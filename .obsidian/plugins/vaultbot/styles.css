@@ -1,0 +1,123 @@
+.vaultbot-chat-container {
+	border-radius: var(--radius-s);
+	border-width: var(--border-width);
+	border-style: solid;
+	border-color: var(--background-modifier-border);
+	background-color: var(--background-primary);
+	padding: var(--spacing-4);
+	margin-bottom: var(--spacing-4);
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-2);
+}
+
+.vaultbot-message {
+	max-width: 80%;
+	word-wrap: break-word;
+	padding: var(--spacing-2) var(--spacing-3);
+	border-radius: var(--radius-s);
+	line-height: 1.4;
+}
+
+.vaultbot-message.user {
+	background-color: var(--background-modifier-accent);
+	align-self: flex-end;
+	margin-left: auto;
+}
+
+.vaultbot-message.assistant {
+	background-color: var(--background-modifier-bg);
+	align-self: flex-start;
+	margin-right: auto;
+}
+
+.vaultbot-message.system {
+	font-size: var(--font-smaller);
+	color: var(--text-muted);
+	text-align: center;
+	padding: var(--spacing-2);
+	margin: 0 auto;
+}
+
+.vaultbot-message.system.error {
+	color: var(--text-error);
+}
+
+.vaultbot-thinking-header {
+	font-size: var(--font-smaller);
+	color: var(--text-muted);
+	cursor: pointer;
+	margin-bottom: var(--spacing-1);
+	padding: var(--spacing-1) 0;
+	border-bottom: 1px dashed var(--background-modifier-border);
+}
+
+.vaultbot-thinking-block {
+	font-size: var(--font-smaller);
+	color: var(--text-muted);
+	background-color: var(--background-secondary);
+	padding: var(--spacing-2) var(--spacing-3);
+	border-radius: var(--radius-s);
+	margin-bottom: var(--spacing-2);
+	white-space: pre-wrap;
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.vaultbot-answer-block {
+	white-space: pre-wrap;
+}
+
+.vaultbot-input-container {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-2);
+}
+
+.vaultbot-input {
+	font-family: var(--font-font-family);
+	font-size: var(--font-text-size);
+	padding: var(--spacing-2) var(--spacing-3);
+	border: var(--border-width) solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	resize: vertical;
+	min-height: 2.5rem;
+}
+
+.vaultbot-input:focus {
+	border-color: var(--text-accent);
+	box-shadow: 0 0 0 2px var(--background-modifier-accent);
+}
+
+.vaultbot-button-container {
+	display: flex;
+}
+
+.vaultbot-button-container button {
+	flex: 1;
+	font-family: var(--font-font-family);
+	font-size: var(--font-text-size);
+	padding: var(--spacing-2) var(--spacing-3);
+	border: none;
+	border-radius: var(--radius-s);
+	background-color: var(--color-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+.vaultbot-button-container button:hover {
+	background-color: var(--color-accent-hover);
+}
+
+.vaultbot-button-container button:active {
+	background-color: var(--color-accent-pressed);
+}
+
+.vaultbot-button-container button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}

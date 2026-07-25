@@ -1,0 +1,114 @@
+# Read the documentation before extending the defaults:
+# https://docs.searxng.org/admin/settings/
+
+use_default_settings: true
+
+server:
+  secret_key: "9Iu1NamztVUxXbMQWYLvWKMfNiZBsyit"
+  image_proxy: true
+  # limiter: false — THE "limitless" lever for a private agent backend.
+  # SearXNG's limiter throttles *clients hitting this instance*. Running it
+  # as a private backend for vaultbot means we disable it so our own agent
+  # is never rate-limited by its own search engine. (Enable only for public
+  # instances; needs a valkey DB.) See docs.searxng.org/admin/searx.limiter.html
+  limiter: false
+  formats:
+    - html
+    - json
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+# ---------------------------------------------------------------------------
+# Outgoing request tuning.
+#
+# SearXNG's defaults are aggressive: a 3s request timeout (duckduckgo times
+# out constantly) and ban windows that climb to 120s once an engine trips a
+# rate limit. Because the container runs from a single host IP with no
+# proxy/rotation, the general-web engines (brave, google, startpage) get
+# banned within a handful of queries and stay banned, which is why every
+# research() call returned 0 sources.
+#
+# These overrides give engines enough time to actually respond (8s, up to
+# 15s) and keep ban windows short so engines recover quickly after a 429.
+# If you add a rotating proxy / Tor later, set `proxies` + `using_tor_proxy`
+# here so engines see varied IPs instead of one banned host.
+# ---------------------------------------------------------------------------
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 15.0
+  useragent_suffix: ""
+
+# ---------------------------------------------------------------------------
+# Engine overrides. `use_default_settings: true` loads the full catalogue;
+# these entries tune the engines that matter for research. The reliable
+# no-key engines (wikipedia, arxiv, github, semantic scholar) are the
+# workhorses; brave/google/startpage/duckduckgo are kept on but tuned with
+# longer timeouts so they don't time out and get banned as easily.
+# ---------------------------------------------------------------------------
+engines:
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  - name: wikidata
+    engine: wikidata
+    shortcut: wd
+    disabled: false
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: ar
+    disabled: false
+    timeout: 10.0
+
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+    timeout: 10.0
+
+  - name: brave
+    engine: brave
+    shortcut: br
+    disabled: false
+    timeout: 10.0
+
+  - name: startpage
+    engine: startpage
+    shortcut: sp
+    disabled: false
+    timeout: 10.0
+
+  - name: google
+    engine: google
+    shortcut: go
+    disabled: false
+    timeout: 10.0
+
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+    disabled: false
+
+  - name: mdn
+    engine: mdn
+    shortcut: mdn
+    disabled: false
+
+  - name: semantic scholar
+    engine: semantic_scholar
+    shortcut: ss
+    disabled: false
+    timeout: 10.0

@@ -1,0 +1,529 @@
+"""plan_executor.py — model-robust execution layer for VaultBot plans.
+
+WHY THIS EXISTS
+---------------
+"Plain English -> vault carries it out" only works if the execution layer is
+agnostic to *which* model produced the plan. A worker model (any of them) emits
+a JSON plan of atomic, idempotent subtasks; this module executes each one
+against graph operations wired in by the caller, verifies each result with a
+*deterministic verifier* (a Python expression, not the worker's self-report),
+and closes the loop with an optional LLM judge.
+
+The four pillars of model-robustness baked in here:
+
+1. **JSON, not Markdown.** Plans are structured subtask dicts. No regex-parsing
+   of prose, no "the model said it did it". The plan is a contract.
+
+2. **Verifier, not self-report.** Every subtask carries a `verifier` expression
+   string evaluated against the *actual op result*. The worker model is NOT
+   trusted to say "yes I did it" — a deterministic gate decides `done`.
+
+3. **Idempotent ops.** The executor itself does NOT enforce idempotency — the
+   registered graph ops must be idempotent by design (re-running them yields the
+   same vault state). The executor *does* log every attempt + result so that
+   duplicate/retried runs are visible in the plan log. Idempotent ops make
+   retries safe and make "resume a half-finished plan" trivial.
+
+4. **Judge closes the loop.** A `judge()` method reads subtask results and
+   returns whether the whole goal is complete, with reasoning and a list of
+   any missing subtask ids. Falls back to a deterministic check
+   (all done + verifier passed) when no LLM client is supplied. The judge is the
+   final word — not the worker model's self-report.
+
+This module is deliberately self-contained: it does NOT import other VaultBot
+modules. The caller (e.g. main.py) constructs an `op_registry` mapping op-name
+to a callable `(args: dict) -> dict` and passes it in. That keeps the executor
+decoupled from the concrete graph implementation.
+
+Pure stdlib only: dataclasses, json, eval (restricted), pathlib, datetime,
+typing. No new dependencies.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+
+# ---------------------------------------------------------------------------
+# Data models
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Subtask:
+    """A single atomic, idempotent subtask with a deterministic verifier.
+
+    Attributes:
+        id: stable identifier used for resume / dedupe / judge references.
+        op: name of the graph op to call; must exist in the op_registry.
+        intent: human-readable description of what this subtask accomplishes.
+        args: dict passed straight to the op callable as its only argument.
+        verifier: a Python expression string evaluated with `result` in scope.
+            Must return truthy/falsy. Example:
+            ``"result.get('sources') and len(result['sources']) >= 3"``
+        status: pending | running | done | failed | skipped.
+        attempts: how many times this subtask has been attempted so far.
+        max_attempts: cap before a subtask is marked permanently failed.
+        result: the dict returned by the op on the last attempt (None until run).
+        error: exception message if the op or verifier raised; None otherwise.
+        verifier_passed: outcome of the verifier on the last attempt.
+    """
+
+    id: str
+    op: str
+    intent: str
+    args: dict
+    verifier: str
+    status: str = "pending"
+    attempts: int = 0
+    max_attempts: int = 5
+    result: Optional[dict] = None
+    error: Optional[str] = None
+    verifier_passed: Optional[bool] = None
+
+
+@dataclass
+class Plan:
+    """A full plan: an ordered list of Subtasks plus bookkeeping."""
+
+    id: str
+    goal: str
+    subtasks: List[Subtask]
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    status: str = "pending"  # pending | running | done | failed | partial
+    log: list = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
+
+
+def subtask_to_json(subtask: Subtask) -> dict:
+    return {
+        "id": subtask.id,
+        "op": subtask.op,
+        "intent": subtask.intent,
+        "args": subtask.args,
+        "verifier": subtask.verifier,
+        "status": subtask.status,
+        "attempts": subtask.attempts,
+        "max_attempts": subtask.max_attempts,
+        "result": subtask.result,
+        "error": subtask.error,
+        "verifier_passed": subtask.verifier_passed,
+    }
+
+
+def subtask_from_json(data: dict) -> Subtask:
+    return Subtask(
+        id=data["id"],
+        op=data["op"],
+        intent=data.get("intent", ""),
+        args=data.get("args", {}) or {},
+        verifier=data.get("verifier", "True"),
+        status=data.get("status", "pending"),
+        attempts=data.get("attempts", 0),
+        max_attempts=data.get("max_attempts", 5),
+        result=data.get("result"),
+        error=data.get("error"),
+        verifier_passed=data.get("verifier_passed"),
+    )
+
+
+def plan_to_json(plan: Plan) -> dict:
+    return {
+        "id": plan.id,
+        "goal": plan.goal,
+        "subtasks": [subtask_to_json(s) for s in plan.subtasks],
+        "created_at": plan.created_at,
+        "status": plan.status,
+        "log": plan.log,
+    }
+
+
+def plan_from_json(data: dict) -> Plan:
+    return Plan(
+        id=data["id"],
+        goal=data.get("goal", ""),
+        subtasks=[subtask_from_json(s) for s in data.get("subtasks", [])],
+        created_at=data.get("created_at", ""),
+        status=data.get("status", "pending"),
+        log=data.get("log", []),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Executor
+# ---------------------------------------------------------------------------
+
+
+# Restricted builtins for verifier eval. Deliberately tiny — verifiers should
+# only need to inspect the result, not call arbitrary functions.
+_SAFE_BUILTINS = {
+    "len": len,
+    "all": all,
+    "any": any,
+    "min": min,
+    "max": max,
+    "sum": sum,
+    "bool": bool,
+    "int": int,
+    "str": str,
+    "list": list,
+    "dict": dict,
+    "True": True,
+    "False": False,
+    "None": None,
+}
+
+
+class PlanExecutor:
+    """Execute a Plan of atomic idempotent subtasks against graph ops.
+
+    The executor is model-robust: it trusts the verifier (a deterministic
+    expression), not the worker model's self-report, and optionally closes the
+    loop with an LLM judge.
+    """
+
+    def __init__(
+        self,
+        op_registry: Dict[str, Callable[[dict], dict]],
+        session_logger=None,
+        max_attempts_per_subtask: int = 5,
+    ) -> None:
+        """Wire up the graph ops.
+
+        Args:
+            op_registry: maps op-name -> callable (args: dict) -> dict. The
+                caller (main.py) registers the real graph operations here.
+            session_logger: optional logger with a `.log(...)` style API. If
+                None, attempts to import and use VaultBot's session_logger are
+                NOT made (kept decoupled) — messages go only to the plan log.
+            max_attempts_per_subtask: default cap for subtasks that don't
+                specify their own `max_attempts`.
+        """
+        self.op_registry = op_registry
+        self.session_logger = session_logger
+        self.max_attempts_per_subtask = max_attempts_per_subtask
+
+    # -- logging -----------------------------------------------------------
+
+    def _log(self, plan: Plan, level: str, msg: str, **extra: Any) -> None:
+        entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": level,
+            "msg": msg,
+        }
+        entry.update(extra)
+        plan.log.append(entry)
+        if self.session_logger is not None:
+            try:
+                # Be tolerant of differing logger signatures.
+                self.session_logger.log(f"[{level}] {msg}")  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+    # -- verification ------------------------------------------------------
+
+    def verify(self, subtask: Subtask, result: Optional[dict]) -> bool:
+        """Safely evaluate `subtask.verifier` with `result` in scope.
+
+        Returns True/False. A broken verifier expression counts as a *failed*
+        verification (returns False) — never raises.
+        """
+        expr = subtask.verifier
+        if not expr:
+            # No verifier means "accept the result as-is if op returned a dict."
+            return isinstance(result, dict)
+        try:
+            # Restricted eval: tiny builtins, result in locals only.
+            value = eval(  # noqa: S307 — restricted scope by design
+                expr,
+                {"__builtins__": _SAFE_BUILTINS},
+                {"result": result},
+            )
+            return bool(value)
+        except Exception as exc:
+            # A broken verifier = failed verification, not a crash.
+            subtask.error = f"verifier error: {exc}"
+            return False
+
+    # -- persistence -------------------------------------------------------
+
+    def load_plan(self, path: str) -> Plan:
+        """Load a plan.json from disk."""
+        p = Path(path)
+        with p.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return plan_from_json(data)
+
+    def save_plan(self, plan: Plan, path: str) -> None:
+        """Persist plan state to disk as JSON."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("w", encoding="utf-8") as fh:
+            json.dump(plan_to_json(plan), fh, indent=2, ensure_ascii=False)
+
+    # -- execution ---------------------------------------------------------
+
+    def _execute_one(self, plan: Plan, subtask: Subtask) -> None:
+        """Execute a single subtask in place, mutating `subtask` and logging."""
+        max_attempts = subtask.max_attempts or self.max_attempts_per_subtask
+
+        # Skip already-finished subtasks.
+        if subtask.status == "done":
+            self._log(plan, "info", f"skip subtask {subtask.id}: already done")
+            return
+        if subtask.status == "skipped":
+            return
+
+        # Unknown op -> permanent fail.
+        op_callable = self.op_registry.get(subtask.op)
+        if op_callable is None:
+            subtask.status = "failed"
+            subtask.error = "unknown op"
+            subtask.verifier_passed = False
+            self._log(
+                plan,
+                "error",
+                f"subtask {subtask.id}: unknown op '{subtask.op}'",
+            )
+            return
+
+        subtask.status = "running"
+        self._log(
+            plan,
+            "info",
+            f"subtask {subtask.id}: running op '{subtask.op}' (attempt "
+            f"{subtask.attempts + 1}/{max_attempts})",
+        )
+
+        # Call the op, robustly.
+        try:
+            result = op_callable(subtask.args)
+            if not isinstance(result, dict):
+                result = {"_raw": result}
+        except Exception as exc:
+            subtask.attempts += 1
+            subtask.error = f"op error: {exc}"
+            subtask.result = None
+            if subtask.attempts >= max_attempts:
+                subtask.status = "failed"
+                self._log(
+                    plan,
+                    "error",
+                    f"subtask {subtask.id}: op raised (attempt "
+                    f"{subtask.attempts}/{max_attempts}) — permanently failed",
+                )
+            else:
+                subtask.status = "failed"
+                self._log(
+                    plan,
+                    "warn",
+                    f"subtask {subtask.id}: op raised (attempt "
+                    f"{subtask.attempts}/{max_attempts}) — will retry later",
+                )
+            return
+
+        subtask.error = None
+
+        # Verify the result deterministically.
+        passed = self.verify(subtask, result)
+        subtask.verifier_passed = passed
+        subtask.result = result
+
+        if passed:
+            subtask.status = "done"
+            self._log(
+                plan,
+                "info",
+                f"subtask {subtask.id}: verifier passed — done",
+            )
+            return
+
+        # Verifier failed.
+        subtask.attempts += 1
+        if subtask.attempts >= max_attempts:
+            subtask.status = "failed"
+            self._log(
+                plan,
+                "error",
+                f"subtask {subtask.id}: verifier failed (attempt "
+                f"{subtask.attempts}/{max_attempts}) — permanently failed",
+            )
+        else:
+            subtask.status = "failed"
+            self._log(
+                plan,
+                "warn",
+                f"subtask {subtask.id}: verifier failed (attempt "
+                f"{subtask.attempts}/{max_attempts}) — will retry later",
+            )
+
+    def execute(self, plan: Plan) -> Plan:
+        """Run all pending subtasks in order. Resumes if some are already done."""
+        plan.status = "running"
+        self._log(plan, "info", f"executing plan '{plan.id}' ({plan.goal!r})")
+
+        for subtask in plan.subtasks:
+            self._execute_one(plan, subtask)
+
+        # Aggregate plan status.
+        statuses = [s.status for s in plan.subtasks]
+        if all(st == "done" for st in statuses):
+            plan.status = "done"
+        elif any(st == "done" for st in statuses):
+            plan.status = "partial"
+        else:
+            plan.status = "failed"
+        self._log(plan, "info", f"plan '{plan.id}' finished: {plan.status}")
+        return plan
+
+    def execute_subtask(self, plan: Plan, subtask_id: str) -> Plan:
+        """Execute ONE subtask by id (for incremental / resume)."""
+        for subtask in plan.subtasks:
+            if subtask.id == subtask_id:
+                plan.status = "running"
+                self._execute_one(plan, subtask)
+                # Recompute aggregate status.
+                statuses = [s.status for s in plan.subtasks]
+                if all(st == "done" for st in statuses):
+                    plan.status = "done"
+                elif any(st == "done" for st in statuses):
+                    plan.status = "partial"
+                else:
+                    plan.status = "failed"
+                return plan
+        # Not found.
+        self._log(plan, "error", f"execute_subtask: unknown id {subtask_id!r}")
+        return plan
+
+    def resume(self, plan_path: str) -> Plan:
+        """Load + continue a partially-done plan from disk."""
+        plan = self.load_plan(plan_path)
+        return self.execute(plan)
+
+    # -- status ------------------------------------------------------------
+
+    def status(self, plan: Plan) -> dict:
+        """Return a compact summary suitable for a status endpoint."""
+        subtasks = [
+            {
+                "id": s.id,
+                "op": s.op,
+                "status": s.status,
+                "attempts": s.attempts,
+                "verifier_passed": s.verifier_passed,
+            }
+            for s in plan.subtasks
+        ]
+        done = sum(1 for s in plan.subtasks if s.status == "done")
+        failed = sum(1 for s in plan.subtasks if s.status == "failed")
+        pending = sum(1 for s in plan.subtasks if s.status == "pending")
+        running = sum(1 for s in plan.subtasks if s.status == "running")
+        return {
+            "plan_id": plan.id,
+            "goal": plan.goal,
+            "status": plan.status,
+            "total": len(plan.subtasks),
+            "done": done,
+            "failed": failed,
+            "pending": pending,
+            "running": running,
+            "subtasks": subtasks,
+        }
+
+    # -- judge -------------------------------------------------------------
+
+    def judge(self, plan: Plan, ollama_client=None) -> dict:
+        """LLM-judge (or deterministic fallback) over the plan's results.
+
+        Returns ``{"complete": bool, "reasoning": str, "missing": [ids]}``.
+
+        If `ollama_client` is None, fall back to a deterministic rule: the plan
+        is complete iff every subtask is `done` *and* `verifier_passed` is True.
+        Otherwise the supplied client is asked to read the results and judge.
+        """
+        # Deterministic fallback.
+        if ollama_client is None:
+            missing = [
+                s.id
+                for s in plan.subtasks
+                if s.status != "done" or s.verifier_passed is not True
+            ]
+            complete = len(missing) == 0
+            reasoning = (
+                "deterministic: all subtasks done and verifier_passed"
+                if complete
+                else f"deterministic: {len(missing)} subtask(s) not verified done"
+            )
+            return {"complete": complete, "reasoning": reasoning, "missing": missing}
+
+        # LLM judge path — tolerant of differing client shapes.
+        try:
+            prompt = self._build_judge_prompt(plan)
+            # Prefer a .chat/.generate style method if present.
+            if hasattr(ollama_client, "chat"):
+                response = ollama_client.chat(prompt)  # type: ignore[attr-defined]
+            elif hasattr(ollama_client, "generate"):
+                response = ollama_client.generate(prompt)  # type: ignore[attr-defined]
+            elif callable(ollama_client):
+                response = ollama_client(prompt)
+            else:
+                raise TypeError("ollama_client has no usable interface")
+            return self._parse_judge_response(response, plan)
+        except Exception as exc:
+            # If the judge itself fails, fall back to the deterministic rule
+            # rather than letting the loop die.
+            self._log(plan, "warn", f"judge LLM failed ({exc}); using fallback")
+            return self.judge(plan, ollama_client=None)
+
+    def _build_judge_prompt(self, plan: Plan) -> str:
+        lines = [
+            "You are a strict judge evaluating whether a plan has been completed.",
+            "Goal: " + plan.goal,
+            "",
+            "Subtask results:",
+        ]
+        for s in plan.subtasks:
+            lines.append(
+                f"- id={s.id} status={s.status} verifier_passed="
+                f"{s.verifier_passed} intent={s.intent!r}"
+            )
+            if s.error:
+                lines.append(f"    error: {s.error}")
+        lines += [
+            "",
+            "Return ONLY a JSON object:",
+            '{"complete": <bool>, "reasoning": "<str>", "missing": ["<id>", ...]}',
+        ]
+        return "\n".join(lines)
+
+    def _parse_judge_response(self, response: Any, plan: Plan) -> dict:
+        """Best-effort parse of an LLM judge response into the judge schema."""
+        text = response if isinstance(response, str) else str(response)
+        # Try to locate a JSON object in the response.
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                obj = json.loads(text[start : end + 1])
+                complete = bool(obj.get("complete", False))
+                reasoning = str(obj.get("reasoning", ""))
+                missing = obj.get("missing", [])
+                if not isinstance(missing, list):
+                    missing = list(missing)
+                return {
+                    "complete": complete,
+                    "reasoning": reasoning,
+                    "missing": [str(m) for m in missing],
+                }
+            except Exception:
+                pass
+        # Parse failed — fall back.
+        return self.judge(plan, ollama_client=None)

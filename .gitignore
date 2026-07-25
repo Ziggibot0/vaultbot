@@ -1,0 +1,88 @@
+# ─── Secrets & personal config ──────────────────────────────────────────────
+# NEVER commit these — they contain API keys, owner name, and local paths.
+.env
+.env.local
+.env.*.local
+
+# ─── Python virtual environment ────────────────────────────────────────────
+# Users create their own with: python -m venv vaultbot_venv
+vaultbot_venv/
+.venv/
+venv/
+env/
+
+# ─── Python cache ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+
+# ─── VaultBot runtime state (regenerated on first run) ─────────────────────
+# These are YOUR vault's state — another user's VaultBot generates its own.
+# The live identity/ folder evolves with you (personal); templates ship in
+# baseline/identity/ instead.
+vaultbot_backend/identity/
+vaultbot_backend/sessions/
+vaultbot_backend/checkpoints/
+vaultbot_backend/vaultbot_index/
+vaultbot_backend/vaultbot.pid
+vaultbot_backend/curriculum_state.json
+vaultbot_backend/touch_counts.json
+vaultbot_backend/embedding_drift.json
+vaultbot_backend/backend.log
+vaultbot_backend/backend_stdout.log
+vaultbot_backend/backend_stderr.log
+vaultbot_backend/pythonw_stdout.log
+vaultbot_backend/pythonw_stderr.log
+vaultbot_backend/*.bak
+vaultbot_backend/custom_tools/*.bak
+vaultbot_backend/speech.py.vosk_bak
+vaultbot_backend/_test_ws.py
+vaultbot_backend/trash/
+
+# ─── Large model files (downloaded separately, see README) ──────────────────
+vaultbot_backend/kokoro_models/
+vaultbot_backend/stt_models/
+
+# ─── The vault itself ───────────────────────────────────────────────────────
+# The vault is the USER'S mind — their personal knowledge, chat history,
+# directives, and notes. A baseline vault ships empty; each user grows their
+# own. Do NOT commit:
+#   - vaultbot/chat/       (conversation logs)
+#   - vaultbot/research/    (autonomous research notes)
+#   - vaultbot/textbooks/  (ingested textbook sections)
+#   - *.md at vault root   (personal directives — see baseline/ for templates)
+vaultbot/chat/
+vaultbot/research/
+vaultbot/textbooks/
+vaultbot/*.md
+vaultbot/maintenance.log
+2026-*.md
+*-Directive.md
+*-Communication-Preferences.md
+*-Principle.md
+*-Path-to-AGI.md
+*-Quality-Gate.md
+*-Longevity-Architecture.md
+
+# ─── Learning materials (user-supplied PDFs) ────────────────────────────────
+learningMaterial/
+
+# ─── Obsidian config (user's local workspace settings) ─────────────────────
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/obsidian-git/data.json
+
+# ─── OS / editor cruft ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.vscode/settings.json
+
+# ─── Stray boot/test logs ───────────────────────────────────────────────────
+boot_*.log

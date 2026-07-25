@@ -1,0 +1,1555 @@
+const { Plugin, Setting, ItemView, PluginSettingTab, Notice } = require('obsidian');
+const { spawn } = require('child_process');
+const path = require('path');
+
+class VaultBotPlugin extends Plugin {
+	async onload() {
+		this.settings = {
+			backendUrl: 'http://localhost:8000',
+			autoStartBackend: true,
+			autoStartMcpServer: true,
+			selectedModel: '',
+			researchBackend: 'tavily',
+			tavilyApiKey: '',
+			ttsEnabled: true,
+			ttsVoice: 'am_michael',
+			ttsRate: 190,
+			ttsMode: 'server'
+		};
+		this.backendStarting = false;
+		this.mcpProcess = null;
+		await this.loadSettings();
+
+		this.addCommand({
+			id: 'open-vaultbot-sidebar',
+			name: 'Open VaultBot Sidebar',
+			callback: () => {
+				this.openSidebar();
+			}
+		});
+
+		this.addRibbonIcon('bot', 'VaultBot', () => {
+			this.openSidebar();
+		});
+
+		this.addSettingTab(new VaultBotSettingTab(this.app, this));
+
+		const backendUrl = this.settings.backendUrl;
+		this.registerView(
+			'vaultbot-sidebar',
+			(leaf) => new VaultBotSidebarView(leaf, backendUrl, this)
+		);
+
+		if (this.settings.autoStartBackend) {
+			// Wait a moment for Obsidian to settle, then try a single start.
+			setTimeout(() => this.startBackendIfNeeded(), 2000);
+		}
+		// The MCP server is part of the plugin â€” it just works when Obsidian
+		// opens. It waits for the backend to be ready, then spawns and writes
+		// MCP client configs so VS Code Copilot Chat / Claude auto-discover it.
+		setTimeout(() => this.startMcpServerIfNeeded(), 6000);
+
+		// Belt-and-suspenders: fire-and-forget a /shutdown beacon the moment
+		// the Obsidian window starts closing. navigator.sendBeacon is built
+		// for exactly this â€” it delivers the POST during teardown without
+		// needing a response and isn't cancelled like fetch when the renderer
+		// is destroyed. The backend's /shutdown endpoint self-terminates via
+		// os._exit, so no response is needed. This survives the case where
+		// onunload's async fetch is torn down before it completes.
+		this._beforeUnloadHandler = (e) => {
+			try {
+				navigator.sendBeacon(this.settings.backendUrl + '/shutdown', new Blob([''], {type: 'text/plain'}));
+			} catch (err) {}
+		};
+		window.addEventListener('beforeunload', this._beforeUnloadHandler);
+	}
+
+	async onunload() {
+		console.log('Unloading VaultBot plugin');
+		// Remove the beforeunload listener so a manual plugin disable doesn't
+		// double-fire shutdown (stopBackend covers that case).
+		if (this._beforeUnloadHandler) {
+			window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+			this._beforeUnloadHandler = null;
+		}
+		this.stopMcpServer();
+		await this.stopBackend();
+	}
+
+	async loadSettings() {
+		const saved = await this.loadData() || {};
+		this.settings = Object.assign({}, this.settings, saved);
+		if (!this.settings.selectedModel) {
+			this.settings.selectedModel = '';
+		}
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
+	}
+
+	async openSidebar() {
+		let leaf = this.app.workspace.getRightLeaf(false);
+		await leaf.setViewState({
+			type: 'vaultbot-sidebar',
+			state: {}
+		});
+		this.app.workspace.revealLeaf(leaf);
+	}
+
+	async isBackendRunning() {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/', { method: 'GET' });
+			return response.status === 200;
+		} catch (e) {
+			return false;
+		}
+	}
+
+	async fetchModels() {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/models');
+			if (!response.ok) return {models: [], current: ''};
+			const data = await response.json();
+			return {
+				models: Array.isArray(data.models) ? data.models : [],
+				current: data.current || ''
+			};
+		} catch (e) {
+			return {models: [], current: ''};
+		}
+	}
+
+	async setBackendModel(model) {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/set_model', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({model})
+			});
+			return response.ok;
+		} catch (e) {
+			return false;
+		}
+	}
+
+	// Read the synthesis-LLM backend config (Ollama local vs an OpenAI-compatible
+	// API key). Lets the settings panel show which backend is active and whether
+	// it's reachable, so a weak-laptop user can confirm their API key is wired up.
+	async fetchLLMConfig() {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/llm/config');
+			if (!response.ok) return null;
+			return await response.json();
+		} catch (e) {
+			return null;
+		}
+	}
+
+	// Switch the synthesis LLM backend at runtime. backend = 'ollama' | 'openai'.
+	// For 'openai' the user supplies base_url + api_key + model. The backend
+	// persists these to .env and rebuilds the client immediately (no restart).
+	async pushLLMConfig({backend, baseUrl, apiKey, model}) {
+		try {
+			const body = {};
+			if (backend) body.backend = backend;
+			if (baseUrl) body.base_url = baseUrl;
+			if (apiKey) body.api_key = apiKey;
+			if (model) body.model = model;
+			const response = await fetch(this.settings.backendUrl + '/llm/config', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(body)
+			});
+			return response.ok ? await response.json() : null;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	// Probe whether the active chat model can see images. The GUI calls this
+	// before ingest (and can call it on first chat) so it can alert the user
+	// in plain language if their model is text-only and they need to pick a
+	// vision model to read textbook pages. Human-centered: the alert lands in
+	// the chat where they already are, not buried in a settings panel.
+	async fetchVisionCheck() {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/llm/vision_check');
+			if (!response.ok) return null;
+			return await response.json();
+		} catch (e) {
+			return null;
+		}
+	}
+
+	// Push research-backend settings (Tavily key + backend choice) to the
+	// running backend so they take effect immediately, no restart needed.
+	async pushResearchConfig() {
+		try {
+			await fetch(this.settings.backendUrl + '/config', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({
+					tavily_api_key: this.settings.tavilyApiKey || '',
+					research_backend: this.settings.researchBackend || 'tavily'
+				})
+			});
+		} catch (e) {
+			console.warn('VaultBot: could not push research config', e);
+		}
+	}
+
+	async startMcpServerIfNeeded() {
+		if (this.mcpProcess) return;
+		try {
+			const running = await this.isBackendRunning();
+			if (!running) {
+				// Backend not ready yet; retry shortly.
+				setTimeout(() => this.startMcpServerIfNeeded(), 5000);
+				return;
+			}
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+			}
+			const venvPython = path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'pythonw.exe');
+			const mcpPy = path.join(vaultRoot, 'vaultbot_backend', 'mcp_server.py');
+			const fs = require('fs');
+			// pythonw.exe = no console window. Fall back to python.exe if missing.
+			const mcpPythonExe = fs.existsSync(venvPython) ? venvPython : path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'python.exe');
+			if (!fs.existsSync(mcpPythonExe) || !fs.existsSync(mcpPy)) {
+				console.warn('VaultBot MCP server: missing venv or mcp_server.py');
+				return;
+			}
+			// Point the MCP server at this backend and spawn it detached.
+			const env = Object.assign({}, process.env, {
+				VAULTBOT_BACKEND_URL: this.settings.backendUrl
+			});
+			this.mcpProcess = spawn(mcpPythonExe, [mcpPy], {
+				cwd: vaultRoot,
+				detached: true,
+				windowsHide: true,
+				stdio: ['ignore', 'ignore', 'ignore'],
+				env: env
+			});
+			this.mcpProcess.unref();
+			console.log('VaultBot MCP server spawned (PID ' + this.mcpProcess.pid + ')');
+			// Write an MCP client config so MCP-aware clients discover the tool.
+			this.writeMcpClientConfig(vaultRoot, mcpPythonExe, mcpPy);
+		} catch (e) {
+			console.error('VaultBot MCP server spawn error:', e);
+		}
+	}
+
+	stopMcpServer() {
+		if (this.mcpProcess) {
+			try { this.mcpProcess.kill(); } catch (e) {}
+			this.mcpProcess = null;
+		}
+	}
+
+	// Kill the backend process when Obsidian closes so nothing is left
+	// running in the background. The backend writes its PID to
+	// vaultbot_backend/vaultbot.pid on startup; we read that and taskkill it.
+	// PRIMARY path: POST /shutdown â€” the backend self-terminates, which is
+	// more reliable than taskkill fired from an Obsidian process that is
+	// itself being torn down (onunload may race with window destruction and
+	// taskkill may not complete). FALLBACK: if the HTTP call fails or the
+	// backend doesn't die in time, taskkill the PID from the pid file.
+	async stopBackend() {
+		const fs = require('fs');
+		const path = require('path');
+		let vaultRoot;
+		if (this.app.vault.adapter.getBasePath) {
+			vaultRoot = this.app.vault.adapter.getBasePath();
+		} else {
+			vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+		}
+		const pidFile = path.join(vaultRoot, 'vaultbot_backend', 'vaultbot.pid');
+
+		// 1) Ask the backend to self-terminate. Best-effort, short timeout.
+		try {
+			const controller = new AbortController();
+			const to = setTimeout(() => controller.abort(), 3000);
+			await fetch(this.settings.backendUrl + '/shutdown', {
+				method: 'POST',
+				signal: controller.signal
+			});
+			clearTimeout(to);
+		} catch (e) {
+			// Expected if the backend is already gone or unreachable.
+		}
+
+		// 2) Wait briefly for the process to actually exit, then verify with
+		//    taskkill against the PID file as a hard fallback.
+		const waitMs = 1500;
+		const start = Date.now();
+		while (Date.now() - start < waitMs) {
+			if (!await this.isBackendRunning()) break;
+			await new Promise(r => setTimeout(r, 150));
+		}
+
+		if (fs.existsSync(pidFile)) {
+			try {
+				const pid = fs.readFileSync(pidFile, 'utf-8').trim();
+				if (pid) {
+					console.log('VaultBot: stopping backend PID ' + pid);
+					try {
+						require('child_process').execSync('taskkill /PID ' + pid + ' /T /F', {stdio: 'ignore'});
+					} catch (e) {
+						console.log('VaultBot: backend process may have already exited:', e.message);
+					}
+				}
+				try { fs.unlinkSync(pidFile); } catch (e) {}
+			} catch (e) {
+				console.error('VaultBot: error reading pid file:', e);
+			}
+		}
+	}
+
+	// Restart the backend: stop it (self-shutdown + taskkill fallback) then
+	// start it fresh. This is the one-click way for a non-tech user to pick
+	// up code changes without typing anything. It reuses stopBackend() +
+	// startBackendIfNeeded() so all the existing PID/log/handle logic
+	// applies. `onProgress` is an optional callback that receives status
+	// strings so a UI can show what's happening.
+	async restartBackend(onProgress) {
+		const notify = (msg) => {
+			try { new Notice(msg); } catch (e) {}
+			if (typeof onProgress === 'function') {
+				try { onProgress(msg); } catch (e) {}
+			}
+		};
+		notify('Restarting VaultBot backend...');
+		// stopBackend() waits for the process to exit + taskkills the PID as
+		// a hard fallback. Safe to call even if the backend is already down.
+		await this.stopBackend();
+		// Give the OS a moment to fully release the port (Windows sometimes
+		// holds it briefly after the process exits).
+		await new Promise(r => setTimeout(r, 1000));
+		// startBackendIfNeeded() bails early if it thinks a backend is
+		// already running, so make sure the running-check returns false by
+		// the time we call it. If something is still up, warn + abort.
+		if (await this.isBackendRunning()) {
+			notify('Restart failed: backend still running after shutdown. Try again.');
+			return false;
+		}
+		await this.startBackendIfNeeded();
+		return await this.isBackendRunning();
+	}
+
+	writeMcpClientConfig(vaultRoot, venvPython, mcpPy) {
+		// Write MCP client configs so tools like VS Code Copilot Chat and
+		// Claude Desktop auto-discover the vault_research tool with zero
+		// manual setup. We write to every location each client reads from.
+		const fs = require('fs');
+		const serverEntry = {
+			command: venvPython,
+			args: [mcpPy],
+			env: { VAULTBOT_BACKEND_URL: this.settings.backendUrl }
+		};
+
+		// 1) VS Code Copilot Chat reads <workspace>/.vscode/mcp.json.
+		//    Schema: { "servers": { "name": { command, args, env } } }
+		try {
+			const vscodeDir = path.join(vaultRoot, '.vscode');
+			if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir, { recursive: true });
+			fs.writeFileSync(
+				path.join(vscodeDir, 'mcp.json'),
+				JSON.stringify({ servers: { vaultbot: serverEntry } }, null, 2),
+				'utf8'
+			);
+		} catch (e) {
+			console.warn('VaultBot: could not write .vscode/mcp.json', e);
+		}
+
+		// 2) Claude Desktop reads %APPDATA%\Claude\claude_desktop_config.json.
+		//    Schema: { "mcpServers": { "name": { command, args, env } } }
+		try {
+			const appData = process.env.APPDATA || path.join(process.env.HOME || '', 'AppData', 'Roaming');
+			const claudeDir = path.join(appData, 'Claude');
+			const claudePath = path.join(claudeDir, 'claude_desktop_config.json');
+			let existing = {};
+			if (fs.existsSync(claudePath)) {
+				try { existing = JSON.parse(fs.readFileSync(claudePath, 'utf8')) || {}; } catch (e) {}
+			}
+			if (!fs.existsSync(claudeDir)) fs.mkdirSync(claudeDir, { recursive: true });
+			existing.mcpServers = Object.assign({}, existing.mcpServers || {}, { vaultbot: serverEntry });
+			fs.writeFileSync(claudePath, JSON.stringify(existing, null, 2), 'utf8');
+		} catch (e) {
+			console.warn('VaultBot: could not write claude_desktop_config.json', e);
+		}
+
+		// 3) Keep a plugin-local copy for reference / manual clients.
+		try {
+			fs.writeFileSync(
+				path.join(vaultRoot, '.obsidian', 'plugins', 'vaultbot', 'mcp.json'),
+				JSON.stringify({ mcpServers: { vaultbot: serverEntry } }, null, 2),
+				'utf8'
+			);
+		} catch (e) {
+			console.warn('VaultBot: could not write plugin mcp.json', e);
+		}
+	}
+
+	async waitForBackend(timeoutMs = 30000, intervalMs = 500) {
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			if (await this.isBackendRunning()) return true;
+			await new Promise(r => setTimeout(r, intervalMs));
+		}
+		return await this.isBackendRunning();
+	}
+
+	async startBackendIfNeeded() {
+		if (this.backendStarting) {
+			new Notice('VaultBot backend is already starting...');
+			return;
+		}
+
+		this.backendStarting = true;
+
+		try {
+			let running = await this.isBackendRunning();
+			if (running) {
+				new Notice('VaultBot backend is already running.');
+				return;
+			}
+
+			new Notice('Starting VaultBot backend...');
+
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+			}
+
+			const venvPython = path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'pythonw.exe');
+			const mainPy = path.join(vaultRoot, 'vaultbot_backend', 'main.py');
+			const logFile = path.join(vaultRoot, 'vaultbot_backend', 'backend.log');
+
+			const fs = require('fs');
+			// pythonw.exe is the windowless Python â€” it has no console at all,
+			// so no window flashes on screen. Fall back to python.exe if pythonw
+			// is somehow missing (shouldn't happen, but be safe).
+			const pythonExe = fs.existsSync(venvPython) ? venvPython : path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'python.exe');
+			if (!fs.existsSync(pythonExe)) {
+				throw new Error('Python not found at ' + pythonExe);
+			}
+			if (!fs.existsSync(mainPy)) {
+				throw new Error('Backend script not found at ' + mainPy);
+			}
+
+// Open the log file in append mode. The running backend inherits the
+		// handle and keeps it open, so a second spawn attempt can hit EBUSY on
+		// Windows. Fall back to a unique timestamped log file (or ignoring stdio)
+		// so a busy log never crashes the plugin.
+		let out = 'ignore';
+		let err = 'ignore';
+		let openedHandles = [];
+		try {
+			const fd = fs.openSync(logFile, 'a');
+			out = fd;
+			err = fd;
+			openedHandles = [fd];
+		} catch (e) {
+			const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+			const altLog = path.join(vaultRoot, 'vaultbot_backend', `backend-${stamp}.log`);
+			try {
+				const fd = fs.openSync(altLog, 'a');
+				out = fd;
+				err = fd;
+				openedHandles = [fd];
+				console.warn('VaultBot: backend.log busy, using ' + altLog);
+			} catch (e2) {
+				console.warn('VaultBot: could not open any log file, stdio ignored', e2);
+			}
+		}
+
+		const backendProcess = spawn(pythonExe, [mainPy], {
+			cwd: vaultRoot,
+			detached: true,
+			windowsHide: true,
+			stdio: ['ignore', out, err],
+			env: Object.assign({}, process.env, {
+				VAULTBOT_RESEARCH_BACKEND: this.settings.researchBackend || 'tavily',
+					// Use the plugin's saved key if set; otherwise pass an empty
+					// string and let the backend load it from .env via load_dotenv.
+					// This fixes the case where the key was set in .env but not
+					// in the plugin settings â€” the backend's load_dotenv('../.env')
+					// will pick it up.
+					TAVILY_API_KEY: this.settings.tavilyApiKey || process.env.TAVILY_API_KEY || '',
+					// OpenMP conflict guard: faster-whisper (libomp140) + faiss/torch
+					// (libiomp5md) in one process crashes without this. Must be set
+					// before Python imports torch/faiss.
+					KMP_DUPLICATE_LIB_OK: 'TRUE'
+				})
+		});
+		backendProcess.unref();
+
+		// Store the PID so stopBackend() can kill it on Obsidian close.
+		this.backendPid = backendProcess.pid;
+
+		openedHandles.forEach(fd => {
+			try {
+				fs.writeSync(fd, `\n[${new Date().toISOString()}] VaultBot backend spawned (PID ${backendProcess.pid})\n`);
+			} catch (e) {}
+			try { fs.closeSync(fd); } catch (e) {}
+		});
+
+			new Notice('VaultBot backend launched; waiting for it to be ready...');
+			running = await this.waitForBackend();
+			if (!running) {
+				throw new Error('Backend process started but did not respond in time. Check vaultbot_backend/backend.log.');
+			}
+			new Notice('VaultBot backend is ready.');
+		} catch (err) {
+			new Notice('Failed to start VaultBot backend: ' + err.message);
+			console.error('VaultBot backend spawn error:', err);
+		} finally {
+			this.backendStarting = false;
+		}
+	}
+}
+
+class VaultBotSettingTab extends PluginSettingTab {
+	constructor(app, plugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	async display() {
+		const {containerEl} = this;
+		containerEl.empty();
+
+		containerEl.createEl('h2', {text: 'VaultBot Settings'});
+
+		new Setting(containerEl)
+			.setName('Backend URL')
+			.setDesc('URL of the VaultBot backend API')
+			.addText(text => text
+				.setPlaceholder('http://localhost:8000')
+				.setValue(this.plugin.settings.backendUrl)
+				.onChange(async (value) => {
+					this.plugin.settings.backendUrl = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Auto-start backend')
+			.setDesc('Start the VaultBot Python backend automatically when Obsidian opens')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoStartBackend)
+				.onChange(async (value) => {
+					this.plugin.settings.autoStartBackend = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Auto-start MCP server')
+			.setDesc('Start the VaultBot MCP server (vault_research tool) when Obsidian opens, so MCP clients like Copilot Chat get a research tool grounded in this vault')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoStartMcpServer)
+				.onChange(async (value) => {
+					this.plugin.settings.autoStartMcpServer = value;
+					await this.plugin.saveSettings();
+					if (value) {
+						this.plugin.startMcpServerIfNeeded();
+					} else {
+						this.plugin.stopMcpServer();
+					}
+				}));
+
+		const modelSetting = new Setting(containerEl)
+			.setName('Ollama model')
+			.setDesc('Which locally installed Ollama model VaultBot should use');
+		const modelDropdown = modelSetting.controlEl.createEl('select');
+		modelDropdown.style.minWidth = '180px';
+		modelDropdown.createEl('option', {text: 'Waiting for backend...', attr: {disabled: true}});
+
+		const populateModels = async () => {
+			const online = await this.plugin.waitForBackend();
+			if (!online) {
+				modelDropdown.empty();
+				modelDropdown.createEl('option', {text: 'Backend offline - start backend first', attr: {disabled: true}});
+				return;
+			}
+			modelDropdown.empty();
+			modelDropdown.createEl('option', {text: 'Fetching models...', attr: {disabled: true}});
+			try {
+				const {models, current} = await this.plugin.fetchModels();
+				modelDropdown.empty();
+				if (!models.length) {
+					modelDropdown.createEl('option', {text: 'No models found', attr: {disabled: true}});
+					return;
+				}
+				const selected = this.plugin.settings.selectedModel || current || models[0];
+				models.forEach(name => {
+					const opt = modelDropdown.createEl('option', {text: name, attr: {value: name}});
+					if (name === selected) opt.selected = true;
+				});
+				this.plugin.settings.selectedModel = selected;
+				await this.plugin.setBackendModel(selected);
+				await this.plugin.saveSettings();
+			} catch (e) {
+				modelDropdown.empty();
+				modelDropdown.createEl('option', {text: 'Could not reach backend', attr: {disabled: true}});
+			}
+		};
+
+		populateModels();
+		modelDropdown.addEventListener('change', async () => {
+			this.plugin.settings.selectedModel = modelDropdown.value;
+			await this.plugin.saveSettings();
+			await this.plugin.setBackendModel(modelDropdown.value);
+		});
+
+		containerEl.createEl('h3', {text: 'LLM Backend'});
+
+		// The synthesis LLM is the only step that spends tokens, so it's the
+		// one swappable surface. 'Ollama' runs a local model (free, private,
+		// needs a beefy machine). 'API key' hits any OpenAI-compatible
+		// endpoint (OpenAI, OpenRouter->Anthropic, Gemini, etc.) so a weak
+		// laptop runs zero local compute. The research loop stays token-free
+		// either way.
+		const llmBackendSetting = new Setting(containerEl)
+			.setName('Synthesis LLM backend')
+			.setDesc('Where the final-answer LLM runs. The research + retrieval loop is always local + token-free.');
+		const llmBackendDropdown = llmBackendSetting.controlEl.createEl('select');
+		llmBackendDropdown.createEl('option', {text: 'Ollama (local, free)', attr: {value: 'ollama'}});
+		llmBackendDropdown.createEl('option', {text: 'API key (OpenAI-compatible)', attr: {value: 'openai'}});
+
+		// API-key backend fields (shown only when 'openai' is selected).
+		const apiFieldsEl = containerEl.createDiv();
+		apiFieldsEl.style.display = 'none';
+		apiFieldsEl.style.paddingLeft = '0';
+		apiFieldsEl.createEl('div', {text: 'Paste your API key + endpoint. Works with OpenAI, OpenRouter, Gemini proxies, vLLM, LM Studio, etc.', attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 8px 0;'}});
+
+		const baseUrlRow = apiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
+		baseUrlRow.createEl('span', {text: 'Base URL', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const baseUrlInput = baseUrlRow.createEl('input', {type: 'text', attr: {placeholder: 'https://api.openai.com', style: 'flex:1;min-width:220px;'}});
+		baseUrlInput.value = 'https://api.openai.com';
+
+		const apiKeyRow = apiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
+		apiKeyRow.createEl('span', {text: 'API key', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const apiKeyInput = apiKeyRow.createEl('input', {type: 'password', attr: {placeholder: 'sk-...', style: 'flex:1;min-width:220px;'}});
+
+		const llmModelRow = apiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
+		llmModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const llmModelInput = llmModelRow.createEl('input', {type: 'text', attr: {placeholder: 'gpt-4o-mini', style: 'flex:1;min-width:220px;'}});
+
+		const llmStatusEl = apiFieldsEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;'}});
+		const llmSaveBtn = apiFieldsEl.createEl('button', {text: 'Save & switch backend', cls: 'mod-cta'});
+		llmSaveBtn.style.marginTop = '4px';
+		llmSaveBtn.addEventListener('click', async () => {
+			llmStatusEl.setText('Switching backend...');
+			const res = await this.plugin.pushLLMConfig({
+				backend: 'openai',
+				baseUrl: baseUrlInput.value.trim(),
+				apiKey: apiKeyInput.value.trim(),
+				model: llmModelInput.value.trim()
+			});
+			if (res && res.status === 'ok') {
+				llmStatusEl.setText(`Connected to ${res.backend} (${res.model}). Running: ${res.running}`);
+				new Notice('LLM backend switched. Reloading model list...');
+				populateModels();
+			} else {
+				llmStatusEl.setText('Failed — check the key, base URL, and model id.');
+			}
+		});
+
+		// Load the current backend config and reflect it in the UI.
+		const refreshLLMConfig = async () => {
+			const cfg = await this.plugin.fetchLLMConfig();
+			if (!cfg) {
+				llmStatusEl.setText('Backend offline — start the backend first.');
+				return;
+			}
+			llmBackendDropdown.value = cfg.backend || 'ollama';
+			apiFieldsEl.style.display = (cfg.backend === 'openai') ? 'block' : 'none';
+			if (cfg.base_url) baseUrlInput.value = cfg.base_url;
+			if (cfg.model) llmModelInput.value = cfg.model;
+			llmStatusEl.setText(`Active: ${cfg.backend} | model: ${cfg.model || '(none)'} | running: ${cfg.running}`);
+		};
+		refreshLLMConfig();
+		llmBackendDropdown.addEventListener('change', async () => {
+			apiFieldsEl.style.display = (llmBackendDropdown.value === 'openai') ? 'block' : 'none';
+			if (llmBackendDropdown.value === 'ollama') {
+				// Switch back to Ollama immediately (no extra fields needed).
+				const res = await this.plugin.pushLLMConfig({backend: 'ollama'});
+				if (res && res.status === 'ok') {
+					llmStatusEl.setText(`Switched to Ollama. Running: ${res.running}`);
+					new Notice('Switched to local Ollama. Reloading models...');
+					populateModels();
+				}
+			}
+		});
+
+		containerEl.createEl('h3', {text: 'Research Backend'});
+
+		new Setting(containerEl)
+			.setName('Search backend')
+			.setDesc('Tavily is the sole search backend (API-key\u2019d, reliable, no rate-limiting). Set your key below.')
+			.addDropdown(dropdown => dropdown
+				.addOption('tavily', 'Tavily')
+				.setValue(this.plugin.settings.researchBackend || 'tavily')
+				.onChange(async (value) => {
+					this.plugin.settings.researchBackend = value;
+					await this.plugin.saveSettings();
+					await this.plugin.pushResearchConfig();
+				}));
+
+		const tavilySetting = new Setting(containerEl)
+			.setName('Tavily API key')
+			.setDesc('Free key from tavily.com. Stored in the plugin settings + written to the vault .env. Required for research.');
+		const tavilyInput = tavilySetting.controlEl.createEl('input', {type: 'password', attr: {placeholder: 'tvly-...'}});
+		tavilyInput.value = this.plugin.settings.tavilyApiKey || '';
+		tavilyInput.style.minWidth = '220px';
+		tavilyInput.addEventListener('change', async () => {
+			this.plugin.settings.tavilyApiKey = tavilyInput.value.trim();
+			await this.plugin.saveSettings();
+			await this.plugin.pushResearchConfig();
+			new Notice('Tavily API key saved.');
+		});
+
+		containerEl.createEl('button', {text: 'Start backend now', cls: 'mod-cta'})
+			.addEventListener('click', () => this.plugin.startBackendIfNeeded());
+
+		containerEl.createEl('h3', {text: 'Voice'});
+
+		new Setting(containerEl)
+			.setName('Speak replies')
+			.setDesc('When on, VaultBot reads its full reply aloud after each answer.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.ttsEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.ttsEnabled = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('TTS engine')
+			.setDesc("'browser' uses the built-in speechSynthesis (fast, streaming, no setup). 'server' uses the backend's local Kokoro v1.0 neural voice (offline, natural, JARVIS-like).")
+			.addDropdown(dropdown => dropdown
+				.addOption('browser', 'Browser (speechSynthesis)')
+				.addOption('server', 'Server (Kokoro v1.0)')
+				.setValue(this.plugin.settings.ttsMode || 'server')
+				.onChange(async (value) => {
+					this.plugin.settings.ttsMode = value;
+					await this.plugin.saveSettings();
+				}));
+
+		const voiceSetting = new Setting(containerEl)
+			.setName('Voice')
+			.setDesc('Kokoro voice for server TTS. (recommended) = JARVIS-like male voices.');
+		const voiceDropdown = voiceSetting.controlEl.createEl('select');
+		const setVoiceOptions = (voices) => {
+			const cur = this.plugin.settings.ttsVoice || 'am_michael';
+			voices.forEach(v => {
+				const label = (v.recommended ? '(recommended) ' : '') + v.name;
+				const opt = voiceDropdown.createEl('option', {text: label, attr: {value: v.id}});
+				if (v.id === cur) opt.selected = true;
+			});
+		};
+		voiceDropdown.addEventListener('change', async () => {
+			this.plugin.settings.ttsVoice = voiceDropdown.value;
+			await this.plugin.saveSettings();
+		});
+		// Try fetching voices from the backend; fall back to browser voices.
+		try {
+			const resp = await fetch(this.plugin.settings.backendUrl + '/voices');
+			if (resp.ok) {
+				const data = await resp.json();
+				setVoiceOptions(data.voices || []);
+			}
+		} catch (e) { /* backend may be down */ }
+
+		new Setting(containerEl)
+			.setName('Speech rate (words/min)')
+			.setDesc('Server TTS speed. 190 is a natural default.')
+			.addText(text => text
+				.setPlaceholder('190')
+				.setValue(String(this.plugin.settings.ttsRate || 190))
+				.onChange(async (value) => {
+					const n = parseInt(value, 10);
+					if (!isNaN(n) && n > 0) {
+						this.plugin.settings.ttsRate = n;
+						await this.plugin.saveSettings();
+				}
+			}));
+	}
+}
+
+class VaultBotSidebarView extends ItemView {
+	constructor(leaf, backendUrl, plugin) {
+		super(leaf);
+		this.backendUrl = backendUrl;
+		this.plugin = plugin;
+		this.contentEl = this.contentEl || this.container;
+	}
+
+	getViewType() {
+		return 'vaultbot-sidebar';
+	}
+
+	getDisplayText() {
+		return 'VaultBot';
+	}
+
+	async onOpen() {
+		if (!this.contentEl) {
+			this.contentEl = this.container || this.containerEl;
+		}
+		this.display();
+	}
+
+	async onClose() {
+		this.contentEl.empty();
+	}
+
+	display() {
+		if (!this.contentEl) {
+			this.contentEl = this.container || this.containerEl;
+		}
+		this.contentEl.empty();
+		this.contentEl.createEl('h2', {text: 'VaultBot Chat'});
+
+		const chatContainer = this.contentEl.createDiv({cls: 'vaultbot-chat-container'});
+		const statusEl = this.contentEl.createDiv({cls: 'vaultbot-status'});
+		statusEl.style.fontSize = '0.85em';
+		statusEl.style.color = 'var(--text-muted)';
+		statusEl.style.marginBottom = '8px';
+		statusEl.style.minHeight = '1.2em';
+
+		let connectionCheckInterval = null;
+		let backendWasOnline = false;
+		const setStatus = (text, clickable = false) => {
+			statusEl.setText(text);
+			statusEl.style.cursor = clickable ? 'pointer' : 'default';
+			if (clickable) {
+				statusEl.onclick = async () => {
+					statusEl.onclick = null;
+					await this.plugin.startBackendIfNeeded();
+					startBackendAndConnect();
+				};
+			} else {
+				statusEl.onclick = null;
+			}
+		};
+
+		const ensureConnection = async () => {
+			const running = await this.plugin.isBackendRunning();
+			if (running) {
+				setStatus('Backend online');
+				if (!backendWasOnline) {
+					backendWasOnline = true;
+					refreshModels();
+				}
+				// Only connect if there is no socket at all, or the existing one is
+				// CLOSING/CLOSED. A socket still in CONNECTING state must not be
+				// re-initiated or it gets closed before the handshake completes.
+				if (!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
+					connectWebSocket();
+				}
+				return;
+			}
+			backendWasOnline = false;
+			setStatus('Backend offline - click to start', true);
+		};
+
+		ensureConnection();
+		connectionCheckInterval = window.setInterval(ensureConnection, 5000);
+		this.registerInterval(connectionCheckInterval);
+
+		// Model picker dropdown
+		const modelBar = this.contentEl.createDiv({cls: 'vaultbot-model-bar'});
+		modelBar.style.display = 'flex';
+		modelBar.style.alignItems = 'center';
+		modelBar.style.gap = '8px';
+		modelBar.style.marginBottom = '8px';
+		modelBar.style.fontSize = '0.85em';
+		modelBar.createEl('span', {text: 'Model:', cls: 'vaultbot-model-label'});
+		const modelSelect = modelBar.createEl('select', {cls: 'vaultbot-model-select'});
+		modelSelect.style.flex = '1';
+		modelSelect.createEl('option', {text: 'Fetching models...', attr: {disabled: true}});
+		const refreshModels = async () => {
+			const online = await this.plugin.waitForBackend(5000, 250);
+			if (!online) {
+				modelSelect.empty();
+				modelSelect.createEl('option', {text: 'Backend offline', attr: {disabled: true}});
+				return;
+			}
+			const {models, current} = await this.plugin.fetchModels();
+			modelSelect.empty();
+			if (!models.length) {
+				modelSelect.createEl('option', {text: 'No models found', attr: {disabled: true}});
+				return;
+			}
+			const selected = this.plugin.settings.selectedModel || current || models[0];
+			models.forEach(name => {
+				const opt = modelSelect.createEl('option', {text: name, attr: {value: name}});
+				if (name === selected) opt.selected = true;
+			});
+			this.plugin.settings.selectedModel = selected;
+			await this.plugin.saveSettings();
+			await this.plugin.setBackendModel(selected);
+		};
+		refreshModels();
+		modelSelect.addEventListener('change', async () => {
+			this.plugin.settings.selectedModel = modelSelect.value;
+			await this.plugin.saveSettings();
+			await this.plugin.setBackendModel(modelSelect.value);
+		});
+		const refreshBtn = modelBar.createEl('span', {text: 'Refresh'});
+		refreshBtn.style.cursor = 'pointer';
+		refreshBtn.style.opacity = '0.6';
+		refreshBtn.title = 'Refresh model list';
+		refreshBtn.addEventListener('click', () => refreshModels());
+
+		const inputContainer = this.contentEl.createDiv({cls: 'vaultbot-input-container'});
+		const input = inputContainer.createEl('textarea', {
+			cls: 'vaultbot-input',
+			attr: {placeholder: 'Ask VaultBot...', rows: '3'}
+		});
+		input.style.width = '100%';
+		input.style.boxSizing = 'border-box';
+		input.style.marginBottom = '4px';
+
+		const buttonContainer = inputContainer.createDiv({cls: 'vaultbot-button-container'});
+		buttonContainer.style.display = 'flex';
+		buttonContainer.style.gap = '8px';
+		const ingestButton = buttonContainer.createEl('button', {text: 'Ingest'});
+		const callButton = buttonContainer.createEl('button', {text: 'Call'});
+		const stopButton = buttonContainer.createEl('button', {text: 'Stop'});
+		const muteButton = buttonContainer.createEl('button', {text: 'Mute'});
+		const restartButton = buttonContainer.createEl('button', {text: 'Restart'});
+		ingestButton.style.flex = '0 0 auto';
+		callButton.style.flex = '0 0 auto';
+		stopButton.style.flex = '0 0 auto';
+		muteButton.style.flex = '0 0 auto';
+		restartButton.style.flex = '0 0 auto';
+		callButton.title = 'Hold to talk, or click to toggle recording. Your speech is transcribed locally and sent as a chat message; the reply is spoken back.';
+		ingestButton.title = 'Ingest any new textbooks from the learningMaterial/ folder into the vault. No AI involved - just parses and links them. Weaving happens in the background.';
+		stopButton.title = 'Interrupt VaultBot immediately. Also stops any voice playback.';
+		muteButton.title = 'Toggle voice playback on/off. Interrupts the current utterance when muted.';
+		restartButton.title = 'Restart the VaultBot backend. Use this after code changes or if the bot seems stuck. Takes a few seconds.';
+		stopButton.style.opacity = '0.7';
+		restartButton.style.opacity = '0.85';
+
+		// --- Voice: recording + STT + TTS --------------------------------
+		// Press & hold (or click toggle) the Call button -> MediaRecorder
+		// captures audio -> POST /stt (vosk, offline) -> text goes into the
+		// input and auto-sends as a chat. The assistant's final reply is
+		// spoken aloud via the browser's speechSynthesis or the backend's
+		// local SAPI voice (per settings). No cloud keys, no per-call cost.
+		let mediaRecorder = null;
+		let audioChunks = [];
+		let isRecording = false;
+		let recordingSince = 0;
+		const supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+		if (!supported) callButton.setAttribute('disabled', 'disabled');
+
+		const setCallState = (recording) => {
+			isRecording = recording;
+			callButton.setText(recording ? 'Recording...' : 'Call');
+			callButton.style.background = recording ? 'var(--background-modifier-error)' : '';
+			callButton.style.color = recording ? 'var(--text-on-accent)' : '';
+		};
+
+		const stopAndSend = async () => {
+			if (!isRecording || !mediaRecorder) return;
+			setCallState(false);
+			try { mediaRecorder.stop(); } catch (e) {}
+		};
+
+		const startRecording = async () => {
+			if (isRecording) return;
+			if (!supported) { new Notice('This browser cannot capture audio.'); return; }
+			// Don't bother recording/transcribing when muted — mute means go
+			// fully text-only (no voice in either direction).
+			if (ttsMuted) { new Notice('Unmute first to use voice.'); return; }
+			try {
+				const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+				audioChunks = [];
+				// Prefer OGG/Opus: the backend decodes it with pure-Python
+				// soundfile (libsndfile), which has no DLL dependency that a
+				// Windows Application Control policy can block. The default
+				// MediaRecorder format is webm/opus, which needs PyAV or
+				// ffmpeg to decode — both unavailable/blocked on this box.
+				// Fall back to whatever the browser offers if OGG isn't
+				// supported (Chrome records webm; the backend still tries
+				// soundfile/PyAV/pydub on whatever arrives).
+				const candidates = ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm', ''];
+				let pickedMime = '';
+				for (const m of candidates) {
+					if (m === '' || MediaRecorder.isTypeSupported(m)) { pickedMime = m; break; }
+				}
+				mediaRecorder = pickedMime ? new MediaRecorder(stream, {mimeType: pickedMime}) : new MediaRecorder(stream);
+				mediaRecorder.ondataavailable = (e) => {
+					if (e.data && e.data.size) audioChunks.push(e.data);
+				};
+				mediaRecorder.onstop = async () => {
+					stream.getTracks().forEach(t => t.stop());
+					const blob = new Blob(audioChunks, {type: mediaRecorder.mimeType || 'audio/ogg'});
+					audioChunks = [];
+					if (!blob.size) return;
+					statusEl.setText('Transcribing...');
+					try {
+						const resp = await fetch(this.backendUrl + '/stt', {
+							method: 'POST',
+							headers: {'Content-Type': blob.type},
+							body: blob
+						});
+						if (!resp.ok) { new Notice('Transcription failed (' + resp.status + ').'); statusEl.setText('Done'); return; }
+						const data = await resp.json();
+						const text = (data.text || '').trim();
+						if (!text) { new Notice('No speech detected.'); statusEl.setText('Done'); return; }
+						input.value = text;
+						statusEl.setText('Done');
+						send('chat');
+					} catch (e) {
+						new Notice('STT error: ' + e.message);
+						statusEl.setText('Done');
+					}
+				};
+				recordingSince = Date.now();
+				mediaRecorder.start();
+				setCallState(true);
+			} catch (e) {
+				new Notice('Microphone unavailable: ' + e.message);
+			}
+		};
+
+		// Click toggles; press-and-hold is the "walkie-talkie" mode.
+		let holdTimer = null;
+		const onDown = (e) => {
+			if (e.pointerType === 'mouse') {
+				// start on press, stop on release
+				holdTimer = null;
+				startRecording();
+			} else {
+				// touch/pen: also press-and-hold
+				startRecording();
+			}
+		};
+		const onUp = (e) => { stopAndSend(); };
+		callButton.addEventListener('pointerdown', (e) => { e.preventDefault(); onDown(e); });
+		callButton.addEventListener('pointerup', (e) => { e.preventDefault(); onUp(e); });
+		callButton.addEventListener('pointerleave', (e) => { if (isRecording) onUp(e); });
+		callButton.addEventListener('pointercancel', onUp);
+
+		// --- Streaming TTS: speak as tokens stream, not all at the end ----
+		// Accumulates streamed answer text and flushes complete sentences to
+		// the browser's speechSynthesis queue the moment a sentence boundary
+		// is seen. This makes the voice start talking in ~1 sentence of
+		// latency instead of waiting for the whole reply. Server (Kokoro)
+		// TTS is whole-utterance, so streaming mode requires the browser
+		// engine; if ttsMode==='server' we fall back to one-shot at the end.
+		let ttsMuted = false;
+		let ttsSentenceBuffer = '';
+		let ttsActiveUtterances = [];
+		const SENTENCE_BOUNDARY = /([.!?])\s+/;
+
+		const updateMuteButton = () => {
+			muteButton.setText(ttsMuted ? 'Unmute' : 'Mute');
+		};
+
+		const stopAllTTS = () => {
+			try { window.speechSynthesis.cancel(); } catch (e) {}
+			if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+			ttsSentenceBuffer = '';
+			ttsActiveUtterances = [];
+		};
+
+		// Speak a sentence immediately (streaming). No-op if muted.
+		const speakSentence = (sentence) => {
+			sentence = (sentence || '').trim();
+			if (!sentence || ttsMuted || !window.speechSynthesis) return;
+			try {
+				const u = new SpeechSynthesisUtterance(sentence);
+				if (this.plugin.settings.ttsVoice) {
+					const v = window.speechSynthesis.getVoices().find(v => v.name === this.plugin.settings.ttsVoice || v.voiceURI === this.plugin.settings.ttsVoice);
+					if (v) u.voice = v;
+				}
+				u.rate = (this.plugin.settings.ttsRate || 190) / 190;
+				ttsActiveUtterances.push(u);
+				u.onend = () => { ttsActiveUtterances = ttsActiveUtterances.filter(x => x !== u); };
+				u.onerror = () => { ttsActiveUtterances = ttsActiveUtterances.filter(x => x !== u); };
+				window.speechSynthesis.speak(u);
+			} catch (e) {}
+		};
+
+		// Feed a streaming text chunk into the TTS pipeline. Flushes complete
+		// sentences; keeps the trailing fragment buffered for the next chunk.
+		const feedStreamingTTS = (textChunk) => {
+			if (!textChunk || ttsMuted) return;
+			if (this.plugin.settings.ttsMode !== 'browser' || !window.speechSynthesis) return;
+			ttsSentenceBuffer += textChunk;
+			// Split on sentence boundaries; keep the last fragment buffered.
+			let parts = ttsSentenceBuffer.split(SENTENCE_BOUNDARY);
+			while (parts.length >= 3) {
+				// split() with a capturing group yields [text, delim, text, delim, ...]
+				const sentence = parts[0] + parts[1];
+				parts = parts.slice(2);
+				if (sentence.trim()) speakSentence(sentence);
+			}
+			ttsSentenceBuffer = parts.join('');
+		};
+
+		// Stop button: interrupt the backend + kill voice playback.
+		stopButton.addEventListener('click', () => {
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({type: 'stop'}));
+			}
+			stopAllTTS();
+			endActivity();
+			statusEl.setText('Interrupted');
+			currentAssistantMessage = null;
+			currentThinkingBlock = null;
+			currentAnswerBlock = null;
+			currentAnswerText = '';
+		});
+
+		// Mute button: toggle voice on/off. Muting kills the current utterance.
+		muteButton.addEventListener('click', () => {
+			ttsMuted = !ttsMuted;
+			updateMuteButton();
+			if (ttsMuted) stopAllTTS();
+		});
+		updateMuteButton();
+
+		let currentAssistantMessage = null;
+		let currentThinkingBlock = null;
+		let currentAnswerBlock = null;
+		let currentAnswerText = ''; // accumulated plain text of the reply, for TTS
+		// Live activity line: shows the current stage + elapsed time, updated
+		// in place by progress/heartbeat events so the user is never staring
+		// at a frozen "Calling X..." with no idea if it's still working.
+		let currentActivityEl = null;
+		let activityStartTs = 0;
+		let activityTimer = null;
+
+		const appendUserMessage = (text) => {
+			const div = chatContainer.createDiv({cls: 'vaultbot-message user'});
+			div.createSpan({text});
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+		};
+
+		// Render a complete assistant message in one shot (used by the
+		// ingest button's status reply, which isn't streamed). Mirrors the
+		// streaming path's markup so styling stays consistent.
+		const appendAssistantMessage = (text) => {
+			const div = chatContainer.createDiv({cls: 'vaultbot-message assistant'});
+			const block = div.createEl('div', {cls: 'vaultbot-answer-block'});
+			// Render simple markdown-ish: **bold**, `code`, and newlines.
+			const lines = (text || '').split('\n');
+			for (const line of lines) {
+				const p = block.createEl('p');
+				p.innerHTML = line
+					.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+					.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+					.replace(/`(.+?)`/g, '<code>$1</code>');
+			}
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+			// Return the block so callers (e.g. the Restart button) can
+			// update its text in place as a status line changes.
+			return block;
+		};
+
+		const startAssistantMessage = () => {
+			currentAssistantMessage = chatContainer.createDiv({cls: 'vaultbot-message assistant'});
+			const thinkingHeader = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-header', text: 'Thinking (click to show)'});
+			currentThinkingBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-block'});
+			currentThinkingBlock.style.display = 'none';
+			thinkingHeader.addEventListener('click', () => {
+				const hidden = currentThinkingBlock.style.display === 'none';
+				currentThinkingBlock.style.display = hidden ? 'block' : 'none';
+				thinkingHeader.textContent = hidden ? 'Thinking (click to hide)' : 'Thinking (click to show)';
+			});
+			currentAnswerBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-answer-block'});
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+		};
+
+		// --- Live activity line (kills the black box) ---
+		// A single mutable line that shows the current stage + a running
+		// elapsed-time counter, updated in place by progress/heartbeat
+		// events. Cleared when the activity completes or the answer is done.
+		const fmtMs = (ms) => {
+			const s = Math.floor(ms / 1000);
+			if (s < 60) return s + 's';
+			return Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0') + 's';
+		};
+		const startActivity = (label, detail) => {
+			if (!currentAssistantMessage) startAssistantMessage();
+			if (!currentActivityEl) {
+				currentActivityEl = currentAssistantMessage.createDiv({cls: 'vaultbot-activity'});
+				currentActivityEl.style.cssText = 'font-size:0.82em;color:var(--text-muted);'
+					+ 'border-left:2px solid var(--interactive-accent);'
+					+ 'padding:3px 8px;margin:4px 0;'
+					+ 'font-family:var(--font-monospace);white-space:pre-wrap;';
+			}
+			activityStartTs = Date.now();
+			if (activityTimer) { window.clearInterval(activityTimer); activityTimer = null; }
+			activityTimer = window.setInterval(() => updateActivity(label), 250);
+			updateActivity(label, detail);
+		};
+		const updateActivity = (label, detail) => {
+			if (!currentActivityEl) return;
+			const elapsed = Date.now() - activityStartTs;
+			let text = '... ' + label + '  [' + fmtMs(elapsed) + ']';
+			if (detail) {
+				const parts = [];
+				for (const k of ['round', 'max_rounds', 'new_sources', 'total_sources', 'sources', 'follow_up_sources', 'url', 'title', 'note', 'total_notes', 'total', 'query', 'facts', 'source_count', 'outbound_links', 'amem_evolved', 'amem_links', 'silent_ms', 'chunks']) {
+					if (detail[k] !== undefined && detail[k] !== null) {
+						let v = detail[k];
+						if (typeof v === 'string' && v.length > 60) v = v.slice(0, 57) + '...';
+						parts.push(k + '=' + v);
+					}
+				}
+				if (parts.length) text += '\n   ' + parts.join(' | ');
+			}
+			currentActivityEl.setText(text);
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+		};
+		const endActivity = (summary) => {
+			if (activityTimer) { window.clearInterval(activityTimer); activityTimer = null; }
+			if (currentActivityEl) {
+				if (summary) {
+					const elapsed = Date.now() - activityStartTs;
+					currentActivityEl.setText('Done: ' + summary + '  [' + fmtMs(elapsed) + ']');
+					currentActivityEl.style.opacity = '0.6';
+				}
+				currentActivityEl = null;
+			}
+		};
+
+		let ws = null;
+		const connectWebSocket = () => {
+			// Don't touch a socket that's already OPEN or still CONNECTING; closing
+			// a connecting socket yields 'closed before the connection is established'.
+			if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+				return;
+			}
+			if (ws) {
+				try { ws.close(); } catch (e) {}
+			}
+			const wsUrl = this.backendUrl.replace('http', 'ws') + '/ws';
+			ws = new WebSocket(wsUrl);
+			ws.onopen = () => {
+				statusEl.setText('Connected to VaultBot backend');
+			};
+			ws.onmessage = (event) => {
+				let msg;
+				try {
+					msg = JSON.parse(event.data);
+				} catch (e) {
+					if (!currentAssistantMessage) startAssistantMessage();
+					currentAnswerBlock.setText(event.data);
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+					return;
+				}
+
+				if (msg.type === 'status') {
+					statusEl.setText(msg.content);
+				} else if (msg.type === 'thinking') {
+					if (!currentAssistantMessage) startAssistantMessage();
+					currentThinkingBlock.style.display = 'block';
+					currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + msg.content);
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				} else if (msg.type === 'answer_chunk') {
+					if (!currentAssistantMessage) startAssistantMessage();
+					const span = currentAnswerBlock.createSpan();
+					span.setText(msg.content);
+					currentAnswerText += msg.content;
+					// Stream into TTS so the voice starts as soon as a full
+					// sentence is available, not at the very end.
+					if (this.plugin.settings.ttsEnabled) feedStreamingTTS(msg.content);
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				} else if (msg.type === 'tool_call') {
+					if (!currentAssistantMessage) startAssistantMessage();
+					const toolName = msg.tool || 'tool';
+					const argsStr = msg.args ? JSON.stringify(msg.args) : '';
+					startActivity('Calling ' + toolName + (argsStr ? ': ' + argsStr : '...'), {});
+				} else if (msg.type === 'progress') {
+					// Granular stage events from the backend (research rounds,
+					// scraping, synthesis, gap fill, note writing, A-MEM).
+					startActivity(msg.stage, msg.detail || {});
+				} else if (msg.type === 'heartbeat') {
+					// Periodic "still alive" pulse during long silent waits.
+					// Carries elapsed_ms + how long since the last output.
+					const label = msg.label || 'working';
+					const detail = {silent_ms: msg.silent_ms, chunks: msg.chunks};
+					if (!currentActivityEl) {
+						startActivity(label, detail);
+					} else {
+						// Keep the existing label but refresh elapsed + detail.
+						updateActivity(label, detail);
+					}
+				} else if (msg.type === 'tool_result') {
+					if (!currentAssistantMessage) startAssistantMessage();
+					const summary = (msg.tool || 'tool') + ' - ' + (msg.summary || 'done');
+					endActivity(summary);
+					const resDiv = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-result'});
+					resDiv.style.cssText = 'font-size:0.85em;color:var(--text-muted);'
+						+ 'padding:2px 8px;margin:2px 0 6px 0;opacity:0.8;';
+					resDiv.setText('  - ' + summary);
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				} else if (msg.type === 'answer_done') {
+					endActivity();
+					statusEl.setText('Done');
+					const spokenText = currentAnswerText;
+					currentAssistantMessage = null;
+					currentThinkingBlock = null;
+					currentAnswerBlock = null;
+					currentAnswerText = '';
+					if (this.plugin.settings.ttsEnabled && spokenText.trim() && !ttsMuted) {
+						// Streaming (browser) mode already spoke sentence-by-
+						// sentence as chunks arrived. Flush any final fragment
+						// left in the buffer (no trailing punctuation).
+						if (this.plugin.settings.ttsMode === 'browser') {
+							if (ttsSentenceBuffer.trim()) {
+								speakSentence(ttsSentenceBuffer);
+								ttsSentenceBuffer = '';
+							}
+						} else {
+							// Server (Kokoro) mode is whole-utterance; speak
+							// the full reply once now.
+							speakReply(spokenText);
+						}
+					}
+				} else if (msg.type === 'error') {
+					endActivity();
+					statusEl.setText('Error: ' + msg.content);
+					const div = chatContainer.createDiv({cls: 'vaultbot-message system error'});
+					div.createSpan({text: 'Error: ' + msg.content});
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				} else if (msg.type === 'stopped') {
+					// Backend confirmed an interrupt (stop button or new msg).
+					stopAllTTS();
+					endActivity();
+					statusEl.setText('Stopped');
+					currentAssistantMessage = null;
+					currentThinkingBlock = null;
+					currentAnswerBlock = null;
+					currentAnswerText = '';
+					ttsSentenceBuffer = '';
+				} else if (msg.type === 'session_reset') {
+					// /new command: clear the chat UI for a fresh session.
+					stopAllTTS();
+					endActivity();
+					chatContainer.empty();
+					currentAssistantMessage = null;
+					currentThinkingBlock = null;
+					currentAnswerBlock = null;
+					currentAnswerText = '';
+					ttsSentenceBuffer = '';
+					statusEl.setText('New session');
+					const div = chatContainer.createDiv({cls: 'vaultbot-message system'});
+					div.createSpan({text: msg.content || 'New session started.'});
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				}
+			};
+			ws.onclose = () => {
+				setStatus('Disconnected from backend - retrying...');
+				// Null out the socket so ensureConnection() will reconnect next tick.
+				ws = null;
+			};
+			ws.onerror = (error) => {
+				console.error('WebSocket error:', error);
+			};
+		};
+
+		const startBackendAndConnect = async () => {
+			await this.plugin.startBackendIfNeeded();
+			let attempts = 0;
+			const poll = window.setInterval(async () => {
+				attempts++;
+				const running = await this.plugin.isBackendRunning();
+				if (running) {
+					window.clearInterval(poll);
+					setStatus('Backend online - connecting...');
+					connectWebSocket();
+				} else if (attempts > 30) {
+					window.clearInterval(poll);
+					setStatus('Backend did not start in time', true);
+				}
+			}, 1000);
+		};
+
+		ensureConnection();
+
+		const send = (type) => {
+			const message = input.value.trim();
+			if (!message) {
+				new Notice('Type a message first.');
+				return;
+			}
+			if (!ws || ws.readyState !== WebSocket.OPEN) {
+				new Notice('VaultBot backend is not connected yet.');
+				return;
+			}
+			appendUserMessage(message);
+		// Interrupt any in-flight reply + stop voice so the new message
+		// takes over immediately instead of queueing behind the old one.
+		stopAllTTS();
+		ws.send(JSON.stringify({type, message, model: this.plugin.settings.selectedModel}));
+		input.value = '';
+		input.focus();
+		currentAssistantMessage = null;
+		currentThinkingBlock = null;
+		currentAnswerBlock = null;
+		currentAnswerText = '';
+		ttsSentenceBuffer = '';
+			currentActivityEl = null;
+		};
+
+		// Ingest button: a one-press way for a non-tech user to feed new
+		// textbooks into the vault without typing a prompt. No LLM involved -
+		// the backend scans learningMaterial/ for uningested PDFs, parses +
+		// weaves them, and reports back. Weaving continues in the background
+		// so the user isn't blocked.
+		ingestButton.addEventListener('click', async () => {
+			if (!ws || ws.readyState !== 1) {
+				new Notice('VaultBot backend is not connected yet.');
+				return;
+			}
+			ingestButton.setText('Ingesting...');
+			ingestButton.setAttribute('disabled', 'disabled');
+			appendUserMessage('(ingesting any new textbooks from learningMaterial/)');
+			// Human-centered vision check: before ingesting, probe whether the
+			// active chat model can read textbook pages (equations/figures). If
+			// it can't, alert the user RIGHT HERE in the chat — in plain
+			// language — that they should pick a vision model in Settings, so
+			// the LLM can later read the pages it's pointed to. This is the
+			// moment a non-coder learns their setup needs one extra field, not a
+			// silent failure later when they ask a math question.
+			try {
+				const vcheck = await this.plugin.fetchVisionCheck();
+				if (vcheck && vcheck.vision_capable === false) {
+					appendAssistantMessage(
+						`Heads up: your current model (${vcheck.model || 'unknown'}) can't read images. ` +
+						`That's fine for ingest (it just indexes the PDFs), but when you later ask about ` +
+						`math/figures, I won't be able to see the equations on the page. ` +
+						`Open VaultBot Settings → LLM Backend and pick a vision-capable model ` +
+						`(e.g. gpt-4o-mini, gemini-1.5-flash, qwen-vl) so I can read textbook pages for you. ` +
+						`Proceeding with ingest now...`
+					);
+				}
+			} catch (e) { /* vision check is advisory, never blocks ingest */ }
+			try {
+				const resp = await fetch(this.backendUrl + '/ingest_learning_material', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({})
+				});
+				const data = await resp.json();
+				const msg = data.message || `Ingested ${data.ingested || 0}, skipped ${data.skipped || 0}.`;
+				appendAssistantMessage(msg);
+				if (data.details) {
+					for (const d of data.details) {
+						if (d.error) appendAssistantMessage(`  X ${d.file}: ${d.error}`);
+						else appendAssistantMessage(`  OK ${d.file}: ${d.notes_created} notes`);
+					}
+				}
+			} catch (e) {
+				appendAssistantMessage(`Ingest request failed: ${e.message || e}`);
+			} finally {
+				ingestButton.setText('Ingest');
+				ingestButton.removeAttribute('disabled');
+			}
+		});
+		// Restart button: stops the backend (self-shutdown + taskkill
+		// fallback) and starts it fresh. The one-click way for a non-tech
+		// user to pick up code changes or recover from a stuck backend
+		// without touching a terminal. Disables the button + shows live
+		// status in the chat while the restart runs (a few seconds).
+		restartButton.addEventListener('click', async () => {
+			if (this.plugin.backendStarting) {
+				new Notice('Backend is already starting; please wait.');
+				return;
+			}
+			restartButton.setAttribute('disabled', 'disabled');
+			restartButton.setText('Restarting...');
+			stopAllTTS();
+			appendUserMessage('(restarting backend)');
+			let statusDiv = appendAssistantMessage('Restarting backend...');
+			try {
+				const ok = await this.plugin.restartBackend((msg) => {
+					if (statusDiv) statusDiv.setText(msg);
+				});
+				if (statusDiv) statusDiv.setText(ok ? 'Backend restarted and ready.' : 'Backend may not have come back up. Check the backend log.');
+				// Reconnect the websocket so the next message flows.
+				connectWebSocket();
+			} catch (e) {
+				if (statusDiv) statusDiv.setText(`Restart failed: ${e.message || e}`);
+			} finally {
+				restartButton.setText('Restart');
+				restartButton.removeAttribute('disabled');
+			}
+		});
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' && !e.shiftKey) {
+				e.preventDefault();
+				send('chat');
+			}
+		});
+
+		// --- TTS: speak the assistant's reply aloud ----------------------
+		// Two engines, picked per settings:
+		//  - 'browser': window.speechSynthesis â€” zero setup, streams as the
+		//    browser allows, no backend round-trip.
+		//  - 'server': POST the text to /tts; the backend synthesizes with the
+		//    local Windows SAPI voice (truly offline) and returns a WAV we
+		//    play. More robust when the browser has no/enqueued voices.
+		let currentAudio = null;
+		const speakReply = async (text) => {
+			text = (text || '').trim();
+			if (!text) return;
+			// Honor the mute toggle — without this, server (Kokoro) mode kept
+			// talking after the user muted, which is why the Mute button
+			// appeared to do nothing (the default ttsMode is 'server').
+			if (ttsMuted) return;
+			// Cancel anything still playing so a new answer doesn't overlap.
+			try { window.speechSynthesis.cancel(); } catch (e) {}
+			if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+
+			if (this.plugin.settings.ttsMode === 'browser' && window.speechSynthesis) {
+				try {
+					const u = new SpeechSynthesisUtterance(text);
+					if (this.plugin.settings.ttsVoice) {
+						const v = window.speechSynthesis.getVoices().find(v => v.name === this.plugin.settings.ttsVoice || v.voiceURI === this.plugin.settings.ttsVoice);
+						if (v) u.voice = v;
+					}
+					u.rate = (this.plugin.settings.ttsRate || 190) / 190;
+					window.speechSynthesis.speak(u);
+					return;
+				} catch (e) { /* fall through to server */ }
+			}
+
+			try {
+				const resp = await fetch(this.backendUrl + '/tts', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({
+						text: text,
+						voice: this.plugin.settings.ttsVoice || undefined,
+						rate: this.plugin.settings.ttsRate || 190
+					})
+				});
+				if (!resp.ok) return;
+				const blob = await resp.blob();
+				const url = URL.createObjectURL(blob);
+				currentAudio = new Audio(url);
+				currentAudio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; };
+				currentAudio.play().catch(() => {});
+			} catch (e) { /* silent fail â€” TTS is best-effort */ }
+		};
+
+		input.focus();
+	}
+}
+
+module.exports = VaultBotPlugin;

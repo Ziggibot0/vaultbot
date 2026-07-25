@@ -1,0 +1,19 @@
+fastapi>=0.115.0
+uvicorn>=0.30.0
+ollama==0.6.2
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+faiss-cpu==1.8.0
+watchdog>=4.0.1
+numpy>=1.24.3
+pydantic>=2.9.0
+python-dotenv==1.0.0
+lxml>=4.9.0
+PyMuPDF>=1.24.0
+# Universal OCR for textbook ingestion. Pinned to 1.10.2: marker 2.0
+# switched its OCR backend to llama.cpp (needs an external llama-server
+# binary, awkward on Windows). 1.10.2 is pure-Python torch. Upgrading
+# huggingface_hub breaks the old sentence-transformers 2.2.2, so that was
+# upgraded too (it's unused by the backend but the import error was noisy).
+marker-pdf==1.10.2
+sentence-transformers>=5.0.0
