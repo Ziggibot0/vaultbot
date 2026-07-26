@@ -43,9 +43,12 @@ from __future__ import annotations
 import os
 import json
 import time
+import logging
 import numpy as np
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Drift magnitude per feedback step.  Small so a single thumbs-up doesn't
 # swamp the content signal; cumulative over many signals.  Rocchio alpha.
@@ -82,8 +85,8 @@ class EmbeddingDrift:
             if self.session_logger:
                 try:
                     self.session_logger.log("drift_load_failed", {"error": str(e)})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
         return {}
 
     def _save(self) -> None:
@@ -95,8 +98,8 @@ class EmbeddingDrift:
             if self.session_logger:
                 try:
                     self.session_logger.log("drift_save_failed", {"error": str(e)})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
 
     # ------------------------------------------------------------------
     # Public API
@@ -153,8 +156,8 @@ class EmbeddingDrift:
                 try:
                     self.session_logger.log("drift_record_failed",
                                            {"error": str(e), "file": file_path})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
 
     def apply_drift(self, file_path: str,
                     content_embedding: Any) -> np.ndarray:
@@ -189,8 +192,8 @@ class EmbeddingDrift:
             if key in self.drift:
                 del self.drift[key]
                 self._save()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
 
     def status(self) -> Dict[str, Any]:
         """Summary for /health or diagnostics."""

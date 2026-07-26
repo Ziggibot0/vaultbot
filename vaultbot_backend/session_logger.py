@@ -24,6 +24,13 @@ class SessionLogger:
             log_dir = Path(log_dir)
         self.log_dir = Path(log_dir).resolve()
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        # Retention: cap session log accumulation so a non-technical user's
+        # disk doesn't fill over months. Keep newest 200 files, delete
+        # anything older than 30 days. Runs once per new session (cheap).
+        try:
+            sweep_old_sessions(self.log_dir)
+        except Exception:
+            pass  # cleanup must never crash the backend
 
         self.session_id: str = str(uuid.uuid4())
         self.started_at: str = datetime.now(timezone.utc).isoformat()
@@ -106,6 +113,40 @@ class SessionLogger:
             "closed_at": datetime.now(timezone.utc).isoformat(),
         })
         self._closed = True
+
+
+def sweep_old_sessions(log_dir, max_files=200, max_age_days=30):
+    """Delete old session JSONL files to cap disk usage.
+
+    Keeps the newest `max_files` files and deletes any file older than
+    `max_age_days` by mtime. Runs once per new SessionLogger (i.e. once
+    per websocket connection). Never raises — cleanup is best-effort.
+
+    Returns the count of deleted files.
+    """
+    try:
+        log_dir = Path(log_dir)
+        if not log_dir.exists():
+            return 0
+        files = sorted(
+            (f for f in log_dir.glob("*.jsonl") if f.is_file()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,  # newest first
+        )
+        deleted = 0
+        cutoff = time.time() - max_age_days * 86400
+        for i, f in enumerate(files):
+            is_too_old = f.stat().st_mtime < cutoff
+            is_over_count = i >= max_files
+            if is_too_old or is_over_count:
+                try:
+                    f.unlink()
+                    deleted += 1
+                except Exception:
+                    pass
+        return deleted
+    except Exception:
+        return 0
 
 
 # Singleton-style default logger used when no session is active.

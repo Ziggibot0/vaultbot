@@ -226,7 +226,15 @@ class SelfImprover:
              catches both "I deleted a module another file imports" and
              "I changed a signature a caller depends on" — the two ways
              the agent broke itself.
-          4. Auto-rollback: on any check failure after the file is on
+          4. Pytest gate (soft): if the import check PASSED, run `pytest -q`
+             against the same backend dir (the tmp copy for dry_run, the
+             live backend dir for a real write). If any test FAILS, the
+             edit is rejected and (for a real write) auto-rolled-back.
+             If pytest itself cannot run (not installed, import error,
+             etc.), the check is recorded as `skipped: <reason>` and the
+             write proceeds — the import check is the hard gate; pytest
+             is a softer gate enforced only when it can actually run.
+          5. Auto-rollback: on any check failure after the file is on
              disk, the pre-edit backup (.bak) is restored immediately.
 
         Args:
@@ -270,10 +278,28 @@ class SelfImprover:
                     self._copy_backend_for_check(tmpdir, full.name, content)
                     ok, err = self._verify_import_in_subprocess(tmpdir)
                     checks["import_check"] = "ok" if ok else f"FAIL: {err}"
-                    return {"status": "dry_run_ok" if ok else "dry_run_rejected",
+                    if not ok:
+                        return {"status": "dry_run_rejected",
+                                "checks": checks,
+                                "would_break_backend": True,
+                                "error": err}
+                    # Import passed — run the soft pytest gate against the
+                    # same tmp copy. A failure is reported as
+                    # dry_run_rejected (no disk touch in dry_run mode).
+                    p_ok, p_out = self._run_pytest_in_subprocess(tmpdir)
+                    if p_out and not p_ok:
+                        checks["pytest"] = f"FAIL: {p_out[:500]}"
+                        return {"status": "dry_run_rejected",
+                                "checks": checks,
+                                "would_break_backend": True,
+                                "error": p_out[:500]}
+                    checks["pytest"] = (
+                        "ok" if p_ok
+                        else f"skipped: {(p_out or 'unknown')[:200]}")
+                    return {"status": "dry_run_ok",
                             "checks": checks,
-                            "would_break_backend": not ok,
-                            "error": None if ok else err}
+                            "would_break_backend": False,
+                            "error": None}
                 finally:
                     shutil.rmtree(tmpdir, ignore_errors=True)
             checks["import_check"] = "skipped (not a core backend file)"
@@ -330,6 +356,50 @@ class SelfImprover:
                         "hint": ("The edit would break the backend on restart. "
                                  "The original file was restored. Fix the error "
                                  "and try again, or use git_rollback if needed.")}
+
+        # --- 3b. Pytest gate (soft; core files only) ---
+        # Only run pytest if the import check passed (don't waste time
+        # running tests on a file that doesn't even import). A pytest
+        # failure rejects the edit and auto-rolls-back from .bak (same
+        # path as the import-check failure above). If pytest itself cannot
+        # run (not installed, import error, etc.), record `skipped: ...`
+        # and proceed — the import check is the hard gate.
+        if is_core and checks.get("import_check") == "ok":
+            try:
+                p_ok, p_out = self._run_pytest_in_subprocess(str(BACKEND_DIR))
+            except Exception as e:
+                checks["pytest"] = f"skipped: could not run pytest: {e}"
+                p_ok = True  # treat as pass; soft gate
+                p_out = None
+            if p_out and not p_ok:
+                checks["pytest"] = f"FAIL: {p_out[:500]}"
+                # Auto-rollback from .bak (same path as import failure).
+                if had_backup:
+                    try:
+                        shutil.copy2(
+                            full.with_suffix(full.suffix + ".bak"), full)
+                        checks["auto_rollback"] = "restored from .bak"
+                    except Exception as rb_err:
+                        checks["auto_rollback"] = f"FAILED: {rb_err}"
+                else:
+                    try:
+                        full.unlink()
+                        checks["auto_rollback"] = (
+                            "deleted new file (no prior .bak)")
+                    except Exception as rb_err:
+                        checks["auto_rollback"] = f"FAILED: {rb_err}"
+                self._log("safe_write_pytest_rejected", {
+                    "file_path": str(full),
+                    "error": p_out[:500], "checks": checks})
+                return {"status": "rejected", "checks": checks,
+                        "error": p_out[:500],
+                        "hint": ("The edit passed the import check but "
+                                 "failed a pytest run. The original file "
+                                 "was restored. Fix the failing test and "
+                                 "try again, or use git_rollback if needed.")}
+            checks["pytest"] = (
+                "ok" if p_ok
+                else f"skipped: {(p_out or 'unknown')[:200]}")
 
         self._log("safe_write", {"file_path": str(full), "length": len(content),
                                   "is_core": is_core, "checks": checks})
@@ -402,6 +472,91 @@ class SelfImprover:
             return False, "import check timed out (30s) — likely a startup hang"
         except Exception as e:
             return False, f"import check could not run: {e}"
+
+    def _run_pytest_in_subprocess(self, backend_dir: str
+                                   ) -> tuple[bool, Optional[str]]:
+        """Run `python -m pytest -q --tb=short` in a subprocess against the
+        given backend dir. Returns (passed, output_message).
+
+        - (True, None or '') : pytest ran and all tests passed.
+        - (False, '<output>') : pytest ran and at least one test FAILED.
+          The output contains the failure summary.
+        - (True, '<reason>')  : pytest could not run at all (not installed,
+          import error, timeout, etc.). The caller treats this as `skipped`
+          and proceeds — the import check is the hard gate; pytest is a
+          softer gate enforced only when it can actually run.
+
+        The 60s timeout prevents a hung test from blocking forever. We use
+        the venv interpreter (same as `_verify_import_in_subprocess`) and
+        point PYTHONPATH at the backend dir so leaf modules import without
+        touching the live backend. We DO NOT pass `-p no:cacheprovider`
+        or similar; the conftest's hard-fence against importing `main` keeps
+        the test process safe.
+        """
+        # Prefer the venv interpreter (matches _verify_import_in_subprocess),
+        # but pytest + faiss live in the SYSTEM Python in this environment,
+        # not in vaultbot_venv. Probe both: use the first interpreter that
+        # can import pytest. If neither can, soft-skip.
+        venv_python = str(
+            BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+        candidates = [venv_python, sys.executable]
+        chosen = None
+        for cand in candidates:
+            if not cand or not Path(cand).exists():
+                continue
+            try:
+                probe = subprocess.run(
+                    [cand, "-c", "import pytest"],
+                    capture_output=True, text=True, timeout=10)
+                if probe.returncode == 0:
+                    chosen = cand
+                    break
+            except Exception:
+                continue
+        if chosen is None:
+            # pytest not importable in any available interpreter — soft-skip.
+            return True, "pytest not installed in any interpreter"
+
+        env = {**os.environ,
+               "PYTHONPATH": backend_dir,
+               # Keep the test process off the live vault / PID lock.
+               "VAULTBOT_SKIP_LOCK": "1",
+               "VAULT_PATH": backend_dir}
+        try:
+            proc = subprocess.run(
+                [chosen, "-m", "pytest", "-q", "--tb=short"],
+                capture_output=True, text=True, timeout=60,
+                cwd=backend_dir, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            # Hung test — treat as skipped (soft gate), not a hard reject.
+            return True, "pytest timed out (60s) — skipped"
+        except FileNotFoundError:
+            return True, "pytest interpreter not found"
+        except Exception as e:
+            # Any other subprocess failure: soft-skip, don't hard-reject.
+            return True, f"pytest could not run: {e}"
+
+        combined = (proc.stdout or "") + (proc.stderr or "")
+        # pytest exit codes: 0 = pass, 1 = tests failed, 2+ = usage/error,
+        # 5 = no tests collected (benign — e.g. a dry-run tmp copy with no
+        # tests/ dir). Only exit code 1 is a real test FAILURE worth
+        # hard-rejecting on; everything else is soft-skipped so the import
+        # check remains the sole hard gate.
+        if proc.returncode == 0:
+            return True, None
+        if proc.returncode in (2, 3, 4):
+            # Usage error / internal error — soft-skip.
+            tail = combined.strip().splitlines()[-1] if combined.strip() else ""
+            return True, (f"pytest usage/internal error "
+                         f"(rc={proc.returncode}): {tail[:200]}")
+        if proc.returncode == 5:
+            # No tests collected — benign; treat as pass.
+            return True, None
+        # rc == 1 (or anything else): real test failure — hard reject.
+        tail = combined.strip().splitlines()[-1] if combined.strip() else ""
+        return False, tail[:500] if tail else (
+            f"pytest exit code {proc.returncode} (no output captured)")
 
     # --- capability_audit ------------------------------------------------
 

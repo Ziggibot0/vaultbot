@@ -46,9 +46,12 @@ import os
 import re
 import json
 import hashlib
+import logging
 import numpy as np
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+logger = logging.getLogger(__name__)
 
 MOC_MARKER = "<!-- vaultbot:moc -->"
 MOC_PREFIX = "moc-"
@@ -264,16 +267,16 @@ def build_mocs(card_paths: List[str],
         for old in tdir.glob(f"{MOC_PREFIX}*.md"):
             try:
                 old.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
         clusters = cluster_cards(card_paths, emb_by_path)
         if progress_callback is not None:
             try:
                 progress_callback("moc_build", {
                     "clusters": len(clusters),
                     "message": f"Building {len(clusters)} maps of content..."})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
         moc_paths: List[str] = []
         cluster_meta: List[Dict[str, Any]] = []
         # Compute inter-cluster relatedness by centroid distance (cheap).
@@ -305,8 +308,8 @@ def build_mocs(card_paths: List[str],
             for cp in cl:
                 try:
                     _stamp_card_cluster(cp, cid)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
         return {"mocs_built": len(moc_paths), "clusters": cluster_meta,
                 "moc_paths": moc_paths}
     except Exception as e:
@@ -473,8 +476,8 @@ def build_mocs_incremental(card_paths: List[str],
                     "new_seeded": new_clusters_seeded,
                     "message": (f"Updating {len(affected_cids)} of "
                                 f"{len(cluster_members)} MOCs...")})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
 
         # 4. Rewrite ONLY the affected MOC notes.  Unaffected MOCs stay on
         #    disk untouched — their L1 support is intact (graph integrity).
@@ -526,8 +529,8 @@ def build_mocs_incremental(card_paths: List[str],
                 if cp in new_set:
                     try:
                         _stamp_card_cluster(cp, cid)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
 
         # 5. Delete MOC notes for clusters that no longer exist (all members
         #    removed).  Compare on-disk MOCs to the current cluster set.
@@ -537,8 +540,8 @@ def build_mocs_incremental(card_paths: List[str],
             if old_cid not in current_cids:
                 try:
                     old_moc.unlink()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
 
         return {"mocs_built": len(moc_paths), "mocs_updated": mocs_updated,
                 "mocs_unchanged": mocs_unchanged,

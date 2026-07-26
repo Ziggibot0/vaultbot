@@ -100,10 +100,23 @@ class VaultBotPlugin extends Plugin {
 
 	async isBackendRunning() {
 		try {
-			const response = await fetch(this.settings.backendUrl + '/', { method: 'GET' });
+			// Hit /health (JSON, minimal) instead of / (full HTML page).
+			// The 5s poll was producing ~17k log lines/day of GET / noise.
+			const response = await fetch(this.settings.backendUrl + '/health', { method: 'HEAD' });
 			return response.status === 200;
 		} catch (e) {
-			return false;
+			// /health may return 404 on older backends without the endpoint;
+			// fall back to GET /health, then to GET / as a last resort.
+			try {
+				const r2 = await fetch(this.settings.backendUrl + '/health', { method: 'GET' });
+				if (r2.ok) return true;
+			} catch (e2) {}
+			try {
+				const r3 = await fetch(this.settings.backendUrl + '/', { method: 'GET' });
+				return r3.status === 200;
+			} catch (e3) {
+				return false;
+			}
 		}
 	}
 

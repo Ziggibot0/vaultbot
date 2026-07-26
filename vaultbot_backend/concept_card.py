@@ -52,8 +52,11 @@ import re
 import json
 import math
 import hashlib
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Markers (HTML comments so they're invisible in Obsidian render but
 # machine-detectable).  Same convention as the textbook source-key +
@@ -118,8 +121,8 @@ def l0_path_for_card(card_abs_path: str | Path) -> Optional[Path]:
             for q in p.parent.glob("*.md"):
                 if q.stem.lower() == target.lower():
                     return q
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
     return None
 
 
@@ -298,8 +301,8 @@ def build_card_for(l0_abs_path: str | Path,
                 if REFINED_MARKER in old and CARD_MARKER in old:
                     # already refined: keep it (refinement is sticky)
                     return card
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
         _atomic_write(card, text)
         return card
     except Exception:
@@ -343,8 +346,8 @@ def build_cards_batch(l0_abs_paths: List[str],
                 progress_callback("concept_card", {
                     "note": i + 1, "total": n,
                     "message": f"Abstracting note {i+1}/{n}..."})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
     return {"cards_built": built, "cards_skipped": skipped,
             "card_paths": out_paths}
 

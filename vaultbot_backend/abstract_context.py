@@ -17,15 +17,18 @@ The fix: a three-resolution context, biomimetic cortical hierarchy:
   - L1 (highway)     : terse concept cards for ALL walked nodes —
                        ~300-500 chars each, the hop-able graph the model
                        actually reasons over. 20 cards ≈ 6-10K chars.
-  - L0 (drill-down)  : the FULL raw content of the single top seed only.
-                       No truncation. This is where detail lives; the
-                       model gets it verbatim for the one note that
-                       matters most.
+  - L0 (drill-down)  : the raw content of the single top seed, capped at
+                       DRILL_CAP (12000 chars) — far above the old 2000-char
+                       legacy cut, with a pointer to the full section on
+                       disk if it exceeds the cap. The model gets the one
+                       note that matters most, nearly verbatim.
 
 Net context drops ~4-6× while the model sees MORE of the vault's shape
-(the L1 highway) AND more of the one note that counts (full L0). No
-content is lost to truncation — L0 is on disk in full, reachable via
-the L1 `> source: [[...]]` pointer.
+(the L1 highway) AND more of the one note that counts (the L0 drill-down).
+No content is lost to truncation — the full note is on disk, reachable
+via the L1 `> source: [[...]]` pointer (the L0 context itself is capped
+at DRILL_CAP = 12000 chars, so notes longer than that carry an appended
+`[... full section on disk ...]` marker rather than being lost).
 
 Degradation
 -----------

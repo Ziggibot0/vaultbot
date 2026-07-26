@@ -3,9 +3,14 @@ uvicorn>=0.30.0
 ollama==0.6.2
 requests>=2.31.0
 beautifulsoup4>=4.12.2
-faiss-cpu==1.8.0
+# faiss-cpu 1.8.0 is built against numpy 1.x and breaks on numpy 2
+# (ABI error in tests — see /memories/repo/pytest-faiss-numpy2-abi.md).
+# 1.11+ supports numpy 2.x. Required by the voice stack (kokoro needs numpy 2).
+faiss-cpu>=1.11.0
 watchdog>=4.0.1
-numpy>=1.24.3
+# numpy 2.x required by kokoro-onnx + faster-whisper (av import).
+# Downgrading to 1.x breaks the voice stack.
+numpy>=2.0.0
 pydantic>=2.9.0
 python-dotenv==1.0.0
 lxml>=4.9.0
@@ -17,6 +22,13 @@ PyMuPDF>=1.24.0
 # upgraded too (it's unused by the backend but the import error was noisy).
 marker-pdf==1.10.2
 sentence-transformers>=5.0.0
+
+# ── Voice stack (Kokoro TTS + faster-whisper STT) ──────────────────────────
+# These require numpy 2.x. See the "Dependency gotchas (voice stack)" section
+# in the repo memory (vaultbot-stack.md) for the full upgrade saga.
+kokoro-onnx>=0.5.0
+misaki-fork[en]>=0.1.0
+faster-whisper>=1.2.1
 
 # ── Testing ──────────────────────────────────────────────────────────
 pytest>=8.0

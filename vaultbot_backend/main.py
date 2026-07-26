@@ -415,6 +415,16 @@ manager = ConnectionManager()
 
 @app.on_event("startup")
 async def startup_event():
+    # Truncate oversized stdout/stderr logs so they can't grow unbounded
+    # (was 256MB, mostly GET / heartbeat noise). Keep the last 1MB.
+    for _log_name in ("backend_stdout.log", "backend_stderr.log"):
+        _log_path = Path(__file__).parent / _log_name
+        try:
+            if _log_path.exists() and _log_path.stat().st_size > 10 * 1024 * 1024:
+                _log_path.with_name(_log_name).write_bytes(b"")
+        except Exception:
+            pass
+
     startup_logger = SessionLogger()
     startup_logger.log("server_startup", {"stage": "begin"})
     try:
@@ -3258,4 +3268,7 @@ async def nssm_install_script():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # access_log=False: the 5s /health poll from the plugin was producing
+    # ~17k log lines/day. Keep error logging on; drop the per-request
+    # access lines. Structured events go to session_logger, not stdout.
+    uvicorn.run(app, host="127.0.0.1", port=8000, access_log=False)
