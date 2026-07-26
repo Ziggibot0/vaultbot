@@ -206,6 +206,7 @@ class SelfImprover:
         "free_search.py", "duckduckgo_client.py", "tavily_client.py",
         "searxng_manager.py", "web_source_store.py", "speech.py",
         "vault_maintenance.py", "vault_indexer.py", "textbook_index.py",
+        "services.py",
     }
 
     def safe_write(self, file_path: str, content: str,

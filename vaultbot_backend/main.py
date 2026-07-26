@@ -413,6 +413,45 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+# ─── Services registry ───────────────────────────────────────────────────
+# Bundle every singleton into a Services instance so extracted modules
+# (chat_handler.py, weaving.py, task_api.py, ...) can receive it as a
+# parameter instead of reading these globals as free variables. See
+# services.py. The globals above stay in place; only the extracted
+# functions change to `svc.<name>` access.
+from services import Services
+svc = Services(
+    ollama_client=ollama_client,
+    vision_client=vision_client,
+    vault_indexer=vault_indexer,
+    vault_graph=vault_graph,
+    note_creator=note_creator,
+    research_engine=research_engine,
+    search_client=search_client,
+    autonomous_researcher=autonomous_researcher,
+    knowledge_curriculum=knowledge_curriculum,
+    checkpointer=checkpointer,
+    procedure_tracker=procedure_tracker,
+    self_improver=self_improver,
+    identity=identity,
+    graph_op_registry=graph_op_registry,
+    plan_executor=plan_executor,
+    amem=amem,
+    fused_retriever=fused_retriever,
+    embedding_drift=embedding_drift,
+    compactor=compactor,
+    lazy_condenser=lazy_condenser,
+    context_budgeter=context_budgeter,
+    health_monitor=health_monitor,
+    calibration_tracker=calibration_tracker,
+    rag_evaluator=rag_evaluator,
+    claim_verifier=claim_verifier,
+    pattern_extractor=pattern_extractor,
+    session_logger=default_session_logger,
+    manager=manager,
+)
+
 @app.on_event("startup")
 async def startup_event():
     # Truncate oversized stdout/stderr logs so they can't grow unbounded
