@@ -14,7 +14,7 @@ gets smarter the more you use it.
 
 - **Answers from your vault** — fused retrieval (vector + wikilink graph +
   backlinks) pulls a connected subgraph of your notes, not just keyword
-  matches. It cites what it finds with `[[wikilinks]]`.
+  matches. It cites what it finds with `[[example-note]]`.
 - **Researches the web** — when the vault is thin, it digs multiple sources,
   corroborates them, and writes a permanent sourced note. Keyless by default
   (DuckDuckGo + Marginalia + arXiv); optional Tavily/SearXNG backends.

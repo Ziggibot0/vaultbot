@@ -221,6 +221,12 @@ class OpenAICompatibleClient(LLMClient):
         Sends a tiny red test image as a data URL and asks what color it is.
         Returns True only if the reply mentions red — proving the model
         actually processed the image, not just accepted the request.
+
+        Reasoning-model note: OpenRouter/o1-style models stream reasoning into
+        a separate `reasoning` field and may spend the whole token budget
+        reasoning before the answer lands in `content`. We bump max_tokens
+        and check BOTH `content` and `reasoning` for "red" so a vision model
+        that genuinely saw the red square isn't falsely reported as blind.
         """
         img_b64 = _test_image_base64()
         messages = [{
@@ -236,15 +242,17 @@ class OpenAICompatibleClient(LLMClient):
                 f"{self.base_url}/v1/chat/completions",
                 headers=self._headers(),
                 json={"model": self.llm_model, "messages": messages,
-                      "temperature": 0.0, "max_tokens": 20},
-                timeout=30,
+                      "temperature": 0.0, "max_tokens": 128},
+                timeout=60,
             )
             if r.status_code != 200:
                 return False
             data = r.json()
             choice = (data.get("choices") or [{}])[0]
-            text = (choice.get("message", {}) or {}).get("content", "") or ""
-            return "red" in text.lower()
+            msg = choice.get("message", {}) or {}
+            content = (msg.get("content", "") or "").lower()
+            reasoning = (msg.get("reasoning", "") or "").lower()
+            return "red" in content or "red" in reasoning
         except Exception:
             return False
 
@@ -415,6 +423,67 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
     return OllamaClient(
         base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
         llm_model=os.getenv("OLLAMA_LLM_MODEL", ""),
+        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+        session_logger=session_logger,
+    )
+
+
+def get_vision_client(session_logger: Any = None) -> Optional[LLMClient]:
+    """Build the OPTIONAL vision LLM client from .env.
+
+    The vision client is a SEPARATE concern from the synthesis (chat) client:
+    it is used ONLY to read rendered textbook pages (textbook_read_page) when
+    the chat model is text-only. A user keeps their fast/cheap chat model and
+    delegates page-reading to a vision-capable model on its own backend.
+
+    Settings (all optional; if any required piece is missing, returns None
+    and the caller falls back to the synthesis client or the text layer):
+      VISION_BACKEND  : "ollama" | "openai"  (defaults to the synthesis backend)
+      VISION_BASE_URL  : OpenAI-compatible endpoint (openai path)
+      VISION_API_KEY   : bearer token (openai path)
+      VISION_MODEL     : model id (openai path) OR Ollama model name
+      VISION_OLLAMA_HOST: Ollama host if the vision model lives on a different
+                         Ollama daemon than the chat model (ollama path)
+
+    Resolution rules:
+      - If VISION_MODEL is unset -> return None (no dedicated vision model;
+        callers fall back to the synthesis client's own vision_capable()).
+      - If VISION_BACKEND == "openai" -> OpenAICompatibleClient using
+        VISION_BASE_URL / VISION_API_KEY / VISION_MODEL. Missing api_key or
+        base_url -> None (not a hard error; just no vision).
+      - If VISION_BACKEND == "ollama" (or unset with VISION_MODEL set) ->
+        OllamaClient pointed at VISION_OLLAMA_HOST (or the same OLLAMA_HOST as
+        chat) with VISION_MODEL as the model.
+    """
+    model = (os.getenv("VISION_MODEL") or "").strip()
+    if not model:
+        return None
+
+    backend = (os.getenv("VISION_BACKEND") or "").strip().lower()
+    # If the vision backend isn't explicitly set, mirror the synthesis backend
+    # so a user who only sets VISION_MODEL gets sensible behavior.
+    if not backend:
+        backend = (os.getenv("LLM_BACKEND") or "").strip().lower()
+
+    if backend == "openai":
+        base_url = (os.getenv("VISION_BASE_URL") or os.getenv("LLM_BASE_URL")
+                    or "https://api.openai.com").strip()
+        api_key = (os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY")
+                   or "").strip()
+        if not api_key:
+            return None
+        return OpenAICompatibleClient(
+            base_url=base_url, api_key=api_key, llm_model=model,
+            session_logger=session_logger,
+        )
+
+    # Ollama path (default).
+    from ollama_client import OllamaClient
+    host = (os.getenv("VISION_OLLAMA_HOST") or os.getenv("OLLAMA_HOST")
+            or "http://localhost:11434")
+    return OllamaClient(
+        base_url=host,
+        llm_model=model,
         embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         session_logger=session_logger,
     )

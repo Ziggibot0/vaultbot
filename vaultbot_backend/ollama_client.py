@@ -19,6 +19,11 @@ class OllamaClient(_BASE):
         self.llm_model = llm_model
         self.embed_model = embed_model
         self.session_logger = session_logger
+        # Reuse a single requests.Session across all calls so HTTP keep-alive
+        # can pool the TCP connection to the local Ollama daemon.  Embedding
+        # batches (8 concurrent) and the streaming chat loop no longer pay a
+        # fresh connection handshake per request.
+        self._session = requests.Session()
 
     def set_model(self, model: str) -> None:
         """Switch the active LLM model at runtime."""
@@ -36,7 +41,7 @@ class OllamaClient(_BASE):
             )
             if result.returncode != 0:
                 # Fallback to the API if the CLI is unavailable
-                resp = requests.get(f"{self.base_url}/api/tags", timeout=5)
+                resp = self._session.get(f"{self.base_url}/api/tags", timeout=5)
                 resp.raise_for_status()
                 return [m["name"] for m in resp.json().get("models", [])]
             models = []
@@ -81,7 +86,7 @@ class OllamaClient(_BASE):
 
         t0 = time.time()
         try:
-            response = requests.post(f"{self.base_url}/api/generate", json=payload, stream=stream)
+            response = self._session.post(f"{self.base_url}/api/generate", json=payload, stream=stream)
             response.raise_for_status()
         except Exception as e:
             self._log_tool("generate", {"payload": payload, "stream": stream}, error=str(e), duration_ms=(time.time() - t0) * 1000)
@@ -133,7 +138,7 @@ class OllamaClient(_BASE):
         }
         t0 = time.time()
         try:
-            response = requests.post(f"{self.base_url}/api/embeddings", json=payload)
+            response = self._session.post(f"{self.base_url}/api/embeddings", json=payload)
             response.raise_for_status()
             data = response.json()
             embedding = data["embedding"]
@@ -167,7 +172,7 @@ class OllamaClient(_BASE):
     def is_running(self) -> bool:
         """Check if the Ollama server is running."""
         try:
-            response = requests.get(f"{self.base_url}/api/tags")
+            response = self._session.get(f"{self.base_url}/api/tags")
             return response.status_code == 200
         except:
             return False
@@ -180,6 +185,16 @@ class OllamaClient(_BASE):
         ask what color it is; True only if the reply mentions red. This is
         the human-centered check the GUI calls before ingest so it can alert
         the user to pick a vision model if their chat model is text-only.
+
+        Thinking-model note: qwen3-style models stream reasoning into a
+        separate `message.thinking` field and may spend the whole token
+        budget reasoning before the answer lands in `message.content`. We
+        (1) disable thinking for this probe via `"think": false` so the
+        model answers directly in content, (2) bump num_predict so a model
+        that still thinks has room to finish, and (3) check BOTH the
+        thinking and content fields for "red" as a belt-and-suspenders — a
+        vision model that actually saw the red square will mention "red" in
+        its reasoning even if the final content got truncated.
         """
         from llm_client import _test_image_base64
         img_b64 = _test_image_base64()
@@ -191,15 +206,18 @@ class OllamaClient(_BASE):
                 "images": [img_b64],
             }],
             "stream": False,
-            "options": {"temperature": 0.0, "num_predict": 20},
+            "think": False,
+            "options": {"temperature": 0.0, "num_predict": 64},
         }
         try:
-            r = requests.post(f"{self.base_url}/api/chat",
-                              json=payload, timeout=30)
+            r = self._session.post(f"{self.base_url}/api/chat",
+                              json=payload, timeout=60)
             if r.status_code != 200:
                 return False
-            text = (r.json().get("message", {}) or {}).get("content", "") or ""
-            return "red" in text.lower()
+            msg = r.json().get("message", {}) or {}
+            content = (msg.get("content", "") or "").lower()
+            thinking = (msg.get("thinking", "") or "").lower()
+            return "red" in content or "red" in thinking
         except Exception:
             return False
 
@@ -229,7 +247,7 @@ class OllamaClient(_BASE):
 
         t0 = time.time()
         try:
-            response = requests.post(f"{self.base_url}/api/chat", json=payload, stream=stream)
+            response = self._session.post(f"{self.base_url}/api/chat", json=payload, stream=stream)
             response.raise_for_status()
         except Exception as e:
             self._log_tool("chat", {"payload": payload, "stream": stream}, error=str(e),

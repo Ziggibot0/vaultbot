@@ -207,14 +207,10 @@ class VaultGraph:
                 to the missing target. Default 1 = every red link is a gap.
         """
         # Count how many distinct notes link to each unresolved target.
+        # `edges` only contains resolved targets, so we must re-scan raw
+        # content for *unresolved* wikilinks.
         ref_counts: Dict[str, int] = {}
         ref_sources: Dict[str, Set[str]] = {}
-        for source_name, targets in self.edges.items():
-            for target in targets:
-                # `edges` only contains resolved targets, so we must re-scan
-                # raw content for *unresolved* wikilinks. Build a full set of
-                # referenced names (resolved or not) per note.
-                pass
         # Re-scan every note's raw content for ALL wikilinks (resolved or not).
         for name, node in self.nodes.items():
             raw_links = WIKILINK_RE.findall(node["content"])

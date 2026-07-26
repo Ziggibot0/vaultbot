@@ -1,123 +1,620 @@
-.vaultbot-chat-container {
-	border-radius: var(--radius-s);
-	border-width: var(--border-width);
-	border-style: solid;
-	border-color: var(--background-modifier-border);
-	background-color: var(--background-primary);
-	padding: var(--spacing-4);
-	margin-bottom: var(--spacing-4);
-	overflow-y: auto;
+/* =========================================================================
+   VaultBot — Earth-tone theme
+   A warm, natural palette: bark, clay, moss, sand, stone. Soft shadows and
+   rounded "river-stone" bubbles give the chat a grounded, product-quality
+   feel. Everything is scoped under .vaultbot-view-root so it never leaks
+   into the rest of Obsidian, and it adapts to light/dark via the --vb-*
+   custom properties defined below.
+   ========================================================================= */
+
+/* The view is a three-region flex column: fixed header at top, the chat
+   panel (scrolls only) in the middle, and a fixed footer (model picker +
+   input/buttons) at the bottom. The root fills the sidebar's height so the
+   footer stays in frame instead of the whole page scrolling. */
+.vaultbot-view-root {
 	display: flex;
 	flex-direction: column;
-	gap: var(--spacing-2);
+	height: 100%;
+	min-height: 0;          /* allow children to shrink + scroll */
+	overflow: hidden;       /* the view itself never scrolls */
 }
 
+.vaultbot-view-root {
+	/* ---- Earth-tone palette (light) ---- */
+	--vb-bark:        #5b4636;   /* deep bark / text accent */
+	--vb-bark-soft:   #6e5a48;
+	--vb-clay:        #c0744a;   /* terracotta accent */
+	--vb-clay-soft:   #d99a73;
+	--vb-moss:        #6b8e5a;   /* sage / moss */
+	--vb-moss-soft:   #93ad84;
+	--vb-sand:        #efe6d6;   /* warm paper */
+	--vb-sand-deep:   #e3d6bf;
+	--vb-stone:       #c9c0b3;   /* cool stone for borders */
+	--vb-stone-deep:  #b3a99a;
+	--vb-bg:          #f6f1e8;   /* linen background */
+	--vb-bg-elev:     #fbf7ef;   /* raised surface */
+	--vb-ink:         #3c322a;   /* main text */
+	--vb-ink-muted:   #7a6e60;   /* secondary text */
+	--vb-shadow:      rgba(91, 70, 54, 0.12);
+	--vb-shadow-soft: rgba(91, 70, 54, 0.06);
+
+	/* ---- Earth-tone palette (dark) ---- */
+	--vb-bark-d:      #d8c4ad;
+	--vb-bark-soft-d: #b9a489;
+	--vb-clay-d:      #d99a73;
+	--vb-clay-soft-d: #c0744a;
+	--vb-moss-d:      #93ad84;
+	--vb-moss-soft-d: #6b8e5a;
+	--vb-sand-d:      #2a2520;
+	--vb-sand-deep-d: #34302a;
+	--vb-stone-d:     #4a443c;
+	--vb-stone-deep-d:#3a342d;
+	--vb-bg-d:        #211e1a;   /* dark loam */
+	--vb-bg-elev-d:   #2a2620;
+	--vb-ink-d:       #e8ddc9;
+	--vb-ink-muted-d: #a89a86;
+	--vb-shadow-d:      rgba(0, 0, 0, 0.35);
+	--vb-shadow-soft-d: rgba(0, 0, 0, 0.18);
+}
+
+/* Swap to the dark palette when Obsidian is in dark mode. */
+.theme-dark .vaultbot-view-root {
+	--vb-bark:        var(--vb-bark-d);
+	--vb-bark-soft:   var(--vb-bark-soft-d);
+	--vb-clay:        var(--vb-clay-d);
+	--vb-clay-soft:   var(--vb-clay-soft-d);
+	--vb-moss:        var(--vb-moss-d);
+	--vb-moss-soft:   var(--vb-moss-soft-d);
+	--vb-sand:        var(--vb-sand-d);
+	--vb-sand-deep:   var(--vb-sand-deep-d);
+	--vb-stone:       var(--vb-stone-d);
+	--vb-stone-deep:  var(--vb-stone-deep-d);
+	--vb-bg:          var(--vb-bg-d);
+	--vb-bg-elev:     var(--vb-bg-elev-d);
+	--vb-ink:         var(--vb-ink-d);
+	--vb-ink-muted:   var(--vb-ink-muted-d);
+	--vb-shadow:      var(--vb-shadow-d);
+	--vb-shadow-soft: var(--vb-shadow-soft-d);
+}
+
+/* ---- Header: a quiet banner with a leaf mark (fixed at top) ---- */
+.vaultbot-view-root .vaultbot-header {
+	flex: 0 0 auto;        /* never shrink or scroll */
+	margin-bottom: 14px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--vb-stone);
+}
+
+.vaultbot-view-root .vaultbot-header-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 1.4em;
+	font-weight: 700;
+	color: var(--vb-bark);
+	letter-spacing: 0.01em;
+}
+
+.vaultbot-view-root .vaultbot-header-mark {
+	font-size: 1.1em;
+	filter: saturate(0.9);
+}
+
+.vaultbot-view-root .vaultbot-header-sub {
+	margin-top: 2px;
+	margin-left: 26px;
+	font-size: 0.78em;
+	color: var(--vb-ink-muted);
+	font-style: italic;
+	letter-spacing: 0.02em;
+}
+
+/* ---- Chat container: the only scrolling region (fills the middle) ---- */
+.vaultbot-chat-container {
+	flex: 1 1 auto;        /* grow to fill, shrink if needed */
+	min-height: 0;         /* critical: lets flex child actually scroll */
+	border-radius: 14px;
+	border: 1px solid var(--vb-stone);
+	background-color: var(--vb-bg);
+	/* Subtle paper-like gradient: a touch lighter at the top. */
+	background-image: linear-gradient(180deg, var(--vb-bg-elev) 0%, var(--vb-bg) 14%);
+	padding: 16px;
+	margin-bottom: 14px;
+	overflow-y: auto;      /* ONLY this panel scrolls */
+	overflow-x: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 3px var(--vb-shadow-soft);
+}
+
+/* ---- Message bubbles: river-stone shapes ---- */
 .vaultbot-message {
-	max-width: 80%;
+	max-width: 100%;
+	width: 100%;
 	word-wrap: break-word;
-	padding: var(--spacing-2) var(--spacing-3);
-	border-radius: var(--radius-s);
-	line-height: 1.4;
+	padding: 9px 13px;
+	border-radius: 16px;
+	line-height: 1.5;
+	font-size: 0.95em;
+	box-shadow: 0 1px 2px var(--vb-shadow-soft);
 }
 
+/* User: clay/terracotta — the human speaking */
 .vaultbot-message.user {
-	background-color: var(--background-modifier-accent);
+	background-color: var(--vb-clay);
+	background-image: linear-gradient(160deg, var(--vb-clay-soft) 0%, var(--vb-clay) 60%);
+	color: #fff8ef;
 	align-self: flex-end;
 	margin-left: auto;
+	border-bottom-right-radius: 5px;
+	text-shadow: 0 0.5px 0 rgba(91, 70, 54, 0.18);
 }
 
+/* Assistant: sand/paper — the bot's grounded voice */
 .vaultbot-message.assistant {
-	background-color: var(--background-modifier-bg);
+	background-color: var(--vb-sand);
+	background-image: linear-gradient(160deg, var(--vb-bg-elev) 0%, var(--vb-sand) 70%);
+	color: var(--vb-ink);
 	align-self: flex-start;
 	margin-right: auto;
+	border: 1px solid var(--vb-sand-deep);
+	border-bottom-left-radius: 5px;
 }
 
+/* System messages: quiet, centered, stone-toned */
 .vaultbot-message.system {
-	font-size: var(--font-smaller);
-	color: var(--text-muted);
+	font-size: 0.82em;
+	color: var(--vb-ink-muted);
 	text-align: center;
-	padding: var(--spacing-2);
+	padding: 6px 10px;
 	margin: 0 auto;
+	background: transparent;
+	box-shadow: none;
 }
 
 .vaultbot-message.system.error {
-	color: var(--text-error);
+	color: #b04a2f;
+	font-weight: 600;
 }
 
+/* ---- Thinking block: a folded leaf ---- */
 .vaultbot-thinking-header {
-	font-size: var(--font-smaller);
-	color: var(--text-muted);
+	font-size: 0.8em;
+	color: var(--vb-ink-muted);
 	cursor: pointer;
-	margin-bottom: var(--spacing-1);
-	padding: var(--spacing-1) 0;
-	border-bottom: 1px dashed var(--background-modifier-border);
+	margin-bottom: 6px;
+	padding: 3px 0;
+	border-bottom: 1px dashed var(--vb-stone);
+	user-select: none;
+}
+
+.vaultbot-thinking-header::before {
+	content: "🍃 ";
+	opacity: 0.7;
 }
 
 .vaultbot-thinking-block {
-	font-size: var(--font-smaller);
-	color: var(--text-muted);
-	background-color: var(--background-secondary);
-	padding: var(--spacing-2) var(--spacing-3);
-	border-radius: var(--radius-s);
-	margin-bottom: var(--spacing-2);
+	font-size: 0.82em;
+	color: var(--vb-ink-muted);
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-sand-deep);
+	padding: 8px 12px;
+	border-radius: 10px;
+	margin-bottom: 8px;
 	white-space: pre-wrap;
 	max-height: 300px;
 	overflow-y: auto;
 }
 
-.vaultbot-answer-block {
+/* ---- Activity line: a moss-colored work indicator ---- */
+.vaultbot-activity {
+	font-size: 0.82em;
+	color: var(--vb-ink-muted);
+	border-left: 3px solid var(--vb-moss);
+	background-color: var(--vb-bg-elev);
+	padding: 4px 10px;
+	margin: 4px 0;
+	border-radius: 0 8px 8px 0;
+	font-family: var(--font-monospace);
 	white-space: pre-wrap;
+	box-shadow: 0 1px 1px var(--vb-shadow-soft);
 }
 
+/* ---- Tool result: a quiet stone chip ---- */
+.vaultbot-tool-result {
+	font-size: 0.85em;
+	color: var(--vb-ink-muted);
+	padding: 2px 10px;
+	margin: 2px 0 8px 0;
+	opacity: 0.85;
+	border-left: 2px solid var(--vb-stone-deep);
+}
+
+/* ---- Status line ---- */
+.vaultbot-status {
+	flex: 0 0 auto;        /* never shrink or scroll */
+	font-size: 0.85em;
+	color: var(--vb-ink-muted);
+	margin-bottom: 10px;
+	min-height: 1.2em;
+}
+
+/* ---- Model picker bar ---- */
+.vaultbot-model-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+	font-size: 0.85em;
+	color: var(--vb-ink-muted);
+}
+
+.vaultbot-model-label {
+	color: var(--vb-bark-soft);
+	font-weight: 600;
+}
+
+.vaultbot-model-select {
+	flex: 1;
+	font-family: var(--font-font-family);
+	font-size: 0.92em;
+	padding: 4px 8px;
+	border: 1px solid var(--vb-stone);
+	border-radius: 8px;
+	background-color: var(--vb-bg-elev);
+	color: var(--vb-ink);
+}
+
+.vaultbot-model-select:focus {
+	border-color: var(--vb-moss);
+	box-shadow: 0 0 0 2px rgba(107, 142, 90, 0.25);
+}
+
+.vaultbot-model-refresh {
+	cursor: pointer;
+	opacity: 0.6;
+	font-size: 1.1em;
+	padding: 0 4px;
+	transition: opacity 0.15s ease, transform 0.4s ease;
+}
+
+.vaultbot-model-refresh:hover {
+	opacity: 1;
+	transform: rotate(180deg);
+}
+
+/* ---- Footer: model picker + input/buttons (fixed at bottom) ---- */
+.vaultbot-footer {
+	flex: 0 0 auto;        /* never shrink or scroll */
+}
+
+/* ---- Input area ---- */
 .vaultbot-input-container {
 	display: flex;
 	flex-direction: column;
-	gap: var(--spacing-2);
+	gap: 8px;
+}
+
+/* Chat bar: textarea + inline Stop button on one row */
+.vaultbot-chat-bar {
+	display: flex;
+	align-items: stretch;
+	gap: 8px;
+}
+
+.vaultbot-chat-bar .vaultbot-input {
+	width: 100%;
+	margin-bottom: 0;
+}
+
+/* Inline Stop button: compact, only the height of the input area */
+.vaultbot-btn-stop {
+	flex: 0 0 auto;
+	align-self: stretch;
+	min-width: 64px;
+	padding: 8px 14px;
 }
 
 .vaultbot-input {
+	width: 100%;
+	box-sizing: border-box;
+	margin-bottom: 4px;
 	font-family: var(--font-font-family);
 	font-size: var(--font-text-size);
-	padding: var(--spacing-2) var(--spacing-3);
-	border: var(--border-width) solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background-color: var(--background-primary);
-	color: var(--text-normal);
+	padding: 9px 12px;
+	border: 1px solid var(--vb-stone);
+	border-radius: 10px;
+	background-color: var(--vb-bg-elev);
+	color: var(--vb-ink);
 	resize: vertical;
-	min-height: 2.5rem;
+	min-height: 2.6rem;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .vaultbot-input:focus {
-	border-color: var(--text-accent);
-	box-shadow: 0 0 0 2px var(--background-modifier-accent);
+	border-color: var(--vb-moss);
+	box-shadow: 0 0 0 2px rgba(107, 142, 90, 0.25);
+	outline: none;
 }
 
+/* ---- Buttons: earthy clay with moss/quiet variants ---- */
 .vaultbot-button-container {
 	display: flex;
+	gap: 10px;
+	align-items: stretch;
 }
 
-.vaultbot-button-container button {
+/* Group clay buttons together and moss buttons together, with a small
+   visual gap between the two clusters. */
+.vaultbot-btn-group {
+	display: flex;
+	gap: 6px;
+	align-items: stretch;
+}
+
+.vaultbot-btn-group-clay { flex: 1; }
+.vaultbot-btn-group-moss { flex: 0 0 auto; }
+
+.vaultbot-btn {
 	flex: 1;
 	font-family: var(--font-font-family);
-	font-size: var(--font-text-size);
-	padding: var(--spacing-2) var(--spacing-3);
-	border: none;
-	border-radius: var(--radius-s);
-	background-color: var(--color-accent);
-	color: var(--text-on-accent);
+	font-size: 0.92em;
+	padding: 8px 12px;
+	border: 1px solid var(--vb-clay-soft);
+	border-radius: 10px;
+	background-color: var(--vb-clay);
+	background-image: linear-gradient(180deg, var(--vb-clay-soft) 0%, var(--vb-clay) 100%);
+	color: #fff8ef;
 	cursor: pointer;
-	transition: background-color 0.15s ease;
+	transition: background-color 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+	box-shadow: 0 1px 2px var(--vb-shadow-soft);
+	text-shadow: 0 0.5px 0 rgba(91, 70, 54, 0.2);
 }
 
-.vaultbot-button-container button:hover {
-	background-color: var(--color-accent-hover);
+.vaultbot-btn:hover {
+	background-color: var(--vb-clay-soft);
+	background-image: linear-gradient(180deg, var(--vb-clay-soft) 0%, var(--vb-clay-soft) 100%);
+	box-shadow: 0 2px 5px var(--vb-shadow);
 }
 
-.vaultbot-button-container button:active {
-	background-color: var(--color-accent-pressed);
+.vaultbot-btn:active {
+	transform: translateY(1px);
+	box-shadow: 0 1px 1px var(--vb-shadow-soft);
 }
 
-.vaultbot-button-container button:disabled {
+.vaultbot-btn:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
+}
+
+/* Quiet buttons (Stop, Restart): moss-toned, less prominent */
+.vaultbot-btn-quiet {
+	background-color: var(--vb-moss);
+	background-image: linear-gradient(180deg, var(--vb-moss-soft) 0%, var(--vb-moss) 100%);
+	border-color: var(--vb-moss-soft);
+	opacity: 0.92;
+}
+
+.vaultbot-btn-quiet:hover {
+	background-color: var(--vb-moss-soft);
+	background-image: linear-gradient(180deg, var(--vb-moss-soft) 0%, var(--vb-moss-soft) 100%);
+}
+
+/* Recording state: a warm clay-red pulse */
+.vaultbot-btn.vaultbot-recording {
+	background-color: #a83c2a;
+	background-image: linear-gradient(180deg, #c45a44 0%, #a83c2a 100%);
+	border-color: #8a2f20;
+	animation: vaultbot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes vaultbot-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(168, 60, 42, 0.5); }
+	50%      { box-shadow: 0 0 0 6px rgba(168, 60, 42, 0); }
+}
+
+/* Mute pressed (active): a darker, "engaged" clay so the user can tell at
+   a glance that voice is off. The toggle persists across turns/sessions. */
+.vaultbot-btn.vaultbot-mute-active {
+	background-color: #8a4a30;
+	background-image: linear-gradient(180deg, #a35a3e 0%, #8a4a30 100%);
+	border-color: #6e3a26;
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.vaultbot-btn.vaultbot-mute-active:hover {
+	background-color: #a35a3e;
+	background-image: linear-gradient(180deg, #a35a3e 0%, #8a4a30 100%);
+}
+
+/* Restart busy / offline: stay dark until the backend is confirmed back up.
+   Applied while a restart is in progress OR the backend is still down. */
+.vaultbot-btn.vaultbot-restart-busy {
+	background-color: #4a4036;
+	background-image: linear-gradient(180deg, #5a4e42 0%, #4a4036 100%);
+	border-color: #3a322a;
+	color: var(--vb-ink-muted);
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+	cursor: progress;
+	opacity: 0.9;
+}
+
+.vaultbot-btn.vaultbot-restart-busy:hover {
+	background-color: #5a4e42;
+	background-image: linear-gradient(180deg, #5a4e42 0%, #4a4036 100%);
+}
+
+/* =========================================================================
+   Markdown rendering inside chat bubbles
+   Obsidian's MarkdownRenderer drops real DOM (tables, lists, code blocks,
+   blockquotes) into .vaultbot-answer-block. These rules make that content
+   feel native to the earth-tone theme.
+   ========================================================================= */
+.vaultbot-answer-block {
+	white-space: normal;
+	overflow-wrap: anywhere;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block {
+	white-space: normal;
+	font-size: 0.95em;
+	line-height: 1.55;
+	max-width: 100%;
+	min-width: 0;
+	color: var(--vb-ink);
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block p {
+	margin: 0.4em 0;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+/* Headings: bark-toned, modest sizes so they don't blow out the bubble. */
+.vaultbot-message.assistant .vaultbot-answer-block h1,
+.vaultbot-message.assistant .vaultbot-answer-block h2,
+.vaultbot-message.assistant .vaultbot-answer-block h3,
+.vaultbot-message.assistant .vaultbot-answer-block h4,
+.vaultbot-message.assistant .vaultbot-answer-block h5,
+.vaultbot-message.assistant .vaultbot-answer-block h6 {
+	margin: 0.7em 0 0.35em 0;
+	color: var(--vb-bark);
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block h1 { font-size: 1.25em; }
+.vaultbot-message.assistant .vaultbot-answer-block h2 { font-size: 1.15em; }
+.vaultbot-message.assistant .vaultbot-answer-block h3 { font-size: 1.05em; }
+.vaultbot-message.assistant .vaultbot-answer-block h4,
+.vaultbot-message.assistant .vaultbot-answer-block h5,
+.vaultbot-message.assistant .vaultbot-answer-block h6 { font-size: 1em; }
+
+/* Tables: earthy borders, scrollable so wide ones don't crush the sidebar. */
+.vaultbot-message.assistant .vaultbot-answer-block .table-wrapper,
+.vaultbot-message.assistant .vaultbot-answer-block table {
+	display: block;
+	overflow-x: auto;
+	max-width: 100%;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block table {
+	border-collapse: collapse;
+	font-size: 0.9em;
+	margin: 0.6em 0;
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-stone);
+	border-radius: 8px;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block th,
+.vaultbot-message.assistant .vaultbot-answer-block td {
+	border: 1px solid var(--vb-sand-deep);
+	padding: 5px 9px;
+	text-align: left;
+	vertical-align: top;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block th {
+	background-color: var(--vb-sand-deep);
+	color: var(--vb-bark);
+	font-weight: 700;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block tr:nth-child(even) td {
+	background-color: var(--vb-bg-elev);
+}
+
+/* Inline + fenced code: stone-toned slabs */
+.vaultbot-message.assistant .vaultbot-answer-block code {
+	font-family: var(--font-monospace);
+	font-size: 0.88em;
+	background-color: var(--vb-sand-deep);
+	color: var(--vb-bark);
+	padding: 1px 5px;
+	border-radius: 5px;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block pre {
+	background-color: var(--vb-sand-deep);
+	border: 1px solid var(--vb-stone);
+	padding: 10px 12px;
+	border-radius: 10px;
+	overflow-x: auto;
+	margin: 0.6em 0;
+	max-width: 100%;
+	box-shadow: inset 0 1px 2px var(--vb-shadow-soft);
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block pre code {
+	background-color: transparent;
+	color: var(--vb-ink);
+	padding: 0;
+	font-size: 0.86em;
+	white-space: pre;
+}
+
+/* Lists: tighten spacing inside a chat bubble */
+.vaultbot-message.assistant .vaultbot-answer-block ul,
+.vaultbot-message.assistant .vaultbot-answer-block ol {
+	margin: 0.4em 0;
+	padding-left: 1.5em;
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block ul li::marker {
+	color: var(--vb-moss);
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block ol li::marker {
+	color: var(--vb-bark-soft);
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block li {
+	margin: 0.18em 0;
+}
+
+/* Blockquotes: a moss-edged quote */
+.vaultbot-message.assistant .vaultbot-answer-block blockquote {
+	margin: 0.5em 0;
+	padding: 0.3em 0.9em;
+	border-left: 3px solid var(--vb-moss);
+	background-color: var(--vb-bg-elev);
+	border-radius: 0 8px 8px 0;
+	color: var(--vb-ink-muted);
+}
+
+/* Horizontal rule: a thin line of stone */
+.vaultbot-message.assistant .vaultbot-answer-block hr {
+	border: none;
+	border-top: 1px solid var(--vb-stone);
+	margin: 0.8em 0;
+}
+
+/* Mermaid / diagrams: explicit container so they don't collapse. */
+.vaultbot-message.assistant .vaultbot-answer-block .markdown-preview-view,
+.vaultbot-message.assistant .vaultbot-answer-block .markdown-embed {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+/* Links: clay-toned, like a trail marker */
+.vaultbot-message.assistant .vaultbot-answer-block a {
+	color: var(--vb-clay);
+	text-decoration: underline;
+	text-decoration-color: var(--vb-clay-soft);
+}
+
+.vaultbot-message.assistant .vaultbot-answer-block a:hover {
+	color: var(--vb-clay-soft);
+}
+
+/* Inline images (e.g. diagrams rendered to png) sit nicely in the bubble. */
+.vaultbot-message.assistant .vaultbot-answer-block img {
+	max-width: 100%;
+	border-radius: 8px;
+	border: 1px solid var(--vb-stone);
+	margin: 0.4em 0;
 }

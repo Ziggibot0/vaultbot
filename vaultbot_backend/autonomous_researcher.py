@@ -146,6 +146,7 @@ class AutonomousResearcher:
         search_client=None,
         curriculum=None,
         checkpointer=None,
+        procedure_tracker=None,
     ):
         self.vault_path = Path(vault_path).resolve()
         self.search_client = search_client
@@ -159,6 +160,7 @@ class AutonomousResearcher:
         self.thin_note_threshold = thin_note_threshold
         self.curriculum = curriculum  # KnowledgeCurriculum (Voyager-style self-directed growth)
         self.checkpointer = checkpointer  # Checkpointer (crash recovery)
+        self.procedure_tracker = procedure_tracker  # ProcedureTracker (failure-driven evolution)
 
         self.engine = ResearchEngine(
             session_logger=session_logger,
@@ -307,6 +309,25 @@ class AutonomousResearcher:
                     self.curriculum.mark_completed(topic)
                 except Exception:
                     pass
+            # --- Phase 3: Update procedural note frontmatter after re-research ---
+            # If this gap was a failing or stale procedure, reset its failure
+            # count and update its frontmatter (status -> experimental,
+            # last_reviewed -> today, stats reset to 0).
+            if self.procedure_tracker is not None and gap.get("kind") in (
+                    "failing_procedure", "stale_procedure"):
+                proc_name = gap.get("procedure", "")
+                if proc_name:
+                    try:
+                        self.procedure_tracker.update_after_research(
+                            proc_name, str(self.vault_path))
+                        self._log("autonomous_procedure_updated", {
+                            "procedure": proc_name,
+                            "kind": gap["kind"],
+                        })
+                    except Exception as e:
+                        self._log("autonomous_procedure_update_failed", {
+                            "procedure": proc_name, "error": str(e),
+                        })
             return note_path
         except Exception as e:
             self._log("autonomous_note_create_failed",
@@ -339,6 +360,20 @@ class AutonomousResearcher:
             })
             gaps = recovered
             self._recovered_gaps = None  # consume them
+        elif self.procedure_tracker is not None:
+            # Check for failing/stale procedures and procedural gaps first.
+            # These are higher priority than normal knowledge gaps because
+            # they represent tasks where the system is actively failing.
+            proc_gaps = self.procedure_tracker.get_research_gaps(
+                vault_path=str(self.vault_path))
+            if proc_gaps:
+                gaps = proc_gaps
+                self._log("autonomous_procedure_gaps", {
+                    "count": len(gaps),
+                    "topics": [g.get("topic", "") for g in gaps[:5]],
+                })
+            else:
+                gaps = self._identify_gaps()
         else:
             gaps = self._identify_gaps()
         self._log("autonomous_cycle_begin", {
@@ -382,6 +417,20 @@ class AutonomousResearcher:
                 "note_path": note_path,
                 "ok": note_path is not None,
             })
+        # --- Phase 3: Run the promotion cycle after each research cycle ---
+        # Scan all procedural notes in the vault, check their success rates,
+        # and promote/flag them based on the deterministic thresholds.
+        # This is purely mechanical: read stats, compare to thresholds,
+        # write frontmatter. No LLM judgment.
+        if self.procedure_tracker is not None:
+            try:
+                promo_result = self.procedure_tracker.run_promotion_cycle(
+                    str(self.vault_path))
+                if promo_result["promoted"] or promo_result["flagged"]:
+                    self._log("autonomous_procedure_promotion", promo_result)
+            except Exception as e:
+                self._log("autonomous_promotion_cycle_failed",
+                          {"error": str(e)})
         self.last_run = {
             "timestamp": time.time(),
             "gap_count": len(gaps),

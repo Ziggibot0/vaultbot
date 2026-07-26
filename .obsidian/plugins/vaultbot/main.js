@@ -1,4 +1,4 @@
-const { Plugin, Setting, ItemView, PluginSettingTab, Notice } = require('obsidian');
+const { Plugin, Setting, ItemView, PluginSettingTab, Notice, MarkdownRenderer } = require('obsidian');
 const { spawn } = require('child_process');
 const path = require('path');
 
@@ -12,6 +12,7 @@ class VaultBotPlugin extends Plugin {
 			researchBackend: 'tavily',
 			tavilyApiKey: '',
 			ttsEnabled: true,
+			ttsMuted: false,
 			ttsVoice: 'am_michael',
 			ttsRate: 190,
 			ttsMode: 'server'
@@ -177,6 +178,44 @@ class VaultBotPlugin extends Plugin {
 			const response = await fetch(this.settings.backendUrl + '/llm/vision_check');
 			if (!response.ok) return null;
 			return await response.json();
+		} catch (e) {
+			return null;
+		}
+	}
+
+	// Read the dedicated vision-model config (the model used to read textbook
+	// pages, separate from the chat model). Lets the settings panel show
+	// whether a vision model is configured and reachable, so a user with a
+	// text-only chat model can confirm their page-reading model is wired up.
+	async fetchVisionConfig() {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/llm/vision_config');
+			if (!response.ok) return null;
+			return await response.json();
+		} catch (e) {
+			return null;
+		}
+	}
+
+	// Configure (or clear) the dedicated vision model at runtime. The vision
+	// model is a SEPARATE concern from the chat model: a user keeps their
+	// fast/cheap text-only chat model and delegates page-reading to a vision-
+	// capable model on its own backend. Sending an empty model clears the
+	// config so the page reader falls back to the chat model's own vision.
+	async pushVisionConfig({backend, baseUrl, apiKey, model, ollamaHost}) {
+		try {
+			const body = {};
+			if (backend) body.backend = backend;
+			if (baseUrl !== undefined) body.base_url = baseUrl;
+			if (apiKey !== undefined) body.api_key = apiKey;
+			if (model !== undefined) body.model = model;
+			if (ollamaHost !== undefined) body.ollama_host = ollamaHost;
+			const response = await fetch(this.settings.backendUrl + '/llm/vision_config', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(body)
+			});
+			return response.ok ? await response.json() : null;
 		} catch (e) {
 			return null;
 		}
@@ -688,6 +727,145 @@ class VaultBotSettingTab extends PluginSettingTab {
 			}
 		});
 
+		containerEl.createEl('h3', {text: 'Vision Model (textbook page reader)'});
+
+		// The vision model is a SEPARATE, OPTIONAL model used ONLY to read
+		// rendered textbook pages (textbook_read_page). It lets a user keep a
+		// fast/cheap text-only chat model and still get equations/figures read
+		// exactly as printed — the page-reading step uses this model instead of
+		// the chat model. Leave the model field empty to fall back to the chat
+		// model's own vision (a vision-capable chat model needs no separate
+		// config). Human-centered: a non-coder picks a vision model once and
+		// never thinks about it again; the ingest alert names THIS model.
+		const visionDescEl = containerEl.createEl('div', {text:
+			'Optional. A vision-capable model used only to read textbook PDF pages ' +
+			'(so equations and figures come through exactly as printed). Leave empty ' +
+			'to fall back to your chat model\u2019s own vision. Works with a different ' +
+			'Ollama host or a separate OpenAI-compatible endpoint than your chat model.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+
+		const visionBackendSetting = new Setting(containerEl)
+			.setName('Vision model backend')
+			.setDesc('Where the page-reading model runs. Defaults to your chat backend.');
+		const visionBackendDropdown = visionBackendSetting.controlEl.createEl('select');
+		visionBackendDropdown.createEl('option', {text: 'Same as chat backend', attr: {value: ''}});
+		visionBackendDropdown.createEl('option', {text: 'Ollama (local, free)', attr: {value: 'ollama'}});
+		visionBackendDropdown.createEl('option', {text: 'API key (OpenAI-compatible)', attr: {value: 'openai'}});
+
+		// Vision API-key backend fields (shown only when 'openai' is selected).
+		const visionApiFieldsEl = containerEl.createDiv();
+		visionApiFieldsEl.style.display = 'none';
+		visionApiFieldsEl.style.paddingLeft = '0';
+		visionApiFieldsEl.createEl('div', {text: 'Use a separate endpoint/key than your chat model, or reuse the chat model\u2019s values by leaving blank.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 8px 0;'}});
+
+		const visionBaseUrlRow = visionApiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
+		visionBaseUrlRow.createEl('span', {text: 'Base URL', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const visionBaseUrlInput = visionBaseUrlRow.createEl('input', {type: 'text', attr: {placeholder: 'https://api.openai.com', style: 'flex:1;min-width:220px;'}});
+		visionBaseUrlInput.value = 'https://api.openai.com';
+
+		const visionApiKeyRow = visionApiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
+		visionApiKeyRow.createEl('span', {text: 'API key', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const visionApiKeyInput = visionApiKeyRow.createEl('input', {type: 'password', attr: {placeholder: 'sk-... (blank = reuse chat key)', style: 'flex:1;min-width:220px;'}});
+
+		const visionModelRow = visionApiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
+		visionModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const visionModelInput = visionModelRow.createEl('input', {type: 'text', attr: {placeholder: 'gpt-4o-mini', style: 'flex:1;min-width:220px;'}});
+
+		// Ollama-host field (shown only when 'ollama' is selected).
+		const visionOllamaFieldsEl = containerEl.createDiv();
+		visionOllamaFieldsEl.style.display = 'none';
+		visionOllamaFieldsEl.style.paddingLeft = '0';
+		visionOllamaFieldsEl.createEl('div', {text: 'Only set this if your vision model lives on a different Ollama daemon than your chat model. Leave blank to use the same host.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 8px 0;'}});
+		const visionOllamaHostRow = visionOllamaFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
+		visionOllamaHostRow.createEl('span', {text: 'Ollama host', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const visionOllamaHostInput = visionOllamaHostRow.createEl('input', {type: 'text', attr: {placeholder: 'http://localhost:11434', style: 'flex:1;min-width:220px;'}});
+
+		// Model field shown for the 'same as chat' / 'ollama' paths (a bare
+		// model name). For 'openai' the model input lives in the API fields.
+		const visionOllamaModelRow = visionOllamaFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
+		visionOllamaModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:80px;font-size:0.85em;'}});
+		const visionOllamaModelInput = visionOllamaModelRow.createEl('input', {type: 'text', attr: {placeholder: 'llava / minicpm-v / qwen-vl', style: 'flex:1;min-width:220px;'}});
+
+		const visionStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin-bottom:6px;'}});
+
+		const visionSaveBtn = containerEl.createEl('button', {text: 'Save vision model', cls: 'mod-cta'});
+		visionSaveBtn.style.marginBottom = '6px';
+		visionSaveBtn.addEventListener('click', async () => {
+			visionStatusEl.setText('Saving vision model...');
+			const be = visionBackendDropdown.value;
+			// The model input depends on which backend is selected.
+			let modelVal = '';
+			if (be === 'openai') {
+				modelVal = visionModelInput.value.trim();
+			} else if (be === 'ollama') {
+				modelVal = visionOllamaModelInput.value.trim();
+			} else {
+				// 'same as chat' — use the Ollama model field as the model name
+				// (the backend mirrors the chat backend automatically).
+				modelVal = visionOllamaModelInput.value.trim();
+			}
+			const res = await this.plugin.pushVisionConfig({
+				backend: be || undefined,
+				baseUrl: be === 'openai' ? visionBaseUrlInput.value.trim() : undefined,
+				apiKey: be === 'openai' ? visionApiKeyInput.value.trim() : undefined,
+				model: modelVal,
+				ollamaHost: (be === 'ollama' || be === '') ? visionOllamaHostInput.value.trim() : undefined
+			});
+			if (res && res.status === 'ok') {
+				const msg = res.configured
+					? `Vision model set: ${res.model} (${res.backend}). Running: ${res.running}`
+					: 'Vision model cleared \u2014 page reading falls back to your chat model.';
+				visionStatusEl.setText(msg);
+				new Notice(res.configured ? 'Vision model saved.' : 'Vision model cleared.');
+				refreshVisionConfig();
+			} else {
+				visionStatusEl.setText('Failed \u2014 check the key, base URL, and model id.');
+			}
+		});
+
+		const visionClearBtn = containerEl.createEl('button', {text: 'Clear vision model'});
+		visionClearBtn.style.marginLeft = '8px';
+		visionClearBtn.addEventListener('click', async () => {
+			visionStatusEl.setText('Clearing vision model...');
+			const res = await this.plugin.pushVisionConfig({model: ''});
+			if (res && res.status === 'ok') {
+				visionStatusEl.setText('Vision model cleared \u2014 page reading falls back to your chat model.');
+				new Notice('Vision model cleared.');
+				refreshVisionConfig();
+			} else {
+				visionStatusEl.setText('Failed to clear \u2014 is the backend running?');
+			}
+		});
+
+		// Load the current vision config and reflect it in the UI.
+		const refreshVisionConfig = async () => {
+			const cfg = await this.plugin.fetchVisionConfig();
+			if (!cfg) {
+				visionStatusEl.setText('Backend offline \u2014 start the backend first.');
+				return;
+			}
+			visionBackendDropdown.value = cfg.backend || '';
+			visionApiFieldsEl.style.display = (cfg.backend === 'openai') ? 'block' : 'none';
+			visionOllamaFieldsEl.style.display = (cfg.backend === 'openai') ? 'none' : 'block';
+			if (cfg.base_url) visionBaseUrlInput.value = cfg.base_url;
+			if (cfg.model) {
+				if (cfg.backend === 'openai') visionModelInput.value = cfg.model;
+				else visionOllamaModelInput.value = cfg.model;
+			}
+			const state = cfg.configured
+				? `Active: ${cfg.backend} | model: ${cfg.model} | running: ${cfg.running}`
+				: 'Not configured \u2014 page reading uses your chat model\u2019s vision (if any).';
+			visionStatusEl.setText(state);
+		};
+		refreshVisionConfig();
+		visionBackendDropdown.addEventListener('change', async () => {
+			const be = visionBackendDropdown.value;
+			visionApiFieldsEl.style.display = (be === 'openai') ? 'block' : 'none';
+			visionOllamaFieldsEl.style.display = (be === 'openai') ? 'none' : 'block';
+		});
+
 		containerEl.createEl('h3', {text: 'Research Backend'});
 
 		new Setting(containerEl)
@@ -715,8 +893,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 			new Notice('Tavily API key saved.');
 		});
 
-		containerEl.createEl('button', {text: 'Start backend now', cls: 'mod-cta'})
-			.addEventListener('click', () => this.plugin.startBackendIfNeeded());
+		// Note: starting the backend is handled by the Restart button in the
+		// VaultBot sidebar. There's no separate "Start backend now" button
+		// here anymore — having two entry points could race each other
+		// (one starts while the other restarts), leaving the backend in a
+		// half-up state. Use the sidebar Restart button instead.
 
 		containerEl.createEl('h3', {text: 'Voice'});
 
@@ -815,14 +996,18 @@ class VaultBotSidebarView extends ItemView {
 			this.contentEl = this.container || this.containerEl;
 		}
 		this.contentEl.empty();
-		this.contentEl.createEl('h2', {text: 'VaultBot Chat'});
+		this.contentEl.addClass('vaultbot-view-root');
+		// Three-region layout: fixed header / scrolling chat / fixed input
+		// bar at the bottom. Only the chat panel scrolls.
+		const headerEl = this.contentEl.createEl('div', {cls: 'vaultbot-header'});
+		const titleEl = headerEl.createEl('div', {cls: 'vaultbot-header-title'});
+		titleEl.createEl('span', {cls: 'vaultbot-header-mark', text: '🌿'});
+		titleEl.createEl('span', {text: 'VaultBot'});
+		headerEl.createEl('div', {cls: 'vaultbot-header-sub', text: 'a garden for your thoughts'});
+
+		const statusEl = this.contentEl.createDiv({cls: 'vaultbot-status'});
 
 		const chatContainer = this.contentEl.createDiv({cls: 'vaultbot-chat-container'});
-		const statusEl = this.contentEl.createDiv({cls: 'vaultbot-status'});
-		statusEl.style.fontSize = '0.85em';
-		statusEl.style.color = 'var(--text-muted)';
-		statusEl.style.marginBottom = '8px';
-		statusEl.style.minHeight = '1.2em';
 
 		let connectionCheckInterval = null;
 		let backendWasOnline = false;
@@ -847,6 +1032,13 @@ class VaultBotSidebarView extends ItemView {
 				if (!backendWasOnline) {
 					backendWasOnline = true;
 					refreshModels();
+					// Backend just came back up: clear the restart button's
+					// dark "busy/offline" state so it reads "Restart" again.
+					if (restartButton) {
+						restartButton.removeAttribute('disabled');
+						restartButton.setText('Restart');
+						restartButton.removeClass('vaultbot-restart-busy');
+					}
 				}
 				// Only connect if there is no socket at all, or the existing one is
 				// CLOSING/CLOSED. A socket still in CONNECTING state must not be
@@ -864,16 +1056,14 @@ class VaultBotSidebarView extends ItemView {
 		connectionCheckInterval = window.setInterval(ensureConnection, 5000);
 		this.registerInterval(connectionCheckInterval);
 
+		// Footer: the model picker + input/buttons. This is the fixed
+		// bottom region of the view; only the chat panel above it scrolls.
+		const footerEl = this.contentEl.createDiv({cls: 'vaultbot-footer'});
+
 		// Model picker dropdown
-		const modelBar = this.contentEl.createDiv({cls: 'vaultbot-model-bar'});
-		modelBar.style.display = 'flex';
-		modelBar.style.alignItems = 'center';
-		modelBar.style.gap = '8px';
-		modelBar.style.marginBottom = '8px';
-		modelBar.style.fontSize = '0.85em';
+		const modelBar = footerEl.createDiv({cls: 'vaultbot-model-bar'});
 		modelBar.createEl('span', {text: 'Model:', cls: 'vaultbot-model-label'});
 		const modelSelect = modelBar.createEl('select', {cls: 'vaultbot-model-select'});
-		modelSelect.style.flex = '1';
 		modelSelect.createEl('option', {text: 'Fetching models...', attr: {disabled: true}});
 		const refreshModels = async () => {
 			const online = await this.plugin.waitForBackend(5000, 250);
@@ -903,41 +1093,35 @@ class VaultBotSidebarView extends ItemView {
 			await this.plugin.saveSettings();
 			await this.plugin.setBackendModel(modelSelect.value);
 		});
-		const refreshBtn = modelBar.createEl('span', {text: 'Refresh'});
-		refreshBtn.style.cursor = 'pointer';
-		refreshBtn.style.opacity = '0.6';
+		const refreshBtn = modelBar.createEl('span', {text: '↻', cls: 'vaultbot-model-refresh'});
 		refreshBtn.title = 'Refresh model list';
 		refreshBtn.addEventListener('click', () => refreshModels());
 
-		const inputContainer = this.contentEl.createDiv({cls: 'vaultbot-input-container'});
-		const input = inputContainer.createEl('textarea', {
+		const inputContainer = footerEl.createDiv({cls: 'vaultbot-input-container'});
+		// The chat bar: textarea + an inline Stop button that only appears
+		// while a turn is in flight (so there's always something to stop).
+		const chatBar = inputContainer.createDiv({cls: 'vaultbot-chat-bar'});
+		const input = chatBar.createEl('textarea', {
 			cls: 'vaultbot-input',
 			attr: {placeholder: 'Ask VaultBot...', rows: '3'}
 		});
-		input.style.width = '100%';
-		input.style.boxSizing = 'border-box';
-		input.style.marginBottom = '4px';
+		const stopButton = chatBar.createEl('button', {text: 'Stop', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-stop'});
+		stopButton.title = 'Interrupt VaultBot immediately. Also stops any voice playback.';
+		stopButton.style.display = 'none'; // hidden until a turn is active
 
+		// Action row: clay (primary) buttons grouped, then moss (quiet)
+		// buttons grouped — each cluster sits together.
 		const buttonContainer = inputContainer.createDiv({cls: 'vaultbot-button-container'});
-		buttonContainer.style.display = 'flex';
-		buttonContainer.style.gap = '8px';
-		const ingestButton = buttonContainer.createEl('button', {text: 'Ingest'});
-		const callButton = buttonContainer.createEl('button', {text: 'Call'});
-		const stopButton = buttonContainer.createEl('button', {text: 'Stop'});
-		const muteButton = buttonContainer.createEl('button', {text: 'Mute'});
-		const restartButton = buttonContainer.createEl('button', {text: 'Restart'});
-		ingestButton.style.flex = '0 0 auto';
-		callButton.style.flex = '0 0 auto';
-		stopButton.style.flex = '0 0 auto';
-		muteButton.style.flex = '0 0 auto';
-		restartButton.style.flex = '0 0 auto';
+		const clayGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-clay'});
+		const mossGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-moss'});
+		const ingestButton = clayGroup.createEl('button', {text: 'Ingest', cls: 'vaultbot-btn'});
+		const callButton = clayGroup.createEl('button', {text: 'Call', cls: 'vaultbot-btn'});
+		const muteButton = clayGroup.createEl('button', {text: 'Mute', cls: 'vaultbot-btn vaultbot-btn-mute'});
+		const restartButton = mossGroup.createEl('button', {text: 'Restart', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-restart'});
 		callButton.title = 'Hold to talk, or click to toggle recording. Your speech is transcribed locally and sent as a chat message; the reply is spoken back.';
 		ingestButton.title = 'Ingest any new textbooks from the learningMaterial/ folder into the vault. No AI involved - just parses and links them. Weaving happens in the background.';
-		stopButton.title = 'Interrupt VaultBot immediately. Also stops any voice playback.';
-		muteButton.title = 'Toggle voice playback on/off. Interrupts the current utterance when muted.';
+		muteButton.title = 'Toggle voice playback on/off. Interrupts the current utterance + discards the queued audio when muted.';
 		restartButton.title = 'Restart the VaultBot backend. Use this after code changes or if the bot seems stuck. Takes a few seconds.';
-		stopButton.style.opacity = '0.7';
-		restartButton.style.opacity = '0.85';
 
 		// --- Voice: recording + STT + TTS --------------------------------
 		// Press & hold (or click toggle) the Call button -> MediaRecorder
@@ -955,8 +1139,7 @@ class VaultBotSidebarView extends ItemView {
 		const setCallState = (recording) => {
 			isRecording = recording;
 			callButton.setText(recording ? 'Recording...' : 'Call');
-			callButton.style.background = recording ? 'var(--background-modifier-error)' : '';
-			callButton.style.color = recording ? 'var(--text-on-accent)' : '';
+			callButton.toggleClass('vaultbot-recording', recording);
 		};
 
 		const stopAndSend = async () => {
@@ -1048,18 +1231,31 @@ class VaultBotSidebarView extends ItemView {
 		// latency instead of waiting for the whole reply. Server (Kokoro)
 		// TTS is whole-utterance, so streaming mode requires the browser
 		// engine; if ttsMode==='server' we fall back to one-shot at the end.
-		let ttsMuted = false;
+		// Mute state is persisted in plugin settings so it survives across
+		// turns, reloads, and sessions.
+		let ttsMuted = !!(this.plugin.settings.ttsMuted);
 		let ttsSentenceBuffer = '';
 		let ttsActiveUtterances = [];
 		const SENTENCE_BOUNDARY = /([.!?])\s+/;
 
 		const updateMuteButton = () => {
 			muteButton.setText(ttsMuted ? 'Unmute' : 'Mute');
+			muteButton.toggleClass('vaultbot-mute-active', ttsMuted);
 		};
 
 		const stopAllTTS = () => {
 			try { window.speechSynthesis.cancel(); } catch (e) {}
-			if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+			// Stop + discard the server WAV: pause the Audio element, revoke
+			// its object URL so the browser releases the blob, and null it.
+			if (currentAudio) {
+				try { currentAudio.pause(); } catch (e) {}
+				try {
+					if (currentAudio.src && currentAudio.src.startsWith('blob:')) {
+						URL.revokeObjectURL(currentAudio.src);
+					}
+				} catch (e) {}
+				currentAudio = null;
+			}
 			ttsSentenceBuffer = '';
 			ttsActiveUtterances = [];
 		};
@@ -1099,23 +1295,38 @@ class VaultBotSidebarView extends ItemView {
 			ttsSentenceBuffer = parts.join('');
 		};
 
-		// Stop button: interrupt the backend + kill voice playback.
+		// Stop button: interrupt the backend + kill voice playback. Sits
+		// inline in the chat bar and only appears while a turn is active.
 		stopButton.addEventListener('click', () => {
+			// Ask the backend to cancel the in-flight task. The backend then
+			// emits a 'stopped' event that clears the local turn state.
 			if (ws && ws.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({type: 'stop'}));
+				try { ws.send(JSON.stringify({type: 'stop'})); } catch (e) {}
 			}
+			// Kill voice + discard any queued WAV immediately, don't wait on
+			// the backend round-trip.
 			stopAllTTS();
 			endActivity();
+			// Optimistically hide the stop button + flush partial text so the
+			// UI reacts instantly. The 'stopped' handler will finish cleanup.
+			setTurnActive(false);
+			closeCurrentSegment();
 			statusEl.setText('Interrupted');
 			currentAssistantMessage = null;
 			currentThinkingBlock = null;
 			currentAnswerBlock = null;
+			currentSegmentText = '';
 			currentAnswerText = '';
 		});
 
-		// Mute button: toggle voice on/off. Muting kills the current utterance.
-		muteButton.addEventListener('click', () => {
+		// Mute button: toggle voice on/off. Muting kills the current
+		// utterance AND discards the queued server WAV (revoke its blob URL
+		// so the audio is gone, not just paused). State is persisted to
+		// plugin settings so it survives across turns + sessions.
+		muteButton.addEventListener('click', async () => {
 			ttsMuted = !ttsMuted;
+			this.plugin.settings.ttsMuted = ttsMuted;
+			try { await this.plugin.saveSettings(); } catch (e) {}
 			updateMuteButton();
 			if (ttsMuted) stopAllTTS();
 		});
@@ -1123,8 +1334,35 @@ class VaultBotSidebarView extends ItemView {
 
 		let currentAssistantMessage = null;
 		let currentThinkingBlock = null;
-		let currentAnswerBlock = null;
-		let currentAnswerText = ''; // accumulated plain text of the reply, for TTS
+		// Turn state: tracks whether the bot is actively generating, so the
+		// inline Stop button only shows when there's something to stop.
+		let turnActive = false;
+		const setTurnActive = (active) => {
+			turnActive = active;
+			stopButton.style.display = active ? '' : 'none';
+		};
+		// Thinking blocks: shown live while the model reasons, then auto-
+		// collapse when the actual answer starts streaming so they don't
+		// clutter the chat. The header stays as a clickable toggle so the
+		// user can re-expand any past thinking block.
+		let currentThinkingHeader = null;
+		const setThinkingVisible = (visible) => {
+			if (!currentThinkingBlock || !currentThinkingHeader) return;
+			currentThinkingBlock.style.display = visible ? 'block' : 'none';
+			currentThinkingHeader.textContent = visible
+				? 'Thinking (click to hide)'
+				: 'Thinking (click to show)';
+		};
+		// In-order streaming: text is rendered into a *segment* element that
+		// is created fresh whenever the model starts talking again (after a
+		// tool call, etc.) and appended at the END of the message at that
+		// moment. Tool calls/results/progress lines are also appended at the
+		// end when they happen. This preserves the true talk→tool→talk→tool
+		// order instead of clustering all text above all tool calls.
+		let currentAnswerBlock = null;     // current text-segment container
+		let currentSegmentText = '';       // markdown accumulated for the segment
+		let currentSegmentRenderTimer = null;
+		let currentAnswerText = '';        // full plain text across all segments, for TTS
 		// Live activity line: shows the current stage + elapsed time, updated
 		// in place by progress/heartbeat events so the user is never staring
 		// at a frozen "Calling X..." with no idea if it's still working.
@@ -1138,21 +1376,69 @@ class VaultBotSidebarView extends ItemView {
 			chatContainer.scrollTop = chatContainer.scrollHeight;
 		};
 
+		// Render markdown into an element using Obsidian's renderer so
+		// tables, lists, code blocks, blockquotes, etc. display properly.
+		// Falls back to escaped plain text if the renderer is unavailable.
+		const renderMarkdownInto = async (el, text) => {
+			el.empty();
+			const md = (text || '').trimEnd();
+			if (!md) return;
+			if (MarkdownRenderer && typeof MarkdownRenderer.renderMarkdown === 'function') {
+				try {
+					await MarkdownRenderer.renderMarkdown(md, el, '', this);
+					return;
+				} catch (e) { /* fall through to plain text */ }
+			}
+			// Fallback: escaped text with line breaks preserved.
+			const pre = el.createEl('div');
+			pre.style.whiteSpace = 'pre-wrap';
+			pre.textContent = md;
+		};
+
+		// (Re)render the current text segment from its accumulated markdown.
+		// Debounced so rapid chunks don't thrash the renderer.
+		const scheduleSegmentRender = (immediate) => {
+			if (currentSegmentRenderTimer) {
+				window.clearTimeout(currentSegmentRenderTimer);
+				currentSegmentRenderTimer = null;
+			}
+			const run = () => {
+				currentSegmentRenderTimer = null;
+				if (!currentAnswerBlock) return;
+				renderMarkdownInto(currentAnswerBlock, currentSegmentText).then(() => {
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				});
+			};
+			if (immediate) run();
+			else currentSegmentRenderTimer = window.setTimeout(run, 60);
+		};
+
+		// Close the current text segment so the next event (tool call,
+		// result, progress) is appended AFTER the text, preserving order.
+		const closeCurrentSegment = () => {
+			if (currentSegmentRenderTimer) {
+				window.clearTimeout(currentSegmentRenderTimer);
+				currentSegmentRenderTimer = null;
+			}
+			if (currentAnswerBlock && currentSegmentText) {
+				// Final render in case a debounced one is pending.
+				renderMarkdownInto(currentAnswerBlock, currentSegmentText).then(() => {
+					chatContainer.scrollTop = chatContainer.scrollHeight;
+				});
+			}
+			currentAnswerBlock = null;
+			currentSegmentText = '';
+		};
+
 		// Render a complete assistant message in one shot (used by the
 		// ingest button's status reply, which isn't streamed). Mirrors the
 		// streaming path's markup so styling stays consistent.
 		const appendAssistantMessage = (text) => {
 			const div = chatContainer.createDiv({cls: 'vaultbot-message assistant'});
 			const block = div.createEl('div', {cls: 'vaultbot-answer-block'});
-			// Render simple markdown-ish: **bold**, `code`, and newlines.
-			const lines = (text || '').split('\n');
-			for (const line of lines) {
-				const p = block.createEl('p');
-				p.innerHTML = line
-					.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-					.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-					.replace(/`(.+?)`/g, '<code>$1</code>');
-			}
+			renderMarkdownInto(block, text).then(() => {
+				chatContainer.scrollTop = chatContainer.scrollHeight;
+			});
 			chatContainer.scrollTop = chatContainer.scrollHeight;
 			// Return the block so callers (e.g. the Restart button) can
 			// update its text in place as a status line changes.
@@ -1161,15 +1447,26 @@ class VaultBotSidebarView extends ItemView {
 
 		const startAssistantMessage = () => {
 			currentAssistantMessage = chatContainer.createDiv({cls: 'vaultbot-message assistant'});
+			// Create per-message locals so the click handler closes over
+			// THESE specific elements — not the module-level vars that get
+			// nulled when the turn ends. This keeps every past thinking
+			// block clickable even after the turn is over.
 			const thinkingHeader = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-header', text: 'Thinking (click to show)'});
-			currentThinkingBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-block'});
-			currentThinkingBlock.style.display = 'none';
+			const thinkingBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-block'});
+			thinkingBlock.style.display = 'none';
 			thinkingHeader.addEventListener('click', () => {
-				const hidden = currentThinkingBlock.style.display === 'none';
-				currentThinkingBlock.style.display = hidden ? 'block' : 'none';
-				thinkingHeader.textContent = hidden ? 'Thinking (click to hide)' : 'Thinking (click to show)';
+				const hidden = thinkingBlock.style.display === 'none';
+				thinkingBlock.style.display = hidden ? 'block' : 'none';
+				thinkingHeader.textContent = hidden
+					? 'Thinking (click to hide)'
+					: 'Thinking (click to show)';
 			});
-			currentAnswerBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-answer-block'});
+			// Expose to the streaming handlers via the module-level refs.
+			currentThinkingHeader = thinkingHeader;
+			currentThinkingBlock = thinkingBlock;
+			// NOTE: no answer block is created up front. Text segments are
+			// created on demand so they sit in true stream order relative to
+			// tool calls, instead of always above them.
 			chatContainer.scrollTop = chatContainer.scrollHeight;
 		};
 
@@ -1186,10 +1483,6 @@ class VaultBotSidebarView extends ItemView {
 			if (!currentAssistantMessage) startAssistantMessage();
 			if (!currentActivityEl) {
 				currentActivityEl = currentAssistantMessage.createDiv({cls: 'vaultbot-activity'});
-				currentActivityEl.style.cssText = 'font-size:0.82em;color:var(--text-muted);'
-					+ 'border-left:2px solid var(--interactive-accent);'
-					+ 'padding:3px 8px;margin:4px 0;'
-					+ 'font-family:var(--font-monospace);white-space:pre-wrap;';
 			}
 			activityStartTs = Date.now();
 			if (activityTimer) { window.clearInterval(activityTimer); activityTimer = null; }
@@ -1247,7 +1540,13 @@ class VaultBotSidebarView extends ItemView {
 					msg = JSON.parse(event.data);
 				} catch (e) {
 					if (!currentAssistantMessage) startAssistantMessage();
-					currentAnswerBlock.setText(event.data);
+					if (!currentAnswerBlock) {
+						currentAnswerBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-answer-block'});
+						currentSegmentText = '';
+					}
+					currentSegmentText += event.data;
+					currentAnswerText += event.data;
+					scheduleSegmentRender();
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 					return;
 				}
@@ -1256,20 +1555,95 @@ class VaultBotSidebarView extends ItemView {
 					statusEl.setText(msg.content);
 				} else if (msg.type === 'thinking') {
 					if (!currentAssistantMessage) startAssistantMessage();
-					currentThinkingBlock.style.display = 'block';
+					// Show the thinking block live while the model reasons.
+					setThinkingVisible(true);
 					currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + msg.content);
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (msg.type === 'answer_chunk') {
 					if (!currentAssistantMessage) startAssistantMessage();
-					const span = currentAnswerBlock.createSpan();
-					span.setText(msg.content);
-					currentAnswerText += msg.content;
+					// Some models embed reasoning as <think>...</think> tags
+					// inside the content stream instead of a separate thinking
+					// field. Strip those out of the answer text and route them
+					// to the thinking block so they don't render as visible
+					// answer text. We track whether we're inside an open tag
+					// across chunks (a tag can span multiple chunks).
+					let raw = msg.content || '';
+					if (raw) {
+						// Handle <think> / </think> tags that may span chunks.
+						// this._inThinkTag persists across answer_chunk calls.
+						if (this._inThinkTag === undefined) this._inThinkTag = false;
+						let outText = '';
+						// If we were inside a think tag from a previous chunk,
+						// everything up to the next </think> is thinking.
+						if (this._inThinkTag) {
+							const closeIdx = raw.indexOf('</think>');
+							if (closeIdx === -1) {
+								// Still inside: all thinking.
+								setThinkingVisible(true);
+								currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + raw);
+								raw = '';
+							} else {
+								setThinkingVisible(true);
+								currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + raw.slice(0, closeIdx));
+								raw = raw.slice(closeIdx + 8);
+								this._inThinkTag = false;
+							}
+						}
+						// Now parse any new <think>...</think> in the remainder.
+						while (raw) {
+							const openIdx = raw.indexOf('<think>');
+							if (openIdx === -1) {
+								outText += raw;
+								break;
+							}
+							outText += raw.slice(0, openIdx);
+							const afterOpen = raw.slice(openIdx + 7);
+							const closeIdx = afterOpen.indexOf('</think>');
+							if (closeIdx === -1) {
+								// Tag spans into the next chunk.
+								setThinkingVisible(true);
+								currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + afterOpen);
+								this._inThinkTag = true;
+								raw = '';
+							} else {
+								setThinkingVisible(true);
+								currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + afterOpen.slice(0, closeIdx));
+								raw = afterOpen.slice(closeIdx + 8);
+							}
+						}
+						raw = outText;
+					}
+					if (!raw) {
+						chatContainer.scrollTop = chatContainer.scrollHeight;
+						return;
+					}
+					// The real answer is starting: auto-collapse the thinking
+					// block so it doesn't clutter the chat. The header stays
+					// as a clickable toggle so the user can re-expand it.
+					setThinkingVisible(false);
+					// A new text segment: create one (after any preceding tool
+					// call/result/progress line) so the text appears IN ORDER
+					// relative to tool activity, not always above it.
+					if (!currentAnswerBlock) {
+						currentAnswerBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-answer-block'});
+						currentSegmentText = '';
+					}
+					currentSegmentText += raw;
+					currentAnswerText += raw;
+					scheduleSegmentRender();
 					// Stream into TTS so the voice starts as soon as a full
 					// sentence is available, not at the very end.
-					if (this.plugin.settings.ttsEnabled) feedStreamingTTS(msg.content);
+					if (this.plugin.settings.ttsEnabled) feedStreamingTTS(raw);
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (msg.type === 'tool_call') {
 					if (!currentAssistantMessage) startAssistantMessage();
+					// The model moved past reasoning to act: auto-collapse the
+					// thinking block (it may have been left open if there was
+					// no answer_chunk between thinking and the tool call).
+					setThinkingVisible(false);
+					// Close any open text segment so this tool call is appended
+					// AFTER the text that preceded it (true stream order).
+					closeCurrentSegment();
 					const toolName = msg.tool || 'tool';
 					const argsStr = msg.args ? JSON.stringify(msg.args) : '';
 					startActivity('Calling ' + toolName + (argsStr ? ': ' + argsStr : '...'), {});
@@ -1290,20 +1664,23 @@ class VaultBotSidebarView extends ItemView {
 					}
 				} else if (msg.type === 'tool_result') {
 					if (!currentAssistantMessage) startAssistantMessage();
+					closeCurrentSegment();
 					const summary = (msg.tool || 'tool') + ' - ' + (msg.summary || 'done');
 					endActivity(summary);
 					const resDiv = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-result'});
-					resDiv.style.cssText = 'font-size:0.85em;color:var(--text-muted);'
-						+ 'padding:2px 8px;margin:2px 0 6px 0;opacity:0.8;';
 					resDiv.setText('  - ' + summary);
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (msg.type === 'answer_done') {
 					endActivity();
+					// Flush the final text segment so its markdown renders.
+					closeCurrentSegment();
 					statusEl.setText('Done');
+					setTurnActive(false);
 					const spokenText = currentAnswerText;
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
+					currentSegmentText = '';
 					currentAnswerText = '';
 					if (this.plugin.settings.ttsEnabled && spokenText.trim() && !ttsMuted) {
 						// Streaming (browser) mode already spoke sentence-by-
@@ -1322,6 +1699,7 @@ class VaultBotSidebarView extends ItemView {
 					}
 				} else if (msg.type === 'error') {
 					endActivity();
+					setTurnActive(false);
 					statusEl.setText('Error: ' + msg.content);
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system error'});
 					div.createSpan({text: 'Error: ' + msg.content});
@@ -1330,10 +1708,14 @@ class VaultBotSidebarView extends ItemView {
 					// Backend confirmed an interrupt (stop button or new msg).
 					stopAllTTS();
 					endActivity();
+					setTurnActive(false);
+					// Flush whatever text was streamed so far so it stays visible.
+					closeCurrentSegment();
 					statusEl.setText('Stopped');
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
+					currentSegmentText = '';
 					currentAnswerText = '';
 					ttsSentenceBuffer = '';
 				} else if (msg.type === 'session_reset') {
@@ -1344,6 +1726,8 @@ class VaultBotSidebarView extends ItemView {
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
+					currentSegmentText = '';
+					currentSegmentRenderTimer = null;
 					currentAnswerText = '';
 					ttsSentenceBuffer = '';
 					statusEl.setText('New session');
@@ -1398,9 +1782,16 @@ class VaultBotSidebarView extends ItemView {
 		ws.send(JSON.stringify({type, message, model: this.plugin.settings.selectedModel}));
 		input.value = '';
 		input.focus();
+		// A new turn is now in flight: show the inline Stop button.
+		setTurnActive(true);
+		// Reset the think-tag parser state for the new turn.
+		this._inThinkTag = false;
+		// Flush the in-flight text segment so it renders before the new turn.
+		closeCurrentSegment();
 		currentAssistantMessage = null;
 		currentThinkingBlock = null;
 		currentAnswerBlock = null;
+		currentSegmentText = '';
 		currentAnswerText = '';
 		ttsSentenceBuffer = '';
 			currentActivityEl = null;
@@ -1420,21 +1811,29 @@ class VaultBotSidebarView extends ItemView {
 			ingestButton.setAttribute('disabled', 'disabled');
 			appendUserMessage('(ingesting any new textbooks from learningMaterial/)');
 			// Human-centered vision check: before ingesting, probe whether the
-			// active chat model can read textbook pages (equations/figures). If
-			// it can't, alert the user RIGHT HERE in the chat — in plain
-			// language — that they should pick a vision model in Settings, so
-			// the LLM can later read the pages it's pointed to. This is the
-			// moment a non-coder learns their setup needs one extra field, not a
-			// silent failure later when they ask a math question.
+			// page-reading model can read textbook pages (equations/figures).
+			// The probed model is the dedicated vision model if one is
+			// configured, else the chat model. If it can't see images, alert
+			// the user RIGHT HERE in the chat — in plain language — that they
+			// should pick a vision model in Settings, so the LLM can later read
+			// the pages it's pointed to. This is the moment a non-coder learns
+			// their setup needs one extra field, not a silent failure later
+			// when they ask a math question.
 			try {
 				const vcheck = await this.plugin.fetchVisionCheck();
 				if (vcheck && vcheck.vision_capable === false) {
+					const which = vcheck.source === 'vision'
+						? 'your vision model'
+						: 'your current chat model';
+					const settingsPath = vcheck.source === 'vision'
+						? 'VaultBot Settings → Vision Model'
+						: 'VaultBot Settings → Vision Model (or pick a vision-capable chat model under LLM Backend)';
 					appendAssistantMessage(
-						`Heads up: your current model (${vcheck.model || 'unknown'}) can't read images. ` +
+						`Heads up: ${which} (${vcheck.model || 'unknown'}) can't read images. ` +
 						`That's fine for ingest (it just indexes the PDFs), but when you later ask about ` +
 						`math/figures, I won't be able to see the equations on the page. ` +
-						`Open VaultBot Settings → LLM Backend and pick a vision-capable model ` +
-						`(e.g. gpt-4o-mini, gemini-1.5-flash, qwen-vl) so I can read textbook pages for you. ` +
+						`Open ${settingsPath} and pick a vision-capable model ` +
+						`(e.g. gpt-4o-mini, gemini-1.5-flash, qwen-vl, llava) so I can read textbook pages for you. ` +
 						`Proceeding with ingest now...`
 					);
 				}
@@ -1466,13 +1865,28 @@ class VaultBotSidebarView extends ItemView {
 		// user to pick up code changes or recover from a stuck backend
 		// without touching a terminal. Disables the button + shows live
 		// status in the chat while the restart runs (a few seconds).
+		// Restart button: stops the backend (self-shutdown + taskkill
+		// fallback) and starts it fresh. While the backend is down or
+		// restarting, the button stays in its dark "busy" state and only
+		// returns to normal once the backend is confirmed back online — so
+		// the user can see at a glance when it's safe to use again.
+		const setRestartBusy = (busy) => {
+			if (busy) {
+				restartButton.setAttribute('disabled', 'disabled');
+				restartButton.setText('Restarting...');
+				restartButton.addClass('vaultbot-restart-busy');
+			} else {
+				restartButton.removeAttribute('disabled');
+				restartButton.setText('Restart');
+				restartButton.removeClass('vaultbot-restart-busy');
+			}
+		};
 		restartButton.addEventListener('click', async () => {
 			if (this.plugin.backendStarting) {
 				new Notice('Backend is already starting; please wait.');
 				return;
 			}
-			restartButton.setAttribute('disabled', 'disabled');
-			restartButton.setText('Restarting...');
+			setRestartBusy(true);
 			stopAllTTS();
 			appendUserMessage('(restarting backend)');
 			let statusDiv = appendAssistantMessage('Restarting backend...');
@@ -1486,8 +1900,16 @@ class VaultBotSidebarView extends ItemView {
 			} catch (e) {
 				if (statusDiv) statusDiv.setText(`Restart failed: ${e.message || e}`);
 			} finally {
-				restartButton.setText('Restart');
-				restartButton.removeAttribute('disabled');
+				// Only un-busy once the backend is actually back up; if it's
+				// still down, leave the button dark so the user sees the
+				// backend isn't ready yet. The connection-check loop will
+				// keep polling, and a later 'online' transition clears it.
+				const up = await this.plugin.isBackendRunning();
+				if (up) setRestartBusy(false);
+				else {
+					restartButton.setText('Offline');
+					restartButton.addClass('vaultbot-restart-busy');
+				}
 			}
 		});
 		input.addEventListener('keydown', (e) => {

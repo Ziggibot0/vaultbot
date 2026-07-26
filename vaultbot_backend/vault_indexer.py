@@ -15,6 +15,7 @@ IGNORED_DIRS = {
     "vaultbot_venv",
     "vaultbot_index",
     "sessions",
+    "partials",
     ".git",
     ".obsidian",
 }
@@ -374,15 +375,24 @@ class VaultIndexer:
                 raise
     
     def _rebuild_index(self):
-        """Rebuild the entire index from remaining metadata."""
+        """Rebuild the entire index from remaining metadata.
+
+        Files that no longer exist on disk (or can't be read) are PRUNED
+        from metadata/timestamps here, not just skipped.  Without pruning,
+        dead entries accumulate (e.g. bulk-deleted textbook sections) and
+        every subsequent rebuild re-attempts to read them, producing O(n^2)
+        error spam across the many per-removal rebuilds triggered by
+        index_missing_or_changed().
+        """
         if not self.metadata:
             self.index = None
             self.dimension = None
             return
-        
-        # Get embeddings for all remaining files
+
+        # Get embeddings for all remaining files; prune any that are gone.
         embeddings = []
-        for meta in self.metadata:
+        dead: list[int] = []  # indices to drop from metadata
+        for i, meta in enumerate(self.metadata):
             file_path = Path(meta['file_path'])
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -390,10 +400,15 @@ class VaultIndexer:
                 embedding = self._get_embedding(content)
                 embeddings.append(embedding)
             except Exception as e:
-                print(f"Error reading {file_path} during rebuild: {e}")
-                # Skip this file
+                print(f"Pruning missing file from index: {file_path} ({e})")
+                dead.append(i)
                 continue
-        
+
+        # Drop dead entries (reverse order so indices stay valid).
+        for i in reversed(dead):
+            fp = self.metadata[i]['file_path']
+            del self.metadata[i]
+            self.timestamps.pop(fp, None)
         if not embeddings:
             self.index = None
             self.dimension = None

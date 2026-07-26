@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 
 # Import our modules
 from ollama_client import OllamaClient
-from llm_client import get_llm_client, LLMClient
+from llm_client import get_llm_client, get_vision_client, LLMClient
 from vault_indexer import VaultIndexer
 from vault_graph import VaultGraph, build_graph_context
 from note_creator import NoteCreator
@@ -49,6 +49,7 @@ from supervision import HealthMonitor, generate_nssm_install, generate_nssm_unin
 from checkpointer import Checkpointer, ResearchCheckpoint
 from duckduckgo_client import DuckDuckGoClient
 from free_search import FreeSearch
+from procedure_tracker import ProcedureTracker, parse_procedures_from_results, interpret_validation_result
 from speech import transcribe as stt_transcribe, synthesize as tts_synthesize, list_voices as tts_voices, set_logger as speech_set_logger
 
 # Load environment variables from the parent directory (Vault2 root).
@@ -173,6 +174,15 @@ speech_set_logger(default_session_logger)
 # Embeddings are a SEPARATE concern and stay on OllamaClient (nomic-embed-text,
 # ~270MB, light enough for a weak laptop) inside vault_indexer.
 ollama_client = get_llm_client(session_logger=default_session_logger)
+# OPTIONAL dedicated vision model for reading textbook pages. This is a
+# SEPARATE concern from the synthesis client: a user can keep a fast/cheap
+# text-only chat model and delegate page-reading (textbook_read_page) to a
+# vision-capable model on its own backend. None when no VISION_MODEL is set,
+# in which case the page reader falls back to the synthesis client's own
+# vision_capable() probe (so a vision-capable chat model still works). See
+# llm_client.get_vision_client for the resolution rules.
+vision_client: Optional[LLMClient] = get_vision_client(
+    session_logger=default_session_logger)
 # VaultBot's own search engine: a keyless, rate-limit-resistant
 # multi-engine aggregator (DuckDuckGo Lite + Marginalia + arXiv) PLUS an
 # opt-in SearXNG (self-hosted Docker) backend for mainstream-web coverage.
@@ -224,6 +234,15 @@ checkpointer = Checkpointer(
     checkpoint_dir=str(Path(__file__).with_name("checkpoints")),
     session_logger=default_session_logger)
 
+# Procedure tracker: the deterministic feedback loop for procedural notes.
+# Logs validation pass/fail per procedure, triggers re-research when
+# failures exceed threshold, and tracks quality promotion. Instantiated
+# BEFORE the autonomous researcher so the researcher can use it.
+procedure_tracker = ProcedureTracker(
+    log_path=str(Path(__file__).with_name("procedure_failure_log.json")),
+    vault_path=os.getenv("VAULT_PATH", "."),
+)
+
 # Autonomous researcher: scans the vault for knowledge gaps and fills them
 # in the background. Started on server startup; can be toggled via the API.
 autonomous_researcher = AutonomousResearcher(
@@ -239,6 +258,7 @@ autonomous_researcher = AutonomousResearcher(
     search_client=search_client,
     curriculum=knowledge_curriculum,
     checkpointer=checkpointer,
+    procedure_tracker=procedure_tracker,
 )
 
 # Self-improvement engine: lets VaultBot read/write its own code, run code in
@@ -547,14 +567,17 @@ def _rebuild_llm_client() -> None:
 
     Used after /llm/config changes a backend/key/model so the new settings
     take effect without a restart. Preserves the session_logger binding.
+    Also rebuilds the optional vision client so a runtime vision-model
+    change takes effect immediately too.
     """
-    global ollama_client
+    global ollama_client, vision_client
     new_client = get_llm_client(session_logger=default_session_logger)
     # Carry over the currently-selected model if the new backend supports it
     # (an Ollama-only model id is meaningless to an OpenAI backend, so only
     # carry when the user explicitly set a model in the payload).
     new_client.set_model(new_client.llm_model or "")
     ollama_client = new_client
+    vision_client = get_vision_client(session_logger=default_session_logger)
 
 @app.get("/llm/config")
 async def get_llm_config():
@@ -622,21 +645,132 @@ async def set_llm_config(payload: dict):
 
 @app.get("/llm/vision_check")
 async def vision_check():
-    """Probe whether the active chat model can see images.
+    """Probe whether the page-reading model can see images.
 
     Human-centered design: the GUI calls this when the user hits Ingest (or
     on first chat) so it can alert them RIGHT THEN — in the chat, in plain
-    language — if their chat model can't read textbook pages and they need
-    to pick a vision model. Returns {vision_capable, model, backend}. The
-    probe renders a tiny red test image and asks the model what color it is,
-    so a True means the model ACTUALLY saw the image, not just accepted it.
+    language — if their page-reading model can't read textbook pages and
+    they need to pick a vision model. Returns {vision_capable, model,
+    backend, source}. The probe renders a tiny red test image and asks the
+    model what color it is, so a True means the model ACTUALLY saw the
+    image, not just accepted it.
+
+    The probed model is the DEDICATED vision client if one is configured
+    (VISION_MODEL set); otherwise it falls back to the synthesis client's
+    own vision_capable() — so a vision-capable chat model still works
+    without a separate vision config. `source` tells the UI which one was
+    used ("vision" vs "synthesis") so the alert can name the right model.
     """
     loop = asyncio.get_event_loop()
-    capable = await loop.run_in_executor(None, ollama_client.vision_capable)
+    probe_client = vision_client if vision_client is not None else ollama_client
+    source = "vision" if vision_client is not None else "synthesis"
+    capable = await loop.run_in_executor(None, probe_client.vision_capable)
     return {
         "vision_capable": bool(capable),
-        "model": ollama_client.llm_model,
-        "backend": _detect_llm_backend(),
+        "model": probe_client.llm_model,
+        "backend": _detect_llm_backend() if vision_client is None
+                   else (os.getenv("VISION_BACKEND") or _detect_llm_backend()),
+        "source": source,
+    }
+
+
+@app.get("/llm/vision_config")
+async def get_vision_config():
+    """Return the dedicated vision-model config (no secrets).
+
+    Lets the settings panel show whether a separate vision model is
+    configured (for reading textbook pages) and which backend/model it
+    uses, so a user with a text-only chat model can confirm their vision
+    model is wired up. `configured` is False when no VISION_MODEL is set
+    (meaning the page reader falls back to the synthesis client).
+    """
+    backend = (os.getenv("VISION_BACKEND") or "").strip().lower()
+    if not backend:
+        backend = _detect_llm_backend()
+    model = (os.getenv("VISION_MODEL") or "").strip()
+    configured = bool(model)
+    base_url = ""
+    if backend == "openai":
+        base_url = (os.getenv("VISION_BASE_URL") or os.getenv("LLM_BASE_URL")
+                    or "").strip()
+    else:
+        base_url = (os.getenv("VISION_OLLAMA_HOST")
+                     or os.getenv("OLLAMA_HOST", "http://localhost:11434"))
+    running = False
+    if vision_client is not None:
+        try:
+            running = bool(vision_client.is_running())
+        except Exception:
+            running = False
+    return {
+        "configured": configured,
+        "backend": backend,
+        "base_url": base_url,
+        "model": model,
+        "has_api_key": bool(os.getenv("VISION_API_KEY")
+                             or os.getenv("LLM_API_KEY", "")) if backend == "openai"
+                       else True,
+        "running": running,
+    }
+
+
+@app.post("/llm/vision_config")
+async def set_vision_config(payload: dict):
+    """Configure (or clear) the dedicated vision model at runtime.
+
+    Accepted fields (all optional; sending an empty `model` clears the
+    vision config so the page reader falls back to the synthesis client):
+      backend:      "ollama" | "openai"  (defaults to the synthesis backend)
+      base_url:     OpenAI-compatible endpoint (openai path)
+      api_key:      bearer token (openai path) — written to .env, not echoed
+      model:        model id (openai) OR Ollama model name
+      ollama_host:  Ollama host if the vision model lives on a different
+                    daemon than the chat model (ollama path)
+
+    Persists to .env and rebuilds the vision client immediately (no
+    restart). Returns the new (secret-free) config.
+    """
+    backend = (payload.get("backend") or "").strip().lower()
+    base_url = (payload.get("base_url") or "").strip()
+    api_key = (payload.get("api_key") or "").strip()
+    model = (payload.get("model") or "").strip()
+    ollama_host = (payload.get("ollama_host") or "").strip()
+
+    if backend and backend not in ("ollama", "openai"):
+        return {"status": "error",
+                "detail": "backend must be 'ollama' or 'openai'"}, 400
+    if backend == "openai" and model:
+        if not api_key and not os.getenv("VISION_API_KEY", "") \
+                and not os.getenv("LLM_API_KEY", ""):
+            return {"status": "error",
+                    "detail": "api_key required for openai vision backend"}, 400
+
+    # Persist the changes to .env so they survive a restart.
+    if backend:
+        _persist_env_value("VISION_BACKEND", backend)
+    if base_url:
+        _persist_env_value("VISION_BASE_URL", base_url)
+    if api_key:
+        _persist_env_value("VISION_API_KEY", api_key)
+    if ollama_host:
+        _persist_env_value("VISION_OLLAMA_HOST", ollama_host)
+    # An empty model string clears the vision config (fall back to synthesis).
+    _persist_env_value("VISION_MODEL", model)
+
+    # Reload .env into the process env so the factory sees the new values.
+    load_dotenv(dotenv_path, override=True)
+    _rebuild_llm_client()
+    return {
+        "status": "ok",
+        "configured": bool(model),
+        "backend": (os.getenv("VISION_BACKEND") or _detect_llm_backend()),
+        "base_url": (os.getenv("VISION_BASE_URL")
+                     or os.getenv("LLM_BASE_URL", "")) if backend == "openai"
+                    else (os.getenv("VISION_OLLAMA_HOST")
+                          or os.getenv("OLLAMA_HOST", "http://localhost:11434")),
+        "model": model,
+        "running": bool(vision_client.is_running()) if vision_client is not None
+                   else False,
     }
 
 
@@ -1022,20 +1156,17 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     await manager.send_personal_message(json.dumps({"type": "status", "content": "Searching vault..."}), websocket, session_logger=session_logger)
     loop = asyncio.get_event_loop()
 
-    # Incremental graph update (Gap 2): diff the vault against the in-memory
-    # graph and only touch changed nodes, instead of a full rglob + rebuild
-    # on every message.  At scale (thousands of notes) a full rescan adds
-    # noticeable latency to every chat; this makes the cost proportional to
-    # the number of CHANGED files, not the vault size.  Falls back to a full
-    # refresh on the first call (empty graph) or any scan failure.
+    # Keep the in-memory vault graph current with disk before retrieval.
+    # The intended design was an incremental diff (cost proportional to
+    # changed files), but VaultGraph only exposes a full refresh(); calling
+    # the non-existent incremental_update() threw AttributeError every turn
+    # and left the graph stale for the whole session. Fall back to a full
+    # refresh so retrieval sees notes created/edited earlier in the chat.
     try:
-        graph_delta = await loop.run_in_executor(
-            None, vault_graph.incremental_update)
-        if graph_delta.get("added") or graph_delta.get("removed") or \
-           graph_delta.get("updated"):
-            session_logger.log("graph_incremental_update", graph_delta)
+        await loop.run_in_executor(None, vault_graph.refresh)
+        session_logger.log("graph_refreshed", {"node_count": len(vault_graph.nodes)})
     except Exception as e:
-        session_logger.log_exception(e, context="graph_incremental_update")
+        session_logger.log_exception(e, context="graph_refresh")
 
     t0 = loop.time()
     try:
@@ -1068,8 +1199,19 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
             if fp:
                 retrieved_paths.append(fp)
                 lazy_condenser.note_touched(fp)
+        # Persist the batched touch counts once per chat turn, not once per
+        # retrieved note (each note_touched() only marks the dict dirty).
+        lazy_condenser.flush_touch_counts()
     except Exception as e:
         session_logger.log("lazy_condenser_touch_failed", {"error": str(e)})
+
+    # Procedure context tracking: which procedural notes were in the vault
+    # context for this turn? Used to log validation results against them.
+    procedures_in_context = parse_procedures_from_results(results)
+    if procedures_in_context:
+        session_logger.log("procedures_in_context", {
+            "procedures": procedures_in_context,
+        })
 
     # Multi-resolution context: L2 MOC (bird's-eye) + L1 concept cards
     # (the thought highway — terse, hop-able) + L0 drill-down (full raw of
@@ -1296,6 +1438,25 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
                 "tool": tool_name, "duration_ms": tool_duration,
                 "result_keys": list(tool_result.keys()) if isinstance(tool_result, dict) else None,
             })
+
+            # Procedure tracking: log validation results against procedures
+            # that were in context for this turn. This is the deterministic
+            # feedback loop -- no LLM judgment, just structured logging.
+            if tool_name in ("vault_lint", "safe_write", "code_run"):
+                try:
+                    v_result, v_category, v_details = interpret_validation_result(
+                        tool_name, tool_result)
+                    proc_name = procedures_in_context[0] if procedures_in_context else "no_procedure"
+                    procedure_tracker.log_result(
+                        procedure=proc_name,
+                        task=tool_name,
+                        validation_result=v_result,
+                        validation_tool=tool_name,
+                        error_details=v_details,
+                        category=v_category,
+                    )
+                except Exception as e:
+                    session_logger.log("procedure_tracking_failed", {"error": str(e)})
             await manager.send_personal_message(json.dumps({
                 "type": "tool_result", "tool": tool_name,
                 "summary": _tool_result_summary(tool_name, tool_result),
@@ -1660,7 +1821,8 @@ async def _execute_agent_tool(tool_name: str, args: Dict[str, Any],
                 await _run_with_heartbeat(
                     websocket, "amem_evolve",
                     lambda: amem.evolve_on_create(
-                        report.get("note_path", ""), report.get("synthesis", "")))
+                        report.get("note_path", ""), report.get("synthesis", ""),
+                        skip_refresh=True))
             except Exception as e:
                 session_logger.log("amem_evolve_failed", {"error": str(e)})
         return report
@@ -1719,16 +1881,23 @@ async def _execute_agent_tool(tool_name: str, args: Dict[str, Any],
 
     # --- Textbook page reader (index-only paradigm) ---
     # The LLM calls this to read one page of an ingested textbook PDF. The
-    # page is rendered to an image and sent to the synthesis LLM (if it's
-    # vision-capable) so equations/figures come through exactly as printed.
-    # Falls back to the text layer (with a caveat) if the model can't see
-    # images. The result carries provenance so the LLM can cite it in notes.
+    # page is rendered to an image and sent to a vision-capable model so
+    # equations/figures come through exactly as printed. Falls back to the
+    # text layer (with a caveat) if the model can't see images. The result
+    # carries provenance so the LLM can cite it in notes.
+    #
+    # Client selection: prefer the DEDICATED vision client (a separate
+    # model the user configured just for page-reading, e.g. a vision model
+    # on a different backend while their chat model stays text-only/fast).
+    # Fall back to the synthesis client so a vision-capable chat model still
+    # works without a separate vision config.
     if tool_name == "textbook_read_page":
         from custom_tools.textbook_read_page import run as _read_page
-        # Inject the active synthesis client so the tool can probe vision
+        page_client = vision_client if vision_client is not None else ollama_client
+        # Inject the active page-reading client so the tool can probe vision
         # support and call it for the page read.
         result = await loop.run_in_executor(
-            None, lambda: _read_page(args, llm_client=ollama_client))
+            None, lambda: _read_page(args, llm_client=page_client))
         return result
 
     # --- Web source re-reader (index-only paradigm for web research) ---
@@ -2258,7 +2427,7 @@ async def _weave_textbook_notes(ingest_result: dict,
             try:
                 _cn, card_embs = await loop.run_in_executor(
                     None, vault_indexer.batch_add_files, card_paths, True)
-                vault_graph.incremental_update()
+                vault_graph.refresh()
                 textbooks_dir = (Path(os.getenv("VAULT_PATH", ".")) / "vaultbot" / "textbooks")
                 # Gather ALL L1 cards in the vault (incremental mode needs
                 # the full set to preserve existing cluster assignments;
@@ -2352,8 +2521,8 @@ def _tool_result_summary(tool_name: str, result: Any) -> str:
     """Human-readable one-line summary of a tool result for the UI."""
     if not isinstance(result, dict):
         return str(result)[:200]
-    if "error" in result:
-        return f"error: {result['error'][:150]}"
+    if result.get("error"):
+        return f"error: {str(result['error'])[:150]}"
     if tool_name == "vault_research":
         return (f"{result.get('source_count', 0)} sources, "
                 f"{result.get('synthesis_facts', 0)} facts"

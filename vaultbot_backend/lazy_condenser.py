@@ -99,6 +99,10 @@ class LazyCondenser:
         else:
             self.state_path = Path(state_path)
         self.touch_counts: Dict[str, int] = self._load_touch_counts()
+        # Dirty flag: note_touched() only marks the in-memory dict dirty;
+        # the caller flushes once per chat turn via flush_touch_counts().
+        # This avoids writing the whole JSON file once per retrieved note.
+        self._dirty: bool = False
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -106,18 +110,30 @@ class LazyCondenser:
     def note_touched(self, note_path: str) -> None:
         """Record that a note was retrieved for chat. Never raises.
 
-        Increments the per-note touch counter and persists it.  Does NOT
-        trigger a condense — the caller (chat loop) decides when to run
-        `maybe_condense_async` so the LLM cost never blocks the answer.
+        Increments the per-note touch counter in memory and marks the state
+        dirty; the caller is responsible for calling `flush_touch_counts()`
+        once per chat turn so the JSON file is written at most once, not once
+        per retrieved note.  Does NOT trigger a condense — the caller (chat
+        loop) decides when to run `maybe_condense_async` so the LLM cost never
+        blocks the answer.
         """
         try:
             key = self._key(note_path)
             if not key:
                 return
             self.touch_counts[key] = self.touch_counts.get(key, 0) + 1
-            self._save_touch_counts()
+            self._dirty = True
         except Exception as e:  # noqa: BLE001
             self._log_error("note_touched_failed", e, {"path": note_path})
+
+    def flush_touch_counts(self) -> None:
+        """Persist touch counts if dirty. Never raises. Call once per chat turn."""
+        try:
+            if self._dirty:
+                self._save_touch_counts()
+                self._dirty = False
+        except Exception as e:  # noqa: BLE001
+            self._log_error("flush_touch_counts_failed", e)
 
     def needs_condense(self, note_path: str) -> bool:
         """True if the note should be condensed (enough touches + long enough

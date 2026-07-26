@@ -1,0 +1,240 @@
+{
+  "entries": [
+    {
+      "timestamp": "2026-07-26T02:02:17.274065+00:00",
+      "procedure": "no_procedure",
+      "task": "safe_write",
+      "validation_result": "fail",
+      "validation_tool": "safe_write",
+      "error_details": "SyntaxError: unterminated string literal (detected at line 1) (line 1)",
+      "category": "syntax_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:02:17.287811+00:00",
+      "procedure": "no_procedure",
+      "task": "safe_write",
+      "validation_result": "fail",
+      "validation_tool": "safe_write",
+      "error_details": "SyntaxError: invalid decimal literal (line 2)",
+      "category": "syntax_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:02:20.895252+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:02:25.333238+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "fail",
+      "validation_tool": "code_run",
+      "error_details": "exit 1: Traceback (most recent call last):\n  File \"<string>\", line 56, in <module>\n  File \"C:\\Users\\skell\\AppData\\Roaming\\uv\\python\\cpython-3.11-windows-x86_64-none\\Lib\\encodings\\cp1252.py\", line 19, in encod",
+      "category": "syntax_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:05.337514+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:07.078087+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "fail",
+      "validation_tool": "vault_lint",
+      "error_details": "missing frontmatter",
+      "category": "missing_frontmatter",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:07.118916+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "fail",
+      "validation_tool": "vault_lint",
+      "error_details": "1 broken wikilinks; missing frontmatter",
+      "category": "broken_wikilinks",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:07.158001+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "pass",
+      "validation_tool": "vault_lint",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:07.180576+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "fail",
+      "validation_tool": "vault_lint",
+      "error_details": "7 broken wikilinks",
+      "category": "broken_wikilinks",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:07.218212+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "fail",
+      "validation_tool": "vault_lint",
+      "error_details": "missing frontmatter",
+      "category": "missing_frontmatter",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:08:14.099270+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:09:22.469623+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:09:23.637688+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "fail",
+      "validation_tool": "vault_lint",
+      "error_details": "7 broken wikilinks",
+      "category": "broken_wikilinks",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:09:31.096232+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:09:32.463441+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "pass",
+      "validation_tool": "vault_lint",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:22:54.503683+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:23:07.919534+00:00",
+      "procedure": "no_procedure",
+      "task": "safe_write",
+      "validation_result": "fail",
+      "validation_tool": "safe_write",
+      "error_details": "SyntaxError: leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers (line 2)",
+      "category": "syntax_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:23:21.063301+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:23:22.792096+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "pass",
+      "validation_tool": "vault_lint",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:23:35.692491+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "pass",
+      "validation_tool": "vault_lint",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:28:47.812343+00:00",
+      "procedure": "no_procedure",
+      "task": "code_run",
+      "validation_result": "pass",
+      "validation_tool": "code_run",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    },
+    {
+      "timestamp": "2026-07-26T02:28:49.425835+00:00",
+      "procedure": "no_procedure",
+      "task": "vault_lint",
+      "validation_result": "pass",
+      "validation_tool": "vault_lint",
+      "error_details": "",
+      "category": "validation_error",
+      "severity": "medium"
+    }
+  ],
+  "summary": {
+    "no_procedure": {
+      "total": 22,
+      "failures": 9,
+      "passes": 13,
+      "last_failure": "2026-07-26T02:23:07.919534+00:00",
+      "last_pass": "2026-07-26T02:28:49.425835+00:00"
+    }
+  },
+  "schema_version": 1,
+  "created": "2026-07-26T01:12:00Z",
+  "description": "Tracks validation failures against procedural notes. Read by the autonomous researcher each cycle to trigger re-research when failure counts exceed thresholds.",
+  "thresholds": {
+    "failure_threshold": 3,
+    "window_days": 30
+  }
+}
