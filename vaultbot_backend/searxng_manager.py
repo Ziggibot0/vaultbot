@@ -193,7 +193,8 @@ class SearxngManager:
         try:
             response = requests.get(
                 f"http://localhost:{self.port}/search",
-                params={"q": query, "format": "json"},
+                params={"q": query, "format": "json",
+                       "categories": "general,it,science"},
                 timeout=timeout,
                 headers={"Accept": "application/json"},
             )
@@ -210,7 +211,7 @@ class SearxngManager:
         try:
             response = requests.get(
                 f"http://localhost:{self.port}/search",
-                params={"q": query},
+                params={"q": query, "categories": "general,it,science"},
                 timeout=timeout,
                 headers={"User-Agent": "Mozilla/5.0"},
             )

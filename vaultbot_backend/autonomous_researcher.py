@@ -173,6 +173,13 @@ class AutonomousResearcher:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        # Chat-priority pause: when a chat turn is in flight, the researcher
+        # yields the Ollama GPU so the interactive user isn't queued behind
+        # background research. The chat loop calls pause_for_chat() at the
+        # start of handle_chat and resume_after_chat() when the turn ends.
+        # This is a threading.Event (not asyncio) so it works across the
+        # researcher's own thread + the main event loop without locks.
+        self._chat_active = threading.Event()
         self.last_run: Optional[Dict[str, Any]] = None
         self.history: List[Dict[str, Any]] = []
         self.enabled = True
@@ -345,6 +352,13 @@ class AutonomousResearcher:
         """Run one autonomous research cycle."""
         if not self.enabled:
             return
+        # Chat-priority: if an interactive chat turn is in flight, skip this
+        # cycle entirely. The user's embedding/LLM calls must not queue behind
+        # background research on a single-GPU laptop. The next cycle (after
+        # the interval) runs normally once the chat ends.
+        if self._chat_active.is_set():
+            self._log("autonomous_cycle_skipped_chat_active", {})
+            return
         cycle_t0 = time.time()
         if hasattr(self, '_heartbeat'):
             self._heartbeat(f"cycle starting")
@@ -388,6 +402,16 @@ class AutonomousResearcher:
         now_iso = lambda: datetime.now(timezone.utc).isoformat()
         for gap in gaps[:budget]:
             if self._stop_event.is_set():
+                break
+            # Chat-priority: stop the cycle mid-way if a chat turn starts,
+            # so the remaining researches don't keep Ollama busy. Already-
+            # started research finishes; the next gap waits for the next
+            # cycle (after the chat ends + the interval).
+            if self._chat_active.is_set():
+                self._log("autonomous_cycle_paused_mid_cycle", {
+                    "completed": len(cycle_checkpoints),
+                    "remaining": budget - len(cycle_checkpoints),
+                })
                 break
             # Mark this gap as 'running' in the checkpoint before researching.
             ckpt = {
@@ -508,12 +532,28 @@ class AutonomousResearcher:
         return {
             "enabled": self.enabled,
             "running": bool(self._thread and self._thread.is_alive()),
+            "paused_for_chat": self._chat_active.is_set(),
             "interval_seconds": self.interval_seconds,
             "max_researches_per_cycle": self.max_researches_per_cycle,
             "last_run": self.last_run,
             "history_count": len(self.history),
             "recent_history": self.history[-5:],
         }
+
+    def pause_for_chat(self) -> None:
+        """Signal the researcher to yield Ollama to an interactive chat turn.
+
+        Sets a flag the researcher checks before starting each research cycle
+        and between researches within a cycle. A cycle already in progress
+        (mid web-search/scrape) finishes that step first — only the Ollama-
+        heavy synthesis is gated. Safe to call repeatedly; resume_after_chat()
+        clears it.
+        """
+        self._chat_active.set()
+
+    def resume_after_chat(self) -> None:
+        """Clear the chat-priority pause so the researcher can resume."""
+        self._chat_active.clear()
 
     def trigger_now(self) -> Dict[str, Any]:
         """Run a cycle immediately (synchronously) on demand.

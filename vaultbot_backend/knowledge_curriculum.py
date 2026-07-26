@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -256,6 +257,20 @@ class KnowledgeCurriculum:
         # Persistent curriculum state, loaded from disk (or seeded empty).
         self.state: Dict[str, Any] = self._load_state()
 
+        # ---- Gaps TTL cache -------------------------------------------------
+        # propose_next_gaps() is query-INDEPENDENT and only feeds a summary
+        # string into the chat system prompt. Scoring the whole vault every
+        # message is pure TTFT overhead. Cache the scored gaps for a short
+        # TTL so a warm chat session reuses one computation across turns.
+        # Invalidated by mark_completed / mark_failed (state changes) and by
+        # the env-configurable TTL below. The autonomous researcher, which
+        # runs on its own schedule, also benefits: rapid re-queries are free.
+        self._GAPS_TTL: float = float(
+            os.getenv("VAULTBOT_GAPS_TTL", "60")
+        )
+        self._gaps_cache: Optional[List[Dict[str, Any]]] = None
+        self._gaps_cache_ts: float = 0.0
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -324,15 +339,34 @@ class KnowledgeCurriculum:
         """Refresh the graph, score all gap signals, return the top-N.
 
         This is the curriculum's main entry point. It:
-          1. Refreshes the vault graph from disk.
+          1. Refreshes the vault graph from disk (now mtime-gated, so the
+             common no-edit case is a cheap stat-only scan).
           2. Collects all five gap-signal types.
           3. Filters out completed topics and recently-failed topics.
           4. Scores survivors by the multiplicative curriculum priority.
           5. Returns the top-N as gap dicts.
 
-        Never raises — on any failure it returns an empty list so the calling
-        autonomous loop can keep running.
+        Results are cached for ``VAULTBOT_GAPS_TTL`` seconds (default 60) so
+        consecutive chat messages in a warm session don't re-score the whole
+        vault — gaps only change when notes are created/edited or when the
+        curriculum state (completed/failed) changes. Never raises — on any
+        failure it returns an empty list so the calling autonomous loop can
+        keep running.
         """
+        # Fast path: serve cached gaps if still fresh. Slicing respects the
+        # caller's `n` without recomputing.
+        if (self._gaps_cache is not None
+                and (time.time() - self._gaps_cache_ts) < self._GAPS_TTL):
+            if self.session_logger is not None:
+                try:
+                    self.session_logger.log("gaps_cache_hit", {
+                        "age_s": round(time.time() - self._gaps_cache_ts, 1),
+                        "returned": min(len(self._gaps_cache), max(0, int(n))),
+                    })
+                except Exception:
+                    pass
+            return self._gaps_cache[:max(0, int(n))] if self._gaps_cache else []
+
         try:
             self.graph.refresh()
         except Exception as e:
@@ -363,16 +397,19 @@ class KnowledgeCurriculum:
                 if norm:
                     seen_names.add(norm)
                 top.append(g)
-                if len(top) >= max(0, int(n)):
-                    break
+
+            # Cache the full scored list (not just top-N) so callers asking
+            # for different N values reuse one computation.
+            self._gaps_cache = top
+            self._gaps_cache_ts = time.time()
 
             self._log_event("curriculum_proposed", {
                 "candidate_count": len(candidates),
                 "filtered_count": len(filtered),
-                "returned": len(top),
-                "top_topics": [g.get("topic") for g in top],
+                "returned": len(top[:max(0, int(n))]),
+                "top_topics": [g.get("topic") for g in top[:max(0, int(n))]],
             })
-            return top
+            return top[:max(0, int(n))]
         except Exception as e:
             self._log_error("propose_next_gaps", e)
             return []
@@ -401,6 +438,8 @@ class KnowledgeCurriculum:
             self.state["failed_topics"] = failed
 
             self._persist_state()
+            # A completion changes what gaps should surface next; drop the cache.
+            self._gaps_cache = None
             self._log_event("curriculum_completed", {"topic": topic})
         except Exception as e:
             self._log_error("mark_completed", e)
@@ -439,6 +478,9 @@ class KnowledgeCurriculum:
                 failed = failed[-200:]
             self.state["failed_topics"] = failed
             self._persist_state()
+            # A failure changes achievability scoring; drop the gaps cache so
+            # the next propose_next_gaps reflects the updated failure history.
+            self._gaps_cache = None
             self._log_event("curriculum_failed", {
                 "topic": topic,
                 "reason": reason,

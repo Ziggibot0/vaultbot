@@ -49,8 +49,20 @@ from supervision import HealthMonitor, generate_nssm_install, generate_nssm_unin
 from checkpointer import Checkpointer, ResearchCheckpoint
 from duckduckgo_client import DuckDuckGoClient
 from free_search import FreeSearch
+try:
+    from forum_backends import ForumEnhancedFreeSearch
+    # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
+    # backends, skips arXiv for technical queries, prioritizes forum results.
+    FreeSearch = ForumEnhancedFreeSearch
+except Exception as _forum_err:
+    print(f"[startup] Forum backends unavailable, using base FreeSearch: {_forum_err}")
 from procedure_tracker import ProcedureTracker, parse_procedures_from_results, interpret_validation_result
 from speech import transcribe as stt_transcribe, synthesize as tts_synthesize, list_voices as tts_voices, set_logger as speech_set_logger
+from context_budgeter import ContextBudgeter
+from calibration import CalibrationTracker
+from rag_eval import RAGEvaluator
+from claim_verifier import ClaimVerifier
+from pattern_extractor import PatternExtractor
 
 # Load environment variables from the parent directory (Vault2 root).
 # override=True ensures .env values win over any stale env passed by the
@@ -328,6 +340,37 @@ lazy_condenser = LazyCondenser(
 # /health endpoint so a watchdog can detect hangs.
 health_monitor = HealthMonitor(session_logger=default_session_logger)
 
+# Context budgeter: ensures retrieved vault context fits within the model's
+# token budget. Pure deterministic -- truncates from the end (lowest-priority
+# detail) if context would overflow. See [[Context-Budgeting-for-Vault-Growth]].
+context_budgeter = ContextBudgeter()
+
+# Calibration tracker: uses Sean's corrections as ground truth to calibrate
+# automated quality gates (vault_lint, procedure_tracker, etc.).
+# Pure deterministic -- heuristic correction detection + structured logging.
+# See [[Calibration-via-Operator-Feedback]].
+calibration_tracker = CalibrationTracker()
+
+# RAG evaluator: logs retrieval results and computes recall@k, precision@k,
+# NDCG@k, MRR when ground truth is available. Pure deterministic.
+# See [[RAG-Evaluation-for-FUSED-Retrieval]].
+rag_evaluator = RAGEvaluator()
+
+# Claim verifier: post-generation verification layer. Extracts atomic claims
+# from research notes, loads cited sources, checks entailment. Uses LLM when
+# available, falls back to deterministic string matching.
+# See [[Claim-Verification-for-Vault-Notes]].
+claim_verifier = ClaimVerifier(llm_client=ollama_client)
+
+# Pattern extractor: deterministic extraction of cross-session patterns from
+# chat logs. Scans episodic memory, finds recurring topics, sentiment
+# patterns, tool usage, and self-model drift. Feeds consolidation gaps to
+# the autonomous researcher. Pure deterministic -- no LLM calls.
+# See [[Semantic-Consolidation-Architecture]].
+pattern_extractor = PatternExtractor(
+    vault_path=os.getenv("VAULT_PATH", "."),
+)
+
 # Connection manager for WebSocket
 class ConnectionManager:
     def __init__(self):
@@ -376,6 +419,26 @@ async def startup_event():
     startup_logger.log("server_startup", {"stage": "begin"})
     try:
         loop = asyncio.get_event_loop()
+        # Purge stale crash-recovery partials. The old in-vault location
+        # (vaultbot_backend/partials/) caused Obsidian's file-recovery core
+        # plugin to race the backend's delete and spam ENOENT errors, so
+        # partials now live in the OS temp dir. Clean both locations on
+        # startup: any leftover partial is from a previous crashed session
+        # that already restarted, so it's stale and safe to remove.
+        def _purge_partials():
+            import tempfile
+            for d in (
+                Path(__file__).with_name("partials"),  # legacy in-vault dir
+                Path(tempfile.gettempdir()) / "vaultbot_partials",  # current
+            ):
+                if not d.is_dir():
+                    continue
+                for p in d.glob("partial_*.md"):
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
+        await loop.run_in_executor(None, _purge_partials)
         # Load the persisted index and start watching for live edits immediately.
         # Heavy re-indexing is deferred so the server/API is available right away.
         await loop.run_in_executor(None, vault_indexer.load)
@@ -818,6 +881,25 @@ async def research_tool_endpoint(payload: dict):
         except Exception as e:
             default_session_logger.log_exception(e, context="research_tool_note")
     report["note_path"] = note_path
+    
+    # Run claim verification on the newly written note.
+    # Extracts atomic claims, checks entailment against cited sources,
+    # updates frontmatter with verification stats. Graceful degradation
+    # if LLM unavailable (falls back to deterministic string matching).
+    if note_path:
+        try:
+            verification = await loop.run_in_executor(
+                None, claim_verifier.verify_note, note_path)
+            report["verification"] = verification
+            if verification.get("unsupported", 0) + verification.get("contradicted", 0) > 0:
+                default_session_logger.log(
+                    "claim_verification",
+                    f"Note {note_path}: {verification['verified']}/{verification['total_claims']} verified, "
+                    f"{verification['unsupported']} unsupported, {verification['contradicted']} contradicted"
+                )
+        except Exception as e:
+            default_session_logger.log_exception(e, context="claim_verification")
+    
     return report
 
 
@@ -932,6 +1014,55 @@ async def autonomous_trigger():
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, autonomous_researcher.trigger_now)
     return result
+
+
+@app.get("/consolidation/gaps")
+async def consolidation_gaps():
+    """Return patterns ripe for semantic consolidation.
+
+    The pattern extractor scans chat logs for recurring topics, correction
+    patterns, tool usage, and self-model drift. These gaps can be
+    consolidated into semantic knowledge notes so future sessions start
+    smarter. See [[Semantic-Consolidation-Architecture]].
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        gaps = await loop.run_in_executor(
+            None, pattern_extractor.get_consolidation_gaps)
+        return {"gaps": gaps, "count": len(gaps),
+                "report": pattern_extractor.consolidation_report()}
+    except Exception as e:
+        default_session_logger.log_exception(e, context="consolidation_gaps")
+        return {"error": str(e)}, 500
+
+
+@app.post("/consolidation/extract")
+async def consolidation_extract():
+    """Run pattern extraction and log the results without writing a note.
+
+    This is the scan-only step of the consolidation pipeline. It extracts
+    patterns deterministically (no LLM) and logs them. The LLM can then
+    synthesize semantic notes from the pre-extracted findings.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        patterns = await loop.run_in_executor(
+            None, pattern_extractor.extract_all)
+        pattern_extractor.log_consolidation(patterns)
+        return {
+            "sessions_scanned": patterns["total_sessions"],
+            "exchanges_scanned": patterns["total_exchanges"],
+            "recurring_topics": len(patterns["recurring_topics"]),
+            "sentiment": patterns["sentiment"]["distribution"],
+            "negative_rate": patterns["sentiment"]["negative_rate"],
+            "tool_frequency": dict(
+                list(patterns["tool_patterns"]["tool_frequency"].items())[:10]),
+            "over_reporting": patterns["over_reporting"]["count"],
+            "self_model_drift": patterns["self_model_drift"],
+        }
+    except Exception as e:
+        default_session_logger.log_exception(e, context="consolidation_extract")
+        return {"error": str(e)}, 500
 
 
 @app.post("/autonomous/toggle")
@@ -1076,6 +1207,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         session_logger.log_exception(e, context=f"handle_{msg_type}")
                         await manager.send_personal_message(
                             json.dumps({"type": "error", "content": f"Server error: {e}"}), websocket)
+                    finally:
+                        # Chat-priority: always release the researcher pause so
+                        # background research resumes after the turn ends —
+                        # whether it completed, errored, or was interrupted.
+                        try:
+                            autonomous_researcher.resume_after_chat()
+                        except Exception:
+                            pass
                 return asyncio.create_task(_run())
 
             websocket._current_task = _spawn_handler()
@@ -1153,30 +1292,70 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     This is the Jarvis loop — the LLM self-directs instead of shrugging.
     """
     session_logger.log("chat_begin", {"user_message": user_message})
+
+    # Chat-priority: pause the autonomous researcher so it doesn't compete
+    # with this interactive turn for the Ollama GPU. On a single-GPU laptop
+    # the user's embedding + LLM calls would otherwise queue behind the
+    # researcher's background synthesis, making the chat appear to hang.
+    # Resumed in the finally block below so it always clears (even on
+    # cancel/error). The researcher skips its cycle while this is set.
+    autonomous_researcher.pause_for_chat()
+
+    # Calibration: detect if this message is a correction of the previous
+    # answer. Sean's corrections are ground truth for calibrating automated
+    # quality gates. See [[Calibration-via-Operator-Feedback]].
+    try:
+        _prev_history = getattr(websocket, "conversation_history", None)
+        _prev_answer = None
+        if _prev_history:
+            for _msg in reversed(_prev_history):
+                if _msg.get("role") == "assistant" and _msg.get("content"):
+                    _prev_answer = _msg["content"]
+                    break
+        if _prev_answer and calibration_tracker.detect_correction(user_message, _prev_answer):
+            _ftype = calibration_tracker.classify_failure(user_message, _prev_answer)
+            calibration_tracker.log_correction(
+                user_message, _prev_answer, failure_type=_ftype)
+            session_logger.log("correction_detected", {"failure_type": _ftype})
+    except Exception as e:
+        session_logger.log("correction_detection_failed", {"error": str(e)})
     await manager.send_personal_message(json.dumps({"type": "status", "content": "Searching vault..."}), websocket, session_logger=session_logger)
     loop = asyncio.get_event_loop()
 
     # Keep the in-memory vault graph current with disk before retrieval.
     # The intended design was an incremental diff (cost proportional to
-    # changed files), but VaultGraph only exposes a full refresh(); calling
-    # the non-existent incremental_update() threw AttributeError every turn
-    # and left the graph stale for the whole session. Fall back to a full
-    # refresh so retrieval sees notes created/edited earlier in the chat.
+    # changed files); VaultGraph.refresh() is now mtime-gated and only re-reads
+    # files that changed since the last refresh, so the common no-edit case is
+    # a cheap stat-only scan and notes created/edited earlier in the chat still
+    # surface. This keeps the vault graph current with disk before retrieval.
     try:
+        _t_graph = loop.time()
         await loop.run_in_executor(None, vault_graph.refresh)
-        session_logger.log("graph_refreshed", {"node_count": len(vault_graph.nodes)})
+        session_logger.log("graph_refreshed", {
+            "node_count": len(vault_graph.nodes),
+            "duration_ms": (loop.time() - _t_graph) * 1000,
+        })
     except Exception as e:
         session_logger.log_exception(e, context="graph_refresh")
 
     t0 = loop.time()
     try:
-        fused_result = await loop.run_in_executor(None, fused_retriever.retrieve, user_message, 5, 1)
+        # Heartbeat-wrapped: the fused retriever embeds the query via Ollama,
+        # which can stall when the autonomous researcher is also using Ollama.
+        # Without a heartbeat the GUI freezes on "Searching vault..." with no
+        # feedback. This pushes a "still alive / elapsed" pulse every 2s so
+        # Sean always sees the backend is working, not hung.
+        fused_result = await _run_with_heartbeat(
+            websocket, "retrieving vault",
+            fused_retriever.retrieve, user_message, 5, 1)
         results = fused_result.get("results", []) if isinstance(fused_result, dict) else (fused_result or [])
     except Exception as e:
         session_logger.log_exception(e, context="fused_retriever.retrieve")
         # Degrade gracefully to flat vector search.
         try:
-            results = await loop.run_in_executor(None, vault_indexer.search, user_message, 5)
+            results = await _run_with_heartbeat(
+                websocket, "retrieving vault (fallback)",
+                vault_indexer.search, user_message, 5)
         except Exception:
             results = []
     session_logger.log("vault_search", {
@@ -1186,6 +1365,14 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
         "duration_ms": (loop.time() - t0) * 1000,
         "retriever": "fused",
     })
+
+    # RAG evaluation: log retrieval results for every query (cheap, always on).
+    # Metrics are computed on-demand when ground truth is available.
+    # See [[RAG-Evaluation-for-FUSED-Retrieval]].
+    try:
+        rag_evaluator.log_retrieval(user_message, results, k=5)
+    except Exception as e:
+        session_logger.log("rag_eval_log_failed", {"error": str(e)})
 
     # Lazy-condenser touch tracking: record that each retrieved note was
     # queried.  Notes that cross the touch threshold (3+) AND are still long
@@ -1220,8 +1407,9 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     # flooded the context with low-density detail.  Falls back to the legacy
     # builder if no L1 cards exist yet (pre-hierarchy vault regions).
     try:
-        abs_ctx = await loop.run_in_executor(
-            None, build_abstract_context, vault_graph, results,
+        abs_ctx = await _run_with_heartbeat(
+            websocket, "building context",
+            build_abstract_context, vault_graph, results,
             user_message, 5, 2, None)
         context = abs_ctx.get("context", "")
         session_logger.log("context_resolution", {
@@ -1234,6 +1422,25 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
         session_logger.log_exception(e, context="build_abstract_context")
         context = build_graph_context(vault_graph, results, user_message, k=5, depth=2)
 
+    # Context budgeting: ensure the retrieved context fits within the
+    # model's token budget. Truncates from the end (lowest-priority L0
+    # drill-down detail) if the context would overflow the context window.
+    # Pure deterministic -- no LLM calls. Graceful degradation: if the
+    # budgeter fails, the original context is used unchanged.
+    try:
+        _budgeted = context_budgeter.budget(
+            context, getattr(websocket, "conversation_history", []))
+        context = _budgeted["context"]
+        if _budgeted["truncated"]:
+            session_logger.log("context_budget", {
+                "original_tokens": _budgeted["original_tokens"],
+                "budgeted_tokens": _budgeted["budgeted_tokens"],
+                "budget": _budgeted["budget"],
+                "chars_dropped": _budgeted["chars_dropped"],
+            })
+    except Exception as e:
+        session_logger.log("context_budget_failed", {"error": str(e)})
+
     # Inject the identity boot context so the agent wakes up coherent across
     # days regardless of which model is in the slot (IDENTITY + SELF_MODEL +
     # GOALS, delivered verbatim before the first turn — MIRROR/Letta pattern).
@@ -1242,7 +1449,14 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     # Gather live state so the system prompt is a real briefing, not static.
     autonomous_state = autonomous_researcher.status()
     try:
-        gaps = await loop.run_in_executor(None, knowledge_curriculum.propose_next_gaps, 10)
+        _t_gaps = loop.time()
+        gaps = await _run_with_heartbeat(
+            websocket, "finding gaps",
+            knowledge_curriculum.propose_next_gaps, 10)
+        session_logger.log("gaps_proposed", {
+            "gap_count": len(gaps),
+            "duration_ms": (loop.time() - _t_gaps) * 1000,
+        })
     except Exception:
         gaps = []
     gaps_summary = "\n".join(
@@ -1304,9 +1518,15 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     # temp file so a crash mid-stream doesn't lose it. On normal completion
     # the file is deleted; on crash, it survives and the next session can
     # surface it ("You were answering 'X' when I crashed — here's what I had:").
-    partial_dir = Path(__file__).with_name("partials")
-    partial_dir.mkdir(exist_ok=True)
-    import time as _time, hashlib
+    #
+    # The partial dir lives OUTSIDE the vault (in the OS temp dir) so that
+    # Obsidian's file-recovery core plugin — which snapshots every .md file
+    # inside the vault — doesn't race the backend's delete and spam the
+    # console with ENOENT errors. The old in-vault location
+    # (vaultbot_backend/partials/) is cleaned up at startup.
+    import time as _time, hashlib, tempfile
+    partial_dir = Path(tempfile.gettempdir()) / "vaultbot_partials"
+    partial_dir.mkdir(parents=True, exist_ok=True)
     partial_id = hashlib.md5((user_message + str(_time.time())).encode()).hexdigest()[:12]
     partial_path = partial_dir / f"partial_{partial_id}.md"
     _write_partial(partial_path, user_message, "", "")  # create the file immediately
@@ -1749,6 +1969,27 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     except Exception as e:
         session_logger.log("self_model_regenerate_failed", {"error": str(e)})
 
+    # Pattern extraction: check for new consolidation gaps after each chat.
+    # This is the episodic -> semantic consolidation trigger. The pattern
+    # extractor scans chat logs for recurring topics, correction patterns,
+    # and self-model drift. Gaps are logged so the autonomous researcher
+    # can consolidate them into semantic knowledge notes.
+    # Pure deterministic -- no LLM calls. See [[Semantic-Consolidation-Architecture]].
+    try:
+        _gaps = await loop.run_in_executor(
+            None, pattern_extractor.get_consolidation_gaps)
+        if _gaps:
+            session_logger.log("consolidation_gaps", {
+                "gap_count": len(_gaps),
+                "top_gaps": [
+                    {"kind": g["kind"], "topic": g["topic"],
+                     "priority": g.get("priority", 0)}
+                    for g in _gaps[:5]
+                ],
+            })
+    except Exception as e:
+        session_logger.log("pattern_extraction_failed", {"error": str(e)})
+
 
 async def _execute_agent_tool(tool_name: str, args: Dict[str, Any],
                               session_logger: SessionLogger,
@@ -1970,19 +2211,29 @@ def _existing_note_titles() -> dict:
     Used to detect plain-text mentions worth wikilinking. Normalized = the
     Obsidian wikilink form (lowercased). Excludes the ingester's own textbook
     notes so we don't link textbook-to-textbook (that's the ingester's job).
+
+    Sourced from the in-memory vault graph (``vault_graph.nodes``) instead of
+    a full ``rglob`` over the vault — the graph already holds every note's
+    stem + file_path in memory, so this is a dict walk instead of a disk
+    scan. The graph's ignore-dir filter (venv/.obsidian/.git/etc.) already
+    applies; the textbooks-folder exclusion is applied here.
     """
     titles: Dict[str, str] = {}
     try:
-        for p in Path(os.getenv("VAULT_PATH", ".")).rglob("*.md"):
-            if _is_ignored_index_path(p):
+        for _name, node in (vault_graph.nodes or {}).items():
+            fp = node.get("file_path") or ""
+            if not fp:
                 continue
             # Skip the textbooks/ folder — those are what we're weaving.
-            if "vaultbot" + os.sep + "textbooks" + os.sep in str(p) + os.sep:
+            if ("vaultbot" + os.sep + "textbooks" + os.sep
+                    not in fp + os.sep):
+                pass  # not a textbook note — keep it
+            else:
                 continue
-            stem = p.stem
+            stem = Path(fp).stem
             if len(stem) < 3:
                 continue  # too short to link safely (e.g. "a", "is")
-            titles[stem.lower()] = str(p)
+            titles[stem.lower()] = fp
     except Exception:
         pass
     return titles

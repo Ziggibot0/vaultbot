@@ -70,8 +70,20 @@ class VaultIndexer:
         )
         self.dimension = None  # Will be set after first embedding
         self.index = None
-        self.metadata = []  # List of dicts: {'file_path': str, 'last_modified': float, 'content_hash': str}
+        self.metadata = []  # List of dicts: {'file_path', 'last_modified', 'content_hash'}
         self.timestamps = {}  # file_path -> last_modified timestamp
+        # Bounded content-preview cache stored alongside each metadata entry.
+        # Populated at index time (where the file is already read for hashing +
+        # embedding) so search() / search_by_vector() can return a snippet
+        # WITHOUT re-reading the file from disk on every query. The whole point:
+        # FAISS finds K nearest in O(log N), then we used to do K synchronous
+        # disk reads for the content — this cache removes those reads. Set to
+        # 0 via VAULTBOT_INDEX_PREVIEW_CHARS to disable (full content returned,
+        # reads from disk as before). Default 2000 covers every known consumer
+        # (abstract_context uses 500, build_graph_context 2000, _snippet 200,
+        # graph_ops.search 240, build_context 1500). A-MEM's write-back path
+        # re-reads from disk itself, so it is unaffected by this cap.
+        self.preview_chars = int(os.getenv("VAULTBOT_INDEX_PREVIEW_CHARS", "2000"))
 
         self.observer = None
         self._load_index()
@@ -221,11 +233,20 @@ class VaultIndexer:
             print(f"Error getting embedding for {file_path}: {e}")
             return
         
-        self._add_embedding_to_index(file_path, embedding, last_modified, content_hash)
+        self._add_embedding_to_index(
+            file_path, embedding, last_modified, content_hash,
+            content_preview=content)
 
     def _add_embedding_to_index(self, file_path: Path, embedding: np.ndarray,
-                                 last_modified: float, content_hash: str):
-        """Add a pre-computed embedding to the index (shared by single and batch paths)."""
+                                 last_modified: float, content_hash: str,
+                                 content_preview: str = ""):
+        """Add a pre-computed embedding to the index (shared by single and batch paths).
+
+        ``content_preview`` is an optional bounded slice of the file content,
+        cached so search results can return a snippet without re-reading the
+        file from disk. Callers that already have the content (both add paths
+        # below read the file for hashing/embedding) pass it in for free.
+        """
         embed_dim = len(embedding)
         if embed_dim == 0:
             print(f"Skipping {file_path}: received empty embedding from Ollama.")
@@ -244,11 +265,15 @@ class VaultIndexer:
         index = self.index
         assert index is not None
         index.add(embedding.reshape(1, -1))  # type: ignore
-        self.metadata.append({
+        meta_entry: Dict[str, Any] = {
             'file_path': str(file_path),
             'last_modified': last_modified,
             'content_hash': content_hash
-        })
+        }
+        # Cache the bounded preview so future searches skip the disk read.
+        if self.preview_chars > 0 and content_preview:
+            meta_entry['content_preview'] = content_preview[:self.preview_chars]
+        self.metadata.append(meta_entry)
         self.timestamps[str(file_path)] = last_modified
         print(f"Added {file_path} to index. Total vectors: {self.index.ntotal}")
         self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash})
@@ -325,12 +350,14 @@ class VaultIndexer:
         # Add to index
         indexed = 0
         emb_by_path: Dict[str, list[float]] = {}
-        for fp, emb, last_mod, ch in zip(valid_paths, embeddings, timestamps, hashes):
+        for fp, emb, last_mod, ch, cont in zip(valid_paths, embeddings, timestamps, hashes, contents):
             if emb is None:
                 continue
             # Remove old entry if it exists
             self._remove_file_internal(fp)
-            self._add_embedding_to_index(fp, np.array(emb, dtype=np.float32), last_mod, ch)
+            self._add_embedding_to_index(
+                fp, np.array(emb, dtype=np.float32), last_mod, ch,
+                content_preview=cont)
             indexed += 1
             if return_embeddings:
                 # emb may be an np.ndarray (chunked) or a plain list.
@@ -594,11 +621,18 @@ class VaultIndexer:
                 continue
             meta = self.metadata[idx]
             file_path = Path(meta['file_path'])
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-            except Exception:
-                content = "[Error reading file]"
+            # Prefer the cached preview (populated at index time) so the
+            # search never re-reads the file from disk. Fall back to a disk
+            # read only for legacy entries (pre-preview) or when the cache
+            # is disabled (preview_chars == 0). Full-content callers (A-MEM
+            # write-back) re-read from disk themselves and ignore this field.
+            content = meta.get('content_preview')
+            if content is None:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except Exception:
+                    content = "[Error reading file]"
             results.append({
                 'file_path': str(file_path),
                 'content': content,

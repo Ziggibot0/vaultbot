@@ -27,10 +27,21 @@ and it matches the research on structured logging for agent systems.
 
 import json
 import re
+import os
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Iterator
 from collections import defaultdict
+
+
+# Directories to skip when scanning the vault for procedural notes. Mirrors
+# the indexer's IGNORED_DIRS so the tracker doesn't waste time reading venv
+# files, Obsidian config, session logs, etc. Kept inline (not imported from
+# vault_indexer) so this module stays dependency-free.
+_TRACKER_IGNORED_DIRS = {
+    "vaultbot_venv", "vaultbot_index", "sessions", "partials",
+    ".git", ".obsidian",
+}
 
 
 # --- Structured failure categories (not free-text) ---
@@ -108,6 +119,44 @@ class ProcedureTracker:
         self.log_path = Path(log_path)
         self.vault_path = Path(vault_path)
         self._ensure_log()
+
+    # --- Vault scanning ---
+
+    def _iter_procedural_notes(self, vault_path: str = "."
+                               ) -> Iterator[Tuple[Path, str, str]]:
+        """Yield (path, frontmatter_str, full_text) for every procedural note.
+
+        Procedural notes are markdown files whose YAML frontmatter contains
+        ``type: procedure``. This is the shared scan used by the time-driven,
+        promotion, and update-after-research paths so the vault is walked
+        ONCE per cycle instead of three times. Uses a pruned ``os.walk``
+        (skips venv/.git/.obsidian/etc. in-place) and reads each file only
+        once. Non-procedural notes are filtered out without a full read of
+        the body where possible (frontmatter is at the top).
+        """
+        vault = Path(vault_path)
+        if not vault.is_dir():
+            return
+        for root, dirs, files in os.walk(vault):
+            # Prune ignored subtrees in-place so os.walk doesn't descend.
+            dirs[:] = [d for d in dirs if d not in _TRACKER_IGNORED_DIRS]
+            for fname in files:
+                if not fname.endswith(".md"):
+                    continue
+                md = Path(root) / fname
+                try:
+                    text = md.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+                if not text.startswith("---"):
+                    continue
+                end = text.find("---", 3)
+                if end == -1:
+                    continue
+                fm = text[3:end]
+                if "type: procedure" not in fm:
+                    continue
+                yield md, fm, text
 
     # --- Log I/O ---
 
@@ -251,19 +300,9 @@ class ProcedureTracker:
         date comparison.
         """
         stale = []
-        vault = Path(vault_path)
         now = datetime.now(timezone.utc)
-        for md in vault.rglob("*.md"):
+        for md, fm, _text in self._iter_procedural_notes(vault_path):
             try:
-                text = md.read_text(encoding="utf-8", errors="replace")
-                if not text.startswith("---"):
-                    continue
-                end = text.find("---", 3)
-                if end == -1:
-                    continue
-                fm = text[3:end]
-                if "type: procedure" not in fm:
-                    continue
                 last_reviewed = None
                 interval = 90
                 for line in fm.split("\n"):
@@ -336,20 +375,8 @@ class ProcedureTracker:
             {"promoted": [...], "flagged": [...], "unchanged": [...]}
         """
         result = {"promoted": [], "flagged": [], "unchanged": []}
-        vault = Path(vault_path)
-
-        for md in vault.rglob("*.md"):
+        for md, fm, _text in self._iter_procedural_notes(vault_path):
             try:
-                text = md.read_text(encoding="utf-8", errors="replace")
-                if not text.startswith("---"):
-                    continue
-                end = text.find("---", 3)
-                if end == -1:
-                    continue
-                fm = text[3:end]
-                if "type: procedure" not in fm:
-                    continue
-
                 proc_name = md.stem
                 promotion = self.check_promotion(proc_name)
 
@@ -422,21 +449,12 @@ class ProcedureTracker:
         vault = Path(vault_path)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        # Find the procedural note file
-        for md in vault.rglob("*.md"):
+        # Find the procedural note file by stem. The shared iterator walks
+        # the vault once with the ignore-dir filter; we early-exit on match.
+        for md, fm, _text in self._iter_procedural_notes(vault_path):
             if md.stem != procedure:
                 continue
             try:
-                text = md.read_text(encoding="utf-8", errors="replace")
-                if not text.startswith("---"):
-                    continue
-                end = text.find("---", 3)
-                if end == -1:
-                    continue
-                fm = text[3:end]
-                if "type: procedure" not in fm:
-                    continue
-
                 # Update frontmatter
                 update_frontmatter(md, {
                     "status": "experimental",
@@ -506,6 +524,12 @@ def parse_procedures_from_results(results: List[Dict[str, Any]]) -> List[str]:
 
     This is the "procedure context tracking" piece: after retrieval,
     we know which procedures were in the vault context for this turn.
+
+    Uses the ``content`` field carried by each result (a bounded preview
+    cached at index time by the indexer) instead of re-reading the file
+    from disk — the frontmatter is always in the first few hundred chars,
+    well within the 2000-char preview. Falls back to a disk read only if
+    the result carries no content at all.
     """
     procedures = []
     for r in results:
@@ -514,18 +538,21 @@ def parse_procedures_from_results(results: List[Dict[str, Any]]) -> List[str]:
         fp = r.get("file_path", "")
         if not fp:
             continue
-        try:
-            text = Path(fp).read_text(encoding="utf-8", errors="replace")
-            if not text.startswith("---"):
+        # Prefer the in-result content (cached preview) over a disk read.
+        text = r.get("content") or r.get("snippet") or ""
+        if not text:
+            try:
+                text = Path(fp).read_text(encoding="utf-8", errors="replace")
+            except Exception:
                 continue
-            end = text.find("---", 3)
-            if end == -1:
-                continue
-            fm = text[3:end]
-            if "type: procedure" in fm:
-                procedures.append(Path(fp).stem)
-        except Exception:
+        if not text.startswith("---"):
             continue
+        end = text.find("---", 3)
+        if end == -1:
+            continue
+        fm = text[3:end]
+        if "type: procedure" in fm:
+            procedures.append(Path(fp).stem)
     return procedures
 
 

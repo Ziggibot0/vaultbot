@@ -93,7 +93,12 @@ def _keyterms(text: str, max_terms: int = 6) -> List[str]:
 
     Ranks tokens by frequency * length, filters stopwords, and keeps proper
     nouns (capitalized mid-sentence) and capitalized multi-word phrases.
+    Also preserves site:domain.com search operators so the search backend
+    can target specific domains (e.g., site:github.com for forum discussions).
     """
+    # Extract site: operators BEFORE lowercasing — the : character is lost
+    # by the tokenizer, so we must capture them from the original text.
+    site_operators = re.findall(r"\bsite:\S+", text, re.I)
     text = text.replace("?", " ").replace("!", " ").strip().lower()
     # Pull out quoted phrases first (the user often telegraphs the topic).
     quoted = re.findall(r"[\"']([^\"']+)[\"']", text)
@@ -108,9 +113,15 @@ def _keyterms(text: str, max_terms: int = 6) -> List[str]:
         if tok in _STOPWORDS or len(tok) < 3:
             continue
         scored[tok] = count * (1 + math.log(len(tok)))
-    # Merge: quoted > phrases > single tokens.
+    # Merge: site: operators > quoted > phrases > single tokens.
     result: List[str] = []
     seen = set()
+    # site: operators get highest priority — they're explicit user intent.
+    for so in site_operators:
+        so_low = so.lower()
+        if so_low not in seen:
+            result.append(so)
+            seen.add(so_low)
     for q in quoted:
         ql = q.lower()
         if ql and ql not in seen:
@@ -123,7 +134,7 @@ def _keyterms(text: str, max_terms: int = 6) -> List[str]:
         if any(w not in _STOPWORDS for w in words) and pl not in seen:
             result.append(p.strip())
             seen.add(pl)
-    # Top single tokens.
+    # Top single tokens — leave room for site: operators.
     ranked = sorted(scored.items(), key=lambda kv: kv[1], reverse=True)
     for tok, _ in ranked:
         if tok in seen:
@@ -342,9 +353,15 @@ class ResearchEngine:
         # Prefer the base terms plus any discovered terms not already present.
         base_low = {t.lower() for t in base_terms}
         additions = [t for t in discovered_terms if t.lower() not in base_low]
-        # Keep queries short — concise queries retrieve better results.
-        terms = base_terms + additions[:3]
-        return " ".join(terms[:6])
+        # Separate site: operators from regular terms — operators always go
+        # last and are never dropped by the term cap.
+        site_ops = [t for t in base_terms if t.lower().startswith("site:")]
+        regular = [t for t in base_terms if not t.lower().startswith("site:")]
+        terms = regular + additions[:3]
+        # Cap regular terms, then always append site: operators.
+        max_regular = max(1, 6 - len(site_ops))
+        query_terms = terms[:max_regular] + site_ops
+        return " ".join(query_terms)
 
     def _corroborated_facts(self, sentences: List[Tuple[str, Dict[str, Any]]],
                             keyterms: List[str]) -> List[Dict[str, Any]]:

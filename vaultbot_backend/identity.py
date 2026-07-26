@@ -149,6 +149,14 @@ class Identity:
             logger.exception("Identity init failed: %s", exc)
             self._safe_log("identity_init_error", {"error": str(exc)})
 
+        # ---- boot_context cache ------------------------------------------
+        # boot_context() re-reads 3 small files on every chat turn to inject
+        # them verbatim into the system prompt. They change rarely, so cache
+        # the assembled string keyed on the max mtime of the three files. A
+        # stat() per turn is far cheaper than three read_text() calls.
+        self._boot_cache: Optional[str] = None
+        self._boot_cache_mtime: float = 0.0
+
     # ------------------------------------------------------------------
     # Seeding
     # ------------------------------------------------------------------
@@ -173,9 +181,27 @@ class Identity:
         the system prompt, verbatim. Order: IDENTITY + SELF_MODEL + GOALS.
 
         This is the "boot injection" — delivered before the first turn, never
-        summarized.
+        summarized. Cached on the files' mtimes so consecutive turns in a
+        session skip the disk reads; the cache is invalidated automatically
+        whenever any of the three files is edited.
         """
         try:
+            # Cache check: stat the three files and compare to the cached
+            # mtime. If none changed, reuse the assembled string.
+            paths = (self._identity_path, self._self_model_path, self._goals_path)
+            current_mtime = 0.0
+            for p in paths:
+                try:
+                    current_mtime = max(current_mtime, os.path.getmtime(p))
+                except OSError:
+                    # Missing file (seed_if_missing should have created it,
+                    # but be defensive) — force a rebuild by diverging mtime.
+                    current_mtime = float("inf")
+                    break
+            if self._boot_cache is not None and current_mtime == self._boot_cache_mtime:
+                self._safe_log("identity_boot_cache_hit", {})
+                return self._boot_cache
+
             identity = self.get_identity()
             self_model = self.get_self_model()
             goals = self.get_goals()
@@ -186,7 +212,13 @@ class Identity:
                 parts.append("# SELF MODEL\n" + self_model)
             if goals:
                 parts.append("# GOALS\n" + goals)
-            return "\n\n".join(parts)
+            assembled = "\n\n".join(parts)
+            self._boot_cache = assembled
+            # Only persist the mtime when we actually read the files (not the
+            # inf sentinel from a missing-file branch).
+            if current_mtime != float("inf"):
+                self._boot_cache_mtime = current_mtime
+            return assembled
         except Exception as exc:  # noqa: BLE001
             logger.exception("boot_context failed: %s", exc)
             self._safe_log("identity_boot_error", {"error": str(exc)})

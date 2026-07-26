@@ -7,7 +7,25 @@ from datetime import datetime, timezone
 from collections import deque
 
 WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")
+# Directories the graph should skip when scanning the vault. Mirrors the
+# indexer's IGNORED_DIRS so the graph and the FAISS index see the same files;
+# without this the graph was ingesting plugin READMEs, venv files, partial
+# crash-recovery notes, etc. as graph nodes.
+_IGNORED_DIRS = {
+    "vaultbot_venv",
+    "vaultbot_index",
+    "sessions",
+    "partials",
+    ".git",
+    ".obsidian",
+}
 
+
+def _is_ignored_path(path: Path) -> bool:
+    for part in path.parts:
+        if part in _IGNORED_DIRS:
+            return True
+    return False
 
 class VaultGraph:
     """
@@ -23,6 +41,11 @@ class VaultGraph:
         self.nodes: Dict[str, Dict[str, Any]] = {}  # normalized name -> metadata
         self.edges: Dict[str, Set[str]] = {}        # normalized name -> set of normalized target names
         self.backlinks: Dict[str, Set[str]] = {}    # normalized name -> set of normalized source names
+        # Per-node file mtime (epoch seconds) for incremental refresh.
+        self._mtimes: Dict[str, float] = {}
+        # Max mtime seen at the last refresh; cheap stat-only fast path checks
+        # against this to skip all work when nothing has changed on disk.
+        self._last_refresh_mtime: float = 0.0
         self._build_graph()
 
     def _log_tool(self, method: str, inputs: Optional[Dict[str, Any]] = None,
@@ -64,22 +87,94 @@ class VaultGraph:
     def _extract_wikilinks(self, text: str) -> Set[str]:
         return {self._normalize_name(match) for match in WIKILINK_RE.findall(text)}
 
+    def _collect_md_files(self) -> List[Path]:
+        """Scan the vault for markdown files, pruning ignored directories
+        in-place during the walk.
+
+        ``rglob`` can't skip a subtree once it has entered it, so a venv or
+        ``.git`` directory full of non-vault files still gets fully traversed
+        and then filtered out afterward (slow on this vault — ~670ms for the
+        raw rglob vs ~180ms for a pruned os.walk). Pruning ``dirs[:]`` in
+        place during ``os.walk`` tells the walker to never descend into the
+        ignored subtrees at all, which is what makes the mtime-gated refresh
+        actually cheap on the warm path.
+        """
+        import os as _os
+        out: List[Path] = []
+        for root, dirs, files in _os.walk(self.vault_path):
+            # Prune ignored dirs in-place so os.walk doesn't descend into them.
+            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]
+            for f in files:
+                if f.endswith(".md"):
+                    p = Path(root) / f
+                    if not _is_ignored_path(p):
+                        out.append(p)
+        return out
+
+    def _add_or_update_node(self, path: Path) -> str:
+        """Insert/update a single node from disk and return its normalized name.
+
+        Re-reading happens only for files the caller has determined changed;
+        this routine reads the file, rebuilds that node's edges/backlinks, and
+        preserves edge reciprocity. It does NOT touch other nodes except to
+        fix up their backlink sets (edges are global: a changed file's links
+        affect the backlinks of its targets).
+        """
+        name = self._normalize_name(path.stem)
+        # Drop any existing edges for this node before re-adding, so stale
+        # links (targets that no longer exist or were unlinked) are cleared.
+        self._remove_edges_for(name)
+        content = self._read_note(path)
+        self.nodes[name] = {
+            "file_path": str(path),
+            "name": path.stem,
+            "content": content,
+            "links": set(),
+        }
+        self.edges[name] = set()
+        self.backlinks.setdefault(name, set())
+        try:
+            self._mtimes[name] = path.stat().st_mtime
+        except OSError:
+            self._mtimes[name] = 0.0
+        # Re-wire this node's outgoing edges and the reciprocal backlinks.
+        for target in self._extract_wikilinks(content):
+            if target in self.nodes:
+                self.edges[name].add(target)
+                self.backlinks[target].add(name)
+                self.nodes[name]["links"].add(target)
+        return name
+
+    def _remove_edges_for(self, name: str) -> None:
+        """Remove a node's outgoing edges and the reciprocal backlinks."""
+        for target in list(self.edges.get(name, set())):
+            self.backlinks.get(target, set()).discard(name)
+        self.edges.get(name, set()).clear()
+        # Also drop this node as a backlink source from its old targets.
+        for src in list(self.backlinks.get(name, set())):
+            self.edges.get(src, set()).discard(name)
+            src_node = self.nodes.get(src)
+            if src_node:
+                src_node.get("links", set()).discard(name)
+
+    def _remove_node(self, name: str) -> None:
+        """Fully evict a node (deleted file): edges, backlinks, metadata."""
+        self._remove_edges_for(name)
+        self.edges.pop(name, None)
+        self.backlinks.pop(name, None)
+        self.nodes.pop(name, None)
+        self._mtimes.pop(name, None)
+
     def _build_graph(self):
         """Scan the vault once and build node/edge/backlink maps."""
-        md_files = [p for p in self.vault_path.rglob("*.md")]
+        md_files = self._collect_md_files()
+        max_mtime = 0.0
         for path in md_files:
             name = self._normalize_name(path.stem)
             if name in self.nodes:
                 continue
-            content = self._read_note(path)
-            self.nodes[name] = {
-                "file_path": str(path),
-                "name": path.stem,
-                "content": content,
-                "links": set(),
-            }
-            self.edges[name] = set()
-            self.backlinks[name] = set()
+            self._add_or_update_node(path)
+            max_mtime = max(max_mtime, self._mtimes.get(name, 0.0))
 
         for name, node in self.nodes.items():
             targets = self._extract_wikilinks(node["content"])
@@ -90,18 +185,80 @@ class VaultGraph:
                     self.backlinks[target].add(name)
                     self.nodes[name]["links"].add(target)
 
+        self._last_refresh_mtime = max_mtime
         self._log_tool("build_graph", {
             "vault_path": str(self.vault_path),
             "note_count": len(self.nodes),
             "edge_count": sum(len(v) for v in self.edges.values()),
         })
 
+    def _detect_changes(self) -> Tuple[List[Path], List[str]]:
+        """Stat-only scan for changed/new/deleted files since the last refresh.
+
+        Returns (changed_or_new_paths, deleted_normalized_names). No file
+        contents are read here — only stat(). This is the fast path that lets
+        `refresh()` be nearly free when the vault hasn't been edited.
+        """
+        md_files = self._collect_md_files()
+        seen_paths = set()
+        changed_or_new: List[Path] = []
+        for path in md_files:
+            seen_paths.add(str(path))
+            name = self._normalize_name(path.stem)
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > self._last_refresh_mtime or name not in self.nodes:
+                changed_or_new.append(path)
+        # Deleted: previously-known paths no longer present on disk.
+        deleted = [name for name, node in self.nodes.items()
+                   if node.get("file_path") and node["file_path"] not in seen_paths]
+        return changed_or_new, deleted
+
+    def refresh_if_changed(self) -> bool:
+        """Refresh the graph only if files changed on disk since last refresh.
+
+        Returns True if any change was applied, False if the graph was already
+        up to date (no disk reads beyond stat()). This is the cheap path that
+        `handle_chat` and `propose_next_gaps` rely on so consecutive messages
+        in a warm session don't pay for a full vault rescan.
+        """
+        changed, deleted = self._detect_changes()
+        if not changed and not deleted:
+            return False
+        # Apply only the delta. Edges are global, so each changed/removed
+        # node's edges are rewired individually.
+        max_mtime = self._last_refresh_mtime
+        for path in changed:
+            name = self._add_or_update_node(path)
+            max_mtime = max(max_mtime, self._mtimes.get(name, 0.0))
+        for name in deleted:
+            self._remove_node(name)
+        self._last_refresh_mtime = max_mtime
+        self._log_tool("incremental_refresh", {
+            "changed_count": len(changed),
+            "deleted_count": len(deleted),
+            "note_count": len(self.nodes),
+            "edge_count": sum(len(v) for v in self.edges.values()),
+        })
+        return True
+
     def refresh(self):
-        """Rebuild the graph from disk."""
-        self.nodes.clear()
-        self.edges.clear()
-        self.backlinks.clear()
-        self._build_graph()
+        """Refresh the graph from disk, incrementally when possible.
+
+        Previously this rebuilt the entire graph from scratch on every call
+        (a full rglob + read of every .md file). It now stats files and only
+        re-reads the ones that changed, which makes the common no-edit case
+        nearly free — important because `handle_chat` and the knowledge
+        curriculum both call this per message. Falls back to a full rebuild
+        if incremental tracking has no state yet.
+        """
+        if not self.nodes and self._last_refresh_mtime == 0.0:
+            # First-ever build: do the full scan once.
+            self._build_graph()
+            return
+        self.refresh_if_changed()
 
     def neighbors(self, name: str, direction: str = "both") -> List[str]:
         """Return linked notes and/or backlinked notes."""

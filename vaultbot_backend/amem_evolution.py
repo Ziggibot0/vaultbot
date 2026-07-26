@@ -146,14 +146,17 @@ class AMemeEvolution:
 
             for hit in neighbors:
                 npath = hit.get("file_path", "")
-                ncontent = hit.get("content") or hit.get("snippet") or ""
-                if not ncontent:
-                    # try to read from disk
-                    try:
-                        ncontent = Path(npath).read_text(encoding="utf-8")
-                    except Exception as e:  # noqa: BLE001
-                        self._log_error("read_neighbor_failed", e, {"path": npath})
-                        continue
+                # ALWAYS read the neighbor's full content from disk here, even
+                # if the search hit carries a content_preview. _evolve_neighbor
+                # mutates this content (tag + wikilink insertion) and writes it
+                # back to the note file via _atomic_write — a capped preview
+                # would silently truncate the stored note. The search-result
+                # content field is a snippet for display/retrieval only.
+                try:
+                    ncontent = Path(npath).read_text(encoding="utf-8")
+                except Exception as e:  # noqa: BLE001
+                    self._log_error("read_neighbor_failed", e, {"path": npath})
+                    continue
 
                 ev = self._evolve_neighbor(npath, ncontent, title, note_content,
                                             heuristic_only=heuristic_only)
@@ -206,7 +209,20 @@ class AMemeEvolution:
 
             # --- Determine new tags ---
             suggested_tags: List[str] = []
-            if (not heuristic_only) and self.ollama_client is not None:
+            # Heuristic first: if the new note's title appears as plain text in
+            # the neighbor, tagging it with the title is a high-precision
+            # signal — the neighbor literally mentions the concept. In that
+            # case skip the LLM tag-suggestion call entirely (saves a
+            # generative LLM call per matching neighbor on the single-note
+            # research path). The LLM only runs when the heuristic misses,
+            # i.e. the relation is semantic but not lexical.
+            heuristic_match = (
+                bool(new_note_title)
+                and new_note_title.lower() in content.lower()
+            )
+            if heuristic_match:
+                suggested_tags = [new_note_title]
+            elif (not heuristic_only) and self.ollama_client is not None:
                 try:
                     suggested_tags = self._llm_suggest_tags(
                         new_note_title, new_note_content, content
