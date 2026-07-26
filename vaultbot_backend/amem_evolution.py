@@ -25,10 +25,8 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 import numpy as np
-
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 
@@ -61,7 +59,7 @@ class AMemeEvolution:
     # ------------------------------------------------------------------ #
     def evolve_on_create(self, note_path: str, note_content: str,
                          heuristic_only: bool = False,
-                         query_embedding: Optional[list] = None,
+                         query_embedding: list | None = None,
                          skip_refresh: bool = False) -> dict:
         """
         Main entry point. Called after a new note is created.
@@ -129,7 +127,7 @@ class AMemeEvolution:
             except Exception:
                 new_note_abs = str(note_p)
 
-            neighbors: List[Dict] = []
+            neighbors: list[dict] = []
             for hit in hits:
                 fp = hit.get("file_path") or hit.get("path") or ""
                 if not fp:
@@ -208,7 +206,7 @@ class AMemeEvolution:
             content = neighbor_content
 
             # --- Determine new tags ---
-            suggested_tags: List[str] = []
+            suggested_tags: list[str] = []
             # Heuristic first: if the new note's title appears as plain text in
             # the neighbor, tagging it with the title is a high-precision
             # signal — the neighbor literally mentions the concept. In that
@@ -283,7 +281,7 @@ class AMemeEvolution:
         new_title: str,
         new_content: str,
         neighbor_content: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Ask the LLM for 1-3 new tags for the neighbor. Returns [] on failure."""
         if self.ollama_client is None:
             return []
@@ -309,7 +307,7 @@ class AMemeEvolution:
         return self._parse_json_tags(text)
 
     @staticmethod
-    def _parse_json_tags(text: str) -> List[str]:
+    def _parse_json_tags(text: str) -> list[str]:
         """Robustly extract a JSON array of strings from an LLM response."""
         # Try direct parse first.
         try:
@@ -371,7 +369,7 @@ class AMemeEvolution:
         return []
 
     @staticmethod
-    def _get_frontmatter_block(content: str) -> Optional[str]:
+    def _get_frontmatter_block(content: str) -> str | None:
         """Return the raw frontmatter text (between the --- fences) or None."""
         if not content.startswith("---"):
             return None
@@ -403,13 +401,13 @@ class AMemeEvolution:
             return content
 
         fm_block = self._get_frontmatter_block(content)
-        existing_tags_lower: Set[str] = set()
-        existing_tags: List[str] = []
+        existing_tags_lower: set[str] = set()
+        existing_tags: list[str] = []
         if fm_block is not None:
             existing_tags = self._extract_tags(content)
             existing_tags_lower = {t.lower() for t in existing_tags}
 
-        to_add: List[str] = []
+        to_add: list[str] = []
         for t in new_tags:
             if t.lower() not in existing_tags_lower:
                 existing_tags_lower.add(t.lower())
@@ -470,7 +468,7 @@ class AMemeEvolution:
 
         # Remove existing tags lines (inline or block) then insert new line.
         lines = fm_text.split("\n")
-        out_lines: List[str] = []
+        out_lines: list[str] = []
         skip_block = False
         i = 0
         while i < len(lines):
@@ -526,7 +524,7 @@ class AMemeEvolution:
         content: str, pattern: re.Pattern, replacement: str, max_count: int = 1
     ) -> str:
         """Replace pattern matches only in text segments outside [[...]] spans."""
-        result_parts: List[str] = []
+        result_parts: list[str] = []
         i = 0
         count = 0
         while i < len(content):
@@ -630,7 +628,7 @@ class AMemeEvolution:
         except Exception:
             log.info("amem:%s %s", event, data)
 
-    def _log_error(self, event: str, err: Exception, extra: Optional[dict] = None) -> None:
+    def _log_error(self, event: str, err: Exception, extra: dict | None = None) -> None:
         try:
             data = {"error": f"{type(err).__name__}: {err}"}
             if extra:

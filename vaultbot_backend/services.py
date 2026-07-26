@@ -14,8 +14,9 @@ import cycles — no leaf module is imported at services.py top level. The
 after the globals block and passes it to the extracted functions.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass  # all fields are string-annotated; no runtime imports needed
@@ -31,7 +32,7 @@ class Services:
     """
     # LLM + embeddings
     ollama_client: Any
-    vision_client: Optional[Any]
+    vision_client: Any | None
     # Index + graph
     vault_indexer: Any
     vault_graph: Any

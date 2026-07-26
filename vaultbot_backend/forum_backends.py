@@ -21,12 +21,12 @@ search fleet.
 """
 
 import re
-import time
 import threading
-import requests
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any
 
-from free_search import FreeSearch, _Backend, _is_blocked_source
+import requests
+from free_search import FreeSearch, _is_blocked_source
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ class _ForumBackend:
         return True
 
     def search(self, query: str, max_results: int = 5
-               ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+               ) -> tuple[list[dict[str, Any]], str | None]:
         """Return (results, error_or_None). Handles cooldown + throttle."""
         if self._in_cooldown():
             return [], f"cooldown:{int(self._cooldown_until - time.time())}s"
@@ -95,7 +95,7 @@ class _ForumBackend:
             self._mark_failure("exception")
             return [], str(e)
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         raise NotImplementedError
 
 
@@ -115,7 +115,7 @@ class GitHubIssuesBackend(_ForumBackend):
 
     API_URL = "https://api.github.com/search/issues"
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         q = _strip_site_operators(query)
         if not q:
             return []
@@ -129,7 +129,7 @@ class GitHubIssuesBackend(_ForumBackend):
         )
         resp.raise_for_status()
         data = resp.json()
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for item in data.get("items", [])[:max_results]:
             url = item.get("html_url", "")
             if not url:
@@ -157,7 +157,7 @@ class StackOverflowBackend(_ForumBackend):
 
     API_URL = "https://api.stackexchange.com/2.3/search/advanced"
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         q = _strip_site_operators(query)
         if not q:
             return []
@@ -175,7 +175,7 @@ class StackOverflowBackend(_ForumBackend):
         )
         resp.raise_for_status()
         data = resp.json()
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for item in data.get("items", [])[:max_results]:
             url = item.get("link", "")
             if not url:
@@ -262,7 +262,7 @@ class ForumEnhancedFreeSearch(FreeSearch):
     """
 
     def __init__(self, session_logger=None, timeout: int = 20,
-                 backends: Optional[List[Any]] = None,
+                 backends: list[Any] | None = None,
                  searxng_manager: Any = None):
         super().__init__(session_logger=session_logger, timeout=timeout,
                          backends=backends, searxng_manager=searxng_manager)
@@ -275,7 +275,7 @@ class ForumEnhancedFreeSearch(FreeSearch):
                 session_logger=session_logger, timeout=timeout))
 
     def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> Dict[str, Any]:
+               search_depth: str = "advanced") -> dict[str, Any]:
         """Fan out to all backends in parallel, merge + dedupe.
 
         Overrides FreeSearch.search() to:
@@ -292,7 +292,7 @@ class ForumEnhancedFreeSearch(FreeSearch):
         active_backends = [b for b in self._backends
                            if not (tech and b.name == "arxiv")]
 
-        results_by_backend: Dict[str, Tuple[List[Dict[str, Any]], Optional[str]]] = {}
+        results_by_backend: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
         threads = []
 
         def _run(b):
@@ -308,10 +308,10 @@ class ForumEnhancedFreeSearch(FreeSearch):
         for th in threads:
             th.join(timeout=max(self.timeout + 5, 30))
 
-        unresponsive: List[List[str]] = []
-        merged: List[Dict[str, Any]] = []
+        unresponsive: list[list[str]] = []
+        merged: list[dict[str, Any]] = []
         seen_urls: set = set()
-        buckets: Dict[str, List[Dict[str, Any]]] = {}
+        buckets: dict[str, list[dict[str, Any]]] = {}
         for name, (res, err) in results_by_backend.items():
             if err:
                 unresponsive.append([name, err])
@@ -323,7 +323,7 @@ class ForumEnhancedFreeSearch(FreeSearch):
         # Include any backends not in the priority list (e.g. custom backends).
         ordered_names += [n for n in buckets if n not in _MERGE_PRIORITY]
 
-        indices: Dict[str, int] = {n: 0 for n in ordered_names}
+        indices: dict[str, int] = {n: 0 for n in ordered_names}
         while any(indices[n] < len(buckets[n]) for n in ordered_names):
             for name in ordered_names:
                 i = indices[name]

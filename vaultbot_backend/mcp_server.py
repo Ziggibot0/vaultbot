@@ -37,19 +37,20 @@ VaultBot exposes tools through two paths with different audiences:
     the backend's source code.
 """
 
+import json
 import os
 import sys
-import json
 import threading
-import requests
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+import requests
 
 BACKEND_URL = os.getenv("VAULTBOT_BACKEND_URL", "http://localhost:8000")
 RESEARCH_TIMEOUT = int(os.getenv("VAULTBOT_RESEARCH_TIMEOUT", "180"))
 
 
-def _backend_research(topic: str, depth: str = "deep") -> Dict[str, Any]:
+def _backend_research(topic: str, depth: str = "deep") -> dict[str, Any]:
     try:
         resp = requests.post(
             f"{BACKEND_URL}/research_tool",
@@ -62,7 +63,7 @@ def _backend_research(topic: str, depth: str = "deep") -> Dict[str, Any]:
         return {"error": f"backend unreachable: {e}", "topic": topic}
 
 
-def _backend_status() -> Dict[str, Any]:
+def _backend_status() -> dict[str, Any]:
     try:
         resp = requests.get(f"{BACKEND_URL}/autonomous/status", timeout=10)
         resp.raise_for_status()
@@ -71,7 +72,7 @@ def _backend_status() -> Dict[str, Any]:
         return {"error": f"backend unreachable: {e}"}
 
 
-def _backend_gaps() -> Dict[str, Any]:
+def _backend_gaps() -> dict[str, Any]:
     try:
         resp = requests.get(f"{BACKEND_URL}/autonomous/gaps", timeout=30)
         resp.raise_for_status()
@@ -80,7 +81,7 @@ def _backend_gaps() -> Dict[str, Any]:
         return {"error": f"backend unreachable: {e}"}
 
 
-def _backend_custom_tools() -> Dict[str, Any]:
+def _backend_custom_tools() -> dict[str, Any]:
     try:
         resp = requests.get(f"{BACKEND_URL}/custom_tools", timeout=10)
         resp.raise_for_status()
@@ -89,7 +90,7 @@ def _backend_custom_tools() -> Dict[str, Any]:
         return {"error": f"backend unreachable: {e}"}
 
 
-def _backend_call_custom_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+def _backend_call_custom_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     try:
         resp = requests.post(f"{BACKEND_URL}/custom_tools/call",
                               json={"name": name, "args": args},
@@ -156,7 +157,7 @@ TOOLS = [
 ]
 
 
-def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+def _dispatch_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """Run a tool call and return {isError, text}."""
     if name == "vault_research":
         topic = (args.get("topic") or "").strip()
@@ -189,19 +190,19 @@ _NOTIFICATIONS = {"notifications/initialized"}
 _initialized = threading.Event()
 
 
-def _make_response(msg_id: Any, result: Any) -> Dict[str, Any]:
+def _make_response(msg_id: Any, result: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": msg_id, "result": result}
 
 
 def _make_error(msg_id: Any, code: int, message: str,
-                data: Any = None) -> Dict[str, Any]:
+                data: Any = None) -> dict[str, Any]:
     err = {"code": code, "message": message}
     if data is not None:
         err["data"] = data
     return {"jsonrpc": "2.0", "id": msg_id, "error": err}
 
 
-def _handle_request(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
     msg_id = msg.get("id")
     method = msg.get("method", "")
     if msg_id is None or method in _NOTIFICATIONS:
@@ -248,7 +249,7 @@ def _handle_request(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return _make_error(msg_id, -32601, f"Method not found: {method}")
 
 
-def _write_stdout(obj: Dict[str, Any]) -> None:
+def _write_stdout(obj: dict[str, Any]) -> None:
     try:
         sys.stdout.write(json.dumps(obj, default=str) + "\n")
         sys.stdout.flush()
@@ -280,7 +281,7 @@ def main():
     sys.exit(0)
 
 
-def _format_research_result(result: Dict[str, Any]) -> str:
+def _format_research_result(result: dict[str, Any]) -> str:
     if result.get("error"):
         return f"Research failed: {result['error']}"
     lines = [
@@ -295,7 +296,7 @@ def _format_research_result(result: Dict[str, Any]) -> str:
         "",
     ]
     if result.get("note_path"):
-        lines += [f"## Note written", f"[[{Path(result['note_path']).stem}]]", ""]
+        lines += ["## Note written", f"[[{Path(result['note_path']).stem}]]", ""]
     if result.get("gaps_filled"):
         lines += ["## Gap-fill queries",
                   "\n".join(f"- {g}" for g in result["gaps_filled"]), ""]
@@ -306,10 +307,10 @@ def _format_research_result(result: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _format_gaps(result: Dict[str, Any]) -> str:
+def _format_gaps(result: dict[str, Any]) -> str:
     if result.get("error"):
         return f"Could not fetch gaps: {result['error']}"
-    gaps: List[Dict[str, Any]] = result.get("gaps", [])
+    gaps: list[dict[str, Any]] = result.get("gaps", [])
     if not gaps:
         return "No knowledge gaps detected — the vault looks complete."
     lines = [f"# Vault knowledge gaps ({len(gaps)})", ""]

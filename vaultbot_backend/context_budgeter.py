@@ -33,7 +33,7 @@ Configurable via environment variables:
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class ContextBudgeter:
@@ -79,8 +79,8 @@ class ContextBudgeter:
     def budget(
         self,
         context: str,
-        conversation_history: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
+        conversation_history: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Ensure context fits within the token budget.
 
         Args:

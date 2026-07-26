@@ -4,7 +4,10 @@ Agent-authored tool: preflight_safety_check
 
 SCHEMA = {"name": "preflight_safety_check", "description": "Pre-flight safety check before self-modifying operations. Verifies git clean state (for rollback safety), critical backend files exist, identity files intact, disk space adequate, custom tools still import cleanly, and vault directory is accessible. Returns PASS / WARN / BLOCK with full details. Run this before any code_write or tool_create operation to verify the system is healthy enough to safely edit.", "parameters": {"description": "No arguments needed. The tool auto-detects paths from its own file location.", "properties": {}, "type": "object"}}
 
-import os, subprocess, shutil, json, time, importlib.util
+import importlib.util
+import shutil
+import subprocess
+import time
 from pathlib import Path
 
 # Determine backend directory from this file's location
@@ -42,21 +45,21 @@ def run(args):
         "blocks": [],
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     }
-    
+
     backend_dir = BACKEND_DIR
-    
+
     # --- 1. Git state check ---
     try:
         def git(*cmd):
             r = subprocess.run(["git"] + list(cmd), capture_output=True, text=True,
                              cwd=str(backend_dir), timeout=10)
             return r.stdout.strip(), r.stderr.strip(), r.returncode
-        
+
         status_out, _, _ = git("status", "--porcelain")
         uncommitted = [l for l in status_out.splitlines() if l.strip()]
         head_out, _, head_rc = git("rev-parse", "HEAD")
         has_head = head_rc == 0
-        
+
         git_check = {
             "clean_working_tree": len(uncommitted) == 0,
             "has_head_for_rollback": has_head,
@@ -64,7 +67,7 @@ def run(args):
             "uncommitted_count": len(uncommitted)
         }
         results["checks"]["git"] = git_check
-        
+
         if not has_head:
             results["blocks"].append("No git HEAD — cannot roll back if self-edit fails")
             results["status"] = "BLOCK"
@@ -78,7 +81,7 @@ def run(args):
     except Exception as e:
         results["warnings"].append(f"Git check failed: {e}")
         results["checks"]["git"] = {"error": str(e)}
-    
+
     # --- 2. Critical backend files ---
     critical_files = [
         "main.py", "agent_tools.py", "self_improver.py",
@@ -87,7 +90,7 @@ def run(args):
         "session_logger.py", "knowledge_curriculum.py",
     ]
     missing = [f for f in critical_files if not (backend_dir / f).exists()]
-    
+
     results["checks"]["critical_files"] = {
         "checked_count": len(critical_files),
         "missing": missing,
@@ -96,12 +99,12 @@ def run(args):
     if missing:
         results["blocks"].append(f"Critical files missing: {missing}")
         results["status"] = "BLOCK"
-    
+
     # --- 3. Identity files ---
     identity_dir = backend_dir / "identity"
     identity_files = ["IDENTITY.md", "SELF_MODEL.md", "GOALS.md"]
     identity_missing = [f for f in identity_files if not (identity_dir / f).exists()]
-    
+
     results["checks"]["identity"] = {
         "dir_exists": identity_dir.exists(),
         "missing": identity_missing,
@@ -110,7 +113,7 @@ def run(args):
     if identity_missing:
         results["blocks"].append(f"Identity files missing: {identity_missing}")
         results["status"] = "BLOCK"
-    
+
     # --- 4. Disk space ---
     try:
         usage = shutil.disk_usage(str(backend_dir))
@@ -130,7 +133,7 @@ def run(args):
                 results["status"] = "WARN"
     except Exception as e:
         results["warnings"].append(f"Disk check failed: {e}")
-    
+
     # --- 5. Custom tools integrity ---
     custom_dir = backend_dir / "custom_tools"
     tool_files = []
@@ -138,7 +141,7 @@ def run(args):
     if custom_dir.exists():
         tool_files = [f for f in custom_dir.glob("*.py")
                      if f.name != "__init__.py" and f.name != "preflight_safety_check.py"]
-    
+
     for tf in tool_files:
         try:
             mod_name = f"custom_tools.{tf.stem}"
@@ -150,7 +153,7 @@ def run(args):
                     broken_tools.append({"file": tf.name, "error": "No run() function"})
         except Exception as e:
             broken_tools.append({"file": tf.name, "error": str(e)})
-    
+
     results["checks"]["custom_tools"] = {
         "total": len(tool_files),
         "broken": broken_tools,
@@ -162,7 +165,7 @@ def run(args):
         )
         if results["status"] == "PASS":
             results["status"] = "WARN"
-    
+
     # --- 6. Vault notes directory ---
     vault_dir = backend_dir.parent / "vaultbot"
     results["checks"]["vault"] = {
@@ -172,11 +175,11 @@ def run(args):
     if not vault_dir.exists():
         results["blocks"].append("Vault notes directory not found")
         results["status"] = "BLOCK"
-    
+
     # --- Final status ---
     if results["blocks"]:
         results["status"] = "BLOCK"
     elif results["warnings"] and results["status"] == "PASS":
         results["status"] = "WARN"
-    
+
     return results

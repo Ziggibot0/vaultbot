@@ -40,13 +40,14 @@ assessment or a user thumbs-up/down drives it).
 
 from __future__ import annotations
 
-import os
 import json
-import time
 import logging
-import numpy as np
+import os
+import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +73,12 @@ class EmbeddingDrift:
         self.state_path = Path(state_path)
         self.embedding_dim = embedding_dim
         self.session_logger = session_logger
-        self.drift: Dict[str, dict] = self._load()
+        self.drift: dict[str, dict] = self._load()
 
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
-    def _load(self) -> Dict[str, dict]:
+    def _load(self) -> dict[str, dict]:
         try:
             if self.state_path.exists():
                 return json.loads(self.state_path.read_text(encoding="utf-8"))
@@ -195,7 +196,7 @@ class EmbeddingDrift:
         except Exception as e:
             logger.debug("swallowed: %s", e)
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """Summary for /health or diagnostics."""
         total = len(self.drift)
         with_feedback = sum(1 for e in self.drift.values()

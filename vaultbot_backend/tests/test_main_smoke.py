@@ -21,8 +21,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 
 def test_main_imports_without_name_error():
     """import main in a subprocess — verifies all shims resolve.

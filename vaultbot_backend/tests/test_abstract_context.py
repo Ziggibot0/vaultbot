@@ -14,11 +14,9 @@ Documentation grounding:
 - Anatomy of a test: Arrange → Act → Assert → Cleanup.
   https://docs.pytest.org/en/stable/explanation/anatomy.html
 """
-from pathlib import Path
 
 from abstract_context import build_abstract_context
 from vault_graph import VaultGraph
-
 
 # ---------------------------------------------------------------------------
 # Test 1 — legacy fallback when no L1 cards exist

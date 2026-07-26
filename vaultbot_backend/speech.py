@@ -31,16 +31,13 @@ works offline, so it is the STT engine here.
 """
 
 import io
-import os
-import sys
 import json
-import wave
-import zipfile
+import os
 import tempfile
 import threading
 import urllib.request
+import zipfile
 from pathlib import Path
-from typing import Optional
 
 # Model files live next to this module so they travel with the vault.
 HERE = Path(__file__).parent
@@ -117,7 +114,7 @@ def _get_kokoro():
             return None
 
 
-def synthesize(text: str, voice: Optional[str] = None, rate: int = 190) -> bytes:
+def synthesize(text: str, voice: str | None = None, rate: int = 190) -> bytes:
     """Synthesize text to WAV bytes (16-bit PCM, 24kHz).
 
     `voice` selects a Kokoro voice (e.g. "am_michael", "af_sarah").
@@ -135,7 +132,6 @@ def synthesize(text: str, voice: Optional[str] = None, rate: int = 190) -> bytes
     speed = max(0.5, min(2.0, float(rate) / 190.0)) if rate else 1.0
     _log("tts_request", {"chars": len(text), "voice": v, "speed": round(speed, 2)})
     try:
-        import numpy as np
         import soundfile as sf
         samples, sr = k.create(text, voice=v, speed=speed, lang="en-us")
         # Convert float32 [-1,1] to int16 PCM WAV bytes for the browser.
@@ -180,7 +176,7 @@ def _vosk_model_root() -> Path:
     return VOSK_MODEL_DIR / VOSK_SMALL_MODEL_NAME
 
 
-def _download_vosk_model() -> Optional[Path]:
+def _download_vosk_model() -> Path | None:
     """Download + extract the small vosk model if not already present.
 
     Returns the model dir path on success, None on failure. Safe to call

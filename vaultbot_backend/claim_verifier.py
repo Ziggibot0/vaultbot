@@ -6,9 +6,8 @@ cited sources. Post-generation verification layer for VaultBot research pipeline
 import json
 import os
 import re
-from datetime import datetime
-from typing import Dict, List, Optional, Any
 from collections import defaultdict
+from datetime import datetime
 
 
 class ClaimVerifier:
@@ -33,7 +32,7 @@ class ClaimVerifier:
 
     def _load_log(self):
         try:
-            with open(self.log_path, "r", encoding="utf-8") as f:
+            with open(self.log_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {"verification_logs": []}
@@ -207,7 +206,7 @@ class ClaimVerifier:
 
     def verify_note(self, note_path):
         try:
-            with open(note_path, "r", encoding="utf-8") as f:
+            with open(note_path, encoding="utf-8") as f:
                 note_content = f.read()
         except Exception as e:
             return {"error": f"Could not read note: {e}"}
@@ -235,7 +234,7 @@ class ClaimVerifier:
                         source_info = info
                         break
             if not source_info:
-                result = {"claim": claim_text, "source": source_title, "verdict": self.SOURCE_NOT_FOUND, "reasoning": f"Source not found in note sources"}
+                result = {"claim": claim_text, "source": source_title, "verdict": self.SOURCE_NOT_FOUND, "reasoning": "Source not found in note sources"}
                 stats[self.SOURCE_NOT_FOUND] += 1
                 verified_claims.append(result)
                 continue
@@ -261,7 +260,7 @@ class ClaimVerifier:
 
     def _update_frontmatter(self, note_path, report):
         try:
-            with open(note_path, "r", encoding="utf-8") as f:
+            with open(note_path, encoding="utf-8") as f:
                 content = f.read()
             verification_yaml = (f"verification:\n  total_claims: {report['total_claims']}\n"
                 f"  verified: {report['verified']}\n  unsupported: {report['unsupported']}\n"

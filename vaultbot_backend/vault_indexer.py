@@ -1,15 +1,16 @@
-import os
+import hashlib
 import json
+import os
 import pickle
 import time
-import hashlib
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-import numpy as np
+from typing import Any
+
 import faiss
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import numpy as np
 from ollama_client import OllamaClient
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 IGNORED_DIRS = {
     "vaultbot_venv",
@@ -77,8 +78,8 @@ class VaultIndexer:
         # never reused until a full _rebuild_index compaction.
         # The legacy `self.metadata` list is kept as a back-compat @property
         # below so external readers (note_creator.py:83) keep working.
-        self._metadata: Dict[int, Dict[str, Any]] = {}
-        self._path_to_id: Dict[str, int] = {}
+        self._metadata: dict[int, dict[str, Any]] = {}
+        self._path_to_id: dict[str, int] = {}
         self._next_id: int = 0
         self.timestamps = {}  # file_path -> last_modified timestamp
         # Bounded content-preview cache stored alongside each metadata entry.
@@ -101,7 +102,7 @@ class VaultIndexer:
     # `indexer.metadata` as a list of dicts.  Return the live values so they
     # see current state without touching the dict internals.
     @property
-    def metadata(self) -> List[Dict[str, Any]]:
+    def metadata(self) -> list[dict[str, Any]]:
         return list(self._metadata.values())
 
     @metadata.setter
@@ -115,11 +116,11 @@ class VaultIndexer:
             self._path_to_id[m['file_path']] = i
         self._next_id = len(value)
 
-    def _log_tool(self, method: str, inputs: Optional[Dict[str, Any]] = None, outputs: Any = None, error: Optional[str] = None):
+    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None, outputs: Any = None, error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(tool="vault_indexer", method=method, inputs=inputs, outputs=outputs, error=error)
-        
+
     def _load_index(self):
         """Load existing index and metadata from disk, or initialize new.
 
@@ -139,7 +140,7 @@ class VaultIndexer:
                 self.index = faiss.read_index(str(self.index_file))
                 with open(self.metadata_file, 'rb') as f:
                     loaded = pickle.load(f)
-                with open(self.timestamp_file, 'r') as f:
+                with open(self.timestamp_file) as f:
                     self.timestamps = json.load(f)
 
                 # Detect format: tuple of length 3 = new; list = legacy.
@@ -196,7 +197,7 @@ class VaultIndexer:
         else:
             print("No existing index found. Creating new index.")
             self._init_new_index()
-    
+
     def _init_new_index(self):
         """Initialize a new empty index."""
         # We'll determine the dimension when we add the first vector
@@ -205,7 +206,7 @@ class VaultIndexer:
         self._path_to_id = {}
         self._next_id = 0
         self.timestamps = {}
-    
+
     def _get_file_hash(self, file_path: Path) -> str:
         """Compute a hash of the file content to detect changes."""
         try:
@@ -213,7 +214,7 @@ class VaultIndexer:
                 return hashlib.md5(f.read()).hexdigest()
         except Exception:
             return ""
-    
+
     def _get_embedding(self, text: str) -> np.ndarray:
         """Get embedding for text using Ollama.
 
@@ -287,23 +288,23 @@ class VaultIndexer:
             start = boundary + 1  # +1 to skip the newline
         # Filter out empty / tiny chunks.
         return [c for c in chunks if len(c.strip()) > 50]
-    
+
     def _add_file_to_index(self, file_path: Path):
         """Read a file, compute embedding, and add to index."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 content = f.read()
         except FileNotFoundError:
             return  # file was deleted between the watcher event and open — normal race
         except Exception as e:
             print(f"Error reading file {file_path}: {e}")
             return
-        
+
         # Compute hash to detect changes
         content_hash = self._get_file_hash(file_path)
         stat = file_path.stat()
         last_modified = stat.st_mtime
-        
+
         # Check if we already have this file and if it's unchanged (O(1) lookup)
         key = str(file_path)
         existing_id = self._path_to_id.get(key)
@@ -315,14 +316,14 @@ class VaultIndexer:
             else:
                 # Update existing: remove old vector (O(1), no re-embedding)
                 self._remove_file_internal(file_path)
-        
+
         # Get embedding
         try:
             embedding = self._get_embedding(content)
         except Exception as e:
             print(f"Error getting embedding for {file_path}: {e}")
             return
-        
+
         self._add_embedding_to_index(
             file_path, embedding, last_modified, content_hash,
             content_preview=content)
@@ -366,7 +367,7 @@ class VaultIndexer:
         assert index is not None
         index.add_with_ids(vec, np.array([faiss_id], dtype=np.int64))  # type: ignore
         abs_path_str = str(file_path if file_path.is_absolute() else file_path.resolve())
-        meta_entry: Dict[str, Any] = {
+        meta_entry: dict[str, Any] = {
             'file_path': abs_path_str,
             'last_modified': last_modified,
             'content_hash': content_hash
@@ -438,7 +439,7 @@ class VaultIndexer:
                 return self._get_chunked_embedding(text)
             return np.array(self.ollama_client.embeddings(text), dtype=np.float32)
 
-        embeddings: list[Optional[np.ndarray]] = [None] * len(contents)
+        embeddings: list[np.ndarray | None] = [None] * len(contents)
         with ThreadPoolExecutor(max_workers=8) as executor:
             futures = {executor.submit(_embed_one, t): i for i, t in enumerate(contents)}
             for future in as_completed(futures):
@@ -450,7 +451,7 @@ class VaultIndexer:
 
         # Add to index
         indexed = 0
-        emb_by_path: Dict[str, list[float]] = {}
+        emb_by_path: dict[str, list[float]] = {}
         for fp, emb, last_mod, ch, cont in zip(valid_paths, embeddings, timestamps, hashes, contents):
             if emb is None:
                 continue
@@ -469,7 +470,7 @@ class VaultIndexer:
         if return_embeddings:
             return indexed, emb_by_path
         return indexed
-    
+
     def _remove_file_internal(self, file_path: Path):
         """Remove a file from the index — O(1), zero re-embedding.
 
@@ -493,7 +494,7 @@ class VaultIndexer:
                 raise
         print(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
         self._log_tool("remove_file", {"file_path": key})
-    
+
     def _rebuild_index(self):
         """Compact the index by reconstructing live vectors — zero Ollama calls.
 
@@ -559,7 +560,7 @@ class VaultIndexer:
         self.index.add_with_ids(stacked, ids_arr)  # type: ignore
         # _next_id stays as-is (ids are reused, not reassigned).
         print(f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)")
-    
+
     def _update_file(self, file_path_str: str):
         """Update a file in the index (called on modification)."""
         file_path = Path(file_path_str)
@@ -567,19 +568,19 @@ class VaultIndexer:
             # File was deleted, handle in on_deleted
             return
         self._add_file_to_index(file_path)
-    
+
     def _add_file(self, file_path_str: str):
         """Add a new file to the index (called on creation)."""
         file_path = Path(file_path_str)
         if not file_path.exists():
             return
         self._add_file_to_index(file_path)
-    
+
     def _remove_file(self, file_path_str: str):
         """Remove a file from the index (called on deletion)."""
         file_path = Path(file_path_str)
         self._remove_file_internal(file_path)
-    
+
     def start_watching(self):
         """Start watching the vault for changes."""
         if self.observer is not None:
@@ -591,15 +592,15 @@ class VaultIndexer:
         # Filter later by path checks in event handler
         self.observer.start()
         print(f"Started watching vault at {self.vault_path}")
-    
+
     def stop_watching(self):
         """Stop watching the vault."""
         if self.observer is not None:
             self.observer.stop()
             self.observer.join()
             self.observer = None
-    
-    def _collect_md_files(self) -> List[Path]:
+
+    def _collect_md_files(self) -> list[Path]:
         """Scan the vault for markdown files, skipping ignored directories."""
         return [p for p in self.vault_path.rglob("*.md") if not _is_ignored_path(p)]
 
@@ -660,7 +661,7 @@ class VaultIndexer:
         self.load()
         self.index_missing_or_changed()
 
-    def search(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: str, k: int = 5) -> list[dict[str, Any]]:
         """Search the vault for the k most relevant notes to `query`.
 
         Returns a list of dicts: {'file_path', 'content', 'score'} sorted by
@@ -678,7 +679,7 @@ class VaultIndexer:
 
         return self.search_by_vector(query_embedding, k)
 
-    def reconstruct_embedding(self, file_path: str) -> Optional[np.ndarray]:
+    def reconstruct_embedding(self, file_path: str) -> np.ndarray | None:
         """Pull a note's content embedding straight out of the FAISS index.
 
         This is the key to LLM-free drift re-ranking: instead of re-embedding
@@ -701,7 +702,7 @@ class VaultIndexer:
             return None
 
     def search_by_vector(self, query_embedding: np.ndarray,
-                         k: int = 5) -> List[Dict[str, Any]]:
+                         k: int = 5) -> list[dict[str, Any]]:
         """Search using a pre-computed embedding vector.
 
         This is the same as ``search()`` but skips the Ollama embedding call,
@@ -727,7 +728,7 @@ class VaultIndexer:
         k_eff = min(k, self.index.ntotal)
         distances, indices = self.index.search(query_vec, k_eff)  # type: ignore
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for faiss_id, distance in zip(indices[0], distances[0]):
             if faiss_id < 0:
                 continue  # FAISS returns -1 for "no result"
@@ -743,7 +744,7 @@ class VaultIndexer:
             content = meta.get('content_preview')
             if content is None:
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    with open(file_path, encoding='utf-8') as f:
                         content = f.read()
                 except Exception:
                     content = "[Error reading file]"
@@ -754,7 +755,7 @@ class VaultIndexer:
             })
         self._log_tool("search_by_vector", {"k": k}, outputs={"result_count": len(results)})
         return results
-    
+
     def persist(self):
         """Save the index and metadata to disk.
 
@@ -773,17 +774,18 @@ class VaultIndexer:
 # Example usage (for testing)
 if __name__ == "__main__":
     import os
+
     from dotenv import load_dotenv
     load_dotenv()
-    
+
     vault_path = os.getenv("VAULT_PATH", "C:\\Users\\skell\\Desktop\\Vault2")
     indexer = VaultIndexer(vault_path)
     indexer.initialize()
-    
+
     # Try a search
     results = indexer.search("test query", k=3)
     print(f"Search results: {results}")
-    
+
     # Keep the script running to allow watching
     try:
         while True:

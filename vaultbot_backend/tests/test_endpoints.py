@@ -26,6 +26,7 @@ Documentation grounding:
 __allows_main_import__ = True
 
 import os
+
 # Bypass the PID lock so `import main` doesn't sys.exit if a backend is running.
 os.environ.setdefault("VAULTBOT_SKIP_LOCK", "1")
 

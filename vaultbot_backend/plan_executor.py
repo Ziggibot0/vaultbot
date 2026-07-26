@@ -42,11 +42,11 @@ typing. No new dependencies.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -81,9 +81,9 @@ class Subtask:
     status: str = "pending"
     attempts: int = 0
     max_attempts: int = 5
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    verifier_passed: Optional[bool] = None
+    result: dict | None = None
+    error: str | None = None
+    verifier_passed: bool | None = None
 
 
 @dataclass
@@ -92,8 +92,8 @@ class Plan:
 
     id: str
     goal: str
-    subtasks: List[Subtask]
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    subtasks: list[Subtask]
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "pending"  # pending | running | done | failed | partial
     log: list = field(default_factory=list)
 
@@ -192,7 +192,7 @@ class PlanExecutor:
 
     def __init__(
         self,
-        op_registry: Dict[str, Callable[[dict], dict]],
+        op_registry: dict[str, Callable[[dict], dict]],
         session_logger=None,
         max_attempts_per_subtask: int = 5,
     ) -> None:
@@ -215,7 +215,7 @@ class PlanExecutor:
 
     def _log(self, plan: Plan, level: str, msg: str, **extra: Any) -> None:
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "level": level,
             "msg": msg,
         }
@@ -230,7 +230,7 @@ class PlanExecutor:
 
     # -- verification ------------------------------------------------------
 
-    def verify(self, subtask: Subtask, result: Optional[dict]) -> bool:
+    def verify(self, subtask: Subtask, result: dict | None) -> bool:
         """Safely evaluate `subtask.verifier` with `result` in scope.
 
         Returns True/False. A broken verifier expression counts as a *failed*
@@ -242,7 +242,7 @@ class PlanExecutor:
             return isinstance(result, dict)
         try:
             # Restricted eval: tiny builtins, result in locals only.
-            value = eval(  # noqa: S307 — restricted scope by design
+            value = eval(
                 expr,
                 {"__builtins__": _SAFE_BUILTINS},
                 {"result": result},

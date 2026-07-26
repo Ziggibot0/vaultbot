@@ -1,11 +1,9 @@
-import asyncio
-import docker
 import time
-import os
-import requests
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
+import docker
+import requests
 from bs4 import BeautifulSoup
 
 # Path to the SearxNG settings file that enables JSON output. Mounting this
@@ -20,7 +18,7 @@ class SearxngManager:
         self.client = docker.from_env()
         self.session_logger = session_logger
 
-    def _log_tool(self, method: str, inputs: Optional[Dict[str, Any]] = None, outputs: Any = None, duration_ms: Optional[float] = None, error: Optional[str] = None):
+    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None, outputs: Any = None, duration_ms: float | None = None, error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(tool="searxng", method=method, inputs=inputs, outputs=outputs, duration_ms=duration_ms, error=error)
@@ -165,9 +163,9 @@ class SearxngManager:
                                 encoding="utf-8") as tf:
                             tf.write(new_settings)
                             tmp_path = tf.name
-                        import docker as _docker
                         # Use the low-level API for put_archive.
-                        import tarfile, io
+                        import io
+                        import tarfile
                         stream = io.BytesIO()
                         with tarfile.open(fileobj=stream, mode="w") as tar:
                             info = tarfile.TarInfo(name="settings.yml")

@@ -36,13 +36,12 @@ Wikipedia is blocked at every layer per [[No-Wikipedia-Directive]].
 """
 
 import re
-import time
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
-
 
 # --- Source blocklist (Sean's directive: never use Wikipedia) ---------------
 _BLOCKED_DOMAINS = {
@@ -143,7 +142,7 @@ class _Backend:
             self._consecutive_failures = 0
 
     # -- public search ----------------------------------------------------
-    def search(self, query: str, max_results: int = 5) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    def search(self, query: str, max_results: int = 5) -> tuple[list[dict[str, Any]], str | None]:
         """Return (results, error_or_None). Handles cooldown + throttle."""
         if self._in_cooldown():
             return [], f"cooldown:{int(self._cooldown_remaining())}s"
@@ -176,7 +175,7 @@ class _Backend:
             return [], str(e)
 
     # -- subclass hook -----------------------------------------------------
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         raise NotImplementedError
 
     # -- interface compat -------------------------------------------------
@@ -195,7 +194,7 @@ class DuckDuckGoLite(_Backend):
 
     SEARCH_URL = "https://lite.duckduckgo.com/lite/"
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         # lite.duckduckgo.com returns a minimal HTML table — far less brittle
         # than the JS-heavy main site and lighter on bandwidth.
         resp = requests.post(
@@ -206,7 +205,7 @@ class DuckDuckGoLite(_Backend):
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         # lite.duckduckgo.com lays results out as a series of <tr> rows:
         #   row A: <a class="result-link" href="ABSOLUTE_URL">Title</a>
         #   row B: <td class="result-snippet">snippet...</td>
@@ -296,7 +295,7 @@ class MarginaliaBackend(_Backend):
         "creativecommons.org", "gnu.org", "w3.org", "github.com/marginalia",
     )
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         resp = requests.get(
             self.SEARCH_URL,
             params={"query": query},
@@ -305,7 +304,7 @@ class MarginaliaBackend(_Backend):
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         seen = set()
         # Marginalia renders each hit as a card containing a heading link to the
         # external page plus a description. The stable hook is an <a> whose
@@ -365,7 +364,7 @@ class ArxivBackend(_Backend):
 
     API_URL = "http://export.arxiv.org/api/query"
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         # arXiv expects a fielded query; "all:" matches title+abstract+...
         q = query.strip()
         # Escape colons/quotes that break arXiv query syntax.
@@ -388,7 +387,7 @@ class ArxivBackend(_Backend):
             soup = BeautifulSoup(resp.text, "xml")
         except Exception:
             soup = BeautifulSoup(resp.text, "html.parser")
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for entry in soup.find_all("entry"):
             title = entry.find("title")
             summary = entry.find("summary")
@@ -447,7 +446,7 @@ class SearxngBackend(_Backend):
     def is_configured(self) -> bool:
         return self._searxng is not None
 
-    def _raw_search(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+    def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
         if self._searxng is None:
             raise RuntimeError("no searxng manager")
         # ensure_running() starts (or self-heals) the Docker container. If
@@ -458,7 +457,7 @@ class SearxngBackend(_Backend):
         data = self._searxng.search(query, timeout=self.timeout)
         if not data:
             return []
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for r in (data.get("results") or [])[:max_results]:
             url = r.get("url", "")
             if not url or _is_blocked_source(url):
@@ -491,14 +490,14 @@ class FreeSearch:
     """
 
     def __init__(self, session_logger=None, timeout: int = 20,
-                 backends: Optional[List[_Backend]] = None,
+                 backends: list[_Backend] | None = None,
                  searxng_manager: Any = None):
         self.session_logger = session_logger
         self.timeout = timeout
         if backends is None:
             # Default fleet: general web (DDG) + deep/non-mainstream (Marginalia)
             # + academic (arXiv). All keyless.
-            fleet: List[_Backend] = [
+            fleet: list[_Backend] = [
                 DuckDuckGoLite(session_logger=session_logger, timeout=timeout),
                 MarginaliaBackend(session_logger=session_logger, timeout=timeout),
                 ArxivBackend(session_logger=session_logger, timeout=timeout),
@@ -528,14 +527,14 @@ class FreeSearch:
 
     # -- search -----------------------------------------------------------
     def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> Dict[str, Any]:
+               search_depth: str = "advanced") -> dict[str, Any]:
         """Fan out to all backends in parallel, merge + dedupe.
 
         Returns {"results": [...], "unresponsive_engines": [["name","reason"],...]}.
         Each result has url, title, content, raw_content.
         """
         t0 = time.time()
-        results_by_backend: Dict[str, Tuple[List[Dict[str, Any]], Optional[str]]] = {}
+        results_by_backend: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
         threads = []
 
         def _run(b: _Backend):
@@ -554,18 +553,18 @@ class FreeSearch:
         for th in threads:
             th.join(timeout=max(self.timeout + 5, 30))
 
-        unresponsive: List[List[str]] = []
-        merged: List[Dict[str, Any]] = []
+        unresponsive: list[list[str]] = []
+        merged: list[dict[str, Any]] = []
         seen_urls: set = set()
         # Interleave so no single engine dominates the top of the list.
-        buckets: Dict[str, List[Dict[str, Any]]] = {}
+        buckets: dict[str, list[dict[str, Any]]] = {}
         for name, (res, err) in results_by_backend.items():
             if err:
                 unresponsive.append([name, err])
             if res:
                 buckets[name] = res
         # Round-robin merge: take one from each engine in turn.
-        indices: Dict[str, int] = {n: 0 for n in buckets}
+        indices: dict[str, int] = {n: 0 for n in buckets}
         while any(indices[n] < len(buckets[n]) for n in buckets):
             for name in buckets:  # preserve a stable order
                 i = indices[name]

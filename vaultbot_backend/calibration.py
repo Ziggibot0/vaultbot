@@ -10,9 +10,8 @@ See [[Calibration-via-Operator-Feedback]] for the architecture rationale.
 import json
 import os
 import re
+from collections import Counter, defaultdict
 from datetime import datetime
-from typing import Dict, List, Optional
-from collections import defaultdict, Counter
 
 
 class CalibrationTracker:
@@ -77,7 +76,7 @@ class CalibrationTracker:
                 json.dump({"corrections": [], "gate_decisions": []}, f, indent=2)
 
     def _load(self) -> dict:
-        with open(self.log_path, "r", encoding="utf-8") as f:
+        with open(self.log_path, encoding="utf-8") as f:
             return json.load(f)
 
     def _save(self, data: dict):
@@ -116,7 +115,7 @@ class CalibrationTracker:
         return False
 
     def classify_failure(self, user_message: str, prev_answer: str = None,
-                        retrieved_notes: List[str] = None) -> str:
+                        retrieved_notes: list[str] = None) -> str:
         """Classify the type of failure based on the correction message.
 
         Returns one of: 'retrieval', 'synthesis', 'verification', 'unknown'
@@ -152,10 +151,10 @@ class CalibrationTracker:
     # --- Logging ---
 
     def log_correction(self, user_message: str, prev_answer: str,
-                      procedures_in_context: List[str] = None,
-                      validation_results: List[Dict] = None,
-                      retrieved_notes: List[str] = None,
-                      failure_type: str = None) -> Dict:
+                      procedures_in_context: list[str] = None,
+                      validation_results: list[dict] = None,
+                      retrieved_notes: list[str] = None,
+                      failure_type: str = None) -> dict:
         """Log a correction event with full context.
 
         This is the core data point: Sean corrected an output, and we capture
@@ -181,7 +180,7 @@ class CalibrationTracker:
         return entry
 
     def log_gate_decision(self, gate_name: str, note_path: str,
-                         decision: str, details: Dict = None):
+                         decision: str, details: dict = None):
         """Log a quality gate decision (pass/fail) for a note.
 
         This lets us later compute: of the notes Sean corrected,
@@ -202,7 +201,7 @@ class CalibrationTracker:
 
     # --- Reporting ---
 
-    def calibration_report(self) -> Dict:
+    def calibration_report(self) -> dict:
         """Compute calibration metrics for each quality gate.
 
         For each gate:
@@ -247,7 +246,7 @@ class CalibrationTracker:
 
         return report
 
-    def get_calibration_gaps(self) -> List[Dict]:
+    def get_calibration_gaps(self) -> list[dict]:
         """Return gaps for the autonomous researcher: gates with poor calibration.
 
         A gate has poor calibration if:

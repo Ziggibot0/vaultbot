@@ -42,21 +42,20 @@ import os
 import re
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # The curriculum imports ONLY from the existing, already-integrated modules.
 # It must never edit them.
 # ---------------------------------------------------------------------------
-from vault_graph import VaultGraph, WIKILINK_RE
-
+from vault_graph import WIKILINK_RE, VaultGraph
 
 # How many recently-completed topics the diversity bonus looks back at.
 _DEFAULT_DIVERSITY_WINDOW: int = 5
 # Tokens that carry almost no signal and are dropped before overlap scoring.
-_STOP_TOKENS: Set[str] = {
+_STOP_TOKENS: set[str] = {
     "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
     "is", "are", "be", "by", "at", "as", "it", "this", "that", "from",
 }
@@ -64,7 +63,7 @@ _STOP_TOKENS: Set[str] = {
 # are NOT worth a research note — researching them yields dictionary-scraping
 # junk ("from", "to", "welcome"). These are only rejected when they appear
 # ALONE as the entire topic; multi-word topics containing them pass.
-_SINGLE_WORD_STOPICS: Set[str] = {
+_SINGLE_WORD_STOPICS: set[str] = {
     # prepositions / conjunctions / articles / particles
     "from", "to", "of", "in", "on", "at", "by", "for", "with", "about",
     "into", "over", "under", "after", "before", "between", "through",
@@ -100,7 +99,7 @@ _PLACEHOLDER_RE = re.compile(
 _MIN_SINGLE_WORD_LEN: int = 3
 
 
-def _is_researchable_topic(gap: Dict[str, Any]) -> bool:
+def _is_researchable_topic(gap: dict[str, Any]) -> bool:
     """Quality gate: should the autonomous researcher spend a cycle on this?
 
     Rejects topics that are almost certainly junk:
@@ -155,10 +154,10 @@ def _is_researchable_topic(gap: Dict[str, Any]) -> bool:
 
 def _now_iso() -> str:
     """UTC timestamp in ISO-8601, for the state file."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
-def _tokenize(text: str) -> Set[str]:
+def _tokenize(text: str) -> set[str]:
     """Split on non-alphanumeric, lowercase, drop stop words + single chars.
 
     No external deps — this is the embedding-free token set used for the
@@ -167,7 +166,7 @@ def _tokenize(text: str) -> Set[str]:
     if not text:
         return set()
     raw = re.split(r"[^a-z0-9]+", text.lower())
-    out: Set[str] = set()
+    out: set[str] = set()
     for tok in raw:
         if len(tok) <= 1:
             continue
@@ -215,8 +214,8 @@ class KnowledgeCurriculum:
     def __init__(
         self,
         vault_graph: VaultGraph,
-        session_logger: Optional[Any] = None,
-        state_path: Optional[str] = None,
+        session_logger: Any | None = None,
+        state_path: str | None = None,
         min_content_length: int = 200,
         thin_community_min_size: int = 3,
         link_density_min_outlinks: int = 5,
@@ -255,7 +254,7 @@ class KnowledgeCurriculum:
         self.skip_vaultbot_paths: bool = bool(skip_vaultbot_paths)
 
         # Persistent curriculum state, loaded from disk (or seeded empty).
-        self.state: Dict[str, Any] = self._load_state()
+        self.state: dict[str, Any] = self._load_state()
 
         # ---- Gaps TTL cache -------------------------------------------------
         # propose_next_gaps() is query-INDEPENDENT and only feeds a summary
@@ -268,15 +267,15 @@ class KnowledgeCurriculum:
         self._GAPS_TTL: float = float(
             os.getenv("VAULTBOT_GAPS_TTL", "60")
         )
-        self._gaps_cache: Optional[List[Dict[str, Any]]] = None
+        self._gaps_cache: list[dict[str, Any]] | None = None
         self._gaps_cache_ts: float = 0.0
 
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
-    def _load_state(self) -> Dict[str, Any]:
+    def _load_state(self) -> dict[str, Any]:
         """Load curriculum state from disk, returning a sane default shape."""
-        default: Dict[str, Any] = {
+        default: dict[str, Any] = {
             "completed_topics": [],
             "failed_topics": [],
             "last_run": None,
@@ -285,7 +284,7 @@ class KnowledgeCurriculum:
             p = Path(self.state_path)
             if not p.exists():
                 return default
-            with open(p, "r", encoding="utf-8") as f:
+            with open(p, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
                 return default
@@ -325,7 +324,7 @@ class KnowledgeCurriculum:
         except Exception:
             pass
 
-    def _log_event(self, event: str, data: Optional[Dict[str, Any]] = None) -> None:
+    def _log_event(self, event: str, data: dict[str, Any] | None = None) -> None:
         try:
             if self.session_logger is not None:
                 self.session_logger.log(event, data)
@@ -335,7 +334,7 @@ class KnowledgeCurriculum:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def propose_next_gaps(self, n: int = 5) -> List[Dict[str, Any]]:
+    def propose_next_gaps(self, n: int = 5) -> list[dict[str, Any]]:
         """Refresh the graph, score all gap signals, return the top-N.
 
         This is the curriculum's main entry point. It:
@@ -388,8 +387,8 @@ class KnowledgeCurriculum:
             # Deduplicate by normalized_name so the same concept (surfaced as
             # both a dangling_link AND a missing_entity, etc.) appears only
             # once in the returned top-N. Keep the highest-scoring instance.
-            seen_names: Set[str] = set()
-            top: List[Dict[str, Any]] = []
+            seen_names: set[str] = set()
+            top: list[dict[str, Any]] = []
             for g in scored:
                 norm = g.get("normalized_name", "").strip().lower()
                 if norm and norm in seen_names:
@@ -420,7 +419,7 @@ class KnowledgeCurriculum:
             if not topic:
                 return
             topic = topic.strip()
-            completed: List[str] = list(self.state.get("completed_topics", []))
+            completed: list[str] = list(self.state.get("completed_topics", []))
             if topic not in completed:
                 completed.append(topic)
             # Keep the list bounded so the diversity window stays meaningful
@@ -430,7 +429,7 @@ class KnowledgeCurriculum:
             self.state["completed_topics"] = completed
 
             # Clear any matching failure record — it's no longer failing.
-            failed: List[Dict[str, Any]] = []
+            failed: list[dict[str, Any]] = []
             for fr in self.state.get("failed_topics", []):
                 if fr.get("topic") == topic:
                     continue
@@ -455,7 +454,7 @@ class KnowledgeCurriculum:
                 return
             topic = topic.strip()
             reason = (reason or "").strip() or "unknown"
-            failed: List[Dict[str, Any]] = list(self.state.get("failed_topics", []))
+            failed: list[dict[str, Any]] = list(self.state.get("failed_topics", []))
 
             found = False
             for fr in failed:
@@ -492,7 +491,7 @@ class KnowledgeCurriculum:
         except Exception as e:
             self._log_error("mark_failed", e)
 
-    def state_summary(self) -> Dict[str, Any]:
+    def state_summary(self) -> dict[str, Any]:
         """Return a compact, JSON-safe summary for the status endpoint.
 
         Never raises.
@@ -518,9 +517,9 @@ class KnowledgeCurriculum:
     # ------------------------------------------------------------------
     # Gap-signal collection
     # ------------------------------------------------------------------
-    def _collect_all_gaps(self) -> List[Dict[str, Any]]:
+    def _collect_all_gaps(self) -> list[dict[str, Any]]:
         """Gather all five gap-signal types into a flat candidate list."""
-        gaps: List[Dict[str, Any]] = []
+        gaps: list[dict[str, Any]] = []
 
         gaps.extend(self._collect_dangling_links())
         gaps.extend(self._collect_thin_notes())
@@ -531,11 +530,11 @@ class KnowledgeCurriculum:
 
         return gaps
 
-    def _collect_dangling_links(self) -> List[Dict[str, Any]]:
+    def _collect_dangling_links(self) -> list[dict[str, Any]]:
         """Signal 1: red links the vault has declared it wants to know."""
         try:
             dangling = self.graph.dangling_links(min_references=1)
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             for d in dangling:
                 out.append({
                     "kind": "dangling_link",
@@ -551,7 +550,7 @@ class KnowledgeCurriculum:
             self._log_error("collect_dangling_links", e)
             return []
 
-    def _collect_thin_notes(self) -> List[Dict[str, Any]]:
+    def _collect_thin_notes(self) -> list[dict[str, Any]]:
         """Signal 2: existing notes with too-short bodies.
 
         Skips anything under ``vaultbot/`` (the bot's own drafts) so the
@@ -559,7 +558,7 @@ class KnowledgeCurriculum:
         """
         try:
             thin = self.graph.thin_notes(min_content_length=self.min_content_length)
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             for t in thin:
                 file_path = t.get("file_path", "") or ""
                 if self.skip_vaultbot_paths and "vaultbot" in file_path.replace("\\", "/").lower():
@@ -581,7 +580,7 @@ class KnowledgeCurriculum:
             self._log_error("collect_thin_notes", e)
             return []
 
-    def _collect_missing_entities(self) -> List[Dict[str, Any]]:
+    def _collect_missing_entities(self) -> list[dict[str, Any]]:
         """Signal 3: red links re-declared from recent notes, deduped.
 
         The set of dangling-link normalized names is the authoritative "what's
@@ -593,18 +592,18 @@ class KnowledgeCurriculum:
         """
         try:
             dangling = self.graph.dangling_links(min_references=1)
-            dangling_names: Set[str] = {
+            dangling_names: set[str] = {
                 d.get("normalized_name", "") for d in dangling if d.get("normalized_name")
             }
             # Re-scan every note's raw content for wikilinks to non-existent
             # notes — same logic as dangling_links but we keep only entries
             # whose reference count from *recent* notes (by mtime) differs.
-            ref_counts: Dict[str, int] = {}
-            ref_sources: Dict[str, Set[str]] = {}
+            ref_counts: dict[str, int] = {}
+            ref_sources: dict[str, set[str]] = {}
             for name, node in self.graph.nodes.items():
                 raw_links = WIKILINK_RE.findall(node.get("content", "") or "")
                 for link in raw_links:
-                    norm = self.graph._normalize_name(link)  # noqa: SLF001
+                    norm = self.graph._normalize_name(link)
                     if norm in self.graph.nodes:
                         continue  # resolved — not missing
                     if norm not in dangling_names:
@@ -612,7 +611,7 @@ class KnowledgeCurriculum:
                     ref_counts[norm] = ref_counts.get(norm, 0) + 1
                     ref_sources.setdefault(norm, set()).add(name)
 
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             # missing_entity only adds value when it surfaces a topic with
             # multiple recent re-declarations; otherwise it's pure dup of the
             # dangling_link signal. Emit only the ones referenced from ≥2
@@ -626,7 +625,7 @@ class KnowledgeCurriculum:
                     if not node:
                         continue
                     for m in WIKILINK_RE.findall(node.get("content", "") or ""):
-                        if self.graph._normalize_name(m) == norm:  # noqa: SLF001
+                        if self.graph._normalize_name(m) == norm:
                             display = m.strip().lstrip("[")
                             break
                     if display != norm:
@@ -645,7 +644,7 @@ class KnowledgeCurriculum:
             self._log_error("collect_missing_entities", e)
             return []
 
-    def _collect_thin_communities(self) -> List[Dict[str, Any]]:
+    def _collect_thin_communities(self) -> list[dict[str, Any]]:
         """Signal 4: cliques of ≥3 linked notes with no MOC/Index hub.
 
         For each note, check whether its neighbor set forms a clique of at
@@ -657,8 +656,8 @@ class KnowledgeCurriculum:
         """
         try:
             min_size = self.thin_community_min_size
-            out: List[Dict[str, Any]] = []
-            seen_cliques: Set[Tuple[str, ...]] = set()
+            out: list[dict[str, Any]] = []
+            seen_cliques: set[tuple[str, ...]] = set()
 
             for name in self.graph.nodes:
                 neighbors = self.graph.neighbors(name, direction="both")
@@ -677,7 +676,7 @@ class KnowledgeCurriculum:
                 members = [name] + non_hub_neighbors
                 # Keep only members that are mutually linked to *every* other
                 # member (strict clique). This is O(k^2) per note but k is tiny.
-                clique: List[str] = []
+                clique: list[str] = []
                 for m in members:
                     linked = set(self.graph.neighbors(m, direction="both"))
                     if all(other in linked for other in members if other != m):
@@ -714,7 +713,7 @@ class KnowledgeCurriculum:
             self._log_error("collect_thin_communities", e)
             return []
 
-    def _collect_link_density_anomalies(self) -> List[Dict[str, Any]]:
+    def _collect_link_density_anomalies(self) -> list[dict[str, Any]]:
         """Signal 5: notes with many out-links but zero in-links (sinks).
 
         A note that links out heavily but is linked back to by nobody is a
@@ -722,7 +721,7 @@ class KnowledgeCurriculum:
         graph. Lower priority than the other signals.
         """
         try:
-            out: List[Dict[str, Any]] = []
+            out: list[dict[str, Any]] = []
             threshold = self.link_density_min_outlinks
             for name, node in self.graph.nodes.items():
                 out_links = self.graph.edges.get(name, set())
@@ -746,8 +745,8 @@ class KnowledgeCurriculum:
     # Filtering + scoring
     # ------------------------------------------------------------------
     def _filter_candidates(
-        self, candidates: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, candidates: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Drop completed topics and topics that failed very recently.
 
         A failed topic is suppressed for a cooldown window; the achievability
@@ -755,17 +754,17 @@ class KnowledgeCurriculum:
         hard-filter topics that failed in the *most recent* attempt to avoid
         an immediate retry loop.
         """
-        completed: Set[str] = {
+        completed: set[str] = {
             t.lower() for t in (self.state.get("completed_topics") or [])
             if isinstance(t, str)
         }
-        failed_recently: Set[str] = {
+        failed_recently: set[str] = {
             fr.get("topic", "").lower()
             for fr in (self.state.get("failed_topics") or [])
             if isinstance(fr, dict) and fr.get("attempts", 0) >= 3
         }
 
-        kept: List[Dict[str, Any]] = []
+        kept: list[dict[str, Any]] = []
         for g in candidates:
             topic = (g.get("topic") or "").lower()
             norm = (g.get("normalized_name") or "").lower()
@@ -786,7 +785,7 @@ class KnowledgeCurriculum:
             kept.append(g)
         return kept
 
-    def _score_gap(self, gap: Dict[str, Any]) -> Dict[str, Any]:
+    def _score_gap(self, gap: dict[str, Any]) -> dict[str, Any]:
         """Apply the Voyager curriculum priority to a single gap.
 
             priority = base_priority * diversity_bonus * achievability_bonus * context_bonus
@@ -799,7 +798,7 @@ class KnowledgeCurriculum:
         context = self._context_bonus(gap)
         priority = base * diversity * achievability * context
 
-        breakdown: Dict[str, float] = {
+        breakdown: dict[str, float] = {
             "base_priority": base,
             "diversity_bonus": diversity,
             "achievability_bonus": achievability,
@@ -812,7 +811,7 @@ class KnowledgeCurriculum:
         gap["reason"] = self._explain(gap, breakdown)
         return gap
 
-    def _diversity_bonus(self, gap: Dict[str, Any]) -> float:
+    def _diversity_bonus(self, gap: dict[str, Any]) -> float:
         """Penalize gaps too similar to recently-completed topics.
 
         A gap whose tokens heavily overlap the last ``diversity_window``
@@ -845,7 +844,7 @@ class KnowledgeCurriculum:
             return 0.6
         return 1.0
 
-    def _achievability_bonus(self, gap: Dict[str, Any]) -> float:
+    def _achievability_bonus(self, gap: dict[str, Any]) -> float:
         """Reward gaps that are cheap to close; crush repeatedly-failed ones.
 
         - thin_note (already exists, just needs expanding): ×1.5
@@ -864,9 +863,7 @@ class KnowledgeCurriculum:
             bonus = 1.0 if ref_count <= 1 else 1.2
         elif kind == "missing_entity":
             bonus = 1.1
-        elif kind == "thin_community":
-            bonus = 1.0
-        elif kind == "link_density":
+        elif kind == "thin_community" or kind == "link_density":
             bonus = 1.0
         else:
             bonus = 1.0
@@ -887,7 +884,7 @@ class KnowledgeCurriculum:
                     bonus *= 0.7
         return bonus
 
-    def _context_bonus(self, gap: Dict[str, Any]) -> float:
+    def _context_bonus(self, gap: dict[str, Any]) -> float:
         """Boost gaps whose referenced_by notes are well-connected (high degree).
 
         Filling a gap that wedges into a rich neighborhood (referencing notes
@@ -898,7 +895,7 @@ class KnowledgeCurriculum:
         ref_by = gap.get("referenced_by") or []
         if not ref_by:
             return 1.0
-        degrees: List[int] = []
+        degrees: list[int] = []
         for src in ref_by:
             if not isinstance(src, str):
                 continue
@@ -916,13 +913,13 @@ class KnowledgeCurriculum:
         return 1.0
 
     def _explain(
-        self, gap: Dict[str, Any], breakdown: Dict[str, float]
+        self, gap: dict[str, Any], breakdown: dict[str, float]
     ) -> str:
         """Human-readable reason string for why this gap was selected."""
         try:
             kind = gap.get("kind", "gap")
             topic = gap.get("topic", "")
-            parts: List[str] = [f"{kind}='{topic}'"]
+            parts: list[str] = [f"{kind}='{topic}'"]
             parts.append(f"base={breakdown['base_priority']:.1f}")
             parts.append(f"div={breakdown['diversity_bonus']:.2f}")
             parts.append(f"ach={breakdown['achievability_bonus']:.2f}")

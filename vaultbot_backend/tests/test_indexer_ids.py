@@ -24,12 +24,9 @@ assert the zero-embedding-on-delete invariant.
 from __future__ import annotations
 
 import json
-import os
 import pickle
 import sys
-import types
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -48,7 +45,7 @@ if "faiss" in sys.modules:
         del sys.modules["faiss"]
 
 try:
-    import faiss  # noqa: F401
+    import faiss
     if not hasattr(faiss, "IndexIDMap2"):
         pytest.skip("faiss module has no IndexIDMap2 (stub loaded)", allow_module_level=True)
 except Exception:
@@ -110,6 +107,7 @@ def _make_indexer(vault: Path, index_dir: Path):
     ``IndexIDMap2`` / ``normalize_L2`` / ``remove_ids``.
     """
     import importlib
+
     import vault_indexer
     # If vault_indexer captured the stub faiss (no IndexIDMap2), reload it
     # after removing the stub from sys.modules so it picks up the real faiss.
@@ -316,6 +314,7 @@ def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
 
     # Load — should detect legacy format and migrate (in __init__).
     import importlib
+
     import vault_indexer
     if not hasattr(vault_indexer.faiss, "IndexIDMap2"):
         if "faiss" in sys.modules and not hasattr(sys.modules["faiss"], "IndexIDMap2"):

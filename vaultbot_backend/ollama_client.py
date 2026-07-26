@@ -1,8 +1,10 @@
 import json
-import time
 import subprocess
+import time
+from collections.abc import Generator
+from typing import Any
+
 import requests
-from typing import Optional, Generator, Dict, Any, List
 
 try:
     # The synthesis LLM abstraction (llm_client.py) treats OllamaClient as
@@ -31,7 +33,7 @@ class OllamaClient(_BASE):
         if self.session_logger is not None:
             self.session_logger.log("model_changed", {"model": model})
 
-    def list_local_models(self) -> List[str]:
+    def list_local_models(self) -> list[str]:
         """Return model names installed in the local Ollama daemon via `ollama list`."""
         try:
             result = subprocess.run(
@@ -57,15 +59,15 @@ class OllamaClient(_BASE):
     # Backend-agnostic alias used by llm_client.LLMClient and the /models
     # endpoint. Same as list_local_models; the alias lets /models call
     # .list_models() uniformly across Ollama and OpenAI-compatible backends.
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         return self.list_local_models()
 
-    def _log_tool(self, method: str, inputs: Dict[str, Any], outputs: Any = None, duration_ms: Optional[float] = None, error: Optional[str] = None):
+    def _log_tool(self, method: str, inputs: dict[str, Any], outputs: Any = None, duration_ms: float | None = None, error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(tool="ollama", method=method, inputs=inputs, outputs=outputs, duration_ms=duration_ms, error=error)
 
-    def generate(self, prompt: str, system: Optional[str] = None, temperature: float = 0.7, max_tokens: Optional[int] = None, stream: bool = False) -> dict | Generator:
+    def generate(self, prompt: str, system: str | None = None, temperature: float = 0.7, max_tokens: int | None = None, stream: bool = False) -> dict | Generator:
         """
         Generate text from the LLM.
         If stream=True, returns a generator that yields chunks.
@@ -148,7 +150,7 @@ class OllamaClient(_BASE):
             self._log_tool("embeddings", {"model": self.embed_model, "truncated": truncated, "text_length": len(payload["prompt"])}, error=str(e), duration_ms=(time.time() - t0) * 1000)
             raise
 
-    def batch_embeddings(self, texts: list[str], max_workers: int = 8) -> list[Optional[list[float]]]:
+    def batch_embeddings(self, texts: list[str], max_workers: int = 8) -> list[list[float] | None]:
         """Get embeddings for multiple texts in parallel via ThreadPoolExecutor.
 
         Ollama's embedding endpoint is stateless and thread-safe — concurrent
@@ -158,7 +160,7 @@ class OllamaClient(_BASE):
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        results: list[Optional[list[float]]] = [None] * len(texts)
+        results: list[list[float] | None] = [None] * len(texts)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(self.embeddings, t): i for i, t in enumerate(texts)}
             for future in as_completed(futures):
@@ -221,7 +223,7 @@ class OllamaClient(_BASE):
         except Exception:
             return False
 
-    def chat(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None,
+    def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.7, stream: bool = False) -> dict | Generator:
         """
         Multi-turn chat completion via /api/chat, with optional tool-calling.

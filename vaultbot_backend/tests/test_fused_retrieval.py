@@ -35,8 +35,8 @@ if "faiss" not in sys.modules:
     _faiss_stub.write_index = lambda *a, **k: None
     sys.modules["faiss"] = _faiss_stub
 
-from fused_retrieval import FusedRetriever
 from embedding_drift import EmbeddingDrift
+from fused_retrieval import FusedRetriever
 
 
 # ---------------------------------------------------------------------------
@@ -52,11 +52,11 @@ class _BrokenGraph:
     # FusedRetriever reads `graph.backlinks` via getattr in _backlink_channel
     # and _rerank; make it a property that raises to simulate a broken graph.
     @property
-    def backlinks(self):  # noqa: D401 - stub
+    def backlinks(self):
         raise RuntimeError("graph offline")
 
     @property
-    def nodes(self):  # noqa: D401 - stub
+    def nodes(self):
         raise RuntimeError("graph offline")
 
     def neighbors(self, name, direction="both"):

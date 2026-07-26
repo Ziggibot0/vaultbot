@@ -14,7 +14,7 @@ stable (the raw HTML is preserved on disk, so nothing is lost).
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 SCHEMA = {
     "name": "web_read_source",
@@ -51,7 +51,7 @@ except NameError:
 VAULT_DIR = BACKEND_DIR.parent
 
 
-def run(args: Dict[str, Any], llm_client=None) -> Dict[str, Any]:
+def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     """Read a saved web source.
 
     Accepts either a URL (looked up in the index) or a filename (read
@@ -59,7 +59,7 @@ def run(args: Dict[str, Any], llm_client=None) -> Dict[str, Any]:
     """
     import sys
     sys.path.insert(0, str(BACKEND_DIR))
-    from web_source_store import find_source, source_path, read_source_text
+    from web_source_store import find_source, read_source_text, source_path
 
     url = (args.get("url") or "").strip()
     filename = (args.get("file") or "").strip()

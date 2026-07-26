@@ -18,17 +18,15 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Optional
 
-from fastapi import WebSocket
-
-from services import Services
-from session_logger import SessionLogger
+from chat_handler import handle_chat
 
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports — no main dependency.
-from chat_helpers import send_progress, run_with_heartbeat
-from chat_handler import handle_chat
+from chat_helpers import run_with_heartbeat, send_progress
+from fastapi import WebSocket
+from services import Services
+from session_logger import SessionLogger
 
 
 async def handle_research(

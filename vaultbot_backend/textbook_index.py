@@ -47,7 +47,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # Resolve paths relative to this file. textbook_index.py lives in
 # vaultbot_backend/, so parent = vaultbot_backend, parent.parent = Vault2
@@ -124,7 +124,7 @@ def _is_real_heading(text: str) -> bool:
     return True
 
 
-def build_pdf_index(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
+def build_pdf_index(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
     """Build a heading→page index from a PDF, fast.
 
     Uses PyMuPDF's font metadata to find headings (larger + bolder than body
@@ -144,7 +144,7 @@ def build_pdf_index(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
         return _build_pdf_index_regex(pdf_path)
 
     doc = fitz.open(pdf_path)
-    spans: List[Tuple[int, str, float, bool, float]] = []
+    spans: list[tuple[int, str, float, bool, float]] = []
     for page_num in range(len(doc)):
         page = doc[page_num]
         for b in page.get_text("dict")["blocks"]:
@@ -175,7 +175,7 @@ def build_pdf_index(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
     # Filter out front-matter noise (title pages, copyright, ISBN, all-caps
     # letter-spaced author names) so the index is clean enough for the LLM
     # to navigate.
-    entries: List[Dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
     seen_headings: set = set()
     i = 0
     while i < len(spans):
@@ -241,7 +241,7 @@ def _pdf_title_fallback(pdf_path: str) -> str:
     return stem or Path(pdf_path).stem
 
 
-def _build_pdf_index_regex(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
+def _build_pdf_index_regex(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
     """Fallback index builder: regex heading detection over the text layer.
 
     Still records page numbers (via form-feed page breaks) so the LLM can be
@@ -251,7 +251,7 @@ def _build_pdf_index_regex(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
         import fitz
         doc = fitz.open(pdf_path)
         title = _pdf_title(doc, pdf_path)
-        entries: List[Dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
         # Use the structural heading pattern from textbook_ingest for
         # consistency, scanning page by page so we keep page numbers.
         heading_re = re.compile(
@@ -268,7 +268,7 @@ def _build_pdf_index_regex(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
         doc.close()
         # Dedupe by heading, keep first page.
         seen: set = set()
-        deduped: List[Dict[str, Any]] = []
+        deduped: list[dict[str, Any]] = []
         for e in entries:
             if e["heading"] not in seen:
                 seen.add(e["heading"])
@@ -283,7 +283,7 @@ def _build_pdf_index_regex(pdf_path: str) -> Tuple[str, List[Dict[str, Any]]]:
 # ---------------------------------------------------------------------------
 
 def write_index_toc(title: str, source_path: str,
-                    entries: List[Dict[str, Any]],
+                    entries: list[dict[str, Any]],
                     skey: str = "") -> str:
     """Build the markdown for an index-only TOC note.
 
@@ -318,7 +318,7 @@ def write_index_toc(title: str, source_path: str,
 # Idempotency + ingest driver
 # ---------------------------------------------------------------------------
 
-def _find_prior_index(skey: str) -> Optional[Path]:
+def _find_prior_index(skey: str) -> Path | None:
     """Find an existing index TOC carrying this source-key, if any."""
     if not TEXTBOOKS_DIR.exists():
         return None
@@ -332,7 +332,7 @@ def _find_prior_index(skey: str) -> Optional[Path]:
     return None
 
 
-def index_one_pdf(pdf_path: str) -> Dict[str, Any]:
+def index_one_pdf(pdf_path: str) -> dict[str, Any]:
     """Index a single PDF: build the heading→page index, write a TOC note.
 
     Returns a result dict {status, file, title, entries, toc_note, error?}.
@@ -367,7 +367,7 @@ def index_one_pdf(pdf_path: str) -> Dict[str, Any]:
     }
 
 
-def index_learning_material(learning_dir: str) -> Dict[str, Any]:
+def index_learning_material(learning_dir: str) -> dict[str, Any]:
     """Index every new PDF in learningMaterial/ as an index-only TOC.
 
     Returns a summary {indexed, skipped, errors, details}. This is what the

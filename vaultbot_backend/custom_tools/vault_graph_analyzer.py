@@ -48,7 +48,7 @@ def build_graph(vault_path, exclude_patterns=None):
     for fp in md_files:
         full_path = os.path.join(vault_path, fp)
         try:
-            with open(full_path, 'r', encoding='utf-8') as f:
+            with open(full_path, encoding='utf-8') as f:
                 content = f.read()
         except Exception:
             continue

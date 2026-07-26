@@ -26,13 +26,12 @@ and it matches the research on structured logging for agent systems.
 """
 
 import json
-import re
 import os
-from pathlib import Path
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple, Iterator
 from collections import defaultdict
-
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 # Directories to skip when scanning the vault for procedural notes. Mirrors
 # the indexer's IGNORED_DIRS so the tracker doesn't waste time reading venv
@@ -123,7 +122,7 @@ class ProcedureTracker:
     # --- Vault scanning ---
 
     def _iter_procedural_notes(self, vault_path: str = "."
-                               ) -> Iterator[Tuple[Path, str, str]]:
+                               ) -> Iterator[tuple[Path, str, str]]:
         """Yield (path, frontmatter_str, full_text) for every procedural note.
 
         Procedural notes are markdown files whose YAML frontmatter contains
@@ -178,7 +177,7 @@ class ProcedureTracker:
 
     def _recompute_summary(self, data: dict) -> dict:
         """Recompute the summary from entries (only within the failure window)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         window_start = now - timedelta(days=FAILURE_WINDOW_DAYS)
         summary = defaultdict(lambda: {
             "total": 0, "failures": 0, "passes": 0,
@@ -223,7 +222,7 @@ class ProcedureTracker:
         """
         data = self._read_log()
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "procedure": procedure,
             "task": task,
             "validation_result": validation_result,
@@ -240,7 +239,7 @@ class ProcedureTracker:
 
     # --- Failure-driven evolution ---
 
-    def get_failing_procedures(self) -> List[Dict[str, Any]]:
+    def get_failing_procedures(self) -> list[dict[str, Any]]:
         """Return procedures that have exceeded the failure threshold.
 
         These should be re-researched by the autonomous researcher.
@@ -263,7 +262,7 @@ class ProcedureTracker:
 
     # --- Procedural gap detection ---
 
-    def get_procedural_gaps(self) -> List[Dict[str, Any]]:
+    def get_procedural_gaps(self) -> list[dict[str, Any]]:
         """Return task types that have failures but no procedure in context.
 
         These are tasks where a procedure is needed but doesn't exist yet.
@@ -292,7 +291,7 @@ class ProcedureTracker:
 
     # --- Time-driven re-research ---
 
-    def get_stale_procedures(self, vault_path: str = ".") -> List[Dict[str, Any]]:
+    def get_stale_procedures(self, vault_path: str = ".") -> list[dict[str, Any]]:
         """Return procedural notes whose last_reviewed date is older than
         their review_interval_days.
 
@@ -300,7 +299,7 @@ class ProcedureTracker:
         date comparison.
         """
         stale = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for md, fm, _text in self._iter_procedural_notes(vault_path):
             try:
                 last_reviewed = None
@@ -321,7 +320,7 @@ class ProcedureTracker:
                 if last_reviewed is None:
                     continue
                 if last_reviewed.tzinfo is None:
-                    last_reviewed = last_reviewed.replace(tzinfo=timezone.utc)
+                    last_reviewed = last_reviewed.replace(tzinfo=UTC)
                 age_days = (now - last_reviewed).days
                 if age_days > interval:
                     stale.append({
@@ -336,7 +335,7 @@ class ProcedureTracker:
 
     # --- Quality-driven promotion ---
 
-    def check_promotion(self, procedure: str) -> Optional[str]:
+    def check_promotion(self, procedure: str) -> str | None:
         """Check if a procedure should be promoted or flagged.
 
         Returns:
@@ -357,7 +356,7 @@ class ProcedureTracker:
             return "flagged"
         return None
 
-    def run_promotion_cycle(self, vault_path: str = ".") -> Dict[str, List[str]]:
+    def run_promotion_cycle(self, vault_path: str = ".") -> dict[str, list[str]]:
         """Scan all procedural notes in the vault and update their frontmatter.
 
         For each procedural note:
@@ -447,7 +446,7 @@ class ProcedureTracker:
         Returns True if the note was found and updated, False otherwise.
         """
         vault = Path(vault_path)
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         # Find the procedural note file by stem. The shared iterator walks
         # the vault once with the ignore-dir filter; we early-exit on match.
@@ -475,7 +474,7 @@ class ProcedureTracker:
 
     # --- Combined gap report (for the autonomous researcher) ---
 
-    def get_research_gaps(self, vault_path: str = ".") -> List[Dict[str, Any]]:
+    def get_research_gaps(self, vault_path: str = ".") -> list[dict[str, Any]]:
         """Return all gaps the autonomous researcher should address.
 
         Combines:
@@ -516,7 +515,7 @@ class ProcedureTracker:
 
 # --- Standalone helper (used by main.py after FUSED retrieval) ---
 
-def parse_procedures_from_results(results: List[Dict[str, Any]]) -> List[str]:
+def parse_procedures_from_results(results: list[dict[str, Any]]) -> list[str]:
     """Extract procedure note names from FUSED retrieval results.
 
     Checks each retrieved note's frontmatter for `type: procedure`.

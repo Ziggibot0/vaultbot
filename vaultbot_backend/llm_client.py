@@ -59,7 +59,8 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any, Dict, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any
 
 import requests
 
@@ -73,6 +74,7 @@ def _test_image_base64() -> str:
     import base64
     try:
         from io import BytesIO
+
         from PIL import Image, ImageDraw
         img = Image.new("RGB", (32, 32), (255, 0, 0))
         d = ImageDraw.Draw(img)
@@ -101,12 +103,12 @@ class LLMClient:
     def set_model(self, model: str) -> None:
         raise NotImplementedError
 
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         raise NotImplementedError
 
     def chat(self,
-             messages: List[Dict[str, Any]],
-             tools: Optional[List[Dict[str, Any]]] = None,
+             messages: list[dict[str, Any]],
+             tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.7,
              stream: bool = False) -> Any:
         raise NotImplementedError
@@ -163,7 +165,7 @@ class OpenAICompatibleClient(LLMClient):
         self.timeout = timeout
 
     # -- internals ---------------------------------------------------------
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -192,7 +194,7 @@ class OpenAICompatibleClient(LLMClient):
             except Exception:
                 pass
 
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         """List model IDs from /v1/models. Returns [] on any failure."""
         try:
             r = requests.get(f"{self.base_url}/v1/models",
@@ -258,11 +260,11 @@ class OpenAICompatibleClient(LLMClient):
 
     # -- chat --------------------------------------------------------------
     def chat(self,
-             messages: List[Dict[str, Any]],
-             tools: Optional[List[Dict[str, Any]]] = None,
+             messages: list[dict[str, Any]],
+             tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.7,
              stream: bool = False) -> Any:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self.llm_model,
             "messages": messages,
             "stream": stream,
@@ -291,7 +293,7 @@ class OpenAICompatibleClient(LLMClient):
             return self._stream_chat(response, payload, t0)
         return self._nonstream_chat(response, payload, t0)
 
-    def _nonstream_chat(self, response, payload, t0) -> Dict[str, Any]:
+    def _nonstream_chat(self, response, payload, t0) -> dict[str, Any]:
         data = response.json()
         choice = (data.get("choices") or [{}])[0]
         msg = choice.get("message", {})
@@ -307,7 +309,7 @@ class OpenAICompatibleClient(LLMClient):
                   duration_ms=(time.time() - t0) * 1000)
         return result
 
-    def _stream_chat(self, response, payload, t0) -> Generator[Dict[str, Any], None, None]:
+    def _stream_chat(self, response, payload, t0) -> Generator[dict[str, Any], None, None]:
         """Yield Ollama-shaped chunks from an OpenAI SSE stream.
 
         Accumulates fragmented tool-call argument strings per index and
@@ -315,7 +317,7 @@ class OpenAICompatibleClient(LLMClient):
         caller sees the same one-shot tool_calls that Ollama produces.
         """
         # Per-index accumulator: index -> {"id","name","arguments_str"}
-        tc_acc: Dict[int, Dict[str, str]] = {}
+        tc_acc: dict[int, dict[str, str]] = {}
         chunk_count = 0
         try:
             for raw in response.iter_lines():
@@ -428,7 +430,7 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
     )
 
 
-def get_vision_client(session_logger: Any = None) -> Optional[LLMClient]:
+def get_vision_client(session_logger: Any = None) -> LLMClient | None:
     """Build the OPTIONAL vision LLM client from .env.
 
     The vision client is a SEPARATE concern from the synthesis (chat) client:

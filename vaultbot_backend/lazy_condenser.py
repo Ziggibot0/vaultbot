@@ -68,8 +68,6 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
-
 
 CONDENSE_MARKER = "<!-- vaultbot:condensed -->"
 ORIG_MARKER = "<!-- vaultbot:original-chars"
@@ -90,7 +88,7 @@ class LazyCondenser:
 
     def __init__(self, vault_path: str, ollama_client=None,
                  session_logger=None,
-                 state_path: Optional[str] = None) -> None:
+                 state_path: str | None = None) -> None:
         self.vault_path = Path(vault_path).resolve()
         self.ollama_client = ollama_client
         self.session_logger = session_logger
@@ -98,7 +96,7 @@ class LazyCondenser:
             self.state_path = Path(__file__).parent / "touch_counts.json"
         else:
             self.state_path = Path(state_path)
-        self.touch_counts: Dict[str, int] = self._load_touch_counts()
+        self.touch_counts: dict[str, int] = self._load_touch_counts()
         # Dirty flag: note_touched() only marks the in-memory dict dirty;
         # the caller flushes once per chat turn via flush_touch_counts().
         # This avoids writing the whole JSON file once per retrieved note.
@@ -291,17 +289,17 @@ class LazyCondenser:
             f"- Pedagogical scaffolding ('let's review...', 'recall that...')\n"
             f"- Verbose worked examples that repeat the same setup — keep "
             f"one representative example, drop the rest\n"
-            f"- Transitional paragraphs ('now we turn to...', 'having " 
+            f"- Transitional paragraphs ('now we turn to...', 'having "
             f"established...')\n"
-            f"- Chatty asides and motivation that isn't a definition or " 
+            f"- Chatty asides and motivation that isn't a definition or "
             f"formula\n\n"
             f"Rules:\n"
             f"- Output ONLY the condensed markdown body. No preamble, no "
             f"'Here is the condensed version:', no commentary.\n"
             f"- Keep it as markdown. Keep all [[wikilinks]].\n"
-            f"- Do NOT add new content. Do NOT invent facts. If you're " 
+            f"- Do NOT add new content. Do NOT invent facts. If you're "
             f"unsure, keep the original wording.\n"
-            f"- Target ~40% of the original length, but prioritize " 
+            f"- Target ~40% of the original length, but prioritize "
             f"preserving information over hitting a length target.\n\n"
             f"Original note body ({len(body)} chars):\n\n{body_input}\n"
         )
@@ -397,7 +395,7 @@ class LazyCondenser:
             # If not under vault root, use the absolute path as-is.
             return str(note_path).replace("\\", "/")
 
-    def _load_touch_counts(self) -> Dict[str, int]:
+    def _load_touch_counts(self) -> dict[str, int]:
         try:
             if self.state_path.exists():
                 return json.loads(self.state_path.read_text(encoding="utf-8"))
@@ -444,7 +442,7 @@ class LazyCondenser:
             pass
 
     def _log_error(self, event: str, err: Exception,
-                   extra: Optional[dict] = None) -> None:
+                   extra: dict | None = None) -> None:
         try:
             if self.session_logger is not None and hasattr(self.session_logger, "log"):
                 self.session_logger.log(event, {"error": str(err),

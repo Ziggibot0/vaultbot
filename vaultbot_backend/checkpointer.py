@@ -26,14 +26,14 @@ result — a checkpoint failure must never take the researcher down.
 from __future__ import annotations
 
 import json
+import logging
 import os
-import time
 import tempfile
 import threading
-import logging
-from dataclasses import dataclass, asdict, field
+import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +57,10 @@ class ResearchCheckpoint:
     kind: str  # dangling_link / thin_note / orphan / etc.
     status: str  # pending / running / done / failed
     started_at: str
-    completed_at: Optional[str] = None
-    note_path: Optional[str] = None
-    error: Optional[str] = None
-    gap: Dict[str, Any] = field(default_factory=dict)
+    completed_at: str | None = None
+    note_path: str | None = None
+    error: str | None = None
+    gap: dict[str, Any] = field(default_factory=dict)
 
 
 class Checkpointer:
@@ -98,7 +98,7 @@ class Checkpointer:
     # Internal helpers
     # ------------------------------------------------------------------ #
 
-    def _safe_log(self, event: str, data: Dict[str, Any]) -> None:
+    def _safe_log(self, event: str, data: dict[str, Any]) -> None:
         """Log via session_logger if present, else no-op. Never raises."""
         try:
             if self.session_logger is not None:
@@ -126,7 +126,7 @@ class Checkpointer:
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     fh.write(content)
-                last_err: Optional[Exception] = None
+                last_err: Exception | None = None
                 for attempt in range(max_retries):
                     try:
                         os.replace(tmp_path, path)
@@ -153,7 +153,7 @@ class Checkpointer:
         try:
             if not path.exists():
                 return None
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 return json.load(fh)
         except Exception as e:  # noqa: BLE001
             self._safe_log("checkpointer_read_failed", {"path": str(path), "error": str(e)})
@@ -164,7 +164,7 @@ class Checkpointer:
     # Checkpoint list (the work-in-flight snapshot)
     # ------------------------------------------------------------------ #
 
-    def save(self, checkpoints: List[ResearchCheckpoint]) -> None:
+    def save(self, checkpoints: list[ResearchCheckpoint]) -> None:
         """Serialize and atomically write the checkpoint list. Never crashes."""
         try:
             payload = json.dumps([asdict(c) for c in checkpoints], indent=2, ensure_ascii=False)
@@ -176,12 +176,12 @@ class Checkpointer:
             )
             logger.warning("Checkpointer: save failed (non-fatal): %s", e)
 
-    def load(self) -> List[ResearchCheckpoint]:
+    def load(self) -> list[ResearchCheckpoint]:
         """Read and deserialize the checkpoint list. Returns [] if missing/corrupt."""
         data = self._read_json(self.checkpoint_path)
         if not data or not isinstance(data, list):
             return []
-        out: List[ResearchCheckpoint] = []
+        out: list[ResearchCheckpoint] = []
         for item in data:
             try:
                 if not isinstance(item, dict):
@@ -212,7 +212,7 @@ class Checkpointer:
             self._safe_log("checkpointer_has_interrupted_failed", {"error": str(e)})
             return False
 
-    def get_interrupted_work(self) -> List[ResearchCheckpoint]:
+    def get_interrupted_work(self) -> list[ResearchCheckpoint]:
         """Return only the checkpoints with status='running' — the work to resume."""
         try:
             return [c for c in self.load() if c.status == "running"]
@@ -224,7 +224,7 @@ class Checkpointer:
     # Full cycle state (richer recovery context)
     # ------------------------------------------------------------------ #
 
-    def save_cycle_state(self, cycle_state: Dict[str, Any]) -> None:
+    def save_cycle_state(self, cycle_state: dict[str, Any]) -> None:
         """Persist the full cycle state (gaps, statuses, timestamp). Atomic."""
         try:
             payload = json.dumps(cycle_state, indent=2, ensure_ascii=False)
@@ -236,7 +236,7 @@ class Checkpointer:
             )
             logger.warning("Checkpointer: save_cycle_state failed (non-fatal): %s", e)
 
-    def load_cycle_state(self) -> Dict[str, Any]:
+    def load_cycle_state(self) -> dict[str, Any]:
         """Load the full cycle state. Returns {} if missing/corrupt."""
         data = self._read_json(self.cycle_state_path)
         if not data or not isinstance(data, dict):
@@ -257,7 +257,7 @@ class Checkpointer:
                 self._safe_log("checkpointer_clear_failed", {"path": str(path), "error": str(e)})
                 logger.warning("Checkpointer: could not remove %s: %s", path, e)
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         """Status-endpoint summary: counts + whether interrupted work exists."""
         try:
             checkpoints = self.load()
@@ -275,7 +275,7 @@ class Checkpointer:
             self._safe_log("checkpointer_summary_failed", {"error": str(e)})
             return {"total": 0, "running": 0, "done": 0, "failed": 0, "has_interrupted": False}
 
-    def recover(self, researcher: Any) -> Dict[str, Any]:
+    def recover(self, researcher: Any) -> dict[str, Any]:
         """Recovery entry point. Called on backend startup.
 
         If there is interrupted work (a checkpoint left in 'running' state

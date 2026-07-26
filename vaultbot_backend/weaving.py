@@ -20,19 +20,17 @@ of reading main.py's module-level globals as free variables.
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import re
-import json
-import asyncio
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any
 
-from fastapi import WebSocket
-
-from services import Services
 from concept_card import build_cards_batch
+from fastapi import WebSocket
 from moc_builder import build_mocs_incremental
-
+from services import Services
 
 # ---------------------------------------------------------------------------
 # Cross-book concept linking (LLM-free, semantic)
@@ -72,9 +70,9 @@ _CROSS_LINK_MAX_ABS_DISTANCE = 300.0
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _send_progress(svc: Services, websocket: Optional[WebSocket],
+async def _send_progress(svc: Services, websocket: WebSocket | None,
                           stage: str,
-                          detail: Optional[Dict[str, Any]] = None) -> None:
+                          detail: dict[str, Any] | None = None) -> None:
     """Send a structured progress event to the live UI.
 
     Extracted mirror of main.py's `_send_progress`; uses the Services
@@ -106,7 +104,7 @@ def existing_note_titles(svc: Services) -> dict:
     scan. The graph's ignore-dir filter (venv/.obsidian/.git/etc.) already
     applies; the textbooks-folder exclusion is applied here.
     """
-    titles: Dict[str, str] = {}
+    titles: dict[str, str] = {}
     try:
         for _name, node in (svc.vault_graph.nodes or {}).items():
             fp = node.get("file_path") or ""
@@ -201,7 +199,7 @@ def index_note_now(svc: Services, note_path: str) -> None:
 def cross_link_textbooks(svc: Services,
                           new_abs_paths: list[str],
                           emb_by_path: dict,
-                          source_keys: Optional[set] = None) -> dict:
+                          source_keys: set | None = None) -> dict:
     """Cross-link the newly-ingested textbook sections to OTHER textbook
     sections in the vault that are semantically similar.
 
@@ -223,7 +221,7 @@ def cross_link_textbooks(svc: Services,
 
     Returns {"cross_links_added": int, "notes_linked": int}; never raises.
     """
-    out: Dict[str, Any] = {"cross_links_added": 0, "notes_linked": 0}
+    out: dict[str, Any] = {"cross_links_added": 0, "notes_linked": 0}
     try:
         textbooks_dir = (Path(os.getenv("VAULT_PATH", "."))
                          / "vaultbot" / "textbooks")
@@ -363,15 +361,15 @@ def strip_related_block(text: str) -> str:
 
 async def weave_textbook_notes(svc: Services,
                                 ingest_result: dict,
-                                websocket: Optional[WebSocket] = None,
-                                session_logger: Optional[Any] = None) -> dict:
+                                websocket: WebSocket | None = None,
+                                session_logger: Any | None = None) -> dict:
     """Run the two post-ingest passes over every section note the ingester
     created or updated. Returns a summary; never raises.
 
     If `websocket` is provided, sends live progress events so the user sees
     "linking 47/129…" instead of a frozen screen during a long weave.
     """
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "indexed": 0, "outbound_links_added": 0,
         "amem_evolved": 0, "amem_links_added": 0,
         "cross_links_added": 0, "notes_cross_linked": 0,

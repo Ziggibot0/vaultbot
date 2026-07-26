@@ -1,13 +1,11 @@
-import os
-import re
 import json
-import hashlib
-from pathlib import Path
-from typing import Dict, List, Set, Any, Optional
-from datetime import datetime, timezone
+import re
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
+from pathlib import Path
+from typing import Any
 
-from vault_graph import VaultGraph, WIKILINK_RE
+from vault_graph import WIKILINK_RE, VaultGraph
 
 
 class VaultMaintenance:
@@ -37,9 +35,9 @@ class VaultMaintenance:
         self.chat_dir.mkdir(exist_ok=True)
         self.research_dir.mkdir(exist_ok=True)
 
-    def _log(self, action: str, details: Dict[str, Any]):
+    def _log(self, action: str, details: dict[str, Any]):
         record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "action": action,
             "details": details,
         }
@@ -78,7 +76,7 @@ class VaultMaintenance:
         Append a new chat exchange to an existing chat note for this topic,
         or create one if it doesn't exist.
         """
-        from vault_guard import assert_writable, VaultWriteForbidden
+        from vault_guard import VaultWriteForbidden, assert_writable
         safe_topic = self._safe_filename(topic)
         note_path = self.chat_dir / f"{safe_topic}.md"
         # Sacred/locked guard: never let the LLM touch a date-only journal
@@ -91,7 +89,7 @@ class VaultMaintenance:
                 "file_path": str(note_path), "reason": e.reason})
             raise
 
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
         section = f"\n\n## {now}\n\n{new_entry}"
 
         if note_path.exists():
@@ -119,9 +117,9 @@ class VaultMaintenance:
         return note_path
 
     def create_research_note(self, topic: str, summary: str, research_content: str,
-                             links: List[str]) -> Path:
+                             links: list[str]) -> Path:
         """Create a research note, replacing an older near-duplicate if found."""
-        from vault_guard import assert_writable, VaultWriteForbidden
+        from vault_guard import VaultWriteForbidden, assert_writable
         safe_topic = self._safe_filename(topic)
         note_path = self.research_dir / f"{safe_topic}.md"
         # Sacred/locked guard: the autonomous researcher + research_tool both
@@ -172,7 +170,7 @@ class VaultMaintenance:
         self._log("research_create", {"file_path": str(note_path), "topic": topic})
         return note_path
 
-    def run_cleanup(self, graph: VaultGraph) -> Dict[str, Any]:
+    def run_cleanup(self, graph: VaultGraph) -> dict[str, Any]:
         """
         Remove orphan generated notes and merge near-duplicate generated notes.
         Returns a report.
@@ -203,7 +201,7 @@ class VaultMaintenance:
         # 2. Merge near-duplicate generated notes (within same folder)
         for folder in (self.chat_dir, self.research_dir):
             files = sorted(folder.glob("*.md"))
-            skip: Set[Path] = set()
+            skip: set[Path] = set()
             for i, a in enumerate(files):
                 if a in skip:
                     continue
@@ -234,7 +232,7 @@ class VaultMaintenance:
 
         return {"removed": removed, "merged": merged}
 
-    def _merge_note_contents(self, paths: List[Path]) -> str:
+    def _merge_note_contents(self, paths: list[Path]) -> str:
         """Combine duplicate notes, preserving oldest date sections when present."""
         blocks = []
         seen = set()

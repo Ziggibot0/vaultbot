@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 
 class VaultWriteForbidden(Exception):
@@ -137,7 +136,7 @@ def assert_writable(path: Path) -> None:
                "The user must remove the LOCKED marker to allow edits.")
 
 
-def writable_check(path: Path) -> Optional[str]:
+def writable_check(path: Path) -> str | None:
     """Soft check returning a reason string if unwritable, else None.
 
     For callers that prefer a None/error-string pattern over exceptions.

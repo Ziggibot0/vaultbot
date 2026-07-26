@@ -4,9 +4,10 @@ Agent-authored tool: vault_delete
 
 SCHEMA = {"name": "vault_delete", "description": "Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals, LOCKED notes, and core identity files. Reports incoming wikilinks that will become broken after deletion. Use this to clean up junk files without risk.", "parameters": {"properties": {"file_path": {"description": "Path to the note to delete, relative to vault root (e.g. 'Other post.md')", "type": "string"}}, "required": ["file_path"], "type": "object"}}
 
-import os, re
-from pathlib import Path
+import os
+import re
 from datetime import datetime
+from pathlib import Path
 
 VAULT_ROOT = Path(__file__).parent.parent.parent.resolve()
 EXCLUDE_DIRS = {".git", "node_modules", ".obsidian", "vaultbot_venv", "__pycache__", "checkpoints", ".venv"}
@@ -61,45 +62,45 @@ def run(args: dict) -> dict:
     file_path = args.get("file_path", "")
     if not file_path:
         return {"error": "file_path is required"}
-    
+
     full = (VAULT_ROOT / file_path).resolve()
-    
+
     try:
         full.relative_to(VAULT_ROOT.resolve())
     except ValueError:
         return {"error": "path must be inside vault root"}
-    
+
     if not full.exists():
         return {"error": f"file not found: {file_path}"}
-    
+
     if not file_path.endswith(".md"):
         return {"error": "can only delete .md files"}
-    
+
     stem = full.stem
-    
+
     if _is_sacred(stem):
         return {"error": f"BLOCKED: '{stem}' is a sacred journal file — never deletable"}
-    
+
     if stem in IDENTITY_FILES:
         return {"error": f"BLOCKED: '{stem}' is a core identity file — never deletable"}
-    
+
     content = full.read_text(encoding="utf-8")
-    
+
     if _is_locked(content):
         return {"error": f"BLOCKED: '{stem}' is LOCKED — never deletable"}
-    
+
     incoming_links = _find_incoming_links(stem)
-    
+
     # Backup to trash before deleting
     TRASH_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup_name = f"{stem}_{timestamp}.md"
     backup_path = TRASH_DIR / backup_name
     backup_path.write_text(content, encoding="utf-8")
-    
+
     # Delete
     full.unlink()
-    
+
     return {
         "deleted": file_path,
         "backup": str(backup_path.relative_to(VAULT_ROOT)).replace("\\", "/"),

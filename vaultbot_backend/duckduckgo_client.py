@@ -14,11 +14,10 @@ Implements a clean search interface for the research engine:
 
 import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
-
 
 # --- Source blocklist (Sean's directive: never use Wikipedia) ---------------
 # Any URL containing one of these substrings is filtered out of search
@@ -56,7 +55,7 @@ class DuckDuckGoClient:
         "Accept-Language": "en-US,en;q=0.9",
     }
 
-    def __init__(self, api_key: Optional[str] = None,
+    def __init__(self, api_key: str | None = None,
                  session_logger=None, timeout: int = 20):
         # api_key accepted for interface compat but not used.
         self.api_key = None
@@ -64,9 +63,9 @@ class DuckDuckGoClient:
         self.timeout = timeout
         self._last_request_time: float = 0.0
 
-    def _log(self, method: str, inputs: Optional[Dict[str, Any]] = None,
-             outputs: Any = None, duration_ms: Optional[float] = None,
-             error: Optional[str] = None):
+    def _log(self, method: str, inputs: dict[str, Any] | None = None,
+             outputs: Any = None, duration_ms: float | None = None,
+             error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
@@ -89,7 +88,7 @@ class DuckDuckGoClient:
         self._last_request_time = time.time()
 
     def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> Dict[str, Any]:
+               search_depth: str = "advanced") -> dict[str, Any]:
         """Search DuckDuckGo and return a result dict.
 
         Returns {"results": [...], "unresponsive_engines": [...]}.

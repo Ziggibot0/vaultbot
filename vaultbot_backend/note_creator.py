@@ -1,10 +1,11 @@
 import os
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from ollama_client import OllamaClient
-from vault_indexer import VaultIndexer
 from vault_graph import VaultGraph
+from vault_indexer import VaultIndexer
 from vault_maintenance import VaultMaintenance
 
 
@@ -29,8 +30,8 @@ class NoteCreator:
         self.maintenance = VaultMaintenance(vault_path, session_logger=session_logger)
         self.graph = VaultGraph(vault_path, session_logger=session_logger)
 
-    def _log_tool(self, method: str, inputs: Optional[Dict[str, Any]] = None,
-                  outputs: Any = None, error: Optional[str] = None):
+    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None,
+                  outputs: Any = None, error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
@@ -38,7 +39,7 @@ class NoteCreator:
             outputs=outputs, error=error
         )
 
-    def _extract_entities(self, text: str) -> List[str]:
+    def _extract_entities(self, text: str) -> list[str]:
         """Pull out quoted phrases and title-cased proper nouns as link seeds."""
         patterns = [
             r'\"([^\"]+)\"',
@@ -54,7 +55,7 @@ class NoteCreator:
                 entities.add(match.strip())
         return list(entities)
 
-    def _find_related_notes(self, entities: List[str], k: int = 5) -> List[Dict[str, Any]]:
+    def _find_related_notes(self, entities: list[str], k: int = 5) -> list[dict[str, Any]]:
         """Vector-search the vault for each entity and deduplicate results.
 
         Gracefully returns an empty list if vector search fails (e.g. Ollama
@@ -76,7 +77,7 @@ class NoteCreator:
                     related.append(res)
         return related
 
-    def _generate_links(self, entities: List[str], related_notes: List[Dict[str, Any]]) -> List[str]:
+    def _generate_links(self, entities: list[str], related_notes: list[dict[str, Any]]) -> list[str]:
         """Turn discovered entities and related notes into Obsidian wikilinks."""
         links = set()
         note_stems = {Path(meta['file_path']).stem: meta['file_path']
@@ -104,7 +105,7 @@ class NoteCreator:
             self._log_tool("maintenance_cleanup", error=str(e))
 
     def create_note_from_research(self, topic: str, research_content: str,
-                                  summary: Optional[str] = None) -> str:
+                                  summary: str | None = None) -> str:
         """Create a research note under vaultbot/research/ and clean up afterwards.
 
         The note file is written to disk FIRST, before any indexing or
@@ -171,7 +172,7 @@ class NoteCreator:
         return str(note_path)
 
     def create_note_from_chat(self, user_message: str, assistant_response: str,
-                              thinking: Optional[str] = None) -> str:
+                              thinking: str | None = None) -> str:
         """Append chat exchanges to a running chat note and clean up afterwards."""
         topic = f"Chat: {user_message[:50]}"
         entry = f"**User:** {user_message}\n\n**Assistant:** {assistant_response}"
@@ -199,6 +200,7 @@ class NoteCreator:
 # Example usage (for testing)
 if __name__ == "__main__":
     import os
+
     from dotenv import load_dotenv
     from vault_indexer import VaultIndexer
 

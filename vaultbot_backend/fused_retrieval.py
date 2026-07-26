@@ -26,10 +26,9 @@ mirrors the low-level path and leaves the community path as a drop-in extension.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import numpy as np
-
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 
@@ -64,8 +63,8 @@ class FusedRetriever:
         self,
         vault_graph: VaultGraph,
         vault_indexer: VaultIndexer,
-        session_logger: Optional["SessionLogger"] = None,
-        embedding_drift: Optional[Any] = None,
+        session_logger: SessionLogger | None = None,
+        embedding_drift: Any | None = None,
     ) -> None:
         self.vault_graph = vault_graph
         self.vault_indexer = vault_indexer
@@ -82,7 +81,7 @@ class FusedRetriever:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def retrieve(self, query: str, k: int = 10, depth: int = 1) -> Dict[str, Any]:
+    def retrieve(self, query: str, k: int = 10, depth: int = 1) -> dict[str, Any]:
         """
         Fuse vector + graph + backlink retrieval.
 
@@ -148,7 +147,7 @@ class FusedRetriever:
     # ------------------------------------------------------------------
     def _vector_channel(
         self, query: str, k: int
-    ) -> tuple[List[Dict[str, Any]], Dict[str, float]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, float]]:
         """
         Run the vector search and normalize scores to [0,1].
 
@@ -197,7 +196,7 @@ class FusedRetriever:
 
         dists = [h.get("score", 0.0) or 0.0 for h in raw]
         max_d = max(dists) if dists else 0.0
-        norm: Dict[str, float] = {}
+        norm: dict[str, float] = {}
         for h, d in zip(raw, dists):
             fp = h.get("file_path")
             if not fp:
@@ -215,8 +214,8 @@ class FusedRetriever:
                 if fp and fp in norm}
         return raw, norm
 
-    def _drift_rerank(self, raw: List[Dict[str, Any]],
-                      query: str) -> Optional[List[Dict[str, Any]]]:
+    def _drift_rerank(self, raw: list[dict[str, Any]],
+                      query: str) -> list[dict[str, Any]] | None:
         """Re-rank `raw` hits by drift-adjusted L2 distance to the query.
 
         For each candidate: reconstruct its content embedding from the
@@ -233,7 +232,7 @@ class FusedRetriever:
         if query_emb is None or query_emb.size == 0:
             return None
 
-        drifted_hits: List[Dict[str, Any]] = []
+        drifted_hits: list[dict[str, Any]] = []
         any_drifted = False
         for h in raw:
             fp = h.get("file_path", "")
@@ -266,12 +265,12 @@ class FusedRetriever:
 
     def _graph_channel(
         self,
-        vector_hits: List[Dict[str, Any]],
-        norm_scores: Dict[str, float],
+        vector_hits: list[dict[str, Any]],
+        norm_scores: dict[str, float],
         depth: int,
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         """1-hop wikilink neighbors of vector hits. Score = GRAPH_BOOST × vector score."""
-        candidates: Dict[str, Dict[str, Any]] = {}
+        candidates: dict[str, dict[str, Any]] = {}
         try:
             graph = self.vault_graph
             for hit in vector_hits:
@@ -309,14 +308,14 @@ class FusedRetriever:
 
     def _backlink_channel(
         self,
-        vector_hits: List[Dict[str, Any]],
-        norm_scores: Dict[str, float],
-    ) -> Dict[str, Dict[str, Any]]:
+        vector_hits: list[dict[str, Any]],
+        norm_scores: dict[str, float],
+    ) -> dict[str, dict[str, Any]]:
         """Backlinks of vector hits. Score = BACKLINK_BOOST × vector score."""
-        candidates: Dict[str, Dict[str, Any]] = {}
+        candidates: dict[str, dict[str, Any]] = {}
         try:
             graph = self.vault_graph
-            backlinks: Dict[str, Set[str]] = getattr(graph, "backlinks", {}) or {}
+            backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
             for hit in vector_hits:
                 fp = hit.get("file_path")
                 base = norm_scores.get(fp, 0.0)
@@ -347,13 +346,13 @@ class FusedRetriever:
     # ------------------------------------------------------------------
     def _merge(
         self,
-        vector_hits: List[Dict[str, Any]],
-        norm_scores: Dict[str, float],
-        graph_candidates: Dict[str, Dict[str, Any]],
-        backlink_candidates: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Dict[str, Any]]:
+        vector_hits: list[dict[str, Any]],
+        norm_scores: dict[str, float],
+        graph_candidates: dict[str, dict[str, Any]],
+        backlink_candidates: dict[str, dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
         """Merge all channels by file_path, taking the MAX score across channels."""
-        merged: Dict[str, Dict[str, Any]] = {}
+        merged: dict[str, dict[str, Any]] = {}
 
         # seed with vector hits
         for hit in vector_hits:
@@ -386,7 +385,7 @@ class FusedRetriever:
 
         return merged
 
-    def _rerank(self, merged: Dict[str, Dict[str, Any]]) -> None:
+    def _rerank(self, merged: dict[str, dict[str, Any]]) -> None:
         """
         Apply reranking boosts:
           - notes present in all 3 channels → ×ALL_CHANNEL_RERANK
@@ -395,7 +394,7 @@ class FusedRetriever:
         """
         try:
             graph = self.vault_graph
-            backlinks: Dict[str, Set[str]] = getattr(graph, "backlinks", {}) or {}
+            backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
         except Exception as e:
             self._log("rerank.graph_unavailable", f"{type(e).__name__}: {e}")
             backlinks = {}
@@ -410,7 +409,7 @@ class FusedRetriever:
                 boost *= self.HUB_RERANK
             cand["score"] = cand["score"] * boost
 
-    def _finalize(self, cand: Dict[str, Any], query: str) -> Dict[str, Any]:
+    def _finalize(self, cand: dict[str, Any], query: str) -> dict[str, Any]:
         """Shape a merged candidate into the final result dict."""
         channels = sorted(
             ch for ch in cand.get("channels", set()) if ch
@@ -434,7 +433,7 @@ class FusedRetriever:
             return ""
         return name.strip().lower().replace("\\", "/")
 
-    def _safe_neighbors(self, name: str, direction: str = "both") -> List[str]:
+    def _safe_neighbors(self, name: str, direction: str = "both") -> list[str]:
         """Call vault_graph.neighbors but never raise."""
         try:
             norm = self._normalize_name(name)
@@ -465,7 +464,7 @@ class FusedRetriever:
             self._log("content.error", f"{type(e).__name__}: {e}")
         return ""
 
-    def _name_from_hit(self, hit: Dict[str, Any], fp: str) -> str:
+    def _name_from_hit(self, hit: dict[str, Any], fp: str) -> str:
         """Get the normalized name from a vector hit, falling back to the graph."""
         name = hit.get("name")
         if name:
@@ -520,7 +519,7 @@ class FusedRetriever:
             pass
 
     @staticmethod
-    def _empty() -> Dict[str, Any]:
+    def _empty() -> dict[str, Any]:
         return {
             "results": [],
             "channels": {"vector": 0, "graph": 0, "backlink": 0},

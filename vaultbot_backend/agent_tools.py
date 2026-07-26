@@ -13,10 +13,10 @@ instances are). This module only holds the schemas + a registry so the
 system prompt and the handler share a single source of truth.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 # Ollama tool schema format mirrors OpenAI function-calling.
-TOOL_DEFINITIONS: List[Dict[str, Any]] = [
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -118,7 +118,7 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 
 # Meta-tools: self-improvement abilities. These let the agent read/write its
 # own code, run code to test, create new tools, reflect, and roll back.
-META_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
+META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -295,9 +295,9 @@ META_TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 ]
 
 
-def build_system_prompt(vault_context: str, autonomous_state: Dict[str, Any],
+def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
                         gaps_summary: str, custom_tools: str = "",
-                        custom_tool_names: List[str] = None) -> str:
+                        custom_tool_names: list[str] = None) -> str:
     """Build the Jarvis-grade system prompt.
 
     Tells the LLM exactly what it is, WHO it serves, what it can do, how the

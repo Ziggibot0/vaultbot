@@ -21,17 +21,17 @@ Search backend: DuckDuckGo (free, no API key, no signup). Zero setup.
 
 import asyncio
 import re
-import time
 import threading
+import time
+from datetime import UTC
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from note_creator import NoteCreator
 from research_engine import ResearchEngine
+from session_logger import SessionLogger
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
-from note_creator import NoteCreator
-from session_logger import SessionLogger
-
 
 # ---------------------------------------------------------------------------
 # Gap quality gate — prevents the researcher from wasting cycles on topics
@@ -64,7 +64,7 @@ _MAX_TOPIC_WORDS = 8
 _MIN_TOPIC_ALNUM_CHARS = 3
 
 
-def _is_researchable_gap(gap: Dict[str, Any]) -> bool:
+def _is_researchable_gap(gap: dict[str, Any]) -> bool:
     """Quality gate: should the autonomous researcher spend a cycle on this?
 
     This is a SECOND layer of filtering on top of the knowledge curriculum's
@@ -138,7 +138,7 @@ class AutonomousResearcher:
         vault_graph: VaultGraph,
         vault_indexer: VaultIndexer,
         note_creator: NoteCreator,
-        session_logger: Optional[SessionLogger] = None,
+        session_logger: SessionLogger | None = None,
         interval_seconds: int = 600,
         max_researches_per_cycle: int = 2,
         min_dangling_references: int = 1,
@@ -170,9 +170,9 @@ class AutonomousResearcher:
             search_client=self.search_client,
         )
 
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         # Chat-priority pause: when a chat turn is in flight, the researcher
         # yields the Ollama GPU so the interactive user isn't queued behind
         # background research. The chat loop calls pause_for_chat() at the
@@ -180,16 +180,16 @@ class AutonomousResearcher:
         # This is a threading.Event (not asyncio) so it works across the
         # researcher's own thread + the main event loop without locks.
         self._chat_active = threading.Event()
-        self.last_run: Optional[Dict[str, Any]] = None
-        self.history: List[Dict[str, Any]] = []
+        self.last_run: dict[str, Any] | None = None
+        self.history: list[dict[str, Any]] = []
         self.enabled = True
 
-    def _log(self, event: str, data: Optional[Dict[str, Any]] = None):
+    def _log(self, event: str, data: dict[str, Any] | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log(event, data)
 
-    def _identify_gaps(self) -> List[Dict[str, Any]]:
+    def _identify_gaps(self) -> list[dict[str, Any]]:
         """Refresh the graph and collect prioritized knowledge gaps.
 
         If a knowledge curriculum is wired in, use its Voyager-style diversity-
@@ -231,7 +231,7 @@ class AutonomousResearcher:
         except Exception as e:
             self._log("autonomous_graph_refresh_failed", {"error": str(e)})
             return []
-        gaps: List[Dict[str, Any]] = []
+        gaps: list[dict[str, Any]] = []
         for d in self.vault_graph.dangling_links(
                 min_references=self.min_dangling_references):
             gaps.append({
@@ -259,7 +259,7 @@ class AutonomousResearcher:
         gaps.sort(key=lambda g: g["priority"], reverse=True)
         return gaps
 
-    def _research_to_note(self, gap: Dict[str, Any]) -> Optional[str]:
+    def _research_to_note(self, gap: dict[str, Any]) -> str | None:
         """Research one gap and persist a linked note. Returns note path."""
         topic = gap["topic"]
         try:
@@ -361,7 +361,7 @@ class AutonomousResearcher:
             return
         cycle_t0 = time.time()
         if hasattr(self, '_heartbeat'):
-            self._heartbeat(f"cycle starting")
+            self._heartbeat("cycle starting")
         # If there are recovered gaps from a previous crash, research those
         # FIRST before the curriculum proposes new ones. This is the retry.
         recovered = getattr(self, '_recovered_gaps', None)
@@ -394,12 +394,12 @@ class AutonomousResearcher:
             "gap_count": len(gaps),
             "top_gaps": [g["topic"] for g in gaps[:5]],
         })
-        filled: List[Dict[str, Any]] = []
+        filled: list[dict[str, Any]] = []
         budget = min(self.max_researches_per_cycle, len(gaps))
         # Checkpoint the cycle's gaps so a crash mid-research can be recovered.
         cycle_checkpoints = []
-        from datetime import datetime, timezone
-        now_iso = lambda: datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now_iso = lambda: datetime.now(UTC).isoformat()
         for gap in gaps[:budget]:
             if self._stop_event.is_set():
                 break
@@ -527,7 +527,7 @@ class AutonomousResearcher:
             except Exception:
                 pass
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """Return a snapshot for the status endpoint."""
         return {
             "enabled": self.enabled,
@@ -555,7 +555,7 @@ class AutonomousResearcher:
         """Clear the chat-priority pause so the researcher can resume."""
         self._chat_active.clear()
 
-    def trigger_now(self) -> Dict[str, Any]:
+    def trigger_now(self) -> dict[str, Any]:
         """Run a cycle immediately (synchronously) on demand.
 
         Used by the /autonomous/trigger endpoint so the user can kick the

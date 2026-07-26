@@ -1,0 +1,104 @@
+# ── VaultBot backend — ruff + pyright config ────────────────────────────────
+# Phase 2 of the 5-debt refactor: replaces the hand-rolled _verify_imports
+# AST checker in main.py with ruff's F821 (undefined-name) rule, which does
+# the same job better and on every file, not just main.py.
+#
+# Run: `ruff check vaultbot_backend/` (lint) / `ruff format vaultbot_backend/` (format)
+
+[tool.ruff]
+# Exclude the custom-named venv (ruff's default exclude covers .venv but NOT
+# vaultbot_venv) plus the standard build/test artifact dirs.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "vaultbot_venv",
+    "vaultbot_index",
+    "sessions",
+    "partials",
+    "checkpoints",
+    "trash",
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Match the runtime Python (the venv is 3.12, but the codebase targets 3.11+
+# features like `str | None` — py311 is the floor).
+target-version = "py311"
+
+[tool.ruff.lint]
+# F821 (undefined-name) replaces _verify_imports.
+# BLE001 (blind-except) feeds Phase 4 triage.
+# FAST002 (non-annotated dependency) is useful once Phase 3 starts.
+# The rest (E, F, W, I, B, UP, SIM, RUF) are the standard sane superset.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE001", "FAST"]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix` is provided).
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: allow assert (S101 is in the S band which we don't select, but be
+# explicit), allow broad except in test helpers, and don't enforce import
+# ordering inside __init__.py files.
+"**/tests/*" = ["S101", "BLE001", "E402"]
+"**/__init__.py" = ["E402", "F401"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+# ── pyright (config only — NOT enforced yet per Phase 2 decision) ────────────
+# Typing Services (Phase 3 step 1) gives most of the IDE value regardless.
+# Enforcing pyright would surface a wave of pre-existing errors unrelated to
+# the 5-debt refactor; we add the config now and enforce later.
+[tool.pyright]
+include = ["vaultbot_backend"]
+exclude = [
+    "vaultbot_backend/vaultbot_venv",
+    "vaultbot_backend/vaultbot_index",
+    "vaultbot_backend/sessions",
+    "vaultbot_backend/checkpoints",
+    "vaultbot_backend/trash",
+    "**/__pycache__",
+    "**/.pytest_cache",
+]
+reportMissingImports = "warning"
+reportMissingTypeStubs = "none"
+# Basic mode: catch real bugs without drowning in strict-mode noise.
+typeCheckingMode = "basic"

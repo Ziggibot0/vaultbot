@@ -27,19 +27,17 @@ Safety:
   - All self-improvement actions are logged.
 """
 
-import os
-import sys
-import re
-import json
-import time
-import shutil
 import importlib
+import json
+import os
+import re
+import shutil
 import subprocess
+import sys
+import time
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-import requests
+from typing import Any
 
 BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"
@@ -57,18 +55,18 @@ class SelfImprover:
         if not init.exists():
             init.write_text("# VaultBot custom tools (agent-authored)\n", encoding="utf-8")
         # Track loaded tool modules for hot-reload.
-        self._loaded_tools: Dict[str, Any] = {}
-        self._loaded_schemas: Dict[str, Dict[str, Any]] = {}
+        self._loaded_tools: dict[str, Any] = {}
+        self._loaded_schemas: dict[str, dict[str, Any]] = {}
         self.load_custom_tools()
 
-    def _log(self, event: str, data: Optional[Dict[str, Any]] = None):
+    def _log(self, event: str, data: dict[str, Any] | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log(event, data)
 
     # --- Tool registry ---------------------------------------------------
 
-    def load_custom_tools(self) -> Dict[str, Dict[str, Any]]:
+    def load_custom_tools(self) -> dict[str, dict[str, Any]]:
         """Dynamically import every .py file in custom_tools/ and register
         its `run` callable and `SCHEMA`. Returns the schema map."""
         self._loaded_tools.clear()
@@ -96,7 +94,7 @@ class SelfImprover:
                 self._log("custom_tool_loaded", {"name": tool_name, "module": mod_name})
         return dict(self._loaded_schemas)
 
-    def custom_tool_schemas(self) -> List[Dict[str, Any]]:
+    def custom_tool_schemas(self) -> list[dict[str, Any]]:
         """Return Ollama-format tool definitions for loaded custom tools."""
         out = []
         for name, schema in self._loaded_schemas.items():
@@ -114,7 +112,7 @@ class SelfImprover:
     def has_tool(self, name: str) -> bool:
         return name in self._loaded_tools
 
-    def execute_custom_tool(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def execute_custom_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         """Run a loaded custom tool by name. Catches all exceptions so a
         buggy agent-authored tool never crashes the server."""
         fn = self._loaded_tools.get(name)
@@ -137,7 +135,7 @@ class SelfImprover:
     # --- code_read -------------------------------------------------------
 
     def code_read(self, file_path: str, start_line: int = 1, end_line: int = 0
-                  ) -> Dict[str, Any]:
+                  ) -> dict[str, Any]:
         """Read a file under the vault/backend. Paths are relative to Vault2 root."""
         full = self._resolve_path(file_path)
         if not full:
@@ -154,7 +152,7 @@ class SelfImprover:
 
     # --- code_write ------------------------------------------------------
 
-    def code_write(self, file_path: str, content: str) -> Dict[str, Any]:
+    def code_write(self, file_path: str, content: str) -> dict[str, Any]:
         """Write a file under the vault/backend. Paths relative to Vault2 root."""
         full = self._resolve_path(file_path, allow_create=True)
         if not full:
@@ -163,7 +161,7 @@ class SelfImprover:
         # its self-edit tool to bypass the sacred/locked protection on vault
         # notes. Non-markdown files (code, config) are unaffected.
         if full.suffix == ".md":
-            from vault_guard import assert_writable, VaultWriteForbidden
+            from vault_guard import VaultWriteForbidden, assert_writable
             try:
                 assert_writable(full)
             except VaultWriteForbidden as e:
@@ -205,12 +203,12 @@ class SelfImprover:
         "vault_guard.py", "supervision.py", "checkpointer.py",
         "free_search.py", "duckduckgo_client.py", "tavily_client.py",
         "searxng_manager.py", "web_source_store.py", "speech.py",
-        "vault_maintenance.py", "vault_indexer.py", "textbook_index.py",
+        "vault_maintenance.py", "textbook_index.py",
         "services.py",
     }
 
     def safe_write(self, file_path: str, content: str,
-                   dry_run: bool = False) -> Dict[str, Any]:
+                   dry_run: bool = False) -> dict[str, Any]:
         """Write a file with safety verification. Use this INSTEAD of
         code_write when editing backend source code (.py files under
         vaultbot_backend/). For markdown notes or non-code files, code_write
@@ -254,7 +252,7 @@ class SelfImprover:
             return {"error": f"path not allowed: {file_path}"}
         is_core = (full.parent.resolve() == BACKEND_DIR
                    and full.name in self._CORE_FILES)
-        checks: Dict[str, Any] = {}
+        checks: dict[str, Any] = {}
 
         # --- 1. Syntax check (no disk touch) ---
         import ast
@@ -309,7 +307,7 @@ class SelfImprover:
 
         # --- Markdown guard (same as code_write) ---
         if full.suffix == ".md":
-            from vault_guard import assert_writable, VaultWriteForbidden
+            from vault_guard import VaultWriteForbidden, assert_writable
             try:
                 assert_writable(full)
             except VaultWriteForbidden as e:
@@ -433,7 +431,7 @@ class SelfImprover:
         (Path(tmpdir) / target_name).write_text(new_content, encoding="utf-8")
 
     def _verify_import_in_subprocess(self, backend_dir: str
-                                     ) -> tuple[bool, Optional[str]]:
+                                     ) -> tuple[bool, str | None]:
         """Run `python -c 'import main'` in a subprocess against the given
         backend dir. Returns (ok, error_message). A clean import means the
         whole import graph resolves with the proposed edit in place."""
@@ -475,7 +473,7 @@ class SelfImprover:
             return False, f"import check could not run: {e}"
 
     def _run_pytest_in_subprocess(self, backend_dir: str
-                                   ) -> tuple[bool, Optional[str]]:
+                                   ) -> tuple[bool, str | None]:
         """Run `python -m pytest -q --tb=short` in a subprocess against the
         given backend dir. Returns (passed, output_message).
 
@@ -561,7 +559,7 @@ class SelfImprover:
 
     # --- capability_audit ------------------------------------------------
 
-    def capability_audit(self, task: str = "") -> Dict[str, Any]:
+    def capability_audit(self, task: str = "") -> dict[str, Any]:
         """Inventory every tool VaultBot currently has — built-in vault
         tools, meta (self-edit) tools, and agent-authored custom tools —
         with each tool's name + description. This lets the agent check
@@ -579,8 +577,8 @@ class SelfImprover:
           coverage: (only if task given) list of relevant tool names +
             a 'gap_assessment' note.
         """
-        from agent_tools import TOOL_DEFINITIONS, META_TOOL_DEFINITIONS
-        tools: List[Dict[str, Any]] = []
+        from agent_tools import META_TOOL_DEFINITIONS, TOOL_DEFINITIONS
+        tools: list[dict[str, Any]] = []
 
         def _add(schema_list, kind):
             for t in schema_list:
@@ -600,7 +598,7 @@ class SelfImprover:
                 "description": schema.get("description", ""),
             })
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "tools": tools,
             "total": len(tools),
             "kinds": {
@@ -645,7 +643,7 @@ class SelfImprover:
 
     # --- code_run --------------------------------------------------------
 
-    def code_run(self, code: str, timeout: int = 15) -> Dict[str, Any]:
+    def code_run(self, code: str, timeout: int = 15) -> dict[str, Any]:
         """Execute Python code in a subprocess and return stdout/stderr/exit."""
         venv_python = str(BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
@@ -667,7 +665,7 @@ class SelfImprover:
     # --- tool_create -----------------------------------------------------
 
     def tool_create(self, tool_name: str, description: str,
-                    parameters: Dict[str, Any], code: str) -> Dict[str, Any]:
+                    parameters: dict[str, Any], code: str) -> dict[str, Any]:
         """Create a new tool file in custom_tools/, load it, and register it.
         `code` must define a `run(args: dict) -> dict` function.
         Returns the new tool's schema if it loaded successfully."""
@@ -703,7 +701,7 @@ class SelfImprover:
 
     # --- self_reflect ----------------------------------------------------
 
-    def self_reflect(self, topic: str, vault_context: str = "") -> Dict[str, Any]:
+    def self_reflect(self, topic: str, vault_context: str = "") -> dict[str, Any]:
         """Ask the LLM to reflect on what it's learned and propose new abilities.
         Uses a cheap, non-streaming call so it doesn't interfere with the chat."""
         try:
@@ -730,7 +728,7 @@ class SelfImprover:
 
     # --- git_rollback ----------------------------------------------------
 
-    def git_rollback(self, file_path: str = "") -> Dict[str, Any]:
+    def git_rollback(self, file_path: str = "") -> dict[str, Any]:
         """Restore files from git HEAD. If file_path is given, restore just
         that file; otherwise restore all changed files under the backend."""
         target = self._resolve_path(file_path) if file_path else BACKEND_DIR
@@ -758,7 +756,7 @@ class SelfImprover:
         return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
     def _resolve_path(self, file_path: str, allow_create: bool = False
-                      ) -> Optional[Path]:
+                      ) -> Path | None:
         """Resolve a path relative to Vault2 root, restricted to the vault
         directory so the agent can't write outside it."""
         if not file_path:

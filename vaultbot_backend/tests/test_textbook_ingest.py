@@ -13,15 +13,14 @@ Documentation grounding:
 """
 from pathlib import Path
 
+import custom_tools.textbook_ingest as tbi
 import pytest
-
 from custom_tools.textbook_ingest import (
-    source_key,
+    _source_key_line,
     find_prior_ingest,
     remove_stale_notes,
-    _source_key_line,
+    source_key,
 )
-import custom_tools.textbook_ingest as tbi
 
 
 @pytest.fixture

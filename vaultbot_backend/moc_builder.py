@@ -42,14 +42,14 @@ A MOC note is `vaultbot/textbooks/moc-<cluster-id>.md`:
 
 from __future__ import annotations
 
-import os
-import re
-import json
 import hashlib
 import logging
-import numpy as np
+import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +77,8 @@ def _atomic_write(path: Path, text: str) -> None:
 # Clustering (greedy connected components at a relative threshold)
 # ---------------------------------------------------------------------------
 
-def cluster_cards(card_paths: List[str],
-                  emb_by_path: Dict[str, Any]) -> List[List[str]]:
+def cluster_cards(card_paths: list[str],
+                  emb_by_path: dict[str, Any]) -> list[list[str]]:
     """Cluster L1 cards by embedding similarity.
 
     `emb_by_path` maps card abs-path (str) -> embedding (list or ndarray).
@@ -94,7 +94,7 @@ def cluster_cards(card_paths: List[str],
     vecs = {p: np.asarray(emb_by_path[p], dtype=np.float32) for p in paths}
     # Pairwise nearest-neighbor distances (n is small — hundreds at most).
     # For each card, find its nearest other card.
-    nearest: Dict[str, Tuple[float, str]] = {}
+    nearest: dict[str, tuple[float, str]] = {}
     for i, p in enumerate(paths):
         best_d = float("inf")
         best_q = None
@@ -137,7 +137,7 @@ def cluster_cards(card_paths: List[str],
             union(p, q)
 
     # Collect clusters.
-    clusters: Dict[str, List[str]] = {}
+    clusters: dict[str, list[str]] = {}
     for p in paths:
         r = find(p)
         clusters.setdefault(r, []).append(p)
@@ -148,7 +148,7 @@ def cluster_cards(card_paths: List[str],
 # Cluster label (extractive, LLM-free)
 # ---------------------------------------------------------------------------
 
-def _card_terms(text: str) -> Set[str]:
+def _card_terms(text: str) -> set[str]:
     """Extract meaningful terms from a concept card for cluster labeling.
 
     Strips boilerplate (headers, pointers, markers, link block) so the
@@ -184,7 +184,7 @@ def _card_terms(text: str) -> Set[str]:
             if w.lower() not in STOP}
 
 
-def _cluster_label(card_paths: List[str]) -> str:
+def _cluster_label(card_paths: list[str]) -> str:
     """Top shared term across the cluster's cards — a cheap label."""
     try:
         term_sets = []
@@ -194,7 +194,7 @@ def _cluster_label(card_paths: List[str]) -> str:
         if not term_sets:
             return "cluster"
         # intersection frequency: terms appearing in the most cards
-        freq: Dict[str, int] = {}
+        freq: dict[str, int] = {}
         for ts in term_sets:
             for t in ts:
                 freq[t] = freq.get(t, 0) + 1
@@ -214,7 +214,7 @@ def _cluster_label(card_paths: List[str]) -> str:
 # MOC note construction
 # ---------------------------------------------------------------------------
 
-def _cluster_id(card_paths: List[str]) -> str:
+def _cluster_id(card_paths: list[str]) -> str:
     h = hashlib.sha1()
     for p in sorted(card_paths):
         h.update(p.encode("utf-8", "replace"))
@@ -223,9 +223,9 @@ def _cluster_id(card_paths: List[str]) -> str:
 
 def build_moc_note(cluster_id: str,
                    label: str,
-                   card_paths: List[str],
+                   card_paths: list[str],
                    textbooks_dir: Path,
-                   related_clusters: Optional[List[str]] = None) -> Path:
+                   related_clusters: list[str] | None = None) -> Path:
     """Write a MOC note for a cluster.  Returns the MOC path."""
     moc_path = textbooks_dir / f"{MOC_PREFIX}{cluster_id}.md"
     lines = [
@@ -248,10 +248,10 @@ def build_moc_note(cluster_id: str,
     return moc_path
 
 
-def build_mocs(card_paths: List[str],
-               emb_by_path: Dict[str, Any],
+def build_mocs(card_paths: list[str],
+               emb_by_path: dict[str, Any],
                textbooks_dir: str | Path,
-               progress_callback: Any = None) -> Dict[str, Any]:
+               progress_callback: Any = None) -> dict[str, Any]:
     """Cluster L1 cards and write a MOC per cluster.  LLM-free.
 
     Also writes the cluster-id back into each card's `> cluster:` line so
@@ -277,10 +277,10 @@ def build_mocs(card_paths: List[str],
                     "message": f"Building {len(clusters)} maps of content..."})
             except Exception as e:
                 logger.debug("swallowed: %s", e)
-        moc_paths: List[str] = []
-        cluster_meta: List[Dict[str, Any]] = []
+        moc_paths: list[str] = []
+        cluster_meta: list[dict[str, Any]] = []
         # Compute inter-cluster relatedness by centroid distance (cheap).
-        centroids: Dict[str, np.ndarray] = {}
+        centroids: dict[str, np.ndarray] = {}
         for cl in clusters:
             cid = _cluster_id(cl)
             vecs = [np.asarray(emb_by_path[p], dtype=np.float32) for p in cl
@@ -291,7 +291,7 @@ def build_mocs(card_paths: List[str],
             cid = _cluster_id(cl)
             label = _cluster_label(cl)
             # find 2 nearest other clusters by centroid
-            related: List[str] = []
+            related: list[str] = []
             if len(centroids) > 1 and cid in centroids:
                 dists = []
                 for ocid, oc in centroids.items():
@@ -339,7 +339,7 @@ def _stamp_card_cluster(card_path: str | Path, cluster_id: str) -> None:
 # and only rewrites the MOC notes for AFFECTED clusters.
 # ---------------------------------------------------------------------------
 
-def _read_card_cluster(card_path: str | Path) -> Optional[str]:
+def _read_card_cluster(card_path: str | Path) -> str | None:
     """Read a card's existing cluster id from its `> cluster:` line."""
     try:
         text = Path(card_path).read_text(encoding="utf-8", errors="replace")
@@ -350,8 +350,8 @@ def _read_card_cluster(card_path: str | Path) -> Optional[str]:
         return None
 
 
-def _cluster_centroid(card_paths: List[str],
-                      emb_by_path: Dict[str, Any]) -> Optional[np.ndarray]:
+def _cluster_centroid(card_paths: list[str],
+                      emb_by_path: dict[str, Any]) -> np.ndarray | None:
     vecs = [np.asarray(emb_by_path[p], dtype=np.float32) for p in card_paths
             if p in emb_by_path]
     if not vecs:
@@ -359,11 +359,11 @@ def _cluster_centroid(card_paths: List[str],
     return np.mean(vecs, axis=0)
 
 
-def build_mocs_incremental(card_paths: List[str],
-                           emb_by_path: Dict[str, Any],
+def build_mocs_incremental(card_paths: list[str],
+                           emb_by_path: dict[str, Any],
                            textbooks_dir: str | Path,
-                           new_card_paths: Optional[List[str]] = None,
-                           progress_callback: Any = None) -> Dict[str, Any]:
+                           new_card_paths: list[str] | None = None,
+                           progress_callback: Any = None) -> dict[str, Any]:
     """Incremental MOC build: preserve existing cluster assignments for
     unchanged cards, only assign new/changed cards.
 
@@ -387,8 +387,8 @@ def build_mocs_incremental(card_paths: List[str],
 
         # 1. Read existing cluster assignments for ALL cards.
         #    cluster_members: cluster_id -> [card_paths]
-        cluster_members: Dict[str, List[str]] = {}
-        unassigned: List[str] = []
+        cluster_members: dict[str, list[str]] = {}
+        unassigned: list[str] = []
         for cp in card_paths:
             cid = _read_card_cluster(cp)
             if cid:
@@ -421,7 +421,7 @@ def build_mocs_incremental(card_paths: List[str],
                     centroids[cid] = c
         else:
             # Precompute existing cluster centroids.
-            centroids: Dict[str, np.ndarray] = {}
+            centroids: dict[str, np.ndarray] = {}
             for cid, members in cluster_members.items():
                 c = _cluster_centroid(members, emb_by_path)
                 if c is not None:
@@ -461,7 +461,7 @@ def build_mocs_incremental(card_paths: List[str],
         # 3. Filter out clusters that shrank below the min size (their
         #    members become unassigned again — but in incremental mode we
         #    keep them rather than orphaning cards; only drop truly empty).
-        affected_cids: Set[str] = set()
+        affected_cids: set[str] = set()
         # Any cluster that contains a new card is affected (its MOC will be
         # rewritten to reflect the new membership).
         for cid, members in cluster_members.items():
@@ -485,8 +485,8 @@ def build_mocs_incremental(card_paths: List[str],
         #    cards) but DON'T orphan their cards — they keep their cluster
         #    assignment so a future nearby card can grow the cluster past
         #    the threshold.
-        moc_paths: List[str] = []
-        cluster_meta: List[Dict[str, Any]] = []
+        moc_paths: list[str] = []
+        cluster_meta: list[dict[str, Any]] = []
         mocs_updated = 0
         mocs_unchanged = 0
         # Recompute inter-cluster relatedness for affected clusters only.
@@ -502,7 +502,7 @@ def build_mocs_incremental(card_paths: List[str],
                 continue
             label = _cluster_label(members)
             # find 2 nearest other clusters by centroid
-            related: List[str] = []
+            related: list[str] = []
             if len(all_centroids) > 1 and all_centroids.get(cid) is not None:
                 dists = []
                 for ocid, oc in all_centroids.items():

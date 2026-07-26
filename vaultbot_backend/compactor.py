@@ -17,7 +17,7 @@ Pure stdlib + existing project imports. No new dependencies.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +36,8 @@ class Compactor:
 
     def __init__(
         self,
-        ollama_client: Optional[Any] = None,
-        session_logger: Optional[Any] = None,
+        ollama_client: Any | None = None,
+        session_logger: Any | None = None,
         max_messages: int = 80,
         keep_head: int = 4,
         keep_tail_ratio: float = 0.4,
@@ -53,7 +53,7 @@ class Compactor:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def should_compact(self, messages: List[Dict[str, Any]]) -> bool:
+    def should_compact(self, messages: list[dict[str, Any]]) -> bool:
         """Return True if the conversation is long enough to warrant compaction."""
         try:
             if not messages:
@@ -67,7 +67,7 @@ class Compactor:
             logger.debug("should_compact error: %s", exc)
             return False
 
-    def compact(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def compact(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Compact the conversation if needed; otherwise return it unchanged.
 
         On any failure, the original message list is returned unmodified.
@@ -132,7 +132,7 @@ class Compactor:
                 pass
             return messages
 
-    def estimate_tokens(self, messages: List[Dict[str, Any]]) -> int:
+    def estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         """Estimate total tokens as sum(len(content) / 4) across all messages."""
         try:
             total_chars = 0
@@ -155,13 +155,13 @@ class Compactor:
         "no preamble."
     )
 
-    def _summarize_with_llm(self, middle_messages: List[Dict[str, Any]]) -> str:
+    def _summarize_with_llm(self, middle_messages: list[dict[str, Any]]) -> str:
         """Build a prompt, call ollama_client.chat, return the summary text.
 
         Catches all errors; on failure the caller falls back to extractive.
         """
         # Render the middle messages into a compact transcript for the LLM.
-        transcript_lines: List[str] = []
+        transcript_lines: list[str] = []
         for m in middle_messages:
             role = m.get("role", "user") if isinstance(m, dict) else "user"
             content = m.get("content", "") if isinstance(m, dict) else ""
@@ -170,7 +170,7 @@ class Compactor:
             transcript_lines.append(f"{role}: {content}")
         transcript = "\n".join(transcript_lines)
 
-        prompt_messages: List[Dict[str, Any]] = [
+        prompt_messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": self._SUMMARY_PROMPT,
@@ -206,10 +206,10 @@ class Compactor:
         # Last resort — let the caller fall back to extractive.
         raise RuntimeError("LLM returned no usable summary content")
 
-    def _extractive_summary(self, middle_messages: List[Dict[str, Any]]) -> str:
+    def _extractive_summary(self, middle_messages: list[dict[str, Any]]) -> str:
         """Simple extractive fallback: keep role + first 150 chars of each message."""
         try:
-            lines: List[str] = []
+            lines: list[str] = []
             for m in middle_messages:
                 role = m.get("role", "user") if isinstance(m, dict) else "user"
                 content = m.get("content", "") if isinstance(m, dict) else ""
@@ -257,7 +257,7 @@ class Compactor:
         except Exception:
             pass
 
-    def _log_exc(self, exc: Optional[Exception], context: Optional[str] = None) -> None:
+    def _log_exc(self, exc: Exception | None, context: str | None = None) -> None:
         try:
             if self.session_logger is not None and hasattr(self.session_logger, "log_exception"):
                 self.session_logger.log_exception(exc, context=context)

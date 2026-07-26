@@ -40,11 +40,11 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from vault_graph import VaultGraph, build_graph_context
-from concept_card import is_card, card_path_for, l0_path_for_card
+from concept_card import card_path_for, is_card, l0_path_for_card
 from moc_builder import MOC_PREFIX
+from vault_graph import VaultGraph, build_graph_context
 
 
 def _read(path: str | Path) -> str:
@@ -62,7 +62,7 @@ def _card_stem_to_l0_stem(card_stem: str) -> str:
     return card_stem
 
 
-def _moc_for_cluster(textbooks_dir: Path, cluster_id: str) -> Optional[Path]:
+def _moc_for_cluster(textbooks_dir: Path, cluster_id: str) -> Path | None:
     """Return the MOC note path for a cluster id, or None if it doesn't exist."""
     p = textbooks_dir / f"{MOC_PREFIX}{cluster_id}.md"
     if p.exists():
@@ -70,7 +70,7 @@ def _moc_for_cluster(textbooks_dir: Path, cluster_id: str) -> Optional[Path]:
     return None
 
 
-def _extract_cluster_id(card_text: str) -> Optional[str]:
+def _extract_cluster_id(card_text: str) -> str | None:
     """Pull the `> cluster: [[moc-<id>]]` cluster id out of a card's text."""
     m = re.search("> cluster: \\[\\[" + re.escape(MOC_PREFIX) + "([^\\]]+)\\]\\]",
                   card_text)
@@ -81,12 +81,12 @@ def _extract_cluster_id(card_text: str) -> Optional[str]:
 
 def build_abstract_context(
     graph: VaultGraph,
-    search_results: List[Dict[str, Any]],
+    search_results: list[dict[str, Any]],
     query: str,
     k: int = 5,
     depth: int = 2,
-    textbooks_dir: Optional[str | Path] = None,
-) -> Dict[str, str]:
+    textbooks_dir: str | Path | None = None,
+) -> dict[str, str]:
     """Build a multi-resolution context string for the chat loop.
 
     Returns {"context": str, "drill_down_used": bool, "resolution": str,
@@ -102,8 +102,8 @@ def build_abstract_context(
     tdir = Path(textbooks_dir)
 
     # ---- Collect seed names + their L0 paths from the search results ----
-    seeds: List[str] = []
-    seed_l0_paths: List[Path] = []
+    seeds: list[str] = []
+    seed_l0_paths: list[Path] = []
     for res in search_results[:k]:
         fp = Path(res.get("file_path", ""))
         if not fp.exists():
@@ -140,9 +140,9 @@ def build_abstract_context(
     subgraph = graph.walk(seeds, depth=depth)
 
     # ---- Partition the walked nodes into L1 cards, L0 notes, and MOCs ----
-    l1_cards: List[Dict[str, Any]] = []
-    l0_notes: List[Dict[str, Any]] = []
-    mocs: List[Dict[str, Any]] = []
+    l1_cards: list[dict[str, Any]] = []
+    l0_notes: list[dict[str, Any]] = []
+    mocs: list[dict[str, Any]] = []
     for node in subgraph["nodes"]:
         name = node["name"]
         fp = Path(node["file_path"])
@@ -193,7 +193,7 @@ def build_abstract_context(
     MAX_CARDS_IN_CONTEXT = 30
     if len(l1_cards) > MAX_CARDS_IN_CONTEXT:
         # Rank cards by their seed's retrieval rank (search_results order).
-        score_by_stem: Dict[str, float] = {}
+        score_by_stem: dict[str, float] = {}
         for i, r in enumerate(search_results):
             fp = r.get("file_path", "")
             if not fp:
@@ -201,7 +201,7 @@ def build_abstract_context(
             # Top result = 1.0, decays by 0.1 per rank (rank 0 -> 1.0).
             score_by_stem[Path(fp).stem] = 1.0 - i * 0.1
 
-        def card_score(c: Dict[str, Any]) -> float:
+        def card_score(c: dict[str, Any]) -> float:
             name = c["name"]
             if name in score_by_stem:
                 return score_by_stem[name]
@@ -233,7 +233,7 @@ def build_abstract_context(
 
     # ---- Render each L1 card as a terse, hop-able highway entry ----
     CARD_RENDER_CAP = 500
-    card_lines: List[str] = []
+    card_lines: list[str] = []
     for node in l1_cards:
         body = node["content"]
         # Strip the H1, the `> source/cluster` pointer lines, and any
@@ -252,7 +252,7 @@ def build_abstract_context(
         )
 
     # ---- L0 drill-down: full raw of the single top seed ----
-    drill_path: Optional[Path] = None
+    drill_path: Path | None = None
     if seed_l0_paths:
         drill_path = seed_l0_paths[0]
     if not drill_path and l1_cards:

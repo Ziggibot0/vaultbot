@@ -47,14 +47,11 @@ rehearsal contract as lazy_condenser.  See `refine_card`.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
-import json
-import math
-import hashlib
-import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +92,7 @@ def card_path_for(l0_abs_path: str | Path) -> Path:
     return p.with_name(p.stem + "-L1.md")
 
 
-def l0_path_for_card(card_abs_path: str | Path) -> Optional[Path]:
+def l0_path_for_card(card_abs_path: str | Path) -> Path | None:
     """Inverse of `card_path_for`: the L0 section a card points at.
 
     Falls back to reading the `> source: [[...]]` line if the naming
@@ -139,7 +136,7 @@ def is_card(path: str | Path) -> bool:
 # Extractive sketch (zero LLM)
 # ---------------------------------------------------------------------------
 
-def _split_sentences(text: str) -> List[str]:
+def _split_sentences(text: str) -> list[str]:
     # Strip markdown headers / lists / blockquotes first; keep prose paragraphs.
     prose_lines = []
     for line in text.splitlines():
@@ -157,12 +154,12 @@ def _split_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if len(p.strip()) >= MIN_SENTENCE_LEN]
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return [w for w in re.findall(r"\b[a-z][a-z0-9-]{2,}\b", text.lower())
             if len(w) > 2]
 
 
-def _top_tfidf_terms(sentences: List[str], top_n: int = SKETCH_TOP_TERMS) -> List[str]:
+def _top_tfidf_terms(sentences: list[str], top_n: int = SKETCH_TOP_TERMS) -> list[str]:
     """Cheap, corpus-local TF (no IDF corpus handy — use length-normalized TF
     with a stopword list).  Good enough for an extractive sketch."""
     STOP = {
@@ -179,9 +176,9 @@ def _top_tfidf_terms(sentences: List[str], top_n: int = SKETCH_TOP_TERMS) -> Lis
         "us", "them", "him", "she", "he", "i", "me", "my", "mine", "ours",
         "chapter", "section", "figure", "table", "example", "exercise",
         "note", "notes", "see", "shown", "shows", "using", "use", "used",
-        "one", "two", "three", "first", "second", "third", "also", "than",
+        "one", "two", "three", "first", "second", "third", "also",
     }
-    tf: Dict[str, int] = {}
+    tf: dict[str, int] = {}
     for s in sentences:
         for tok in _tokenize(s):
             if tok in STOP:
@@ -227,7 +224,7 @@ def _extractive_sketch(l0_text: str, heading: str = "") -> str:
 # Card construction (LLM-free)
 # ---------------------------------------------------------------------------
 
-def build_card_text(l0_path: Path, l0_text: str, outgoing_links: List[str]) -> str:
+def build_card_text(l0_path: Path, l0_text: str, outgoing_links: list[str]) -> str:
     """Compose the full markdown body of an L1 concept card.
 
     `outgoing_links` are the L0 section's outgoing wikilink targets (the
@@ -244,7 +241,7 @@ def build_card_text(l0_path: Path, l0_text: str, outgoing_links: List[str]) -> s
         f"# {heading}  (concept card)",
         "",
         f"> source: [[{l0_path.stem}]]",
-        f"> cluster: [[TODO]]",  # filled in by moc_builder
+        "> cluster: [[TODO]]",  # filled in by moc_builder
         "",
         CARD_MARKER,
         "",
@@ -266,9 +263,9 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def build_card_for(l0_abs_path: str | Path,
-                   l0_text: Optional[str] = None,
-                   outgoing_links: Optional[List[str]] = None,
-                   vault_graph: Any = None) -> Optional[Path]:
+                   l0_text: str | None = None,
+                   outgoing_links: list[str] | None = None,
+                   vault_graph: Any = None) -> Path | None:
     """Create or refresh the L1 card for an L0 section.  Returns the card
     path, or None on failure.  Idempotent: re-running overwrites in place.
 
@@ -309,16 +306,16 @@ def build_card_for(l0_abs_path: str | Path,
         return None
 
 
-def build_cards_batch(l0_abs_paths: List[str],
+def build_cards_batch(l0_abs_paths: list[str],
                       vault_graph: Any = None,
-                      progress_callback: Any = None) -> Dict[str, Any]:
+                      progress_callback: Any = None) -> dict[str, Any]:
     """Build L1 cards for many L0 sections.  LLM-free.
 
     Returns {"cards_built": int, "cards_skipped": int, "card_paths": [...]}.
     """
     built = 0
     skipped = 0
-    out_paths: List[str] = []
+    out_paths: list[str] = []
     n = len(l0_abs_paths)
     for i, fp in enumerate(l0_abs_paths):
         try:
@@ -327,7 +324,7 @@ def build_cards_batch(l0_abs_paths: List[str],
                 skipped += 1
                 continue
             text = p.read_text(encoding="utf-8", errors="replace")
-            links: Optional[List[str]] = None
+            links: list[str] | None = None
             if vault_graph is not None:
                 node = vault_graph.get_note(p.stem)
                 if node:
@@ -374,7 +371,7 @@ def needs_refine(card_path: str | Path, touch_count: int) -> bool:
 
 def refine_card(card_path: str | Path,
                 ollama_client: Any,
-                l0_text: Optional[str] = None) -> Dict[str, Any]:
+                l0_text: str | None = None) -> dict[str, Any]:
     """One-shot LLM rewrite of an extractive card into a tight semantic
     summary.  Preserves the header, the `> source:` pointer, the links,
     and the markers — only the sketch body is rewritten.  Idempotent.

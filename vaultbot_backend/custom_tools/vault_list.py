@@ -13,11 +13,11 @@ EXCLUDE_DIRS = {".git", "node_modules", ".obsidian", "vaultbot_venv", "__pycache
 def run(args: dict) -> dict:
     directory = args.get("directory", "")
     tag = args.get("tag", "")
-    
+
     search_path = VAULT_ROOT / directory if directory else VAULT_ROOT
     if not search_path.exists():
         return {"error": f"directory not found: {directory}"}
-    
+
     md_files = []
     for root, dirs, files in os.walk(search_path):
         dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
@@ -26,9 +26,9 @@ def run(args: dict) -> dict:
                 full = Path(root) / f
                 rel = full.relative_to(VAULT_ROOT)
                 md_files.append(str(rel).replace("\\", "/"))
-    
+
     md_files.sort()
-    
+
     if tag:
         filtered = []
         for f in md_files:
@@ -39,5 +39,5 @@ def run(args: dict) -> dict:
             except:
                 pass
         md_files = filtered
-    
+
     return {"count": len(md_files), "files": md_files}

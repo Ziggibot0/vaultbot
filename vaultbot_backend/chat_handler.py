@@ -35,21 +35,25 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
-from fastapi import WebSocket
-
-from services import Services
 from abstract_context import build_abstract_context
-from agent_tools import TOOL_DEFINITIONS, META_TOOL_DEFINITIONS, build_system_prompt
-from vault_graph import build_graph_context
-from procedure_tracker import parse_procedures_from_results, interpret_validation_result
+from agent_tools import META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_prompt
 
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports — no main dependency.
-from chat_helpers import send_progress, run_with_heartbeat, tool_result_summary
+from chat_helpers import run_with_heartbeat, send_progress, tool_result_summary
+from fastapi import WebSocket
+from procedure_tracker import interpret_validation_result, parse_procedures_from_results
+from services import Services
 from task_api import write_partial
-from weaving import existing_note_titles, link_outbound, cross_link_textbooks, weave_textbook_notes
+from vault_graph import build_graph_context
+from weaving import (
+    cross_link_textbooks,
+    existing_note_titles,
+    link_outbound,
+    weave_textbook_notes,
+)
 
 
 async def handle_chat(svc: Services, websocket: WebSocket,
@@ -294,7 +298,9 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # inside the vault — doesn't race the backend's delete and spam the
     # console with ENOENT errors. The old in-vault location
     # (vaultbot_backend/partials/) is cleaned up at startup.
-    import time as _time, hashlib, tempfile
+    import hashlib
+    import tempfile
+    import time as _time
     partial_dir = Path(tempfile.gettempdir()) / "vaultbot_partials"
     partial_dir.mkdir(parents=True, exist_ok=True)
     partial_id = hashlib.md5((user_message + str(_time.time())).encode()).hexdigest()[:12]
@@ -328,7 +334,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     try:
                         chunk = await asyncio.wait_for(
                             asyncio.shield(next_chunk_task), timeout=3.0)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         elapsed = int((loop.time() - round_t0) * 1000)
                         since = int((loop.time() - last_chunk_at) * 1000)
                         await svc.manager.send_personal_message(json.dumps({
@@ -613,8 +619,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 # its card so the card reflects the new terse content.  Zero
                 # LLM calls for cards that haven't earned it.
                 try:
-                    from concept_card import (card_path_for, needs_refine,
-                                              refine_card, build_card_for)
+                    from concept_card import (
+                        build_card_for,
+                        card_path_for,
+                        needs_refine,
+                        refine_card,
+                    )
                     # First: refresh cards for any condensed L0 sections so
                     # the card sketch reflects the new body (unless the card
                     # was already LLM-refined, which is sticky).  Also RESET
@@ -761,8 +771,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         session_logger.log("pattern_extraction_failed", {"error": str(e)})
 
 
-async def execute_agent_tool(svc: Services, tool_name: str, args: Dict[str, Any],
-                             session_logger, websocket: Optional[WebSocket] = None) -> Dict[str, Any]:
+async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any],
+                             session_logger, websocket: WebSocket | None = None) -> dict[str, Any]:
     """Execute one tool call from the chat LLM. Runs in the async context.
 
     `websocket` is passed so long-running tools (vault_research) can push

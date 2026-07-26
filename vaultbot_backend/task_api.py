@@ -14,10 +14,9 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from datetime import UTC
 from pathlib import Path
 from typing import Any
-
-from services import Services
 
 # `Plan`/`Subtask` come from plan_executor (pure stdlib — safe at import time).
 # `GRAPH_OP_SCHEMAS` lives in graph_ops, which transitively imports faiss via
@@ -26,6 +25,7 @@ from services import Services
 # Importing it lazily inside create_task keeps `import task_api` cheap and
 # faiss-free until a real plan is actually being built.
 from plan_executor import Plan, Subtask
+from services import Services
 
 
 async def create_task(svc: Services, payload: dict) -> Any:
@@ -135,9 +135,9 @@ def write_partial(path: Path, user_message: str, answer: str, thinking: str) -> 
     Never raises — a partial-write failure must not kill the chat loop.
     """
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
         path.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
         content = (
             f"---\npartial: true\ncreated: {ts}\n---\n\n"
             f"# Partial Answer (crash recovery)\n\n"

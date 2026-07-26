@@ -23,9 +23,8 @@ record.
 """
 
 import base64
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 SCHEMA = {
     "name": "textbook_read_page",
@@ -70,7 +69,7 @@ LEARNING_DIR = VAULT_DIR / "learningMaterial"
 TEXTBOOKS_DIR = VAULT_DIR / "vaultbot" / "textbooks"
 
 
-def _resolve_pdf(pdf_name: str) -> Optional[Path]:
+def _resolve_pdf(pdf_name: str) -> Path | None:
     """Resolve a PDF reference to an actual path.
 
     Accepts: a bare filename, a path under learningMaterial/, or an index
@@ -106,7 +105,7 @@ def _resolve_pdf(pdf_name: str) -> Optional[Path]:
 
 
 def _render_page_image(pdf_path: Path, page_num: int,
-                       dpi: int = 150) -> Optional[str]:
+                       dpi: int = 150) -> str | None:
     """Render one PDF page to a base64 PNG (for the vision model).
 
     dpi=150 balances legibility vs token cost (~800-1200 tokens/page at
@@ -143,7 +142,7 @@ def _extract_page_text(pdf_path: Path, page_num: int) -> str:
         return ""
 
 
-def run(args: Dict[str, Any], llm_client=None) -> Dict[str, Any]:
+def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     """Read one page of a textbook PDF.
 
     Renders the page to an image and asks the vision-capable llm_client to
@@ -253,5 +252,5 @@ def _read_with_vision(llm_client, img_b64: str, pdf_name: str,
         if hasattr(result, "__iter__"):
             return "".join(c.get("response", "") for c in result)
         return ""
-    except Exception as e:
+    except Exception:
         return ""

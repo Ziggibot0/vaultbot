@@ -12,11 +12,9 @@ See [[How-to-Evaluate-Retrieval-Quality]] for the procedural steps.
 """
 
 import json
-import os
 import math
+import os
 from datetime import datetime
-from typing import Dict, List, Optional
-from collections import defaultdict
 
 
 class RAGEvaluator:
@@ -63,7 +61,7 @@ class RAGEvaluator:
                 }, f, indent=2)
 
     def _load(self) -> dict:
-        with open(self.log_path, "r", encoding="utf-8") as f:
+        with open(self.log_path, encoding="utf-8") as f:
             return json.load(f)
 
     def _save(self, data: dict):
@@ -72,7 +70,7 @@ class RAGEvaluator:
 
     # ─── Logging (always on, cheap) ───
 
-    def log_retrieval(self, query: str, retrieved: List[Dict],
+    def log_retrieval(self, query: str, retrieved: list[dict],
                       k: int = 5, timestamp: str = None) -> None:
         """Log a retrieval event. Called after every FUSED retrieve.
 
@@ -108,7 +106,7 @@ class RAGEvaluator:
 
     # ─── Ground truth management ───
 
-    def add_ground_truth(self, query: str, relevant_notes: List[str]) -> None:
+    def add_ground_truth(self, query: str, relevant_notes: list[str]) -> None:
         """Add or update a ground-truth mapping for a query.
 
         Ground truth comes from:
@@ -125,7 +123,7 @@ class RAGEvaluator:
         data["ground_truth"][key] = relevant_notes
         self._save(data)
 
-    def _find_ground_truth(self, query: str) -> Optional[List[str]]:
+    def _find_ground_truth(self, query: str) -> list[str] | None:
         """Look up ground truth for a query. Returns None if not found.
 
         Tries exact match first, then substring matching (query might be
@@ -166,7 +164,7 @@ class RAGEvaluator:
 
     # ─── Metric computation ───
 
-    def _compute_recall_at_k(self, retrieved: List[str], relevant: List[str], k: int) -> float:
+    def _compute_recall_at_k(self, retrieved: list[str], relevant: list[str], k: int) -> float:
         """Recall@k: fraction of relevant notes in top-k results."""
         if not relevant:
             return 0.0
@@ -176,7 +174,7 @@ class RAGEvaluator:
         hits = len(retrieved_set & relevant_set)
         return hits / len(relevant_set)
 
-    def _compute_precision_at_k(self, retrieved: List[str], relevant: List[str], k: int) -> float:
+    def _compute_precision_at_k(self, retrieved: list[str], relevant: list[str], k: int) -> float:
         """Precision@k: fraction of top-k results that are relevant."""
         top_k = retrieved[:k]
         if not top_k:
@@ -186,7 +184,7 @@ class RAGEvaluator:
         hits = len(retrieved_set & relevant_set)
         return hits / len(retrieved_set)
 
-    def _compute_ndcg_at_k(self, retrieved: List[str], relevant: List[str], k: int) -> float:
+    def _compute_ndcg_at_k(self, retrieved: list[str], relevant: list[str], k: int) -> float:
         """NDCG@k: normalized discounted cumulative gain.
 
         Uses binary relevance (1 if relevant, 0 if not).
@@ -214,7 +212,7 @@ class RAGEvaluator:
             return 0.0
         return dcg / idcg
 
-    def _compute_mrr(self, retrieved: List[str], relevant: List[str]) -> float:
+    def _compute_mrr(self, retrieved: list[str], relevant: list[str]) -> float:
         """Mean Reciprocal Rank: 1/rank of first relevant result."""
         relevant_set = {self._normalize_note(n) for n in relevant}
         for i, note in enumerate(retrieved):
@@ -222,8 +220,8 @@ class RAGEvaluator:
                 return 1.0 / (i + 1)
         return 0.0
 
-    def evaluate_retrieval(self, query: str, retrieved: List[Dict],
-                           relevant: List[str] = None, k: int = 5) -> Dict:
+    def evaluate_retrieval(self, query: str, retrieved: list[dict],
+                           relevant: list[str] = None, k: int = 5) -> dict:
         """Compute retrieval metrics for a single query.
 
         Args:
@@ -292,7 +290,7 @@ class RAGEvaluator:
 
     # ─── Regression detection ───
 
-    def regression_check(self) -> Dict:
+    def regression_check(self) -> dict:
         """Compare recent metrics to historical baseline.
 
         Splits metric history into 'recent' (last N queries) and 'baseline'
@@ -363,7 +361,7 @@ class RAGEvaluator:
 
     # ─── Reporting ───
 
-    def get_metrics_summary(self) -> Dict:
+    def get_metrics_summary(self) -> dict:
         """Get a summary of all metrics over time."""
         data = self._load()
         history = data.get("metric_history", [])
@@ -395,7 +393,7 @@ class RAGEvaluator:
             "metrics": summary,
         }
 
-    def get_retrieval_gaps(self) -> List[Dict]:
+    def get_retrieval_gaps(self) -> list[dict]:
         """Return queries with poor retrieval metrics for the autonomous researcher.
 
         A query is flagged if:

@@ -1,10 +1,7 @@
-import os
 import re
-import json
-from pathlib import Path
-from typing import Dict, List, Set, Any, Optional, Tuple
-from datetime import datetime, timezone
 from collections import deque
+from pathlib import Path
+from typing import Any
 
 WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")
 # Directories the graph should skip when scanning the vault. Mirrors the
@@ -38,18 +35,18 @@ class VaultGraph:
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.max_note_size = max_note_size
-        self.nodes: Dict[str, Dict[str, Any]] = {}  # normalized name -> metadata
-        self.edges: Dict[str, Set[str]] = {}        # normalized name -> set of normalized target names
-        self.backlinks: Dict[str, Set[str]] = {}    # normalized name -> set of normalized source names
+        self.nodes: dict[str, dict[str, Any]] = {}  # normalized name -> metadata
+        self.edges: dict[str, set[str]] = {}        # normalized name -> set of normalized target names
+        self.backlinks: dict[str, set[str]] = {}    # normalized name -> set of normalized source names
         # Per-node file mtime (epoch seconds) for incremental refresh.
-        self._mtimes: Dict[str, float] = {}
+        self._mtimes: dict[str, float] = {}
         # Max mtime seen at the last refresh; cheap stat-only fast path checks
         # against this to skip all work when nothing has changed on disk.
         self._last_refresh_mtime: float = 0.0
         self._build_graph()
 
-    def _log_tool(self, method: str, inputs: Optional[Dict[str, Any]] = None,
-                  outputs: Any = None, error: Optional[str] = None):
+    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None,
+                  outputs: Any = None, error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
@@ -61,7 +58,7 @@ class VaultGraph:
         """Wikilinks are case-insensitive and tolerate leading/trailing spaces."""
         return name.strip().lower().replace("\\", "/")
 
-    def _resolve_note_path(self, name: str) -> Optional[Path]:
+    def _resolve_note_path(self, name: str) -> Path | None:
         """Find an actual markdown file matching a wikilink target."""
         norm = self._normalize_name(name)
         # Exact match first
@@ -84,10 +81,10 @@ class VaultGraph:
             self._log_tool("read_note", {"file_path": str(path)}, error=str(e))
             return ""
 
-    def _extract_wikilinks(self, text: str) -> Set[str]:
+    def _extract_wikilinks(self, text: str) -> set[str]:
         return {self._normalize_name(match) for match in WIKILINK_RE.findall(text)}
 
-    def _collect_md_files(self) -> List[Path]:
+    def _collect_md_files(self) -> list[Path]:
         """Scan the vault for markdown files, pruning ignored directories
         in-place during the walk.
 
@@ -100,7 +97,7 @@ class VaultGraph:
         actually cheap on the warm path.
         """
         import os as _os
-        out: List[Path] = []
+        out: list[Path] = []
         for root, dirs, files in _os.walk(self.vault_path):
             # Prune ignored dirs in-place so os.walk doesn't descend into them.
             dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]
@@ -192,7 +189,7 @@ class VaultGraph:
             "edge_count": sum(len(v) for v in self.edges.values()),
         })
 
-    def _detect_changes(self) -> Tuple[List[Path], List[str]]:
+    def _detect_changes(self) -> tuple[list[Path], list[str]]:
         """Stat-only scan for changed/new/deleted files since the last refresh.
 
         Returns (changed_or_new_paths, deleted_normalized_names). No file
@@ -201,7 +198,7 @@ class VaultGraph:
         """
         md_files = self._collect_md_files()
         seen_paths = set()
-        changed_or_new: List[Path] = []
+        changed_or_new: list[Path] = []
         for path in md_files:
             seen_paths.add(str(path))
             name = self._normalize_name(path.stem)
@@ -260,7 +257,7 @@ class VaultGraph:
             return
         self.refresh_if_changed()
 
-    def neighbors(self, name: str, direction: str = "both") -> List[str]:
+    def neighbors(self, name: str, direction: str = "both") -> list[str]:
         """Return linked notes and/or backlinked notes."""
         norm = self._normalize_name(name)
         result = set()
@@ -270,8 +267,8 @@ class VaultGraph:
             result.update(self.backlinks.get(norm, set()))
         return sorted(result)
 
-    def walk(self, start_names: List[str], depth: int = 2,
-             min_backlinks: int = 1) -> Dict[str, Any]:
+    def walk(self, start_names: list[str], depth: int = 2,
+             min_backlinks: int = 1) -> dict[str, Any]:
         """
         Breadth-first walk starting from a set of seed notes.
 
@@ -279,8 +276,8 @@ class VaultGraph:
         min_backlinks: only include a note if it has at least this many backlinks
         OR is a direct neighbor of a seed (keeps context from getting too thin).
         """
-        visited: Set[str] = set()
-        queue: deque[Tuple[str, int]] = deque()
+        visited: set[str] = set()
+        queue: deque[tuple[str, int]] = deque()
         for name in start_names:
             norm = self._normalize_name(name)
             if norm in self.nodes:
@@ -298,7 +295,7 @@ class VaultGraph:
 
         # Filter by backlink threshold unless it is a seed or direct neighbor of seed
         seeds = {self._normalize_name(n) for n in start_names}
-        direct_neighbors: Set[str] = set()
+        direct_neighbors: set[str] = set()
         for seed in seeds:
             direct_neighbors.update(self.neighbors(seed, direction="both"))
 
@@ -349,10 +346,10 @@ class VaultGraph:
     def note_exists(self, name: str) -> bool:
         return self._normalize_name(name) in self.nodes
 
-    def get_note(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_note(self, name: str) -> dict[str, Any] | None:
         return self.nodes.get(self._normalize_name(name))
 
-    def dangling_links(self, min_references: int = 1) -> List[Dict[str, Any]]:
+    def dangling_links(self, min_references: int = 1) -> list[dict[str, Any]]:
         """Return wikilink targets that do NOT resolve to any note.
 
         These are the vault's own declarations of what it wants to know.
@@ -366,8 +363,8 @@ class VaultGraph:
         # Count how many distinct notes link to each unresolved target.
         # `edges` only contains resolved targets, so we must re-scan raw
         # content for *unresolved* wikilinks.
-        ref_counts: Dict[str, int] = {}
-        ref_sources: Dict[str, Set[str]] = {}
+        ref_counts: dict[str, int] = {}
+        ref_sources: dict[str, set[str]] = {}
         # Re-scan every note's raw content for ALL wikilinks (resolved or not).
         for name, node in self.nodes.items():
             raw_links = WIKILINK_RE.findall(node["content"])
@@ -405,7 +402,7 @@ class VaultGraph:
         gaps.sort(key=lambda g: g["reference_count"], reverse=True)
         return gaps
 
-    def thin_notes(self, min_content_length: int = 200) -> List[Dict[str, Any]]:
+    def thin_notes(self, min_content_length: int = 200) -> list[dict[str, Any]]:
         """Return notes whose body is shorter than min_content_length.
 
         These are notes that exist but don't yet say enough â€” another kind of
@@ -429,7 +426,7 @@ class VaultGraph:
         return thin
 
 
-def build_graph_context(graph: VaultGraph, search_results: List[Dict[str, Any]],
+def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
                         query: str, k: int = 5, depth: int = 2) -> str:
     """
     Given flat search results, turn them into a rich graph context prompt.
@@ -457,9 +454,9 @@ def build_graph_context(graph: VaultGraph, search_results: List[Dict[str, Any]],
     for node in subgraph["nodes"]:
         lines.append(f"\n### [[{node['name']}]]")
         if node["outgoing_links"]:
-            lines.append(f"Links out: " + ", ".join(f"[[{n}]]" for n in node["outgoing_links"]))
+            lines.append("Links out: " + ", ".join(f"[[{n}]]" for n in node["outgoing_links"]))
         if node["backlinks"]:
-            lines.append(f"Linked from: " + ", ".join(f"[[{n}]]" for n in node["backlinks"]))
+            lines.append("Linked from: " + ", ".join(f"[[{n}]]" for n in node["backlinks"]))
         lines.append("")
         lines.append(node["content"][:2_000])
 

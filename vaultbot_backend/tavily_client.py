@@ -17,7 +17,7 @@ instead of crashing.
 
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -32,15 +32,15 @@ class TavilyClient:
 
     API_URL = "https://api.tavily.com/search"
 
-    def __init__(self, api_key: Optional[str] = None, session_logger=None,
+    def __init__(self, api_key: str | None = None, session_logger=None,
                  timeout: int = 20):
         self.api_key = api_key or os.getenv("TAVILY_API_KEY", "")
         self.session_logger = session_logger
         self.timeout = timeout
 
-    def _log(self, method: str, inputs: Optional[Dict[str, Any]] = None,
-             outputs: Any = None, duration_ms: Optional[float] = None,
-             error: Optional[str] = None):
+    def _log(self, method: str, inputs: dict[str, Any] | None = None,
+             outputs: Any = None, duration_ms: float | None = None,
+             error: str | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
@@ -56,7 +56,7 @@ class TavilyClient:
         return bool(self.api_key)
 
     def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> Dict[str, Any]:
+               search_depth: str = "advanced") -> dict[str, Any]:
         """Run a Tavily search and return a SearXNG-compatible result dict.
 
         Returns {"results": [...], "unresponsive_engines": [...]}.

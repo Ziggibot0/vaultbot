@@ -23,13 +23,13 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from services import Services
 
 
 async def send_progress(svc: Services, websocket, stage: str,
-                        detail: Optional[Dict[str, Any]] = None) -> None:
+                        detail: dict[str, Any] | None = None) -> None:
     """Send a structured progress event to the live UI."""
     try:
         await svc.manager.send_personal_message(
@@ -69,7 +69,7 @@ async def run_with_heartbeat(svc: Services, websocket, label: str,
     while not task.done():
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=interval)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await heartbeat(svc, websocket, label, t0, interval)
         except Exception:
             # Re-raise the real exception from the task.
@@ -114,7 +114,7 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
         if st == "written":
             return f"safe_write: wrote {result.get('bytes', 0)} bytes to {result.get('file_path', '?')} (verified)"
         if st == "dry_run_ok":
-            return f"safe_write dry_run: OK — would write safely"
+            return "safe_write dry_run: OK — would write safely"
         return f"safe_write {st}: {str(result.get('error', ''))[:80]}"
     if tool_name == "capability_audit":
         return f"{result.get('total', 0)} tools ({result.get('kinds', {})})"

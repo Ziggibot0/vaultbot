@@ -1,13 +1,12 @@
-import os
-import sys
-import re
-import json
 import asyncio
 import atexit
+import json
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,40 +18,34 @@ logger = logging.getLogger(__name__)
 # workaround per the OMP error message.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from amem_evolution import AMemeEvolution
+from autonomous_researcher import AutonomousResearcher
+from checkpointer import Checkpointer
+from compactor import Compactor
 from dotenv import load_dotenv
+from embedding_drift import EmbeddingDrift
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from free_search import FreeSearch
+from fused_retrieval import FusedRetriever
+from graph_ops import GraphOpRegistry
+from identity import Identity
+from knowledge_curriculum import KnowledgeCurriculum
+from lazy_condenser import LazyCondenser
+from llm_client import LLMClient, get_llm_client, get_vision_client
+from note_creator import NoteCreator
 
 # Import our modules
-from ollama_client import OllamaClient
-from llm_client import get_llm_client, get_vision_client, LLMClient
-from vault_indexer import VaultIndexer
-from vault_graph import VaultGraph, build_graph_context
-from note_creator import NoteCreator
-from session_logger import SessionLogger
+from plan_executor import PlanExecutor
 from research_engine import ResearchEngine
-from autonomous_researcher import AutonomousResearcher
-from agent_tools import TOOL_DEFINITIONS, META_TOOL_DEFINITIONS, build_system_prompt
 from self_improver import SelfImprover
-from knowledge_curriculum import KnowledgeCurriculum
-from plan_executor import PlanExecutor, Plan, Subtask
-from identity import Identity
-from graph_ops import GraphOpRegistry, SCHEMAS as GRAPH_OP_SCHEMAS
-from amem_evolution import AMemeEvolution
-from fused_retrieval import FusedRetriever
-from compactor import Compactor
-from lazy_condenser import LazyCondenser
-from concept_card import build_cards_batch, card_path_for, needs_refine, refine_card, is_card
-from moc_builder import build_mocs, build_mocs_incremental, MOC_PREFIX
-from abstract_context import build_abstract_context
-from embedding_drift import EmbeddingDrift
+from session_logger import SessionLogger
 from supervision import HealthMonitor, generate_nssm_install, generate_nssm_uninstall
-from checkpointer import Checkpointer, ResearchCheckpoint
-from duckduckgo_client import DuckDuckGoClient
-from free_search import FreeSearch
+from vault_graph import VaultGraph
+from vault_indexer import VaultIndexer
+
 try:
     from forum_backends import ForumEnhancedFreeSearch
     # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
@@ -60,13 +53,16 @@ try:
     FreeSearch = ForumEnhancedFreeSearch
 except Exception as _forum_err:
     print(f"[startup] Forum backends unavailable, using base FreeSearch: {_forum_err}")
-from procedure_tracker import ProcedureTracker, parse_procedures_from_results, interpret_validation_result
-from speech import transcribe as stt_transcribe, synthesize as tts_synthesize, list_voices as tts_voices, set_logger as speech_set_logger
-from context_budgeter import ContextBudgeter
 from calibration import CalibrationTracker
-from rag_eval import RAGEvaluator
 from claim_verifier import ClaimVerifier
+from context_budgeter import ContextBudgeter
 from pattern_extractor import PatternExtractor
+from procedure_tracker import ProcedureTracker
+from rag_eval import RAGEvaluator
+from speech import list_voices as tts_voices
+from speech import set_logger as speech_set_logger
+from speech import synthesize as tts_synthesize
+from speech import transcribe as stt_transcribe
 
 # Load environment variables from the parent directory (Vault2 root).
 # override=True ensures .env values win over any stale env passed by the
@@ -74,57 +70,11 @@ from pattern_extractor import PatternExtractor
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path, override=True)
 
-# ─── Startup import sanity check ─────────────────────────────────────────────
-# Scans this file for names used in direct constructor/function calls that are
-# not imported, not built-in, not locally defined, and not function parameters.
-# Catches "forgot the import" bugs BEFORE the server boots, so they fail loudly
-# at startup instead of silently breaking on the next restart.
-def _verify_imports():
-    import ast as _ast
-    import builtins as _builtins
-    with open(__file__, encoding="utf-8") as _f:
-        _tree = _ast.parse(_f.read())
-
-    _imported = set()
-    for _node in _ast.walk(_tree):
-        if isinstance(_node, _ast.ImportFrom):
-            for _a in _node.names:
-                _imported.add(_a.asname or _a.name)
-        elif isinstance(_node, _ast.Import):
-            for _a in _node.names:
-                _imported.add(_a.asname or _a.name.split('.')[0])
-
-    _called = set()
-    for _node in _ast.walk(_tree):
-        if isinstance(_node, _ast.Call) and isinstance(_node.func, _ast.Name):
-            _called.add(_node.func.id)
-
-    _defined = set()
-    _params = set()
-    for _node in _ast.walk(_tree):
-        if isinstance(_node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-            _defined.add(_node.name)
-            for _arg in _node.args.args + list(_node.args.posonlyargs) + list(_node.args.kwonlyargs):
-                _params.add(_arg.arg)
-            if _node.args.vararg:
-                _params.add(_node.args.vararg.arg)
-            if _node.args.kwarg:
-                _params.add(_node.args.kwarg.arg)
-        elif isinstance(_node, _ast.ClassDef):
-            _defined.add(_node.name)
-
-    _undefined = _called - _imported - set(dir(_builtins)) - _defined - _params
-    if _undefined:
-        _msg = (
-            f"[VaultBot] FATAL: {len(_undefined)} name(s) used in calls but not "
-            f"imported or defined: {', '.join(sorted(_undefined))}. "
-            f"Add the missing import(s) to main.py before restarting."
-        )
-        print(_msg, file=sys.stderr)
-        sys.exit(1)
-
-_verify_imports()
-# ─── End import sanity check ─────────────────────────────────────────────────
+# NOTE: The hand-rolled _verify_imports() AST checker that used to live here
+# has been replaced by `ruff check` (F821 — undefined-name) configured in
+# pyproject.toml.  ruff catches the same "forgot the import" bugs but on
+# EVERY file, not just main.py, and doesn't add startup overhead.  Run
+# `ruff check vaultbot_backend/` before deploy (see CONTRIBUTING.md).
 
 # Prevent duplicate backend instances on the same vault.
 PID_FILE = Path(__file__).with_name('vaultbot.pid')
@@ -332,7 +282,7 @@ ollama_client = get_llm_client(session_logger=default_session_logger)
 # in which case the page reader falls back to the synthesis client's own
 # vision_capable() probe (so a vision-capable chat model still works). See
 # llm_client.get_vision_client for the resolution rules.
-vision_client: Optional[LLMClient] = get_vision_client(
+vision_client: LLMClient | None = get_vision_client(
     session_logger=default_session_logger)
 # VaultBot's own search engine: a keyless, rate-limit-resistant
 # multi-engine aggregator (DuckDuckGo Lite + Marginalia + arXiv) PLUS an
@@ -560,6 +510,7 @@ manager = ConnectionManager()
 # services.py. The globals above stay in place; only the extracted
 # functions change to `svc.<name>` access.
 from services import Services
+
 svc = Services(
     ollama_client=ollama_client,
     vision_client=vision_client,
@@ -949,7 +900,7 @@ async def research_tool_endpoint(payload: dict):
         except Exception as e:
             default_session_logger.log_exception(e, context="research_tool_note")
     report["note_path"] = note_path
-    
+
     # Run claim verification on the newly written note.
     # Extracts atomic claims, checks entailment against cited sources,
     # updates frontmatter with verification stats. Graceful degradation
@@ -967,7 +918,7 @@ async def research_tool_endpoint(payload: dict):
                 )
         except Exception as e:
             default_session_logger.log_exception(e, context="claim_verification")
-    
+
     return report
 
 
@@ -1204,7 +1155,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if task and not task.done():
                     # Mark the task as stopped-by-user so its CancelledError
                     # handler doesn't send a duplicate 'stopped' event.
-                    setattr(task, "_stopped_by_user", True)
+                    task._stopped_by_user = True
                     task.cancel()
                 await manager.send_personal_message(
                     json.dumps({"type": "stopped", "content": "Interrupted"}), websocket)
@@ -1220,7 +1171,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # freshly-reset history.
                 task = getattr(websocket, "_current_task", None)
                 if task and not task.done():
-                    setattr(task, "_stopped_by_user", True)
+                    task._stopped_by_user = True
                     task.cancel()
                 websocket.conversation_history = []
                 # Roll a new session log so diagnostics for the new conversation
@@ -1302,7 +1253,7 @@ async def websocket_endpoint(websocket: WebSocket):
 # stage the model is in and that it's still alive.
 
 async def _send_progress(websocket: WebSocket, stage: str,
-                          detail: Optional[Dict[str, Any]] = None) -> None:
+                          detail: dict[str, Any] | None = None) -> None:
     """Send a structured progress event to the live UI."""
     from chat_helpers import send_progress
     await send_progress(svc, websocket, stage, detail)
@@ -1338,9 +1289,9 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
     await _handle_chat_impl(svc, websocket, user_message, session_logger)
 
 
-async def _execute_agent_tool(tool_name: str, args: Dict[str, Any],
+async def _execute_agent_tool(tool_name: str, args: dict[str, Any],
                               session_logger: SessionLogger,
-                              websocket: Optional[WebSocket] = None) -> Dict[str, Any]:
+                              websocket: WebSocket | None = None) -> dict[str, Any]:
     """Execute one tool call from the chat LLM. Runs in the async context.
 
     `websocket` is passed so long-running tools (vault_research) can push
@@ -1448,7 +1399,7 @@ _CROSS_LINK_MAX_ABS_DISTANCE = 300.0
 
 def _cross_link_textbooks(new_abs_paths: list[str],
                            emb_by_path: dict,
-                           source_keys: Optional[set] = None) -> dict:
+                           source_keys: set | None = None) -> dict:
     """Cross-link the newly-ingested textbook sections to OTHER textbook
     sections in the vault that are semantically similar.
 
@@ -1494,8 +1445,8 @@ def _strip_related_block(text: str) -> str:
 
 
 async def _weave_textbook_notes(ingest_result: dict,
-                                websocket: Optional[WebSocket] = None,
-                                session_logger: Optional[Any] = None) -> dict:
+                                websocket: WebSocket | None = None,
+                                session_logger: Any | None = None) -> dict:
     """Run the two post-ingest passes over every section note the ingester
     created or updated. Returns a summary; never raises.
 

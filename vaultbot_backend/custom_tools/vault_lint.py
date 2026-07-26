@@ -4,7 +4,8 @@ Agent-authored tool: vault_lint
 
 SCHEMA = {"name": "vault_lint", "description": "Check a note for broken wikilinks, missing frontmatter, argument quality, and other quality issues. Returns a report of all wikilinks, which ones are broken (target note doesn't exist), whether the note has YAML frontmatter, what tags it has, and whether it passes argument-quality checks (minimum length, has wikilinks, contains reasoning language). Ignores wikilinks inside code spans/blocks. Checks against all vault files (not just .md). Use this after writing notes to verify quality.", "parameters": {"properties": {"file_path": {"description": "Path to the note to lint, relative to vault root (e.g. 'Autonomy-Directive.md')", "type": "string"}}, "required": ["file_path"], "type": "object"}}
 
-import os, re
+import os
+import re
 from pathlib import Path
 
 VAULT_ROOT = Path(__file__).parent.parent.parent.resolve()
@@ -79,59 +80,59 @@ def _check_argument_quality(content: str) -> list:
 
 def run(args: dict) -> dict:
     file_path = args.get("file_path", "")
-    
+
     if not file_path:
         return {"error": "file_path is required"}
-    
+
     full = (VAULT_ROOT / file_path).resolve()
-    
+
     try:
         full.relative_to(VAULT_ROOT.resolve())
     except ValueError:
         return {"error": "path must be inside vault root"}
-    
+
     if not full.exists():
         return {"error": f"file not found: {file_path}"}
-    
+
     content = full.read_text(encoding="utf-8")
     issues = []
-    
+
     # Build index of all files for link checking
     all_stems, all_paths = _build_file_index()
-    
+
     # Strip code before matching wikilinks
     clean_content = _strip_code(content)
-    
+
     # Find all wikilinks: [[Target]] or [[Target|alias]]
     wikilinks = re.findall(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', clean_content)
     wikilinks = [l.strip() for l in wikilinks if l.strip()]
-    
+
     broken_links = []
     for link in wikilinks:
         # Valid if it matches a file stem OR a relative file path
         if link not in all_stems and link not in all_paths:
             broken_links.append(link)
-    
+
     if broken_links:
         issues.append({"type": "broken_wikilinks", "count": len(broken_links), "links": broken_links})
-    
+
     # Check for frontmatter
     has_frontmatter = content.startswith("---")
     if not has_frontmatter:
         issues.append({"type": "missing_frontmatter", "message": "Note has no YAML frontmatter"})
-    
+
     # Check for empty sections
     empty_sections = re.findall(r'^#+\s+.+\n\s*\n(?=^#|\Z)', content, re.MULTILINE)
     if empty_sections:
         issues.append({"type": "empty_sections", "count": len(empty_sections)})
-    
+
     # Check argument quality (NOTE QUALITY rule enforcement)
     quality_issues = _check_argument_quality(content)
     issues.extend(quality_issues)
-    
+
     # Extract tags (avoid matching hex colors like #FF0000)
     tags = list(set(re.findall(r'(?<!\w)#([a-zA-Z][a-zA-Z0-9_-]*)', content)))
-    
+
     return {
         "file_path": str(full),
         "total_wikilinks": len(wikilinks),

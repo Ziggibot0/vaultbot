@@ -31,17 +31,17 @@ def _is_locked(content: str) -> bool:
 def run(args: dict) -> dict:
     file_path = args.get("file_path", "")
     content = args.get("content", "")
-    
+
     if not file_path or not content:
         return {"error": "file_path and content are required"}
-    
+
     full = (VAULT_ROOT / file_path).resolve()
-    
+
     try:
         full.relative_to(VAULT_ROOT.resolve())
     except ValueError:
         return {"error": "path must be inside vault root"}
-    
+
     if full.exists():
         existing = full.read_text(encoding="utf-8")
         if _is_locked(existing):
@@ -52,8 +52,8 @@ def run(args: dict) -> dict:
         new_content = existing.rstrip() + "\n\n" + content + "\n"
     else:
         new_content = content + "\n"
-    
+
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_text(new_content, encoding="utf-8")
-    
+
     return {"file_path": str(full), "bytes_added": len(content), "total_bytes": len(new_content)}

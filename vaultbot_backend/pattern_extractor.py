@@ -23,10 +23,8 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
 
 # --- Constants ---
 
@@ -99,7 +97,7 @@ class PatternExtractor:
                 json.dump({"consolidations": [], "last_consolidation": None}, f, indent=2)
 
     def _load(self) -> dict:
-        with open(self.log_path, "r", encoding="utf-8") as f:
+        with open(self.log_path, encoding="utf-8") as f:
             return json.load(f)
 
     def _save(self, data: dict):
@@ -128,7 +126,7 @@ class PatternExtractor:
             }
         """
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, encoding='utf-8') as f:
                 content = f.read()
         except Exception:
             return {'title': '', 'file': os.path.basename(filepath), 'exchanges': []}
@@ -196,7 +194,7 @@ class PatternExtractor:
         return {'title': title, 'file': os.path.basename(filepath),
                 'exchanges': exchanges}
 
-    def scan_chat_logs(self, since_timestamp: str = None) -> List[dict]:
+    def scan_chat_logs(self, since_timestamp: str = None) -> list[dict]:
         """Scan all chat logs and return structured sessions.
 
         Args:
@@ -233,7 +231,7 @@ class PatternExtractor:
 
     # --- Pattern extractors ---
 
-    def extract_recurring_topics(self, sessions: List[dict]) -> List[dict]:
+    def extract_recurring_topics(self, sessions: list[dict]) -> list[dict]:
         """Find wikilinks that appear in 3+ sessions.
 
         These are the topics that keep coming up — candidates for semantic
@@ -265,7 +263,7 @@ class PatternExtractor:
         recurring.sort(key=lambda x: -x['session_count'])
         return recurring
 
-    def extract_sentiment_patterns(self, sessions: List[dict]) -> dict:
+    def extract_sentiment_patterns(self, sessions: list[dict]) -> dict:
         """Extract Sean's response sentiment distribution and negative exchanges.
 
         The negative rate is a key calibration metric: if it's not trending
@@ -295,7 +293,7 @@ class PatternExtractor:
             'negative_exchanges': negative_exchanges,
         }
 
-    def extract_tool_patterns(self, sessions: List[dict]) -> dict:
+    def extract_tool_patterns(self, sessions: list[dict]) -> dict:
         """Extract tool usage frequency and co-occurrence patterns.
 
         Tool co-occurrence reveals workflow patterns: which tools are used
@@ -327,7 +325,7 @@ class PatternExtractor:
             'top_workflows': top_workflows,
         }
 
-    def extract_over_reporting(self, sessions: List[dict]) -> dict:
+    def extract_over_reporting(self, sessions: list[dict]) -> dict:
         """Detect exchanges where the assistant response was excessively long.
 
         Sean's communication preference is bottom-line-up-front. Long
@@ -350,7 +348,7 @@ class PatternExtractor:
             'exchanges': long_exchanges,
         }
 
-    def detect_self_model_drift(self) -> Optional[dict]:
+    def detect_self_model_drift(self) -> dict | None:
         """Compare SELF_MODEL.md claims against vault reality.
 
         Scans SELF_MODEL.md for numeric claims (e.g., "20 tools", "8
@@ -367,7 +365,7 @@ class PatternExtractor:
             return None
 
         try:
-            with open(self_model_path, 'r', encoding='utf-8') as f:
+            with open(self_model_path, encoding='utf-8') as f:
                 self_model_text = f.read()
         except Exception:
             return None
@@ -413,7 +411,7 @@ class PatternExtractor:
                         continue
                     fpath = os.path.join(root, fname)
                     try:
-                        with open(fpath, 'r', encoding='utf-8') as f:
+                        with open(fpath, encoding='utf-8') as f:
                             head = f.read(500)
                         if 'type: procedure' in head:
                             actual += 1
@@ -461,7 +459,7 @@ class PatternExtractor:
         all_exchanges = [ex for s in sessions for ex in s['exchanges']]
 
         return {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': datetime.now(UTC).isoformat(),
             'total_sessions': len(sessions),
             'total_exchanges': len(all_exchanges),
             'recurring_topics': self.extract_recurring_topics(sessions),
@@ -484,7 +482,7 @@ class PatternExtractor:
             The log entry that was written.
         """
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': datetime.now(UTC).isoformat(),
             'sessions_scanned': patterns.get('total_sessions', 0),
             'exchanges_scanned': patterns.get('total_exchanges', 0),
             'recurring_topics_found': len(patterns.get('recurring_topics', [])),
@@ -504,7 +502,7 @@ class PatternExtractor:
         self._save(data)
         return entry
 
-    def get_last_consolidation_time(self) -> Optional[str]:
+    def get_last_consolidation_time(self) -> str | None:
         """Return the timestamp of the last consolidation run, or None."""
         data = self._load()
         return data.get('last_consolidation')
@@ -530,7 +528,7 @@ class PatternExtractor:
             'recent_runs': consolidations[-5:],
         }
 
-    def get_consolidation_gaps(self) -> List[dict]:
+    def get_consolidation_gaps(self) -> list[dict]:
         """Return patterns that need consolidation, for the autonomous researcher.
 
         This is the interface for the autonomous researcher: it calls this

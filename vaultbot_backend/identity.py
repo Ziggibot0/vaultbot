@@ -24,12 +24,12 @@ Pure stdlib + optional ``ollama_client``. No new dependencies.
 
 from __future__ import annotations
 
+import logging
 import os
-import time
 import tempfile
 import threading
-import logging
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -105,11 +105,11 @@ _SELF_MODEL_SYSTEM_PROMPT = (
 )
 
 
-def _join_threads(threads: Optional[Dict[str, str]]) -> str:
+def _join_threads(threads: dict[str, str] | None) -> str:
     """Render the optional threads dict as a labelled text block."""
     if not threads:
         return ""
-    lines: List[str] = []
+    lines: list[str] = []
     for key, value in threads.items():
         lines.append(f"[{key}]\n{value}")
     return "\n\n".join(lines)
@@ -145,7 +145,7 @@ class Identity:
         try:
             os.makedirs(identity_dir, exist_ok=True)
             self._seed_if_missing()
-        except Exception as exc:  # noqa: BLE001 — never crash the chat loop
+        except Exception as exc:
             logger.exception("Identity init failed: %s", exc)
             self._safe_log("identity_init_error", {"error": str(exc)})
 
@@ -154,7 +154,7 @@ class Identity:
         # them verbatim into the system prompt. They change rarely, so cache
         # the assembled string keyed on the max mtime of the three files. A
         # stat() per turn is far cheaper than three read_text() calls.
-        self._boot_cache: Optional[str] = None
+        self._boot_cache: str | None = None
         self._boot_cache_mtime: float = 0.0
 
     # ------------------------------------------------------------------
@@ -205,7 +205,7 @@ class Identity:
             identity = self.get_identity()
             self_model = self.get_self_model()
             goals = self.get_goals()
-            parts: List[str] = []
+            parts: list[str] = []
             if identity:
                 parts.append("# IDENTITY\n" + identity)
             if self_model:
@@ -219,7 +219,7 @@ class Identity:
             if current_mtime != float("inf"):
                 self._boot_cache_mtime = current_mtime
             return assembled
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("boot_context failed: %s", exc)
             self._safe_log("identity_boot_error", {"error": str(exc)})
             return ""
@@ -231,7 +231,7 @@ class Identity:
     def regenerate_self_model(
         self,
         recent_activity: str,
-        threads: Optional[Dict[str, str]] = None,
+        threads: dict[str, str] | None = None,
     ) -> str:
         """MIRROR bounded reconstruction of the self-model.
 
@@ -263,7 +263,7 @@ class Identity:
                 {"chars": len(new_text)},
             )
             return new_text
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("regenerate_self_model failed: %s", exc)
             self._safe_log("identity_self_model_error", {"error": str(exc)})
             # Return whatever we currently have rather than crash.
@@ -273,7 +273,7 @@ class Identity:
         self,
         prior: str,
         recent_activity: str,
-        threads: Optional[Dict[str, str]],
+        threads: dict[str, str] | None,
     ) -> str:
         """Call the LLM to produce the reconstructed narrative."""
         thread_text = _join_threads(threads)
@@ -333,15 +333,15 @@ class Identity:
     def update_goals(
         self,
         goal: str,
-        steps: Optional[List[str]] = None,
-        completed_step: Optional[str] = None,
-        next_step: Optional[str] = None,
+        steps: list[str] | None = None,
+        completed_step: str | None = None,
+        next_step: str | None = None,
     ) -> str:
         """Full-replace GOALS.md with the current goal + decomposition +
         last-completed + next-step. Returns the new text.
         """
         try:
-            lines: List[str] = []
+            lines: list[str] = []
             lines.append("# Current Goal")
             lines.append(goal.strip() if goal else "(None set.)")
             lines.append("")
@@ -374,7 +374,7 @@ class Identity:
             self._atomic_write(self._goals_path, text)
             self._safe_log("identity_goals_updated", {"chars": len(text)})
             return text
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("update_goals failed: %s", exc)
             self._safe_log("identity_goals_error", {"error": str(exc)})
             return self.get_goals()
@@ -388,7 +388,7 @@ class Identity:
         try:
             self._atomic_write(self._identity_path, text.strip() + "\n")
             self._safe_log("identity_set", {"chars": len(text)})
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("set_identity failed: %s", exc)
             self._safe_log("identity_set_error", {"error": str(exc)})
 
@@ -405,7 +405,7 @@ class Identity:
     # Status summary
     # ------------------------------------------------------------------
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         """For the status endpoint."""
         try:
             identity = self.get_identity()
@@ -417,7 +417,7 @@ class Identity:
                 "goals_chars": len(goals),
                 "self_model_tokens_est": len(self_model) // _CHARS_PER_TOKEN,
             }
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("summary failed: %s", exc)
             self._safe_log("identity_summary_error", {"error": str(exc)})
             return {
@@ -433,7 +433,7 @@ class Identity:
 
     def _read(self, path: str) -> str:
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 return fh.read()
         except FileNotFoundError:
             return ""
@@ -463,7 +463,7 @@ class Identity:
                 # On Windows the os.replace can fail with WinError 32 if
                 # another process briefly has the target open. Retry with a
                 # short backoff so we ride out the contention.
-                last_err: Optional[Exception] = None
+                last_err: Exception | None = None
                 for attempt in range(max_retries):
                     try:
                         os.replace(tmp_path, path)
@@ -486,7 +486,7 @@ class Identity:
                     pass
                 raise
 
-    def _safe_log(self, event: str, data: Dict[str, Any]) -> None:
+    def _safe_log(self, event: str, data: dict[str, Any]) -> None:
         """Log via session_logger if present, else no-op. Never raises."""
         try:
             if self.session_logger is not None:

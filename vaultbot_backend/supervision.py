@@ -31,9 +31,8 @@ from __future__ import annotations
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
-
 
 # Heartbeat is considered stale after this many seconds (1 hour = probably hung).
 HEARTBEAT_STALE_SECONDS = 3600
@@ -48,7 +47,7 @@ class HealthMonitor:
     that flags staleness without killing the process.
     """
 
-    def __init__(self, session_logger: Optional[object] = None) -> None:
+    def __init__(self, session_logger: object | None = None) -> None:
         # session_logger is optional; if provided it should have a .log(msg) or
         # similar method. We call it defensively inside try/except so a bad
         # logger never crashes the monitor or the main process.
@@ -58,7 +57,7 @@ class HealthMonitor:
         self._last_heartbeat: float = time.time()
         self._current_task: str = ""
 
-        self._heartbeat_thread: Optional[threading.Thread] = None
+        self._heartbeat_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
     # ------------------------------------------------------------------
@@ -77,7 +76,7 @@ class HealthMonitor:
             # Heartbeat must never crash the caller.
             pass
 
-    def health(self, extra: Optional[dict] = None) -> dict:
+    def health(self, extra: dict | None = None) -> dict:
         """Return a health snapshot dict.
 
         Fields:
@@ -132,7 +131,7 @@ class HealthMonitor:
     def start_watchdog(
         self,
         check_interval: int = 300,
-        on_stale: Optional[Callable[[], None]] = None,
+        on_stale: Callable[[], None] | None = None,
     ) -> None:
         """Start a passive background watchdog thread.
 
@@ -226,7 +225,7 @@ class HealthMonitor:
 def generate_nssm_install(
     vaultbot_dir: str,
     python_exe: str,
-    log_dir: Optional[str] = None,
+    log_dir: str | None = None,
 ) -> str:
     """Return a string of `nssm` commands to install VaultBot as a Windows service.
 
@@ -317,8 +316,8 @@ def generate_nssm_uninstall() -> str:
 
 
 __all__ = [
+    "HEARTBEAT_STALE_SECONDS",
     "HealthMonitor",
     "generate_nssm_install",
     "generate_nssm_uninstall",
-    "HEARTBEAT_STALE_SECONDS",
 ]

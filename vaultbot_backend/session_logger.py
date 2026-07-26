@@ -1,11 +1,10 @@
 import json
-import os
 import time
-import uuid
 import traceback
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class SessionLogger:
@@ -17,7 +16,7 @@ class SessionLogger:
     file, making it trivial to replay or grep a request's full lifecycle.
     """
 
-    def __init__(self, log_dir: Optional[str] = None):
+    def __init__(self, log_dir: str | None = None):
         if log_dir is None:
             log_dir = Path(__file__).parent / "sessions"
         else:
@@ -33,7 +32,7 @@ class SessionLogger:
             pass  # cleanup must never crash the backend
 
         self.session_id: str = str(uuid.uuid4())
-        self.started_at: str = datetime.now(timezone.utc).isoformat()
+        self.started_at: str = datetime.now(UTC).isoformat()
         self._file_path = self.log_dir / f"{self.session_id}.jsonl"
         self._closed = False
 
@@ -47,7 +46,7 @@ class SessionLogger:
     def _now(self) -> float:
         return time.time()
 
-    def _write(self, record: Dict[str, Any]) -> None:
+    def _write(self, record: dict[str, Any]) -> None:
         if self._closed:
             return
         try:
@@ -57,7 +56,7 @@ class SessionLogger:
             # Logging must never crash the application. Fail silently to stderr.
             print(f"[SessionLogger] Failed to write event: {e}")
 
-    def log(self, event: str, data: Optional[Dict[str, Any]] = None) -> None:
+    def log(self, event: str, data: dict[str, Any] | None = None) -> None:
         """Log a generic event with optional payload."""
         record = {
             "event": event,
@@ -72,10 +71,10 @@ class SessionLogger:
         self,
         tool: str,
         method: str,
-        inputs: Optional[Dict[str, Any]] = None,
-        outputs: Optional[Any] = None,
-        duration_ms: Optional[float] = None,
-        error: Optional[str] = None,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any | None = None,
+        duration_ms: float | None = None,
+        error: str | None = None,
     ) -> None:
         """Log a tool/framework call with input, output, timing, and error."""
         self.log("tool_call", {
@@ -87,16 +86,16 @@ class SessionLogger:
             "error": error,
         })
 
-    def log_message(self, direction: str, payload: Dict[str, Any]) -> None:
+    def log_message(self, direction: str, payload: dict[str, Any]) -> None:
         """Log a WebSocket message sent or received."""
         self.log("websocket_message", {
             "direction": direction,  # "in" or "out"
             "payload": payload,
         })
 
-    def log_exception(self, exc: Optional[Exception] = None, context: Optional[str] = None) -> None:
+    def log_exception(self, exc: Exception | None = None, context: str | None = None) -> None:
         """Log an exception with traceback."""
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "traceback": traceback.format_exc() if exc or context else "",
         }
         if exc is not None:
@@ -110,7 +109,7 @@ class SessionLogger:
         if self._closed:
             return
         self.log("session_end", {
-            "closed_at": datetime.now(timezone.utc).isoformat(),
+            "closed_at": datetime.now(UTC).isoformat(),
         })
         self._closed = True
 
@@ -150,10 +149,10 @@ def sweep_old_sessions(log_dir, max_files=200, max_age_days=30):
 
 
 # Singleton-style default logger used when no session is active.
-_default_logger: Optional[SessionLogger] = None
+_default_logger: SessionLogger | None = None
 
 
-def get_default_logger(log_dir: Optional[str] = None) -> SessionLogger:
+def get_default_logger(log_dir: str | None = None) -> SessionLogger:
     global _default_logger
     if _default_logger is None:
         _default_logger = SessionLogger(log_dir=log_dir)

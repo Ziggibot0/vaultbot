@@ -21,15 +21,14 @@ The ops wrap the existing building blocks (vault_graph, vault_indexer,
 note_creator, research_engine, ollama_client) without modifying them.
 """
 
-import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
-from vault_graph import VaultGraph
-from vault_indexer import VaultIndexer
 from note_creator import NoteCreator
 from research_engine import ResearchEngine
+from vault_graph import VaultGraph
+from vault_indexer import VaultIndexer
 
 try:
     from ollama_client import OllamaClient
@@ -76,7 +75,7 @@ class GraphOpRegistry:
         self.session_logger = session_logger
 
         # op-name -> bound method
-        self.ops: Dict[str, Any] = {
+        self.ops: dict[str, Any] = {
             "search": self.search,
             "extract": self.extract,
             "link": self.link,
@@ -90,9 +89,9 @@ class GraphOpRegistry:
     def _log(
         self,
         method: str,
-        inputs: Optional[Dict[str, Any]] = None,
+        inputs: dict[str, Any] | None = None,
         outputs: Any = None,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         if self.session_logger is None:
             return
@@ -114,7 +113,7 @@ class GraphOpRegistry:
         slug = re.sub(r"[\s_-]+", "-", slug).strip("-")
         return slug or "untitled"
 
-    def _resolve_note(self, name: str) -> Optional[Path]:
+    def _resolve_note(self, name: str) -> Path | None:
         """Resolve a note name/path to an actual .md file in the vault."""
         try:
             p = Path(name)
@@ -143,7 +142,7 @@ class GraphOpRegistry:
         return text[:max_len].rsplit(" ", 1)[0] + "…"
 
     # --- op: search ------------------------------------------------------
-    def search(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def search(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         Semantic search over the vault's embedding index.
 
@@ -158,7 +157,7 @@ class GraphOpRegistry:
                 return {"error": "missing or invalid 'query'"}
             k = int(args.get("k", 5))
             raw = self.vault_indexer.search(query, k=k)
-            results: List[Dict[str, Any]] = []
+            results: list[dict[str, Any]] = []
             for r in raw:
                 fp = r.get("file_path", "")
                 content = r.get("content", "")
@@ -176,7 +175,7 @@ class GraphOpRegistry:
             return {"error": str(e)}
 
     # --- op: extract -----------------------------------------------------
-    def extract(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def extract(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         Extract entities + key facts from a note or raw text.
 
@@ -211,7 +210,7 @@ class GraphOpRegistry:
                 if e not in stop_single and len(e) >= 2
             )
 
-            key_facts: List[str] = []
+            key_facts: list[str] = []
             for m in _FACT_CUE_RE.findall(text):
                 fact = re.sub(r"\s+", " ", m).strip()
                 if 20 <= len(fact) <= 240 and fact not in key_facts:
@@ -262,7 +261,7 @@ class GraphOpRegistry:
             return {"error": str(e)}
 
     # --- op: link --------------------------------------------------------
-    def link(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def link(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         Insert a wikilink from one note to another (MERGE semantics).
 
@@ -270,7 +269,7 @@ class GraphOpRegistry:
         from `create_note` (which writes note bodies). Use this to wire up
         the graph AFTER notes exist.
         """
-        from vault_guard import assert_writable, VaultWriteForbidden
+        from vault_guard import VaultWriteForbidden, assert_writable
         try:
             source = args.get("source_note")
             target = args.get("target_note")
@@ -320,7 +319,7 @@ class GraphOpRegistry:
             return {"error": str(e)}
 
     # --- op: synthesize --------------------------------------------------
-    def synthesize(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def synthesize(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         Run the research engine on a topic and return the synthesis.
 
@@ -359,7 +358,7 @@ class GraphOpRegistry:
             return {"error": str(e)}
 
     # --- op: create_note -------------------------------------------------
-    def create_note(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def create_note(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         UPSERT a note by title/slug.
 
@@ -389,7 +388,7 @@ class GraphOpRegistry:
 
             # Sacred/locked guard: never let the LLM create or append to a
             # date-only journal file or a LOCKED note.
-            from vault_guard import assert_writable, VaultWriteForbidden
+            from vault_guard import VaultWriteForbidden, assert_writable
             try:
                 assert_writable(note_path)
             except VaultWriteForbidden as e:
@@ -441,7 +440,7 @@ class GraphOpRegistry:
             return {"error": str(e)}
 
     # --- op: learn_skill -------------------------------------------------
-    def learn_skill(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def learn_skill(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         Register a reusable procedure as a skill (markdown file under
         ``vaultbot_backend/skills/``).
@@ -496,7 +495,7 @@ class GraphOpRegistry:
             return {"error": str(e)}
 
     # --- op: verify ------------------------------------------------------
-    def verify(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def verify(self, args: dict[str, Any]) -> dict[str, Any]:
         """
         Deterministic gate: check a condition against the vault.
 
@@ -554,7 +553,7 @@ class GraphOpRegistry:
 
 
 # --- Ollama-format tool schemas (shared by the LLM tool-caller) ---------
-SCHEMAS: List[Dict[str, Any]] = [
+SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {

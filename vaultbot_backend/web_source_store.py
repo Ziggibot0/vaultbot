@@ -31,7 +31,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     VAULT_DIR = Path(__file__).resolve().parent.parent
@@ -60,7 +60,7 @@ def _ensure_dirs() -> None:
     WEB_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _load_index() -> List[Dict[str, Any]]:
+def _load_index() -> list[dict[str, Any]]:
     try:
         if INDEX_PATH.exists():
             return json.loads(INDEX_PATH.read_text(encoding="utf-8"))
@@ -69,7 +69,7 @@ def _load_index() -> List[Dict[str, Any]]:
     return []
 
 
-def _save_index(entries: List[Dict[str, Any]]) -> None:
+def _save_index(entries: list[dict[str, Any]]) -> None:
     _ensure_dirs()
     tmp = INDEX_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False),
@@ -77,7 +77,7 @@ def _save_index(entries: List[Dict[str, Any]]) -> None:
     os.replace(tmp, INDEX_PATH)
 
 
-def _find_by_url(entries: List[Dict[str, Any]], url: str) -> Optional[Dict[str, Any]]:
+def _find_by_url(entries: list[dict[str, Any]], url: str) -> dict[str, Any] | None:
     for e in entries:
         if e.get("url") == url:
             return e
@@ -85,7 +85,7 @@ def _find_by_url(entries: List[Dict[str, Any]], url: str) -> Optional[Dict[str, 
 
 
 def save_source(url: str, html: str, title: str = "",
-                topic: str = "") -> Optional[Dict[str, Any]]:
+                topic: str = "") -> dict[str, Any] | None:
     """Save a raw HTML page to learningMaterial/web/ and index it.
 
     Returns the index entry {url, file, title, date, topic}, or None on
@@ -127,7 +127,7 @@ def save_source(url: str, html: str, title: str = "",
 
 
 def fetch_and_save(url: str, title: str = "", topic: str = "",
-                   timeout: int = 15) -> Optional[Dict[str, Any]]:
+                   timeout: int = 15) -> dict[str, Any] | None:
     """Fetch the raw HTML for a URL and save it.
 
     Used when we have a URL but not yet the HTML (e.g. a search hit that
@@ -151,12 +151,12 @@ def fetch_and_save(url: str, title: str = "", topic: str = "",
         return None
 
 
-def find_source(url: str) -> Optional[Dict[str, Any]]:
+def find_source(url: str) -> dict[str, Any] | None:
     """Look up a saved source by URL. Returns the index entry or None."""
     return _find_by_url(_load_index(), url)
 
 
-def list_sources(topic: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_sources(topic: str | None = None) -> list[dict[str, Any]]:
     """List saved sources, optionally filtered by topic."""
     entries = _load_index()
     if topic is None:

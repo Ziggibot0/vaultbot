@@ -22,12 +22,11 @@ Everything here is deterministic/extractive — the LLM only ever sees the
 finished, sourced summary, so the model's weights stay out of the dig.
 """
 
+import math
 import re
 import time
-import math
-import string
-from collections import Counter, defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from collections import Counter
+from typing import Any, Optional
 
 try:
     from tavily_client import TavilyClient
@@ -88,7 +87,7 @@ _FACET_PATTERNS = [
 ]
 
 
-def _keyterms(text: str, max_terms: int = 6) -> List[str]:
+def _keyterms(text: str, max_terms: int = 6) -> list[str]:
     """Extract salient noun-ish keyterms without an LLM.
 
     Ranks tokens by frequency * length, filters stopwords, and keeps proper
@@ -107,14 +106,14 @@ def _keyterms(text: str, max_terms: int = 6) -> List[str]:
     # Tokenize the lowercased text.
     tokens = re.findall(r"[a-z][a-z0-9\-]+", text)
     # Score single tokens: freq * length, skip stopwords.
-    scored: Dict[str, float] = {}
+    scored: dict[str, float] = {}
     tok_counter = Counter(tokens)
     for tok, count in tok_counter.items():
         if tok in _STOPWORDS or len(tok) < 3:
             continue
         scored[tok] = count * (1 + math.log(len(tok)))
     # Merge: site: operators > quoted > phrases > single tokens.
-    result: List[str] = []
+    result: list[str] = []
     seen = set()
     # site: operators get highest priority — they're explicit user intent.
     for so in site_operators:
@@ -146,7 +145,7 @@ def _keyterms(text: str, max_terms: int = 6) -> List[str]:
     return result[:max_terms]
 
 
-def _split_sentences(text: str) -> List[str]:
+def _split_sentences(text: str) -> list[str]:
     """Cheap sentence splitter that's good enough for scraped web text."""
     text = re.sub(r"\s+", " ", text).strip()
     # Split on . ! ? followed by whitespace+capital, or newlines.
@@ -159,12 +158,12 @@ def _split_sentences(text: str) -> List[str]:
     return sentences
 
 
-def _tokenize_light(text: str) -> List[str]:
+def _tokenize_light(text: str) -> list[str]:
     return [w for w in re.findall(r"[a-z0-9][a-z0-9\-]+", text.lower())
             if w not in _STOPWORDS and len(w) > 2]
 
 
-def _score_sentence(sentence: str, keyterms: List[str],
+def _score_sentence(sentence: str, keyterms: list[str],
                     source_count: int) -> float:
     """Extractive score: keyword density * corroboration boost."""
     toks = _tokenize_light(sentence)
@@ -185,7 +184,7 @@ def _score_sentence(sentence: str, keyterms: List[str],
     return density * corroboration
 
 
-def _detect_facets(topic: str) -> List[str]:
+def _detect_facets(topic: str) -> list[str]:
     facets = []
     for name, pattern in _FACET_PATTERNS:
         if pattern.search(topic):
@@ -196,7 +195,7 @@ def _detect_facets(topic: str) -> List[str]:
     return facets
 
 
-def _facet_keywords(facet: str) -> List[str]:
+def _facet_keywords(facet: str) -> list[str]:
     return {
         "definition": ["definition", "means", "refers to", "is a", "are a"],
         "history": ["history", "origin", "introduced", "founded", "invented",
@@ -241,12 +240,12 @@ class ResearchEngine:
         # long-running step so a live UI can show "round 2/4, 12 sources…".
         self.progress_callback = progress_callback
 
-    def _log(self, event: str, data: Optional[Dict[str, Any]] = None):
+    def _log(self, event: str, data: dict[str, Any] | None = None):
         if self.session_logger is None:
             return
         self.session_logger.log(event, data)
 
-    def _progress(self, stage: str, detail: Optional[Dict[str, Any]] = None) -> None:
+    def _progress(self, stage: str, detail: dict[str, Any] | None = None) -> None:
         """Emit a progress event to the live UI (if a callback is wired)."""
         if self.progress_callback is None:
             return
@@ -257,7 +256,7 @@ class ResearchEngine:
             pass
 
     def _search_round(self, query: str, round_idx: int,
-                      topic: str = "") -> List[Dict[str, Any]]:
+                      topic: str = "") -> list[dict[str, Any]]:
         """Run one search query and return fetched, cleaned sources.
 
         Tavily is the sole search backend. If Tavily is unset or returns
@@ -266,7 +265,7 @@ class ResearchEngine:
         doesn't, we fetch the URL directly via tavily.scrape().
         """
         t0 = time.time()
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
 
         if not (self.search_client and self.search_client.is_configured):
             self._log("research_search_unconfigured",
@@ -347,8 +346,8 @@ class ResearchEngine:
             })
         return sources
 
-    def _expand_query(self, base_terms: List[str],
-                      discovered_terms: List[str]) -> str:
+    def _expand_query(self, base_terms: list[str],
+                      discovered_terms: list[str]) -> str:
         """Build a refined query that adds newly-discovered salient terms."""
         # Prefer the base terms plus any discovered terms not already present.
         base_low = {t.lower() for t in base_terms}
@@ -363,11 +362,11 @@ class ResearchEngine:
         query_terms = terms[:max_regular] + site_ops
         return " ".join(query_terms)
 
-    def _corroborated_facts(self, sentences: List[Tuple[str, Dict[str, Any]]],
-                            keyterms: List[str]) -> List[Dict[str, Any]]:
+    def _corroborated_facts(self, sentences: list[tuple[str, dict[str, Any]]],
+                            keyterms: list[str]) -> list[dict[str, Any]]:
         """Score, dedup, and return the strongest corroborated sentences."""
         # Group near-duplicate sentences (same tokens, different sources).
-        fact_buckets: Dict[str, Dict[str, Any]] = {}
+        fact_buckets: dict[str, dict[str, Any]] = {}
         for sentence, src in sentences:
             toks = tuple(sorted(_tokenize_light(sentence)))
             if not toks:
@@ -389,9 +388,9 @@ class ResearchEngine:
         facts.sort(key=lambda f: f["score"], reverse=True)
         return facts
 
-    def _identify_gaps(self, topic: str, facets: List[str],
-                       all_sources: List[Dict[str, Any]],
-                       keyterms: List[str]) -> List[str]:
+    def _identify_gaps(self, topic: str, facets: list[str],
+                       all_sources: list[dict[str, Any]],
+                       keyterms: list[str]) -> list[str]:
         """Detect facets that remain under-covered and emit follow-up queries."""
         corpus = " ".join(s["text"][:1500] for s in all_sources).lower()
         gaps = []
@@ -408,7 +407,7 @@ class ResearchEngine:
                 gaps.append(f"{topic.strip()} {kt}")
         return gaps[: self.max_follow_ups]
 
-    def research(self, topic: str) -> Dict[str, Any]:
+    def research(self, topic: str) -> dict[str, Any]:
         """Run a full multi-round research dig. Returns a structured report.
 
         No LLM is used here. The caller may pass the report's `synthesis`
@@ -422,10 +421,10 @@ class ResearchEngine:
             "topic": topic, "keyterms": base_terms, "facets": facets,
         })
 
-        all_sources: List[Dict[str, Any]] = []
+        all_sources: list[dict[str, Any]] = []
         seen_urls: set = set()
-        discovered_terms: List[str] = []
-        rounds_log: List[Dict[str, Any]] = []
+        discovered_terms: list[str] = []
+        rounds_log: list[dict[str, Any]] = []
 
         # --- Main multi-round loop -------------------------------------------
         self._progress("research_start", {
@@ -479,13 +478,13 @@ class ResearchEngine:
 
         # --- Extractive synthesis -------------------------------------------
         self._progress("synthesizing", {"sources": len(all_sources)})
-        sentences: List[Tuple[str, Dict[str, Any]]] = []
+        sentences: list[tuple[str, dict[str, Any]]] = []
         for src in all_sources:
             for sent in _split_sentences(src["text"]):
                 sentences.append((sent, src))
         facts = self._corroborated_facts(sentences, base_terms)
         # Take the top facts but cap total synthesis length.
-        synthesis_lines: List[str] = []
+        synthesis_lines: list[str] = []
         total_len = 0
         max_synth = 3500
         used = set()
@@ -505,7 +504,7 @@ class ResearchEngine:
 
         # --- Gap fill: targeted follow-ups for under-covered facets ----------
         gaps = self._identify_gaps(topic, facets, all_sources, base_terms)
-        follow_up_sources: List[Dict[str, Any]] = []
+        follow_up_sources: list[dict[str, Any]] = []
         if gaps:
             self._log("research_gap_fill", {"gaps": gaps})
             self._progress("gap_fill", {"queries": len(gaps), "gaps": gaps})
@@ -566,8 +565,8 @@ class ResearchEngine:
             "duration_ms": report["duration_ms"]})
         return report
 
-    def synthesize_note_markdown(self, report: Dict[str, Any],
-                                 summary: Optional[str] = None) -> str:
+    def synthesize_note_markdown(self, report: dict[str, Any],
+                                 summary: str | None = None) -> str:
         """Render a research report as Obsidian markdown (no LLM)."""
         lines = [f"# {report['topic']}", ""]
         if summary:
