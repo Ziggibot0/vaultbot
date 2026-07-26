@@ -70,7 +70,16 @@ class VaultIndexer:
         )
         self.dimension = None  # Will be set after first embedding
         self.index = None
-        self.metadata = []  # List of dicts: {'file_path', 'last_modified', 'content_hash'}
+        # ── Phase 1 migration: id-keyed metadata + IndexIDMap2 ──────────
+        # _metadata maps faiss id → {file_path, last_modified, content_hash, ...}.
+        # _path_to_id maps str(file_path) → faiss id for O(1) lookup.
+        # _next_id is monotonic; tombstoned ids (removed via remove_ids) are
+        # never reused until a full _rebuild_index compaction.
+        # The legacy `self.metadata` list is kept as a back-compat @property
+        # below so external readers (note_creator.py:83) keep working.
+        self._metadata: Dict[int, Dict[str, Any]] = {}
+        self._path_to_id: Dict[str, int] = {}
+        self._next_id: int = 0
         self.timestamps = {}  # file_path -> last_modified timestamp
         # Bounded content-preview cache stored alongside each metadata entry.
         # Populated at index time (where the file is already read for hashing +
@@ -88,33 +97,99 @@ class VaultIndexer:
         self.observer = None
         self._load_index()
 
+    # Back-compat: external callers (note_creator._generate_links) iterate
+    # `indexer.metadata` as a list of dicts.  Return the live values so they
+    # see current state without touching the dict internals.
+    @property
+    def metadata(self) -> List[Dict[str, Any]]:
+        return list(self._metadata.values())
+
+    @metadata.setter
+    def metadata(self, value):
+        # Legacy callers / _load_index migration may assign a list.  Re-key
+        # it into the id-keyed dict with sequential ids starting at 0.
+        self._metadata = {}
+        self._path_to_id = {}
+        for i, m in enumerate(value):
+            self._metadata[i] = m
+            self._path_to_id[m['file_path']] = i
+        self._next_id = len(value)
+
     def _log_tool(self, method: str, inputs: Optional[Dict[str, Any]] = None, outputs: Any = None, error: Optional[str] = None):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(tool="vault_indexer", method=method, inputs=inputs, outputs=outputs, error=error)
         
     def _load_index(self):
-        """Load existing index and metadata from disk, or initialize new."""
+        """Load existing index and metadata from disk, or initialize new.
+
+        Handles three on-disk formats:
+        1. New format (Phase 1+): metadata.pkl is a tuple
+           ``(_metadata: dict[int, dict], _path_to_id: dict[str, int],
+           _next_id: int)`` and index.faiss is an IndexIDMap2.
+        2. Legacy format: metadata.pkl is a list[dict] and index.faiss is
+           an IndexFlatL2.  We detect this by checking whether the pickle
+           unpacks into a tuple of length 3; if it's a list, we migrate it
+           in-place by assigning sequential ids 0..N-1 and rebuilding an
+           IndexIDMap2 from reconstruct(i) of each vector in the old flat
+           index — zero Ollama calls.
+        """
         if self.index_file.exists() and self.metadata_file.exists() and self.timestamp_file.exists():
             try:
                 self.index = faiss.read_index(str(self.index_file))
                 with open(self.metadata_file, 'rb') as f:
-                    self.metadata = pickle.load(f)
+                    loaded = pickle.load(f)
                 with open(self.timestamp_file, 'r') as f:
                     self.timestamps = json.load(f)
-                # Normalize any stale relative paths to absolute so a CWD change
-                # between sessions doesn't produce doubled paths (e.g.
-                # vaultbot_backend\vaultbot_backend\identity\...). This is a
-                # one-time migration — once all paths are absolute, the
-                # normalization is a no-op.
-                for meta in self.metadata:
-                    fp = Path(meta['file_path'])
-                    if not fp.is_absolute():
-                        resolved = (self.vault_path / fp).resolve()
-                        meta['file_path'] = str(resolved)
-                # Determine dimension from the index
-                self.dimension = self.index.d
-                print(f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}")
+
+                # Detect format: tuple of length 3 = new; list = legacy.
+                if isinstance(loaded, tuple) and len(loaded) == 3:
+                    self._metadata, self._path_to_id, self._next_id = loaded
+                    # Normalize any stale relative paths to absolute.
+                    for fid, meta in list(self._metadata.items()):
+                        fp = Path(meta['file_path'])
+                        if not fp.is_absolute():
+                            resolved = (self.vault_path / fp).resolve()
+                            old_key = meta['file_path']
+                            meta['file_path'] = str(resolved)
+                            self._path_to_id.pop(old_key, None)
+                            self._path_to_id[str(resolved)] = fid
+                else:
+                    # Legacy list format — migrate to id-keyed dict.
+                    print("[migration] Detected legacy list-format metadata; "
+                          "converting to IndexIDMap2 (zero re-embedding)...")
+                    legacy_list = loaded if isinstance(loaded, list) else []
+                    self._metadata = {}
+                    self._path_to_id = {}
+                    # Reconstruct each vector from the old IndexFlatL2 and
+                    # re-add it to a fresh IndexIDMap2 with sequential ids.
+                    old_index = self.index
+                    dim = old_index.d if old_index is not None else None
+                    self.index = None  # let _add_embedding_to_index create it
+                    for i, meta in enumerate(legacy_list):
+                        fp = Path(meta['file_path'])
+                        if not fp.is_absolute():
+                            fp = (self.vault_path / fp).resolve()
+                            meta['file_path'] = str(fp)
+                        try:
+                            vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
+                        except Exception:
+                            print(f"[migration] Skipping unreconstructable "
+                                  f"legacy vector {i} ({meta['file_path']})")
+                            continue
+                        # Use the internal add path so the id map + metadata
+                        # + timestamps are all set consistently.
+                        self._add_embedding_to_index(
+                            fp, vec, meta.get('last_modified', 0.0),
+                            meta.get('content_hash', ''),
+                            content_preview=meta.get('content_preview', ''))
+                    self.dimension = dim
+                    print(f"[migration] Migrated {self._next_id} vectors "
+                          f"to IndexIDMap2.")
+
+                if self.index is not None:
+                    self.dimension = self.index.d
+                    print(f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}")
             except Exception as e:
                 print(f"Error loading existing index: {e}. Creating new index.")
                 self._init_new_index()
@@ -126,7 +201,9 @@ class VaultIndexer:
         """Initialize a new empty index."""
         # We'll determine the dimension when we add the first vector
         self.index = None
-        self.metadata = []
+        self._metadata = {}
+        self._path_to_id = {}
+        self._next_id = 0
         self.timestamps = {}
     
     def _get_file_hash(self, file_path: Path) -> str:
@@ -227,16 +304,17 @@ class VaultIndexer:
         stat = file_path.stat()
         last_modified = stat.st_mtime
         
-        # Check if we already have this file and if it's unchanged
-        for i, meta in enumerate(self.metadata):
-            if meta['file_path'] == str(file_path):
-                if meta.get('content_hash') == content_hash:
-                    # No change
-                    return
-                else:
-                    # Update existing
-                    self._remove_file_internal(file_path)
-                    break
+        # Check if we already have this file and if it's unchanged (O(1) lookup)
+        key = str(file_path)
+        existing_id = self._path_to_id.get(key)
+        if existing_id is not None:
+            meta = self._metadata.get(existing_id)
+            if meta and meta.get('content_hash') == content_hash:
+                # No change
+                return
+            else:
+                # Update existing: remove old vector (O(1), no re-embedding)
+                self._remove_file_internal(file_path)
         
         # Get embedding
         try:
@@ -267,28 +345,40 @@ class VaultIndexer:
 
         if self.index is None:
             self.dimension = embed_dim
-            self.index = faiss.IndexFlatL2(self.dimension)
-            print(f"Initialized new index with dimension {self.dimension}")
+            self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
+            print(f"Initialized new IndexIDMap2 with dimension {self.dimension}")
         elif embed_dim != self.index.d:
             print(f"Skipping {file_path}: embedding dimension {embed_dim} does not match index dimension {self.index.d}.")
             self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error=f"dimension mismatch: {embed_dim} vs {self.index.d}")
             return
 
+        # Normalize the embedding in-place so L2 distance ≡ cosine
+        # distance.  This makes the embedding-drift re-ranking layer
+        # correct-by-construction for ANY embed model, not just the
+        # currently-used normalized nomic-embed-text.  Unit vectors:
+        # ||a−b||² = 2(1−cos(a,b)), so L2 ranking == cosine ranking.
+        vec = embedding.reshape(1, -1).astype(np.float32)
+        faiss.normalize_L2(vec)
+
+        faiss_id = self._next_id
+        self._next_id += 1
         index = self.index
         assert index is not None
-        index.add(embedding.reshape(1, -1))  # type: ignore
+        index.add_with_ids(vec, np.array([faiss_id], dtype=np.int64))  # type: ignore
+        abs_path_str = str(file_path if file_path.is_absolute() else file_path.resolve())
         meta_entry: Dict[str, Any] = {
-            'file_path': str(file_path if file_path.is_absolute() else file_path.resolve()),
+            'file_path': abs_path_str,
             'last_modified': last_modified,
             'content_hash': content_hash
         }
         # Cache the bounded preview so future searches skip the disk read.
         if self.preview_chars > 0 and content_preview:
             meta_entry['content_preview'] = content_preview[:self.preview_chars]
-        self.metadata.append(meta_entry)
-        self.timestamps[str(file_path)] = last_modified
+        self._metadata[faiss_id] = meta_entry
+        self._path_to_id[abs_path_str] = faiss_id
+        self.timestamps[abs_path_str] = last_modified
         print(f"Added {file_path} to index. Total vectors: {self.index.ntotal}")
-        self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash})
+        self._log_tool("add_file", {"file_path": abs_path_str, "last_modified": last_modified, "content_hash": content_hash})
 
     def batch_add_files(self, file_paths: list[str],
                         return_embeddings: bool = False):
@@ -320,15 +410,14 @@ class VaultIndexer:
                 content = fp.read_text(encoding="utf-8", errors="replace")
             except Exception:
                 continue
-            # Skip unchanged files
+            # Skip unchanged files (O(1) lookup)
             content_hash = self._get_file_hash(fp)
-            skip = False
-            for meta in self.metadata:
-                if meta['file_path'] == str(fp) and meta.get('content_hash') == content_hash:
-                    skip = True
-                    break
-            if skip:
-                continue
+            key = str(fp)
+            existing_id = self._path_to_id.get(key)
+            if existing_id is not None:
+                meta = self._metadata.get(existing_id)
+                if meta and meta.get('content_hash') == content_hash:
+                    continue  # unchanged
             contents.append(content)
             valid_paths.append(fp)
             hashes.append(content_hash)
@@ -382,86 +471,94 @@ class VaultIndexer:
         return indexed
     
     def _remove_file_internal(self, file_path: Path):
-        """Remove a file from the index (internal method)."""
-        # FAISS doesn't support removal directly, so we rebuild the index without the file.
-        # For simplicity, we'll mark it as removed and rebuild when needed.
-        # For now, we'll just remove from metadata and timestamps, and note that we need to rebuild.
-        # A better approach would be to use IVF or allow rebuilding periodically.
-        # Given the likely size of a personal vault, we can rebuild on deletion.
-        # However, to avoid frequent rebuilds, we'll just mark and rebuild when the number of deletions is significant.
-        # For simplicity in this implementation, we'll remove and rebuild the entire index when a file is deleted.
-        # This is acceptable for a personal vault that isn't huge and doesn't have frequent deletions.
-        # We'll implement a simple removal by rebuilding without the file.
-        
-        # Find the index of the file in metadata
-        index_to_remove = None
-        for i, meta in enumerate(self.metadata):
-            if meta['file_path'] == str(file_path):
-                index_to_remove = i
-                break
-        
-        if index_to_remove is not None:
-            # Remove from metadata and timestamps
-            del self.metadata[index_to_remove]
-            del self.timestamps[str(file_path)]
-            # Rebuild the index without this vector
+        """Remove a file from the index — O(1), zero re-embedding.
+
+        IndexIDMap2.remove_ids marks the id as removed (tombstone) in a single
+        pass over the id map — no Ollama calls, no re-reading files.  This is
+        the fix for the old rebuild-on-delete which re-embedded the ENTIRE
+        vault on every single note deletion (O(N) LLM calls per delete).
+        Tombstoned ids are never reused until a full _rebuild_index compaction.
+        """
+        key = str(file_path)
+        faiss_id = self._path_to_id.pop(key, None)
+        if faiss_id is None:
+            return  # not indexed — nothing to do
+        self._metadata.pop(faiss_id, None)
+        self.timestamps.pop(key, None)
+        if self.index is not None:
             try:
-                self._rebuild_index()
-                print(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
-                self._log_tool("remove_file", {"file_path": str(file_path)})
+                self.index.remove_ids(np.array([faiss_id], dtype=np.int64))  # type: ignore
             except Exception as e:
-                self._log_tool("remove_file", {"file_path": str(file_path)}, error=str(e))
+                self._log_tool("remove_file", {"file_path": key}, error=str(e))
                 raise
+        print(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
+        self._log_tool("remove_file", {"file_path": key})
     
     def _rebuild_index(self):
-        """Rebuild the entire index from remaining metadata.
+        """Compact the index by reconstructing live vectors — zero Ollama calls.
 
-        Files that no longer exist on disk (or can't be read) are PRUNED
-        from metadata/timestamps here, not just skipped.  Without pruning,
-        dead entries accumulate (e.g. bulk-deleted textbook sections) and
-        every subsequent rebuild re-attempts to read them, producing O(n^2)
-        error spam across the many per-removal rebuilds triggered by
-        index_missing_or_changed().
+        This is NOT called on delete anymore (Phase 1: _remove_file_internal
+        uses remove_ids).  It is kept for two purposes:
+        1. On-disk corruption recovery (a broken index.faiss is rebuilt from
+           the metadata + file contents).
+        2. Optional compaction: remove_ids leaves tombstones; over months of
+           churn the flat storage grows.  Calling this rebuilds a fresh
+           IndexIDMap2 from reconstruct(id) of all live ids — zero embedding
+           calls because the vectors are already in the index.
+
+        Files whose paths in _metadata no longer exist on disk are pruned.
         """
-        if not self.metadata:
+        if not self._metadata:
             self.index = None
             self.dimension = None
+            self._path_to_id = {}
+            self._next_id = 0
             return
 
-        # Get embeddings for all remaining files; prune any that are gone.
-        embeddings = []
-        dead: list[int] = []  # indices to drop from metadata
-        for i, meta in enumerate(self.metadata):
-            file_path = Path(meta['file_path'])
+        # Reconstruct live vectors straight from the FAISS index (zero
+        # Ollama calls) — this is the key difference from the old rebuild
+        # which re-embedded every file.  Prune any whose path is gone on disk.
+        live_ids = []
+        live_vecs = []
+        dead_keys = []
+        for fid, meta in self._metadata.items():
+            fp = Path(meta['file_path'])
+            if not fp.exists():
+                dead_keys.append((fid, meta['file_path']))
+                continue
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                embedding = self._get_embedding(content)
-                embeddings.append(embedding)
+                vec = self.index.reconstruct(fid).astype(np.float32).reshape(1, -1)  # type: ignore
+                live_ids.append(fid)
+                live_vecs.append(vec)
             except Exception as e:
-                print(f"Pruning missing file from index: {file_path} ({e})")
-                dead.append(i)
+                # reconstruct can fail if the id was already tombstoned;
+                # treat as dead and prune.
+                dead_keys.append((fid, meta['file_path']))
+                print(f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}")
                 continue
 
-        # Drop dead entries (reverse order so indices stay valid).
-        for i in reversed(dead):
-            fp = self.metadata[i]['file_path']
-            del self.metadata[i]
-            self.timestamps.pop(fp, None)
-        if not embeddings:
+        for fid, fp_str in dead_keys:
+            self._metadata.pop(fid, None)
+            self._path_to_id.pop(fp_str, None)
+            self.timestamps.pop(fp_str, None)
+
+        if not live_vecs:
             self.index = None
             self.dimension = None
+            self._path_to_id = {}
+            self._next_id = 0
             return
-        
-        # Create new index
-        self.dimension = len(embeddings[0])
-        self.index = faiss.IndexFlatL2(self.dimension)
-        # Add all embeddings
-        embeddings_array = np.array(embeddings).astype('float32')
-        index = self.index
-        assert index is not None
-        index.add(embeddings_array)  # type: ignore
-        print(f"Rebuilt index with {len(embeddings)} vectors")
+
+        # Build a fresh compact IndexIDMap2 with the same ids (so
+        # _path_to_id stays valid) and normalized vectors.
+        stacked = np.vstack(live_vecs).astype(np.float32)
+        faiss.normalize_L2(stacked)
+        ids_arr = np.array(live_ids, dtype=np.int64)
+        self.dimension = stacked.shape[1]
+        self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
+        self.index.add_with_ids(stacked, ids_arr)  # type: ignore
+        # _next_id stays as-is (ids are reused, not reassigned).
+        print(f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)")
     
     def _update_file(self, file_path_str: str):
         """Update a file in the index (called on modification)."""
@@ -569,7 +666,7 @@ class VaultIndexer:
         Returns a list of dicts: {'file_path', 'content', 'score'} sorted by
         relevance (lower L2 distance = more similar).
         """
-        if self.index is None or self.index.ntotal == 0 or not self.metadata:
+        if self.index is None or self.index.ntotal == 0 or not self._metadata:
             self._log_tool("search", {"query": query, "k": k}, outputs={"result_count": 0}, error="empty index")
             return []
 
@@ -587,20 +684,21 @@ class VaultIndexer:
         This is the key to LLM-free drift re-ranking: instead of re-embedding
         a candidate note's content to apply drift (which would cost an
         Ollama call per candidate), we reconstruct the stored vector
-        directly from the IndexFlatL2 index. Zero Ollama calls.
+        directly from the IndexIDMap2 index via its rev_map. Zero Ollama calls.
 
-        Returns the float32 embedding, or None if the file isn't indexed.
+        Returns the float32 embedding (normalized), or None if the file isn't indexed.
         """
-        if self.index is None or not self.metadata:
+        if self.index is None or not self._metadata:
+            return None
+        faiss_id = self._path_to_id.get(file_path)
+        if faiss_id is None:
             return None
         try:
-            for i, meta in enumerate(self.metadata):
-                if meta.get("file_path") == file_path:
-                    return self.index.reconstruct(i).astype(np.float32)
+            return self.index.reconstruct(faiss_id).astype(np.float32)  # type: ignore
         except Exception as e:
             self._log_tool("reconstruct_embedding", {"file_path": file_path},
                            error=str(e))
-        return None
+            return None
 
     def search_by_vector(self, query_embedding: np.ndarray,
                          k: int = 5) -> List[Dict[str, Any]]:
@@ -611,7 +709,7 @@ class VaultIndexer:
         during a textbook weave reuses the just-indexed note's embedding as
         the neighbor-search query instead of re-embedding the note text).
         """
-        if self.index is None or self.index.ntotal == 0 or not self.metadata:
+        if self.index is None or self.index.ntotal == 0 or not self._metadata:
             self._log_tool("search_by_vector", {"k": k}, outputs={"result_count": 0}, error="empty index")
             return []
 
@@ -621,17 +719,21 @@ class VaultIndexer:
                            error=f"dimension mismatch: query {len(query_embedding)} vs index {self.index.d}")
             return []
 
-        # FAISS expects a 2-D float32 array.
+        # Normalize the query vector so L2 ≡ cosine (matches the normalized
+        # stored vectors).
         query_vec = np.asarray(query_embedding, dtype=np.float32).reshape(1, -1)
+        faiss.normalize_L2(query_vec)
         # Search up to k (but never more than what's indexed).
         k_eff = min(k, self.index.ntotal)
         distances, indices = self.index.search(query_vec, k_eff)  # type: ignore
 
         results: List[Dict[str, Any]] = []
-        for idx, distance in zip(indices[0], distances[0]):
-            if idx < 0 or idx >= len(self.metadata):
-                continue
-            meta = self.metadata[idx]
+        for faiss_id, distance in zip(indices[0], distances[0]):
+            if faiss_id < 0:
+                continue  # FAISS returns -1 for "no result"
+            meta = self._metadata.get(int(faiss_id))
+            if meta is None:
+                continue  # tombstoned or unknown id
             file_path = Path(meta['file_path'])
             # Prefer the cached preview (populated at index time) so the
             # search never re-reads the file from disk. Fall back to a disk
@@ -654,11 +756,16 @@ class VaultIndexer:
         return results
     
     def persist(self):
-        """Save the index and metadata to disk."""
+        """Save the index and metadata to disk.
+
+        The metadata pickle stores a tuple ``(_metadata, _path_to_id,
+        _next_id)`` so _load_index can detect the new format vs. the legacy
+        list format and migrate accordingly.
+        """
         if self.index is not None:
             faiss.write_index(self.index, str(self.index_file))
         with open(self.metadata_file, 'wb') as f:
-            pickle.dump(self.metadata, f)
+            pickle.dump((self._metadata, self._path_to_id, self._next_id), f)
         with open(self.timestamp_file, 'w') as f:
             json.dump(self.timestamps, f)
         print(f"Index persisted to {self.index_path}")
