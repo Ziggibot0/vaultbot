@@ -45,6 +45,12 @@ from agent_tools import TOOL_DEFINITIONS, META_TOOL_DEFINITIONS, build_system_pr
 from vault_graph import build_graph_context
 from procedure_tracker import parse_procedures_from_results, interpret_validation_result
 
+# Leaf-module imports for helpers that were previously deferred-imported
+# from main (circular). These are now direct leaf imports — no main dependency.
+from chat_helpers import send_progress, run_with_heartbeat, tool_result_summary
+from task_api import write_partial
+from weaving import existing_note_titles, link_outbound, cross_link_textbooks, weave_textbook_notes
+
 
 async def handle_chat(svc: Services, websocket: WebSocket,
                      user_message: str, session_logger) -> None:
@@ -53,18 +59,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
     This is the Jarvis loop — the LLM self-directs instead of shrugging.
     """
-    # Deferred imports: main.py helpers live in main.py and importing main
-    # at module init would create a cycle (main imports chat_handler).
-    # Defer until call time so the cycle is broken.
-    from main import (
-        _run_with_heartbeat,
-        _write_partial,
-        _tool_result_summary,
-        _existing_note_titles,
-        _link_outbound,
-        _cross_link_textbooks,
-    )
-
+    # Module-level imports from chat_helpers, task_api, weaving — no longer
+    # deferred from main (circular dependency eliminated).
     session_logger.log("chat_begin", {"user_message": user_message})
 
     # Chat-priority: pause the autonomous researcher so it doesn't compete
@@ -119,16 +115,16 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # Without a heartbeat the GUI freezes on "Searching vault..." with no
         # feedback. This pushes a "still alive / elapsed" pulse every 2s so
         # Sean always sees the backend is working, not hung.
-        fused_result = await _run_with_heartbeat(
-            websocket, "retrieving vault",
+        fused_result = await run_with_heartbeat(
+            svc, websocket, "retrieving vault",
             svc.fused_retriever.retrieve, user_message, 5, 1)
         results = fused_result.get("results", []) if isinstance(fused_result, dict) else (fused_result or [])
     except Exception as e:
         session_logger.log_exception(e, context="fused_retriever.retrieve")
         # Degrade gracefully to flat vector search.
         try:
-            results = await _run_with_heartbeat(
-                websocket, "retrieving vault (fallback)",
+            results = await run_with_heartbeat(
+                svc, websocket, "retrieving vault (fallback)",
                 svc.vault_indexer.search, user_message, 5)
         except Exception:
             results = []
@@ -181,8 +177,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # flooded the context with low-density detail.  Falls back to the legacy
     # builder if no L1 cards exist yet (pre-hierarchy vault regions).
     try:
-        abs_ctx = await _run_with_heartbeat(
-            websocket, "building context",
+        abs_ctx = await run_with_heartbeat(
+            svc, websocket, "building context",
             build_abstract_context, svc.vault_graph, results,
             user_message, 5, 2, None)
         context = abs_ctx.get("context", "")
@@ -224,8 +220,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     autonomous_state = svc.autonomous_researcher.status()
     try:
         _t_gaps = loop.time()
-        gaps = await _run_with_heartbeat(
-            websocket, "finding gaps",
+        gaps = await run_with_heartbeat(
+            svc, websocket, "finding gaps",
             svc.knowledge_curriculum.propose_next_gaps, 10)
         session_logger.log("gaps_proposed", {
             "gap_count": len(gaps),
@@ -303,7 +299,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     partial_dir.mkdir(parents=True, exist_ok=True)
     partial_id = hashlib.md5((user_message + str(_time.time())).encode()).hexdigest()[:12]
     partial_path = partial_dir / f"partial_{partial_id}.md"
-    _write_partial(partial_path, user_message, "", "")  # create the file immediately
+    write_partial(partial_path, user_message, "", "")  # create the file immediately
 
     try:
      round_idx = 0
@@ -364,7 +360,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     await svc.manager.send_personal_message(json.dumps({"type": "answer_chunk", "content": text}), websocket, session_logger=session_logger)
                     # Update the partial-answer file so a crash mid-stream
                     # preserves whatever was streamed so far.
-                    _write_partial(partial_path, user_message, final_answer + round_text, thinking_text)
+                    write_partial(partial_path, user_message, final_answer + round_text, thinking_text)
                 if tcs:
                     round_tool_calls.extend(tcs)
         except Exception as e:
@@ -453,7 +449,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     session_logger.log("procedure_tracking_failed", {"error": str(e)})
             await svc.manager.send_personal_message(json.dumps({
                 "type": "tool_result", "tool": tool_name,
-                "summary": _tool_result_summary(tool_name, tool_result),
+                "summary": tool_result_summary(tool_name, tool_result),
             }), websocket, session_logger=session_logger)
 
             conversation.append({
@@ -469,7 +465,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     except Exception as e:
         # The whole agentic loop crashed — save whatever was streamed so far.
         session_logger.log_exception(e, context="handle_chat_agentic_loop")
-        _write_partial(partial_path, user_message, final_answer, thinking_text)
+        write_partial(partial_path, user_message, final_answer, thinking_text)
         session_logger.log("partial_answer_saved_on_crash", {
             "partial_path": str(partial_path),
             "answer_chars": len(final_answer),
@@ -585,11 +581,11 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 # double-wrap).  Also re-run the cross-book linker with the
                 # NEW embeddings so the "## Related sections" block reflects
                 # the condensed content, not the original.
-                title_map = _existing_note_titles()
+                title_map = existing_note_titles(svc)
                 for fp in condensed_paths:
                     try:
                         await loop.run_in_executor(
-                            None, _link_outbound, fp, title_map)
+                            None, link_outbound, fp, title_map)
                     except Exception:
                         pass
                 # Re-run cross-book linking on the condensed notes only.
@@ -601,7 +597,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 source_keys = {str(Path(fp).resolve()) for fp in condensed_paths}
                 try:
                     cross = await loop.run_in_executor(
-                        None, _cross_link_textbooks,
+                        None, cross_link_textbooks, svc,
                         condensed_paths, new_embs, source_keys)
                     session_logger.log("post_condense_relink", {
                         "condensed": len(condensed_paths),
@@ -772,13 +768,8 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: Dict[str, Any]
     `websocket` is passed so long-running tools (vault_research) can push
     live progress events to the UI instead of going silent for 30-60s.
     """
-    # Deferred import: see handle_chat docstring for the cycle rationale.
-    from main import (
-        _send_progress,
-        _run_with_heartbeat,
-        _weave_textbook_notes,
-    )
-
+    # Module-level imports from chat_helpers, weaving — no longer deferred
+    # from main (circular dependency eliminated).
     loop = asyncio.get_event_loop()
 
     if tool_name == "vault_research":
@@ -798,15 +789,15 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: Dict[str, Any]
             def _progress_cb(stage: str, detail: dict):
                 try:
                     asyncio.run_coroutine_threadsafe(
-                        _send_progress(websocket, stage, detail), loop)
+                        send_progress(svc, websocket, stage, detail), loop)
                 except Exception:
                     pass
             svc.research_engine.progress_callback = _progress_cb
 
         t_research = loop.time()
         try:
-            report = await _run_with_heartbeat(
-                websocket, f"research:{topic[:40]}", svc.research_engine.research, topic)
+            report = await run_with_heartbeat(
+                svc, websocket, f"research{topic[:40]}", svc.research_engine.research, topic)
         finally:
             svc.research_engine.max_rounds = int(os.getenv("VAULTBOT_RESEARCH_ROUNDS", "4"))
             svc.research_engine.max_follow_ups = int(os.getenv("VAULTBOT_RESEARCH_FOLLOWUPS", "3"))
@@ -820,9 +811,9 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: Dict[str, Any]
             try:
                 summary = (f"Research into '{topic}' ({report['source_count']} "
                            f"sources, {report['synthesis_facts']} facts).")
-                await _send_progress(websocket, "writing_note", {"topic": topic})
-                note_path = await _run_with_heartbeat(
-                    websocket, "writing_note",
+                await send_progress(svc, websocket, "writing_note", {"topic": topic})
+                note_path = await run_with_heartbeat(
+                    svc, websocket, "writing_note",
                     svc.note_creator.create_note_from_research,
                     topic, report["synthesis"], summary)
                 md = svc.research_engine.synthesize_note_markdown(report, summary)
@@ -837,10 +828,10 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: Dict[str, Any]
         # the new note (arXiv:2502.12110).
         if report.get("note_path"):
             try:
-                await _send_progress(websocket, "amem_evolve", {
+                await send_progress(svc, websocket, "amem_evolve", {
                     "note": Path(report["note_path"]).stem})
-                await _run_with_heartbeat(
-                    websocket, "amem_evolve",
+                await run_with_heartbeat(
+                    svc, websocket, "amem_evolve",
                     lambda: svc.amem.evolve_on_create(
                         report.get("note_path", ""), report.get("synthesis", ""),
                         skip_refresh=True))
@@ -957,7 +948,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: Dict[str, Any]
                 # Progress events are sent to the websocket from the thread.
                 async def _run_weave_bg():
                     try:
-                        await _weave_textbook_notes(
+                        await weave_textbook_notes(svc,
                             result, websocket=websocket,
                             session_logger=session_logger)
                     except Exception as e:

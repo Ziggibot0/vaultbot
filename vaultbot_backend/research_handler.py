@@ -25,6 +25,11 @@ from fastapi import WebSocket
 from services import Services
 from session_logger import SessionLogger
 
+# Leaf-module imports for helpers that were previously deferred-imported
+# from main (circular). These are now direct leaf imports — no main dependency.
+from chat_helpers import send_progress, run_with_heartbeat
+from chat_handler import handle_chat
+
 
 async def handle_research(
     websocket: WebSocket,
@@ -38,9 +43,8 @@ async def handle_research(
     The dig itself uses NO LLM — only extractive synthesis over corroborated
     sources. The LLM only sees the finished, sourced summary at the end.
     """
-    # Lazy imports to avoid an import cycle with main.py.
-    from main import _send_progress, _run_with_heartbeat, handle_chat
-
+    # Module-level imports from chat_helpers, chat_handler — no longer
+    # deferred from main (circular dependency eliminated).
     session_logger.log("research_begin", {"user_message": user_message})
     await svc.manager.send_personal_message(
         json.dumps({"type": "status", "content": "Researching the web (deep dig)..."}),
@@ -54,14 +58,14 @@ async def handle_research(
     def _progress_cb(stage: str, detail: dict):
         try:
             asyncio.run_coroutine_threadsafe(
-                _send_progress(websocket, stage, detail), loop)
+                send_progress(svc, websocket, stage, detail), loop)
         except Exception:
             pass
 
     svc.research_engine.progress_callback = _progress_cb
     try:
-        report = await _run_with_heartbeat(
-            websocket, "research", svc.research_engine.research, user_message)
+        report = await run_with_heartbeat(
+            svc, websocket, "research", svc.research_engine.research, user_message)
     except Exception as e:
         svc.research_engine.progress_callback = prev_cb
         session_logger.log_exception(e, context="research_engine.research")
@@ -93,7 +97,7 @@ async def handle_research(
     await svc.manager.send_personal_message(
         json.dumps({"type": "status", "content": "Creating linked note..."}),
         websocket, session_logger=session_logger)
-    await _send_progress(websocket, "writing_note", {"topic": derive_topic(user_message)})
+    await send_progress(svc, websocket, "writing_note", {"topic": derive_topic(user_message)})
 
     try:
         topic = report.get("topic") or derive_topic(user_message)
@@ -102,8 +106,8 @@ async def handle_research(
                    f"{report.get('synthesis_facts', 0)} facts).")
         if len(summary) > 800:
             summary = summary[:797] + "..."
-        note_path = await _run_with_heartbeat(
-            websocket, "writing_note",
+        note_path = await run_with_heartbeat(
+            svc, websocket, "writing_note",
             svc.note_creator.create_note_from_research, topic, research_text, summary)
         # Overwrite with the richer markdown so sources + follow-ups persist.
         try:
@@ -126,7 +130,7 @@ async def handle_research(
 
     # Refresh graph after writing so subsequent chats see the updated vault state
     svc.vault_graph.refresh()
-    await handle_chat(websocket, user_message, session_logger)
+    await handle_chat(svc, websocket, user_message, session_logger)
 
 
 def derive_topic(user_message: str) -> str:

@@ -141,6 +141,11 @@ def _check_pid_alive(pid: int) -> bool:
             return False
 
 def acquire_lock() -> None:
+    # Allow tests / subprocess smoke checks to import main without
+    # triggering the PID lock (which would sys.exit if a backend is
+    # running). Set VAULTBOT_SKIP_LOCK=1 in the environment.
+    if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
+        return
     if PID_FILE.exists():
         try:
             old_pid = int(PID_FILE.read_text().strip())
