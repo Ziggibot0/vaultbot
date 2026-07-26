@@ -2395,103 +2395,28 @@ async def handle_research(websocket: WebSocket, user_message: str, session_logge
     """Deep-research the web via the LLM-light engine, create a linked note,
     then answer from the note + vault.
 
-    The dig itself uses NO LLM — only extractive synthesis over corroborated
-    sources. The LLM only sees the finished, sourced summary at the end.
+    Thin shim — body extracted to research_handler.handle_research (which
+    receives the Services registry so it reads singletons via svc.<name>
+    instead of as free variables).
     """
-    session_logger.log("research_begin", {"user_message": user_message})
-    await manager.send_personal_message(json.dumps({"type": "status", "content": "Researching the web (deep dig)..."}), websocket, session_logger=session_logger)
-    loop = asyncio.get_event_loop()
-
-    t0 = loop.time()
-    # Wire a thread-safe progress callback so the UI shows each search round.
-    prev_cb = research_engine.progress_callback
-    def _progress_cb(stage: str, detail: dict):
-        try:
-            asyncio.run_coroutine_threadsafe(
-                _send_progress(websocket, stage, detail), loop)
-        except Exception:
-            pass
-    research_engine.progress_callback = _progress_cb
-    try:
-        report = await _run_with_heartbeat(
-            websocket, "research", research_engine.research, user_message)
-    except Exception as e:
-        research_engine.progress_callback = prev_cb
-        session_logger.log_exception(e, context="research_engine.research")
-        await manager.send_personal_message(json.dumps({"type": "error", "content": f"Research failed: {e}"}), websocket, session_logger=session_logger)
-        return
-    finally:
-        research_engine.progress_callback = prev_cb
-    session_logger.log("deep_research", {
-        "query": user_message,
-        "source_count": report.get("source_count", 0),
-        "facts": report.get("synthesis_facts", 0),
-        "rounds": len(report.get("rounds", [])),
-        "duration_ms": (loop.time() - t0) * 1000,
-    })
-
-    if not report.get("source_count"):
-        await manager.send_personal_message(json.dumps({"type": "error", "content": "No web sources found."}), websocket, session_logger=session_logger)
-        session_logger.log("research_error", {"stage": "search", "error": "no_sources"})
-        return
-
-    research_text = report.get("synthesis", "")
-    if not research_text:
-        research_text = " ".join(s.get("snippet", "") for s in report.get("sources", [])[:3])
-
-    await manager.send_personal_message(json.dumps({"type": "status", "content": "Creating linked note..."}), websocket, session_logger=session_logger)
-    await _send_progress(websocket, "writing_note", {"topic": _derive_topic(user_message)})
-
-    try:
-        topic = report.get("topic") or _derive_topic(user_message)
-        summary = (f"Deep research into '{topic}' "
-                   f"({report.get('source_count', 0)} sources, "
-                   f"{report.get('synthesis_facts', 0)} facts).")
-        if len(summary) > 800:
-            summary = summary[:797] + "..."
-        note_path = await _run_with_heartbeat(
-            websocket, "writing_note",
-            note_creator.create_note_from_research, topic, research_text, summary)
-        # Overwrite with the richer markdown so sources + follow-ups persist.
-        try:
-            md = research_engine.synthesize_note_markdown(report, summary)
-            Path(note_path).write_text(md, encoding="utf-8")
-        except Exception:
-            pass
-        session_logger.log("research_note_created", {"note_path": note_path, "topic": topic})
-    except Exception as e:
-        session_logger.log_exception(e, context="note_creator.create_note_from_research")
-        await manager.send_personal_message(json.dumps({"type": "error", "content": f"Note creation failed: {e}"}), websocket, session_logger=session_logger)
-        return
-
-    await manager.send_personal_message(json.dumps({"type": "status", "content": f"Created note: {Path(note_path).name}"}), websocket, session_logger=session_logger)
-    session_logger.log("research_end", {"note_path": note_path})
-
-    # Refresh graph after writing so subsequent chats see the updated vault state
-    vault_graph.refresh()
-    await handle_chat(websocket, user_message, session_logger)
+    from research_handler import handle_research as _handle_research_impl
+    return await _handle_research_impl(svc, websocket, user_message, session_logger)
 
 
 def _derive_topic(user_message: str) -> str:
-    """Derive a concise note title from the user's research request."""
-    cleaned = user_message.strip().rstrip("?").lower()
-    for word in ["what is", "what are", "research", "tell me about", "explain", "define"]:
-        cleaned = cleaned.replace(word, "")
-    cleaned = cleaned.strip().title()
-    return cleaned if cleaned else "Research Note"
+    """Derive a concise note title from the user's research request.
+
+    Thin shim — body extracted to research_handler.derive_topic.
+    """
+    from research_handler import derive_topic
+    return derive_topic(user_message)
 
 
 # Kept for backward compatibility; graph context is now built by build_graph_context.
 def build_context(results: list) -> str:
-    if not results:
-        return "VAULT CONTEXT: (no relevant notes found)"
-    lines = ["VAULT CONTEXT:"]
-    for i, res in enumerate(results, 1):
-        file_path = res.get("file_path", "")
-        note_name = Path(file_path).stem if file_path else "Unknown"
-        lines.append(f"\n--- Note {i}: [[{note_name}]] ---")
-        lines.append(res.get("content", "")[:1500])
-    return "\n".join(lines)
+    """Thin shim — body extracted to research_handler.build_context."""
+    from research_handler import build_context as _build_context_impl
+    return _build_context_impl(results)
 
 # --- /task: plain-English → verified plan execution (model-robust) --------
 
@@ -2501,169 +2426,49 @@ async def create_task(payload: dict):
     idempotent graph-op subtasks (each with a deterministic verifier), and
     execute them against the curated graph-op vocabulary.
 
-    The plan is persisted to disk so it survives crashes and model swaps —
-    a fresh session can resume from the plan file. Completion is decided by
-    a judge (deterministic verifier + optional LLM), not the worker's
-    self-report.
-
-    POST body: {"goal": "<plain English>", "execute": true}
-    If execute is false, returns the plan without running it.
+    Thin shim — body extracted to task_api.create_task (which receives the
+    Services registry so it reads singletons via svc.<name>).
     """
-    goal = (payload.get("goal") or "").strip()
-    if not goal:
-        return {"error": "missing goal"}, 400
-    execute_now = payload.get("execute", True)
-
-    loop = asyncio.get_event_loop()
-
-    # Step 1: ask the LLM to decompose the goal into atomic graph-op subtasks.
-    # Each subtask has: op (one of the 7), args, verifier (Python expression
-    # over result), intent. This is the one reasoning step where the model
-    # matters most — but the output is JSON with a fixed schema, so even a
-    # weak model produces a usable plan (NL2GQL evidence: schema grounding >
-    # parameter scale).
-    op_names = list(graph_op_registry.ops.keys())
-    op_descriptions = "\n".join(
-        f"  - {name}: {s['function']['description'][:120]}"
-        for name, s in zip(op_names, GRAPH_OP_SCHEMAS))
-    decompose_prompt = (
-        "You are a task planner for VaultBot, a self-improving research agent "
-        "in an Obsidian vault. Decompose the user's goal into a sequence of "
-        "atomic, verifiable subtasks using ONLY these graph operations:\n"
-        f"{op_descriptions}\n\n"
-        "Return a JSON object: {\"subtasks\": [{\"op\": \"...\", "
-        "\"intent\": \"...\", \"args\": {...}, \"verifier\": \"result.get('count',0) > 0\"}]}.\n"
-        "Each verifier is a Python expression over `result`. Make every subtask "
-        "idempotent and independently verifiable. Be specific.\n\n"
-        f"User goal: {goal}\n\nReturn ONLY valid JSON, no prose.")
-    try:
-        plan_response = await loop.run_in_executor(
-            None, lambda: ollama_client.chat(
-                [{"role": "user", "content": decompose_prompt}],
-                temperature=0.3, stream=False))
-    except Exception as e:
-        default_session_logger.log_exception(e, context="task_decompose")
-        return {"error": f"decomposition failed: {e}"}, 500
-
-    raw = plan_response.get("message", {}).get("content", "") if isinstance(plan_response, dict) else ""
-    # Parse the JSON plan (tolerate code fences / preamble).
-    try:
-        plan_data = json.loads(_extract_json(raw))
-    except Exception:
-        return {"error": "could not parse plan", "raw": raw[:500]}, 500
-
-    subtask_dicts = plan_data.get("subtasks", [])
-    if not subtask_dicts:
-        return {"error": "plan has no subtasks", "raw": raw[:500]}, 500
-
-    # Build the Plan object.
-    import time as _time
-    plan_id = f"task_{int(_time.time())}"
-    subtasks = []
-    for i, sd in enumerate(subtask_dicts):
-        subtasks.append(Subtask(
-            id=f"S{i+1}",
-            op=sd.get("op", ""),
-            intent=sd.get("intent", ""),
-            args=sd.get("args", {}),
-            verifier=sd.get("verifier", "True"),
-            max_attempts=int(sd.get("max_attempts", 5))))
-    plan = Plan(id=plan_id, goal=goal, subtasks=subtasks)
-
-    # Persist the plan so it survives crashes and model swaps.
-    plans_dir = Path(__file__).with_name("plans")
-    plans_dir.mkdir(exist_ok=True)
-    plan_path = plans_dir / f"{plan_id}.json"
-    plan_executor.save_plan(plan, str(plan_path))
-
-    if not execute_now:
-        return {"plan_id": plan_id, "plan": plan_executor.plan_to_json(plan),
-                "executed": False}
-
-    # Execute the plan (graph ops are idempotent; verifier gates each step).
-    try:
-        plan = await loop.run_in_executor(None, plan_executor.execute, plan)
-    except Exception as e:
-        default_session_logger.log_exception(e, context="task_execute")
-        return {"error": f"execution failed: {e}", "plan_id": plan_id}, 500
-    plan_executor.save_plan(plan, str(plan_path))
-
-    # Judge completion (deterministic fallback if no LLM).
-    judgment = plan_executor.judge(plan)
-    return {"plan_id": plan_id, "plan": plan_executor.plan_to_json(plan),
-            "judgment": judgment, "executed": True}
+    from task_api import create_task as _create_task_impl
+    return await _create_task_impl(svc, payload)
 
 
 def _write_partial(path: Path, user_message: str, answer: str, thinking: str) -> None:
     """Write the streamed-so-far answer to a partial file for crash recovery.
-    Called after each answer_chunk so a crash mid-stream preserves progress.
-    Never raises — a partial-write failure must not kill the chat loop.
+
+    Thin shim — body extracted to task_api.write_partial.
     """
-    try:
-        from datetime import datetime, timezone
-        path.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(timezone.utc).isoformat()
-        content = (
-            f"---\npartial: true\ncreated: {ts}\n---\n\n"
-            f"# Partial Answer (crash recovery)\n\n"
-            f"## User asked\n{user_message}\n\n"
-            f"## Answer so far\n{answer}\n\n"
-            f"## Thinking so far\n{thinking[:2000]}\n"
-        )
-        path.write_text(content, encoding="utf-8")
-    except Exception:
-        pass
+    from task_api import write_partial
+    return write_partial(path, user_message, answer, thinking)
 
 
 def _extract_json(text: str) -> str:
-    """Extract a JSON object from text that may have code fences or prose."""
-    import re as _re
-    # Strip code fences.
-    m = _re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, _re.DOTALL)
-    if m:
-        return m.group(1)
-    # Find the first { ... } block.
-    start = text.find("{")
-    if start >= 0:
-        depth = 0
-        for i in range(start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    return text[start:i+1]
-    return text.strip()
+    """Extract a JSON object from text that may have code fences or prose.
+
+    Thin shim — body extracted to task_api.extract_json.
+    """
+    from task_api import extract_json
+    return extract_json(text)
 
 
 @app.get("/task/{plan_id}")
 async def get_task(plan_id: str):
-    """Retrieve a persisted plan's status."""
-    plan_path = Path(__file__).with_name("plans") / f"{plan_id}.json"
-    if not plan_path.exists():
-        return {"error": "plan not found"}, 404
-    try:
-        plan = plan_executor.load_plan(str(plan_path))
-        return {"plan": plan_executor.plan_to_json(plan),
-                "judgment": plan_executor.judge(plan)}
-    except Exception as e:
-        return {"error": str(e)}, 500
+    """Retrieve a persisted plan's status.
+
+    Thin shim — body extracted to task_api.get_task.
+    """
+    from task_api import get_task as _get_task_impl
+    return await _get_task_impl(svc, plan_id)
 
 
 @app.post("/task/{plan_id}/resume")
 async def resume_task(plan_id: str):
-    """Resume a partially-completed plan from disk."""
-    plan_path = Path(__file__).with_name("plans") / f"{plan_id}.json"
-    if not plan_path.exists():
-        return {"error": "plan not found"}, 404
-    loop = asyncio.get_event_loop()
-    try:
-        plan = await loop.run_in_executor(None, plan_executor.resume, str(plan_path))
-    except Exception as e:
-        return {"error": str(e)}, 500
-    plan_executor.save_plan(plan, str(plan_path))
-    return {"plan": plan_executor.plan_to_json(plan),
-            "judgment": plan_executor.judge(plan)}
+    """Resume a partially-completed plan from disk.
+
+    Thin shim — body extracted to task_api.resume_task.
+    """
+    from task_api import resume_task as _resume_task_impl
+    return await _resume_task_impl(svc, plan_id)
 
 
 # --- /identity: the three-file identity layer ---------------------------
@@ -2671,26 +2476,22 @@ async def resume_task(plan_id: str):
 @app.get("/identity")
 async def get_identity():
     """Return the agent's current identity state (IDENTITY + SELF_MODEL +
-    GOALS) so the UI can show who the agent is and what it's working on."""
-    return {
-        "identity": identity.get_identity(),
-        "self_model": identity.get_self_model(),
-        "goals": identity.get_goals(),
-        "summary": identity.summary(),
-    }
+    GOALS) so the UI can show who the agent is and what it's working on.
+
+    Thin shim — body extracted to identity_api.get_identity.
+    """
+    from identity_api import get_identity as _get_identity_impl
+    return await _get_identity_impl(svc)
 
 
 @app.post("/identity/goals")
 async def set_goals(payload: dict):
-    """Update the agent's active goal (full-replace GOALS.md)."""
-    goal = payload.get("goal", "")
-    steps = payload.get("steps", [])
-    completed = payload.get("completed_step")
-    next_step = payload.get("next_step")
-    if not goal:
-        return {"error": "missing goal"}, 400
-    text = identity.update_goals(goal, steps, completed, next_step)
-    return {"goals": text, "summary": identity.summary()}
+    """Update the agent's active goal (full-replace GOALS.md).
+
+    Thin shim — body extracted to identity_api.set_goals.
+    """
+    from identity_api import set_goals as _set_goals_impl
+    return await _set_goals_impl(svc, payload)
 
 
 @app.post("/identity/self_model")
@@ -2701,15 +2502,11 @@ async def regenerate_self_model(payload: dict):
     that gave +5-20% across 7 architecturally diverse models (MIRROR,
     arXiv:2506.00430). The self-model is a ≤3000-token first-person narrative
     that makes the agent coherent across days regardless of model.
+
+    Thin shim — body extracted to identity_api.regenerate_self_model.
     """
-    activity = payload.get("activity", "")
-    loop = asyncio.get_event_loop()
-    try:
-        new_model = await loop.run_in_executor(
-            None, lambda: identity.regenerate_self_model(activity))
-    except Exception as e:
-        return {"error": str(e)}, 500
-    return {"self_model": new_model, "summary": identity.summary()}
+    from identity_api import regenerate_self_model as _regen_impl
+    return await _regen_impl(svc, payload)
 
 
 # --- /health: liveness endpoint for watchdog / monitoring ---------------
