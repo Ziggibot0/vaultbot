@@ -34,18 +34,24 @@ def pytest_collection_modifyitems(items):
 
     main.py's module top-level calls acquire_lock() which sys.exit(0)s
     if a backend is already running (vaultbot.pid exists). Importing it
-    in a test process is never safe. We scan sys.modules AFTER
-    collection (so all imports have resolved) and fail any item whose
-    module graph pulled in `main`.
+    in a test process is never safe — UNLESS the test module explicitly
+    opts in by setting `__allows_main_import__ = True` at module level
+    AND sets VAULTBOT_SKIP_LOCK=1 in the environment to bypass the PID
+    lock. This is the endpoint-test exemption: test_endpoints.py needs
+    `from main import app` to use FastAPI's TestClient.
     """
     if "main" in sys.modules:
-        # Inject a fail mark on every item so the run reports a clear
-        # error instead of silently running against a poisoned state.
         import pytest
         for item in items:
+            mod = getattr(item, 'module', None)
+            if mod and getattr(mod, '__allows_main_import__', False):
+                continue  # explicitly exempted (endpoint tests)
             item.add_marker(pytest.mark.fail(
                 reason="A test imported `main` (forbidden — it calls "
                        "acquire_lock() → sys.exit + loads the live FAISS "
                        "index). Import leaf modules only. See "
-                       "conftest.py docstring."
+                       "conftest.py docstring. If you need `from main "
+                       "import app` for endpoint tests, set "
+                       "`__allows_main_import__ = True` at module level "
+                       "AND ensure VAULTBOT_SKIP_LOCK=1 is set."
             ))
