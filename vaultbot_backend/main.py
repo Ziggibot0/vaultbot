@@ -4,8 +4,12 @@ import re
 import json
 import asyncio
 import atexit
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional, List
+
+logger = logging.getLogger(__name__)
 
 # ─── OpenMP conflict guard ──────────────────────────────────────────────────
 # faster-whisper (CTranslate2) ships libomp140.dll while faiss/torch/onnxruntime
@@ -149,7 +153,8 @@ def acquire_lock() -> None:
     if PID_FILE.exists():
         try:
             old_pid = int(PID_FILE.read_text().strip())
-        except Exception:
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
             old_pid = None
         if old_pid and _check_pid_alive(old_pid):
             print(f"VaultBot backend already running (PID {old_pid}). Exiting.")
@@ -160,13 +165,142 @@ def release_lock() -> None:
     try:
         if PID_FILE.exists() and PID_FILE.read_text().strip() == str(os.getpid()):
             PID_FILE.unlink()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
 
 acquire_lock()
 atexit.register(release_lock)
 
-app = FastAPI(title="VaultBot API")
+
+# ─── Lifespan: modern replacement for @app.on_event ──────────────────────
+# The deprecated @app.on_event("startup"/"shutdown") is scheduled for
+# removal in FastAPI. The lifespan context manager is the documented
+# replacement (https://fastapi.tiangolo.com/advanced/testing-events/).
+# It also lets TestClient(app) control startup/shutdown for endpoint tests.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ── (moved from the old @app.on_event("startup") handler)
+    # Truncate oversized stdout/stderr logs so they can't grow unbounded
+    # (was 256MB, mostly GET / heartbeat noise). Keep the last 1MB.
+    for _log_name in ("backend_stdout.log", "backend_stderr.log"):
+        _log_path = Path(__file__).parent / _log_name
+        try:
+            if _log_path.exists() and _log_path.stat().st_size > 10 * 1024 * 1024:
+                _log_path.with_name(_log_name).write_bytes(b"")
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
+
+    startup_logger = SessionLogger()
+    startup_logger.log("server_startup", {"stage": "begin"})
+    try:
+        loop = asyncio.get_event_loop()
+        # Purge stale crash-recovery partials. The old in-vault location
+        # (vaultbot_backend/partials/) caused Obsidian's file-recovery core
+        # plugin to race the backend's delete and spam ENOENT errors, so
+        # partials now live in the OS temp dir. Clean both locations on
+        # startup: any leftover partial is from a previous crashed session
+        # that already restarted, so it's stale and safe to remove.
+        def _purge_partials():
+            import tempfile
+            for d in (
+                Path(__file__).with_name("partials"),  # legacy in-vault dir
+                Path(tempfile.gettempdir()) / "vaultbot_partials",  # current
+            ):
+                if not d.is_dir():
+                    continue
+                for p in d.glob("partial_*.md"):
+                    try:
+                        p.unlink()
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
+        await loop.run_in_executor(None, _purge_partials)
+        # Load the persisted index and start watching for live edits immediately.
+        # Heavy re-indexing is deferred so the server/API is available right away.
+        await loop.run_in_executor(None, vault_indexer.load)
+        await loop.run_in_executor(None, vault_indexer.start_watching)
+
+        # Kick off background re-indexing of only new/changed notes after the server is up.
+        async def background_index():
+            try:
+                await loop.run_in_executor(None, vault_indexer.index_missing_or_changed)
+            except Exception as e:
+                startup_logger.log_exception(e, context="background_index")
+        asyncio.create_task(background_index())
+
+        startup_logger.log("server_startup", {"stage": "end", "status": "ok",
+                                   "vectors": vault_indexer.index.ntotal if vault_indexer.index else 0})
+        # Start the autonomous researcher so it begins filling vault gaps
+        # in the background. It waits a short grace period before its first
+        # cycle so the index/graph are settled.
+        try:
+            autonomous_researcher.start()
+            # Wire the health monitor's heartbeat into the researcher so the
+            # /health endpoint reflects live autonomous activity.
+            autonomous_researcher._heartbeat = health_monitor.heartbeat
+            health_monitor.start_watchdog(check_interval=300)
+            # Recover any interrupted research from a previous crash.
+            # The checkpointer stores in-flight work; on startup we check for
+            # status="running" checkpoints and re-queue them so the
+            # researcher actually retries them instead of just logging.
+            try:
+                recovery = checkpointer.recover(autonomous_researcher)
+                if recovery.get("recovered"):
+                    startup_logger.log("checkpointer_recovered", {
+                        "interrupted_count": len(recovery["recovered"]),
+                        "topics": [c.topic for c in recovery["recovered"]],
+                    })
+                    # Re-queue the interrupted gaps so the next cycle
+                    # researches them FIRST, before the curriculum's
+                    # normal proposals. This is the actual retry.
+                    recovered_gaps = []
+                    for ckpt in recovery["recovered"]:
+                        recovered_gaps.append(ckpt.gap if ckpt.gap else {
+                            "kind": ckpt.kind,
+                            "topic": ckpt.topic,
+                            "priority": 9999,  # top priority
+                            "normalized_name": ckpt.topic.lower(),
+                            "referenced_by": [],
+                        })
+                    if recovered_gaps:
+                        autonomous_researcher._recovered_gaps = recovered_gaps
+                        startup_logger.log("checkpointer_requeued", {
+                            "count": len(recovered_gaps),
+                            "topics": [g["topic"] for g in recovered_gaps],
+                        })
+            except Exception as e:
+                startup_logger.log("checkpointer_recovery_failed", {"error": str(e)})
+            startup_logger.log("autonomous_researcher_started", {})
+        except Exception as e:
+            startup_logger.log_exception(e, context="autonomous_researcher_start")
+    except Exception as e:
+        startup_logger.log_exception(e, context="server_startup")
+    finally:
+        startup_logger.close()
+
+    yield
+
+    # ── Shutdown ── (moved from the old @app.on_event("shutdown") handler)
+    shutdown_logger = SessionLogger()
+    shutdown_logger.log("server_shutdown", {"stage": "begin"})
+    try:
+        # Stop the autonomous researcher first so it doesn't fire mid-shutdown.
+        try:
+            autonomous_researcher.stop()
+            shutdown_logger.log("autonomous_researcher_stopped", {})
+        except Exception as e:
+            shutdown_logger.log_exception(e, context="autonomous_researcher_stop")
+        # Stop watching the vault for changes and persist the index
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, vault_indexer.stop_watching)
+        await loop.run_in_executor(None, vault_indexer.persist)
+        shutdown_logger.log("server_shutdown", {"stage": "end", "status": "ok"})
+    except Exception as e:
+        shutdown_logger.log_exception(e, context="server_shutdown")
+    finally:
+        shutdown_logger.close()
+
+
+app = FastAPI(title="VaultBot API", lifespan=lifespan)
 
 # Allow the Obsidian Electron app (origin app://obsidian.md) and local browsers
 # to call the API without browser CORS preflight blocks.
@@ -456,126 +590,6 @@ svc = Services(
     session_logger=default_session_logger,
     manager=manager,
 )
-
-@app.on_event("startup")
-async def startup_event():
-    # Truncate oversized stdout/stderr logs so they can't grow unbounded
-    # (was 256MB, mostly GET / heartbeat noise). Keep the last 1MB.
-    for _log_name in ("backend_stdout.log", "backend_stderr.log"):
-        _log_path = Path(__file__).parent / _log_name
-        try:
-            if _log_path.exists() and _log_path.stat().st_size > 10 * 1024 * 1024:
-                _log_path.with_name(_log_name).write_bytes(b"")
-        except Exception:
-            pass
-
-    startup_logger = SessionLogger()
-    startup_logger.log("server_startup", {"stage": "begin"})
-    try:
-        loop = asyncio.get_event_loop()
-        # Purge stale crash-recovery partials. The old in-vault location
-        # (vaultbot_backend/partials/) caused Obsidian's file-recovery core
-        # plugin to race the backend's delete and spam ENOENT errors, so
-        # partials now live in the OS temp dir. Clean both locations on
-        # startup: any leftover partial is from a previous crashed session
-        # that already restarted, so it's stale and safe to remove.
-        def _purge_partials():
-            import tempfile
-            for d in (
-                Path(__file__).with_name("partials"),  # legacy in-vault dir
-                Path(tempfile.gettempdir()) / "vaultbot_partials",  # current
-            ):
-                if not d.is_dir():
-                    continue
-                for p in d.glob("partial_*.md"):
-                    try:
-                        p.unlink()
-                    except Exception:
-                        pass
-        await loop.run_in_executor(None, _purge_partials)
-        # Load the persisted index and start watching for live edits immediately.
-        # Heavy re-indexing is deferred so the server/API is available right away.
-        await loop.run_in_executor(None, vault_indexer.load)
-        await loop.run_in_executor(None, vault_indexer.start_watching)
-
-        # Kick off background re-indexing of only new/changed notes after the server is up.
-        async def background_index():
-            try:
-                await loop.run_in_executor(None, vault_indexer.index_missing_or_changed)
-            except Exception as e:
-                startup_logger.log_exception(e, context="background_index")
-        asyncio.create_task(background_index())
-
-        startup_logger.log("server_startup", {"stage": "end", "status": "ok",
-                                   "vectors": vault_indexer.index.ntotal if vault_indexer.index else 0})
-        # Start the autonomous researcher so it begins filling vault gaps
-        # in the background. It waits a short grace period before its first
-        # cycle so the index/graph are settled.
-        try:
-            autonomous_researcher.start()
-            # Wire the health monitor's heartbeat into the researcher so the
-            # /health endpoint reflects live autonomous activity.
-            autonomous_researcher._heartbeat = health_monitor.heartbeat
-            health_monitor.start_watchdog(check_interval=300)
-            # Recover any interrupted research from a previous crash.
-            # The checkpointer stores in-flight work; on startup we check for
-            # status="running" checkpoints and re-queue them so the
-            # researcher actually retries them instead of just logging.
-            try:
-                recovery = checkpointer.recover(autonomous_researcher)
-                if recovery.get("recovered"):
-                    startup_logger.log("checkpointer_recovered", {
-                        "interrupted_count": len(recovery["recovered"]),
-                        "topics": [c.topic for c in recovery["recovered"]],
-                    })
-                    # Re-queue the interrupted gaps so the next cycle
-                    # researches them FIRST, before the curriculum's
-                    # normal proposals. This is the actual retry.
-                    recovered_gaps = []
-                    for ckpt in recovery["recovered"]:
-                        recovered_gaps.append(ckpt.gap if ckpt.gap else {
-                            "kind": ckpt.kind,
-                            "topic": ckpt.topic,
-                            "priority": 9999,  # top priority
-                            "normalized_name": ckpt.topic.lower(),
-                            "referenced_by": [],
-                        })
-                    if recovered_gaps:
-                        autonomous_researcher._recovered_gaps = recovered_gaps
-                        startup_logger.log("checkpointer_requeued", {
-                            "count": len(recovered_gaps),
-                            "topics": [g["topic"] for g in recovered_gaps],
-                        })
-            except Exception as e:
-                startup_logger.log("checkpointer_recovery_failed", {"error": str(e)})
-            startup_logger.log("autonomous_researcher_started", {})
-        except Exception as e:
-            startup_logger.log_exception(e, context="autonomous_researcher_start")
-    except Exception as e:
-        startup_logger.log_exception(e, context="server_startup")
-    finally:
-        startup_logger.close()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    shutdown_logger = SessionLogger()
-    shutdown_logger.log("server_shutdown", {"stage": "begin"})
-    try:
-        # Stop the autonomous researcher first so it doesn't fire mid-shutdown.
-        try:
-            autonomous_researcher.stop()
-            shutdown_logger.log("autonomous_researcher_stopped", {})
-        except Exception as e:
-            shutdown_logger.log_exception(e, context="autonomous_researcher_stop")
-        # Stop watching the vault for changes and persist the index
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, vault_indexer.stop_watching)
-        await loop.run_in_executor(None, vault_indexer.persist)
-        shutdown_logger.log("server_shutdown", {"stage": "end", "status": "ok"})
-    except Exception as e:
-        shutdown_logger.log_exception(e, context="server_shutdown")
-    finally:
-        shutdown_logger.close()
 
 @app.get("/")
 async def get():
@@ -930,8 +944,8 @@ async def research_tool_endpoint(payload: dict):
             try:
                 from pathlib import Path as _P
                 _P(note_path).write_text(md, encoding="utf-8")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
         except Exception as e:
             default_session_logger.log_exception(e, context="research_tool_note")
     report["note_path"] = note_path
@@ -1267,8 +1281,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         # whether it completed, errored, or was interrupted.
                         try:
                             autonomous_researcher.resume_after_chat()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("swallowed: %s", e)
                 return asyncio.create_task(_run())
 
             websocket._current_task = _spawn_handler()
@@ -1667,8 +1681,8 @@ async def shutdown_endpoint(request: Request):
     # log a warning about an unread body; the content is irrelevant.
     try:
         await request.body()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
 
     def _terminate():
         try:
@@ -1678,18 +1692,18 @@ async def shutdown_endpoint(request: Request):
             # Run the graceful shutdown path synchronously (best effort).
             try:
                 autonomous_researcher.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
             try:
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(vault_indexer.stop_watching())
                 loop.run_until_complete(vault_indexer.persist())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
             try:
                 release_lock()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
         finally:
             os._exit(0)
 

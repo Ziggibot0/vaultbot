@@ -14,6 +14,27 @@ Protocol: JSON-RPC 2.0 over stdin/stdout, per the MCP specification.
 The server is a thin shim: all heavy lifting (web search, extractive
 synthesis, note writing, vault graph) lives in the backend HTTP API.
 The burden stays on the vault/web, not on the LLM's weights.
+
+Tool surfaces
+-------------
+VaultBot exposes tools through two paths with different audiences:
+
+**In-vault chat (Obsidian plugin → /ws)**
+    The chat LLM sees ALL tools: 4 builtin vault tools (vault_research,
+    vault_search, vault_gaps, vaultbot_status) + 7 meta/self-improvement
+    tools (code_read, code_run, tool_create, self_reflect, git_rollback,
+    safe_write, capability_audit) + N agent-authored custom tools. This
+    is the full-featured surface — the agent can research, self-improve,
+    and use any tool it has written for itself.
+
+**External MCP (Copilot Chat, Claude Desktop → this stdio server)**
+    MCP clients see a curated surface: 3 vault tools (vault_research,
+    vault_gaps, vaultbot_status) + N agent-authored custom tools. The
+    self-improvement meta-tools (code_read, code_run, safe_write, etc.)
+    are NOT exposed — they're for the in-vault agent's autonomous growth,
+    not for external clients. This is by design: an external MCP client
+    asking "research X" should get research, not the ability to rewrite
+    the backend's source code.
 """
 
 import os

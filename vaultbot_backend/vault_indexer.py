@@ -102,6 +102,16 @@ class VaultIndexer:
                     self.metadata = pickle.load(f)
                 with open(self.timestamp_file, 'r') as f:
                     self.timestamps = json.load(f)
+                # Normalize any stale relative paths to absolute so a CWD change
+                # between sessions doesn't produce doubled paths (e.g.
+                # vaultbot_backend\vaultbot_backend\identity\...). This is a
+                # one-time migration — once all paths are absolute, the
+                # normalization is a no-op.
+                for meta in self.metadata:
+                    fp = Path(meta['file_path'])
+                    if not fp.is_absolute():
+                        resolved = (self.vault_path / fp).resolve()
+                        meta['file_path'] = str(resolved)
                 # Determine dimension from the index
                 self.dimension = self.index.d
                 print(f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}")
@@ -206,6 +216,8 @@ class VaultIndexer:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+        except FileNotFoundError:
+            return  # file was deleted between the watcher event and open — normal race
         except Exception as e:
             print(f"Error reading file {file_path}: {e}")
             return
@@ -266,7 +278,7 @@ class VaultIndexer:
         assert index is not None
         index.add(embedding.reshape(1, -1))  # type: ignore
         meta_entry: Dict[str, Any] = {
-            'file_path': str(file_path),
+            'file_path': str(file_path if file_path.is_absolute() else file_path.resolve()),
             'last_modified': last_modified,
             'content_hash': content_hash
         }
