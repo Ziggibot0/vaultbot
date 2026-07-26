@@ -86,3 +86,20 @@ desktop.ini
 
 # ─── Stray boot/test logs ───────────────────────────────────────────────────
 boot_*.log
+
+# ─── Airtight runtime/personal guards (Phase: distribution prep) ──────────
+# Runtime error logs + structured log files (regenerated on every run).
+vaultbot_backend/backend.err
+vaultbot_backend/*_log.json
+vaultbot_backend/partials/
+
+# Personal notes — these are the operator's relationship with their bot,
+# not generic capability docs. A new user grows their own.
+Sean-*.md
+Calibration-via-Operator-Feedback.md
+Cross-Session-Patterns-*.md
+
+# Obsidian local workspace state (user-specific view settings).
+.obsidian/app.json
+.obsidian/graph.json
+.obsidian/plugins/vaultbot/data.json

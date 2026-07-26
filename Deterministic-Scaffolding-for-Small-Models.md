@@ -1,5 +1,26 @@
+---
+type: exemplar
+exemplar: architecture-note
+created: 2025-07-25
+summary: "How to structure an architecture note — design reasoning, trade-offs, research-backed arguments, and what to build next."
+tags: [architecture, exemplar, scaffolding, small-models, deterministic]
+---
+
+<!-- EXEMPLAR ANNOTATION: ARCHITECTURE NOTE
+     This note is an exemplar for writing architecture notes. An architecture note:
+     1. Leads with a core insight or quote that frames the problem
+     2. Presents the pattern/solution with structured evidence (code blocks, tables)
+     3. Includes quantitative results from real-world case studies
+     4. Generalizes patterns into actionable principles (numbered list)
+     5. Maps the pattern to VaultBot's specific architecture
+     6. Identifies what's already deterministic vs what needs scaffolding
+     7. Ends with a "what to build" section and related wikilinks
+     8. Every claim is sourced with inline links to archived web pages
+-->
+
 # Deterministic Scaffolding for Small Models
 
+<!-- ANNOTATION: Lead with the core insight. One paragraph that frames the entire problem and solution. Include a sourced quote if available. -->
 ## The Core Insight
 
 > "The AI proposes; the scaffolding disposes." -- [OpenEmpower: Deterministic Scaffolding for Agentic AI](learningMaterial/web/www-openempower-com-blog-deterministic-scaffolding-agentic-ai-case-study-what-1bad6127.html)
@@ -8,6 +29,7 @@ AI models are probabilistic. Production systems must be deterministic. The solut
 
 This is the architecture that makes a 30B local model sufficient from day 1. The framework does the heavy lifting, not the model's weights.
 
+<!-- ANNOTATION: Present the core pattern with a structured code block. This makes the architecture visually clear and easy to pattern-match against. -->
 ## The Sandwich Pattern
 
 The core architecture from the [OpenEmpower case study](learningMaterial/web/www-openempower-com-blog-deterministic-scaffolding-agentic-ai-case-study-what-1bad6127.html) -- a European bank processing 2,000 regulatory filings/month:
@@ -27,6 +49,7 @@ Output Layer (Deterministic)
 
 **Results:** 3 weeks (12 analysts) -> 3 days (2 analysts). Error rate: 5% -> 0.3%. The scaffolding caught most AI errors; humans caught the rest.
 
+<!-- ANNOTATION: Generalize from the specific case to actionable principles. Use a numbered list with bold key terms. Each pattern should be independently applicable. -->
 ## Five Patterns That Generalize
 
 From the [OpenEmpower case study](learningMaterial/web/www-openempower-com-blog-deterministic-scaffolding-agentic-ai-case-study-what-1bad6127.html):
@@ -41,6 +64,7 @@ From the [OpenEmpower case study](learningMaterial/web/www-openempower-com-blog-
 
 5. **Fail safe** -- When validation fails, route to humans (or in VaultBot's case, to IDK fallback). Never produce unvalidated output. The system degrades to "I don't know," not to uncontrolled AI output. This directly connects to the [[IDK-Fallback-Directive]].
 
+<!-- ANNOTATION: Map the general pattern to VaultBot's specific architecture. Split into 'what's already deterministic' vs 'what needs scaffolding' — this makes the gap actionable. -->
 ## What This Means for VaultBot
 
 VaultBot already has pieces of this pattern. The gap is making them explicit and deterministic:
@@ -91,6 +115,7 @@ From [Few-Shot Prompting Examples 2026](learningMaterial/web/neuraplus-ai-github
 
 **For VaultBot:** The vault should contain tagged exemplar notes -- best research note, best tool creation, best gap-fill. When a 30B model needs to write a research note, FUSED retrieval pulls the exemplar and the model pattern-matches. The shots live permanently in the vault, not in the prompt.
 
+<!-- ANNOTATION: End with a forward-looking section. What needs to be built? What components are missing? This makes the note actionable, not just descriptive. -->
 ## The Path to Cloud Model Obsolescence
 
 ### What the Cloud Model Currently Does (That It Shouldn't Need To)
@@ -129,6 +154,7 @@ The cloud model's job is **not** to build the scaffolding. The framework's job i
 
 The vault finds these things through [[Autonomy-Directive|autonomous research]] and stores them. The 30B follows them. The cloud model becomes unnecessary not because it's been replaced by a better model, but because the framework has absorbed the cognition that the model was providing.
 
+<!-- ANNOTATION: Every architecture note should end with wikilinks to related notes. These connections make the note findable via graph traversal, not just keyword search. -->
 ## Related
 - [[Small-Model-Path-to-AGI]] -- the original theory note (now updated with this framing)
 - [[Autonomy-Directive]] -- VaultBot operates autonomously, finding and storing scaffolding
@@ -141,3 +167,6 @@ The vault finds these things through [[Autonomy-Directive|autonomous research]] 
 ## Philosophical Grounding
 
 The sandwich pattern (deterministic validation wrapping probabilistic AI) is grounded in **epistemology** — specifically the Gettier problem. A model can produce a true output by accident (Gettier case), but the validation layer ensures outputs are not just true but *justified*. See [[Knowledge-Triad-Ontology-Epistemology-Hermeneutics]] for how this connects to ontology (structure) and hermeneutics (interpretation).
+
+
+LOCKED

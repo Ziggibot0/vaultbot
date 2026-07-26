@@ -203,7 +203,7 @@ applies_to:
   - research
   - note-writing
 depends_on:
-  - "[[Example-Procedure]]"
+  - "Example-Procedure-Name"
 sources:
   - "https://example.com/guide"
   - "https://example.com/best-practices"

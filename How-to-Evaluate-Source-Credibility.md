@@ -1,5 +1,7 @@
 ---
-type: procedure
+type: exemplar
+exemplar: procedural-note
+exemplar_procedure: true
 status: experimental
 created: 2026-07-26
 last_reviewed: 2026-07-26
@@ -19,8 +21,20 @@ sources:
   - "https://www.onlinecolleges.net/for-students/online-academic-research/"
 ---
 
+<!-- EXEMPLAR ANNOTATION: PROCEDURAL NOTE
+     This note is an exemplar for writing procedural notes. A procedural note:
+     1. Has full procedural schema in frontmatter (type, status, falsifiable_if, applies_to, depends_on, sources)
+     2. Starts with 'When to Use This' — clear scope of when the procedure applies
+     3. Has numbered steps, each starting with a bold action verb
+     4. Each step is independently actionable — no step requires reading another step to understand
+     5. Ends with a grading/decision section that produces a deterministic output
+     6. Links to related procedures and directives via wikilinks
+     7. Has a falsifiable_if clause — the procedure can be proven wrong
+ -->
+
 # How to Evaluate Source Credibility
 
+<!-- ANNOTATION: Start with clear scope. When does this procedure apply? What does it cover? What does it NOT cover? This prevents the model from applying the procedure in the wrong context. -->
 ## When to Use This
 
 Use this procedure when the research engine returns sources and you need to decide which to trust and cite. This applies to:
@@ -28,6 +42,7 @@ Use this procedure when the research engine returns sources and you need to deci
 - Deciding which sources to include in a research note's synthesis
 - Assessing whether a source is strong enough to support a claim
 
+<!-- ANNOTATION: Each step is numbered and starts with a bold action verb. The steps are sequential — follow them in order. Each step is self-contained: no step requires reading another step to understand what to do. -->
 ## Steps
 
 1. **Check authority.** Who wrote this? What are their credentials? Is the publisher reputable (academic press, government, established organization)? If you can't identify the author or publisher, the source is weak.
@@ -76,3 +91,6 @@ A 2017 Stanford University study compared how university students, faculty, and 
 - [[How-to-Structure-a-Research-Note]] — the next step after source evaluation
 - [[No-Wikipedia-Directive]] — blocked sources
 - [[Vault-Knowledge-Only-Directive]] — vault is the only knowledge source
+
+
+LOCKED

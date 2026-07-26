@@ -92,3 +92,10 @@ follow the same safety protocol the agent uses:
 4. If you added a tool, mention it in the README's feature list.
 5. Keep the LLM-call economy — don't introduce gratuitous LLM calls in
    loops that are currently LLM-free.
+
+## Related
+
+- [[Implementation-Plan-Architecture-Modules]] — the architecture modules
+- [[Procedural-Bootstrap-and-Evolution-Plan]] — the development plan
+- [[Vault-Longevity-Architecture]] — long-term architecture
+- [[Exemplar-Tool-Creation]] — how to create tools properly
