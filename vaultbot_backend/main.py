@@ -1285,27 +1285,16 @@ async def websocket_endpoint(websocket: WebSocket):
 async def _send_progress(websocket: WebSocket, stage: str,
                           detail: Optional[Dict[str, Any]] = None) -> None:
     """Send a structured progress event to the live UI."""
-    try:
-        await manager.send_personal_message(
-            json.dumps({"type": "progress", "stage": stage,
-                         "detail": detail or {}}),
-            websocket, session_logger=default_session_logger)
-    except Exception:
-        pass
+    from chat_helpers import send_progress
+    await send_progress(svc, websocket, stage, detail)
 
 
 async def _heartbeat(websocket: WebSocket, label: str,
                       start_time: float, interval: float = 2.0) -> None:
     """Push a one-shot heartbeat so the UI can render elapsed time + a
     'still alive' pulse. Called periodically by long-running executors."""
-    try:
-        elapsed = asyncio.get_event_loop().time() - start_time
-        await manager.send_personal_message(
-            json.dumps({"type": "heartbeat", "label": label,
-                         "elapsed_ms": int(elapsed * 1000)}),
-            websocket, session_logger=default_session_logger)
-    except Exception:
-        pass
+    from chat_helpers import heartbeat
+    await heartbeat(svc, websocket, label, start_time, interval)
 
 
 async def _run_with_heartbeat(websocket: WebSocket, label: str,
@@ -1316,22 +1305,8 @@ async def _run_with_heartbeat(websocket: WebSocket, label: str,
     `coro_or_fn` is a plain callable (run in the default executor). Heartbeats
     fire every `interval` seconds with the elapsed time, and a final
     progress event fires when the call returns."""
-    loop = asyncio.get_event_loop()
-    t0 = loop.time()
-    interval = kwargs.pop("interval", 2.0)
-    task = loop.run_in_executor(None, lambda: coro_or_fn(*args, **kwargs))
-    while not task.done():
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=interval)
-        except asyncio.TimeoutError:
-            await _heartbeat(websocket, label, t0, interval)
-        except Exception:
-            # Re-raise the real exception from the task.
-            return task.result()
-    result = task.result()
-    await _send_progress(websocket, label + "_done", {
-        "duration_ms": int((loop.time() - t0) * 1000)})
-    return result
+    from chat_helpers import run_with_heartbeat
+    return await run_with_heartbeat(svc, websocket, label, coro_or_fn, *args, **kwargs)
 
 
 async def handle_chat(websocket: WebSocket, user_message: str, session_logger: SessionLogger):
@@ -1340,19 +1315,35 @@ async def handle_chat(websocket: WebSocket, user_message: str, session_logger: S
 
     This is the Jarvis loop — the LLM self-directs instead of shrugging.
     """
-    session_logger.log("chat_begin", {"user_message": user_message})
+    from chat_handler import handle_chat as _handle_chat_impl
+    await _handle_chat_impl(svc, websocket, user_message, session_logger)
 
-    # Chat-priority: pause the autonomous researcher so it doesn't compete
-    # with this interactive turn for the Ollama GPU. On a single-GPU laptop
-    # the user's embedding + LLM calls would otherwise queue behind the
-    # researcher's background synthesis, making the chat appear to hang.
-    # Resumed in the finally block below so it always clears (even on
-    # cancel/error). The researcher skips its cycle while this is set.
-    autonomous_researcher.pause_for_chat()
 
-    # Calibration: detect if this message is a correction of the previous
-    # answer. Sean's corrections are ground truth for calibrating automated
-    # quality gates. See [[Calibration-via-Operator-Feedback]].
+async def _execute_agent_tool(tool_name: str, args: Dict[str, Any],
+                              session_logger: SessionLogger,
+                              websocket: Optional[WebSocket] = None) -> Dict[str, Any]:
+    """Execute one tool call from the chat LLM. Runs in the async context.
+
+    `websocket` is passed so long-running tools (vault_research) can push
+    live progress events to the UI instead of going silent for 30-60s.
+    """
+    from chat_handler import execute_agent_tool
+    return await execute_agent_tool(svc, tool_name, args, session_logger, websocket)
+
+
+async def _execute_agent_tool(tool_name: str, args: Dict[str, Any],
+                              session_logger: SessionLogger,
+                              websocket: Optional[WebSocket] = None) -> Dict[str, Any]:
+    """Execute one tool call from the chat LLM. Runs in the async context.
+
+    `websocket` is passed so long-running tools (vault_research) can push
+    live progress events to the UI instead of going silent for 30-60s.
+    """
+    loop = asyncio.get_event_loop()
+
+    if tool_name == "vault_research":
+        topic = (args.get("topic") or "").strip()
+        depth = args.get("depth", "deep")
     try:
         _prev_history = getattr(websocket, "conversation_history", None)
         _prev_answer = None
@@ -2267,33 +2258,14 @@ def _existing_note_titles() -> dict:
     scan. The graph's ignore-dir filter (venv/.obsidian/.git/etc.) already
     applies; the textbooks-folder exclusion is applied here.
     """
-    titles: Dict[str, str] = {}
-    try:
-        for _name, node in (vault_graph.nodes or {}).items():
-            fp = node.get("file_path") or ""
-            if not fp:
-                continue
-            # Skip the textbooks/ folder — those are what we're weaving.
-            if ("vaultbot" + os.sep + "textbooks" + os.sep
-                    not in fp + os.sep):
-                pass  # not a textbook note — keep it
-            else:
-                continue
-            stem = Path(fp).stem
-            if len(stem) < 3:
-                continue  # too short to link safely (e.g. "a", "is")
-            titles[stem.lower()] = fp
-    except Exception:
-        pass
-    return titles
+    from weaving import existing_note_titles
+    return existing_note_titles(svc)
 
 
 def _is_ignored_index_path(p: Path) -> bool:
     """True for vault subpaths the indexer/graph ignore (venv, index, etc.)."""
-    parts = str(p).replace("\\", "/").lower()
-    ignored = ("vaultbot_venv/", "vaultbot_backend/vaultbot_index/",
-               "vaultbot_backend/partials/", ".git/")
-    return any(seg in parts for seg in ignored)
+    from weaving import is_ignored_index_path
+    return is_ignored_index_path(p)
 
 
 def _link_outbound(note_path: str, title_map: dict) -> int:
@@ -2307,56 +2279,16 @@ def _link_outbound(note_path: str, title_map: dict) -> int:
       - Skips the title line (H1) so the note's own heading isn't self-linked.
       - Atomic write; never raises (returns 0 on any failure).
     """
-    try:
-        p = Path(note_path)
-        text = p.read_text(encoding="utf-8", errors="replace")
-        if not text:
-            return 0
-        lines = text.split("\n")
-        # Skip the first H1 line (the note's own heading).
-        start = 1 if lines and lines[0].lstrip().startswith("# ") else 0
-        links_added = 0
-        for stem_lower, _fp in title_map.items():
-            if len(stem_lower) < 4:
-                continue
-            # Match the title as a whole word, case-insensitive, but NOT when
-            # it's already inside a wikilink. The lookbehind/lookahead block
-            # matches right after `[[` or right before `]]`, so an already-
-            # linked mention is skipped. A bare mention mid-sentence matches.
-            pattern = re.compile(
-                r"(?<!\[\[)\b" + re.escape(stem_lower) + r"\b(?!\]\])",
-                re.IGNORECASE)
-            for i in range(start, len(lines)):
-                # Don't link a mention that sits inside a URL.
-                if "http" in lines[i] and stem_lower in lines[i].lower():
-                    # Could still link a non-URL word on the same line; the
-                    # subn count=1 picks the first match, so only skip if the
-                    # first match is inside the URL. Simplest safe rule: skip
-                    # the line entirely if the title appears inside an http link.
-                    url_match = re.search(r"https?://\S*", lines[i])
-                    if url_match and stem_lower in url_match.group(0).lower():
-                        continue
-                new_line, n = pattern.subn(
-                    lambda m: f"[[{m.group(0)}]]", lines[i], count=1)
-                if n:
-                    lines[i] = new_line
-                    links_added += n
-        if links_added:
-            p.write_text("\n".join(lines), encoding="utf-8")
-        return links_added
-    except Exception:
-        return 0
+    from weaving import link_outbound
+    return link_outbound(note_path, title_map)
 
 
 def _index_note_now(note_path: str) -> None:
     """Index a single note immediately so it's searchable right away (instead
     of waiting for the background watcher). Failure-isolated.
     """
-    try:
-        vault_indexer._add_file(note_path)
-        vault_indexer.persist()
-    except Exception:
-        pass
+    from weaving import index_note_now
+    return index_note_now(svc, note_path)
 
 
 # ---------------------------------------------------------------------------
@@ -2416,76 +2348,8 @@ def _cross_link_textbooks(new_abs_paths: list[str],
 
     Returns {"cross_links_added": int, "notes_linked": int}; never raises.
     """
-    out: Dict[str, Any] = {"cross_links_added": 0, "notes_linked": 0}
-    try:
-        textbooks_dir = (Path(os.getenv("VAULT_PATH", "."))
-                         / "vaultbot" / "textbooks")
-        if not textbooks_dir.exists():
-            return out
-        # Build the set of all textbook note paths (candidates for cross-linking).
-        all_textbook_paths = [str(p) for p in textbooks_dir.rglob("*.md")]
-        if len(all_textbook_paths) < 2:
-            return out
-        import numpy as _np
-        for new_path in new_abs_paths:
-            try:
-                emb = emb_by_path.get(new_path)
-                if emb is None:
-                    continue
-                # Find nearest neighbors among ALL indexed notes.
-                hits = vault_indexer.search_by_vector(
-                    _np.asarray(emb, dtype=_np.float32),
-                    k=15)  # over-fetch then filter
-                # Filter to: textbook notes, not self, not same book.
-                # We collect ALL cross-book textbook candidates first, then
-                # apply the relative distance threshold (link to candidates
-                # within _CROSS_LINK_DISTANCE_RATIO × the nearest candidate's
-                # distance).  This adapts to any embedding model's distance
-                # scale — raw L2 in 768-dim space runs 45-195, not 0-1.
-                candidates: list = []
-                for h in hits:
-                    fp = h.get("file_path", "")
-                    if not fp or fp == new_path:
-                        continue
-                    fp_norm = str(Path(fp).resolve())
-                    new_norm = str(Path(new_path).resolve())
-                    if fp_norm == new_norm:
-                        continue
-                    # Must be a textbook note.
-                    if "vaultbot" + os.sep + "textbooks" + os.sep not in fp_norm + os.sep:
-                        continue
-                    # Exclude same-book notes if we have source_keys.
-                    if source_keys and fp_norm in source_keys:
-                        continue
-                    dist = h.get("score", 999.0)
-                    candidates.append((fp, dist))
-                if not candidates:
-                    continue
-                # Sort by distance (closest first).
-                candidates.sort(key=lambda x: x[1])
-                nearest = candidates[0][1]
-                # Absolute floor: if even the nearest cross-book candidate is
-                # very far away, there's no real semantic match — skip.
-                if nearest > _CROSS_LINK_MAX_ABS_DISTANCE:
-                    continue
-                # Relative threshold: keep candidates within
-                # _CROSS_LINK_DISTANCE_RATIO × nearest.
-                cutoff = nearest * _CROSS_LINK_DISTANCE_RATIO
-                links = [(fp, d) for fp, d in candidates if d <= cutoff]
-                links = links[:_CROSS_LINK_MAX_PER_NOTE]
-                if not links:
-                    continue
-                # Insert/refresh the "Related sections" block in the new note
-                # + a backlink in each target note.
-                added = _insert_related_block(new_path, links)
-                if added:
-                    out["cross_links_added"] += added
-                    out["notes_linked"] += 1
-            except Exception:
-                continue
-    except Exception:
-        pass
-    return out
+    from weaving import cross_link_textbooks
+    return cross_link_textbooks(svc, new_abs_paths, emb_by_path, source_keys)
 
 
 def _insert_related_block(note_path: str,
@@ -2498,61 +2362,14 @@ def _insert_related_block(note_path: str,
     duplicates).  The block is placed before the `---\n**Navigation:**`
     footer so it sits with the body, not in the nav.
     """
-    try:
-        p = Path(note_path)
-        text = p.read_text(encoding="utf-8", errors="replace")
-        # Build the new Related sections block.
-        lines = []
-        for fp, _dist in links:
-            stem = Path(fp).stem
-            lines.append(f"- [[{stem}]]")
-        block = _CROSS_LINK_HEADER + "\n" + "\n".join(lines) + "\n"
-        # Remove any existing Related sections block (idempotent refresh).
-        text = _strip_related_block(text)
-        # Insert before the navigation footer.
-        nav_idx = text.find("\n---\n**Navigation:**")
-        if nav_idx == -1:
-            nav_idx = text.find("\n---\n")
-        if nav_idx == -1:
-            text = text.rstrip() + "\n\n" + block
-        else:
-            text = text[:nav_idx].rstrip() + "\n\n" + block + text[nav_idx:]
-        p.write_text(text, encoding="utf-8")
-        # Backlinks: add the new note to each target's Related sections block.
-        new_stem = p.stem
-        added = 0
-        for fp, _dist in links:
-            try:
-                tp = Path(fp)
-                ttext = tp.read_text(encoding="utf-8", errors="replace")
-                ttext = _strip_related_block(ttext)
-                back_block = (_CROSS_LINK_HEADER + "\n"
-                              + f"- [[{new_stem}]]\n")
-                tnav_idx = ttext.find("\n---\n**Navigation:**")
-                if tnav_idx == -1:
-                    tnav_idx = ttext.find("\n---\n")
-                if tnav_idx == -1:
-                    ttext = ttext.rstrip() + "\n\n" + back_block
-                else:
-                    ttext = (ttext[:tnav_idx].rstrip() + "\n\n"
-                             + back_block + ttext[tnav_idx:])
-                tp.write_text(ttext, encoding="utf-8")
-                added += 1
-            except Exception:
-                continue
-        return added + len(links)
-    except Exception:
-        return 0
+    from weaving import insert_related_block
+    return insert_related_block(note_path, links)
 
 
 def _strip_related_block(text: str) -> str:
     """Remove an existing '## Related sections' block from a note (idempotent)."""
-    import re as _re
-    # Match the header + its bullet lines up to the next blank line / heading / ---.
-    pat = _re.compile(
-        r"\n?## Related sections\n(?:- \[\[[^\]]+\]\]\n)+\n?",
-        _re.MULTILINE)
-    return pat.sub("\n", text)
+    from weaving import strip_related_block
+    return strip_related_block(text)
 
 
 async def _weave_textbook_notes(ingest_result: dict,
@@ -2564,301 +2381,14 @@ async def _weave_textbook_notes(ingest_result: dict,
     If `websocket` is provided, sends live progress events so the user sees
     "linking 47/129…" instead of a frozen screen during a long weave.
     """
-    out: Dict[str, Any] = {
-        "indexed": 0, "outbound_links_added": 0,
-        "amem_evolved": 0, "amem_links_added": 0,
-        "cross_links_added": 0, "notes_cross_linked": 0,
-        "notes": [],
-        "status": "complete",
-    }
-    sl = session_logger or default_session_logger
-    try:
-        created = ingest_result.get("notes_created", [])
-        updated = ingest_result.get("notes_updated", [])
-        note_rels = created + updated
-        total = len(note_rels)
-        if not note_rels:
-            return out
-        # Resolve absolute paths. The ingester returns paths relative to its
-        # VAULT_DIR (which is <vault_root>/vaultbot), so we prepend vaultbot/
-        # when joining to the vault root. We try both forms to be safe.
-        vault_root = Path(os.getenv("VAULT_PATH", "."))
-        title_map = _existing_note_titles()
-        loop = asyncio.get_event_loop()
-
-        if websocket is not None:
-            await _send_progress(websocket, "weaving_begin", {
-                "total_notes": total,
-                "message": f"Linking {total} textbook notes into the vault..."})
-
-        # Resolve all absolute paths first
-        abs_paths: list[str] = []
-        for rel in note_rels:
-            candidate = (vault_root / "vaultbot" / rel).resolve()
-            if not candidate.exists():
-                candidate = (vault_root / rel).resolve()
-            abs_paths.append(str(candidate))
-
-        # --- Pass 1: batch-index all notes in parallel --- #
-        # This is the slow part (embedding calls).  We fire them all at once
-        # via ThreadPoolExecutor so Ollama processes them concurrently, and
-        # we ASK FOR THE EMBEDDINGS BACK so the A-MEM pass below can reuse
-        # them as neighbor-search queries instead of re-embedding each note
-        # (saves one embedding call per note — ~129 calls on a big ingest).
-        if websocket is not None:
-            await _send_progress(websocket, "weaving_progress", {
-                "note": 0, "total": total,
-                "message": f"Indexing {total} notes in parallel..."})
-        indexed, emb_by_path = await loop.run_in_executor(
-            None, vault_indexer.batch_add_files, abs_paths, True)
-        out["indexed"] = indexed
-
-        # One graph refresh for the whole weave — the graph doesn't change
-        # between consecutive notes in the same ingest, so refreshing once
-        # here (instead of inside every evolve_on_create) saves N full vault
-        # rescans.  A-MEM is told to skip its own refresh via skip_refresh.
-        try:
-            vault_graph.refresh()
-        except Exception:
-            pass
-
-        # --- Pass 2: outbound links + A-MEM (sequential, fast) --- #
-        # A-MEM runs in heuristic_only mode here: the per-neighbor LLM
-        # tag-suggestion call is skipped entirely, so a 129-note ingest
-        # makes ZERO generative LLM calls during the weave (the single-note
-        # vault_research path still uses the LLM).  The heuristic adds the
-        # new note's title as a tag + inserts a backlink — most of A-MEM's
-        # value for textbook sections, which have unambiguous titles.
-        for idx, (rel, abs_path) in enumerate(zip(note_rels, abs_paths)):
-            if websocket is not None and (idx % 10 == 0 or idx == total - 1):
-                await _send_progress(websocket, "weaving_progress", {
-                    "note": idx + 1, "total": total,
-                    "message": f"Linking note {idx+1}/{total}..."})
-
-            # outbound-link into existing notes
-            added = await loop.run_in_executor(
-                None, _link_outbound, abs_path, title_map)
-            out["outbound_links_added"] += added
-            # A-MEM: evolve existing neighbors (old -> new backlinks).
-            # heuristic_only=True skips the LLM; query_embedding reuses the
-            # embedding we just computed during indexing; skip_refresh=True
-            # because we refreshed the graph once above.
-            try:
-                content = Path(abs_path).read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                content = ""
-            ev = await loop.run_in_executor(
-                None, lambda c=content, a=abs_path: amem.evolve_on_create(
-                    a, c,
-                    heuristic_only=True,
-                    query_embedding=emb_by_path.get(a),
-                    skip_refresh=True))
-            if ev.get("evolved_count"):
-                out["amem_evolved"] += ev["evolved_count"]
-            out["amem_links_added"] += ev.get("links_added", 0)
-            out["notes"].append({
-                "note": rel, "outbound": added,
-                "neighbors_evolved": ev.get("evolved_count", 0),
-            })
-
-        # --- Pass 3: cross-book concept linking (LLM-free, semantic) --- #
-        # The outbound linker (pass 2) explicitly excludes textbooks, so two
-        # books covering the same concept (calculus + physics both covering
-        # "derivatives") stay invisible to each other — info islands.  This
-        # pass uses the FAISS index + the embeddings we already computed to
-        # find semantically similar sections ACROSS textbooks and insert
-        # bidirectional "## Related sections" wikilinks.  Tight distance
-        # threshold (0.75) so only genuine concept overlap gets linked, not
-        # "both are about math."  Idempotent.  Same-book notes excluded.
-        if websocket is not None:
-            await _send_progress(websocket, "weaving_progress", {
-                "note": total, "total": total,
-                "message": f"Cross-linking {total} notes to other textbooks..."})
-        # Build the set of paths belonging to THIS ingest's book so we don't
-        # cross-link a book to its own sections (intra-book nav is the
-        # ingester's job).
-        source_keys = set(abs_paths)
-        cross = await loop.run_in_executor(
-            None, _cross_link_textbooks, abs_paths, emb_by_path, source_keys)
-        out["cross_links_added"] = cross.get("cross_links_added", 0)
-        out["notes_cross_linked"] = cross.get("notes_linked", 0)
-
-        # --- Pass 4: L1 concept cards (LLM-free abstraction layer) --- #
-        # Build a terse concept card (~300-500 chars) for each L0 section so
-        # the chat loop can walk the ABSTRACT graph (cards) instead of the
-        # raw graph (full chapters).  Cards point back to their L0 source
-        # via `> source: [[...]]`.  Zero LLM calls — extractive sketch only.
-        # Cards are first-class vault nodes: indexed by FAISS, walked by the
-        # link graph, hop-able by the LLM at ~1/100th the context cost of L0.
-        if websocket is not None:
-            await _send_progress(websocket, "weaving_progress", {
-                "note": total, "total": total,
-                "message": f"Building concept cards for {total} notes..."})
-        try:
-            card_result = await loop.run_in_executor(
-                None, build_cards_batch, abs_paths, vault_graph, None)
-            out["cards_built"] = card_result.get("cards_built", 0)
-            card_paths = card_result.get("card_paths", [])
-        except Exception as e:
-            out["cards_built"] = 0
-            card_paths = []
-            try:
-                sl.log("concept_card_build_failed", {"error": str(e)})
-            except Exception:
-                pass
-
-        # --- Pass 5: L2 maps of content (incremental, graph-integrity-
-        # preserving).  Cluster the L1 cards by embedding similarity and
-        # write/update one MOC note per cluster.  INCREMENTAL: existing
-        # clusters keep their IDs + members (so L2 abstractions stay
-        # supported by their L1 cards — no "floating abstractions"); only
-        # new/changed cards are assigned (to the nearest existing cluster
-        # within threshold, or seed a new one), and only AFFECTED MOC notes
-        # are rewritten.  Reuses the ingest embeddings — zero new embedding
-        # calls for clustering; only the new cards needed indexing. --- #
-        if card_paths:
-            if websocket is not None:
-                await _send_progress(websocket, "weaving_progress", {
-                    "note": total, "total": total,
-                    "message": f"Clustering {len(card_paths)} new cards into maps of content..."})
-            # Index the new cards so they're in the FAISS index + get their
-            # embeddings back for clustering.  This is the only new embedding
-            # cost of the whole hierarchy build, and it's parallel + local.
-            try:
-                _cn, card_embs = await loop.run_in_executor(
-                    None, vault_indexer.batch_add_files, card_paths, True)
-                vault_graph.refresh()
-                textbooks_dir = (Path(os.getenv("VAULT_PATH", ".")) / "vaultbot" / "textbooks")
-                # Gather ALL L1 cards in the vault (incremental mode needs
-                # the full set to preserve existing cluster assignments;
-                # only the new subset gets assigned).  Merge the new
-                # embeddings with any existing ones we can recover.
-                all_card_paths = [str(p) for p in textbooks_dir.rglob("*-L1.md")]
-                # The new cards' embeddings are in card_embs; for existing
-                # cards not in this batch, recover their embeddings from the
-                # FAISS index via search_by_vector on themselves (cheap —
-                # we have the content).  Fall back to re-embedding only if
-                # needed.
-                full_embs = dict(card_embs)
-                missing = [p for p in all_card_paths if p not in full_embs]
-                if missing:
-                    try:
-                        _mn, recovered = await loop.run_in_executor(
-                            None, vault_indexer.batch_add_files, missing, True)
-                        full_embs.update(recovered)
-                    except Exception:
-                        pass
-                moc_result = await loop.run_in_executor(
-                    None, build_mocs_incremental, all_card_paths, full_embs,
-                    str(textbooks_dir), card_paths, None)
-                out["mocs_built"] = moc_result.get("mocs_built", 0)
-                out["mocs_updated"] = moc_result.get("mocs_updated", 0)
-                out["mocs_unchanged"] = moc_result.get("mocs_unchanged", 0)
-                out["new_clusters"] = moc_result.get("new_clusters", 0)
-                out["clusters"] = moc_result.get("clusters", [])
-                # Re-index the MOC notes that were written/updated.
-                moc_paths = moc_result.get("moc_paths", [])
-                if moc_paths:
-                    await loop.run_in_executor(
-                        None, vault_indexer.batch_add_files, moc_paths, False)
-                try:
-                    sl.log("hierarchy_built", {
-                        "cards": out.get("cards_built", 0),
-                        "mocs": out.get("mocs_built", 0),
-                        "mocs_updated": out.get("mocs_updated", 0),
-                        "mocs_unchanged": out.get("mocs_unchanged", 0),
-                        "new_clusters": out.get("new_clusters", 0),
-                        "clusters": len(out.get("clusters", []))})
-                except Exception:
-                    pass
-            except Exception as e:
-                out["mocs_built"] = 0
-                try:
-                    sl.log("moc_build_failed", {"error": str(e)})
-                except Exception:
-                    pass
-        else:
-            out["mocs_built"] = 0
-
-        if websocket is not None:
-            await _send_progress(websocket, "weaving_done", {
-                "total_notes": total,
-                "indexed": out["indexed"],
-                "outbound_links": out["outbound_links_added"],
-                "amem_evolved": out["amem_evolved"],
-                "amem_links": out["amem_links_added"],
-                "cross_links": out.get("cross_links_added", 0),
-                "notes_cross_linked": out.get("notes_cross_linked", 0),
-                "cards_built": out.get("cards_built", 0),
-                "mocs_built": out.get("mocs_built", 0),
-                "message": (f"Done: {out['outbound_links_added']} outbound links, "
-                            f"{out['amem_evolved']} neighbors evolved, "
-                            f"{out.get('cross_links_added', 0)} cross-book links, "
-                            f"{out.get('cards_built', 0)} concept cards, "
-                            f"{out.get('mocs_built', 0)} maps of content "
-                            f"across {total} notes.")})
-
-        sl.log("textbook_weave_complete", {
-            "total": total, "indexed": out["indexed"],
-            "outbound_links": out["outbound_links_added"],
-            "amem_evolved": out["amem_evolved"],
-            "amem_links": out["amem_links_added"],
-            "cross_links": out.get("cross_links_added", 0),
-            "notes_cross_linked": out.get("notes_cross_linked", 0),
-            "cards_built": out.get("cards_built", 0),
-            "mocs_built": out.get("mocs_built", 0)})
-    except Exception as e:
-        out["error"] = str(e)
-        out["status"] = "error"
-        sl.log("textbook_weave_failed", {"error": str(e)})
-        if websocket is not None:
-            await _send_progress(websocket, "weaving_done", {
-                "message": f"Weaving completed with errors: {str(e)[:100]}"})
-    return out
+    from weaving import weave_textbook_notes
+    return await weave_textbook_notes(svc, ingest_result, websocket, session_logger)
 
 
 def _tool_result_summary(tool_name: str, result: Any) -> str:
     """Human-readable one-line summary of a tool result for the UI."""
-    if not isinstance(result, dict):
-        return str(result)[:200]
-    if result.get("error"):
-        return f"error: {str(result['error'])[:150]}"
-    if tool_name == "vault_research":
-        return (f"{result.get('source_count', 0)} sources, "
-                f"{result.get('synthesis_facts', 0)} facts"
-                + (f", note: {Path(result['note_path']).stem}"
-                   if result.get("note_path") else ""))
-    if tool_name == "vault_search":
-        return f"{len(result.get('results', []))} notes found"
-    if tool_name == "vault_gaps":
-        return f"{result.get('count', 0)} gaps found"
-    if tool_name == "vaultbot_status":
-        st = result
-        return ("running" if st.get("running") else "stopped") + \
-               f", {st.get('history_count', 0)} cycles"
-    if tool_name == "code_read":
-        return f"{result.get('total_lines', 0)} lines from {result.get('file_path', '?')}"
-    if tool_name == "code_run":
-        return f"exit {result.get('exit_code', '?')}: {str(result.get('stdout', ''))[:80]!r}"
-    if tool_name == "tool_create":
-        return f"{result.get('status', '?')}: {result.get('tool_name', '?')}"
-    if tool_name == "self_reflect":
-        return f"reflection: {str(result.get('reflection', ''))[:80]!r}"
-    if tool_name == "git_rollback":
-        return f"restored {result.get('restored', '?')}"
-    if tool_name == "safe_write":
-        st = result.get("status", "?")
-        if st == "written":
-            return f"safe_write: wrote {result.get('bytes', 0)} bytes to {result.get('file_path', '?')} (verified)"
-        if st == "dry_run_ok":
-            return f"safe_write dry_run: OK — would write safely"
-        return f"safe_write {st}: {str(result.get('error', ''))[:80]}"
-    if tool_name == "capability_audit":
-        return f"{result.get('total', 0)} tools ({result.get('kinds', {})})"
-    # Custom tools: try to extract a meaningful key.
-    if isinstance(result, dict) and result.get("result"):
-        return str(result["result"])[:120]
-    return str(result)[:200]
+    from chat_helpers import tool_result_summary
+    return tool_result_summary(tool_name, result)
 
 
 async def handle_research(websocket: WebSocket, user_message: str, session_logger: SessionLogger):
