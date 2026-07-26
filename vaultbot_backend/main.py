@@ -510,6 +510,7 @@ manager = ConnectionManager()
 # services.py. The globals above stay in place; only the extracted
 # functions change to `svc.<name>` access.
 from services import Services
+from app_state import set_services, get_services  # Phase 3: DI surface for routers
 
 svc = Services(
     ollama_client=ollama_client,
@@ -541,6 +542,21 @@ svc = Services(
     session_logger=default_session_logger,
     manager=manager,
 )
+
+# Phase 3: register the singleton so routers using Depends(get_services)
+# receive the live Services instance.  This must run BEFORE app.include_router
+# is called for any router (the router handlers dereference get_services at
+# request time, so the order within startup doesn't matter, but set it now
+# so it's impossible to forget).
+set_services(svc)
+
+# -- Phase 3: include routers (extracted route groups) --
+# Each router module reads the Services singleton via Depends(get_services)
+# instead of main.py's module-level globals.  Migrated routes are deleted
+# from main.py as they move into routers/.  See routers/__init__.py for the
+# migration order.
+from routers import system as _system_router
+app.include_router(_system_router.router)
 
 @app.get("/")
 async def get():
@@ -1581,36 +1597,6 @@ async def regenerate_self_model(payload: dict):
     return await _regen_impl(svc, payload)
 
 
-# --- /health: liveness endpoint for watchdog / monitoring ---------------
-
-@app.get("/health")
-async def health():
-    """Liveness check. Returns uptime, heartbeat age, current task, and
-    dependency status so a watchdog (or the Obsidian plugin) can detect hangs
-    and restart if needed. Keep this <50ms.
-    """
-    extra = {
-        "ollama": _ping_ollama(),
-        "autonomous_enabled": autonomous_researcher.enabled,
-        "autonomous_running": bool(autonomous_researcher._thread and
-                                   autonomous_researcher._thread.is_alive()),
-        "index_vectors": vault_indexer.index.ntotal if vault_indexer.index else 0,
-        "graph_nodes": len(vault_graph.nodes),
-        "identity_self_model_chars": len(identity.get_self_model()),
-    }
-    return health_monitor.health(extra=extra)
-
-
-def _ping_ollama() -> bool:
-    """Quick check that Ollama is responding."""
-    try:
-        import requests
-        r = requests.get(f"{ollama_client.base_url}/api/version", timeout=2)
-        return r.status_code == 200
-    except Exception:
-        return False
-
-
 @app.post("/shutdown")
 async def shutdown_endpoint(request: Request):
     """Self-terminate the backend so the Obsidian plugin can stop it
@@ -1660,49 +1646,6 @@ async def shutdown_endpoint(request: Request):
 
     threading.Thread(target=_terminate, daemon=True).start()
     return {"status": "shutting_down"}
-
-
-# --- /checkpoints: crash-recovery status --------------------------------
-
-@app.get("/checkpoints")
-async def checkpoint_status():
-    """Return the autonomous researcher's checkpoint state so the UI can
-    show whether there's interrupted work to resume after a crash.
-    """
-    return checkpointer.summary()
-
-
-@app.post("/checkpoints/recover")
-async def recover_checkpoints():
-    """Manually trigger recovery of any interrupted research work."""
-    try:
-        loop = asyncio.get_event_loop()
-        recovery = await loop.run_in_executor(None, checkpointer.recover, autonomous_researcher)
-        return recovery
-    except Exception as e:
-        return {"error": str(e)}, 500
-
-
-@app.get("/supervision/nssm")
-async def nssm_install_script():
-    """Return the nssm install commands so the user can install VaultBot as a
-    Windows service that starts on boot, restarts on crash, and rotates logs.
-    Run the output in an admin terminal to install.
-    """
-    vaultbot_dir = str(Path(__file__).parent.resolve())
-    python_exe = str(Path(sys.executable).resolve())
-    log_dir = str(Path(vaultbot_dir).parent / "logs")
-    return {
-        "install": generate_nssm_install(vaultbot_dir, python_exe, log_dir),
-        "uninstall": generate_nssm_uninstall(),
-        "instructions": (
-            "1. Install nssm: https://nssm.cc/download\n"
-            "2. Open an admin terminal\n"
-            "3. Paste the install commands\n"
-            "4. VaultBot will start on boot, restart on crash, and run for days.\n"
-            "5. Logs rotate at 10MB in: " + log_dir
-        ),
-    }
 
 
 if __name__ == "__main__":

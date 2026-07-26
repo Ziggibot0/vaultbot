@@ -8,18 +8,46 @@ functions and route handlers. As main.py is split into separate modules
 can no longer read the globals as free variables. Instead they receive a
 `Services` instance as a parameter and access singletons via `svc.<name>`.
 
-This module deliberately uses `TYPE_CHECKING` + string annotations to avoid
-import cycles — no leaf module is imported at services.py top level. The
-`Services` dataclass is a pure data container; main.py constructs it once
-after the globals block and passes it to the extracted functions.
+Phase 3 (typed Services): the fields are now typed with their real classes
+(imported under ``TYPE_CHECKING`` so no runtime import cycle is created).
+This gives IDE autocomplete + type-checking across every extracted module
+without changing the no-cycle property.  ``get_services()`` / ``set_services()``
+live in ``app_state.py`` and are the FastAPI dependency-injection surface.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass  # all fields are string-annotated; no runtime imports needed
+    from ollama_client import OllamaClient
+    from llm_client import LLMClient
+    from vault_indexer import VaultIndexer
+    from vault_graph import VaultGraph
+    from note_creator import NoteCreator
+    from research_engine import ResearchEngine
+    from free_search import FreeSearch
+    from autonomous_researcher import AutonomousResearcher
+    from knowledge_curriculum import KnowledgeCurriculum
+    from checkpointer import Checkpointer
+    from procedure_tracker import ProcedureTracker
+    from self_improver import SelfImprover
+    from identity import Identity
+    from graph_ops import GraphOpRegistry
+    from plan_executor import PlanExecutor
+    from amem_evolution import AMemeEvolution
+    from fused_retrieval import FusedRetriever
+    from embedding_drift import EmbeddingDrift
+    from compactor import Compactor
+    from lazy_condenser import LazyCondenser
+    from context_budgeter import ContextBudgeter
+    from supervision import HealthMonitor
+    from calibration import CalibrationTracker
+    from rag_eval import RAGEvaluator
+    from claim_verifier import ClaimVerifier
+    from pattern_extractor import PatternExtractor
+    from session_logger import SessionLogger
+
 
 @dataclass
 class Services:
@@ -28,43 +56,51 @@ class Services:
     Constructed once in main.py after the globals block. Extracted modules
     receive a `Services` instance as their first parameter and access
     singletons via attribute access (``svc.ollama_client``, etc.) instead of
-    reading main.py's module-level globals as free variables.
+    reading main.py's module-level globals as free variables.  Routers
+    receive it via ``Depends(get_services)`` (see app_state.py).
+
+    The ``ollama_client`` and ``vision_client`` fields are mutable: the
+    ``/llm/config`` route can swap the synthesis client at runtime, and
+    every ``Depends(get_services)`` consumer sees the new client immediately
+    (the dataclass instance is shared, not re-created per request).
     """
     # LLM + embeddings
-    ollama_client: Any
-    vision_client: Any | None
+    ollama_client: OllamaClient
+    vision_client: LLMClient | None
     # Index + graph
-    vault_indexer: Any
-    vault_graph: Any
-    note_creator: Any
+    vault_indexer: VaultIndexer
+    vault_graph: VaultGraph
+    note_creator: NoteCreator
     # Research
-    research_engine: Any
-    search_client: Any
-    autonomous_researcher: Any
-    knowledge_curriculum: Any
-    checkpointer: Any
-    procedure_tracker: Any
+    research_engine: ResearchEngine
+    search_client: FreeSearch
+    autonomous_researcher: AutonomousResearcher
+    knowledge_curriculum: KnowledgeCurriculum
+    checkpointer: Checkpointer
+    procedure_tracker: ProcedureTracker
     # Self-improvement + identity
-    self_improver: Any
-    identity: Any
+    self_improver: SelfImprover
+    identity: Identity
     # Plan execution
-    graph_op_registry: Any
-    plan_executor: Any
+    graph_op_registry: GraphOpRegistry
+    plan_executor: PlanExecutor
     # A-MEM + retrieval
-    amem: Any
-    fused_retriever: Any
-    embedding_drift: Any
+    amem: AMemeEvolution
+    fused_retriever: FusedRetriever
+    embedding_drift: EmbeddingDrift
     # Context management
-    compactor: Any
-    lazy_condenser: Any
-    context_budgeter: Any
+    compactor: Compactor
+    lazy_condenser: LazyCondenser
+    context_budgeter: ContextBudgeter
     # Health + monitoring
-    health_monitor: Any
+    health_monitor: HealthMonitor
     # Calibration + evaluation + verification
-    calibration_tracker: Any
-    rag_evaluator: Any
-    claim_verifier: Any
-    pattern_extractor: Any
+    calibration_tracker: CalibrationTracker
+    rag_evaluator: RAGEvaluator
+    claim_verifier: ClaimVerifier
+    pattern_extractor: PatternExtractor
     # Session logging + websocket manager
-    session_logger: Any
-    manager: Any
+    session_logger: SessionLogger
+    # ConnectionManager is defined in main.py (kept there for now); typed
+    # loosely to avoid importing main here (would create a cycle).
+    manager: "object"
