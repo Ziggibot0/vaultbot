@@ -40,17 +40,20 @@ def test_main_imports_without_name_error():
     backend_dir = Path(__file__).parent.parent.resolve()
     # A minimal import check: can main.py be imported without error?
     # We don't call any functions — just verify the module graph resolves.
+    # Phase 3: the handle_chat/handle_research/_execute_agent_tool shims were
+    # deleted from main.py (they live in chat_handler.py / research_handler.py
+    # now, called directly by routers/ws.py). Verify the extracted modules
+    # import instead.
     code = (
         "import sys; sys.path.insert(0, r'" + str(backend_dir) + "'); "
         "import main; "
         "print('main imported OK'); "
-        # Verify the shim functions exist and are callable
-        "assert callable(main.handle_chat); "
-        "assert callable(main._execute_agent_tool); "
-        "assert callable(main.handle_research); "
-        "assert callable(main.create_task); "
-        "assert callable(main.get_identity); "
-        "print('shims verified OK')"
+        # Verify the extracted handler modules import (the shims are gone).
+        "from chat_handler import handle_chat; assert callable(handle_chat); "
+        "from research_handler import handle_research; assert callable(handle_research); "
+        "from task_api import create_task; assert callable(create_task); "
+        "from identity_api import get_identity; assert callable(get_identity); "
+        "print('handlers verified OK')"
     )
     env = {
         "VAULTBOT_SKIP_LOCK": "1",  # bypass PID lock
@@ -73,4 +76,4 @@ def test_main_imports_without_name_error():
         f"stderr: {result.stderr}"
     )
     assert "main imported OK" in result.stdout
-    assert "shims verified OK" in result.stdout
+    assert "handlers verified OK" in result.stdout
