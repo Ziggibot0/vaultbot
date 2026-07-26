@@ -174,7 +174,7 @@ class VaultIndexer:
                             meta['file_path'] = str(fp)
                         try:
                             vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
-                        except Exception:
+                        except Exception:  # noqa: BLE001  migration best-effort — skip any bad legacy vector
                             print(f"[migration] Skipping unreconstructable "
                                   f"legacy vector {i} ({meta['file_path']})")
                             continue
@@ -191,7 +191,7 @@ class VaultIndexer:
                 if self.index is not None:
                     self.dimension = self.index.d
                     print(f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  corruption recovery — fall back to a fresh index on any load error
                 print(f"Error loading existing index: {e}. Creating new index.")
                 self._init_new_index()
         else:
@@ -212,7 +212,7 @@ class VaultIndexer:
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.md5(f.read()).hexdigest()
-        except Exception:
+        except OSError:  # file gone / permission error — treat as unchanged
             return ""
 
     def _get_embedding(self, text: str) -> np.ndarray:
@@ -296,7 +296,7 @@ class VaultIndexer:
                 content = f.read()
         except FileNotFoundError:
             return  # file was deleted between the watcher event and open — normal race
-        except Exception as e:
+        except OSError as e:  # permission error / IO error
             print(f"Error reading file {file_path}: {e}")
             return
 
@@ -320,7 +320,7 @@ class VaultIndexer:
         # Get embedding
         try:
             embedding = self._get_embedding(content)
-        except Exception as e:
+        except (RuntimeError, ConnectionError) as e:  # Ollama down / API error
             print(f"Error getting embedding for {file_path}: {e}")
             return
 
@@ -409,7 +409,7 @@ class VaultIndexer:
                 continue
             try:
                 content = fp.read_text(encoding="utf-8", errors="replace")
-            except Exception:
+            except OSError:  # file gone between exists() and read — skip
                 continue
             # Skip unchanged files (O(1) lookup)
             content_hash = self._get_file_hash(fp)
@@ -446,7 +446,7 @@ class VaultIndexer:
                 i = futures[future]
                 try:
                     embeddings[i] = future.result()
-                except Exception:
+                except Exception:  # noqa: BLE001  embedding best-effort — a failed embed shouldn't abort the batch
                     embeddings[i] = None
 
         # Add to index
@@ -531,7 +531,7 @@ class VaultIndexer:
                 vec = self.index.reconstruct(fid).astype(np.float32).reshape(1, -1)  # type: ignore
                 live_ids.append(fid)
                 live_vecs.append(vec)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  compaction best-effort — prune tombstoned/unreconstructable ids
                 # reconstruct can fail if the id was already tombstoned;
                 # treat as dead and prune.
                 dead_keys.append((fid, meta['file_path']))
@@ -696,7 +696,7 @@ class VaultIndexer:
             return None
         try:
             return self.index.reconstruct(faiss_id).astype(np.float32)  # type: ignore
-        except Exception as e:
+        except RuntimeError as e:  # faiss raises on bad/tombstoned id
             self._log_tool("reconstruct_embedding", {"file_path": file_path},
                            error=str(e))
             return None
@@ -746,7 +746,7 @@ class VaultIndexer:
                 try:
                     with open(file_path, encoding='utf-8') as f:
                         content = f.read()
-                except Exception:
+                except OSError:  # file gone / corrupt — return a placeholder
                     content = "[Error reading file]"
             results.append({
                 'file_path': str(file_path),
