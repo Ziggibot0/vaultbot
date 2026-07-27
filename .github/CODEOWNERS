@@ -1,0 +1,7 @@
+# CODEOWNERS for the VaultBot repository
+#
+# Sean Kellogg (project founder & custodian) is the required reviewer for
+# every path. No PR merges without his explicit approval. This is the
+# formal mechanism behind "the maintainer keeps control of what ships."
+
+* @skelogg

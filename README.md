@@ -158,6 +158,21 @@ Wikipedia") and it will store that as a directive note itself.
 
 MIT — see [LICENSE](LICENSE). VaultBot is yours to run, modify, and share.
 
+## Project founder & custodian
+
+**Sean Kellogg** — project founder and custodian. Sole merge authority for
+this repository; final say on project direction and what ships.
+
+- Email: skelogg124@gmail.com
+- Role: maintainer / moderator (no copyright assignment required from
+  contributors — see [CONTRIBUTING.md](CONTRIBUTING.md))
+
+## Reporting security issues
+
+Found a vulnerability? Please report it privately to
+skelogg124@gmail.com instead of opening a public issue. See
+[SECURITY.md](SECURITY.md) for details.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The short version: test with
