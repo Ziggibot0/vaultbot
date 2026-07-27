@@ -57,6 +57,7 @@ _CHARS_PER_TOKEN = 4
 _IDENTITY_FILENAME = "IDENTITY.md"
 _SELF_MODEL_FILENAME = "SELF_MODEL.md"
 _GOALS_FILENAME = "GOALS.md"
+_RESTART_CONTEXT_FILENAME = "RESTART_CONTEXT.md"
 
 # ---------------------------------------------------------------------------
 # Seed content
@@ -141,6 +142,7 @@ class Identity:
         self._identity_path = os.path.join(identity_dir, _IDENTITY_FILENAME)
         self._self_model_path = os.path.join(identity_dir, _SELF_MODEL_FILENAME)
         self._goals_path = os.path.join(identity_dir, _GOALS_FILENAME)
+        self._restart_context_path = os.path.join(identity_dir, _RESTART_CONTEXT_FILENAME)
 
         try:
             os.makedirs(identity_dir, exist_ok=True)
@@ -178,14 +180,28 @@ class Identity:
 
     def boot_context(self) -> str:
         """Read all three files and return a single string for injection into
-        the system prompt, verbatim. Order: IDENTITY + SELF_MODEL + GOALS.
+        the system prompt, verbatim. Order: RESTART_CONTEXT (if present) +
+        IDENTITY + SELF_MODEL + GOALS.
 
         This is the "boot injection" — delivered before the first turn, never
         summarized. Cached on the files' mtimes so consecutive turns in a
         session skip the disk reads; the cache is invalidated automatically
         whenever any of the three files is edited.
+
+        If RESTART_CONTEXT.md exists (written by the backend_restart tool
+        before triggering a restart), it is prepended to the boot context and
+        then deleted — one-shot injection so the agent wakes up after a
+        restart already knowing what was happening. The restart context is
+        NOT included in the cache, so it only appears on the first boot
+        after restart.
         """
         try:
+            # Check for one-shot restart context first. This is consumed
+            # (read + deleted) immediately, then prepended to the return
+            # value. It is NOT stored in the boot cache, so subsequent
+            # boot_context() calls in the same session won't include it.
+            restart_ctx = self._consume_restart_context()
+
             # Cache check: stat the three files and compare to the cached
             # mtime. If none changed, reuse the assembled string.
             paths = (self._identity_path, self._self_model_path, self._goals_path)
@@ -194,12 +210,17 @@ class Identity:
                 try:
                     current_mtime = max(current_mtime, os.path.getmtime(p))
                 except OSError:
-                    # Missing file (seed_if_missing should have created it,
-                    # but be defensive) — force a rebuild by diverging mtime.
                     current_mtime = float("inf")
                     break
-            if self._boot_cache is not None and current_mtime == self._boot_cache_mtime:
+
+            if (
+                self._boot_cache is not None
+                and current_mtime == self._boot_cache_mtime
+            ):
                 self._safe_log("identity_boot_cache_hit", {})
+                # Prepend restart context to cached value if present.
+                if restart_ctx:
+                    return restart_ctx + "\n\n" + self._boot_cache
                 return self._boot_cache
 
             identity = self.get_identity()
@@ -214,15 +235,37 @@ class Identity:
                 parts.append("# GOALS\n" + goals)
             assembled = "\n\n".join(parts)
             self._boot_cache = assembled
-            # Only persist the mtime when we actually read the files (not the
-            # inf sentinel from a missing-file branch).
             if current_mtime != float("inf"):
                 self._boot_cache_mtime = current_mtime
+            # Prepend restart context to the return value, NOT to the cache.
+            if restart_ctx:
+                return restart_ctx + "\n\n" + assembled
             return assembled
         except Exception as exc:
             logger.exception("boot_context failed: %s", exc)
             self._safe_log("identity_boot_error", {"error": str(exc)})
             return ""
+
+    def _consume_restart_context(self) -> str:
+        """Read and delete RESTART_CONTEXT.md if it exists (one-shot).
+
+        Written by the backend_restart tool before triggering a restart.
+        Contains recent chat history so the agent wakes up knowing what
+        was happening. Consumed on the first boot_context() call after
+        restart, then deleted so it doesn't persist across turns.
+        """
+        try:
+            if os.path.exists(self._restart_context_path):
+                content = self._read(self._restart_context_path)
+                os.remove(self._restart_context_path)
+                self._safe_log(
+                    "identity_restart_context_consumed",
+                    {"chars": len(content)},
+                )
+                return content
+        except Exception as exc:
+            logger.warning("Failed to consume restart context: %s", exc)
+        return ""
 
     # ------------------------------------------------------------------
     # MIRROR bounded reconstruction
