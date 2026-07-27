@@ -14,7 +14,7 @@ def run(args: dict) -> dict:
        system prompt automatically, then deletes the file (one-shot).
 
     This means after a restart, the agent wakes up already knowing what
-    was happening — no need to call resume_context or ask Sean.
+    was happening — no manual steps needed.
 
     The plugin then:
     1. Calls POST /shutdown (graceful backend shutdown)
