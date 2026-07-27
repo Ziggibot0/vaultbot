@@ -11,8 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -27,13 +25,6 @@ from conversation_state import load_history, clear_history
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Path to RESTART_CONTEXT.md — written by the backend_restart tool before
-# triggering a restart. If this file exists when a WebSocket connects, the
-# agent proactively resumes work without waiting for Sean to send a message.
-_RESTART_CONTEXT_PATH = (
-    Path(__file__).resolve().parent.parent / "identity" / "RESTART_CONTEXT.md"
-)
-
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket,
@@ -44,12 +35,6 @@ async def websocket_endpoint(websocket: WebSocket,
     compactor trims it when it grows too long. The receive loop spawns
     fire-and-forget tasks for each chat/research turn so stop/new messages
     stay responsive.
-
-    AUTO-RESUME: If RESTART_CONTEXT.md exists (written by backend_restart
-    before triggering a restart), the agent proactively sends a message to
-    Sean and spawns handle_chat with a synthetic "continue" trigger. This
-    means after a restart, the agent wakes up and continues working without
-    Sean having to send a wake-up message. See [[Auto-Resume-Directive]].
     """
     session_logger = SessionLogger()
     client_host = websocket.client.host if websocket.client else "unknown"
@@ -72,51 +57,6 @@ async def websocket_endpoint(websocket: WebSocket,
             "turns": len(restored),
             "history_chars": sum(len(str(m.get("content", ""))) for m in restored),
         })
-
-    # ---- AUTO-RESUME ---------------------------------------------------
-    # If RESTART_CONTEXT.md exists, the backend was restarted mid-session.
-    # The restart context (recent chat history) will be injected into the
-    # system prompt by Identity.boot_context() on the first handle_chat
-    # call. Here we proactively trigger that call so the agent resumes
-    # without Sean having to send a wake-up message.
-    if _RESTART_CONTEXT_PATH.exists():
-        session_logger.log("auto_resume_triggered", {
-            "restart_context": str(_RESTART_CONTEXT_PATH),
-        })
-        # Send a proactive heads-up to Sean so he sees something happening.
-        await svc.manager.send_personal_message(
-            json.dumps({
-                "type": "chat",
-                "content": "Backend restarted. Picking up where I left off...",
-            }),
-            websocket, session_logger=session_logger)
-
-        # Spawn handle_chat with a synthetic continue message. The LLM will
-        # see the restart context in its system prompt (via boot_context)
-        # and this message telling it to continue. This runs concurrently
-        # with the receive loop below, so Sean can still interrupt with
-        # stop/new messages while the agent is resuming.
-        async def _auto_resume():
-            try:
-                await handle_chat(
-                    svc, websocket,
-                    "You were just restarted mid-session. Your restart context "
-                    "(recent chat history) has been injected into your system "
-                    "prompt. Read GOALS.md and continue where you left off. "
-                    "Don't ask Sean to re-explain anything. Just do it.",
-                    session_logger)
-            except asyncio.CancelledError:
-                session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
-            except Exception as e:
-                session_logger.log_exception(e, context="auto_resume")
-            finally:
-                try:
-                    svc.autonomous_researcher.resume_after_chat()
-                except Exception as e:
-                    logger.debug("swallowed: %s", e)
-
-        websocket._current_task = asyncio.create_task(_auto_resume())
-
     try:
         while True:
             data = await websocket.receive_text()
