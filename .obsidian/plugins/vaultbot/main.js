@@ -5,7 +5,12 @@ const path = require('path');
 class VaultBotPlugin extends Plugin {
 	async onload() {
 		this.settings = {
-			backendUrl: 'http://localhost:8000',
+			// Use 127.0.0.1, NOT localhost: the backend (uvicorn) binds to
+			// 127.0.0.1 (IPv4 only). On Windows, 'localhost' resolves to ::1
+			// (IPv6) first, and fetch() to [::1]:8000 gets ERR_CONNECTION_REFUSED
+			// even though the backend is up on IPv4 — which made the liveness
+			// probe + restart button intermittently fail.
+			backendUrl: 'http://127.0.0.1:8000',
 			autoStartBackend: true,
 			autoStartMcpServer: true,
 			selectedModel: '',
@@ -83,6 +88,18 @@ class VaultBotPlugin extends Plugin {
 		if (!this.settings.selectedModel) {
 			this.settings.selectedModel = '';
 		}
+		// Migrate any saved 'localhost' URL to 127.0.0.1 so the plugin talks
+		// to the backend over IPv4 (which is what uvicorn binds to). Without
+		// this, a saved 'http://localhost:8000' keeps causing intermittent
+		// ERR_CONNECTION_REFUSED on Windows because localhost resolves to
+		// ::1 (IPv6) first and the backend isn't listening there.
+		try {
+			if (typeof this.settings.backendUrl === 'string' &&
+				this.settings.backendUrl.includes('://localhost')) {
+				this.settings.backendUrl = this.settings.backendUrl.replace('://localhost', '://127.0.0.1');
+				await this.saveSettings();
+			}
+		} catch (e) { /* non-fatal */ }
 	}
 
 	async saveSettings() {
@@ -99,24 +116,22 @@ class VaultBotPlugin extends Plugin {
 	}
 
 	async isBackendRunning() {
+		// Probe liveness. Use GET throughout: the backend registers /health as
+		// a GET handler, and FastAPI returns 405 Method Not Allowed for HEAD on
+		// GET-only routes — which previously made this poll always report "down"
+		// even when the backend was healthy, causing endless respawn loops.
+		// /health returns a small JSON dict; / returns a small marker dict, so
+		// GET is cheap on both.
 		try {
-			// Hit /health (JSON, minimal) instead of / (full HTML page).
-			// The 5s poll was producing ~17k log lines/day of GET / noise.
-			const response = await fetch(this.settings.backendUrl + '/health', { method: 'HEAD' });
-			return response.status === 200;
-		} catch (e) {
-			// /health may return 404 on older backends without the endpoint;
-			// fall back to GET /health, then to GET / as a last resort.
-			try {
-				const r2 = await fetch(this.settings.backendUrl + '/health', { method: 'GET' });
-				if (r2.ok) return true;
-			} catch (e2) {}
-			try {
-				const r3 = await fetch(this.settings.backendUrl + '/', { method: 'GET' });
-				return r3.status === 200;
-			} catch (e3) {
-				return false;
-			}
+			const response = await fetch(this.settings.backendUrl + '/health', { method: 'GET' });
+			if (response.ok || response.status === 200) return true;
+		} catch (e) {}
+		// Older backends without /health, or transient 5xx: fall back to GET /.
+		try {
+			const r2 = await fetch(this.settings.backendUrl + '/', { method: 'GET' });
+			return r2.status === 200;
+		} catch (e2) {
+			return false;
 		}
 	}
 
@@ -392,6 +407,245 @@ class VaultBotPlugin extends Plugin {
 		return await this.isBackendRunning();
 	}
 
+	// ─────────────────────────────────────────────────────────────────────
+	// Self-updater: pull the latest CODE from GitHub and apply it over the
+	// live vault, WITHOUT touching any user state.
+	//
+	// What gets updated (code only):
+	//   - vaultbot_backend/**/*.py            (the backend engine)
+	//   - .obsidian/plugins/vaultbot/main.js   (this plugin file)
+	//   - .obsidian/plugins/vaultbot/manifest.json
+	//   - .obsidian/plugins/vaultbot/styles.css
+	//
+	// What is PRESERVED (never overwritten):
+	//   - .obsidian/plugins/vaultbot/data.json (your keys, model, voice, etc.)
+	//   - every .md doc in the vault (notes, chat logs, research, textbooks)
+	//   - vaultbot_backend/*_log.json, sessions/, checkpoints/,
+	//     vaultbot_index/, *.log, *.pid, kokoro_models/, stt_models/,
+	//     trash/, __pycache__/  — all runtime state stays put
+	//
+	// The backend is stopped first (Windows locks .py files while running),
+	// the tarball is downloaded to a temp dir, code paths are extracted to a
+	// staging dir, then copied over the live files. data.json is backed up
+	// before the plugin files are touched and restored after, as a belt-and-
+	// braces guard against the repo's default data.json sneaking in.
+	//
+	// `onProgress(statusString)` is optional; the UI uses it for a live line.
+	// Resolves to {ok:true, version} on success or {ok:false, error} on failure.
+	// ─────────────────────────────────────────────────────────────────────
+	async performSelfUpdate(onProgress, ref) {
+		const fs = require('fs');
+		const os = require('os');
+		const { execFile, execFileSync } = require('child_process');
+		const notify = (msg) => {
+			try { new Notice(msg); } catch (e) {}
+			if (typeof onProgress === 'function') {
+				try { onProgress(msg); } catch (e) {}
+			}
+		};
+
+		let vaultRoot;
+		if (this.app.vault.adapter.getBasePath) {
+			vaultRoot = this.app.vault.adapter.getBasePath();
+		} else {
+			vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+		}
+
+		const refSpec = (ref && String(ref).trim()) || 'main';
+		// GitHub serves a tarball for any branch/tag/commit ref. The archive
+		// prefix is always "<repo>-<ref-with-slashes-collapsed>/" — but the
+		// safest way to find the prefix is to list the archive and read the
+		// first path component. We do that after download.
+		const tarballUrl = `https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/${encodeURIComponent(refSpec)}.tar.gz`;
+		// NOTE: for tags use .../archive/refs/tags/<ref>.tar.gz. We try heads
+		// first; if GitHub 404s, retry as a tag so users can pin a release.
+
+		const pluginDir = path.join(vaultRoot, '.obsidian', 'plugins', 'vaultbot');
+		const backendDir = path.join(vaultRoot, 'vaultbot_backend');
+		const dataJsonPath = path.join(pluginDir, 'data.json');
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vaultbot-update-'));
+		const stagingDir = path.join(tmpDir, 'staging');
+		const tarballPath = path.join(tmpDir, 'update.tar.gz');
+		fs.mkdirSync(stagingDir, { recursive: true });
+
+		const cleanup = () => {
+			try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+		};
+
+		try {
+			notify(`Stopping VaultBot before update…`);
+			// Stop MCP + backend so Windows releases file locks on .py files.
+			try { this.stopMcpServer(); } catch (e) {}
+			await this.stopBackend();
+			// Best-effort: make sure nothing is still up holding locks.
+			await new Promise(r => setTimeout(r, 800));
+
+			notify(`Downloading update from GitHub (${refSpec})…`);
+			// Use curl.exe explicitly: PowerShell aliases `curl` to
+			// Invoke-WebRequest, but we spawn a real shell so we control the
+			// binary. execFileSync throws on non-zero exit, which a 404 is.
+			let lastErr = null;
+			for (const attempt of [tarballUrl, `https://github.com/ziggibot-uni/vaultbot/archive/refs/tags/${encodeURIComponent(refSpec)}.tar.gz`]) {
+				try {
+					execFileSync('curl.exe', ['-sL', '-o', tarballPath, attempt], { stdio: 'ignore' });
+					if (fs.existsSync(tarballPath) && fs.statSync(tarballPath).size > 1000) {
+						lastErr = null;
+						break;
+					}
+					lastErr = lastErr || new Error('Tarball empty or missing for ' + attempt);
+				} catch (e) {
+					lastErr = e;
+				}
+			}
+			if (lastErr) throw new Error('Could not download update from GitHub: ' + lastErr.message);
+
+			notify(`Extracting update…`);
+			// Extract ONLY code paths into staging. Exclusions guard against
+			// the repo's tracked-but-state files (logs, *.json state, pid,
+			// sessions, checkpoints, indexes, models, trash, pycache) ever
+			// landing in the live vault. We also exclude data.json so the
+			// repo's default plugin settings never clobber the user's keys.
+			//
+			// tar --exclude globs match against the FULL archive path
+			// (including the vaultbot-main/ prefix), so we anchor patterns
+			// with `*/`. We extract the whole archive minus exclusions into
+			// staging, then copy only the two code trees we care about.
+			const extractArgs = [
+				'-xzf', tarballPath,
+				'-C', stagingDir,
+				'--exclude=*/.obsidian/plugins/vaultbot/data.json',
+				'--exclude=*/vaultbot_backend/*.log',
+				'--exclude=*/vaultbot_backend/*_log.json',
+				'--exclude=*/vaultbot_backend/calibration_log.json',
+				'--exclude=*/vaultbot_backend/claim_verification_log.json',
+				'--exclude=*/vaultbot_backend/consolidation_log.json',
+				'--exclude=*/vaultbot_backend/embedding_drift.json',
+				'--exclude=*/vaultbot_backend/procedure_failure_log.json',
+				'--exclude=*/vaultbot_backend/rag_eval_log.json',
+				'--exclude=*/vaultbot_backend/touch_counts.json',
+				'--exclude=*/vaultbot_backend/vaultbot.pid',
+				'--exclude=*/vaultbot_backend/sessions',
+				'--exclude=*/vaultbot_backend/sessions/*',
+				'--exclude=*/vaultbot_backend/checkpoints',
+				'--exclude=*/vaultbot_backend/checkpoints/*',
+				'--exclude=*/vaultbot_backend/vaultbot_index',
+				'--exclude=*/vaultbot_backend/vaultbot_index/*',
+				'--exclude=*/vaultbot_backend/kokoro_models',
+				'--exclude=*/vaultbot_backend/kokoro_models/*',
+				'--exclude=*/vaultbot_backend/stt_models',
+				'--exclude=*/vaultbot_backend/stt_models/*',
+				'--exclude=*/vaultbot_backend/trash',
+				'--exclude=*/vaultbot_backend/trash/*',
+				'--exclude=*/vaultbot_backend/__pycache__',
+				'--exclude=*/vaultbot_backend/__pycache__/*',
+				'--exclude=*/vaultbot_backend/*/__pycache__',
+				'--exclude=*/vaultbot_backend/*/__pycache__/*',
+				'--exclude=*/vaultbot_backend/**/*.pyc'
+			];
+			execFileSync('tar.exe', extractArgs, { stdio: 'ignore' });
+
+			// Find the single top-level archive prefix (e.g. "vaultbot-main").
+			const entries = fs.readdirSync(stagingDir, { withFileTypes: true })
+				.filter(d => d.isDirectory());
+			if (entries.length !== 1) {
+				throw new Error('Unexpected archive layout: expected one top-level folder, found ' + entries.length);
+			}
+			const archiveRoot = path.join(stagingDir, entries[0].name);
+
+			notify(`Applying backend code…`);
+			// Copy the backend code tree over the live one. We copy individual
+			// tracked files rather than nuking the whole directory, so any
+			// untracked local state files (sessions/, logs, models, etc.) that
+			// the exclusions left untouched in the LIVE vault are preserved.
+			const srcBackend = path.join(archiveRoot, 'vaultbot_backend');
+			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot_backend/ folder.');
+			await copyCodeTree(srcBackend, backendDir);
+
+			notify(`Applying plugin files…`);
+			// Back up the user's data.json + mcp.json first; restore after.
+			// (data.json is excluded from extraction, but we defend in depth.)
+			const backups = {};
+			for (const name of ['data.json', 'mcp.json']) {
+				const p = path.join(pluginDir, name);
+				if (fs.existsSync(p)) {
+					backups[name] = fs.readFileSync(p);
+				}
+			}
+			const srcPlugin = path.join(archiveRoot, '.obsidian', 'plugins', 'vaultbot');
+			if (!fs.existsSync(srcPlugin)) throw new Error('Archive has no plugin folder.');
+			// Copy only code files from the archive's plugin dir. Never copy
+			// data.json even if it somehow survived (it shouldn't).
+			for (const name of ['main.js', 'manifest.json', 'styles.css', 'mcp.json']) {
+				const src = path.join(srcPlugin, name);
+				if (!fs.existsSync(src)) continue;
+				fs.copyFileSync(src, path.join(pluginDir, name));
+			}
+			// Restore the user's preserved files.
+			for (const [name, buf] of Object.entries(backups)) {
+				fs.writeFileSync(path.join(pluginDir, name), buf);
+			}
+
+			// Read the new version for reporting.
+			let newVersion = '?';
+			try {
+				const man = JSON.parse(fs.readFileSync(path.join(pluginDir, 'manifest.json'), 'utf8'));
+				newVersion = man.version || '?';
+			} catch (e) {}
+
+			notify(`Update applied (v${newVersion}). Restarting backend…`);
+			// Bring the backend + MCP back up so the user is not left dark.
+			await this.startBackendIfNeeded();
+			if (this.settings.autoStartMcpServer) {
+				try { this.startMcpServerIfNeeded(); } catch (e) {}
+			}
+
+			notify(`VaultBot updated to v${newVersion} and restarted.`);
+			return { ok: true, version: newVersion };
+		} catch (err) {
+			notify('Update failed: ' + (err && err.message ? err.message : String(err)));
+			console.error('VaultBot self-update error:', err);
+			// Best-effort recovery: restart the backend if it's down, since
+			// we stopped it at the top. Code files are only overwritten on
+			// success, so a mid-flight failure leaves the old code intact.
+			try {
+				if (!await this.isBackendRunning()) await this.startBackendIfNeeded();
+				if (this.settings.autoStartMcpServer) {
+					try { this.startMcpServerIfNeeded(); } catch (e) {}
+				}
+			} catch (e) {}
+			return { ok: false, error: err && err.message ? err.message : String(err) };
+		} finally {
+			cleanup();
+		}
+
+		// ── helper: copy a code tree, overwriting changed files but leaving
+		// any untracked local files in the destination intact. Recursively
+		// walks the source dir; for each file, mkdirp the relative parent in
+		// the destination and copyFileSync over it. Does NOT delete files that
+		// exist in dest but not src — that's intentional, so user state files
+		// (logs, sessions, models) that aren't in the repo are kept.
+		async function copyCodeTree(src, dest) {
+			const stack = [{ s: src, d: dest }];
+			while (stack.length) {
+				const { s, d } = stack.pop();
+				fs.mkdirSync(d, { recursive: true });
+				for (const entry of fs.readdirSync(s, { withFileTypes: true })) {
+					const sp = path.join(s, entry.name);
+					const dp = path.join(d, entry.name);
+					if (entry.isDirectory()) {
+						// Skip __pycache__ dirs everywhere — never propagate them.
+						if (entry.name === '__pycache__') continue;
+						stack.push({ s: sp, d: dp });
+					} else if (entry.isFile()) {
+						// Skip compiled bytecode and stale .bak files.
+						if (entry.name.endsWith('.pyc') || entry.name.endsWith('.bak')) continue;
+						fs.copyFileSync(sp, dp);
+					}
+				}
+			}
+		}
+	}
+
 	writeMcpClientConfig(vaultRoot, venvPython, mcpPy) {
 		// Write MCP client configs so tools like VS Code Copilot Chat and
 		// Claude Desktop auto-discover the vault_research tool with zero
@@ -555,7 +809,17 @@ class VaultBotPlugin extends Plugin {
 			new Notice('VaultBot backend launched; waiting for it to be ready...');
 			running = await this.waitForBackend();
 			if (!running) {
-				throw new Error('Backend process started but did not respond in time. Check vaultbot_backend/backend.log.');
+				// The backend may have bind-failed because port 8000 was still
+				// in TIME_WAIT after a rapid plugin reload killed the previous
+				// instance. Wait briefly for the OS to release the port, then
+				// retry the whole spawn sequence once before giving up.
+				new Notice('Backend did not come up; retrying in 3s...');
+				await new Promise(r => setTimeout(r, 3000));
+				if (await this.isBackendRunning()) {
+					running = true;
+				} else {
+					throw new Error('Backend process started but did not respond in time. Check vaultbot_backend/backend.log.');
+				}
 			}
 			new Notice('VaultBot backend is ready.');
 		} catch (err) {
@@ -974,6 +1238,69 @@ class VaultBotSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 				}
 			}));
+
+		containerEl.createEl('h3', {text: 'Updates'});
+
+		// One-click self-updater. Pulls the latest CODE from GitHub and
+		// applies it over the live vault. User state is never touched:
+		//   - data.json (your keys/model/voice) is preserved
+		//   - all your .md notes, chat logs, research, textbooks stay put
+		//   - backend runtime state (sessions, checkpoints, indexes, logs,
+		//     models, pid) is left exactly as-is
+		// Only vaultbot_backend/*.py + the plugin's main.js/manifest/styles
+		// are replaced. The backend is stopped first (Windows locks .py
+		// files while running) and restarted automatically when done.
+		containerEl.createEl('div', {text:
+			'Update VaultBot to the latest version from GitHub. This replaces ' +
+			'only the code (backend Python files + this plugin) \u2014 your notes, ' +
+			'chat logs, API keys, model choice, and all other settings are kept ' +
+			'safe. The backend restarts automatically when the update finishes.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+
+		const updateRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;'}});
+		const refInput = updateRow.createEl('input', {type: 'text', attr: {
+			placeholder: 'main (branch or tag)',
+			style: 'flex:1;min-width:180px;'}});
+		refInput.value = 'main';
+		const updateBtn = updateRow.createEl('button', {text: 'Update from GitHub', cls: 'mod-cta'});
+		const updateStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin-top:6px;'}});
+
+		// Show the currently-installed version from manifest.json so the user
+		// can compare before/after.
+		let installedVersion = '?';
+		try {
+			const fs = require('fs');
+			const manPath = path.join(this.plugin.app.vault.adapter.getBasePath ? this.plugin.app.vault.adapter.getBasePath() : '', '.obsidian', 'plugins', 'vaultbot', 'manifest.json');
+			if (fs.existsSync(manPath)) {
+				installedVersion = JSON.parse(fs.readFileSync(manPath, 'utf8')).version || '?';
+			}
+		} catch (e) {}
+		updateStatusEl.setText(`Installed version: ${installedVersion}`);
+
+		let updating = false;
+		updateBtn.addEventListener('click', async () => {
+			if (updating) return;
+			updating = true;
+			updateBtn.setAttribute('disabled', 'disabled');
+			updateBtn.setText('Updating…');
+			try {
+				const res = await this.plugin.performSelfUpdate((msg) => {
+					updateStatusEl.setText(msg);
+				}, refInput.value.trim() || 'main');
+				if (res && res.ok) {
+					updateStatusEl.setText(`Done. VaultBot is now v${res.version}.`);
+					new Notice(`VaultBot updated to v${res.version}.`);
+				} else {
+					updateStatusEl.setText(`Update failed: ${res && res.error ? res.error : 'unknown error'}`);
+				}
+			} catch (e) {
+				updateStatusEl.setText('Update failed: ' + (e && e.message ? e.message : String(e)));
+			} finally {
+				updating = false;
+				updateBtn.removeAttribute('disabled');
+				updateBtn.setText('Update from GitHub');
+			}
+		});
 	}
 }
 
