@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vaultbot": {
+      "command": "C:\\Users\\skell\\Desktop\\Vault2\\vaultbot_venv\\Scripts\\pythonw.exe",
+      "args": [
+        "C:\\Users\\skell\\Desktop\\Vault2\\vaultbot_backend\\mcp_server.py"
+      ],
+      "env": {
+        "VAULTBOT_BACKEND_URL": "http://127.0.0.1:8000"
+      }
+    }
+  }
+}

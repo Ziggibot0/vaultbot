@@ -57,7 +57,7 @@ try:
 except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"
-TEXTBOOKS_DIR = VAULT_DIR / "vaultbot" / "textbooks"
+TEXTBOOKS_DIR = VAULT_DIR / "09-Textbooks"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,532 @@
+# Foundations of Information Systems — Index
+
+> **Source PDF:** learningMaterial/Foundations_of_Information_Systems_-_WEB_oNlbGYl.pdf
+> **Pages:** 491
+> **Indexed:** 2026-07-25 20:15 UTC
+> This is an index, not a copy. Each entry points to a page in the source PDF. Ask me about a topic and I'll read the page and write what I learn into the vault with provenance.
+
+## Contents
+
+- **Foundations of Information Systems** — page 3
+- **DR . MAHESHS. RAISINGHANI , TEXASW OMAN ’ SU NIVERSITY** — page 3
+- **CONTENTSPreface 1 Fundamentals of Information Systems 7** — page 7
+- **Data Management and Information Systems Business Strategies 41** — page 7
+- **Enterprise Security, Data Privacy, and Risk Management 209** — page 8
+- **Cloud Computing and Managing the Cloud Infrastructure 253** — page 8
+- **Emerging Technologies and Frontiers of Information Systems 373** — page 9
+- **Ethics, Sustainability, and Social Issues in Information Systems 435** — page 10
+- **Art Attribution** — page 11
+- **Errata** — page 11
+- **Format** — page 11
+- **About Foundations of Information Systems** — page 11
+- **Coverage and Scope** — page 12
+- **Pedagogical Foundation and Features** — page 12
+- **About the Author Senior Contributing Author** — page 13
+- **Contributing Authors** — page 14
+- **Reviewers** — page 14
+- **Additional Resources Student and Instructor Resources** — page 15
+- **Academic Integrity** — page 15
+- **Community Hubs** — page 16
+- **Technology partners** — page 16
+- **Chapter Outline** — page 17
+- **Introduction** — page 17
+- **1.1 Introduction to Information Systems Learning Objectives** — page 18
+- **Key Concepts in Information Systems** — page 18
+- **Components of an Information System** — page 18
+- **Types of Information Systems** — page 20
+- **Application of Information Systems in Business** — page 21
+- **The Historical Evolution of Information Systems** — page 22
+- **Evolution of Communication and Information Sharing** — page 22
+- **Development of the Internet** — page 22
+- **Evolution of Computer Hardware and Software** — page 24
+- **Digital Media and Its Impact on Human Communication** — page 25
+- **Web 2.0 and Social Media Platforms** — page 25
+- **Future Trends in Information Systems** — page 26
+- **Features of Information Systems** — page 26
+- **Components of Information Systems** — page 26
+- **Elements of Information Systems** — page 27
+- **Operations of Information Systems** — page 27
+- **Impact on an Organization’s Operations** — page 28
+- **1.2 Frameworks of Knowledge and Industry Standards Learning Objectives** — page 29
+- **Use of Frameworks and Industry Standards in Information Systems** — page 30
+- **Specific Frameworks and Standards in Information Systems** — page 30
+- **Application of the Frameworks and Standards** — page 35
+- **Characteristics and Roles of Information Systems Professionals** — page 35
+- **1.3 Connections between Information Systems and Information Technology Learning Objectives** — page 36
+- **Competencies in IS** — page 36
+- **Connections between Information Systems and Information Technology** — page 39
+- **Career Focus: Training and Education Requirements for Information Systems Fields** — page 39
+- **1.4 The Global Importance of Information Systems Learning Objectives** — page 40
+- **Why Information Systems Should Be Global** — page 40
+- **Global Innovations** — page 40
+- **Global Initiatives in Information Systems** — page 41
+- **Key Terms** — page 43
+- **Summary 1.1 Introduction to Information Systems** — page 45
+- **1.2 Frameworks of Knowledge and Industry Standards** — page 45
+- **1.3 Connections between Information Systems and Information Technology** — page 46
+- **1.4 The Global Importance of Information Systems** — page 46
+- **Review Questions** — page 46
+- **Check Your Understanding Questions** — page 49
+- **Application Questions** — page 49
+- **2.1 Practices and Frameworks for Data Management Learning Objectives** — page 51
+- **Data Management and Information Systems Business Strategies 2** — page 51
+- **Identifying Practices and Frameworks That Assist Data Management** — page 52
+- **Dimensions and Characteristics of Data to Inform Data Management Decisions** — page 56
+- **Information System Planning and Management** — page 58
+- **Frameworks for Data Management Practices and Processes** — page 59
+- **2.2 Strategies to Improve the Value of Information Technology Within Organizations Learning Objectives** — page 61
+- **Defining the Value of Information Technology Within Organizations** — page 61
+- **Strategies to Improve the Value of Information Technology for Organizations** — page 65
+- **Case Study: High-Tech Stumble of UKIdentity Cards** — page 66
+- **Strategies to Generate Value Using Information Technology** — page 67
+- **2.3 Digital Business Models Learning Objectives** — page 68
+- **Defining Digital Business Models** — page 68
+- **Case Study: Transforming Health Care Through the Sharing Economy Model** — page 70
+- **Digital Business Model Critiques** — page 71
+- **2.4 Business Process Management Learning Objectives** — page 72
+- **Business Process** — page 72
+- **Business Process Reengineering, Improvement, and Management** — page 73
+- **Information Systems and Business Processes** — page 78
+- **2.5 Digital Innovation Creation, Distribution, and Commercialization Learning Objectives** — page 79
+- **Digital Innovation and Its Adoption** — page 79
+- **Deploying Information Technologies to Innovate** — page 81
+- **Summary 2.1 Practices and Frameworks for Data Management** — page 84
+- **2.2 Strategies to Improve the Value of Information Technology Within Organizations** — page 84
+- **2.3 Digital Business Models** — page 85
+- **2.4 Business Process Management** — page 85
+- **2.5 Digital Innovation Creation, Distribution, and Commercialization** — page 85
+- **3.1 Data Types, Database Management Systems, and Tools for Managing Data Learning Objectives** — page 91
+- **Types of Data** — page 92
+- **Managing Data in a Database Management System** — page 93
+- **Database Types** — page 95
+- **Database Design Techniques** — page 99
+- **Gathering, Organizing, Curating, and Processing Data** — page 103
+- **Gathering Data** — page 103
+- **Organizing Data** — page 104
+- **Curating Data** — page 105
+- **Processing Data** — page 105
+- **Data Security and Access Control** — page 105
+- **Comparing Database Management Systems** — page 107
+- **3.2 Practical Applications of Database Design and Management Learning Objectives** — page 109
+- **Database Design** — page 109
+- **Steps for Determining the Design and Structure for a Database Management System** — page 111
+- **Applications of Database Management Systems in Different Industries** — page 114
+- **3.3 Mobile Database Development and Cloud Database Management Systems Learning Objectives** — page 115
+- **Developing a Mobile-First Application with a Database** — page 116
+- **Designing for Mobile Data Input** — page 116
+- **Data Collection and Usage on Websites** — page 116
+- **Ensuring Data Cleanliness and Security** — page 116
+- **Privacy and Data Protection** — page 117
+- **Design Principles for Mobile Applications and Database Management Systems** — page 117
+- **Cloud-Based Databases** — page 117
+- **Considerations for Cloud-Based Databases and Their Architecture** — page 118
+- **Pros and Cons of Cloud-Based Databases** — page 118
+- **Summary 3.1 Data Types, Database Management Systems, and Tools for Managing Data** — page 121
+- **3.2 Practical Applications of Database Design and Management** — page 121
+- **3.3 Mobile Database Development and Cloud Database Management Systems** — page 122
+- **4.1 Systems Analysis and Design for Application Development Learning Objectives** — page 125
+- **Systems Analysis and Design** — page 126
+- **Benefits of Systems Analysis and Design** — page 127
+- **Systems Analysis** — page 127
+- **Systems Design** — page 129
+- **Tools in Systems Analysis and Design** — page 130
+- **Software Development Life Cycle and Agile Software Development** — page 132
+- **Agile Software Development** — page 133
+- **How Does Agile Development Work?** — page 135
+- **Advantages and Disadvantages of SDLC and Agile Software Development** — page 136
+- **Roles and Responsibilities of the Analysis and Design Teams** — page 137
+- **4.2 Defining the Business Problem and User Requirements Learning Objectives** — page 138
+- **How to Determine a Business Problem** — page 138
+- **Tools and Techniques Used to Identify User Requirements** — page 139
+- **Consequences of Incorrect or Incomplete User Requirements** — page 141
+- **Defining a Business Problem and Determining User Requirements: Case Study** — page 142
+- **4.3 Technical Design Methodologies and Practical Applications Learning Objectives** — page 144
+- **System Design Principles and Networked Architectures** — page 144
+- **Logical and Physical Designs** — page 145
+- **The Data Cycle** — page 147
+- **Prototype Designs** — page 147
+- **Computerized System Design** — page 147
+- **Input/Output Control** — page 148
+- **Systems Design Task List** — page 148
+- **Systems Designs for Enterprise Network Architectures** — page 149
+- **4.4 Designing for Mobile Devices and Other Design Considerations Learning Objectives** — page 150
+- **User-Centered Design** — page 151
+- **Special Design Considerations for Mobile Apps and Social Platforms** — page 152
+- **Guidelines for Mobile App Design** — page 154
+- **Guidelines for Website Design and Usability** — page 155
+- **Summary 4.1 Systems Analysis and Design for Application Development** — page 159
+- **4.2 Defining the Business Problem and User Requirements** — page 159
+- **4.3 Technical Design Methodologies and Practical Applications** — page 159
+- **4.4 Designing for Mobile Devices and Other Design Considerations** — page 160
+- **5.1 The Importance of Network Security Learning Objectives** — page 165
+- **Information Security and Information Privacy on a Public or Private Network** — page 166
+- **Information Security** — page 168
+- **Information Privacy** — page 169
+- **Key Principles and Concepts of Network Security** — page 171
+- **Network Vulnerabilities and Threats** — page 173
+- **Types of Network Vulnerabilities** — page 173
+- **Hardware Vulnerabilities** — page 174
+- **Types of Network Threats** — page 175
+- **5.2 Security Technologies and Solutions Learning Objectives** — page 178
+- **Technologies and Solutions to Protect Information and Networks** — page 178
+- **Firewalls** — page 178
+- **Protocols** — page 179
+- **Intrusion Detection and Prevention Systems** — page 180
+- **Monitoring Tools** — page 181
+- **Best Practices for Network Threat Mitigation** — page 181
+- **Security Threats, Vulnerabilities, and Appropriate Countermeasures** — page 182
+- **Types of Threats** — page 182
+- **Vulnerabilities** — page 185
+- **Countermeasures for Threats** — page 186
+- **Additional Practices for Secure Computing and Risk Management** — page 186
+- **Ethical Hacking** — page 187
+- **Risk Management Approaches** — page 188
+- **Frameworks for Risk Management** — page 188
+- **Building a Culture of Security** — page 189
+- **Legal and Ethical Issues in Securing Information and Networks** — page 189
+- **Legal Protections Afforded to Employees and Users** — page 189
+- **User Agreements and Legal Recourse** — page 190
+- **Regional Laws, Intellectual Property Rights, and Consequences** — page 190
+- **5.3 Information Security and Risk Management Strategies Learning Objectives** — page 192
+- **Key Objectives, Principles, and Components of ISRMStrategy** — page 192
+- **Risk Assessment** — page 192
+- **Policy Development** — page 192
+- **Control Implementation** — page 193
+- **Training and Awareness** — page 193
+- **Monitoring and Auditing** — page 193
+- **Response and Recovery** — page 193
+- **Compliance Frameworks and Regulations Related to ISRM** — page 193
+- **National Institute of Standards and Technology** — page 195
+- **Other Compliance Frameworks and Regulations** — page 195
+- **Developing a Comprehensive Risk Management Plan** — page 196
+- **Phase 1: Risk Identification** — page 196
+- **Phase 2: Risk Assessment** — page 197
+- **Phase 3: Risk Mitigation Strategies** — page 199
+- **Phase 4: Monitoring and Review** — page 200
+- **Frameworks for Continuous Monitoring and Improvement of the ISRMStrategy** — page 200
+- **5.4 Career Focus: Key Certifications Learning Objectives** — page 202
+- **Career Roles and Responsibilities in Information Security** — page 203
+- **Overview of Information Security as a Profession** — page 203
+- **Roles and Careers in Information Security** — page 204
+- **Certifications and Degree Programs for Careers in Information Security** — page 205
+- **Empowering Cybersecurity Careers: Value and Impact of Professional Certifications and Related Degrees** — page 206
+- **Combining Certifications and Degrees** — page 207
+- **Organizations for Information Security Careers** — page 208
+- **Corporate Sector** — page 208
+- **Government, Public Sector, and Nonprofit Think Tanks** — page 208
+- **Freelance and Consultancy** — page 209
+- **Importance of Continuous Learning and Adaptability** — page 209
+- **Summary 5.1 The Importance of Network Security** — page 213
+- **5.2 Security Technologies and Solutions** — page 213
+- **5.3 Information Security and Risk Management Strategies** — page 213
+- **5.4 Career Focus: Key Certifications** — page 214
+- **6.1 Key Concepts in Data Privacy and Data Security Learning Objectives** — page 219
+- **Enterprise Security, Data Privacy, and Risk Management 6** — page 219
+- **The Importance of Enterprise Digital Data Privacy and Data Security** — page 220
+- **Risks and Consequences of Unprotected Personal Data and Sensitive Information** — page 222
+- **Cyber Espionage** — page 223
+- **Reputational Harm** — page 223
+- **How Enterprise Security and Risk Policies Impact Data Privacy** — page 223
+- **Privacy by Design and Privacy Engineering** — page 224
+- **Third-Party Risks** — page 226
+- **Data Privacy Regulations and Standards** — page 227
+- **6.2 Vulnerabilities and Threats in Web Applications and IoTTechnology Learning Objectives** — page 228
+- **Common Online Vulnerabilities and Threats** — page 229
+- **Web Applications: Banking and E-commerce** — page 230
+- **IoTTechnology: Smart Homes and Self-Driving Cars** — page 230
+- **Frameworks to Identify Vulnerabilities and Protect IoT/ITEcosystems** — page 231
+- **Countermeasures to Combat Online Security Threats** — page 233
+- **Implementing Secure Coding Practices** — page 233
+- **Strengthening Authentication and Authorization** — page 234
+- **Designing for Security and Hardware Measures** — page 234
+- **Social Responsibility of Enterprises and Information Technology Professionals** — page 234
+- **Ethical Considerations in Information Technology** — page 235
+- **Role of Enterprises in Promoting Digital Inclusivity and Accessibility** — page 236
+- **Transparency and Accountability** — page 236
+- **Social Responsibility in the Information Technology Sector** — page 237
+- **6.3 Data Security and Privacy from a Global Perspective Learning Objectives** — page 237
+- **Global Frameworks in Data Security and Privacy** — page 237
+- **COBIT 2019 Framework** — page 238
+- **NISTPrivacy Framework** — page 239
+- **National Regulations outside the United States and the European Union** — page 240
+- **China: Personal Information Protection Law** — page 240
+- **Japan: Act on the Protection of Personal Information** — page 241
+- **South Africa: Protection of Personal Information Act** — page 241
+- **Industry-Specific Regulations and Standards** — page 241
+- **Case Study: Attaining ISO/IEC 27001 Certification** — page 242
+- **Background: The ISO/IEC 27001 Standard** — page 242
+- **The Challenge: Certification during a Pandemic** — page 243
+- **Remote Auditing: ANew Paradigm** — page 243
+- **Achieving Certification: Implications and Benefits** — page 244
+- **6.4 Managing Enterprise Risk and Compliance Learning Objectives** — page 244
+- **Auditing Policy Compliance to a Global Framework** — page 244
+- **Key Principles of GDPR** — page 244
+- **Data Mapping** — page 245
+- **Data Processing Activities** — page 246
+- **GDPRCompliance Checklist** — page 247
+- **Identifying Gaps and Risks** — page 247
+- **Gap Analysis** — page 247
+- **Developing, Implementing, and Monitoring Policies and Protocols** — page 248
+- **New Policies and Protocols** — page 248
+- **Legal and Internal Reviews** — page 249
+- **Employee Training** — page 249
+- **Policy Implementation** — page 250
+- **Communication** — page 251
+- **Continuous Monitoring and Auditing** — page 252
+- **Case Study: Facebook Gap Analysis, Risk Assessment, and Policy Changes** — page 252
+- **Summary 6.1 Key Concepts in Data Privacy and Data Security** — page 256
+- **6.2 Vulnerabilities and Threats in Web Applications and IoTTechnology** — page 257
+- **6.3 Data Security and Privacy from a Global Perspective** — page 257
+- **6.4 Managing Enterprise Risk and Compliance** — page 257
+- **Cloud Computing and Managing the Cloud Infrastructure 7** — page 263
+- **7.1 Fundamentals of Cloud Computing Learning Objectives** — page 264
+- **Cloud Computing and Its Relevance to the Organization** — page 264
+- **Cloud Computing Compared to On-Premises Hosting** — page 266
+- **The Role of Information Systems Professionals in Cloud Computing** — page 268
+- **Case Study: Using the Cloud to Prepare for a Natural Disaster** — page 269
+- **7.2 Cloud Computing Services, Pricing, and Deployment Models Learning Objectives** — page 270
+- **Deployment and Pricing of Cloud Services** — page 270
+- **Major Cloud Service Providers and Their Delivery Models** — page 275
+- **7.3 Cloud Computing Technologies Learning Objectives** — page 277
+- **Technology Components in Cloud Computing** — page 277
+- **Migration Strategies and Best Practices** — page 279
+- **Cloud-Based Standards in Industry** — page 280
+- **Case Study: Migrating to the Cloud** — page 281
+- **7.4 Cloud-Based Industry Applications Learning Objectives** — page 282
+- **Types and Categories of Applications in the Cloud** — page 282
+- **Migrating an Enterprise Application to the Cloud** — page 284
+- **Case Study: Using the Cloud for Parallel Application Development** — page 286
+- **7.5 Scientific, Industrial, and Social Implications of Cloud Computing Learning Objectives** — page 286
+- **Scientific Breakthroughs That Made Cloud Computing Possible** — page 287
+- **Social Implications of Cloud Computing and Its Impact on Data Privacy** — page 287
+- **Cloud-Based Sustainability** — page 288
+- **Summary 7.1 Fundamentals of Cloud Computing** — page 291
+- **7.2 Cloud Computing Services, Pricing, and Deployment Models** — page 291
+- **7.3 Cloud Computing Technologies** — page 292
+- **7.4 Cloud-Based Industry Applications** — page 292
+- **7.5 Scientific, Industrial, and Social Implications of Cloud Computing** — page 292
+- **8.1 The Business Analytics Process Learning Objectives** — page 298
+- **Importance of and Challenges with Big Data** — page 298
+- **Challenge: Volume** — page 299
+- **Challenge: Quality** — page 299
+- **Challenge: Governance** — page 299
+- **Challenge: Actionable Insights** — page 299
+- **Data Acquisition** — page 300
+- **The Business Analytics Process** — page 301
+- **Step 1: Problem Definition** — page 301
+- **Step 2: Data Preparation** — page 301
+- **Step 3: Statistical Analysis** — page 304
+- **Step 4: Results Interpretation** — page 305
+- **Step 5: Implementation** — page 305
+- **8.2 Foundations of Business Intelligence and Analytics Learning Objectives** — page 306
+- **The Importance of Business Intelligence and Analytics** — page 306
+- **Valuable Insights** — page 306
+- **Visualization** — page 307
+- **Key Performance Indicators and Benchmarking** — page 307
+- **Inventory Management** — page 307
+- **Customer Analytics** — page 308
+- **Business Intelligence Tools Offer Competitive Advantage** — page 308
+- **How Organizations Use Business Intelligence and Analytics** — page 309
+- **Decision-Making** — page 309
+- **Time-Series Analysis** — page 309
+- **Decision Trees** — page 310
+- **Marketing** — page 311
+- **Financial Analysis** — page 312
+- **Supply Chain Analysis** — page 312
+- **Business and Data Analytics Tools** — page 312
+- **Tools for Visualization** — page 313
+- **Data Mining** — page 313
+- **Analytical Models** — page 313
+- **Predictive Analytics** — page 313
+- **Business Intelligence Reporting** — page 318
+- **Ethical and Legal Aspects of Data Collection** — page 319
+- **8.3 Analytics to Improve Decision-Making Learning Objectives** — page 319
+- **Role and Importance of Analytics in Decision-Making** — page 320
+- **Regression** — page 320
+- **Neural Networks** — page 320
+- **Clustering** — page 320
+- **Choosing Appropriate Models or Tools** — page 321
+- **How Organizations Use Business Analytics for Decision-Making** — page 321
+- **Operational, Tactical, and Strategic Decision-Making** — page 321
+- **Communicating Results** — page 322
+- **Ethical and Social Considerations** — page 322
+- **Case Study: Applying Analytics to the Decision-Making Process** — page 323
+- **8.4 Web Analytics Learning Objectives** — page 324
+- **The Role and Importance of Web Analytics** — page 324
+- **Improving an Organization’s Online Presence** — page 324
+- **Optimizing Metrics** — page 325
+- **Gaining Insights** — page 325
+- **Web Data Collection** — page 325
+- **Web Data Analysis** — page 326
+- **Web Analytics Platforms** — page 326
+- **Data Extraction and Transformation** — page 326
+- **Statistical Analysis and Modeling** — page 327
+- **Custom Analysis and Visualization** — page 329
+- **Search Engine Optimization** — page 331
+- **Identifying Areas for Improvement** — page 331
+- **A/BTesting** — page 331
+- **Summary 8.1 The Business Analytics Process** — page 334
+- **8.2 Foundations of Business Intelligence and Analytics** — page 334
+- **8.3 Analytics to Improve Decision-Making** — page 335
+- **8.4 Web Analytics** — page 335
+- **9.1 Foundations of Information Systems Project Management Learning Objectives** — page 340
+- **Concepts and Methodologies of Project Management** — page 340
+- **Differences Between Project Management, Program Management, and Portfolio Management** — page 341
+- **Project Management Using Project Management Body of Knowledge** — page 342
+- **Agile Project Management** — page 346
+- **PRINCE2 Methodology** — page 347
+- **Tools of the Trade** — page 350
+- **Project Management Office** — page 350
+- **Program and Portfolio Management** — page 351
+- **Applying Project Management, Program Management, and Portfolio Management Skills** — page 352
+- **Case Study: Choosing a Project Management Approach** — page 352
+- **9.2 Setting Up and Managing Projects for Success Learning Objectives** — page 354
+- **Project Stages** — page 354
+- **Project Initiation** — page 354
+- **Project Planning** — page 355
+- **Project Execution** — page 356
+- **Monitoring and Control** — page 357
+- **Project Closure** — page 357
+- **Developing a Project Management Plan and Schedule** — page 358
+- **Defining Project Objectives** — page 358
+- **Identifying Deliverables** — page 358
+- **Defining Scope** — page 358
+- **Work Breakdown Structure** — page 358
+- **Developing the Schedule** — page 359
+- **The Plan and Schedule in Action** — page 359
+- **Project Risks** — page 364
+- **Identifying Risks** — page 364
+- **Evaluating Risks** — page 365
+- **Mitigating Risks** — page 367
+- **9.3 Career Focus: Opportunities in Information Systems Project Management Learning Objectives** — page 369
+- **Career Opportunities in Project Management** — page 369
+- **Project Management in Health Care** — page 369
+- **Project Management in Finance** — page 371
+- **Project Management in Manufacturing** — page 372
+- **Project Management in Engineering** — page 373
+- **Project Management in Business** — page 374
+- **What It Takes to Be a Project Manager** — page 375
+- **Characteristics of Project Managers** — page 375
+- **Education and Certifications to Become a Project Manager** — page 376
+- **Summary 9.1 Foundations of Information Systems Project Management** — page 379
+- **9.2 Setting Up and Managing Projects for Success** — page 379
+- **9.3 Career Focus: Opportunities in Information Systems Project Management** — page 379
+- **10.1 Defining Emerging Technologies Learning Objectives** — page 383
+- **Emerging Technologies and Frontiers of Information Systems 10** — page 383
+- **What Makes an Emerging Technology** — page 384
+- **Real-World Applications of Emerging Technologies** — page 385
+- **Opportunities, Challenges, and Risks of Emerging Technologies** — page 387
+- **Opportunities** — page 388
+- **Challenges and Risks** — page 389
+- **10.2 The Evolving Frontiers of Information Systems Learning Objectives** — page 390
+- **The Frontiers of Information Systems** — page 390
+- **Data Analytics** — page 390
+- **Artificial Intelligence** — page 391
+- **Cybersecurity** — page 392
+- **Cloud Computing** — page 393
+- **Mobile Computing** — page 393
+- **The Convergence of Information Systems Frontiers and Emerging Technologies** — page 394
+- **Opportunities, Challenges, and Risks of Information Systems Frontiers** — page 394
+- **10.3 Societal and Global Importance of Emerging Technologies in Information Systems Learning Objectives** — page 395
+- **Societal and Global Impact of Emerging Technologies** — page 396
+- **The Global Community of Research and Innovation** — page 399
+- **How Research and Innovation Lead to Emerging Technologies** — page 399
+- **Questions in Emerging Technologies** — page 401
+- **Summary 10.1 Defining Emerging Technologies** — page 405
+- **10.2 The Evolving Frontiers of Information Systems** — page 406
+- **10.3 Societal and Global Importance of Emerging Technologies in Information Systems** — page 406
+- **11.1 The Importance of Global Information Systems Learning Objectives** — page 409
+- **The Role of Global Information Systems** — page 411
+- **How Global Information Systems Differ from Traditional Information Systems** — page 413
+- **Facilitating Communication and Collaboration with Global Information Systems** — page 415
+- **Improving Decision-Making Processes with Global Information Systems** — page 416
+- **Global Information System Infrastructure** — page 417
+- **Hardware** — page 419
+- **Software** — page 419
+- **Designing and Implementing a Global Information System Infrastructure** — page 419
+- **Challenges of Managing a Global Information System Infrastructure** — page 421
+- **Building Versus Outsourcing Global Information Systems** — page 422
+- **11.2 Global Information Systems Business Models, Logistics, and Risk Management Learning Objectives** — page 423
+- **Global E-Business** — page 423
+- **Types of E-Business Models** — page 424
+- **Global Enterprise Strategies** — page 425
+- **Global Logistics** — page 425
+- **Types of Logistics Models** — page 426
+- **Why Use a Global Logistics Information System?** — page 426
+- **Global Supply Chain Management** — page 427
+- **Types of Supply Chain Management Models** — page 427
+- **Effective Supply Chain Management** — page 428
+- **Challenges of Global Risk Management** — page 428
+- **11.3 Culture in Information Systems and Global Information Systems Teams Learning Objectives** — page 429
+- **The Impact of Culture on Organizations and Information Systems** — page 429
+- **Culture and Technology Adoption** — page 432
+- **Cultural Factors that Influence Technology Adoption** — page 432
+- **Identifying Cultural Barriers in Technology** — page 433
+- **Designing Culturally Appropriate Technology and Systems** — page 434
+- **Global Information System Teams** — page 435
+- **Cross-Functional Enterprises** — page 436
+- **Summary 11.1 The Importance of Global Information Systems** — page 438
+- **11.2 Global Information Systems Business Models, Logistics, and Risk Management** — page 439
+- **11.3 Culture in Information Systems and Global Information Systems Teams** — page 439
+- **Ethics, Sustainability, and Social Issues in Information Systems 12** — page 445
+- **12.1 Ethics, Sustainability, and Use of Information Systems Learning Objectives** — page 446
+- **Normative Ethical Perspectives** — page 446
+- **Utilitarianism** — page 446
+- **Deontology** — page 447
+- **Virtue Ethics** — page 448
+- **Synthesis** — page 448
+- **Systems Thinking and the DIKWPyramid** — page 449
+- **Sustainability and Information Systems** — page 450
+- **Green, Lean, and Sustainable Information Systems** — page 451
+- **Sustainable Consumption and Production** — page 452
+- **Sustainable Supply Chain Management** — page 453
+- **Corporate Social Responsibility** — page 454
+- **Sustainable Development Goals** — page 455
+- **Impact of Ethics and Sustainability on Information Systems and Information Technology** — page 456
+- **Human-Computer Interaction** — page 456
+- **User Experience** — page 457
+- **Technology Adoption and Resistance** — page 457
+- **Technology Addiction** — page 458
+- **Robotic and Artificial Intelligence Replacement of Humans** — page 458
+- **Societal Implications of Technology** — page 458
+- **12.2 Intellectual Property Learning Objectives** — page 460
+- **U.S. Intellectual Property Laws and Regulations** — page 461
+- **Patent Law** — page 463
+- **Trade Secret Law** — page 465
+- **Trademark Law** — page 466
+- **Ethical Issues in Intellectual Property Law** — page 466
+- **Intellectual Property in Information Systems and Information Technology** — page 466
+- **Patent Law in Information Systems and Information Technology** — page 467
+- **Trade Secret Law in Information Systems and Information Technology** — page 467
+- **Trademark Law in Information Systems and Information Technology** — page 468
+- **Global Initiatives to Protect Intellectual Property** — page 469
+- **World Intellectual Property Organization** — page 469
+- **Trans-Pacific Partnership** — page 469
+- **Case Study: Intellectual Property** — page 470
+- **12.3 Ethics of Artificial Intelligence Development and Machine Learning Learning Objectives** — page 470
+- **Ethical Governance and Regulations in Artificial Intelligence Systems and Products** — page 471
+- **Artificial Intelligence’s Impact on Fairness, Bias, Transparency, and Explainability** — page 473
+- **12.4 Ethics in Health Informatics Learning Objectives** — page 475
+- **Ethical Governance and Regulation of Artificial Intelligence in Health Care** — page 475
+- **Data Ownership and Control of Health Data** — page 477
+- **Privacy and Confidentiality of Sensitive Health Information** — page 478
+- **Summary 12.1 Ethics, Sustainability, and Use of Information Systems** — page 481
+- **12.2 Intellectual Property** — page 482
+- **12.3 Ethics of Artificial Intelligence Development and Machine Learning** — page 482
+- **12.4 Ethics in Health Informatics** — page 482
+- **Answer Key Chapter 1 Review Questions** — page 487
+- **Chapter 2 Review Questions** — page 487
+- **Chapter 3 Review Questions** — page 487
+- **Chapter 4 Review Questions** — page 487
+- **Chapter 5 Review Questions** — page 487
+- **Chapter 6 Review Questions** — page 488
+- **Chapter 7 Review Questions** — page 488
+- **Chapter 8 Review Questions** — page 488
+- **Chapter 9 Review Questions** — page 489
+- **Chapter 10 Review Questions** — page 489
+- **Chapter 11 Review Questions** — page 489
+- **Chapter 12 Review Questions** — page 489
+- **Index A** — page 491
+
+#textbook #index #ingested
+<!-- vaultbot:textbook-source-key 7cf98a250ae0 -->

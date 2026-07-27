@@ -147,8 +147,8 @@ class RAGEvaluator:
         """Normalize a note identifier for comparison.
 
         Strips path prefixes, normalizes case, removes .md extension.
-        Handles both relative (vaultbot/research/X.md) and absolute
-        (C:/Users/.../vaultbot/research/X.md) paths so ground truth
+        Handles both relative (07-Research/X.md) and absolute
+        (C:/Users/.../07-Research/X.md) paths so ground truth
         and retrieved results match regardless of path format.
         """
         n = note.replace("\\", "/").lower()

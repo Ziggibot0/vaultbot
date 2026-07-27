@@ -2,7 +2,7 @@
 Pattern Extractor — deterministic extraction of cross-session patterns from
 episodic memory (chat logs, calibration log, procedure failure log).
 
-Pure deterministic. No LLM calls. Scans vaultbot/chat/ logs, extracts
+Pure deterministic. No LLM calls. Scans 08-Chat/ logs, extracts
 structured patterns (recurring topics, sentiment, tool usage, workflows,
 over-reporting, self-model drift), and returns them for consolidation.
 
@@ -69,7 +69,7 @@ _MAX_LOG_ENTRIES = 100          # keep consolidation log bounded
 class PatternExtractor:
     """Extracts cross-session patterns from episodic memory sources.
 
-    Scans chat logs in vaultbot/chat/ and extracts:
+    Scans chat logs in 08-Chat/ and extracts:
       - Recurring topics (wikilinks appearing in multiple sessions)
       - Sentiment patterns (Sean's positive/negative/neutral responses)
       - Tool usage frequency and co-occurrence
@@ -83,7 +83,7 @@ class PatternExtractor:
 
     def __init__(self, vault_path: str = None, log_path: str = None):
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
-        self.chat_dir = os.path.join(self.vault_path, "vaultbot", "chat")
+        self.chat_dir = os.path.join(self.vault_path, "08-Chat")
         self.log_path = log_path or os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "consolidation_log.json"

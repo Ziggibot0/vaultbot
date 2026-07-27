@@ -16,7 +16,7 @@ Each section becomes a vault note with:
   - Source attribution
 
 Safety:
-  - Only writes to vaultbot/textbooks/ -- never touches backend code
+  - Only writes to 09-Textbooks/ -- never touches backend code
   - Size limits: max 100 sections, max 10,000 chars per section
   - All errors are caught and returned, never raised
   - File paths are sanitized to prevent directory traversal
@@ -90,8 +90,8 @@ try:
 except NameError:
     BACKEND_DIR = Path(".").resolve()
 
-VAULT_DIR = BACKEND_DIR.parent / "vaultbot"
-TEXTBOOKS_DIR = VAULT_DIR / "textbooks"
+VAULT_DIR = BACKEND_DIR.parent
+TEXTBOOKS_DIR = VAULT_DIR / "09-Textbooks"
 
 # Limits
 MAX_SECTIONS = 1000

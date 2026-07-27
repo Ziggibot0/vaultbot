@@ -2,11 +2,11 @@
 Agent-authored tool: vault_delete
 """
 
-SCHEMA = {"name": "vault_delete", "description": "Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals, LOCKED notes, and core identity files. Reports incoming wikilinks that will become broken after deletion. Use this to clean up junk files without risk.", "parameters": {"properties": {"file_path": {"description": "Path to the note to delete, relative to vault root (e.g. 'Other post.md')", "type": "string"}}, "required": ["file_path"], "type": "object"}}
+SCHEMA = {"name": "vault_delete", "description": "Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals (except empty past-day journals), LOCKED notes, and core identity files. Reports incoming wikilinks that will become broken after deletion. Use this to clean up junk files without risk.", "parameters": {"properties": {"file_path": {"description": "Path to the note to delete, relative to vault root (e.g. 'Other post.md')", "type": "string"}}, "required": ["file_path"], "type": "object"}}
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 VAULT_ROOT = Path(__file__).parent.parent.parent.resolve()
@@ -16,6 +16,41 @@ IDENTITY_FILES = {"IDENTITY", "SELF_MODEL", "GOALS"}
 
 def _is_sacred(stem: str) -> bool:
     return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem) or re.match(r"^\d{2}-\d{2}-\d{4}$", stem))
+
+def _is_empty_past_journal(stem: str, full_path: str) -> bool:
+    """Check if this is an empty journal from a past day (deletable).
+
+    Sean authorized deleting empty past-day journals — they contain no
+    thoughts, so there's nothing sacred to protect. Today's journal is
+    always kept (Sean might still write in it). Non-empty journals are
+    always kept (those are Sean's actual thoughts).
+    """
+    if not _is_sacred(stem):
+        return False
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", stem)
+    if not m:
+        m = re.match(r"^(\d{2})-(\d{2})-(\d{4})$", stem)
+        if not m:
+            return False
+        month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+    try:
+        journal_date = date(year, month, day)
+    except ValueError:
+        return False
+
+    today = date.today()
+    if journal_date >= today:
+        return False  # Today or future — never delete
+
+    try:
+        with open(full_path, encoding='utf-8') as f:
+            content = f.read().strip()
+        return len(content) == 0
+    except Exception:
+        return False
 
 def _is_locked(content: str) -> bool:
     lines = content.split("\n")
@@ -78,8 +113,22 @@ def run(args: dict) -> dict:
 
     stem = full.stem
 
+    # Sacred journal check — but allow empty past-day journals
     if _is_sacred(stem):
-        return {"error": f"BLOCKED: '{stem}' is a sacred journal file — never deletable"}
+        if _is_empty_past_journal(stem, str(full)):
+            # Empty past journal — delete without backup (nothing to back up)
+            full.unlink()
+            return {
+                "deleted": file_path,
+                "backup": None,
+                "bytes_deleted": 0,
+                "incoming_links": [],
+                "incoming_link_count": 0,
+                "warning": None,
+                "note": "empty past-day journal deleted (no content to back up)"
+            }
+        else:
+            return {"error": f"BLOCKED: '{stem}' is a sacred journal file — never deletable"}
 
     if stem in IDENTITY_FILES:
         return {"error": f"BLOCKED: '{stem}' is a core identity file — never deletable"}
@@ -90,6 +139,22 @@ def run(args: dict) -> dict:
         return {"error": f"BLOCKED: '{stem}' is LOCKED — never deletable"}
 
     incoming_links = _find_incoming_links(stem)
+
+    # Check if file is already in trash — skip re-backup
+    is_in_trash = "vaultbot_backend" in file_path and "trash" in file_path
+
+    if is_in_trash:
+        # Already a backup — delete permanently without re-backing-up
+        full.unlink()
+        return {
+            "deleted": file_path,
+            "backup": None,
+            "bytes_deleted": len(content),
+            "incoming_links": incoming_links,
+            "incoming_link_count": len(incoming_links),
+            "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]" if incoming_links else None,
+            "note": "file was already in trash — deleted permanently without re-backup"
+        }
 
     # Backup to trash before deleting
     TRASH_DIR.mkdir(parents=True, exist_ok=True)

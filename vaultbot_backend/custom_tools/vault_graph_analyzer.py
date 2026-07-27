@@ -2,14 +2,14 @@
 Agent-authored tool: vault_graph_analyzer
 """
 
-SCHEMA = {"name": "vault_graph_analyzer", "description": "Analyze the connectedness of the vault's .md files. Finds islands (connected components), measures hop distances, identifies isolated nodes, and suggests bridge edges to connect disconnected islands. Excludes LICENSE.md by default. Use this to find where the graph is fragmented and what edges to build.", "parameters": {"properties": {"exclude_patterns": {"default": ["LICENSE.md"], "description": "Filenames to exclude from analysis (default: LICENSE.md)", "items": {"type": "string"}, "type": "array"}, "max_hops": {"default": 6, "description": "Maximum hop distance to measure connectivity (default: 6)", "type": "integer"}, "vault_path": {"default": "", "description": "Path to vault root. Defaults to parent of vaultbot_backend/.", "type": "string"}}, "type": "object"}}
+SCHEMA = {"name": "vault_graph_analyzer", "description": "Analyze the connectedness of the vault's .md files. Finds islands (connected components), measures hop distances, identifies isolated nodes, and suggests bridge edges to connect disconnected islands. Excludes LICENSE.md by default. Use this to find where the graph is fragmented and what edges to build.", "parameters": {"properties": {"exclude_patterns": {"default": ["LICENSE.md"], "description": "Filenames to exclude from analysis (default: LICENSE.md)", "items": {"type": "string"}, "type": "array"}, "max_hops": {"default": 6, "description": "Maximum hop distance to measure connectivity (default 6)", "type": "integer"}, "vault_path": {"default": "", "description": "Path to vault root. Defaults to parent of vaultbot_backend/.", "type": "string"}}, "type": "object"}}
 
 import os
 import re
 from collections import defaultdict, deque
 
 # Directories that contain .md files but are NOT vault knowledge content
-EXCLUDE_DIRS = {'vaultbot_venv', '__pycache__', 'node_modules', '.git', '.obsidian', 'partials'}
+EXCLUDE_DIRS = {'vaultbot_venv', '__pycache__', 'node_modules', '.git', '.obsidian', 'partials', 'trash'}
 
 def find_md_files(vault_path, exclude_patterns=None):
     if exclude_patterns is None:
@@ -33,17 +33,30 @@ def parse_wikilinks(content):
     return [m.strip() for m in matches]
 
 def build_graph(vault_path, exclude_patterns=None):
+    """Build graph using full relative paths as node identifiers.
+    
+    Wikilinks use basenames (e.g. [[GOALS]]), so we maintain a basename->paths
+    mapping to resolve links. A wikilink [[X]] connects to ALL files named X.md,
+    since Obsidian resolves to the closest match but for connectivity analysis
+    we want to be conservative (show higher connectivity, not lower).
+    """
     if exclude_patterns is None:
         exclude_patterns = ['LICENSE.md']
     md_files = find_md_files(vault_path, exclude_patterns)
-    name_to_files = defaultdict(list)
-    for fp in md_files:
-        basename = os.path.splitext(os.path.basename(fp))[0]
-        name_to_files[basename].append(fp)
+    
+    def to_node_id(rel_path):
+        return os.path.splitext(rel_path)[0].replace('\\', '/')
+    
+    # Build basename -> list of node_ids mapping for wikilink resolution
+    name_to_nodes = defaultdict(list)
     all_nodes = set()
     for fp in md_files:
+        node_id = to_node_id(fp)
         basename = os.path.splitext(os.path.basename(fp))[0]
-        all_nodes.add(basename)
+        name_to_nodes[basename].append(node_id)
+        all_nodes.add(node_id)
+    
+    # Build adjacency: full path nodes, resolve wikilinks by basename
     adj = defaultdict(set)
     for fp in md_files:
         full_path = os.path.join(vault_path, fp)
@@ -52,13 +65,15 @@ def build_graph(vault_path, exclude_patterns=None):
                 content = f.read()
         except Exception:
             continue
-        basename = os.path.splitext(os.path.basename(fp))[0]
+        node_id = to_node_id(fp)
         links = parse_wikilinks(content)
         for link in links:
-            if link in all_nodes:
-                adj[basename].add(link)
-                adj[link].add(basename)
-    return adj, all_nodes, name_to_files, md_files
+            for target in name_to_nodes.get(link, []):
+                if target != node_id:  # no self-loops
+                    adj[node_id].add(target)
+                    adj[target].add(node_id)
+    
+    return adj, all_nodes, name_to_nodes, md_files
 
 def find_components(adj, all_nodes):
     visited = set()
@@ -116,7 +131,7 @@ def suggest_bridges(components, adj, all_nodes):
 def analyze_graph(vault_path, exclude_patterns=None, max_hops=6):
     if exclude_patterns is None:
         exclude_patterns = ['LICENSE.md']
-    adj, all_nodes, name_to_files, md_files = build_graph(vault_path, exclude_patterns)
+    adj, all_nodes, name_to_nodes, md_files = build_graph(vault_path, exclude_patterns)
     components = find_components(adj, all_nodes)
     total_nodes = len(all_nodes)
     total_edges = sum(len(neighbors) for neighbors in adj.values()) // 2

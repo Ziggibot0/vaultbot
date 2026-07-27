@@ -1,0 +1,598 @@
+# Introduction to Behavioral Neuroscience — Index
+
+> **Source PDF:** learningMaterial/Introduction-Behavioral-Neuroscience_-_WEB.pdf
+> **Pages:** 903
+> **Indexed:** 2026-07-25 20:16 UTC
+> This is an index, not a copy. Each entry points to a page in the source PDF. Ask me about a topic and I'll read the page and write what I learn into the vault with provenance.
+
+## Contents
+
+- **Introduction to Behavioral Neuroscience** — page 3
+- **Structure and Function of the Nervous System: Cells and Anatomy** — page 7
+- **Neurophysiology** — page 7
+- **Basic Neurochemistry** — page 7
+- **Comparative Neuroscience** — page 8
+- **Neurodevelopment** — page 8
+- **Vision** — page 8
+- **Hearing and Balance** — page 8
+- **The Chemical Senses** — page 9
+- **Touch and Pain** — page 9
+- **Motor Control** — page 9
+- **Sexual Behavior and Development** — page 9
+- **Stress** — page 10
+- **Emotion and Mood** — page 10
+- **Psychopharmacology** — page 10
+- **Biological Rhythms and Sleep** — page 11
+- **Homeostasis** — page 11
+- **Neuroimmunology** — page 11
+- **Learning and Memory** — page 11
+- **Attention and Executive Function** — page 12
+- **About Introduction to Behavioral Neuroscience** — page 13
+- **About the authors** — page 16
+- **1.1 Building a Nervous System** — page 22
+- **Brain cells are eukaryotic cells** — page 22
+- **Introduction to the central dogma: cell identity is determined by gene expression** — page 23
+- **Organelles: carry out functions of cells** — page 24
+- **Neurons** — page 24
+- **Dendrites** — page 26
+- **Axons** — page 26
+- **The Synapse** — page 27
+- **Glia** — page 28
+- **Astrocytes** — page 29
+- **Microglia** — page 30
+- **Oligodendrocytes** — page 30
+- **Schwann Cells** — page 31
+- **History of Neuroscience: Visualizing Brain Cells: from Cajal to Brainbow** — page 31
+- **Chemical Stains: Focus on the Golgi Stain** — page 32
+- **Immunofluorescence** — page 32
+- **GFPLabeling/Brainbow** — page 32
+- **1.2 Organization of the Nervous System** — page 33
+- **Neuroscience across species: neural nets, ganglia and centralized brains** — page 33
+- **Animal symmetry** — page 34
+- **Centralization and cephalization** — page 35
+- **The basic organization and structure of the vertebrate nervous system** — page 35
+- **CNS and PNS** — page 36
+- **Gray and white matter** — page 37
+- **Meninges** — page 37
+- **Ventricles** — page 38
+- **Vascular system of the brain** — page 39
+- **Neural circuits** — page 40
+- **Basic building blocks of neural circuits** — page 40
+- **Simple human circuit example** — page 41
+- **Mapping complex brain circuits** — page 42
+- **1.3 The Central Nervous System: CNS** — page 42
+- **Anatomical orientation and planes of orientation** — page 43
+- **Developmental perspective: vertebrate nervous system development** — page 44
+- **Telencephalon and diencephalon** — page 45
+- **Mesencephalon, metencephalon and myelencephalon** — page 46
+- **Spinal cord** — page 46
+- **Gray and white matter in the spinal cord** — page 46
+- **Ascending and descending pathways** — page 47
+- **1.4 The Brain: Structure and Function** — page 48
+- **Cerebrum and cerebral cortex** — page 49
+- **Lobes of the cerebral cortex** — page 50
+- **Hemispheres** — page 51
+- **Limbic System and Basal Ganglia** — page 51
+- **Limbic System** — page 52
+- **Basal Ganglia** — page 52
+- **Diencephalon** — page 53
+- **Thalamus** — page 54
+- **Hypothalamus** — page 54
+- **Brainstem** — page 54
+- **Midbrain** — page 55
+- **Pons** — page 55
+- **Medulla oblongata** — page 55
+- **Cerebellum** — page 56
+- **Brain lateralization** — page 56
+- **Visualizing the human brain** — page 56
+- **1.5 The Peripheral Nervous System: PNS** — page 58
+- **Afferent and efferent divisions** — page 58
+- **Cranial and spinal nerves** — page 58
+- **Ganglia** — page 59
+- **The somatic and autonomic divisions of the PNS** — page 60
+- **Sympathetic nervous system** — page 62
+- **Parasympathetic nervous system** — page 62
+- **The enteric nervous system** — page 62
+- **Section Summary 1.1 Building a Nervous System** — page 64
+- **Key Terms 1.1 Building a Nervous System** — page 64
+- **References Introduction** — page 65
+- **Multiple Choice 1.1 Building a Nervous System** — page 67
+- **Fill in the Blank 1.1 Building a Nervous System** — page 70
+- **2.1 Neural Communication** — page 72
+- **Communication between neurons happens chemically, at synapses** — page 73
+- **Information spreads within a neuron electrically** — page 76
+- **2.2 Neural Circuits** — page 81
+- **In the swim circuit of Tritonia diomedea a few neurons produce rhythmic behavior important for survival** — page 81
+- **Studying neural circuits reveals important principles about how nervous systems generate behavior** — page 83
+- **2.3 Principles of Bioelectricity** — page 87
+- **Fundamentals of electricity: Charge, current, conductance, and potential** — page 89
+- **Electrical signaling in neurons involves changes in potential and can be measured with a voltmeter** — page 92
+- **Electrical currents in neurons are the movement of four electrolytes dissolved in your cellular fluids: Na** — page 94
+- **, Cl** — page 94
+- **, and Ca** — page 94
+- **Electrolytes are moved by electrostatic force and diffusion but their movement is blocked by the cell membrane** — page 95
+- **Ion pumps create concentration-gradient batteries, concentrating K** — page 97
+- **inside neurons and Na** — page 97
+- **, Ca** — page 97
+- **, and Cl** — page 97
+- **outside** — page 97
+- **Ion channels are selective but passive conductors; some ion channels are gated** — page 98
+- **Ionic Currents and Equilibrium Potentials** — page 100
+- **2.4 Mechanisms of Neural Signaling** — page 102
+- **The resting potential is produced by leak channels and concentration gradients** — page 103
+- **Post-synaptic potentials are produced by ligand-gated channels** — page 106
+- **The action potential is produced by sequential opening of voltage-gated Na** — page 111
+- **and K** — page 111
+- **channels.** — page 111
+- **Action potential propagation is sped up by myelin** — page 117
+- **2.5 Our Deep but Still Incomplete Understanding of Neural Signaling** — page 119
+- **Neural signaling is complex** — page 125
+- **There is still so much to learn about neural signaling** — page 126
+- **Section Summary 2.1 Neural Communication** — page 128
+- **Key Terms 2.1 Neural Communication** — page 129
+- **Multiple Choice 2.1 Neural Communication** — page 131
+- **Fill in the Blank 2.1 Neural Communication** — page 134
+- **3.1 General Neurochemistry Principles** — page 137
+- **How do neurons produce neurotransmitters?** — page 137
+- **How are neurotransmitters stored and released?** — page 139
+- **Post-synaptic actions of neurotransmitters** — page 139
+- **Ending neurotransmitter action** — page 140
+- **3.2 Neurotransmitters Made from Amino Acids** — page 141
+- **Dopamine, norepinephrine, and epinephrine.** — page 141
+- **Serotonin** — page 146
+- **Neuropeptides** — page 150
+- **Glutamate and GABA** — page 152
+- **Histamine** — page 157
+- **3.3 Neurotransmitters Made from Fats** — page 159
+- **Endocannabinoids** — page 160
+- **Prostaglandins** — page 162
+- **Acetylcholine** — page 163
+- **History of Neuroscience: Otto Loewi and dreams of neuroscience** — page 166
+- **Neurosteroids** — page 166
+- **Section Summary 3.1 General Neurochemistry Principles** — page 167
+- **Key Terms 3.1 General Neurochemistry Principles** — page 167
+- **References 3.1 General Neurochemistry Principles** — page 167
+- **Multiple Choice 3.1 General Neurochemistry Principles** — page 169
+- **Fill in the Blank 3.1 General Neurochemistry Principles** — page 172
+- **4.1 How Do We Choose AModel System?** — page 174
+- **Selecting a model system** — page 174
+- **History and regulation of animal research** — page 175
+- **4.2 How Do We Compare Brains?** — page 176
+- **Comparing neural structures** — page 176
+- **Marked differences in anatomical organization between birds and mammals** — page 177
+- **Definition and challenges: comparing bird brains to those of mammals** — page 180
+- **4.3 How Do Brains Vary in Size?** — page 181
+- **The human brain is very big in comparison with many other species** — page 181
+- **Relative brain regions vary across species** — page 182
+- **Sensory and motor specializations across mammals** — page 183
+- **4.4 How Do Connections Differ Across Species?** — page 185
+- **Techniques to study the evolution of connections in model systems** — page 185
+- **Techniques to study the evolution of connections in humans** — page 187
+- **4.5 How Can Diverse Species Help Us Make Inferences about Human Neurobiology?** — page 189
+- **Monkeys as model systems to understand human fetal development** — page 189
+- **Studying closely related species to make inferences about the neural basis of social bonds** — page 192
+- **4.6 How Can Brain Organoids Help Us Make Inferences about Brain Evolution?** — page 194
+- **How to grow stem cells into brain organoids** — page 194
+- **Species differences revealed from brain organoids** — page 198
+- **Section Summary 4.1 How Do We Choose AModel System?** — page 199
+- **Key Terms 4.1 How Do We Choose AModel System?** — page 200
+- **References 4.1 How Do We Choose AModel System?** — page 200
+- **Multiple Choice 4.1 How Do We Choose AModel System?** — page 205
+- **Fill in the Blank 4.1 How Do We Choose AModel System?** — page 208
+- **5.1 Gastrulation and Formation of the Neural Tube (Neurulation)** — page 210
+- **Why is brain development important?** — page 210
+- **How does development begin?** — page 210
+- **5.2 Growth and Development of the Early Brain** — page 216
+- **Segmentation of the early brain** — page 217
+- **Proliferation and differentiation: how are neurons and glia formed?** — page 218
+- **Differentiation of neurons and glia** — page 221
+- **Neuronal Migration Patterns** — page 221
+- **5.3 Synapse Formation and Maturation** — page 224
+- **Communication by electrical impulse** — page 224
+- **Synaptogenesis** — page 228
+- **Neuronal survival and cell death** — page 229
+- **Synapse refinement** — page 231
+- **5.4 Experience Dependent Plasticity** — page 236
+- **Embryonic and fetal period** — page 236
+- **2: Perinatal period** — page 239
+- **Plasticity during adolescence** — page 242
+- **Section Summary 5.1 Gastrulation and Formation of the Neural Tube (Neurulation)** — page 243
+- **Key Terms 5.1 Gastrulation and Formation of the Neural Tube (Neurulation)** — page 243
+- **References 5.1 Gastrulation and Formation of the Neural Tube (Neurulation)** — page 243
+- **Multiple Choice 5.1 Gastrulation and Formation of the Neural Tube (Neurulation)** — page 247
+- **Fill in the Blank 5.1 Gastrulation and Formation of the Neural Tube (Neurulation)** — page 250
+- **6.1 An Overview of the Visual System** — page 252
+- **We Capture Photons of Light Reflected from Objects Around Us** — page 252
+- **Anatomy of the Eye** — page 253
+- **Correcting Optical Flaws: Myopia, Hyperopia and Presbyopia** — page 254
+- **6.2 The Retina** — page 255
+- **The Retina Is Composed of Several Neural Cell Types** — page 256
+- **Rods and Cones Capture Photons of Light** — page 257
+- **Rods and Cones Depolarize in the Dark and Hyperpolarize in the Light** — page 258
+- **Phototransduction** — page 259
+- **Color Vision in the Retina: Three Kinds of Cones** — page 261
+- **Color Blindness** — page 264
+- **6.3 Visual Processing Begins in Bipolar, Horizontal, Amacrine and Ganglion Cells** — page 264
+- **Bipolar Cells** — page 264
+- **Retinal Ganglion Cells** — page 266
+- **Color Vision in the Retina: Opponent Color RGCs** — page 268
+- **6.4 The Thalamus and Primary Visual Cortex** — page 271
+- **Visual Fields and the Visual Pathway** — page 272
+- **Lateral Geniculate Nucleus** — page 272
+- **V1 Simple, Complex and “Hypercomplex” Neurons** — page 273
+- **Building Simple and Complex Receptive Fields** — page 275
+- **Binocular Units** — page 278
+- **Functional Anatomy of V1** — page 280
+- **Color Vision in the Cortex** — page 284
+- **6.5 Extrastriate Cortex** — page 286
+- **Extrastriate Visual Areas Overview** — page 286
+- **Dorsal Stream** — page 287
+- **Ventral Stream** — page 287
+- **Face-Selective Units** — page 288
+- **6.6 Unsolved Questions In Visual Perception** — page 290
+- **The Binding Problem** — page 290
+- **Top-Down Processing** — page 290
+- **Grandmother Cells** — page 293
+- **Section Summary 6.1 An Overview of the Visual System** — page 295
+- **Key Terms 6.1 An Overview of the Visual System** — page 296
+- **References 6.1 An Overview of the Visual System** — page 296
+- **Multiple Choice 6.1 An Overview of the Visual System** — page 298
+- **Fill in the Blank 6.1 An Overview of the Visual System** — page 301
+- **7.1 Acoustic Cues and Signals** — page 304
+- **Why is the sense of hearing important?** — page 304
+- **How is sound produced?** — page 306
+- **How does sound travel and interact with objects?** — page 309
+- **7.2 How Does Acoustic Information Enter the Brain?** — page 310
+- **External ear** — page 311
+- **Middle ear** — page 311
+- **Inner ear** — page 313
+- **Ascending auditory pathways** — page 318
+- **7.3 How Does the Brain Process Acoustic Information?** — page 322
+- **Location** — page 322
+- **Perceptual contents** — page 325
+- **Speech and other communication signals** — page 328
+- **7.4 Balance: ASense of Where You Are** — page 332
+- **Sensing angular and linear movements** — page 333
+- **Vestibular control of gaze and balance** — page 335
+- **Section Summary 7.1 Acoustic Cues and Signals** — page 339
+- **Key Terms 7.1 Acoustic Cues and Signals** — page 339
+- **References 7.1 Acoustic Cues and Signals** — page 340
+- **Multiple Choice 7.1 Acoustic Cues and Signals** — page 343
+- **Fill in the Blank 7.2 How Does Acoustic Information Enter the Brain?** — page 346
+- **8.1 The Chemical Senses are Several Distinct Sensory Systems** — page 348
+- **Taste-mediated behaviors** — page 348
+- **Olfactory-mediated behaviors** — page 349
+- **Chemesthesis-related behaviors** — page 350
+- **8.2 The Gustatory System** — page 352
+- **Gustation and peripheral anatomy to receptors** — page 352
+- **Gustation - neurotransmission and the central nervous system** — page 360
+- **Science as a process: Taste nerves and the nucleus of the solitary tract** — page 363
+- **Gustatory pathway and cortical processing** — page 366
+- **8.3 The Olfactory System** — page 367
+- **The nasal cavity** — page 367
+- **Olfactory epithelium and sensory neurons** — page 369
+- **Olfactory bulb circuitry** — page 371
+- **Cortical processing** — page 372
+- **The accessory olfactory system** — page 374
+- **The olfactory system and disease** — page 375
+- **8.4 Chemethesis, Spices, and Solitary Chemosensory Cells** — page 377
+- **The somatosensory system plays a role in flavor perception** — page 377
+- **Thermal TRPs** — page 378
+- **Solitary chemosensory cells** — page 379
+- **8.5 Influences That Shape Perception of Smell and Flavor** — page 380
+- **Flavor is a multimodal neural construct** — page 380
+- **Genetics influences the perception of taste and smell** — page 381
+- **Section Summary 8.1 The Chemical Senses are Several Distinct Sensory Systems** — page 383
+- **Key Terms 8.1 The Chemical Senses are Several Distinct Sensory Systems** — page 384
+- **References 8.1 The Chemical Senses are Several Distinct Sensory Systems** — page 384
+- **Multiple Choice 8.1 The Chemical Senses are Several Distinct Sensory Systems** — page 393
+- **Fill in the Blank 8.1 The Chemical Senses are Several Distinct Sensory Systems** — page 396
+- **9.1 Somatosensory Receptors** — page 398
+- **Peripheral receptors and functional modalities** — page 398
+- **Primary afferents** — page 405
+- **9.2 Somatosensation in the Central Nervous System** — page 406
+- **Spinal Cord** — page 406
+- **Thalamus and other projections** — page 415
+- **Cortical process of touch and pain** — page 416
+- **9.3 Pain and Itch** — page 416
+- **Pain definition and types** — page 417
+- **Congenital insensitivity to pain** — page 417
+- **Psychological contribution to pain** — page 417
+- **Limbic system contribution to emotional aspects of pain** — page 418
+- **Chronic pain and depression** — page 419
+- **Itch mechanisms and treatment** — page 420
+- **9.4 Pain Relief** — page 422
+- **Placebos** — page 422
+- **Over-the-counter treatments, physical therapy, and massage** — page 423
+- **Opioids and endorphins** — page 423
+- **Cannabinoids** — page 426
+- **Capsaicin** — page 428
+- **Surgical treatment** — page 429
+- **Electrical/magnetic stimulation** — page 429
+- **Section Summary 9.1 Somatosensory Receptors** — page 432
+- **Key Terms 9.1 Somatosensory Receptors** — page 432
+- **References 9.1 Somatosensory Receptors** — page 433
+- **Multiple Choice 9.1 Somatosensory Receptors** — page 438
+- **Fill in the Blank 9.1 Somatosensory Receptors** — page 441
+- **10.1 The Physiological Actions Implementing Movement – Contraction of Muscles** — page 444
+- **What constitutes muscle cells and their contractile elements?** — page 444
+- **How does a sarcomere generate contraction?** — page 446
+- **From muscle cell action potentials to contractions** — page 447
+- **Muscle organization and motor units** — page 450
+- **Mechanisms of force generation** — page 451
+- **10.2 Eliciting Contractions from Lower Levels – Lower Motoneurons and Reflex Arcs** — page 453
+- **LMN organization** — page 454
+- **LMNs activate the neuromuscular junction** — page 455
+- **The feedback proprioceptive senses** — page 456
+- **The Muscle Spindles and related reflexes** — page 457
+- **Gamma versus alpha motoneuron system** — page 459
+- **The Golgi Tendon Organs and related reflexes** — page 460
+- **Collaboration between grip, touch and stretch** — page 460
+- **10.3 Our Brain Gets Involved – Responsibilities of Upper Motor Systems** — page 461
+- **The Prefrontal Cortex – Integrating our wants and needs with circumstances** — page 461
+- **Premotor cortices** — page 462
+- **The basal ganglia** — page 464
+- **The cerebellum** — page 471
+- **Primary motor cortex** — page 472
+- **Section Summary 10.1 The Physiological Actions Implementing Movement – Contraction of Muscles** — page 477
+- **Key Terms 10.1 The Physiological Actions Implementing Movement – Contraction of Muscles** — page 478
+- **References 10.1 The Physiological Actions Implementing Movement – Contraction of Muscles** — page 478
+- **Multiple Choice 10.1 The Physiological Actions Implementing Movement – Contraction of Muscles** — page 484
+- **Fill in the Blank 10.1 The Physiological Actions Implementing Movement – Contraction of Muscles** — page 487
+- **11.1 Understanding Sexual Reproduction and Sexual Dimorphism** — page 490
+- **Neuroscience across species: Evolution of Sexual Reproduction and Sexual Differentiation** — page 490
+- **Sexual Dimorphism** — page 494
+- **Sex Differences in Non-Sexual Traits** — page 496
+- **11.2 Mechanisms of Sexual Determination and Differentiation** — page 498
+- **Developmental perspective: Genetic and Ecological Factors of Sex Determination** — page 498
+- **Role of Hormones in Sexual Differentiation: Organizational vs Activational Mechanisms** — page 503
+- **11.3 Sex Differences in Brain and Behavior: Genetic, Hormonal, and Environmental Mechanisms** — page 508
+- **Contribution of Sex Chromosomes to Sex Differences in the Brain** — page 509
+- **Contribution of Sex Hormones to Sex Differences in the Brain** — page 510
+- **Contribution of Environmental Factors to Sex differences in the Brain** — page 513
+- **11.4 Sex Differences in Brain Circuits and Susceptibility to Psychiatric Disease** — page 515
+- **Sex Differences in Stress-Related Circuits** — page 516
+- **Sex Differences in Monoamines** — page 517
+- **Social Behaviors: Vasopressin and Oxytocin** — page 520
+- **Section Summary 11.1 Understanding Sexual Reproduction and Sexual Dimorphism** — page 524
+- **Key Terms 11.1 Understanding Sexual Reproduction and Sexual Dimorphism** — page 525
+- **References 11.1 Understanding Sexual Reproduction and Sexual Dimorphism** — page 525
+- **Multiple Choice 11.1 Understanding Sexual Reproduction and Sexual Dimorphism** — page 533
+- **Fill in the Blank 11.1 Understanding Sexual Reproduction and Sexual Dimorphism** — page 536
+- **12.1 What Is Stress?** — page 538
+- **Definition of stress** — page 538
+- **Classification of stressors** — page 540
+- **Valence of the stress response** — page 543
+- **Neuroscience across Species: Methods to study stress** — page 545
+- **12.2 Neural Mechanisms and Circuitry of the Stress Response** — page 548
+- **Sympathetic versus parasympathetic nervous system function** — page 549
+- **HPA axis stress response** — page 550
+- **Feedback mechanisms** — page 552
+- **SNS and HPA axis effects on the body and restoring balance** — page 555
+- **How stress affects the brain and behavior** — page 555
+- **12.3 Interindividual Variability and Resilience in Response to Stress** — page 559
+- **Factors that influence interindividual variability in response to stress** — page 559
+- **Resilience** — page 567
+- **How to optimize the stress response** — page 568
+- **12.4 Clinical Implications of Stress** — page 568
+- **Allostasis vs. allostatic (over)load** — page 568
+- **Mood disorders** — page 569
+- **Anxiety disorders** — page 570
+- **Posttraumatic stress disorder (PTSD)** — page 570
+- **Cognitive and memory disorders** — page 571
+- **Addiction, compulsive and impulse disorders** — page 572
+- **Stress and (neuro)immune function** — page 572
+- **Section Summary 12.1 What Is Stress?** — page 575
+- **Key Terms 12.1 What Is Stress?** — page 575
+- **References 12.1 What Is Stress?** — page 576
+- **Multiple Choice 12.1 What Is Stress?** — page 583
+- **Fill in the Blank 12.1 What Is Stress?** — page 586
+- **13.1 Foundational and Contemporary Theories of Emotion** — page 589
+- **James Lange** — page 589
+- **Cannon-Bard** — page 591
+- **Schachter-Singer Two-Factor view** — page 592
+- **Appraisal Theory Perspectives** — page 594
+- **Constructionist Theory view** — page 595
+- **13.2 What Category of Feelings Are Considered as the “Basic Emotions”?** — page 596
+- **Paul Eckman.** — page 597
+- **Robert Plutchik** — page 601
+- **13.3 What Is the Contribution of Brain Structures in Emotional States?** — page 605
+- **Papez circuit overview** — page 605
+- **The thalamus relays interoceptive and exteroceptive sensory information** — page 607
+- **The reflexive emotional responses generated by the hypothalamus** — page 607
+- **The amygdala’s reflexive role in emotional learning and fear** — page 608
+- **Insula Cortex** — page 613
+- **Prefrontal Cortex** — page 614
+- **Anterior Cingulate Cortex** — page 616
+- **13.4 Mood and Emotional Disorders Associated with Depression** — page 618
+- **Neurochemical imbalances as a cause of depression** — page 618
+- **Prefrontal cortical dysfunction as a cause of depression** — page 620
+- **Section Summary 13.1 Foundational and Contemporary Theories of Emotion** — page 626
+- **Key Terms 13.1 Foundational and Contemporary Theories of Emotion** — page 627
+- **References 13.1 Foundational and Contemporary Theories of Emotion** — page 627
+- **Multiple Choice 13.1 Foundational and Contemporary Theories of Emotion** — page 630
+- **Fill in the Blank 13.1 Foundational and Contemporary Theories of Emotion** — page 634
+- **14.1 Basic Principles of Pharmacology** — page 636
+- **Factors affecting drug availability** — page 636
+- **Drug interactions with neurotransmitter lifecycle** — page 640
+- **Drug-receptor interactions** — page 641
+- **14.2 Psychotherapeutics** — page 645
+- **Treatment of anxiety** — page 645
+- **Treatment of depression** — page 646
+- **Treatment of schizophrenia** — page 651
+- **Treatment of attention-deficit/hyperactivity disorder** — page 652
+- **14.3 Neural Circuitry of Drug Reward** — page 652
+- **Dopamine reward pathway** — page 652
+- **Commonly used psychoactive drugs** — page 654
+- **14.4 Neurobiology of Addiction** — page 659
+- **Neurobiological model of addiction** — page 659
+- **Risk/protective factors** — page 664
+- **People behind the science: Dr. Yasmin Hurd** — page 665
+- **Science as a process: Is addiction a brain disease?** — page 666
+- **Section Summary 14.1 Basic Principles of Pharmacology** — page 667
+- **Key Terms 14.1 Basic Principles of Pharmacology** — page 667
+- **References 14.1 Basic Principles of Pharmacology** — page 668
+- **Multiple Choice 14.1 Basic Principles of Pharmacology** — page 671
+- **Fill in the Blank 14.1 Basic Principles of Pharmacology** — page 674
+- **15.1 What Are Circadian Rhythms?** — page 678
+- **Neuroscience Across Species: Why Are Rhythms Important?** — page 678
+- **Examples of Rhythms** — page 678
+- **Qualities of a Rhythm** — page 679
+- **Chronotypes** — page 680
+- **15.2 Where Are Rhythms in the Brain?** — page 683
+- **The Retina** — page 684
+- **The Suprachiasmatic Nucleus of the Hypothalamus** — page 685
+- **Rhythm Circuitry** — page 686
+- **The Pineal Gland and Melatonin** — page 687
+- **Rhythms in Clock Genes** — page 688
+- **15.3 Regulation of Sleep** — page 691
+- **Why Does Sleep Exist?** — page 691
+- **Stages of Sleep** — page 694
+- **Regulating Sleep** — page 697
+- **Neuroscience across Species: Comparative Sleep** — page 698
+- **Sex as a Biological Variable: Sex Differences in Sleep Variables** — page 699
+- **15.4 Disorders of Sleep and Circadian Rhythms** — page 700
+- **Non-24 hour Sleep/wake Disorder** — page 700
+- **Narcolepsy** — page 701
+- **Delayed Sleep-Wake Phase Disorder (DSWPD)** — page 703
+- **15.5 Circadian Rhythms and Society** — page 703
+- **Daylight Savings Time** — page 703
+- **Shift Work** — page 704
+- **Long Term Impact of Sleep Deficits on Health** — page 705
+- **Naps as Therapy** — page 705
+- **Sleep Hygiene and College Students** — page 705
+- **Chronotherapeutics** — page 707
+- **Asthma and Bronchodilators** — page 707
+- **Section Summary 15.1 What Are Circadian Rhythms?** — page 709
+- **Key Terms 15.1 What Are Circadian Rhythms?** — page 709
+- **References 15.1 What Are Circadian Rhythms?** — page 710
+- **Multiple Choice 15.1 What Are Circadian Rhythms?** — page 715
+- **Fill in the Blank 15.1 What Are Circadian Rhythms?** — page 718
+- **16.1 Principles of Homeostasis** — page 720
+- **Homeostatic systems maintain life-sustaining factors at optimal set points** — page 721
+- **Homeostatic systems maintain set points using negative feedback mechanisms** — page 721
+- **The nervous system regulates homeostasis using different effector systems** — page 723
+- **16.2 Neural Control of Blood Oxygenation Levels** — page 725
+- **Homeostatic regulation of respiratory rate** — page 725
+- **Homeostatic regulation of heart rate** — page 727
+- **16.3 Neural Control of Core Body Temperature** — page 729
+- **Neural sensation of body temperature** — page 730
+- **Neural systems that sense and control thermoregulation** — page 731
+- **Effector systems that regulate thermoregulation** — page 732
+- **16.4 Neural Control of Feeding Behavior** — page 734
+- **Hormonal and neuronal sensors of caloric intake** — page 735
+- **Central integration and regulation of food intake** — page 739
+- **Food intake disorders** — page 743
+- **16.5 Neural Control of Drinking Behavior** — page 744
+- **Osmotic homeostasis systems** — page 745
+- **Section Summary 16.1 Principles of Homeostasis** — page 748
+- **Key Terms 16.1 Principles of Homeostasis** — page 748
+- **References 16.3 Neural Control of Core Body Temperature** — page 749
+- **Multiple Choice 16.1 Principles of Homeostasis** — page 750
+- **Fill in the Blank 16.1 Principles of Homeostasis** — page 753
+- **17.1 Cells and Messengers of the Immune System** — page 756
+- **The peripheral immune system** — page 757
+- **History of Neuroscience: Immune privilege within the brain** — page 765
+- **17.2 What Does Your Immune System Have to Do with Your Behavior?** — page 767
+- **Immune system impacts on behavior** — page 768
+- **How the immune system makes the brain feel sick** — page 768
+- **Environment-Brain Bidirectional Communication: Flexible sickness behavior** — page 769
+- **When sickness drags on** — page 771
+- **17.3 How Does the Brain Talk to the Immune System?** — page 771
+- **Behavioral conditioning of the immune system** — page 772
+- **Stress and the immune system** — page 774
+- **Autonomic nervous system control of immune function** — page 777
+- **17.4 What Do Immune System Signals Do Once They Reach the Brain?** — page 781
+- **Immune responses within the central nervous system** — page 781
+- **Microglia: a unique cell with a unique origin** — page 782
+- **Section Summary 17.1 Cells and Messengers of the Immune System** — page 789
+- **Key Terms 17.1 Cells and Messengers of the Immune System** — page 789
+- **References 17.1 Cells and Messengers of the Immune System** — page 790
+- **Multiple Choice 17.1 Cells and Messengers of the Immune System** — page 797
+- **Fill in the Blank 17.1 Cells and Messengers of the Immune System** — page 799
+- **18.1 Memory is Classified Based on Time Course and Type of Information Stored** — page 802
+- **The time course of memories** — page 802
+- **When memories fail** — page 807
+- **18.2 Implicit Memories: Associative vs. Nonassociative Learning** — page 815
+- **Nonassociative learning** — page 816
+- **Associative learning** — page 819
+- **Operant conditioning** — page 822
+- **18.3 Explicit Memories: Episodic and Semantic Memories** — page 823
+- **Neuroscience across species: Episodic memory depends on the hippocampus** — page 823
+- **The brain’s GPS system: grid cells and place cells** — page 825
+- **Linking spatial cognition to episodic memory** — page 827
+- **18.4 Synaptic Mechanisms of Long-Term Memory** — page 827
+- **Long-term potentiation and depression** — page 828
+- **Mechanisms of LTP and LTD** — page 830
+- **Section Summary 18.1 Memory is Classified Based on Time Course and Type of Information Stored** — page 834
+- **Key Terms 18.1 Memory is Classified Based on Time Course and Type of Information Stored** — page 834
+- **References 18.1 Memory is Classified Based on Time Course and Type of Information Stored** — page 835
+- **Multiple Choice 18.1 Memory is Classified Based on Time Course and Type of Information Stored** — page 839
+- **Fill in the Blank 18.1 Memory is Classified Based on Time Course and Type of Information Stored** — page 842
+- **19.1 What are the Different Psychological Processes Associated with Attention?** — page 844
+- **Arousal, consciousness, and vigilance** — page 844
+- **Covert vs. overt orienting** — page 845
+- **Endogenous vs. exogenous orienting** — page 846
+- **Visual search** — page 848
+- **19.2 How is Attention Implemented in the Brain?** — page 849
+- **Brainstem and subcortical structures** — page 850
+- **Dorsal and ventral attentional networks** — page 851
+- **Neuroscience across species: Non-human primates: Attentional effects on sensory processing** — page 852
+- **19.3 What Happens to Unattended Information?** — page 856
+- **Inattentional blindness** — page 856
+- **Early/late selection** — page 856
+- **Science as a process: Perceptual load and neural correlates** — page 858
+- **19.4 What is the Relationship between Attention and Eye Movements?** — page 861
+- **The premotor theory of attention** — page 861
+- **Neuroscience across species: Non-human primates: Frontal eye field stimulation** — page 861
+- **19.5 How Do Clinical Disorders Affect Attentional Function?** — page 863
+- **Neglect and extinction** — page 863
+- **Different manifestations of neglect** — page 866
+- **Treatment options for neglect patients** — page 867
+- **19.6 How Do We Use Executive Functions to Make Decisions and Achieve Goals?** — page 869
+- **Components of executive function (and their associated tests)** — page 870
+- **Mapping executive function to the brain** — page 872
+- **Effects of brain damage on executive function** — page 874
+- **Dopamine, Schizophrenia, and Executive Function** — page 876
+- **Section Summary 19.1 What are the Different Psychological Processes Associated with Attention?** — page 878
+- **Key Terms 19.1 What are the Different Psychological Processes Associated with Attention?** — page 878
+- **References 19.1 What are the Different Psychological Processes Associated with Attention?** — page 879
+- **Multiple Choice 19.1 What are the Different Psychological Processes Associated with Attention?** — page 888
+- **Fill in the Blank 19.1 What are the Different Psychological Processes Associated with Attention?** — page 892
+- **APPENDIXA Methods Transmission Electron Microscopy** — page 893
+- **Magnetic Stimulation** — page 893
+- **Sleep Studies and EEGTechnology** — page 893
+- **Optogenetics** — page 893
+- **Calcium Imaging** — page 893
+- **Immunohistochemistry and Fluorescence Microscopy** — page 893
+- **Functional MRIs (fMRI)** — page 893
+- **The Science of EEGs** — page 893
+- **Deep Brain Stimulation** — page 893
+- **Chemogenetics** — page 893
+- **Electrophysiology** — page 893
+- **Lesions** — page 893
+- **Transgenic Models** — page 893
+- **ANSWERKEYChapter 1 Multiple Choice** — page 895
+- **Fill in the Blank** — page 895
+- **Chapter 2 Multiple Choice** — page 895
+- **Chapter 3 Multiple Choice** — page 895
+- **Chapter 4 Multiple Choice** — page 896
+- **Chapter 5 Multiple Choice** — page 896
+- **Chapter 6 Multiple Choice** — page 897
+- **Chapter 7 Multiple Choice** — page 897
+- **Chapter 8 Multiple Choice** — page 897
+- **Chapter 9 Multiple Choice** — page 898
+- **Chapter 10 Multiple Choice** — page 898
+- **Chapter 11 Multiple Choice** — page 899
+- **Chapter 12 Multiple Choice** — page 899
+- **Chapter 13 Multiple Choice** — page 899
+- **Chapter 14 Multiple Choice** — page 900
+- **Chapter 15 Multiple Choice** — page 900
+- **Chapter 16 Multiple Choice** — page 901
+- **Chapter 17 Multiple Choice** — page 901
+- **Chapter 18 Multiple Choice** — page 901
+- **Chapter 19 Multiple Choice** — page 902
+- **INDEXSymbols** — page 903
+
+#textbook #index #ingested
+<!-- vaultbot:textbook-source-key ec75e2f6fa94 -->

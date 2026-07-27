@@ -2074,6 +2074,10 @@ class VaultBotSidebarView extends ItemView {
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system'});
 					div.createSpan({text: msg.content || 'New session started.'});
 					chatContainer.scrollTop = chatContainer.scrollHeight;
+				} else if (msg.type === 'restart') {
+					// Backend requested restart — same code path as the GUI button.
+					statusEl.setText('Backend requested restart...');
+					this.plugin.restartBackend();
 				}
 			};
 			ws.onclose = () => {

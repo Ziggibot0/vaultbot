@@ -703,10 +703,12 @@ class SelfImprover:
 
     def self_reflect(self, topic: str, vault_context: str = "") -> dict[str, Any]:
         """Ask the LLM to reflect on what it's learned and propose new abilities.
-        Uses a cheap, non-streaming call so it doesn't interfere with the chat."""
+        Uses a cheap, non-streaming call so it doesn't interfere with the chat.
+        Routes through get_llm_client() so it works with ANY configured backend
+        (Ollama, OpenAI, OpenRouter, etc.) — not just local Ollama."""
         try:
-            from ollama_client import OllamaClient
-            client = OllamaClient()
+            from llm_client import get_llm_client
+            client = get_llm_client()
             prompt = (
                 "You are VaultBot reflecting on your own abilities in service "
                 "of your owner. Given the topic and vault context below, "

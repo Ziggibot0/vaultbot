@@ -3,7 +3,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ollama_client import OllamaClient
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 from vault_maintenance import VaultMaintenance
@@ -13,8 +12,8 @@ class NoteCreator:
     """
     Creates vault notes and immediately maintains the vault so it stays clean.
 
-    - Research notes go to vaultbot/research/
-    - Chat notes are merged by topic in vaultbot/chat/
+    - Research notes go to 07-Research/
+    - Chat notes are merged by topic in 08-Chat/
     - After every write, orphan and near-duplicate generated notes are cleaned.
 
     Resilience: embedding/vector-search failures (e.g. Ollama returning 500)
@@ -26,7 +25,6 @@ class NoteCreator:
         self.vault_path = Path(vault_path).resolve()
         self.indexer = indexer
         self.session_logger = session_logger
-        self.ollama_client = OllamaClient(session_logger=session_logger)
         self.maintenance = VaultMaintenance(vault_path, session_logger=session_logger)
         self.graph = VaultGraph(vault_path, session_logger=session_logger)
 
@@ -124,7 +122,7 @@ class NoteCreator:
 
     def create_note_from_research(self, topic: str, research_content: str,
                                   summary: str | None = None) -> str:
-        """Create a research note under vaultbot/research/ and clean up afterwards.
+        """Create a research note under 07-Research/ and clean up afterwards.
 
         The note file is written to disk FIRST, before any indexing or
         graph operations. This ensures the knowledge is persisted even if

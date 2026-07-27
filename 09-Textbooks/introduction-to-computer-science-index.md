@@ -1,0 +1,873 @@
+# Introduction to Computer Science — Index
+
+> **Source PDF:** learningMaterial/Introduction_To_Computer_Science_-_WEB.pdf
+> **Pages:** 927
+> **Indexed:** 2026-07-25 20:16 UTC
+> This is an index, not a copy. Each entry points to a page in the source PDF. Ask me about a topic and I'll read the page and write what I learn into the vault with provenance.
+
+## Contents
+
+- **Introduction to Computer Science** — page 3
+- **DR . JEAN -CLAUDEF RANCHITTI , NYUC OURANTI NSTITUTE** — page 3
+- **CONTENTSPreface 1 PART 1 PROBLEMSOLVINGANDALGORITHMSIntroduction to Computer Science 9** — page 7
+- **PART 2 REALIZATIONSOFALGORITHMSLinguistic Realization of Algorithms: Low-Level Programming Languages 143** — page 7
+- **Hardware Realizations of Algorithms: Computer Systems Design 193** — page 7
+- **PART 5 HUMAN-CENTEREDRESPONSIBLECOMPUTINGCyber Resources Qualities and Cyber Computing Governance 811** — page 9
+- **Appendix A: Network Design Application of Algorithms 911** — page 10
+- **Art Attribution** — page 11
+- **Errata** — page 11
+- **Format** — page 11
+- **About Introduction to Computer Science** — page 11
+- **Coverage and Scope** — page 12
+- **Pedagogical Foundation and Features** — page 13
+- **About the Author Senior Contributing Author** — page 14
+- **Contributing Authors** — page 14
+- **Reviewers** — page 15
+- **Additional Resources Student and Instructor Resources** — page 16
+- **Academic Integrity** — page 16
+- **Community Hubs** — page 17
+- **Technology partners** — page 17
+- **Chapter Outline** — page 19
+- **Introduction** — page 19
+- **1.1 Computer Science Learning Objectives** — page 20
+- **The Early History of Computing** — page 20
+- **What Is Computer Science?** — page 22
+- **What Is a Computer?** — page 23
+- **The Capabilities and Limitations of Computer Science** — page 25
+- **Computers and Racial Justice** — page 26
+- **Computers and Global Development** — page 28
+- **1.2 Computer Science across the Disciplines Learning Objectives** — page 30
+- **Data Science** — page 30
+- **Computational Science** — page 31
+- **Information Science** — page 33
+- **Computer Science Is an Interdisciplinary Field** — page 34
+- **1.3 Computer Science and the Future of Society Learning Objectives** — page 35
+- **Developing Foundational Technologies** — page 36
+- **Evaluating Negative Consequences of Technology** — page 38
+- **Designing Technologies for Social Good** — page 40
+- **Chapter Review Key Terms** — page 43
+- **Summary 1.1 Computer Science** — page 43
+- **1.2 Computer Science across the Disciplines** — page 44
+- **1.3 Computer Science and the Future of Society** — page 44
+- **Review Questions** — page 45
+- **Conceptual Questions** — page 46
+- **Practice Exercises** — page 46
+- **Problem Set A** — page 47
+- **Problem Set B** — page 47
+- **Thought Provokers** — page 47
+- **Labs** — page 47
+- **2.1 Computational Thinking Learning Objectives** — page 50
+- **What Is Computational Thinking?** — page 50
+- **Vision** — page 51
+- **Computational Thinking Concepts** — page 51
+- **Computational Thinking Techniques** — page 52
+- **Decomposition** — page 54
+- **Logical Thinking and Pattern Recognition** — page 54
+- **Abstraction** — page 55
+- **Algorithm** — page 56
+- **Testing and Debugging** — page 60
+- **Practical Computational Thinking Examples** — page 61
+- **2.2 Architecting Solutions with Adaptive Design Reuse in Mind Learning Objectives** — page 62
+- **Business Solutions Design Patterns** — page 62
+- **Layering and Componentization** — page 63
+- **Enterprise-Level Architecture Domains** — page 65
+- **Enterprise Business Architecture and Model** — page 66
+- **Enterprise Technical Architecture** — page 73
+- **Information Systems Architecture View** — page 79
+- **From Enterprise to Solution Architecture** — page 79
+- **Breadth of Applicability of Models** — page 79
+- **2.3 Evolving Architectures into Useable Products Learning Objectives** — page 81
+- **Leveraging Architectural Similarities and Applying Patterns** — page 82
+- **Accelerating the Creation of Mainstream Business Solutions** — page 83
+- **Responsive Web 2.0 Business Solutions** — page 83
+- **Native Mobile Business Solutions** — page 84
+- **Web 3.0 Business Solutions** — page 86
+- **Cloud-Native Business Solutions** — page 86
+- **Innovative Cloud Mashups** — page 88
+- **Summary 2.1 Computational Thinking** — page 92
+- **2.2 Architecting Solutions with Adaptive Design Reuse in Mind** — page 93
+- **2.3 Evolving Architectures into Useable Products** — page 93
+- **3.1 Introduction to Data Structures and Algorithms Learning Objectives** — page 99
+- **Introduction to Algorithms** — page 100
+- **Understanding Data Structures** — page 100
+- **Selecting a Data Structure** — page 101
+- **Linear Data Structures** — page 102
+- **Tree Data Structures** — page 103
+- **Graph Data Structures** — page 106
+- **Complex Data** — page 107
+- **3.2 Algorithm Design and Discovery Learning Objectives** — page 107
+- **Algorithmic Problem Solving** — page 108
+- **Modeling** — page 108
+- **Search Algorithms** — page 110
+- **Algorithm Design Patterns** — page 111
+- **Algorithm Analysis** — page 112
+- **3.3 Formal Properties of Algorithms Learning Objectives** — page 114
+- **Time and Space Complexity** — page 116
+- **Big ONotation for Orders of Growth** — page 118
+- **3.4 Algorithmic Paradigms Learning Objectives** — page 120
+- **Divide and Conquer Algorithms** — page 120
+- **Brute-Force Algorithms** — page 122
+- **Greedy Algorithms** — page 123
+- **Reduction Algorithms** — page 125
+- **3.5 Sample Algorithms by Problem Learning Objectives** — page 126
+- **Data Structure Problems** — page 126
+- **Searching** — page 127
+- **Sorting** — page 127
+- **Hashing** — page 129
+- **Graph Problems** — page 130
+- **Traversal** — page 130
+- **Minimum Spanning Trees** — page 131
+- **Shortest Paths** — page 132
+- **3.6 Computer Science Theory Learning Objectives** — page 133
+- **Models of Computation** — page 134
+- **Turing Machines** — page 134
+- **Complexity Classes** — page 135
+- **NP-complete Problems** — page 135
+- **P versus NP** — page 137
+- **Summary 3.1 Introduction to Data Structures and Algorithms** — page 141
+- **3.2 Algorithm Design and Discovery** — page 141
+- **3.3 Formal Properties of Algorithms** — page 142
+- **3.4 Algorithmic Paradigms** — page 142
+- **3.5 Sample Algorithms by Problem** — page 143
+- **3.6 Computer Science Theory** — page 143
+- **Linguistic Realization of Algorithms: Low-Level Programming Languages 4** — page 153
+- **4.1 Models of Computation Learning Objectives** — page 154
+- **Low-Level Programming** — page 157
+- **Machine Code** — page 157
+- **Assembly Language** — page 158
+- **Middle-Level and High-Level Programming** — page 159
+- **Programming Language Paradigms** — page 161
+- **The Imperative Programming Paradigm** — page 161
+- **Declarative and Functional Programming** — page 161
+- **Structured Programming** — page 162
+- **Procedural Programming** — page 164
+- **Object-Oriented Programming** — page 165
+- **4.2 Building CPrograms Learning Objectives** — page 166
+- **Introduction to C** — page 166
+- **Developing CPrograms** — page 170
+- **Compiling and Running CPrograms** — page 172
+- **Linking Programs** — page 173
+- **Linking Steps** — page 174
+- **Executable and Linkable Module Format** — page 176
+- **Symbol Types and Resolution** — page 176
+- **Static Libraries** — page 177
+- **Loading Executable Object Files** — page 179
+- **Tools to Manipulate Object Files** — page 182
+- **Version Control Management** — page 182
+- **4.3 Parallel Programming Models Learning Objectives** — page 183
+- **Parallel Computing Overview** — page 183
+- **Parallel Programming** — page 185
+- **Parallel Programming Models and Languages** — page 185
+- **Designing Parallel Programs** — page 186
+- **Using C with MPI and OpenMPParallel Libraries** — page 187
+- **4.4 Applications of Programming Models Learning Objectives** — page 189
+- **The Future of Low-Level Programming** — page 189
+- **Rust** — page 189
+- **Firmware** — page 190
+- **OSKernels and Device Drivers** — page 190
+- **Summary 4.1 Models of Computation** — page 194
+- **4.2 Building CPrograms** — page 195
+- **4.3 Parallel Programming Models** — page 195
+- **4.4 Applications of Programming Models** — page 195
+- **Hardware Realizations of Algorithms: Computer Systems Design 5** — page 203
+- **5.1 Computer Systems Organization Learning Objectives** — page 204
+- **Computer Systems** — page 204
+- **Data Storage Inside a Computer** — page 205
+- **Application Programs and Executables** — page 205
+- **Hardware Organization of Systems** — page 206
+- **Input/Output Devices** — page 207
+- **Main Memory** — page 208
+- **Processor** — page 208
+- **5.2 Computer Levels of Abstraction Learning Objectives** — page 208
+- **Application Programs Abstractions** — page 210
+- **High-Level Programming Language** — page 210
+- **Instruction Set Architecture** — page 211
+- **Processor Abstractions** — page 212
+- **Microarchitecture** — page 213
+- **Digital Logic Abstraction** — page 213
+- **The Lowest Level of Abstraction** — page 213
+- **The Role of the Operating System** — page 213
+- **New Disruptive Computer System Abstractions** — page 214
+- **5.3 Machine-Level Information Representation Learning Objectives** — page 215
+- **Integer Numbers Representation** — page 215
+- **Unsigned Integer Numbers Representation** — page 216
+- **Signed Integer Numbers Representation** — page 216
+- **Character Representation** — page 218
+- **Real Numbers (Floating Points)** — page 218
+- **5.4 Machine-Level Program Representation Learning Objectives** — page 221
+- **Intel Processors and Related Architectures** — page 221
+- **Assembly and Machine Code** — page 223
+- **Registers** — page 224
+- **Operands** — page 225
+- **Assembly Operations** — page 225
+- **Data Movement Operations** — page 226
+- **Arithmetic and Logic Operations** — page 226
+- **Comparison and Test Operations** — page 226
+- **Procedure Call Operations** — page 227
+- **Vector Instructions** — page 227
+- **5.5 Memory Hierarchy Learning Objectives** — page 227
+- **Memory and Storage** — page 228
+- **The Memory Hierarchy** — page 229
+- **Memory Technologies** — page 230
+- **Memory: DRAM** — page 230
+- **Memory: SRAM** — page 232
+- **Storage Technologies** — page 233
+- **Hard Disk** — page 233
+- **Solid-State Drive** — page 233
+- **More About Cache Memory** — page 234
+- **Locality** — page 235
+- **5.6 Processor Architectures Learning Objectives** — page 236
+- **Homogeneous Processor Architectures** — page 236
+- **Moore’s Law and Dennard Scaling** — page 236
+- **Traditional Processor Architectures** — page 237
+- **Multiple Cores** — page 238
+- **Heterogeneous Processor Architectures** — page 238
+- **Multiple Nodes** — page 239
+- **Summary 5.1 Computer Systems Organization** — page 241
+- **5.2 Computer Levels of Abstraction** — page 241
+- **5.3 Machine-Level Information Representation** — page 242
+- **5.4 Machine-Level Program Representation** — page 242
+- **5.5 Memory Hierarchy** — page 242
+- **5.6 Processor Architectures** — page 243
+- **6.1 What Is an Operating System? Learning Objectives** — page 250
+- **Monitoring Access** — page 251
+- **Efficiency Management** — page 252
+- **Mechanisms Implementation** — page 253
+- **OS-Level and Server Virtualization** — page 253
+- **OSArchitecture and Support Layers** — page 253
+- **OSKernel Features** — page 254
+- **Hardware Management** — page 255
+- **Protected Sharing** — page 256
+- **6.2 Fundamental OSConcepts Learning Objectives** — page 256
+- **OSComponents** — page 257
+- **Process Management and Threads** — page 257
+- **Address Space and Memory Space Management** — page 258
+- **Device Drivers and I/ODevices** — page 260
+- **Device Registers** — page 261
+- **OSStructure** — page 262
+- **Monolithic OSDesign** — page 263
+- **Layered OSDesign** — page 263
+- **Hardware Abstraction** — page 264
+- **Microkernels** — page 264
+- **Cloud Infrastructure and Exokernel** — page 266
+- **6.3 Processes and Concurrency Learning Objectives** — page 267
+- **Process** — page 267
+- **Process Management** — page 268
+- **Inter-Process Communication** — page 270
+- **Streams, Pipes, and Sockets** — page 270
+- **Concurrency** — page 270
+- **Threads** — page 271
+- **Scheduling/Dispatching** — page 272
+- **Synchronization** — page 275
+- **Allocation** — page 277
+- **6.4 Memory Management Learning Objectives** — page 277
+- **Memory** — page 277
+- **Linkers and Dynamic Linking** — page 279
+- **Dynamic Storage Management** — page 280
+- **Virtual Memory** — page 281
+- **Demand Paging** — page 282
+- **6.5 File Systems Learning Objectives** — page 284
+- **Files, File Systems, Directories, and File Management** — page 284
+- **Disk Devices** — page 285
+- **File System Architectures** — page 285
+- **File System Interface** — page 286
+- **Inodes** — page 286
+- **Distributed File Systems** — page 287
+- **Flash Memory** — page 288
+- **6.6 Reliability and Security Learning Objectives** — page 289
+- **Protection** — page 289
+- **Security** — page 290
+- **Recovery** — page 291
+- **Longevity** — page 292
+- **Technology and OSs** — page 292
+- **Virtual Machines** — page 293
+- **Summary 6.1 What Is an Operating System?** — page 298
+- **6.2 Fundamental OSConcepts** — page 299
+- **6.3 Processes and Concurrency** — page 299
+- **6.4 Memory Management** — page 300
+- **6.5 File Systems** — page 300
+- **6.6 Reliability and Security** — page 301
+- **7.1 Programming Language Foundations Learning Objectives** — page 308
+- **What Are HLLs?** — page 308
+- **Learning Motivations** — page 309
+- **Implementing Abstraction** — page 309
+- **Choosing Appropriate HLLs** — page 310
+- **Learning New HLLs** — page 311
+- **Best Use of HLLs** — page 311
+- **Languages Are Purpose Driven** — page 312
+- **History of HLLs** — page 313
+- **Fortran** — page 313
+- **COBOL** — page 313
+- **BASIC** — page 314
+- **Pascal and C** — page 314
+- **C++ and Objective C** — page 315
+- **Java** — page 316
+- **Scripting Languages** — page 317
+- **Logic-Based Languages** — page 318
+- **The Implementation of HLLs** — page 318
+- **Imperative/Procedural Programming** — page 318
+- **Event-Driven Programming** — page 318
+- **Implementation Approaches** — page 319
+- **Programming Environments** — page 320
+- **7.2 Programming Language Constructs Learning Objectives** — page 321
+- **HLLData Types** — page 321
+- **Primitive Data Types** — page 322
+- **Complex Data Types** — page 323
+- **Variables** — page 324
+- **Identifiers** — page 324
+- **Variable Declarations** — page 325
+- **Assignment** — page 325
+- **Named Constants** — page 326
+- **Operators** — page 326
+- **Documentation and Comments** — page 329
+- **HLLExpressions and Statements** — page 329
+- **Flow of Control** — page 330
+- **Sequential Execution** — page 330
+- **Selection** — page 331
+- **Iteration** — page 333
+- **Functions** — page 336
+- **Modularity** — page 336
+- **Maintainability** — page 336
+- **Reusability** — page 336
+- **Function Signature** — page 336
+- **Function Call** — page 337
+- **Recursion** — page 339
+- **Well-Structured Programs** — page 339
+- **Exception Handling** — page 340
+- **Files and Input/Output** — page 341
+- **7.3 Alternative Programming Models Learning Objectives** — page 341
+- **Functional Programming** — page 341
+- **Functional Programming Concepts** — page 342
+- **Functional Programming Assessment** — page 342
+- **Encapsulation** — page 343
+- **Inheritance** — page 344
+- **Polymorphism** — page 345
+- **OOPAssessment** — page 345
+- **Concurrency and Parallel Programming** — page 345
+- **Race Conditions** — page 345
+- **Implementing Synchronization** — page 346
+- **Programming with Scripting Languages** — page 348
+- **7.4 Programming Language Implementation Learning Objectives** — page 350
+- **Preprocessing** — page 350
+- **Compilation** — page 351
+- **Front-End Compiler Structure** — page 351
+- **Middle-End Compiler Structure** — page 351
+- **Intermediate Form** — page 351
+- **Back-End Compiler Structure** — page 352
+- **Compilation of Interpreted Languages** — page 352
+- **Dynamic and Just-in-Time Compilation** — page 353
+- **Assembly** — page 353
+- **Linking** — page 353
+- **Runtime Program Management** — page 353
+- **Symbolic Debugging** — page 354
+- **Code Optimization and Improvement** — page 355
+- **Summary 7.1 Programming Language Foundations** — page 361
+- **7.2 Programming Language Constructs** — page 361
+- **7.3 Alternative Programming Models** — page 361
+- **7.4 Programming Language Implementation** — page 362
+- **8.1 Data Management Focus Learning Objectives** — page 370
+- **Data Management in Computer and Data Science** — page 371
+- **Data Management in the Industry** — page 371
+- **Data Management Aspects** — page 372
+- **Metadata Cataloging** — page 372
+- **Metadata Modeling** — page 372
+- **Data Quality** — page 373
+- **Data Governance and Compliance** — page 374
+- **Data Management Roles** — page 374
+- **Information Architect** — page 374
+- **Database Designer** — page 375
+- **Data Owner** — page 375
+- **Data Steward** — page 375
+- **Database Administrator** — page 375
+- **Computer Scientist** — page 375
+- **Data Scientist** — page 376
+- **Data Management Road Map** — page 376
+- **8.2 Data Management Systems Learning Objectives** — page 376
+- **Definition and Characteristics** — page 376
+- **Applications of Database Technology** — page 377
+- **Elements of Database Systems** — page 377
+- **Database Systems and Database Management** — page 378
+- **DBMSFacets** — page 379
+- **Data Model Categories** — page 380
+- **Single vs. Multiuser DBMSs** — page 381
+- **DBMSUsers** — page 381
+- **DBMSArchitectures** — page 381
+- **DBMSUsage Areas** — page 382
+- **8.3 Relational Database Management Systems Learning Objectives** — page 382
+- **Relational Model** — page 383
+- **Structured Query Language** — page 383
+- **Relational Algebra** — page 384
+- **Tuple Relational Calculus and Domain Relational Calculus** — page 386
+- **Query-by-Example (QBE) Language** — page 387
+- **Logical Design** — page 387
+- **Relational Model Constraints** — page 388
+- **Normalization** — page 388
+- **Relational Database Design** — page 390
+- **Mapping a Conceptual EERModel to a Relational Model** — page 390
+- **Physical Design** — page 391
+- **Disk Storage and Basic File Structures** — page 392
+- **Physical File Organization and Indexing** — page 392
+- **Physical Database Organization** — page 393
+- **Query Execution Concepts** — page 393
+- **Physical Database Design and Tuning** — page 393
+- **RDBMSAPIs and Programming Techniques** — page 395
+- **RDBMSArchitectures** — page 396
+- **Database APIs** — page 396
+- **Object Persistence and Object-Relational Mappings (ORMs)** — page 396
+- **Sample RDBMSApplications** — page 396
+- **RDBMSFeatures** — page 397
+- **Transaction Management** — page 397
+- **Concurrency Control** — page 397
+- **Data Distribution** — page 397
+- **Distributed Transaction Management** — page 397
+- **Parallel and Distributed Processing** — page 398
+- **8.4 Nonrelational Database Management Systems Learning Objectives** — page 400
+- **Legacy Databases** — page 400
+- **Hierarchical Model** — page 400
+- **Non-First Normal Form DBMSs** — page 400
+- **Object Databases and Object Persistence** — page 401
+- **Principles of Object Persistence** — page 401
+- **OODBMSs and ODBs** — page 401
+- **Extended Relational Databases** — page 401
+- **Limitations of the Relational Model** — page 402
+- **Active RDBMSExtensions** — page 402
+- **Object-Relational RDBMSExtensions** — page 402
+- **XMLDatabases** — page 402
+- **Differences between XML and Relational Data** — page 402
+- **Mappings between XML and Object-Relational Data** — page 403
+- **Unstructured Data and NoSQLDatabases** — page 403
+- **Key-Value Stores** — page 404
+- **Tuple and Document Stores** — page 404
+- **Column-Oriented Databases** — page 404
+- **Graph-Based Databases** — page 404
+- **Other NoSQLDatabases** — page 404
+- **Transaction Management and Concurrency in NoSQLDatabases** — page 405
+- **Query Languages and APIs for NoSQLDatabases** — page 405
+- **Cloud and Other Data Management Services** — page 406
+- **Cloud Data as a Service (DaaS)** — page 406
+- **Blockchain DBMSs** — page 406
+- **8.5 Data Warehousing, Data Lakes, and Business Intelligence Learning Objectives** — page 407
+- **Data Warehouse Characteristics** — page 407
+- **Extraction, Transformation, and Loading Process** — page 409
+- **Data Marts** — page 409
+- **Virtual Data Warehouses and Virtual Data Marts** — page 409
+- **Operational Data Stores** — page 410
+- **Data Lakes** — page 410
+- **Data Warehouses vs. Data Lakes** — page 410
+- **Data Lake Development** — page 411
+- **From Data Lakes to Data Swamps** — page 411
+- **Business Intelligence** — page 412
+- **8.6 Data Management for Shallow and Deep Learning Applications Learning Objectives** — page 412
+- **Big Data** — page 412
+- **The Five Vs of Big Data** — page 413
+- **New Sources of Data** — page 413
+- **Data and Process Integration** — page 413
+- **Data Quality and Master Data Management** — page 413
+- **Data Governance** — page 414
+- **Privacy and Security of Data** — page 414
+- **Big Data Analytics** — page 415
+- **Analytics Process Model** — page 415
+- **Data Preprocessing** — page 416
+- **Types of Analytics** — page 416
+- **Postprocessing of Analytical Models** — page 417
+- **Evaluating Analytics** — page 417
+- **Big Data Analytics Frameworks for Shallow Machine Learning** — page 417
+- **MapReduce** — page 417
+- **Hadoop Framework** — page 418
+- **SQL on Hadoop** — page 418
+- **Apache Spark Framework** — page 419
+- **Streaming Big Data Analytics** — page 419
+- **On-Premises vs. Cloud Solutions** — page 419
+- **Searching Unstructured Data and Enterprise Search** — page 419
+- **Cognitive Analytics and Artificial Intelligence** — page 420
+- **Cognitive Computing** — page 420
+- **Sample AIApplications** — page 420
+- **Reinforcement and Transfer Learning** — page 420
+- **Cognitive Analytics Frameworks for Deep Machine Learning** — page 421
+- **Spark MLlib** — page 421
+- **MXNet** — page 421
+- **Google TensorFlow** — page 421
+- **Azure Machine Learning Platform and Microsoft Cognitive Toolkit** — page 421
+- **Massively Parallel Processing (MPP) Databases** — page 422
+- **8.7 Informatics and Data Management Learning Objectives** — page 422
+- **Definition and Applications** — page 422
+- **Informatics as a Data Management Solution** — page 423
+- **Informatics Information Systems** — page 423
+- **Information System Creation Life Cycle** — page 423
+- **Summary 8.1 Data Management Focus** — page 429
+- **8.2 Data Management Systems** — page 429
+- **8.3 Relational Database Management Systems** — page 430
+- **8.4 Nonrelational Database Management Systems** — page 430
+- **8.5 Data Warehousing, Data Lakes, and Business Intelligence** — page 430
+- **8.6 Data Management for Shallow and Deep Learning Applications** — page 431
+- **8.7 Informatics and Data Management** — page 431
+- **9.1 Software Engineering Fundamentals Learning Objectives** — page 440
+- **The Intent of Software Engineering** — page 441
+- **Software Engineering Teams** — page 441
+- **Cost Management** — page 442
+- **Software Engineering and Computer Science** — page 443
+- **The Nature and Impact of Software** — page 444
+- **Categories of Software** — page 444
+- **Software Requirements** — page 446
+- **Software Engineer Skills** — page 447
+- **9.2 Software Engineering Process Learning Objectives** — page 450
+- **Traditional Process Models** — page 450
+- **Agile Process Models** — page 452
+- **Software Process Framework Activities** — page 453
+- **Inception Framework Activity** — page 453
+- **Elaboration Framework Activity** — page 456
+- **Software Design** — page 459
+- **Construction Framework Activity** — page 460
+- **Unit, Integration, and System Testing** — page 461
+- **Deployment Framework Activity** — page 461
+- **Crosscutting/Umbrella Activities** — page 462
+- **Popular Software Process Models** — page 466
+- **Waterfall** — page 467
+- **The V-Model** — page 468
+- **Incremental Model** — page 469
+- **Prototyping Model** — page 470
+- **Spiral Model** — page 471
+- **Unified Process Model** — page 472
+- **Scrum** — page 474
+- **DevOps** — page 475
+- **Site Reliability Engineering** — page 476
+- **Suggested Process Model** — page 477
+- **9.3 Special Topics Learning Objectives** — page 478
+- **Testing** — page 478
+- **Levels of Testing** — page 479
+- **Methodologies of Testing** — page 480
+- **Unit Testing** — page 480
+- **Test-Driven Development** — page 482
+- **System Testing** — page 484
+- **Acceptance Testing** — page 484
+- **Usability Testing** — page 484
+- **Software Engineering Tools** — page 486
+- **Compiler** — page 486
+- **Debugger** — page 486
+- **Profiler** — page 487
+- **Integrated Development Environment (IDE)** — page 487
+- **Version Control System** — page 487
+- **Bug Tracking System** — page 488
+- **Software Reuse** — page 491
+- **Patterns** — page 491
+- **Refactoring** — page 492
+- **Software Licensing** — page 494
+- **Free and Open-Source Software (FOSS)** — page 495
+- **Software Engineering Ethics and Legal Aspects** — page 496
+- **Road Ahead for Software Engineering** — page 498
+- **Evolution of Programming** — page 498
+- **Future of Software Development** — page 498
+- **Summary 9.1 Software Engineering Fundamentals** — page 503
+- **9.2 Software Engineering Process** — page 503
+- **9.3 Special Topics** — page 504
+- **10.1 Patterns Management Learning Objectives** — page 512
+- **Pattern Hierarchy** — page 512
+- **Analysis and Design Model Patterns** — page 513
+- **Implementation Patterns** — page 514
+- **Pattern Catalogs** — page 515
+- **Pattern Languages** — page 518
+- **Current State of Patterns Management** — page 518
+- **10.2 Enterprise Architecture Management Frameworks Learning Objectives** — page 520
+- **Enterprise Architecture** — page 520
+- **Aligning Business and Technology Strategies** — page 524
+- **Enterprise Architecture Frameworks** — page 528
+- **The Open Group Architecture Framework** — page 534
+- **Strategic Adoption Road Map** — page 538
+- **Enterprise Business and Technical Architectures** — page 541
+- **Enterprise Architecture Process Frameworks and Related Patterns** — page 543
+- **ArchDev (SecOps)** — page 546
+- **Blueprinting Templates** — page 546
+- **Architectural and Implementation Styles** — page 548
+- **10.3 Solution Architecture Management Learning Objectives** — page 555
+- **Software Engineering Process Patterns** — page 555
+- **From Software Models to Software Implementation** — page 556
+- **Architectural and Design Patterns** — page 557
+- **Enterprise Technical Architecture Frameworks** — page 558
+- **Software Stacks** — page 558
+- **Implementation Patterns and Idioms** — page 559
+- **Summary 10.1 Patterns Management** — page 561
+- **10.2 Enterprise Architecture Management Frameworks** — page 562
+- **10.3 Solution Architecture Management** — page 562
+- **11.1 Modern Web Applications Architectures Learning Objectives** — page 570
+- **Server-Side Rendering and MVCPatterns** — page 572
+- **Responsive Web 2.0 Applications** — page 574
+- **Native Mobile Applications** — page 578
+- **Native Application Development for Android** — page 578
+- **Native Application Development for iOS** — page 579
+- **The Benefits and Drawbacks Between Native, Web, and Hybrid Mobile Application Development** — page 579
+- **Web 3.0 Applications** — page 580
+- **Web 3.0 Application Architectures** — page 580
+- **Web 3.0 Application Challenges** — page 584
+- **Hybrid Web 2.0/3.0 Applications** — page 586
+- **11.2 Sample Responsive WAD with Bootstrap and Django Learning Objectives** — page 588
+- **Creating a Todo Web Application with Bootstrap and Django** — page 588
+- **Prerequisites** — page 588
+- **Creating the Django Project** — page 590
+- **Creating and Registering the Todo App** — page 592
+- **Define the Todo Model** — page 593
+- **Setting Up the Django RESTAPIs** — page 596
+- **Creating the Serializers** — page 596
+- **Creating the View** — page 596
+- **Creating the Routers** — page 597
+- **Creating the User Interface** — page 600
+- **Installing Bootstrap** — page 600
+- **Creating the Templates** — page 602
+- **11.3 Sample Responsive WAD with Bootstrap/React and Node Learning Objectives** — page 614
+- **Creating a Todo Web Application with Bootstrap and React and Node** — page 615
+- **Creating the Node Back End** — page 615
+- **Creating the Node App** — page 615
+- **Setting Up the Express Web Server** — page 616
+- **Configuring the MongoDBDatabase and Mongoose** — page 617
+- **Building the Controller** — page 619
+- **Set Up the RESTAPI** — page 622
+- **Creating the React Front End** — page 623
+- **Creating the React App** — page 624
+- **Installing Bootstrap and Other Dependencies** — page 624
+- **Create the React Components** — page 625
+- **Connecting the React Front End to the Node Back End** — page 627
+- **11.4 Sample Responsive WAD with Bootstrap/React and Django Learning Objectives** — page 629
+- **Updating the Todo Web Application with Bootstrap, React, and Django** — page 629
+- **Extending the Django Back End to Support the React Front End** — page 630
+- **Connecting the React Front End to the Django Back End** — page 631
+- **11.5 Sample Native WAD with React Native and Node or Django Learning Objectives** — page 634
+- **Creating a Todo Web Application with React Native and Node** — page 635
+- **Creating the React Native App** — page 637
+- **Creating the React Native App Components** — page 641
+- **Connecting the Front-End Native App with the Back-End Node App** — page 645
+- **11.6 Sample Ethereum Blockchain Web 2.0/Web 3.0 Application Learning Objectives** — page 647
+- **Creating a Todo Ethereum Blockchain Web 3.0 Application** — page 647
+- **Install Bootstrap, Web3, and Other Dependencies** — page 648
+- **Creating the Smart Contract** — page 649
+- **Creating the Front-End React Components** — page 653
+- **Adding Web3 to the React App** — page 654
+- **Configuring the React App to Communicate with the Smart Contract** — page 655
+- **Summary 11.1 Modern Web Applications Architectures** — page 661
+- **11.2 Sample Responsive WAD with Bootstrap and Django** — page 661
+- **11.3 Sample Responsive WAD with Bootstrap/React and Node** — page 661
+- **11.4 Sample Responsive WAD with Bootstrap/React and Django** — page 662
+- **11.5 Sample Native WAD with React Native and Node or Django** — page 662
+- **11.6 Sample Ethereum Blockchain Web 2.0/Web 3.0 Application** — page 662
+- **12.1 Introduction to Cloud-Native Applications Learning Objectives** — page 670
+- **Monolithic vs. Microservices Architecture** — page 671
+- **Components vs. Services** — page 675
+- **SOA vs. Microservices** — page 676
+- **Microservices Challenges** — page 678
+- **Logging Microservices** — page 679
+- **Cloud-Native Application Architecture** — page 681
+- **Sample Web-Native Architecture** — page 682
+- **Features of Cloud-Native Applications** — page 683
+- **Microservices-Based Applications** — page 683
+- **Best-Suited Languages and Frameworks for Microservices** — page 683
+- **Container-Based Framework** — page 684
+- **API-Based Framework** — page 685
+- **Dynamically Orchestrated Framework** — page 685
+- **Agile DevOps and Automation using CI/CD** — page 687
+- **Elastic–Dynamic Scale-Up/Down** — page 688
+- **Benefits of Cloud-Native Applications** — page 688
+- **Best Practices for Cloud-Native Application Development** — page 689
+- **Tools for Cloud-Native Application Development** — page 690
+- **Docker** — page 690
+- **Kubernetes** — page 691
+- **Terraform** — page 692
+- **GitLab and GitHub CI/CD** — page 692
+- **Red Hat OpenShift** — page 693
+- **Tanzu** — page 693
+- **Node** — page 693
+- **The Future of Cloud-Native Applications** — page 693
+- **12.2 Cloud-Based and Cloud-Native Applications Deployment Technologies Learning Objectives** — page 694
+- **Introduction to Cloud Deployment Technology** — page 694
+- **Cloud Service Models** — page 696
+- **Cloud Deployment Models** — page 699
+- **Cloud Deployment Technology Options** — page 702
+- **IaaSDeployment Options** — page 702
+- **PaaSDeployment Options** — page 706
+- **FaaSDeployment Options** — page 706
+- **PaaS and FaaSComparison** — page 708
+- **Cloud Deployment Technology Use Cases and Implementation** — page 709
+- **Cloud Deployment Technology Use Cases** — page 709
+- **Cloud Deployment Technology Implementation** — page 711
+- **PaaSCloud Deployment Implementation** — page 712
+- **Selection of Cloud Deployment Technologies** — page 713
+- **Fit to Business Needs** — page 713
+- **Understanding Workload/Service Requirements** — page 713
+- **Selecting Application/Service Cloud Deployment Technology** — page 713
+- **Key to Success Summary** — page 714
+- **12.3 Example PaaS and FaaSDeployments of Cloud-Native Applications Learning Objectives** — page 715
+- **PaaSDeployment of a Sample Cloud-Native Application** — page 715
+- **Set Up a Postgres Database in Azure** — page 716
+- **Create and Deploy a Cloud-Native Application** — page 719
+- **Build and Store Microservices Images in an Azure Container Registry** — page 725
+- **Build the Docker Images** — page 726
+- **Create an Azure Kubernetes Service Instance** — page 729
+- **Deploy Microservices to the Kubernetes Cluster** — page 729
+- **PaaSDeployment of a Sample Cloud-Native Application Using VMWare Tanzu** — page 734
+- **Set Up an Environment for VMWare Tanzu** — page 735
+- **Install and Test the Kuard Demo Application** — page 737
+- **FaaSDeployment of a Sample Cloud-Native Application** — page 743
+- **FaaSEnvironment Setup** — page 743
+- **Create a Datastore for the Event-Driven FaaSCloud-Native Application** — page 744
+- **Create and Configure an Event Hub** — page 744
+- **Create, Build, and Deploy the FaaSProducer Function** — page 745
+- **Create, Build, and Deploy the FaaSConsumer Function** — page 748
+- **Test the Deployed FaaSProducer and Consumer Functions** — page 752
+- **Summary 12.1 Introduction to Cloud-Native Applications** — page 756
+- **12.2 Cloud-Based and Cloud-Native Applications Deployment Technologies** — page 757
+- **12.3 Example PaaS and FaaSDeployments of Cloud-Native Applications** — page 757
+- **13.1 Hybrid Multicloud Solutions and Cloud Mashups Learning Objectives** — page 766
+- **Hybrid and Multicloud Solutions** — page 766
+- **Hybrid Cloud Solutions** — page 767
+- **Multicloud Solutions** — page 768
+- **Cloud Mashups** — page 769
+- **Leveraging Cloud Services to Implement Cloud Applications’ Workloads** — page 769
+- **13.2 Big Cloud IaaSMainstream Capabilities Learning Objectives** — page 770
+- **Storage Service** — page 771
+- **Compute Services** — page 773
+- **Web and Mobile App Services** — page 774
+- **Container Management Services** — page 776
+- **Database Management Services** — page 777
+- **13.3 Big Cloud PaaSMainstream Capabilities Learning Objectives** — page 778
+- **Internet of Things Services** — page 778
+- **Shallow and Deep Machine Learning Services** — page 780
+- **Big Data Analytics Services** — page 780
+- **Streaming Big Data Analytics Services** — page 782
+- **Deep Learning and Generative AIServices** — page 783
+- **MLToolkits Performance** — page 785
+- **Blockchain Services** — page 786
+- **AWSBlockchain Services** — page 786
+- **IBMBlockchain Services** — page 788
+- **Oracle Blockchain Services** — page 789
+- **GCPBlockchain Services** — page 789
+- **Extended Reality Services** — page 790
+- **Azure MRServices and Related PaaSServices** — page 790
+- **GCPXR and Related PaaSServices** — page 792
+- **Other XR and Related PaaSServices** — page 792
+- **3-D/4-DPrinting Services** — page 792
+- **Applications Development Services** — page 793
+- **Integration Management** — page 793
+- **Identity and Security Management** — page 793
+- **Application Life Cycle Management** — page 793
+- **Monitoring** — page 794
+- **Management and Governance** — page 794
+- **13.4 Towards Intelligent Autonomous Networked Super Systems Learning Objectives** — page 794
+- **Web Platforms and Smart Ecosystems Applications** — page 794
+- **Industry Applications** — page 796
+- **Evolving Considerations for Standards and Guidelines** — page 797
+- **Human Computer Interaction (HCI) Guidelines for Immersive Solutions** — page 799
+- **Supersociety Digital Solutions** — page 799
+- **Supersociety Capabilities** — page 800
+- **Nanotechnology** — page 800
+- **Robotics and Advanced Robotics** — page 801
+- **Computer Vision and Cognitive Robotics** — page 803
+- **Artificial Cognitive Systems** — page 803
+- **Supercomputers** — page 803
+- **Intelligent Autonomous Networked Systems and Supersystems** — page 807
+- **Summary 13.1 Hybrid Multicloud Solutions and Cloud Mashups** — page 810
+- **13.2 Big Cloud IaaSMainstream Capabilities** — page 811
+- **13.3 Big Cloud PaaSMainstream Capabilities** — page 811
+- **13.4 Towards Intelligent Autonomous Networked Super Systems** — page 812
+- **Cyber Resources Qualities and Cyber Computing Governance 14** — page 821
+- **14.1 Cyber Resources Management Frameworks Learning Objectives** — page 822
+- **Cyber Resources Qualities** — page 825
+- **Defining Cyber Resources Qualities** — page 825
+- **Measuring Cyber Resources Qualities** — page 827
+- **Web and Mobile Solutions Era** — page 828
+- **Open Web Platform Quality Challenges** — page 829
+- **Modern Web/Mobile Solutions Quality Challenges** — page 830
+- **Modern Walled Garden Platforms Quality Challenges** — page 830
+- **Cloud-Centric Solutions Era** — page 830
+- **Hardware Virtualization Quality Challenges** — page 831
+- **Container Management Platforms Quality Challenges** — page 831
+- **Cloud Big Data Analytics PaaSQuality Challenges** — page 832
+- **Cloud IoTPaaSQuality Challenges** — page 833
+- **Cloud Robotics PaaSQuality Challenges** — page 833
+- **Industry 4.0 Metaverse Smart Ecosystems Era** — page 834
+- **Smart Ecosystems 3-DModeling Platform Quality Challenges** — page 835
+- **Smart Ecosystems AR/VRPlatform Quality Challenges** — page 836
+- **Smart Ecosystems IoTPlatform Quality Challenges** — page 836
+- **Smart Ecosystem Blockchain Platform Quality Challenges** — page 837
+- **Smart Ecosystems AI/MLPlatform Quality Challenges** — page 837
+- **Smart Ecosystems 3-D/4-DPlatform Quality Challenges** — page 838
+- **Metaverse Smart Ecosystems Platform Quality Challenges** — page 839
+- **Industry 5.0 Supersociety Solutions Era** — page 840
+- **Supersociety Autonomous Systems Platform Quality Challenges** — page 840
+- **Supersociety Advanced Robotics Platform Quality Challenges** — page 840
+- **Supersociety Nanotechnology Platform Quality Challenges** — page 841
+- **Supersociety Super-Compute Platform Quality Challenges** — page 841
+- **Supersociety Autonomous Super-Systems Platform Quality Challenges** — page 842
+- **14.2 Cybersecurity Deep Dive Learning Objectives** — page 843
+- **What Is Cybersecurity?** — page 843
+- **Why Is Cybersecurity Important?** — page 845
+- **Domains of Cybersecurity and Associated Cryptography Techniques** — page 845
+- **Cybersecurity Misconceptions** — page 847
+- **Supply Chain and Security Issues** — page 847
+- **Common Cyber Threats** — page 847
+- **Key Cybersecurity Technologies and Best Practices** — page 849
+- **Securing Information and Communication** — page 849
+- **Authentication and Passwords** — page 850
+- **Access Control** — page 851
+- **Anonymity and Privacy** — page 851
+- **Zero-Knowledge Proofs** — page 859
+- **Open Problems in Cryptography** — page 862
+- **Traditional Software Solutions Security** — page 863
+- **Software Security** — page 864
+- **Common Cyber Threat Defenses** — page 874
+- **Software Solutions Assurance Methodologies** — page 876
+- **Internet Solutions Cybersecurity** — page 884
+- **Web Infrastructure Assurance** — page 884
+- **Web/Mobile Applications Frameworks Assurance** — page 895
+- **Cloud-Centric Solutions Cybersecurity** — page 896
+- **Cloud Infrastructure Assurance** — page 896
+- **Cloud Services Assurance** — page 897
+- **Cloud Applications Frameworks Assurance** — page 898
+- **Cloud Applications Assurance** — page 898
+- **Cloud Information Assurance** — page 898
+- **Cloud Assurance Methodologies** — page 899
+- **Hardware Crisis** — page 899
+- **Industry 4.0 Metaverse Smart Ecosystems Cybersecurity** — page 900
+- **Smart Ecosystems Platforms Assurance** — page 900
+- **Metaverse Smart Ecosystems Platform Cybersecurity Assurance Methodologies** — page 900
+- **Industry 5.0 Supersociety Solutions Cybersecurity** — page 901
+- **Supersociety Autonomous Systems Platform Assurance** — page 901
+- **Supersociety Advanced Robotics Platform Assurance** — page 902
+- **Supersociety Nanotechnology Platform Assurance** — page 902
+- **Supersociety Supercompute Platform Assurance** — page 902
+- **Supersociety Autonomous Supersystems Platform Assurance** — page 903
+- **14.3 Governing the Use of Cyber Resources Learning Objectives** — page 903
+- **Cyber Economics** — page 903
+- **Responsible Computing Basics** — page 904
+- **Responsible Data Center** — page 905
+- **Responsible Infrastructure** — page 905
+- **Responsible Code** — page 905
+- **Responsible Data Usage** — page 906
+- **Responsible Systems** — page 906
+- **Responsible Impact** — page 907
+- **Cyber Economics and Responsible Computing for Internet Web/Mobile Solutions** — page 907
+- **Cyber Economics and Responsible Computing for Cloud Solutions** — page 908
+- **Cyber Economics and Responsible Computing for Smart Ecosystems Solutions** — page 908
+- **Cyber Economics and Responsible Computing for Super-Society Solutions** — page 908
+- **What Cyber Economics and Responsible Computing Means to Supporters and Careers in IT** — page 908
+- **Summary 14.1 Cyber Resources Management Frameworks** — page 911
+- **14.2 Cybersecurity Deep Dive** — page 912
+- **14.3 Governing the Use of Cyber Resources** — page 913
+- **AAppendix A: Network Design Application of Algorithms Introduction to Data Communications and Networks** — page 921
+- **Network Components** — page 921
+- **Communication Links** — page 921
+- **The Internet** — page 921
+- **Network Edge and Core** — page 922
+- **Hosts as Clients and Servers** — page 922
+- **Network Core** — page 922
+- **Network Core Functions** — page 922
+- **Network Performance** — page 922
+- **Network Security** — page 923
+- **Network Layers and Service Models** — page 923
+- **Internet Network Protocols** — page 923
+- **Routers Forwarding Functionality** — page 923
+- **Internet Control Message Protocol** — page 924
+- **Encoding** — page 924
+- **Wireless and Mobile Networks** — page 924
+- **Distributed and Decentralized Systems** — page 924
+- **History of the Internet and Inner-Workings** — page 925
+- **Index Symbols** — page 927
+
+#textbook #index #ingested
+<!-- vaultbot:textbook-source-key 2ec96ff6e950 -->

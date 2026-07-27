@@ -1,0 +1,372 @@
+# University Physics Volume 3 — Index
+
+> **Source PDF:** learningMaterial/university-physics-volume-3_-_WEB.pdf
+> **Pages:** 593
+> **Indexed:** 2026-07-25 20:16 UTC
+> This is an index, not a copy. Each entry points to a page in the source PDF. Ask me about a topic and I'll read the page and write what I learn into the vault with provenance.
+
+## Contents
+
+- **The Nature of Light** — page 7
+- **Geometric Optics and Image Formation** — page 7
+- **Interference** — page 7
+- **Diffraction** — page 7
+- **Relativity** — page 8
+- **Photons and Matter Waves** — page 8
+- **Quantum Mechanics** — page 8
+- **Atomic Structure** — page 8
+- **Condensed Matter Physics** — page 9
+- **Nuclear Physics** — page 9
+- **Particle Physics and Cosmology** — page 9
+- **PREFACE** — page 11
+- **About University Physics** — page 11
+- **Additional resources** — page 13
+- **About the authors** — page 13
+- **1.1 The Propagation of Light** — page 16
+- **The Speed of Light: Early Measurements** — page 16
+- **Speed of Light in Matter** — page 17
+- **Speed of Light in Jewelry** — page 19
+- **The Ray Model of Light** — page 19
+- **1.2 The Law of Reflection** — page 20
+- **Corner Reflectors (Retroreflectors)** — page 22
+- **1.3 Refraction** — page 23
+- **Determining the Index of Refraction** — page 25
+- **ALarger Change in Direction** — page 26
+- **1.4 Total Internal Reflection** — page 26
+- **Determining a Critical Angle** — page 27
+- **Fiber Optics: Endoscopes to Telephones** — page 28
+- **Corner Reflectors and Diamonds** — page 30
+- **1.5 Dispersion** — page 32
+- **Dispersion of White Light by Crown Glass** — page 33
+- **1.6 Huygens’s Principle** — page 36
+- **Reflection** — page 37
+- **Refraction** — page 37
+- **Deriving the Law of Refraction** — page 37
+- **1.7 Polarization** — page 40
+- **Malus’s Law** — page 40
+- **Calculating Intensity Reduction by a Polarizing Filter** — page 43
+- **Polarization by Reflection** — page 44
+- **Calculating Polarization by Reflection** — page 45
+- **Atomic Explanation of Polarizing Filters** — page 45
+- **Polarization by Scattering** — page 46
+- **Liquid Crystals and Other Polarization Effects in Materials** — page 47
+- **Chapter Review Key Terms** — page 50
+- **Key Equations** — page 50
+- **Summary** — page 50
+- **Conceptual Questions** — page 51
+- **Problems** — page 53
+- **Additional Problems** — page 56
+- **Challenge Problems** — page 57
+- **2.1 Images Formed by Plane Mirrors** — page 59
+- **Locating an Image in a Plane Mirror** — page 60
+- **Multiple Images** — page 61
+- **2.2 Spherical Mirrors** — page 61
+- **Curved Mirrors** — page 62
+- **Using Ray Tracing to Locate Images** — page 64
+- **Summary of Ray-Tracing Rules** — page 65
+- **Image Formation by Reflection—The Mirror Equation** — page 66
+- **Solar Electric Generating System** — page 68
+- **Image in a Convex Mirror** — page 69
+- **Departure from the Small-Angle Approximation** — page 70
+- **2.3 Images Formed by Refraction** — page 72
+- **Refraction at a Plane Interface—Apparent Depth** — page 72
+- **Refraction at a Spherical Interface** — page 73
+- **2.4 Thin Lenses** — page 75
+- **Ray Tracing and Thin Lenses** — page 77
+- **Image Formation by Thin Lenses** — page 78
+- **Oblique Parallel Rays and Focal Plane** — page 79
+- **Thin-Lens Equation** — page 80
+- **Using the Thin-Lens Equation** — page 82
+- **Using the Lens Maker’s Equation** — page 84
+- **Converging Lens and Different Object Distances** — page 84
+- **Choosing the Focal Length and Type of Lens** — page 85
+- **2.5 The Eye** — page 86
+- **Physics of the Eye** — page 87
+- **Effective Focal Length of the Eye** — page 89
+- **Image of an object placed at the near point** — page 89
+- **Vision Correction** — page 90
+- **Correcting Nearsightedness** — page 91
+- **Correcting Farsightedness** — page 92
+- **2.6 The Camera** — page 93
+- **2.7 The Simple Magnifier** — page 95
+- **Magnifying a Diamond** — page 98
+- **2.8 Microscopes and Telescopes** — page 98
+- **Microscopes** — page 98
+- **Microscope Magnification** — page 100
+- **Telescopes** — page 102
+- **Reflecting Telescopes** — page 105
+- **3.1 Young's Double-Slit Interference** — page 119
+- **3.2 Mathematics of Interference** — page 123
+- **Finding a Wavelength from an Interference Pattern** — page 124
+- **Calculating the Highest Order Possible** — page 125
+- **3.3 Multiple-Slit Interference** — page 125
+- **3.4 Interference in Thin Films** — page 127
+- **Changes in Phase due to Reflection** — page 128
+- **Calculating the Thickness of a Nonreflective Lens Coating** — page 129
+- **Combining Path Length Difference with Phase Change** — page 130
+- **Soap Bubbles** — page 130
+- **3.5 The Michelson Interferometer** — page 133
+- **Precise Distance Measurements by Michelson Interferometer** — page 135
+- **Measuring the Refractive Index of a Gas** — page 135
+- **4.1 Single-Slit Diffraction** — page 146
+- **Diffraction through a Single Slit** — page 146
+- **Calculating Single-Slit Diffraction** — page 149
+- **4.2 Intensity in Single-Slit Diffraction** — page 150
+- **Intensity in Single-Slit Diffraction** — page 153
+- **4.3 Double-Slit Diffraction** — page 155
+- **Intensity of the Fringes** — page 156
+- **Two-Slit Diffraction** — page 157
+- **4.4 Diffraction Gratings** — page 157
+- **Diffraction Gratings: An Infinite Number of Slits** — page 157
+- **Applications of Diffraction Gratings** — page 160
+- **Calculating Typical Diffraction Grating Effects** — page 160
+- **4.5 Circular Apertures and Resolution** — page 162
+- **Calculating Diffraction Limits of the Hubble Space Telescope** — page 164
+- **4.6 X-Ray Diffraction** — page 168
+- **X-Ray Diffraction with Salt Crystals** — page 169
+- **4.7 Holography** — page 170
+- **5.1 Invariance of Physical Laws** — page 184
+- **Inertial Frames** — page 184
+- **Einstein’s First Postulate** — page 185
+- **Einstein’s Second Postulate** — page 185
+- **5.2 Relativity of Simultaneity** — page 186
+- **5.3 Time Dilation** — page 189
+- **Half-Life of a Muon** — page 192
+- **Time Dilation in a High-Speed Vehicle** — page 192
+- **What Speeds are Relativistic?** — page 193
+- **Calculating for a Relativistic Event** — page 194
+- **Relativistic Television** — page 195
+- **The Twin Paradox** — page 196
+- **5.4 Length Contraction** — page 198
+- **Proper Length** — page 198
+- **Length Contraction** — page 199
+- **Calculating Length Contraction** — page 200
+- **5.5 The Lorentz Transformation** — page 203
+- **The Galilean Transformation Equations** — page 203
+- **The Lorentz Transformation Equations** — page 204
+- **Using the Lorentz Transformation for Time** — page 205
+- **Using the Lorentz Transformation for Length** — page 206
+- **Lorentz Transformation and Simultaneity** — page 206
+- **Space-time** — page 207
+- **5.6 Relativistic Velocity Transformation** — page 213
+- **Velocity Transformations** — page 213
+- **Relativistic Transformation of Velocity** — page 213
+- **Velocity Transformation Equations for Light** — page 214
+- **Relativistic Package Delivery** — page 215
+- **5.7 Doppler Effect for Light** — page 216
+- **The Relativistic Doppler Effect** — page 216
+- **Red Shifts and Blue Shifts** — page 217
+- **Calculating a Doppler Shift** — page 218
+- **5.8 Relativistic Momentum** — page 219
+- **5.9 Relativistic Energy** — page 221
+- **Kinetic Energy and the Ultimate Speed Limit** — page 221
+- **Comparing Kinetic Energy** — page 223
+- **Total Relativistic Energy** — page 225
+- **Calculating Rest Energy** — page 226
+- **Stored Energy and Potential Energy** — page 227
+- **Calculating Rest Mass** — page 227
+- **Relativistic Energy and Momentum** — page 228
+- **6.1 Blackbody Radiation** — page 242
+- **Temperatures of Distant Stars** — page 244
+- **Power Radiated by Stars** — page 245
+- **Planck’s Quantum Oscillator** — page 248
+- **Quantum Theory Applied to a Classical Oscillator** — page 249
+- **6.2 Photoelectric Effect** — page 250
+- **Characteristics of the Photoelectric Effect** — page 251
+- **The Work Function** — page 252
+- **Photoelectric Effect for Silver** — page 254
+- **Work Function and Cut-Off Frequency** — page 254
+- **The Photon Energy and Kinetic Energy of Photoelectrons** — page 255
+- **6.3 The Compton Effect** — page 256
+- **Momentum of a Photon** — page 256
+- **The Compton Effect** — page 257
+- **Compton Shift** — page 258
+- **Compton Scattering** — page 260
+- **6.4 Bohr’s Model of the Hydrogen Atom** — page 260
+- **Limits of the Balmer Series** — page 262
+- **Electron Orbits** — page 265
+- **Electron Energies** — page 265
+- **Spectral Emission Lines of Hydrogen** — page 267
+- **Size and Ionization Energy of the Hydrogen Atom in an Excited State** — page 268
+- **6.5 De Broglie’s Matter Waves** — page 269
+- **How Long Are de Broglie Matter Waves?** — page 270
+- **The Electron Wave in the Ground State of Hydrogen** — page 272
+- **Neutron Scattering** — page 275
+- **Wavelength of a Relativistic Proton** — page 276
+- **6.6 Wave-Particle Duality** — page 276
+- **Double-Slit Experiment with Electrons** — page 278
+- **Resolving Power of an Electron Microscope** — page 281
+- **7.1 Wave Functions** — page 295
+- **Using the Wave Function** — page 296
+- **Where Is the Ball? (Part I)** — page 298
+- **Where Is the Ball? (Part II)** — page 300
+- **An Interpretation of the Wave Function** — page 301
+- **Complex Conjugates** — page 303
+- **Expectation Values** — page 304
+- **Expectation Value (Part I)** — page 305
+- **Expectation Value (Part II)** — page 306
+- **7.2 The Heisenberg Uncertainty Principle** — page 307
+- **Momentum and Position** — page 307
+- **The Uncertainty Principle Large and Small** — page 309
+- **Uncertainty and the Hydrogen Atom** — page 309
+- **Energy and Time** — page 310
+- **Atomic Transitions** — page 311
+- **7.3 The Schrӧdinger Equation** — page 311
+- **7.4 The Quantum Particle in a Box** — page 314
+- **ASimple Model of the Nucleus** — page 317
+- **AClassical Particle in a Box** — page 319
+- **7.5 The Quantum Harmonic Oscillator** — page 320
+- **The Classic Harmonic Oscillator** — page 320
+- **The Quantum Harmonic Oscillator** — page 321
+- **Classical Region of Harmonic Oscillations** — page 323
+- **Vibrational Energies of the Hydrogen Chloride Molecule** — page 324
+- **7.6 The Quantum Tunneling of Particles through Potential Barriers** — page 326
+- **Tunneling and Potential Energy** — page 326
+- **Tunneling and the Wave Function** — page 327
+- **Transmission Coefficient** — page 330
+- **Radioactive Decay** — page 331
+- **Field Emission** — page 332
+- **Resonant Quantum Tunneling** — page 335
+- **8.1 The Hydrogen Atom** — page 348
+- **Physical Significance of the Quantum Numbers** — page 350
+- **How Many Possible States?** — page 350
+- **What Are the Allowed Directions?** — page 353
+- **Using the Wave Function to Make Predictions** — page 355
+- **8.2 Orbital Magnetic Dipole Moment of the Electron** — page 357
+- **Orbital Magnetic Dipole Moment** — page 359
+- **8.3 Electron Spin** — page 361
+- **Electron Spin and Radiation** — page 362
+- **8.4 The Exclusion Principle and the Periodic Table** — page 365
+- **Subshells and Totals for** — page 368
+- **8.5 Atomic Spectra and X-rays** — page 371
+- **The Sodium Doublet** — page 374
+- **Atomic Fluorescence** — page 375
+- **X-rays** — page 375
+- **X-Rays from Aluminum** — page 377
+- **Characteristic X-Ray Energy** — page 379
+- **X-ray Technology** — page 380
+- **8.6 Lasers** — page 381
+- **Digital storage: CDs, DVDs, and Blu-Ray** — page 382
+- **Chirped Pulse Amplification: From Fusion to Eye Surgery** — page 384
+- **9.1 Types of Molecular Bonds** — page 393
+- **Types of Bonds** — page 394
+- **The Energy of Salt** — page 396
+- **Bonding in Polyatomic Molecules** — page 398
+- **9.2 Molecular Spectra** — page 399
+- **The Rotational Energy of HCl** — page 400
+- **9.3 Bonding in Crystalline Solids** — page 402
+- **Ionic Bonding in Solids** — page 403
+- **The Dissociation Energy of Salt** — page 407
+- **Covalent Bonding in Solids** — page 408
+- **Metallic Bonding in Solids** — page 409
+- **9.4 Free Electron Model of Metals** — page 409
+- **Energy of a Metal Cube** — page 410
+- **Fermi Energy of Silver** — page 412
+- **9.5 Band Theory of Solids** — page 413
+- **9.6 Semiconductors and Doping** — page 417
+- **9.7 Semiconductor Devices** — page 420
+- **Diodes** — page 420
+- **Diode Current** — page 423
+- **Junction Transistor** — page 424
+- **9.8 Superconductivity** — page 426
+- **Properties of Superconductors** — page 426
+- **Niobium Wire** — page 429
+- **Theory of Superconductors** — page 430
+- **10.1 Properties of Nuclei** — page 442
+- **Counts of Nucleons** — page 442
+- **Nuclear Size** — page 446
+- **The Iron Nucleus** — page 446
+- **10.2 Nuclear Binding Energy** — page 447
+- **Mass Defect** — page 447
+- **Mass Defect and Binding Energy of the Deuteron** — page 448
+- **Graph of Binding Energy per Nucleon** — page 448
+- **Tightly Bound Alpha Nuclides** — page 449
+- **10.3 Radioactive Decay** — page 450
+- **Radioactive Decay Law** — page 450
+- **Decay Constant and Activity of Strontium-90** — page 452
+- **What is Activity in Living Tissue?** — page 453
+- **Radioactive Dating** — page 454
+- **An Ancient Burial Cave** — page 454
+- **10.4 Nuclear Reactions** — page 455
+- **Alpha Decay** — page 456
+- **Plutonium Alpha Decay** — page 457
+- **Beta Decay** — page 458
+- **Bismuth Alpha and Beta Decay** — page 459
+- **Gamma Decay** — page 460
+- **Radioactive Decay Series** — page 460
+- **Radioactivity in the Earth** — page 463
+- **10.5 Fission** — page 464
+- **The Atomic Bomb** — page 467
+- **Calculating Energy Released by Fission** — page 468
+- **Fission Nuclear Reactors** — page 468
+- **Calculating Energy of Fissionable Fuel** — page 470
+- **10.6 Nuclear Fusion** — page 470
+- **Nucleosynthesis** — page 471
+- **Energy of the Sun** — page 473
+- **The Hydrogen Bomb** — page 474
+- **The Fusion Reactor** — page 474
+- **10.7 Medical Applications and Biological Effects of Nuclear Radiation** — page 475
+- **Medical Applications** — page 476
+- **Biological Effects** — page 479
+- **Sources of Radiation** — page 481
+- **What Mass of Escaped Chernobyl?** — page 482
+- **11.1 Introduction to Particle Physics** — page 494
+- **Four Fundamental Forces** — page 494
+- **Classifications of Elementary Particles** — page 495
+- **Particles and Antiparticles** — page 496
+- **11.2 Particle Conservation Laws** — page 499
+- **Baryon Number Conservation** — page 499
+- **Lepton Number Conservation** — page 501
+- **Strangeness Conservation** — page 502
+- **11.3 Quarks** — page 504
+- **Quark Combinations** — page 504
+- **Quark Structure** — page 505
+- **Color** — page 507
+- **Quark Confinement** — page 507
+- **11.4 Particle Accelerators and Detectors** — page 508
+- **Early Particle Accelerators** — page 508
+- **Accelerating Tubes** — page 509
+- **The Energy of an Electron in a Cyclotron** — page 511
+- **Colliding Beam Machines** — page 511
+- **Creating a New Particle** — page 513
+- **Particle Detectors** — page 513
+- **11.5 The Standard Model** — page 516
+- **Introduction to the Standard Model** — page 516
+- **Electromagnetic Force** — page 517
+- **Weak Nuclear Force** — page 518
+- **Strong Nuclear Force** — page 519
+- **Unification Theories** — page 520
+- **11.6 The Big Bang** — page 521
+- **Hubble’s Law** — page 521
+- **Big Bang Model** — page 522
+- **Calculating Speeds and Galactic Distances** — page 523
+- **Structure and Dynamics of the Universe** — page 524
+- **11.7 Evolution of the Early Universe** — page 526
+- **The Early Universe** — page 526
+- **What Was the Average Thermal Energy of a Particle just after the Big Bang?** — page 528
+- **Nucleosynthesis of Light Elements** — page 529
+- **Cosmic Microwave Background Radiation** — page 529
+- **Antimatter and Matter** — page 531
+- **Dark Matter and Dark Energy** — page 531
+- **APPENDIXA Units** — page 541
+- **APPENDIXB Conversion Factors** — page 545
+- **APPENDIXC Fundamental Constants** — page 549
+- **APPENDIXD Astronomical Data** — page 551
+- **APPENDIXE Mathematical Formulas** — page 553
+- **APPENDIXF Chemistry** — page 557
+- **APPENDIXG The Greek Alphabet** — page 559
+- **ANSWERKEYChapter 1 Check Your Understanding** — page 561
+- **Chapter 2 Conceptual Questions** — page 563
+- **Chapter 3 Check Your Understanding** — page 569
+- **Chapter 4 Check Your Understanding** — page 570
+- **Chapter 5 Check Your Understanding** — page 572
+- **Chapter 6 Check Your Understanding** — page 576
+- **Chapter 7 Check Your Understanding** — page 578
+- **Chapter 8 Check Your Understanding** — page 580
+- **Chapter 9 Check Your Understanding** — page 583
+- **Chapter 10 Check Your Understanding** — page 586
+- **Chapter 11 Check Your Understanding** — page 589
+- **INDEXSymbols** — page 593
+
+#textbook #index #ingested
+<!-- vaultbot:textbook-source-key 7b87eedd4504 -->

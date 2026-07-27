@@ -9,7 +9,7 @@ A knowledge gap is one of:
 
 The researcher runs on a schedule inside the backend. It picks the
 highest-priority gap, runs the LLM-light ResearchEngine, writes a research
-note under vaultbot/research/, links it back to the notes that referenced
+note under 07-Research/, links it back to the notes that referenced
 the gap, re-indexes, and repeats — until it runs out of gaps or hits a
 budget cap per cycle.
 
@@ -245,7 +245,7 @@ class AutonomousResearcher:
                 min_content_length=self.thin_note_threshold):
             # Skip notes that are themselves generated research/chat notes —
             # those are the bot's own outputs, not user knowledge to fill.
-            if "vaultbot" in Path(t["file_path"]).parts:
+            if any(d in Path(t["file_path"]).parts for d in ("08-Chat", "07-Research")):
                 continue
             gaps.append({
                 "kind": "thin_note",

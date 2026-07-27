@@ -7,6 +7,7 @@ mutation, no websocket state). Handlers read singletons via
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -22,14 +23,13 @@ router = APIRouter()
 
 
 def _ping_ollama(svc: Services) -> bool:
-    """Quick check that Ollama (or the configured LLM backend) is responding."""
+    """Quick check that the configured LLM backend is responding.
+
+    Uses the client's own is_running() method so it works with ANY backend
+    (Ollama, OpenAI-compatible, etc.) — not just local Ollama.
+    """
     try:
-        import requests
-        base_url = getattr(svc.ollama_client, "base_url", None)
-        if not base_url:
-            return False
-        r = requests.get(f"{base_url}/api/version", timeout=2)
-        return r.status_code == 200
+        return bool(svc.ollama_client.is_running())
     except Exception:
         return False
 
@@ -57,6 +57,26 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
         "identity_self_model_chars": len(svc.identity.get_self_model()),
     }
     return svc.health_monitor.health(extra=extra)
+
+
+@router.post("/restart")
+async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
+    """Ask the Obsidian plugin to restart the backend via WebSocket.
+
+    Broadcasts ``{"type": "restart"}`` to all connected WebSocket clients.
+    The plugin's message handler calls ``restartBackend()`` — the exact same
+    code path as the GUI restart button. The plugin then calls ``/shutdown``
+    and spawns a fresh backend process.
+
+    This is the clean way for the agent to self-restart: the plugin (a
+    separate process that survives the backend dying) handles the actual
+    shutdown + respawn, not a fragile batch script.
+    """
+    await svc.manager.broadcast(json.dumps({
+        "type": "restart",
+        "content": "Backend is restarting. This is the same code path as the restart button."
+    }), session_logger=svc.session_logger)
+    return {"status": "restart_requested", "message": "WebSocket broadcast sent. Plugin will restart the backend."}
 
 
 # --- /checkpoints: crash-recovery status --------------------------------

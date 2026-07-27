@@ -43,6 +43,7 @@ from agent_tools import META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_pr
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports — no main dependency.
 from chat_helpers import run_with_heartbeat, send_progress, tool_result_summary
+from conversation_state import save_history
 from fastapi import WebSocket
 from procedure_tracker import interpret_validation_result, parse_procedures_from_results
 from services import Services
@@ -698,16 +699,30 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # final assistant answer. This is what gets prepended next turn.
     try:
         history = getattr(websocket, "conversation_history", None)
-        if history is not None and final_answer:
+        if history is not None:
             # The conversation list is [system, ...history, user, assistant,
             # tool, assistant, ...]. Strip the leading system message and
             # everything we just added (user msg onward) is the new history.
             new_turns = [m for m in conversation if m.get("role") != "system"]
-            websocket.conversation_history = new_turns
-            session_logger.log("history_persisted", {
-                "turns": len(new_turns),
-                "history_chars": sum(len(str(m.get("content", ""))) for m in new_turns),
-            })
+            # Only persist if we actually added turns this round (guard
+            # against a no-op). Persist even when final_answer is empty —
+            # an empty answer (model bailed / tool-only round) still
+            # carried the user's message + any tool/thinking exchanges,
+            # and dropping those from history breaks the thread both
+            # in-session and across restarts.
+            if len(new_turns) > len(history):
+                websocket.conversation_history = new_turns
+                session_logger.log("history_persisted", {
+                    "turns": len(new_turns),
+                    "history_chars": sum(len(str(m.get("content", ""))) for m in new_turns),
+                    "final_answer_len": len(final_answer or ""),
+                })
+                # Persist to disk so a backend restart restores this exact
+                # thread on the next WebSocket connect. This is the "bring
+                # you back into the same session" fix — the live conversation
+                # survives restarts, not just the slow identity files.
+                # Best-effort, never blocks.
+                save_history(new_turns)
     except Exception as e:
         session_logger.log("history_persist_failed", {"error": str(e)})
 
@@ -745,7 +760,32 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # of thinking lies in maintaining its outputs across time, not the act of
     # thinking itself.
     try:
-        activity = f"User asked: {user_message[:300]}\nAnswer: {final_answer[:500]}"
+        # Build a rich activity summary so the self-model captures not just
+        # the final answer but the reasoning + tool use that led there. An
+        # empty answer (model bailed / tool-only round) still imprints the
+        # thinking — otherwise a turn that ended in silence leaves the
+        # self-model stale, which is what made the agent "forget what it was
+        # doing" after a restart.
+        activity_parts = [f"User asked: {user_message[:300]}"]
+        if final_answer:
+            activity_parts.append(f"Answer: {final_answer[:500]}")
+        else:
+            activity_parts.append("Answer: (empty — model produced no final text)")
+        if thinking_text:
+            # Include a slice of the reasoning so the self-model records
+            # what the agent was actually working through.
+            activity_parts.append(f"Reasoning: {thinking_text[:600]}")
+        # Tool calls across all rounds, summarized.
+        _tool_summary = []
+        for m in conversation:
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                for tc in m["tool_calls"]:
+                    fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                    _tool_summary.append(fn.get("name", "?"))
+        if _tool_summary:
+            activity_parts.append(
+                "Tools used: " + ", ".join(_tool_summary[:10]))
+        activity = "\n".join(activity_parts)
         await loop.run_in_executor(None, lambda: svc.identity.regenerate_self_model(activity))
     except Exception as e:
         session_logger.log("self_model_regenerate_failed", {"error": str(e)})

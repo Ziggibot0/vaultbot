@@ -13,7 +13,7 @@ class VaultMaintenance:
     Continuous self-cleaning for a vaultbot-managed vault.
 
     Rules:
-    1. Generated notes live under vaultbot/chat/ and vaultbot/research/.
+    1. Generated notes live under 08-Chat/ and 07-Research/.
     2. Chat notes on the same topic are merged into one running log.
     3. Orphan generated notes (no wikilinks in, no wikilinks out, empty body) are removed.
     4. Near-duplicate generated notes are merged.
@@ -24,14 +24,12 @@ class VaultMaintenance:
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.similarity_threshold = similarity_threshold
-        self.bot_dir = self.vault_path / "vaultbot"
-        self.chat_dir = self.bot_dir / "chat"
-        self.research_dir = self.bot_dir / "research"
-        self.log_file = self.bot_dir / "maintenance.log"
+        self.chat_dir = self.vault_path / "08-Chat"
+        self.research_dir = self.vault_path / "07-Research"
+        self.log_file = self.vault_path / "vaultbot_backend" / "maintenance.log"
         self._ensure_dirs()
 
     def _ensure_dirs(self):
-        self.bot_dir.mkdir(exist_ok=True)
         self.chat_dir.mkdir(exist_ok=True)
         self.research_dir.mkdir(exist_ok=True)
 
@@ -54,8 +52,10 @@ class VaultMaintenance:
             )
 
     def _is_generated(self, path: Path) -> bool:
+        """Check if a path is under one of the generated-note directories."""
         try:
-            return self.bot_dir in path.resolve().parents
+            resolved = path.resolve()
+            return self.chat_dir in resolved.parents or self.research_dir in resolved.parents
         except Exception:
             return False
 
@@ -178,25 +178,26 @@ class VaultMaintenance:
         removed = []
         merged = []
 
-        # 1. Remove orphans under vaultbot/
-        for path in list(self.bot_dir.rglob("*.md")):
-            content = path.read_text(encoding="utf-8")
-            links = WIKILINK_RE.findall(content)
-            body = self._body_text(content)
-            name = path.stem
-            norm = name.lower()
+        # 1. Remove orphans under generated-note directories
+        for folder in (self.chat_dir, self.research_dir):
+            for path in list(folder.glob("*.md")):
+                content = path.read_text(encoding="utf-8")
+                links = WIKILINK_RE.findall(content)
+                body = self._body_text(content)
+                name = path.stem
+                norm = name.lower()
 
-            has_backlinks = norm in graph.backlinks and len(graph.backlinks[norm]) > 0
-            has_outgoing = len(links) > 0
-            is_empty = len(body) < 80
+                has_backlinks = norm in graph.backlinks and len(graph.backlinks[norm]) > 0
+                has_outgoing = len(links) > 0
+                is_empty = len(body) < 80
 
-            if is_empty and not has_backlinks:
-                try:
-                    path.unlink()
-                    removed.append(str(path))
-                    self._log("remove_orphan", {"file_path": str(path)})
-                except Exception as e:
-                    self._log("remove_orphan", {"file_path": str(path), "error": str(e)})
+                if is_empty and not has_backlinks:
+                    try:
+                        path.unlink()
+                        removed.append(str(path))
+                        self._log("remove_orphan", {"file_path": str(path)})
+                    except Exception as e:
+                        self._log("remove_orphan", {"file_path": str(path), "error": str(e)})
 
         # 2. Merge near-duplicate generated notes (within same folder)
         for folder in (self.chat_dir, self.research_dir):

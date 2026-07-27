@@ -420,6 +420,25 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    namespace["run_procedure"] = run_procedure\n'
         )
 
+    if "vault_graph_analyzer" in allowed_tools:
+        snippets.append(
+            'if "vault_graph_analyzer" in allowed:\n'
+            '    from custom_tools.vault_graph_analyzer import analyze_graph\n'
+            '    def vault_graph_analyzer(exclude_patterns=None, max_hops=6):\n'
+            '        result = analyze_graph(vault_path, exclude_patterns or ["LICENSE.md"], max_hops)\n'
+            '        return {"status": "success", "analysis": result}\n'
+            '    namespace["vault_graph_analyzer"] = vault_graph_analyzer\n'
+        )
+
+    if "vault_delete" in allowed_tools:
+        snippets.append(
+            'if "vault_delete" in allowed:\n'
+            '    from custom_tools.vault_delete import run as _vault_delete_run\n'
+            '    def vault_delete(file_path):\n'
+            '        return _vault_delete_run({"file_path": file_path})\n'
+            '    namespace["vault_delete"] = vault_delete\n'
+        )
+
     return "\n".join(snippets)
 
 
@@ -430,7 +449,7 @@ def _run_code_step(
     allowed_tools: list[str],
     vault_path: str,
     prior_results: list[Any],
-    timeout: int = 60,
+    timeout: int = 120,
     procedure_name: str = "",
     call_stack: list[str] | None = None,
 ) -> tuple[bool, str, Optional[str], Optional[str]]:
@@ -889,8 +908,11 @@ async def execute_procedure(
 
         # --- Execute based on step type ---
         if step.step_type == "code":
+            # Use 300s timeout for steps that may call llm_generate (synthesis can be slow)
+            _step_timeout = 300 if "llm_generate" in procedure.allowed_tools else 120
             success, output, error, tb = _run_code_step(
                 step, procedure.allowed_tools, vault_path, prior_results,
+                timeout=_step_timeout,
                 procedure_name=procedure.name,
                 call_stack=call_stack,
             )

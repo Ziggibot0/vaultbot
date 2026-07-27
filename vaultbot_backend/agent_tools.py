@@ -313,7 +313,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "procedure_name": {
                         "type": "string",
-                        "description": "The note title (stem) of the procedure to execute, e.g. How-to-Verify-Claims-in-a-Research-Note",
+                        "description": "The note title (stem) of the procedure to execute, e.g. Verify-Claims or Dream-Pass",
                     },
                 },
                 "required": ["procedure_name"],
@@ -513,6 +513,10 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"  - Found through research, not invented. Research how experts do "
         f"  the task, then write what you found as steps. Don't make up a "
         f"  method from your weights.\n"
+        f"  - Tool-style names, not tutorial names. Name procedures like "
+        f"  tools (e.g., 'Dream-Pass', 'Verify-Claims', 'Procedure-Creator') "
+        f"  — never 'How to X'. Procedures are machine-executable protocols, "
+        f"  not advice to read. The validator rejects 'How to' prefixes.\n"
         f"  - Specific and testable. Each step has a clear input, action, "
         f"  and output. Use [validate: at_least N notes] or [validate: "
         f"  contains \"X\"] to make pass/fail deterministic.\n"

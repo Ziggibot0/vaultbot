@@ -20,6 +20,7 @@ from services import Services
 from session_logger import SessionLogger
 from chat_handler import handle_chat
 from research_handler import handle_research
+from conversation_state import load_history, clear_history
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -42,7 +43,20 @@ async def websocket_endpoint(websocket: WebSocket,
     # Per-connection conversation history. This is THE fix for the "amnesia"
     # bug: without it, every message started a fresh 2-message conversation
     # (system + this message) with zero memory of prior turns.
-    websocket.conversation_history = []
+    #
+    # RESTORE-ON-RECONNECT: load the persisted history from disk so a backend
+    # restart (Sean asked VaultBot to restart itself, a crash, a code reload)
+    # brings the agent back into the SAME session — the live thread is
+    # restored, not just the slow identity files. Sean: "change your restart
+    # backend tool to bring you back into the same session and start you
+    # back up." This is that change.
+    restored = load_history()
+    websocket.conversation_history = restored
+    if restored:
+        session_logger.log("conversation_history_restored", {
+            "turns": len(restored),
+            "history_chars": sum(len(str(m.get("content", ""))) for m in restored),
+        })
     try:
         while True:
             data = await websocket.receive_text()
@@ -79,6 +93,9 @@ async def websocket_endpoint(websocket: WebSocket,
                     task._stopped_by_user = True
                     task.cancel()
                 websocket.conversation_history = []
+                # Wipe the persisted copy too so a restart after /new doesn't
+                # resurrect the cleared thread.
+                clear_history()
                 old_session_id = session_logger.session_id
                 session_logger = SessionLogger()
                 session_logger.log("session_reset", {

@@ -167,13 +167,19 @@ def run(args):
             results["status"] = "WARN"
 
     # --- 6. Vault notes directory ---
-    vault_dir = backend_dir.parent / "vaultbot"
+    # Check for the hierarchical folder structure (00-Identity, 07-Research, 08-Chat, etc.)
+    vault_dir = backend_dir.parent
+    expected_folders = ["00-Identity", "07-Research", "08-Chat"]
+    found_folders = [f for f in expected_folders if (vault_dir / f).exists()]
+    note_count = sum(1 for f in vault_dir.rglob("*.md")
+                     if "vaultbot_backend" not in str(f) and "vaultbot_venv" not in str(f))
     results["checks"]["vault"] = {
-        "exists": vault_dir.exists(),
-        "note_count": len(list(vault_dir.rglob("*.md"))) if vault_dir.exists() else 0
+        "exists": len(found_folders) >= 2,
+        "found_folders": found_folders,
+        "note_count": note_count
     }
-    if not vault_dir.exists():
-        results["blocks"].append("Vault notes directory not found")
+    if len(found_folders) < 2:
+        results["blocks"].append("Vault notes directory not found (expected folders like 00-Identity/, 07-Research/)")
         results["status"] = "BLOCK"
 
     # --- Final status ---

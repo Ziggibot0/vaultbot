@@ -66,7 +66,7 @@ except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"
 LEARNING_DIR = VAULT_DIR / "learningMaterial"
-TEXTBOOKS_DIR = VAULT_DIR / "vaultbot" / "textbooks"
+TEXTBOOKS_DIR = VAULT_DIR / "09-Textbooks"
 
 
 def _resolve_pdf(pdf_name: str) -> Path | None:
