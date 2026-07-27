@@ -249,7 +249,20 @@ class OllamaClient(_BASE):
 
         t0 = time.time()
         try:
-            response = self._session.post(f"{self.base_url}/api/chat", json=payload, stream=stream)
+            # Streaming chat: a read timeout so a stalled cloud model
+            # (glm-5.2:cloud is a remote ollama.com model) raises
+            # ReadTimeout instead of blocking the chat loop forever. The
+            # connect timeout is short (the server is local); the read
+            # timeout is generous (120s) so a slow-but-alive stream isn't
+            # killed. The non-stream path already uses timeout=60.
+            if stream:
+                response = self._session.post(
+                    f"{self.base_url}/api/chat", json=payload,
+                    stream=True, timeout=(5, 120))
+            else:
+                response = self._session.post(
+                    f"{self.base_url}/api/chat", json=payload,
+                    stream=False, timeout=60)
             response.raise_for_status()
         except Exception as e:
             self._log_tool("chat", {"payload": payload, "stream": stream}, error=str(e),

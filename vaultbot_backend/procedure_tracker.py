@@ -17,12 +17,10 @@ Procedural Bootstrap and Evolution Plan:
 All mechanisms are deterministic: counters, date comparisons, and
 string matching. No LLM judgment is used for any decision here.
 
-The `falsifiable_if` field in procedural note frontmatter is treated as
-documentation for humans, NOT as a matching target for code. Failures
-are categorized with structured categories (broken_wikilinks,
-missing_frontmatter, etc.) and counted against the procedure that was
-in context. This is simpler and more reliable than free-text matching,
-and it matches the research on structured logging for agent systems.
+Step-level tracking (added for the step-gate runtime): each step's
+pass/fail is logged with a ``step_number`` field, enabling per-step
+failure detection and re-research targeting. See
+``step_gate_runtime.py`` and [[Procedural-Bootstrap-and-Evolution-Plan]].
 """
 
 import json
@@ -63,6 +61,7 @@ PROMOTION_THRESHOLD = 5        # uses before promotion check
 PROMOTION_SUCCESS_RATE = 0.7   # 70% success rate to promote to verified
 DEMOTION_SUCCESS_RATE = 0.4     # below 40% -> flag for re-research
 MAX_LOG_ENTRIES = 500          # keep the log bounded
+STEP_FAILURE_THRESHOLD = 3     # step failures before step-level re-research
 
 
 # --- Frontmatter update helper ---
@@ -157,6 +156,51 @@ class ProcedureTracker:
                     continue
                 yield md, fm, text
 
+    # --- Procedure stem index (for fast lookup by name) -----------------
+    #
+    # A stem -> {path, frontmatter} map so the chat handler can resolve
+    # ``execute_procedure("How-to-Verify-Claims-in-a-Research-Note")`` in
+    # O(1) instead of rglob-walking the vault on every call.  The index
+    # is rebuilt on demand; callers (main.py) should call this once at
+    # startup and refresh it on file-change events.  Stale entries (a
+    # note that was deleted) are simply absent from the next rebuild.
+
+    def get_procedure_index(self, vault_path: str = "."
+                            ) -> dict[str, dict[str, Any]]:
+        """Build and return a stem -> {path, frontmatter} index.
+
+        Walks the vault once, restricted to procedural notes.  The
+        frontmatter dict is the simple key-value parse used elsewhere
+        in this module (no nested mappings).  Returned dict is owned
+        by the caller — caching it is the caller's responsibility.
+        """
+        index: dict[str, dict[str, Any]] = {}
+        for md, fm_str, _text in self._iter_procedural_notes(vault_path):
+            fm: dict[str, Any] = {}
+            current_key: str | None = None
+            current_list: list | None = None
+            for line in fm_str.split("\n"):
+                line = line.rstrip()
+                if not line:
+                    continue
+                if line.startswith("  - ") and current_key:
+                    value = line[4:].strip().strip('"').strip("'")
+                    if current_list is None:
+                        current_list = []
+                        fm[current_key] = current_list
+                    current_list.append(value)
+                    continue
+                if ":" in line:
+                    current_list = None
+                    key, _, value = line.partition(":")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if value:
+                        fm[key] = value
+                        current_key = key
+            index[md.stem] = {"path": str(md), "frontmatter": fm}
+        return index
+
     # --- Log I/O ---
 
     def _ensure_log(self):
@@ -236,6 +280,115 @@ class ProcedureTracker:
             data["entries"] = data["entries"][-MAX_LOG_ENTRIES:]
         data["summary"] = self._recompute_summary(data)
         self._write_log(data)
+
+    # --- Step-level logging (for the step-gate runtime) ---
+
+    def log_step_result(self, procedure: str, step_number: int,
+                        passed: bool, error: str = ""):
+        """Log a pass or fail for a single step within a procedure.
+
+        This is called by the step-gate runtime after each step's
+        validation. Step-level entries share the same log file as
+        procedure-level entries, distinguished by the ``step_number``
+        field (procedure-level entries have no ``step_number``).
+
+        Args:
+            procedure: The procedure note name.
+            step_number: Which step (1-indexed).
+            passed: Whether the step's output passed validation.
+            error: Validation error message if failed, empty if passed.
+        """
+        data = self._read_log()
+        entry = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "procedure": procedure,
+            "step_number": step_number,
+            "validation_result": "pass" if passed else "fail",
+            "validation_tool": "step_gate",
+            "error_details": error,
+            "category": "validation_error",
+            "severity": "medium" if not passed else "low",
+        }
+        data["entries"].append(entry)
+        if len(data["entries"]) > MAX_LOG_ENTRIES:
+            data["entries"] = data["entries"][-MAX_LOG_ENTRIES:]
+        data["summary"] = self._recompute_summary(data)
+        self._write_log(data)
+
+    def get_step_stats(self, procedure: str, step_number: int) -> dict[str, Any]:
+        """Return pass/fail stats for a specific step within a procedure.
+
+        Only counts entries within the failure window. Returns a dict
+        with total, passes, failures, and success_rate.
+        """
+        data = self._read_log()
+        now = datetime.now(UTC)
+        window_start = now - timedelta(days=FAILURE_WINDOW_DAYS)
+        total = 0
+        passes = 0
+        failures = 0
+        for entry in data.get("entries", []):
+            if (entry.get("procedure") != procedure
+                    or entry.get("step_number") != step_number):
+                continue
+            ts = entry.get("timestamp", "")
+            try:
+                entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if entry_dt < window_start:
+                continue
+            total += 1
+            if entry.get("validation_result") == "pass":
+                passes += 1
+            else:
+                failures += 1
+        return {
+            "procedure": procedure,
+            "step_number": step_number,
+            "total": total,
+            "passes": passes,
+            "failures": failures,
+            "success_rate": passes / total if total > 0 else 0.0,
+        }
+
+    def get_failing_steps(self, procedure: str) -> list[dict[str, Any]]:
+        """Return steps within a procedure that have exceeded the step
+        failure threshold.
+
+        These are specific steps that consistently fail validation and
+        should be re-researched or rewritten. The autonomous researcher
+        can use this to target the exact step that needs fixing, not
+        the whole procedure.
+        """
+        data = self._read_log()
+        now = datetime.now(UTC)
+        window_start = now - timedelta(days=FAILURE_WINDOW_DAYS)
+        step_failures: dict[int, int] = defaultdict(int)
+        for entry in data.get("entries", []):
+            if entry.get("procedure") != procedure:
+                continue
+            step_num = entry.get("step_number")
+            if step_num is None:
+                continue
+            ts = entry.get("timestamp", "")
+            try:
+                entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if entry_dt < window_start:
+                continue
+            if entry.get("validation_result") == "fail":
+                step_failures[step_num] += 1
+        return [
+            {
+                "procedure": procedure,
+                "step_number": step_num,
+                "failures": count,
+            }
+            for step_num, count in sorted(step_failures.items())
+            if count >= STEP_FAILURE_THRESHOLD
+        ]
 
     # --- Failure-driven evolution ---
 
@@ -479,8 +632,9 @@ class ProcedureTracker:
 
         Combines:
         1. Failing procedures (re-research the procedure's topic)
-        2. Procedural gaps (find a procedure for a task type)
-        3. Stale procedures (re-research on schedule)
+        2. Failing steps within procedures (re-research the specific step)
+        3. Procedural gaps (find a procedure for a task type)
+        4. Stale procedures (re-research on schedule)
 
         Returns a prioritized list suitable for feeding into the
         autonomous researcher's cycle.
@@ -496,6 +650,18 @@ class ProcedureTracker:
                 "procedure": proc["procedure"],
                 "failures": proc["failures"],
             })
+
+        # Failing steps -> re-research the specific step
+        for proc in self.get_failing_procedures():
+            for step in self.get_failing_steps(proc["procedure"]):
+                gaps.append({
+                    "kind": "failing_step",
+                    "topic": f"{proc['procedure']} step {step['step_number']}",
+                    "priority": step["failures"] * 12,
+                    "procedure": proc["procedure"],
+                    "step_number": step["step_number"],
+                    "failures": step["failures"],
+                })
 
         # Procedural gaps -> find a new procedure
         gaps.extend(self.get_procedural_gaps())

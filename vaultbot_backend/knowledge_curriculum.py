@@ -269,6 +269,19 @@ class KnowledgeCurriculum:
         )
         self._gaps_cache: list[dict[str, Any]] | None = None
         self._gaps_cache_ts: float = 0.0
+        # ---- Thin-communities sub-cache ---------------------------------
+        # ``_collect_thin_communities`` is the most expensive gap signal
+        # (O(n * k^2) clique detection over every note). Its result depends
+        # ONLY on the graph topology, which is mtime-tracked on
+        # ``VaultGraph._last_refresh_mtime``. So we cache it keyed on that
+        # mtime: a back-to-back scoring pass that finds the graph unchanged
+        # reuses the previous clique list for free. The main gaps cache is
+        # invalidated on mark_completed/mark_failed; this sub-cache is
+        # invalidated only when the graph actually changes (a note added /
+        # edited / linked), which is the correct condition for a
+        # topology-only signal.
+        self._thin_communities_cache: list[dict[str, Any]] | None = None
+        self._thin_communities_graph_mtime: float = -1.0
 
     # ------------------------------------------------------------------
     # Persistence
@@ -518,22 +531,45 @@ class KnowledgeCurriculum:
     # Gap-signal collection
     # ------------------------------------------------------------------
     def _collect_all_gaps(self) -> list[dict[str, Any]]:
-        """Gather all five gap-signal types into a flat candidate list."""
+        """Gather all five gap-signal types into a flat candidate list.
+
+        ``dangling_links()`` is a full graph scan; the missing-entity
+        collector needs the same authoritative set to dedupe against, so we
+        compute it ONCE here and pass it to both collectors. Previously each
+        collector called ``graph.dangling_links()`` independently, doubling
+        the scan cost on every gap-scoring pass.
+        """
         gaps: list[dict[str, Any]] = []
 
-        gaps.extend(self._collect_dangling_links())
+        # Compute the dangling-link set once; reuse for both signal 1 and 3.
+        try:
+            dangling = self.graph.dangling_links(min_references=1)
+        except Exception as e:
+            self._log_error("collect_dangling_links", e)
+            dangling = []
+
+        gaps.extend(self._collect_dangling_links(dangling=dangling))
         gaps.extend(self._collect_thin_notes())
-        # missing_entity is deduped against dangling_link inside the collector.
-        gaps.extend(self._collect_missing_entities())
+        # missing_entity dedupes against the same dangling set.
+        gaps.extend(self._collect_missing_entities(dangling=dangling))
         gaps.extend(self._collect_thin_communities())
         gaps.extend(self._collect_link_density_anomalies())
 
         return gaps
 
-    def _collect_dangling_links(self) -> list[dict[str, Any]]:
-        """Signal 1: red links the vault has declared it wants to know."""
+    def _collect_dangling_links(
+        self, dangling: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        """Signal 1: red links the vault has declared it wants to know.
+
+        ``dangling`` may be supplied by the caller (``_collect_all_gaps``
+        computes it once and shares it with ``_collect_missing_entities``)
+        to avoid a second full ``graph.dangling_links()`` scan. If not
+        supplied, falls back to computing it here for standalone callers.
+        """
         try:
-            dangling = self.graph.dangling_links(min_references=1)
+            if dangling is None:
+                dangling = self.graph.dangling_links(min_references=1)
             out: list[dict[str, Any]] = []
             for d in dangling:
                 out.append({
@@ -580,7 +616,9 @@ class KnowledgeCurriculum:
             self._log_error("collect_thin_notes", e)
             return []
 
-    def _collect_missing_entities(self) -> list[dict[str, Any]]:
+    def _collect_missing_entities(
+        self, dangling: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
         """Signal 3: red links re-declared from recent notes, deduped.
 
         The set of dangling-link normalized names is the authoritative "what's
@@ -589,9 +627,13 @@ class KnowledgeCurriculum:
         avoid double-counting we dedupe against the dangling-link candidate
         set by normalized name and only emit entries that contribute extra
         context (e.g. a referenced_by source the bare dangling scan missed).
+
+        ``dangling`` is normally supplied by ``_collect_all_gaps`` so this
+        collector reuses the authoritative scan instead of recomputing it.
         """
         try:
-            dangling = self.graph.dangling_links(min_references=1)
+            if dangling is None:
+                dangling = self.graph.dangling_links(min_references=1)
             dangling_names: set[str] = {
                 d.get("normalized_name", "") for d in dangling if d.get("normalized_name")
             }
@@ -653,8 +695,24 @@ class KnowledgeCurriculum:
         "every pair of neighbors is mutually linked" — a strict but cheap
         check. We emit one gap per detected clique, keyed by its smallest
         member so duplicates collapse naturally.
+
+        Performance: this is O(n * k^2) over every note and is the dominant
+        cost of a cold gap-scoring pass. The result depends ONLY on the graph
+        topology (nodes + edges), which is mtime-tracked on
+        ``VaultGraph._last_refresh_mtime``. So we cache the result keyed on
+        that mtime: a back-to-back scoring pass that finds the graph unchanged
+        reuses the previous clique list for free. The cache is invalidated
+        only when the graph actually changes (a note added/edited/linked),
+        which is exactly the right condition for a topology-only signal.
         """
         try:
+            graph_mtime = getattr(self.graph, "_last_refresh_mtime", 0.0)
+            if (self._thin_communities_cache is not None
+                    and self._thin_communities_graph_mtime == graph_mtime
+                    and graph_mtime > 0.0):
+                # Graph topology unchanged since last compute — reuse.
+                return list(self._thin_communities_cache)
+
             min_size = self.thin_community_min_size
             out: list[dict[str, Any]] = []
             seen_cliques: set[tuple[str, ...]] = set()
@@ -708,6 +766,10 @@ class KnowledgeCurriculum:
                     "base_priority": len(clique_sorted),
                 })
 
+            # Cache keyed on graph mtime so an unchanged topology reuses
+            # this O(n*k^2) result on the next scoring pass.
+            self._thin_communities_cache = list(out)
+            self._thin_communities_graph_mtime = graph_mtime
             return out
         except Exception as e:
             self._log_error("collect_thin_communities", e)

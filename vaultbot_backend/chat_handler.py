@@ -420,7 +420,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             t_tool0 = loop.time()
             try:
                 tool_result = await execute_agent_tool(
-                    svc, tool_name, tool_args, session_logger, websocket)
+                    svc, tool_name, tool_args, session_logger, websocket,
+                    user_message=user_message)
             except Exception as e:
                 session_logger.log_exception(e, context=f"tool_{tool_name}")
                 tool_result = {"error": str(e)}
@@ -772,7 +773,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
 
 async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any],
-                             session_logger, websocket: WebSocket | None = None) -> dict[str, Any]:
+                             session_logger, websocket: WebSocket | None = None,
+                             user_message: str = "") -> dict[str, Any]:
     """Execute one tool call from the chat LLM. Runs in the async context.
 
     `websocket` is passed so long-running tools (vault_research) can push
@@ -900,6 +902,97 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
     if tool_name == "capability_audit":
         return await loop.run_in_executor(None, lambda: svc.self_improver.capability_audit(
             args.get("task", "")))
+
+    # --- Procedure execution (step-gate runtime) --- #
+    # The LLM calls this to execute a procedure written in a markdown note.
+    # The procedure runs as a blocking subprocess: code steps execute
+    # deterministically (zero LLM cost), LLM steps use minimal context via
+    # get_llm_client(). Returns the procedure's step-by-step output.
+    # See [[Procedure-Subprocess-Architecture]].
+    if tool_name == "execute_procedure":
+        from procedure_compiler import compile_procedure as _compile_proc
+        from step_gate_runtime import execute_procedure as _run_proc
+
+        proc_name = args.get("procedure_name", "")
+        if not proc_name:
+            return {"error": "missing procedure_name"}
+
+        backend_dir = Path(__file__).parent.resolve()
+        vault_root = backend_dir.parent
+
+        # Resolve the procedure file via the tracker's stem index (O(1)
+        # after first build) instead of rglob-walking the vault on every
+        # call.  The index is cached on the tracker and rebuilt lazily if
+        # the stem is missing (covers a note written seconds ago).
+        proc_file = None
+        try:
+            idx = getattr(svc.procedure_tracker, "_stem_index", None)
+            if idx is None:
+                idx = svc.procedure_tracker.get_procedure_index(str(vault_root))
+                svc.procedure_tracker._stem_index = idx
+            entry = idx.get(proc_name)
+            if entry:
+                proc_file = Path(entry["path"])
+        except Exception:
+            pass
+
+        if not proc_file:
+            # Fallback: rglob for a just-written note the index hasn't seen.
+            for candidate in vault_root.rglob("*.md"):
+                if candidate.stem == proc_name:
+                    proc_file = candidate
+                    break
+
+        if not proc_file:
+            return {"error": f"procedure not found: {proc_name}"}
+
+        proc = _compile_proc(str(proc_file))
+        if not proc:
+            return {"error": f"not a procedure note: {proc_name}"}
+
+        result = await _run_proc(
+            procedure=proc,
+            context="",
+            llm_client=svc.ollama_client,
+            vault_path=str(vault_root),
+            procedure_tracker=svc.procedure_tracker,
+        )
+
+        # --- Procedure-level drift feedback (Phase 3) ---
+        # Nudge the procedure NOTE's embedding toward the query if it
+        # passed, away if it failed.  Reuses the chat-loop query embedding
+        # already computed for note drift.  No new drift code — just a
+        # new caller.  See embedding_drift.py.
+        if user_message:
+            try:
+                q_emb = await loop.run_in_executor(
+                    None, svc.vault_indexer._get_embedding, user_message)
+                helpful = result.overall_passed
+                svc.embedding_drift.record_feedback(
+                    str(proc_file), q_emb, helpful=helpful)
+                session_logger.log("procedure_drift_feedback", {
+                    "procedure": proc_name,
+                    "helpful": helpful,
+                    "failed_step": result.failed_step,
+                })
+            except Exception as e:
+                session_logger.log("procedure_drift_feedback_failed",
+                                    {"error": str(e)})
+
+        return {
+            "procedure": proc_name,
+            "overall_passed": result.overall_passed,
+            "failed_step": result.failed_step,
+            "steps_executed": len(result.steps),
+            "final_output": result.final_output[:4000],
+            "child_procedures": result.child_procedures,
+            "step_details": [
+                {"step": sr.step_number, "type": sr.step_type,
+                 "passed": sr.passed,
+                 "error": sr.error or sr.validation_error}
+                for sr in result.steps
+            ],
+        }
 
     # --- Textbook page reader (index-only paradigm) --- #
     # The LLM calls this to read one page of an ingested textbook PDF. The

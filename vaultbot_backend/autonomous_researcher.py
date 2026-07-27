@@ -272,6 +272,20 @@ class AutonomousResearcher:
             self._log("autonomous_research_empty", {"topic": topic})
             return None
 
+        # Chat-priority abort: the web scrape (engine.research) is now done
+        # and the NEXT steps (Ollama embedding/index, graph refresh) are
+        # what block an interactive chat's embedding. If a chat turn is
+        # waiting, abandon this gap here so the chat gets Ollama now. The
+        # gap stays in the curriculum for the next cycle. The scrape work
+        # is discarded (research is best-effort background; chat is
+        # user-facing priority). We do NOT try to cancel the scrape itself
+        # mid-HTTP -- that would mean threading cancellation into requests,
+        # and the scrape is network-bound and usually returns in seconds.
+        if self._chat_active.is_set():
+            self._log("autonomous_gap_aborted_for_chat",
+                      {"topic": topic, "kind": gap.get("kind")})
+            return None
+
         summary = (f"Autonomous research into '{topic}' to fill a "
                    f"{gap['kind']} gap. "
                    f"{report['source_count']} sources, "

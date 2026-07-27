@@ -291,8 +291,12 @@ class MarginaliaBackend(_Backend):
     )
     # External boilerplate URLs that appear in the page chrome/footer of the
     # results page (license links, etc.) and are never real search hits.
+    # NOTE: "marginalia" (bare) catches ALL marginalia-owned hosts, including
+    # chat.marginalia.nu ("project discord"), marginalia-search.com, and any
+    # other subdomain — they are the search engine's own chrome, not results.
     _JUNK_DOMAINS = (
         "creativecommons.org", "gnu.org", "w3.org", "github.com/marginalia",
+        "marginalia.nu", "marginalia-search.com",
     )
 
     def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
@@ -618,6 +622,37 @@ class FreeSearch:
             for tag in soup(["script", "style", "nav", "footer", "header",
                              "aside", "form", "noscript", "svg"]):
                 tag.decompose()
+            # Strip Stack Exchange "Related" / "Hot Network Questions" sidebars
+            # and inline related-question blocks BEFORE extracting text.
+            # These inject dozens of off-topic questions (e.g. "How can I
+            # remove a key from a Python dictionary?") into the scraped
+            # body, where the synthesis then ranks them high because they
+            # contain generic terms ("remove", "python", "vector") from the
+            # query. They are navigation, not content.
+            for sel in ("div.related", "div.module", "div.sidebar",
+                        "aside.related", "div.hot-network-questions",
+                        "div.js-related-questions", "div[data-tracker]",
+                        "div[id^='hot-network']", "div[id^='related']",
+                        "section.related",
+                        # SO inline "Related questions" card under answers.
+                        "div.related-questions",
+                        # Generic: any element whose class/id screams sidebar.
+                        "[class*='related']", "[id*='related']",
+                        "[class*='sidebar']", "[id*='sidebar']",
+                        "[class*='hot-network']", "[id*='hot-network']"):
+                for el in soup.select(sel):
+                    el.decompose()
+            # Also drop elements whose visible text is a "Related"/"Hot Network"
+            # heading — catches variants the selectors miss.
+            for heading in soup.find_all(
+                    ["h2", "h3", "h4", "div", "span"],
+                    string=re.compile(
+                        r"\s*(Related|Hot Network Questions|Linked)\s*",
+                        re.I)):
+                parent = heading.parent
+                if parent is not None and parent.name in (
+                        "div", "section", "aside", "li"):
+                    parent.decompose()
             main = (soup.find("article") or soup.find("main")
                     or soup.find("body"))
             text = (main.get_text(separator="\n", strip=True) if main

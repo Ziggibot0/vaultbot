@@ -92,14 +92,32 @@ class NoteCreator:
             links.add(f"[[{stem}]]")
         return sorted(links)
 
-    def _refresh_and_clean(self):
+    def _refresh_and_clean(self, target_path: Path | None = None,
+                           skip_graph_refresh: bool = False):
         """Rebuild graph awareness and run self-maintenance.
 
         Wrapped in try/except so cleanup failures never block note creation.
+
+        When ``target_path`` is supplied, the cleanup is incremental: only
+        the single new note is checked against the existing generated notes
+        (O(n) dedup) instead of the full O(n^2) pairwise sweep that
+        ``run_cleanup`` performs over every generated note. This is the
+        hot path called after every research/chat note write, where the
+        full sweep was the dominant cost of the "writing note..." stage.
+
+        When ``skip_graph_refresh`` is True, the graph refresh is skipped
+        entirely — used when the caller is about to refresh the graph
+        itself (research_handler / chat_handler both refresh after this
+        returns), so a second refresh here is wasted work.
         """
         try:
-            self.graph.refresh()
-            cleanup = self.maintenance.run_cleanup(self.graph)
+            if not skip_graph_refresh:
+                self.graph.refresh()
+            if target_path is not None:
+                cleanup = self.maintenance.run_cleanup_for_new(
+                    self.graph, target_path)
+            else:
+                cleanup = self.maintenance.run_cleanup(self.graph)
             self._log_tool("maintenance_cleanup", cleanup)
         except Exception as e:
             self._log_tool("maintenance_cleanup", error=str(e))
@@ -111,58 +129,51 @@ class NoteCreator:
         The note file is written to disk FIRST, before any indexing or
         graph operations. This ensures the knowledge is persisted even if
         the embedding service (Ollama) is down or returning errors.
+
+        Performance note: this function intentionally does NOT do
+        embedding-based link enrichment. The callers
+        (``research_handler``, ``chat_handler``, ``autonomous_researcher``)
+        overwrite the note file with ``synthesize_note_markdown`` immediately
+        after this returns, which has no "Related Notes" section — so any
+        enrichment here would be discarded. A-MEM (``evolve_on_create``)
+        runs afterward and adds backlinks to *neighbors*, which is the
+        durable form of link enrichment. Skipping the per-entity vector
+        search here removes ~30-60s of Ollama round-trips from the
+        "writing note..." stage.
         """
+        import time
+        t_start = time.monotonic()
+
         # --- Step 1: Write the note file immediately -------------------------
-        # Use empty links initially; we'll try to enrich them but won't
-        # block on vector search failures.
         note_path = self.maintenance.create_research_note(
             topic=topic,
             summary=summary or research_content[:500],
             research_content=research_content,
-            links=[],  # placeholder; enriched below if possible
+            links=[],
         )
+        t_write = time.monotonic()
 
         self._log_tool("create_note_from_research", {
             "topic": topic,
             "file_path": str(note_path),
+            "write_ms": round((t_write - t_start) * 1000, 1),
         })
 
-        # --- Step 2: Try to find related notes and enrich links -------------
-        try:
-            combined_text = f"{topic}\n{summary or ''}\n{research_content}"
-            entities = self._extract_entities(combined_text)
-            related_notes = self._find_related_notes(entities, k=5)
-            links = self._generate_links(entities, related_notes)
-            if links:
-                # Re-write the note with enriched links.
-                content_lines = [
-                    f"# {topic}",
-                    "",
-                    "## Summary",
-                    summary or research_content[:500],
-                    "",
-                    "## Research Notes",
-                    research_content,
-                    "",
-                    "## Related Notes",
-                ]
-                if links:
-                    content_lines.extend([f"- {link}" for link in links])
-                else:
-                    content_lines.append("*No related notes found.*")
-                Path(note_path).write_text(
-                    "\n".join(content_lines), encoding="utf-8")
-        except Exception as e:
-            self._log_tool("enrich_links_failed",
-                           {"topic": topic}, error=str(e))
+        # --- Step 2: Incremental cleanup for the new note (non-blocking) ----
+        # Skip the graph refresh — every caller refreshes the graph itself
+        # right after this returns, so a refresh here is wasted work.
+        self._refresh_and_clean(
+            target_path=Path(note_path), skip_graph_refresh=True)
+        t_clean = time.monotonic()
 
-        # --- Step 3: Refresh graph and clean up (non-blocking) -------------
-        self._refresh_and_clean()
-
-        # --- Step 4: Try to index the note (non-blocking) -------------------
+        # --- Step 3: Try to index the note (non-blocking) -------------------
         try:
             self.indexer._add_file_to_index(note_path)
-            self._log_tool("index_note", {"file_path": str(note_path)})
+            self._log_tool("index_note", {
+                "file_path": str(note_path),
+                "cleanup_ms": round((t_clean - t_write) * 1000, 1),
+                "index_ms": round((time.monotonic() - t_clean) * 1000, 1),
+            })
         except Exception as e:
             # Indexing failure (e.g. Ollama 500) must NOT prevent the note
             # from being returned. The file is already on disk.
@@ -186,7 +197,11 @@ class NoteCreator:
             "file_path": str(note_path),
         })
 
-        self._refresh_and_clean()
+        # Incremental cleanup for the new note; skip graph refresh — the
+        # caller's handle_chat refreshes the graph, so a second refresh here
+        # is wasted work.
+        self._refresh_and_clean(
+            target_path=Path(note_path), skip_graph_refresh=True)
 
         try:
             self.indexer._add_file_to_index(note_path)

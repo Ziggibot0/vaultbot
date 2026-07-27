@@ -58,6 +58,13 @@ class FusedRetriever:
     # similarity — a note with strong drift but weak content similarity
     # won't leapfrog a note that's genuinely a better content match.
     DRIFT_SCORE_WEIGHT = 0.25
+    # Verified-procedure retrieval boost.  A procedure note whose
+    # frontmatter ``status`` is ``verified`` (set by
+    # procedure_tracker.run_promotion_cycle) gets this fractional score
+    # bump, BELOW DRIFT_SCORE_WEIGHT so verified status only breaks ties
+    # near the margin and never overrides content similarity.  See
+    # [[Procedure-Subprocess-Architecture]] grading loop.
+    VERIFIED_BOOST = 0.05
 
     def __init__(
         self,
@@ -76,6 +83,12 @@ class FusedRetriever:
         # keeps the constructor call in main.py valid even when the
         # retriever-side re-ranking isn't active.
         self.embedding_drift = embedding_drift
+        # Optional stem -> frontmatter-status map for verified-procedure
+        # retrieval boost (Phase 3 grading loop).  Populated by main.py
+        # from procedure_tracker.get_procedure_index(); None disables the
+        # boost.  Kept as a plain dict attribute so this module stays
+        # decoupled from procedure_tracker.
+        self.procedure_status_index: dict[str, str] | None = None
         self._log("init", "FusedRetriever initialized")
 
     # ------------------------------------------------------------------
@@ -407,6 +420,13 @@ class FusedRetriever:
             name = cand.get("name")
             if name and len(backlinks.get(name, set())) >= self.HUB_DEGREE_THRESHOLD:
                 boost *= self.HUB_RERANK
+            # Verified-procedure boost: a procedure note whose status is
+            # "verified" gets a small additive bump.  This is the second
+            # half of the "scooch over time" grading loop: drift moves the
+            # vector, verified-status moves the rank.
+            if (self.procedure_status_index is not None and name
+                    and self.procedure_status_index.get(name) == "verified"):
+                boost += self.VERIFIED_BOOST
             cand["score"] = cand["score"] * boost
 
     def _finalize(self, cand: dict[str, Any], query: str) -> dict[str, Any]:

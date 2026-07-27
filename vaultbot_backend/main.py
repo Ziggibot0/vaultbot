@@ -100,7 +100,24 @@ def acquire_lock() -> None:
     # running). Set VAULTBOT_SKIP_LOCK=1 in the environment.
     if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
         return
-    if PID_FILE.exists():
+    # Atomic claim: os.open with O_CREAT|O_EXCL is the only cross-process
+    # primitive that creates-and-locks in one syscall. The old read-check-
+    # write sequence raced under concurrent spawns (two processes both read
+    # no/old pid, both wrote, both proceeded -> duplicate zombies idling).
+    # Try once exclusively; on EEXIST, verify the recorded pid is alive and
+    # exit if so, or unlink a stale file and retry once.
+    import errno
+    for _ in range(2):
+        try:
+            fd = os.open(str(PID_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, str(os.getpid()).encode())
+            finally:
+                os.close(fd)
+            return
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
         try:
             old_pid = int(PID_FILE.read_text().strip())
         except Exception as e:
@@ -109,7 +126,17 @@ def acquire_lock() -> None:
         if old_pid and _check_pid_alive(old_pid):
             print(f"VaultBot backend already running (PID {old_pid}). Exiting.")
             sys.exit(0)
-    PID_FILE.write_text(str(os.getpid()))
+        # Stale lock file (process gone) -> unlink and loop to retry the
+        # exclusive create. If the unlink itself races another starter, the
+        # second iteration's O_EXCL will settle it.
+        try:
+            PID_FILE.unlink()
+        except OSError:
+            pass
+    # Could not claim after retry (extreme race) -> exit rather than
+    # risk a duplicate.
+    print("VaultBot backend lock contention; another starter won. Exiting.")
+    sys.exit(0)
 
 def release_lock() -> None:
     try:
@@ -542,6 +569,22 @@ svc = Services(
     session_logger=default_session_logger,
     manager=manager,
 )
+
+# Phase 3: wire verified-procedure status into FUSED retrieval so verified
+# procedures get a small score bump (VERIFIED_BOOST).  The status map is
+# stem -> "verified"|"flagged"|"experimental" pulled from the tracker's
+# procedure index.  Refreshed lazily on each execute_procedure call by
+# chat_handler (which rebuilds the stem index); here we seed it once at
+# startup so the boost is active before the first procedure call.
+try:
+    _proc_idx = procedure_tracker.get_procedure_index(
+        os.getenv("VAULT_PATH", "."))
+    fused_retriever.procedure_status_index = {
+        stem: entry.get("frontmatter", {}).get("status", "")
+        for stem, entry in _proc_idx.items()
+    }
+except Exception as e:
+    default_session_logger.log("procedure_status_index_failed", {"error": str(e)})
 
 # Phase 3: register the singleton so routers using Depends(get_services)
 # receive the live Services instance.  This must run BEFORE app.include_router

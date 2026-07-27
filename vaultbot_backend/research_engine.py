@@ -95,16 +95,34 @@ def _keyterms(text: str, max_terms: int = 6) -> list[str]:
     Also preserves site:domain.com search operators so the search backend
     can target specific domains (e.g., site:github.com for forum discussions).
     """
-    # Extract site: operators BEFORE lowercasing — the : character is lost
-    # by the tokenizer, so we must capture them from the original text.
+    # Extract site: operators BEFORE any preprocessing — the : character is
+    # lost by the tokenizer, so we must capture them from the original text.
     site_operators = re.findall(r"\bsite:\S+", text, re.I)
-    text = text.replace("?", " ").replace("!", " ").strip().lower()
-    # Pull out quoted phrases first (the user often telegraphs the topic).
-    quoted = re.findall(r"[\"']([^\"']+)[\"']", text)
-    # Pull out capitalized noun phrases from the original-cased text.
-    phrases = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b", text)
-    # Tokenize the lowercased text.
-    tokens = re.findall(r"[a-z][a-z0-9\-]+", text)
+    # Slug detection: the autonomous researcher passes vault note names (e.g.
+    # ``FAISS-IndexIDMap2-remove_ids-vector-removal-API-documentation``) as
+    # the topic. These use hyphens as word separators, not intra-token
+    # punctuation. A topic with no spaces but with hyphens is treated as a
+    # slug and split on hyphens BEFORE tokenizing, so each concept becomes its
+    # own keyterm candidate instead of the whole slug collapsing into one
+    # giant token like "how-to-safe_write".
+    original = text
+    if " " not in text.strip() and "-" in text and len(text) > 8:
+        token_source = text.replace("-", " ")
+    else:
+        token_source = text
+    # Pull capitalized noun phrases from the ORIGINAL-cased text BEFORE
+    # lowercasing. The previous code lowercased first, so the [A-Z] regex
+    # matched nothing and proper nouns like "FAISS IndexIDMap2" were never
+    # extracted — generic tokens ("python", "vectors") then dominated and
+    # arXiv returned any paper mentioning "Python".
+    phrases = re.findall(r"\b([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+){0,3})\b", original)
+    # Pull quoted phrases (the user often telegraphs the topic).
+    quoted = re.findall(r"[\"']([^\"']+)[\"']", original)
+    work = token_source.replace("?", " ").replace("!", " ").strip().lower()
+    # Tokenize the lowercased text — KEEP underscores so remove_ids stays
+    # one token (was split into "remove"+"ids" by the old [a-z][a-z0-9\-]+
+    # regex, losing the actual API name and matching generic "remove").
+    tokens = re.findall(r"[a-z][a-z0-9_]+", work)
     # Score single tokens: freq * length, skip stopwords.
     scored: dict[str, float] = {}
     tok_counter = Counter(tokens)
@@ -165,23 +183,169 @@ def _tokenize_light(text: str) -> list[str]:
 
 def _score_sentence(sentence: str, keyterms: list[str],
                     source_count: int) -> float:
-    """Extractive score: keyword density * corroboration boost."""
+    """Extractive score: keyword density * corroboration boost.
+
+    Signal terms (proper nouns, API names, multi-word phrases — the terms
+    that actually disambiguate the topic) are weighted 5× higher than
+    generic single-word keyterms. A sentence that mentions "FAISS" and
+    "remove_ids" is almost certainly on-topic; one that only mentions
+    "python" and "index" is not, even if those are in the keyterm list.
+    """
     toks = _tokenize_light(sentence)
     if not toks:
         return 0.0
     tok_set = set(toks)
-    hits = 0
+    sig = _signal_terms(keyterms)
+    sig_set = {s.lower() for s in sig}
+    hits = 0.0
     for kt in keyterms:
         kt_low = kt.lower()
         if " " in kt_low:
             if kt_low in sentence.lower():
-                hits += 2
+                # Multi-word phrases are always signal → heavy weight.
+                hits += 5.0
+        elif kt_low in sig_set:
+            if kt_low in tok_set:
+                hits += 5.0
+            elif kt_low in sentence.lower():
+                hits += 2.0
         elif kt_low in tok_set:
-            hits += 1
+            # Generic term — small weight, just density filler.
+            hits += 1.0
     density = hits / math.sqrt(len(toks))
     # Corroboration: a fact supported by N independent sources is worth more.
     corroboration = 1.0 + 0.15 * max(0, source_count - 1)
     return density * corroboration
+
+
+# --- Source relevance gate ------------------------------------------------
+#
+# The core reason the research engine returns "garbage": every hit from every
+# engine flows into synthesis with no source-level relevance check. A source
+# that matches one generic word ("python", "vector", "index") but is about a
+# completely different topic gets the same treatment as a real hit. The
+# synthesis then picks sentences by keyword *density*, and wrong-topic sources
+# that happen to be longer / use the generic words more often win.
+#
+# The gate separates high-specificity "signal" terms from generic English, and
+# requires a source to carry enough of the signal to count. Signal terms are:
+#   - Proper nouns / capitalized phrases (FAISS, IndexIDMap2, DuckDuckGo)
+#   - Underscored / hyphenated API names (remove_ids, write_index)
+#   - Quoted phrases the user telegraphed
+#   - site: operator domains (the user explicitly targeted a site)
+# Generic single words ("python", "vectors", "how", "delete") are NOT signal
+# — millions of pages contain them and they carry no topical information.
+
+def _signal_terms(keyterms: list[str]) -> list[str]:
+    """Return the high-specificity subset of keyterms.
+
+    These are the terms that actually disambiguate the topic from the
+    millions of pages that share its generic vocabulary. Used as the
+    relevance gate's yardstick: a source must contain at least one
+    signal term (or, for very generic topics, a quorum of the keyterms).
+    """
+    sig: list[str] = []
+    for kt in keyterms:
+        low = kt.lower()
+        if low.startswith("site:"):
+            # site:github.com -> the domain is the signal.
+            sig.append(low[5:])
+            continue
+        # Multi-word phrases are always signal (rare by definition).
+        if " " in low:
+            sig.append(low)
+            continue
+        # Underscored or hyphenated compound tokens are API/library names.
+        if "_" in low or "-" in low:
+            sig.append(low)
+            continue
+        # Capitalized single tokens (proper nouns) are signal. We can't see
+        # case from keyterms (already lowered by _keyterms), but tokens ≥5
+        # chars that aren't in a broad generic-tech stoplist are treated as
+        # signal. Short common words ("python", "index", "vector") are NOT
+        # signal alone — they need a signal partner.
+        if len(low) >= 5 and low not in _GENERIC_TERMS:
+            sig.append(low)
+    # Dedup preserving order.
+    seen: set[str] = set()
+    out: list[str] = []
+    for s in sig:
+        if s not in seen:
+            out.append(s)
+            seen.add(s)
+    return out
+
+
+# Broad generic tech vocabulary that appears in millions of unrelated pages.
+# These are NOT signal on their own — a source mentioning only "python" and
+# "index" tells you nothing about whether it's about FAISS. A source must pair
+# them with a real signal term (FAISS, IndexIDMap2, remove_ids, …) to pass.
+_GENERIC_TERMS = {
+    "python", "index", "vector", "vectors", "array", "arrays", "data",
+    "code", "function", "method", "class", "object", "value", "values",
+    "list", "dict", "string", "file", "files", "system", "server", "client",
+    "model", "models", "training", "learning", "search", "query", "database",
+    "api", "config", "config", "build", "run", "test", "error", "bug",
+    "issue", "problem", "solution", "example", "tutorial", "guide",
+    "library", "package", "module", "import", "install", "version",
+    "performance", "memory", "time", "size", "type", "name", "key", "keys",
+    "add", "delete", "remove", "update", "create", "read", "write", "load",
+    "save", "load", "open", "close", "start", "stop", "set", "get", "new",
+    "old", "best", "good", "bad", "how", "what", "why", "when", "where",
+    "without", "with", "from", "into", "using", "use", "used", "uses",
+    "research", "study", "paper", "analysis", "study", "results", "method",
+    "approach", "based", "proposed", "novel", "new", "recent", "current",
+}
+
+
+def _source_relevance(title: str, text: str, signal: list[str],
+                       all_keyterms: list[str]) -> tuple[float, str]:
+    """Score how on-topic a source is. Returns (score, reason).
+
+    score >= 1.0 means the source passes the relevance gate.
+    - Signal-term match: each distinct signal term found in title+text adds
+      1.0. A source carrying the topic's proper nouns / API names is almost
+      certainly on-topic regardless of generic-word density.
+    - Generic-term fallback: if the topic has NO signal terms (very generic
+      query like "how to evaluate source credibility"), fall back to a
+      quorum of all keyterms — a source must share >= 40% of them.
+    - Title match boost: signal terms in the title count double (titles are
+      the author's own claim of what the page is about).
+    """
+    if not signal:
+        # No signal terms → use generic quorum. This is the case for soft
+        # topics ("how to evaluate credibility of sources") where there are
+        # no proper nouns. Require >= 40% of all keyterms present.
+        if not all_keyterms:
+            return 1.0, "no_keyterms"
+        title_low = (title or "").lower()
+        text_low = (text or "").lower()[:8000]
+        present = 0
+        for kt in all_keyterms:
+            kt_low = kt.lower()
+            if " " in kt_low:
+                if kt_low in text_low or kt_low in title_low:
+                    present += 1
+            elif kt_low in text_low or kt_low in title_low:
+                present += 1
+        ratio = present / len(all_keyterms)
+        return ratio * 2.5, f"generic_quorum:{present}/{len(all_keyterms)}"
+    title_low = (title or "").lower()
+    text_low = (text or "").lower()[:8000]
+    score = 0.0
+    matched: list[str] = []
+    for s in signal:
+        in_title = s in title_low
+        in_text = s in text_low
+        if in_title and in_text:
+            score += 2.0
+            matched.append(s)
+        elif in_title or in_text:
+            score += 1.0
+            matched.append(s)
+    if not matched:
+        return 0.0, "no_signal_match"
+    return score, f"signal:{','.join(matched[:4])}"
 
 
 def _detect_facets(topic: str) -> list[str]:
@@ -291,6 +455,15 @@ class ResearchEngine:
             "backend": getattr(self.search_client, "name", "search_client"),
             "hits": len(hits), "duration_ms": (time.time() - t0) * 1000,
         })
+        # Compute the topic's signal terms ONCE for the relevance gate.
+        # The gate drops sources that don't carry the topic's
+        # high-specificity terms (proper nouns, API names) — this is the
+        # fix for "the pile has some good stuff but the bot finds garbage":
+        # without a gate, off-topic sources that happen to share generic
+        # words ("python", "vector") flow into synthesis and crowd out the
+        # real hits. See [[How-to-Fix-Research-Engine-Returning-Garbage]].
+        topic_terms = _keyterms(topic) if topic else []
+        signal = _signal_terms(topic_terms)
         sources = []
         for hit in hits:
             url = hit.get("url")
@@ -338,11 +511,29 @@ class ResearchEngine:
                 self._log("research_scrape_fallback_snippet", {"url": url})
             if not text or len(text) < 30:
                 continue
+            # Relevance gate: drop sources that don't carry the topic's
+            # signal terms. This is what separates the "good stuff" from
+            # the pile. A source must score >= 1.0 to pass. We use the
+            # snippet/title for the gate when text is short so a source
+            # that scraped to almost nothing still gets judged on its
+            # search-result snippet (which the engine ranked relevant).
+            gate_text = text if len(text) >= 200 else (
+                f"{snippet}\n{text}")
+            rel_score, rel_reason = _source_relevance(
+                hit.get("title", ""), gate_text, signal, topic_terms)
+            if rel_score < 1.0:
+                self._log("research_source_rejected",
+                          {"round": round_idx, "url": url,
+                           "title": hit.get("title", "")[:80],
+                           "score": round(rel_score, 2),
+                           "reason": rel_reason})
+                continue
             sources.append({
                 "url": url,
                 "title": hit.get("title", ""),
                 "snippet": snippet,
                 "text": text,
+                "_relevance": rel_score,
             })
         return sources
 
@@ -391,20 +582,32 @@ class ResearchEngine:
     def _identify_gaps(self, topic: str, facets: list[str],
                        all_sources: list[dict[str, Any]],
                        keyterms: list[str]) -> list[str]:
-        """Detect facets that remain under-covered and emit follow-up queries."""
+        """Detect facets that remain under-covered and emit follow-up queries.
+
+        Follow-up queries are built from the topic's SIGNAL terms (proper
+        nouns, API names) + the facet keywords — NOT the whole topic string.
+        The old code appended facet keywords to the entire topic, producing
+        10-word queries like "faiss-IndexIDMap2-serialization-... serialization"
+        that matched nothing useful. Signal terms are short and specific, so
+        the follow-up query stays focused and the relevance gate still works.
+        """
         corpus = " ".join(s["text"][:1500] for s in all_sources).lower()
+        signal = _signal_terms(keyterms)
+        # Build a compact query base from signal terms (max 4). Fall back to
+        # the top keyterms if there are no signal terms (very generic topic).
+        base = signal[:4] if signal else keyterms[:4]
+        base_query = " ".join(base)
         gaps = []
         for facet in facets:
             fks = _facet_keywords(facet)
             coverage = sum(1 for fk in fks if fk in corpus)
             if coverage < max(1, len(fks) // 3):
-                # Build a follow-up query that targets the facet.
-                fk_query = f"{topic.strip()} {' '.join(fks[:2])}"
-                gaps.append(fk_query)
+                # Targeted follow-up: signal terms + facet keywords.
+                gaps.append(f"{base_query} {' '.join(fks[:2])}")
         # Also detect missing keyterms in the corpus.
         for kt in keyterms:
             if kt.lower() not in corpus and len(gaps) < self.max_follow_ups:
-                gaps.append(f"{topic.strip()} {kt}")
+                gaps.append(f"{base_query} {kt}")
         return gaps[: self.max_follow_ups]
 
     def research(self, topic: str) -> dict[str, Any]:

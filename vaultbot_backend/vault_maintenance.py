@@ -232,6 +232,48 @@ class VaultMaintenance:
 
         return {"removed": removed, "merged": merged}
 
+    def run_cleanup_for_new(self, graph: VaultGraph,
+                            new_note: Path) -> dict[str, Any]:
+        """Incremental cleanup scoped to a single freshly-written note.
+
+        This is the cheap replacement for ``run_cleanup`` on the hot
+        ``create_note_from_research`` / ``create_note_from_chat`` path,
+        where the full O(n^2) pairwise dedup pass over every generated
+        note was the dominant cost of the "writing note..." stage.
+
+        Only one O(1) check runs: is ``new_note`` itself an orphan (empty
+        body + no backlinks)? If so, remove it.
+
+        The near-duplicate check is intentionally NOT done here:
+          * For research notes, ``create_research_note`` already does a
+            pre-write O(n) dedup pass that *removes* a near-duplicate
+            existing note before the new one is written, so a duplicate
+            of the new note cannot exist by the time we get here.
+          * The callers (research_handler / chat_handler) overwrite
+            ``note_path`` with ``synthesize_note_markdown`` immediately
+            after this returns. A merge here would be undone by that
+            overwrite, so it would be wasted work that also races the
+            caller.
+
+        The full O(n^2) pairwise sweep still runs on the autonomous /
+        startup maintenance cycle, where latency does not matter.
+        """
+        removed: list[str] = []
+        try:
+            content = new_note.read_text(encoding="utf-8")
+            body = self._body_text(content)
+            name = new_note.stem
+            norm = name.lower()
+            has_backlinks = norm in graph.backlinks and len(graph.backlinks[norm]) > 0
+            is_empty = len(body) < 80
+            if is_empty and not has_backlinks:
+                new_note.unlink()
+                removed.append(str(new_note))
+                self._log("remove_orphan", {"file_path": str(new_note)})
+        except Exception as e:
+            self._log("remove_orphan", {"file_path": str(new_note), "error": str(e)})
+        return {"removed": removed, "merged": []}
+
     def _merge_note_contents(self, paths: list[Path]) -> str:
         """Combine duplicate notes, preserving oldest date sections when present."""
         blocks = []

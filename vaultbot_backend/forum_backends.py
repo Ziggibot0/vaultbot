@@ -239,6 +239,69 @@ def is_technical_query(query: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Academic query detection — when arXiv is actually useful
+# ---------------------------------------------------------------------------
+# arXiv's ``all:`` search is extremely permissive and returns "results" for
+# almost any query (a paper mentioning "index" matches "lobby index in
+# networks", one mentioning "vector" matches "fuzzy vectors"). The
+# technical-query suppression above catches programming topics, but arXiv
+# also returns garbage for procedural/how-to topics ("how to evaluate
+# source credibility" → noise). arXiv should only fire when the query is
+# GENUINELY academic: it carries research-paper signal terms (physics,
+# mathematics, algorithm, neural, quantum, theorem, etc.) OR the topic is
+# a named scientific concept. This makes arXiv opt-in by academic intent
+# rather than the default it was.
+
+# High-confidence academic / research-paper signal terms. A query carrying
+# any of these is likely to have relevant arXiv results.
+_ACADEMIC_SIGNALS = {
+    # Scientific fields
+    "physics", "mathematics", "biology", "chemistry", "neuroscience",
+    "linguistics", "philosophy", "economics", "sociology", "psychology",
+    "astronomy", "geology", "ecology", "genetics", "immunology",
+    # Research-paper vocabulary
+    "theorem", "lemma", "proof", "corollary", "algorithm", "complexity",
+    "polynomial", "asymptotic", "convergence", "optimal", "bounds",
+    "estimation", "inference", "regression", "classification", "embedding",
+    "regularization", "optimization", "gradient", "stochastic",
+    # ML / AI research terms
+    "neural", "transformer", "attention", "reinforcement", "supervised",
+    "unsupervised", "representation", "generative", "discriminative",
+    "embedding", "encoder", "decoder", "backpropagation", "convolutional",
+    "recurrent", "graph", "bayesian", "probabilistic", "statistical",
+    # Quantum / physics technical
+    "quantum", "entanglement", "hamiltonian", "eigenvalue", "tensor",
+    "manifold", "topology", "differential", "integral",
+    # arXiv section names that appear in real academic queries
+    "cs.ai", "cs.cl", "cs.lg", "stat.ml", "cond-mat", "hep",
+}
+
+# Procedural / how-to / tooling prefixes that strongly indicate NON-academic
+# intent. arXiv never helps with these.
+_NON_ACADEMIC_PREFIXES = (
+    "how to", "how-to", "best practices", "best-practices",
+    "tutorial", "guide", "setup", "install", "configure", "deploy",
+    "fix", "debug", "troubleshoot", "migrate",
+)
+
+
+def is_academic_query(query: str) -> bool:
+    """Return True if the query is likely to have relevant arXiv results.
+
+    arXiv's full-text search is permissive enough to return "results" for
+    any query, so we gate it on genuine academic intent: either the query
+    carries a research-paper signal term, OR it's a named scientific concept
+    (not a how-to / procedural / tooling question).
+    """
+    q_lower = query.lower().strip()
+    # Procedural / how-to prefixes → almost never academic.
+    if any(q_lower.startswith(p) for p in _NON_ACADEMIC_PREFIXES):
+        return False
+    tokens = set(re.findall(r"[a-z][a-z0-9_\-\.\+]+", q_lower))
+    return bool(tokens & _ACADEMIC_SIGNALS)
+
+
+# ---------------------------------------------------------------------------
 # ForumEnhancedFreeSearch — drop-in replacement for FreeSearch
 # ---------------------------------------------------------------------------
 
@@ -287,10 +350,37 @@ class ForumEnhancedFreeSearch(FreeSearch):
         """
         t0 = time.time()
         tech = is_technical_query(query)
+        # arXiv is gated on genuine academic intent. arXiv's full-text
+        # search is permissive enough to return "results" for any query
+        # ("index" matches "lobby index in networks", "vector" matches
+        # "fuzzy vectors"), so we only run it when the query carries real
+        # research-paper signal (physics/theorem/neural/…). This replaces
+        # the old "skip arXiv only for technical queries" approach, which
+        # let arXiv fire on procedural/how-to topics and flood the pile
+        # with off-topic papers. See [[How-to-Fix-Research-Engine-
+        # Returning-Garbage]].
+        academic = is_academic_query(query)
+        # Forum backends (GitHub Issues, StackOverflow) are gated on
+        # technical intent. GitHub's issue search is full of SEO spam
+        # ("Dissertation Writing Help in UAE" repos) that pollutes
+        # general/academic topics — the generic-quorum relevance gate
+        # can't catch them because they deliberately stuff "academic",
+        # "research", "sources" into their titles. Running them only for
+        # technical queries (where they're genuinely the best source)
+        # keeps the spam out of soft-topic research.
+        forum_relevant = tech
 
-        # Determine active backends — skip arxiv for technical queries.
-        active_backends = [b for b in self._backends
-                           if not (tech and b.name == "arxiv")]
+        # Determine active backends:
+        #  - arxiv only when the query is genuinely academic
+        #  - forum backends only when the query is technical
+        #  - general-web backends (ddg, searxng, marginalia) always run
+        def _skip(b):
+            if b.name == "arxiv":
+                return not academic or tech
+            if b.name in ("github_issues", "stackoverflow"):
+                return not forum_relevant
+            return False
+        active_backends = [b for b in self._backends if not _skip(b)]
 
         results_by_backend: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
         threads = []
