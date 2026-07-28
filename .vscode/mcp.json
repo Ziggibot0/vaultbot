@@ -1,4 +1,4 @@
-﻿{
+{
   "servers": {
     "vaultbot": {
       "command": "${workspaceFolder}/vaultbot_venv/Scripts/pythonw.exe",
