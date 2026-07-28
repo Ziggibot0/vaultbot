@@ -1,17 +1,23 @@
-# ─── Secrets & personal config ──────────────────────────────────────────────
-# NEVER commit these — they contain API keys, owner name, and local paths.
+﻿# ─────────────────────────────────────────────────────────────────────
+# Secrets & personal config
+# NEVER commit - API keys, owner name, local paths.
+# ─────────────────────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 
-# ─── Python virtual environment ────────────────────────────────────────────
-# Users create their own with: python -m venv vaultbot_venv
+# ─────────────────────────────────────────────────────────────────────
+# Python virtual environment
+# Users create their own: python -m venv vaultbot_venv  (or .venv)
+# ─────────────────────────────────────────────────────────────────────
 vaultbot_venv/
 .venv/
 venv/
 env/
 
-# ─── Python cache ───────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Python cache
+# ─────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,46 +25,80 @@ __pycache__/
 *.egg-info/
 *.egg
 
-# ─── VaultBot runtime state (regenerated on first run) ─────────────────────
-# These are YOUR vault's state — another user's VaultBot generates its own.
-# The live identity/ folder evolves with you (personal); templates ship in
-# baseline/identity/ instead.
+# ─────────────────────────────────────────────────────────────────────
+# VaultBot runtime state (regenerated on first run)
+# These are YOUR vault's state - another user's VaultBot makes its own.
+# ─────────────────────────────────────────────────────────────────────
 vaultbot_backend/identity/
 vaultbot_backend/sessions/
 vaultbot_backend/checkpoints/
 vaultbot_backend/vaultbot_index/
+vaultbot_backend/vaultbot/
 vaultbot_backend/vaultbot.pid
 vaultbot_backend/curriculum_state.json
 vaultbot_backend/touch_counts.json
 vaultbot_backend/embedding_drift.json
+vaultbot_backend/conversation_state.json
+vaultbot_backend/conversation_state.*
+vaultbot_backend/procedure_failure_log.json
+vaultbot_backend/calibration_log.json
+vaultbot_backend/claim_verification_log.json
+vaultbot_backend/consolidation_log.json
+vaultbot_backend/rag_eval_log.json
 vaultbot_backend/backend.log
+vaultbot_backend/backend.err
 vaultbot_backend/backend_stdout.log
 vaultbot_backend/backend_stderr.log
 vaultbot_backend/pythonw_stdout.log
 vaultbot_backend/pythonw_stderr.log
+vaultbot_backend/boot.log
+vaultbot_backend/maintenance.log
+vaultbot_backend/test_err.log
+vaultbot_backend/test_out.log
 vaultbot_backend/*.bak
+vaultbot_backend/*.bak.*
 vaultbot_backend/custom_tools/*.bak
 vaultbot_backend/speech.py.vosk_bak
-vaultbot_backend/_test_ws.py
+vaultbot_backend/_test_*.py
 vaultbot_backend/trash/
+vaultbot_backend/partials/
+vaultbot_backend/*_log.json
 
-# ─── Large model files (downloaded separately, see README) ──────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Large model files (downloaded separately, see README)
+# ─────────────────────────────────────────────────────────────────────
 vaultbot_backend/kokoro_models/
 vaultbot_backend/stt_models/
 
-# ─── The vault itself ───────────────────────────────────────────────────────
-# The vault is the USER'S mind — their personal knowledge, chat history,
-# directives, and notes. A baseline vault ships empty; each user grows their
-# own. Do NOT commit:
-#   - vaultbot/chat/       (conversation logs)
-#   - vaultbot/research/    (autonomous research notes)
-#   - vaultbot/textbooks/  (ingested textbook sections)
-#   - *.md at vault root   (personal directives — see baseline/ for templates)
+# ─────────────────────────────────────────────────────────────────────
+# The vault itself - the USER'S mind
+# The vault is personal knowledge, chat history, directives, and notes.
+# A baseline vault ships empty; each user grows their own.
+# These hierarchical folders are where VaultBot writes its output:
+# ─────────────────────────────────────────────────────────────────────
+00-Identity/Auto-Resume-Directive.md
+00-Identity/Autonomy-Directive.md
+00-Identity/IDK-Fallback-Directive.md
+00-Identity/No-Wikipedia-Directive.md
+00-Identity/Vault-Knowledge-Only-Directive.md
+00-Identity/Fractal-Entropy-Principle.md
+00-Identity/Sean-Communication-Preferences.md
+00-Identity/Self-Edit-Verification-Directive.md
+
+06-Playbooks/
+07-Research/
+08-Biology/
+08-Chat/
+09-Textbooks/
+
+# Old flat-layout vault contents (pre-hierarchical reorg)
 vaultbot/chat/
 vaultbot/research/
 vaultbot/textbooks/
 vaultbot/*.md
 vaultbot/maintenance.log
+
+# Personal root directives + notes (operator relationship with their bot)
 2026-*.md
 *-Directive.md
 *-Communication-Preferences.md
@@ -66,16 +106,33 @@ vaultbot/maintenance.log
 *-Path-to-AGI.md
 *-Quality-Gate.md
 *-Longevity-Architecture.md
+*-Roadmap.md
+*-Patterns.md
+Sean-*.md
+Calibration-via-Operator-Feedback.md
+Cross-Session-Patterns-*.md
+GOALS.md
+LICENSE
 
-# ─── Learning materials (user-supplied PDFs) ────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Learning materials (user-supplied PDFs)
+# ─────────────────────────────────────────────────────────────────────
 learningMaterial/
 
-# ─── Obsidian config (user's local workspace settings) ─────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Obsidian config (user local workspace settings)
+# ─────────────────────────────────────────────────────────────────────
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+.obsidian/app.json
+.obsidian/graph.json
+.obsidian/hotkeys.json
 .obsidian/plugins/obsidian-git/data.json
+.obsidian/plugins/vaultbot/data.json
 
-# ─── OS / editor cruft ──────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# OS / editor cruft
+# ─────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -84,22 +141,7 @@ desktop.ini
 *~
 .vscode/settings.json
 
-# ─── Stray boot/test logs ───────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Stray boot/test logs
+# ─────────────────────────────────────────────────────────────────────
 boot_*.log
-
-# ─── Airtight runtime/personal guards (Phase: distribution prep) ──────────
-# Runtime error logs + structured log files (regenerated on every run).
-vaultbot_backend/backend.err
-vaultbot_backend/*_log.json
-vaultbot_backend/partials/
-
-# Personal notes — these are the operator's relationship with their bot,
-# not generic capability docs. A new user grows their own.
-Sean-*.md
-Calibration-via-Operator-Feedback.md
-Cross-Session-Patterns-*.md
-
-# Obsidian local workspace state (user-specific view settings).
-.obsidian/app.json
-.obsidian/graph.json
-.obsidian/plugins/vaultbot/data.json

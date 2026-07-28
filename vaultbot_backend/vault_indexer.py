@@ -778,7 +778,7 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
 
-    vault_path = os.getenv("VAULT_PATH", "C:\\Users\\skell\\Desktop\\Vault2")
+    vault_path = os.getenv("VAULT_PATH", ".")
     indexer = VaultIndexer(vault_path)
     indexer.initialize()
 

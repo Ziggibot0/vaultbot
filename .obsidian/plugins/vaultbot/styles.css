@@ -600,15 +600,27 @@
 	overflow-x: auto;
 }
 
-/* Links: clay-toned, like a trail marker */
+/* Links: inherit text color so they're readable on any bubble,
+   underlined so they're distinguishable from surrounding text. */
 .vaultbot-message.assistant .vaultbot-answer-block a {
-	color: var(--vb-clay);
+	color: inherit;
 	text-decoration: underline;
-	text-decoration-color: var(--vb-clay-soft);
+	text-underline-offset: 2px;
 }
 
 .vaultbot-message.assistant .vaultbot-answer-block a:hover {
-	color: var(--vb-clay-soft);
+	filter: brightness(1.15);
+}
+
+/* User message links: same treatment — inherit the near-white text color */
+.vaultbot-message.user a {
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.vaultbot-message.user a:hover {
+	filter: brightness(1.15);
 }
 
 /* Inline images (e.g. diagrams rendered to png) sit nicely in the bubble. */
@@ -617,4 +629,29 @@
 	border-radius: 8px;
 	border: 1px solid var(--vb-stone);
 	margin: 0.4em 0;
+}
+/* Drag & drop file indicator on the chat bar */
+.vaultbot-chat-bar.vaultbot-drop-active {
+	border: 2px dashed var(--vb-moss);
+	border-radius: 10px;
+	background-color: rgba(107, 142, 90, 0.08);
+	padding: 4px;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+/* Clickable wikilinks in chat messages */
+.vaultbot-message a.internal-link {
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+.vaultbot-message a.internal-link:hover {
+	color: inherit;
+	filter: brightness(1.15);
+}
+.vaultbot-message a.external-link {
+	color: inherit;
+	text-decoration: underline;
+	cursor: pointer;
 }

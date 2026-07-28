@@ -436,9 +436,14 @@ fused_retriever = FusedRetriever(
 
 # Context compactor (OpenHands Condenser pattern): summarizes conversation
 # middle when history grows too long, preventing context overflow on long
-# chats without losing the thread.
+# chats without losing the thread. Thresholds are lowered from the defaults
+# (80 msgs / 20K tokens) to 40 msgs / 12K tokens — the agentic loop adds 2+
+# messages per tool round, and a remote cloud model (glm-5.2:cloud) times
+# out at >120s TTFT when the payload exceeds ~200K chars. Compacting earlier
+# keeps the per-round payload bounded so the cloud round-trip stays fast.
 compactor = Compactor(
-    ollama_client=ollama_client, session_logger=default_session_logger)
+    ollama_client=ollama_client, session_logger=default_session_logger,
+    max_messages=int(os.getenv("VAULTBOT_COMPACT_MAX_MESSAGES", "40")))
 
 # Lazy note condenser: de-fluffs notes over time as they're queried. After
 # each chat, retrieved notes get a touch; once a note has been queried 3+

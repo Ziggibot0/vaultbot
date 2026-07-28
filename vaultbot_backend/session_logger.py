@@ -114,12 +114,14 @@ class SessionLogger:
         self._closed = True
 
 
-def sweep_old_sessions(log_dir, max_files=200, max_age_days=30):
+def sweep_old_sessions(log_dir, max_files=200, max_age_days=30, max_file_mb=5):
     """Delete old session JSONL files to cap disk usage.
 
     Keeps the newest `max_files` files and deletes any file older than
-    `max_age_days` by mtime. Runs once per new SessionLogger (i.e. once
-    per websocket connection). Never raises — cleanup is best-effort.
+    `max_age_days` by mtime. Also truncates any single file larger than
+    `max_file_mb` to its last ~1000 lines (keeps the tail = most recent
+    events). Runs once per new SessionLogger (i.e. once per websocket
+    connection). Never raises — cleanup is best-effort.
 
     Returns the count of deleted files.
     """
@@ -134,6 +136,7 @@ def sweep_old_sessions(log_dir, max_files=200, max_age_days=30):
         )
         deleted = 0
         cutoff = time.time() - max_age_days * 86400
+        max_bytes = max_file_mb * 1024 * 1024
         for i, f in enumerate(files):
             is_too_old = f.stat().st_mtime < cutoff
             is_over_count = i >= max_files
@@ -141,6 +144,16 @@ def sweep_old_sessions(log_dir, max_files=200, max_age_days=30):
                 try:
                     f.unlink()
                     deleted += 1
+                except Exception:
+                    pass
+            elif f.stat().st_size > max_bytes:
+                # Truncate oversized active logs: keep the last ~1000 lines
+                # (most recent events) so debugging still has context.
+                try:
+                    lines = f.read_bytes().splitlines()
+                    if len(lines) > 1000:
+                        with open(f, "wb") as fh:
+                            fh.write(b"\n".join(lines[-1000:]) + b"\n")
                 except Exception:
                     pass
         return deleted

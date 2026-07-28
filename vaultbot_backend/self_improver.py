@@ -252,6 +252,16 @@ class SelfImprover:
             return {"error": f"path not allowed: {file_path}"}
         is_core = (full.parent.resolve() == BACKEND_DIR
                    and full.name in self._CORE_FILES)
+        # --- 0. JS guard: reject JS files (use js_safe_write instead) ---
+        if full.suffix in ('.js', '.mjs', '.cjs'):
+            return {"status": "rejected",
+                    "error": f"safe_write is for Python (.py) files only. "
+                             f"Got '{full.suffix}' — use js_safe_write for "
+                             f"JavaScript files.",
+                    "hint": "Call js_safe_write with the same file_path and "
+                            "content. js_safe_write validates JS syntax with "
+                            "node --check before writing."}
+
         checks: dict[str, Any] = {}
 
         # --- 1. Syntax check (no disk touch) ---
@@ -404,6 +414,160 @@ class SelfImprover:
                                   "is_core": is_core, "checks": checks})
         return {"status": "written", "file_path": str(full),
                 "bytes": len(content), "checks": checks, "is_core": is_core}
+
+
+    def js_safe_write(self, file_path: str, content: str,
+                      dry_run: bool = False) -> dict[str, Any]:
+        """Write a JavaScript file with syntax validation. Use this for
+        .js, .mjs, and .cjs files — especially the Obsidian plugin's
+        main.js. It validates JS syntax with `node --check` BEFORE
+        writing to disk (atomic write pattern), so the real file is
+        never in a broken state.
+
+        Safety checks (in order, fail-fast):
+          1. Extension guard: must be .js, .mjs, or .cjs. Rejects .py
+             files (use safe_write for Python).
+          2. Syntax check: writes content to a temp file, then runs
+             `node --check` on it. If node reports a SyntaxError, the
+             edit is rejected and the real file is never touched.
+          3. Atomic write: only if syntax check passes, backup the
+             original to .bak, write the new content as UTF-8, verify
+             the write by re-reading, and clean up the .bak on success.
+          4. Auto-rollback: if the write verification fails, restore
+             from .bak immediately.
+
+        Args:
+          file_path: path relative to vault root (e.g.
+            '.obsidian/plugins/vaultbot/main.js').
+          content: the new JS file content.
+          dry_run: if True, run the syntax check only; do NOT write.
+
+        Returns a dict with: status ("written" | "dry_run_ok" |
+        "rejected"), the checks performed, and on rejection the error.
+        """
+        import tempfile, subprocess, shutil as _shutil
+
+        full = self._resolve_path(file_path, allow_create=True)
+        if not full:
+            return {"error": f"path not allowed: {file_path}"}
+
+        # --- 1. Extension guard ---
+        if full.suffix not in ('.js', '.mjs', '.cjs'):
+            return {"status": "rejected",
+                    "error": f"js_safe_write is for JavaScript (.js, .mjs, "
+                             f".cjs) files only. Got '{full.suffix}' — use "
+                             f"safe_write for Python (.py) files.",
+                    "hint": "Call safe_write with the same file_path and "
+                            "content for Python files."}
+
+        checks: dict[str, Any] = {}
+
+        # --- 2. Syntax check via node --check (atomic: temp file first) ---
+        node_path = _shutil.which("node")
+        if not node_path:
+            checks["syntax"] = "skipped: node not found"
+            return {"status": "rejected", "checks": checks,
+                    "error": "Node.js not found on PATH. Cannot validate "
+                             "JS syntax. Install Node.js or set PATH.",
+                    "hint": "Node.js is required for js_safe_write."}
+
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.js',
+                                               delete=False,
+                                               encoding='utf-8') as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+        except Exception as e:
+            return {"status": "rejected", "checks": checks,
+                    "error": f"failed to create temp file: {e}"}
+
+        try:
+            result = subprocess.run(
+                [node_path, '--check', tmp_path],
+                capture_output=True, text=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            os.unlink(tmp_path)
+            return {"status": "rejected", "checks": checks,
+                    "error": "node --check timed out (15s)"}
+        except Exception as e:
+            os.unlink(tmp_path)
+            return {"status": "rejected", "checks": checks,
+                    "error": f"node --check failed to run: {e}"}
+
+        if result.returncode != 0:
+            # Extract the useful part of the error (skip node internals)
+            err_lines = result.stderr.strip().split('\n')
+            syntax_err = '\n'.join(
+                l for l in err_lines
+                if not l.startswith('    at ')
+                and not l.startswith('Node.js'))
+            checks["syntax"] = f"FAIL: {syntax_err}"
+            os.unlink(tmp_path)
+            self._log("js_safe_write_rejected", {
+                "file_path": str(full),
+                "syntax_error": syntax_err[:500]})
+            return {"status": "rejected", "checks": checks,
+                    "error": syntax_err[:500],
+                    "hint": "Fix the JS syntax error; nothing was written. "
+                            "The real file was never touched."}
+
+        checks["syntax"] = "ok (node --check passed)"
+        os.unlink(tmp_path)
+
+        # --- dry_run: stop here, report it WOULD be safe ---
+        if dry_run:
+            return {"status": "dry_run_ok", "checks": checks,
+                    "would_break_plugin": False, "error": None}
+
+        # --- 3. Atomic write: backup, write, verify ---
+        had_backup = False
+        try:
+            full.parent.mkdir(parents=True, exist_ok=True)
+            if full.exists():
+                bak = full.with_suffix(full.suffix + ".bak")
+                _shutil.copy2(full, bak)
+                had_backup = True
+            full.write_text(content, encoding="utf-8")
+            checks["encoding"] = "utf-8 ok"
+        except Exception as e:
+            return {"status": "rejected", "checks": checks,
+                    "error": f"write failed: {e}"}
+
+        # Verify the write
+        try:
+            written = full.read_text(encoding="utf-8")
+            if written != content:
+                raise IOError("write verification mismatch")
+            checks["write_verified"] = "ok"
+        except Exception as e:
+            checks["write_verified"] = f"FAIL: {e}"
+            if had_backup:
+                try:
+                    _shutil.copy2(full.with_suffix(full.suffix + ".bak"),
+                                  full)
+                    checks["auto_rollback"] = "restored from .bak"
+                except Exception as rb_err:
+                    checks["auto_rollback"] = f"FAILED: {rb_err}"
+            self._log("js_safe_write_verify_failed", {
+                "file_path": str(full), "error": str(e), "checks": checks})
+            return {"status": "rejected", "checks": checks,
+                    "error": f"write verification failed: {e}",
+                    "hint": "The original file was restored from .bak."}
+
+        # Clean up backup on success
+        if had_backup:
+            try:
+                full.with_suffix(full.suffix + ".bak").unlink()
+            except Exception:
+                pass  # non-critical
+
+        self._log("js_safe_write", {
+            "file_path": str(full), "length": len(content),
+            "checks": checks})
+        return {"status": "written", "file_path": str(full),
+                "bytes": len(content), "checks": checks}
+
+
 
     def _copy_backend_for_check(self, tmpdir: str, target_name: str,
                                 new_content: str) -> None:

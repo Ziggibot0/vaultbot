@@ -116,6 +116,14 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
         if st == "dry_run_ok":
             return "safe_write dry_run: OK — would write safely"
         return f"safe_write {st}: {str(result.get('error', ''))[:80]}"
+
+    if tool_name == "js_safe_write":
+        st = result.get("status", "?")
+        if st == "written":
+            return f"js_safe_write: wrote {result.get('bytes', 0)} bytes to {result.get('file_path', '?')} (node --check passed)"
+        if st == "dry_run_ok":
+            return "js_safe_write dry_run: OK — node --check passed"
+        return f"js_safe_write {st}: {str(result.get('error', ''))[:80]}"
     if tool_name == "capability_audit":
         return f"{result.get('total', 0)} tools ({result.get('kinds', {})})"
     # Custom tools: try to extract a meaningful key.

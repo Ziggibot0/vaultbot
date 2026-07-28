@@ -556,7 +556,7 @@ if __name__ == "__main__":
         load_dotenv()
     except Exception:
         pass
-    vault_path = os.getenv("VAULT_PATH", "C:\\Users\\skell\\Desktop\\Vault2")
+    vault_path = os.getenv("VAULT_PATH", ".")
     try:
         vg = VaultGraph(vault_path)
         vg.refresh()

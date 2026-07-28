@@ -24,12 +24,6 @@ class VaultBotPlugin extends Plugin {
 		};
 		this.backendStarting = false;
 		this.mcpProcess = null;
-		// Shared in-flight boot promise: prevents multiple callers from
-		// each opening their own /health + / fetch loop while the backend
-		// is still booting (which floods the dev console with
-		// ERR_CONNECTION_REFUSED). All callers should await
-		// this.onceBackendReady() instead of polling independently.
-		this._backendReadyPromise = null;
 		await this.loadSettings();
 
 		this.addCommand({
@@ -85,50 +79,7 @@ class VaultBotPlugin extends Plugin {
 			this._beforeUnloadHandler = null;
 		}
 		this.stopMcpServer();
-		// When reloading (not unloading), keep the backend alive so the
-		// new plugin instance reconnects to the existing backend instead
-		// of spawning a new one. This makes plugin reload ~2s instead of
-		// ~8s (no backend shutdown + restart cycle).
-		if (this._isReloading) {
-			console.log('Plugin reload in progress — keeping backend alive');
-		} else {
-			await this.stopBackend();
-		}
-	}
-
-	// Reload the plugin itself (disable + re-enable) without killing the
-	// backend. This picks up changes to main.js/styles.css without you
-	// having to manually toggle the plugin in Settings. Triggered by a
-	// WebSocket message from the backend (type: 'reload_plugin').
-	async reloadSelf() {
-		const app = this.app;
-		console.log('Reloading VaultBot plugin...');
-		try { new Notice('Reloading VaultBot plugin...'); } catch (e) {}
-		this._isReloading = true;
-
-		// Schedule the re-enable from a setTimeout so it survives the
-		// plugin instance being destroyed during disablePlugin. The
-		// callback runs in the global event loop, not tied to this
-		// plugin instance's lifecycle.
-		setTimeout(async () => {
-			try {
-				await app.plugins.enablePlugin('vaultbot');
-				console.log('VaultBot plugin reloaded successfully');
-				try { new Notice('VaultBot plugin reloaded.'); } catch (e) {}
-			} catch (e) {
-				console.error('Failed to re-enable plugin:', e);
-				try { new Notice('Plugin reload failed — re-enable manually in Settings > Community plugins'); } catch (e2) {}
-			}
-		}, 500);
-
-		// Disable the plugin. onunload() sees _isReloading=true and
-		// skips stopBackend(), so the backend stays running.
-		try {
-			await app.plugins.disablePlugin('vaultbot');
-		} catch (e) {
-			console.error('Failed to disable plugin for reload:', e);
-			try { new Notice('Plugin reload failed: ' + (e.message || e)); } catch (e2) {}
-		}
+		await this.stopBackend();
 	}
 
 	async loadSettings() {
@@ -171,12 +122,6 @@ class VaultBotPlugin extends Plugin {
 		// even when the backend was healthy, causing endless respawn loops.
 		// /health returns a small JSON dict; / returns a small marker dict, so
 		// GET is cheap on both.
-		//
-		// NOTE: any failed fetch here is logged by Chromium's network layer
-		// to the dev console as ERR_CONNECTION_REFUSED, regardless of the
-		// try/catch. That's expected while the backend is booting. To avoid
-		// spamming the console, callers should go through onceBackendReady()
-		// rather than repeatedly invoking this directly during boot.
 		try {
 			const response = await fetch(this.settings.backendUrl + '/health', { method: 'GET' });
 			if (response.ok || response.status === 200) return true;
@@ -188,26 +133,6 @@ class VaultBotPlugin extends Plugin {
 		} catch (e2) {
 			return false;
 		}
-	}
-
-	// Single-flight ready promise. The first caller to ask during a boot
-	// starts ONE poll loop; everyone else (sidebar ensureConnection,
-	// refreshModels, the MCP starter) awaits the same promise. This is what
-	// stops the dev-console ERR_CONNECTION_REFUSED flood on startup.
-	onceBackendReady(timeoutMs = 30000, intervalMs = 500) {
-		if (this._backendReadyPromise) return this._backendReadyPromise;
-		this._backendReadyPromise = (async () => {
-			const start = Date.now();
-			while (Date.now() - start < timeoutMs) {
-				if (await this.isBackendRunning()) return true;
-				await new Promise(r => setTimeout(r, intervalMs));
-			}
-			return await this.isBackendRunning();
-		})();
-		// Drop the cached promise once settled so a later boot (after the
-		// backend dies and is restarted) gets a fresh poll.
-		this._backendReadyPromise.finally(() => { this._backendReadyPromise = null; });
-		return this._backendReadyPromise;
 	}
 
 	async fetchModels() {
@@ -483,42 +408,6 @@ class VaultBotPlugin extends Plugin {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
-	// Check the latest version available on GitHub without applying it.
-	// Fetches the repo's manifest.json from the raw GitHub URL and compares
-	// its version field against the locally-installed manifest. Resolves to
-	// {latest, current, updateAvailable} on success or {error} on failure.
-	// ─────────────────────────────────────────────────────────────────────
-	async checkLatestVersion(ref) {
-		const fs = require('fs');
-		const refSpec = (ref && String(ref).trim()) || 'main';
-		let currentVersion = '?';
-		try {
-			const vaultRoot = this.app.vault.adapter.getBasePath
-				? this.app.vault.adapter.getBasePath()
-				: this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
-			const manPath = path.join(vaultRoot, '.obsidian', 'plugins', 'vaultbot', 'manifest.json');
-			if (fs.existsSync(manPath)) {
-				currentVersion = JSON.parse(fs.readFileSync(manPath, 'utf8')).version || '?';
-			}
-		} catch (e) {}
-		// Use the GitHub API (works for branches + tags) to get the manifest.
-		const apiUrl = `https://raw.githubusercontent.com/ziggibot-uni/vaultbot/${encodeURIComponent(refSpec)}/.obsidian/plugins/vaultbot/manifest.json`;
-		try {
-			const resp = await fetch(apiUrl, { cache: 'no-store' });
-			if (!resp.ok) return { error: `GitHub returned ${resp.status}`, current: currentVersion };
-			const manifest = await resp.json();
-			const latest = manifest.version || '?';
-			return {
-				latest,
-				current: currentVersion,
-				updateAvailable: latest !== '?' && latest !== currentVersion
-			};
-		} catch (e) {
-			return { error: e && e.message ? e.message : String(e), current: currentVersion };
-		}
-	}
-
-	// ─────────────────────────────────────────────────────────────────────
 	// Self-updater: pull the latest CODE from GitHub and apply it over the
 	// live vault, WITHOUT touching any user state.
 	//
@@ -734,53 +623,22 @@ class VaultBotPlugin extends Plugin {
 		// walks the source dir; for each file, mkdirp the relative parent in
 		// the destination and copyFileSync over it. Does NOT delete files that
 		// exist in dest but not src — that's intentional, so user state files
-		// (logs, sessions, models, agent-authored custom tools) that aren't in
-		// the repo are kept.
-		//
-		// Before overwriting a file that differs from the archive version,
-		// the previous local copy is saved to .vaultbot-update-backup/ with a
-		// timestamp, so user/bot modifications are never silently lost.
+		// (logs, sessions, models) that aren't in the repo are kept.
 		async function copyCodeTree(src, dest) {
-			const backupDir = path.join(dest, '.vaultbot-update-backup');
-			const ts = new Date().toISOString().replace(/[:.]/g, '-');
-			let backupCount = 0;
-			const stack = [{ s: src, d: dest, rel: '' }];
+			const stack = [{ s: src, d: dest }];
 			while (stack.length) {
-				const { s, d, rel } = stack.pop();
+				const { s, d } = stack.pop();
 				fs.mkdirSync(d, { recursive: true });
 				for (const entry of fs.readdirSync(s, { withFileTypes: true })) {
 					const sp = path.join(s, entry.name);
 					const dp = path.join(d, entry.name);
-					const relPath = rel ? rel + '/' + entry.name : entry.name;
 					if (entry.isDirectory()) {
-						// Skip __pycache__ + backup dirs everywhere.
-						if (entry.name === '__pycache__' || entry.name === '.vaultbot-update-backup') continue;
-						stack.push({ s: sp, d: dp, rel: relPath });
+						// Skip __pycache__ dirs everywhere — never propagate them.
+						if (entry.name === '__pycache__') continue;
+						stack.push({ s: sp, d: dp });
 					} else if (entry.isFile()) {
 						// Skip compiled bytecode and stale .bak files.
 						if (entry.name.endsWith('.pyc') || entry.name.endsWith('.bak')) continue;
-						// If the destination file exists and differs from the
-						// archive version, back it up before overwriting so
-						// user/bot modifications are preserved.
-						if (fs.existsSync(dp)) {
-							let same = false;
-							try {
-								const srcStat = fs.statSync(sp);
-								const dstStat = fs.statSync(dp);
-								if (srcStat.size === dstStat.size) {
-									const srcBuf = fs.readFileSync(sp);
-									const dstBuf = fs.readFileSync(dp);
-									same = srcBuf.equals(dstBuf);
-								}
-							} catch (e) {}
-							if (!same) {
-								fs.mkdirSync(path.join(backupDir, ts), { recursive: true });
-								const backupPath = path.join(backupDir, ts, relPath.replace(/[\\/]/g, '__'));
-								fs.mkdirSync(path.dirname(backupPath), { recursive: true });
-								fs.copyFileSync(dp, backupPath);
-								backupCount++;
-							}
-						}
 						fs.copyFileSync(sp, dp);
 					}
 				}
@@ -949,10 +807,7 @@ class VaultBotPlugin extends Plugin {
 		});
 
 			new Notice('VaultBot backend launched; waiting for it to be ready...');
-			// Use the single-flight ready promise so concurrent callers
-			// (sidebar ensureConnection, refreshModels) don't each open
-			// their own fetch loop and flood the console.
-			running = await this.onceBackendReady();
+			running = await this.waitForBackend();
 			if (!running) {
 				// The backend may have bind-failed because port 8000 was still
 				// in TIME_WAIT after a rapid plugin reload killed the previous
@@ -1392,31 +1247,26 @@ class VaultBotSettingTab extends PluginSettingTab {
 		//   - all your .md notes, chat logs, research, textbooks stay put
 		//   - backend runtime state (sessions, checkpoints, indexes, logs,
 		//     models, pid) is left exactly as-is
-		//   - custom tools your VaultBot created are preserved
-		//   - any file the updater overwrites is backed up first to
-		//     .vaultbot-update-backup/ so modifications are never lost
 		// Only vaultbot_backend/*.py + the plugin's main.js/manifest/styles
 		// are replaced. The backend is stopped first (Windows locks .py
 		// files while running) and restarted automatically when done.
 		containerEl.createEl('div', {text:
 			'Update VaultBot to the latest version from GitHub. This replaces ' +
 			'only the code (backend Python files + this plugin) \u2014 your notes, ' +
-			'chat logs, API keys, model choice, custom tools your bot built, and ' +
-			'all other settings are kept safe. Any file that differs from the ' +
-			'update is backed up to .vaultbot-update-backup/ first, so nothing ' +
-			'is ever lost. The backend restarts automatically when done.',
+			'chat logs, API keys, model choice, and all other settings are kept ' +
+			'safe. The backend restarts automatically when the update finishes.',
 			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
 
 		const updateRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;'}});
 		const refInput = updateRow.createEl('input', {type: 'text', attr: {
 			placeholder: 'main (branch or tag)',
-			style: 'flex:1;min-width:140px;'}});
+			style: 'flex:1;min-width:180px;'}});
 		refInput.value = 'main';
-		const checkBtn = updateRow.createEl('button', {text: 'Check for updates'});
 		const updateBtn = updateRow.createEl('button', {text: 'Update from GitHub', cls: 'mod-cta'});
 		const updateStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin-top:6px;'}});
 
-		// Show the currently-installed version from manifest.json.
+		// Show the currently-installed version from manifest.json so the user
+		// can compare before/after.
 		let installedVersion = '?';
 		try {
 			const fs = require('fs');
@@ -1427,39 +1277,12 @@ class VaultBotSettingTab extends PluginSettingTab {
 		} catch (e) {}
 		updateStatusEl.setText(`Installed version: ${installedVersion}`);
 
-		// Check for updates: fetch the latest manifest from GitHub and
-		// compare versions without applying anything.
-		let checking = false;
-		checkBtn.addEventListener('click', async () => {
-			if (checking) return;
-			checking = true;
-			checkBtn.setAttribute('disabled', 'disabled');
-			checkBtn.setText('Checking\u2026');
-			try {
-				const info = await this.plugin.checkLatestVersion(refInput.value.trim() || 'main');
-				if (info.error) {
-					updateStatusEl.setText(`Check failed: ${info.error}`);
-				} else if (info.updateAvailable) {
-					updateStatusEl.setText(`Update available: v${info.latest} (you have v${info.current}). Click "Update from GitHub" to apply.`);
-					new Notice(`VaultBot v${info.latest} is available.`);
-				} else {
-					updateStatusEl.setText(`You're up to date: v${info.current}.`);
-				}
-			} catch (e) {
-				updateStatusEl.setText('Check failed: ' + (e && e.message ? e.message : String(e)));
-			} finally {
-				checking = false;
-				checkBtn.removeAttribute('disabled');
-				checkBtn.setText('Check for updates');
-			}
-		});
-
 		let updating = false;
 		updateBtn.addEventListener('click', async () => {
 			if (updating) return;
 			updating = true;
 			updateBtn.setAttribute('disabled', 'disabled');
-			updateBtn.setText('Updating\u2026');
+			updateBtn.setText('Updating…');
 			try {
 				const res = await this.plugin.performSelfUpdate((msg) => {
 					updateStatusEl.setText(msg);
@@ -1563,18 +1386,6 @@ class VaultBotSidebarView extends ItemView {
 		};
 
 		const ensureConnection = async () => {
-			// If a boot is in progress, don't open another fetch probe here —
-			// just await the shared ready promise. This is what was spamming
-			// the dev console with ERR_CONNECTION_REFUSED every 5s while the
-			// backend was still coming up.
-			if (this.plugin.backendStarting || this.plugin._backendReadyPromise) {
-				const ready = await this.plugin.onceBackendReady();
-				if (!ready) {
-					backendWasOnline = false;
-					setStatus('Backend offline - click to start', true);
-				}
-				return;
-			}
 			const running = await this.plugin.isBackendRunning();
 			if (running) {
 				setStatus('Backend online');
@@ -1615,10 +1426,7 @@ class VaultBotSidebarView extends ItemView {
 		const modelSelect = modelBar.createEl('select', {cls: 'vaultbot-model-select'});
 		modelSelect.createEl('option', {text: 'Fetching models...', attr: {disabled: true}});
 		const refreshModels = async () => {
-			// Use the single-flight ready promise instead of an independent
-			// 250ms poll loop — that loop was the worst of the three console
-			// spammers during boot (two fetches every 250ms).
-			const online = await this.plugin.onceBackendReady(5000, 500);
+			const online = await this.plugin.waitForBackend(5000, 250);
 			if (!online) {
 				modelSelect.empty();
 				modelSelect.createEl('option', {text: 'Backend offline', attr: {disabled: true}});
@@ -2373,13 +2181,6 @@ class VaultBotSidebarView extends ItemView {
 					// Backend requested restart — same code path as the GUI button.
 					statusEl.setText('Backend requested restart...');
 					this.plugin.restartBackend();
-				} else if (msg.type === 'reload_plugin') {
-					// Backend requested plugin reload (disable + re-enable).
-					// This picks up changes to main.js/styles.css without you
-					// having to manually toggle the plugin. The backend stays
-					// running during the reload.
-					statusEl.setText('Reloading plugin...');
-					this.plugin.reloadSelf();
 				} else if (msg.type === 'vault_changed') {
 					// The backend wrote files directly to disk, bypassing
 					// Obsidian's vault API. Obsidian's file watcher may not

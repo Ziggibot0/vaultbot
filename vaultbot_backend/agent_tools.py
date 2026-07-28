@@ -247,7 +247,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "This is the tool that prevents you from breaking yourself "
                 "in half. Set dry_run=true to preview whether an edit would "
                 "be safe without writing. For markdown notes or non-code "
-                "files, code_write is fine."
+                "files, code_write is fine. IMPORTANT: safe_write is for PYTHON (.py) files only. For JavaScript (.js) files, use js_safe_write instead."
             ),
             "parameters": {
                 "type": "object",
@@ -267,6 +267,39 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "js_safe_write",
+            "description": (
+                "SAFE self-edit of JavaScript files (.js, .mjs, .cjs). "
+                "Use this for the Obsidian plugin main.js and any other "
+                "JS files. It validates JS syntax with node --check BEFORE "
+                "writing to disk (atomic write pattern: write to temp file, "
+                "validate, then swap). If syntax validation fails, the real "
+                "file is NEVER touched. Supports dry_run=true to preview. "
+                "IMPORTANT: js_safe_write is for JAVASCRIPT files only. "
+                "For Python (.py) files, use safe_write instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path relative to vault root (e.g. .obsidian/plugins/vaultbot/main.js).",
+                    },
+                    "content": {"type": "string"},
+                    "dry_run": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "If true, validate JS syntax only; do not write to disk.",
+                    },
+                },
+                "required": ["file_path", "content"],
+            },
+        },
+    },
+
     {
         "type": "function",
         "function": {
@@ -422,6 +455,11 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"- SAFE-EDIT your own source: safe_write verifies an edit won't "
         f"break the backend (syntax + import check in a subprocess, auto-"
         f"rollback on failure). Use it INSTEAD of code_write for any .py "
+        f"- SAFE-EDIT JavaScript files: js_safe_write validates "
+        f"JS syntax with node --check before writing (atomic "
+        f"pattern). Use it for the Obsidian plugin main.js and "
+        f"any .js file. NEVER use safe_write for .js files or "
+        f"js_safe_write for .py files.\n"
         f"file under vaultbot_backend/. git_rollback restores a bad edit.\n"
         f"- AUDIT your own capabilities: capability_audit lists every tool "
         f"you have and, given a task, tells you whether you have a gap. Run "

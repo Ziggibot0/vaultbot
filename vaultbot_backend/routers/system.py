@@ -79,6 +79,32 @@ async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
     return {"status": "restart_requested", "message": "WebSocket broadcast sent. Plugin will restart the backend."}
 
 
+@router.post("/reload-plugin")
+async def reload_plugin_endpoint(svc: Annotated[Services, Depends(get_services)]):
+    """Ask the Obsidian plugin to reload itself via WebSocket.
+
+    Broadcasts ``{"type": "reload_plugin"}`` to all connected WebSocket
+    clients. The plugin's message handler calls ``reloadSelf()`` which
+    disables and re-enables the plugin via Obsidian's plugin API
+    (``app.plugins.disablePlugin`` + ``app.plugins.enablePlugin``).
+
+    Unlike ``/restart``, the backend stays running during the reload —
+    ``onunload()`` checks ``_isReloading`` and skips ``stopBackend()``.
+    The new plugin instance reconnects to the existing backend.
+
+    This lets the agent pick up changes to ``main.js`` / ``styles.css``
+    without Sean having to manually toggle the plugin in Settings.
+    """
+    await svc.manager.broadcast(json.dumps({
+        "type": "reload_plugin",
+        "content": "Plugin reload requested. The plugin will disable and re-enable itself."
+    }), session_logger=svc.session_logger)
+    return {
+        "status": "reload_requested",
+        "message": "WebSocket broadcast sent. Plugin will reload itself (disable + re-enable). Backend stays running."
+    }
+
+
 # --- /checkpoints: crash-recovery status --------------------------------
 
 @router.get("/checkpoints")

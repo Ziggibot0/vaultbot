@@ -768,6 +768,17 @@ def interpret_validation_result(tool_name: str, tool_result: dict) -> tuple:
             return ("fail", "validation_error", error)
         return ("pass", "validation_error", "")
 
+    if tool_name == "js_safe_write":
+        status = tool_result.get("status", "")
+        if status in ("written", "dry_run_ok"):
+            return ("pass", "validation_error", "")
+        elif status in ("rejected", "error"):
+            error = tool_result.get("error", "")
+            if "syntax" in error.lower() or "SyntaxError" in error:
+                return ("fail", "syntax_error", error)
+            return ("fail", "validation_error", error)
+        return ("pass", "validation_error", "")
+
     if tool_name == "code_run":
         exit_code = tool_result.get("exit_code", 0)
         if exit_code != 0:

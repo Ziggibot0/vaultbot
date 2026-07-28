@@ -96,6 +96,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         session_logger.log("correction_detection_failed", {"error": str(e)})
     await svc.manager.send_personal_message(json.dumps({"type": "status", "content": "Searching vault..."}), websocket, session_logger=session_logger)
     loop = asyncio.get_event_loop()
+    chat_start_time = loop.time()  # for vault_changed file scan
 
     # Keep the in-memory vault graph current with disk before retrieval.
     # The intended design was an incremental diff (cost proportional to
@@ -310,7 +311,40 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
     try:
      round_idx = 0
+     # Hard round cap: prevents an infinite tool-call loop from running
+     # forever if the model gets stuck repeating tool calls without
+     # converging on a final answer. 25 is generous (real turns use 1-8
+     # rounds); hitting the cap logs a warning and returns whatever was
+     # accumulated so the user sees the partial work instead of a hang.
+     MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "25"))
      while True:
+        # Pre-flight hard char cap: before sending the conversation to the
+        # cloud model, enforce a last-resort char cap so the payload can
+        # NEVER exceed the size where a remote model times out (>120s
+        # TTFT). The compactor should keep it bounded, but this is the
+        # tank-grade guarantee — if compaction failed or was insufficient,
+        # this truncates the oldest non-head messages' content before the
+        # call, never after. Configurable via VAULTBOT_CHAT_MAX_CHARS.
+        _MAX_CHAT_CHARS = int(os.getenv("VAULTBOT_CHAT_MAX_CHARS", "80000"))
+        _conv_chars = sum(len(str(m.get("content", "") or "")) +
+                         len(str(m.get("thinking", "") or ""))
+                         for m in conversation if isinstance(m, dict))
+        if _conv_chars > _MAX_CHAT_CHARS:
+            # Truncate oldest non-head messages' content
+            for i in range(2, max(2, len(conversation) - 2)):
+                if _conv_chars <= _MAX_CHAT_CHARS:
+                    break
+                m = conversation[i]
+                if isinstance(m, dict):
+                    for key in ("content", "thinking"):
+                        val = m.get(key, "")
+                        if val and len(str(val)) > 200:
+                            old_len = len(str(val))
+                            m[key] = str(val)[:200] + "\n[...truncated pre-flight...]"
+                            _conv_chars -= (old_len - len(str(m[key])))
+            session_logger.log("pre_flight_char_cap", {
+                "chars": _conv_chars, "cap": _MAX_CHAT_CHARS, "round": round_idx})
+
         # Stream the LLM response for this round.
         round_text = ""
         round_thinking = ""
@@ -372,8 +406,16 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     round_tool_calls.extend(tcs)
         except Exception as e:
             session_logger.log_exception(e, context="ollama_client.chat")
-            await svc.manager.send_personal_message(json.dumps({"type": "error", "content": f"LLM error: {e}"}), websocket, session_logger=session_logger)
-            return
+            # Don't drop the turn — salvage whatever was streamed so far so
+            # the user's message + any tool work + partial answer is
+            # persisted to history and the agent can recover on the next
+            # turn. This is the tank-grade recovery: a transient cloud
+            # timeout (Read timed out) shouldn't lose the whole turn.
+            if round_text:
+                conversation.append({"role": "assistant", "content": round_text})
+            final_answer = (final_answer + round_text).strip()
+            await svc.manager.send_personal_message(json.dumps({"type": "error", "content": f"LLM error: {e}. Partial answer preserved where possible."}), websocket, session_logger=session_logger)
+            break
 
         session_logger.log("agent_round", {
             "round": round_idx,
@@ -466,9 +508,41 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "content": json.dumps(tool_result, default=str),
             })
 
+        # Mid-loop compaction: the agentic loop adds 2+ messages per tool
+        # round (assistant + tool result). Over many rounds the conversation
+        # balloons to 100K+ chars even though it started compacted. A remote
+        # cloud model (glm-5.2:cloud) takes >120s to process a 400K-char
+        # payload before the first token, hitting the read timeout. Re-compact
+        # here so the next LLM round sees a bounded conversation, not a
+        # snowballing one. This is the fix for "read timed out" after a few
+        # turns of tool use.
+        if svc.compactor.should_compact(conversation):
+            conversation = svc.compactor.compact(conversation)
+            session_logger.log("mid_loop_compacted", {
+                "messages": len(conversation),
+                "round": round_idx,
+            })
+
         # Loop back: the LLM now sees the tool results and will produce
         # either another tool call or the final answer.
         round_idx += 1
+
+        # Hard round cap: if the model keeps calling tools without
+        # converging on a final answer, break out and return what we have.
+        # This prevents an infinite loop from hanging the session for hours
+        # (the tank-grade guarantee: the chat always terminates).
+        if round_idx >= MAX_ROUNDS:
+            session_logger.log("max_rounds_reached", {
+                "round": round_idx,
+                "final_answer_len": len(final_answer),
+            })
+            await svc.manager.send_personal_message(json.dumps({
+                "type": "status",
+                "content": f"Reached max tool rounds ({MAX_ROUNDS}). Returning what I have so far.",
+            }), websocket, session_logger=session_logger)
+            if not final_answer:
+                final_answer = round_text or "(no final answer produced)"
+            break
 
     except Exception as e:
         # The whole agentic loop crashed — save whatever was streamed so far.
@@ -505,6 +579,44 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         "thinking_length": len(thinking_text),
         "tool_rounds": round_idx + 1,
     })
+
+    # --- Notify the Obsidian plugin that vault files may have changed -------
+    # The backend writes files directly to disk, bypassing Obsidian's vault
+    # API. Obsidian's file watcher may not detect these changes immediately
+    # (especially on Windows), so the graph view stays stale until Obsidian
+    # is restarted. This broadcast tells the plugin which files changed so
+    # it can "touch" them through Obsidian's vault API, triggering the
+    # metadata cache to re-process and the graph view to update in real-time.
+    try:
+        import time as _time
+        changed_files = []
+        vault_root = svc.vault_path
+        for dirpath, dirnames, filenames in os.walk(vault_root):
+            # Skip non-vault directories
+            dirnames[:] = [d for d in dirnames if d not in (
+                '.obsidian', 'vaultbot_backend', 'node_modules', '.git',
+                'learningMaterial', 'custom_tools', '__pycache__',
+            )]
+            for fname in filenames:
+                if fname.endswith('.md'):
+                    fpath = os.path.join(dirpath, fname)
+                    try:
+                        mtime = os.path.getmtime(fpath)
+                        if mtime >= chat_start_time:
+                            # Return path relative to vault root
+                            rel = os.path.relpath(fpath, vault_root)
+                            changed_files.append(rel.replace(os.sep, '/'))
+                    except OSError:
+                        pass
+        if changed_files:
+            await svc.manager.send_personal_message(
+                json.dumps({"type": "vault_changed", "files": changed_files}),
+                websocket, session_logger=session_logger)
+            session_logger.log("vault_changed_broadcast", {
+                "file_count": len(changed_files),
+            })
+    except Exception as e:
+        session_logger.log("vault_changed_failed", {"error": str(e)})
 
     # Embedding-drift feedback (relevance feedback, LLM-free): nudge the
     # stored embeddings of retrieved notes toward (or away from) this query
@@ -936,6 +1048,11 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
 
     if tool_name == "safe_write":
         return await loop.run_in_executor(None, lambda: svc.self_improver.safe_write(
+            args.get("file_path", ""), args.get("content", ""),
+            bool(args.get("dry_run", False))))
+
+    if tool_name == "js_safe_write":
+        return await loop.run_in_executor(None, lambda: svc.self_improver.js_safe_write(
             args.get("file_path", ""), args.get("content", ""),
             bool(args.get("dry_run", False))))
 

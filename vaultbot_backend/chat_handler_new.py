@@ -1054,6 +1054,11 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             args.get("file_path", ""), args.get("content", ""),
             bool(args.get("dry_run", False))))
 
+    if tool_name == "js_safe_write":
+        return await loop.run_in_executor(None, lambda: svc.self_improver.js_safe_write(
+            args.get("file_path", ""), args.get("content", ""),
+            bool(args.get("dry_run", False))))
+
     if tool_name == "capability_audit":
         return await loop.run_in_executor(None, lambda: svc.self_improver.capability_audit(
             args.get("task", "")))

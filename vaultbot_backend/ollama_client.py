@@ -67,6 +67,32 @@ class OllamaClient(_BASE):
             return
         self.session_logger.log_tool_call(tool="ollama", method=method, inputs=inputs, outputs=outputs, duration_ms=duration_ms, error=error)
 
+    def _chat_log_summary(self, payload: dict, stream: bool) -> dict:
+        """Build a compact log summary of the chat payload.
+
+        The full payload (all message content + thinking + tool_calls) is
+        NEVER logged — it's the source of the 41 MB session log that fills
+        disk over a days-long autonomous session. Instead we log the model,
+        message count, per-message role + content length, and tool count.
+        That's enough to debug retrieval/compaction issues without the bloat.
+        """
+        msgs = payload.get("messages", [])
+        msg_summary = [
+            {"role": m.get("role", "?"),
+             "chars": len(str(m.get("content", "") or "")),
+             "thinking_chars": len(str(m.get("thinking", "") or "")),
+             "has_tool_calls": bool(m.get("tool_calls"))}
+            for m in msgs if isinstance(m, dict)
+        ]
+        return {
+            "model": payload.get("model", ""),
+            "stream": stream,
+            "message_count": len(msgs),
+            "total_content_chars": sum(m["chars"] for m in msg_summary),
+            "messages": msg_summary,
+            "has_tools": bool(payload.get("tools")),
+        }
+
     def generate(self, prompt: str, system: str | None = None, temperature: float = 0.7, max_tokens: int | None = None, stream: bool = False) -> dict | Generator:
         """
         Generate text from the LLM.
@@ -265,8 +291,8 @@ class OllamaClient(_BASE):
                     stream=False, timeout=60)
             response.raise_for_status()
         except Exception as e:
-            self._log_tool("chat", {"payload": payload, "stream": stream}, error=str(e),
-                            duration_ms=(time.time() - t0) * 1000)
+            self._log_tool("chat", self._chat_log_summary(payload, stream),
+                            error=str(e), duration_ms=(time.time() - t0) * 1000)
             raise
 
         if stream:
@@ -291,11 +317,11 @@ class OllamaClient(_BASE):
                         if data.get("done", False):
                             break
                 except Exception as e:
-                    self._log_tool("chat", {"payload": payload, "stream": stream},
+                    self._log_tool("chat", self._chat_log_summary(payload, stream),
                                     error=str(e), duration_ms=(time.time() - t0) * 1000)
                     raise
                 finally:
-                    self._log_tool("chat", {"payload": payload, "stream": stream},
+                    self._log_tool("chat", self._chat_log_summary(payload, stream),
                                     outputs={"chunks": chunk_count,
                                              "tool_calls": len(accumulated_tool_calls)},
                                     duration_ms=(time.time() - t0) * 1000)
@@ -308,6 +334,9 @@ class OllamaClient(_BASE):
                 "thinking": msg.get("thinking", "") or "",
                 "tool_calls": msg.get("tool_calls", []) or [],
             }
-            self._log_tool("chat", {"payload": payload, "stream": stream},
-                            outputs=result, duration_ms=(time.time() - t0) * 1000)
+            self._log_tool("chat", self._chat_log_summary(payload, stream),
+                            outputs={"response_len": len(result["response"]),
+                                     "thinking_len": len(result["thinking"]),
+                                     "tool_calls": len(result["tool_calls"])},
+                            duration_ms=(time.time() - t0) * 1000)
             return result
