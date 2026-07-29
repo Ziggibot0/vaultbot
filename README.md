@@ -167,15 +167,19 @@ close and reopen Obsidian) for changes to take effect.
 
 **"The backend didn't start" / VaultBot isn't responding in chat.**
 1. Check Ollama is running (icon in system tray). If not, open the Ollama app.
-2. In Obsidian: Settings → Community plugins → VaultBot → gear icon →
-   **Restart backend**. Wait ~20 seconds.
-3. Still stuck? Open `vaultbot_backend/backend.log` in the vault and look
-   at the last ~20 lines for an error message.
+2. In Obsidian: click the **Diagnose** button in the VaultBot sidebar.
+   VaultBot checks for common problems (Ollama not running, missing model,
+   port conflict) and shows plain-English fixes — no log file needed.
+3. If Diagnose finds nothing, click **Restart** in the sidebar. If it
+   still doesn't come back, Diagnose runs automatically and shows you why.
 4. If the venv was never created (the installer didn't finish), re-run the
-   one-liner install command — it picks up where it left off.
+   one-liner install command — it picks up where it left off (it remembers
+   which steps already completed).
 
 **"VaultBot needs setup" message in Obsidian.** The plugin can't find the
-Python environment. Re-run the one-liner install command to finish setup.
+Python environment. The setup wizard shows you exactly what's missing
+(Python, Ollama, or the environment) with download buttons. Or re-run the
+one-liner install command to finish setup.
 
 **Model download is slow or fails.** `ollama pull` can be flaky on slow
 connections. Just re-run the same `ollama pull` command — it resumes where
@@ -191,9 +195,9 @@ without it.
 (it's pinned in `requirements.txt`). If you upgraded numpy separately,
 reinstall: `pip install --force-reinstall faiss-cpu>=1.11`.
 
-**Port 8000 already in use.** Something else on your machine is using the
-backend's port. Close other Python servers, or change the port in
-`vaultbot_backend/main.py` (advanced).
+**Port 8000 already in use.** Click **Diagnose** in the sidebar — it
+detects port conflicts and offers a one-click **Restart** to clear the
+stale process.
 
 ---
 

@@ -10,6 +10,41 @@ set -e
 REPO_ZIP="https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/main.zip"
 VAULT_NAME="VaultBot"
 
+# ── Install-state resume helpers ──────────────────────────────────────────
+# Same resume principle as setup.ps1: write a .vaultbot-install-state.json
+# inside the vault folder tracking which steps are done. On re-run, each
+# step checks the state and skips if already done. We use grep to check
+# (no jq dependency) and append to a temp file + rewrite as JSON to set.
+# The state file path is set after step 3 (download) since $VAULT_PATH
+# doesn't exist before then. Steps 1-2 are interactive and always run.
+STATE_FILE=""
+
+step_done() {
+    # Returns 0 (true) if the named step is marked done in the state file.
+    [ -z "$STATE_FILE" ] && return 1
+    [ ! -f "$STATE_FILE" ] && return 1
+    grep -q "\"$1\": true" "$STATE_FILE" 2>/dev/null
+}
+
+mark_step_done() {
+    # Mark a step as done by rewriting the state JSON with the new key.
+    # Uses python3 (already verified as a prerequisite) to parse+write JSON
+    # so we don't depend on jq.
+    [ -z "$STATE_FILE" ] && return 0
+    local step="$1"
+    python3 -c "
+import json, sys
+path = sys.argv[1]
+step = sys.argv[2]
+try:
+    with open(path) as f: state = json.load(f)
+except Exception:
+    state = {}
+state[step] = True
+with open(path, 'w') as f: json.dump(state, f)
+" "$STATE_FILE" "$step" 2>/dev/null || true
+}
+
 echo ""
 echo "  ============================="
 echo "      VaultBot Installer"
@@ -89,41 +124,66 @@ else
     echo "  [OK] Downloaded to $VAULT_PATH"
 fi
 
+# Now that $VAULT_PATH exists, set the install-state file path so steps
+# 4-7 can resume if the user re-runs after a partial install.
+STATE_FILE="$VAULT_PATH/.vaultbot-install-state.json"
+if [ -f "$STATE_FILE" ]; then
+    echo "  [!]  Found previous install state -- resuming where you left off."
+fi
+
 # ── 4. Create the Python virtual environment ────────────────────────────────
 VENV_PYTHON="$VAULT_PATH/vaultbot_venv/bin/python"
-if [ -f "$VENV_PYTHON" ]; then
+if step_done "venv_created"; then
+    echo "  [!]  Virtual environment already created -- skipping."
+elif [ -f "$VENV_PYTHON" ]; then
     echo "  [!]  Virtual environment already exists -- skipping."
+    mark_step_done "venv_created"
 else
     echo ">>> Creating Python environment (a few seconds)..."
     cd "$VAULT_PATH"
     python3 -m venv vaultbot_venv
     cd - >/dev/null
     echo "  [OK] Virtual environment created"
+    mark_step_done "venv_created"
 fi
 
 # ── 5. Install dependencies ─────────────────────────────────────────────────
 REQ_PATH="$VAULT_PATH/vaultbot_backend/requirements.txt"
-echo ">>> Installing dependencies (5-15 min, one-time only)..."
-echo "  Grab a coffee. This is the longest step."
-"$VENV_PYTHON" -m pip install --upgrade pip --quiet
-"$VENV_PYTHON" -m pip install -r "$REQ_PATH"
-echo "  [OK] Dependencies installed"
+if step_done "deps_installed"; then
+    echo "  [!]  Dependencies already installed -- skipping."
+else
+    echo ">>> Installing dependencies (5-15 min, one-time only)..."
+    echo "  Grab a coffee. This is the longest step."
+    "$VENV_PYTHON" -m pip install --upgrade pip --quiet
+    "$VENV_PYTHON" -m pip install -r "$REQ_PATH"
+    echo "  [OK] Dependencies installed"
+    mark_step_done "deps_installed"
+fi
 
 # ── 6. Pull AI models via Ollama ────────────────────────────────────────────
-echo ">>> Downloading AI models (~2 GB, one-time only)..."
-echo "  This is the big download. It resumes if interrupted."
-ollama pull qwen3.6:latest
-ollama pull nomic-embed-text
-echo "  [OK] Models ready"
+if step_done "models_pulled"; then
+    echo "  [!]  AI models already downloaded -- skipping."
+else
+    echo ">>> Downloading AI models (~2 GB, one-time only)..."
+    echo "  This is the big download. It resumes if interrupted."
+    ollama pull qwen3.6:latest
+    ollama pull nomic-embed-text
+    echo "  [OK] Models ready"
+    mark_step_done "models_pulled"
+fi
 
 # ── 7. Write .env with the user's name ──────────────────────────────────────
 ENV_EXAMPLE="$VAULT_PATH/.env.example"
 ENV_FILE="$VAULT_PATH/.env"
-if [ -f "$ENV_EXAMPLE" ]; then
+if step_done "env_written"; then
+    echo "  [!]  Config already written -- skipping."
+elif [ -f "$ENV_EXAMPLE" ]; then
     sed "s/^VAULTBOT_OWNER=.*/VAULTBOT_OWNER=$OWNER_NAME/" "$ENV_EXAMPLE" > "$ENV_FILE"
     echo "  [OK] Configured -- VaultBot will call you $OWNER_NAME"
+    mark_step_done "env_written"
 else
     echo "  [!]  .env.example not found -- skipping .env creation"
+    mark_step_done "env_written"
 fi
 
 # ── 8. Done -- open Obsidian ─────────────────────────────────────────────────

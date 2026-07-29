@@ -1,4 +1,4 @@
-﻿# Current Goal
+# Current Goal
 Learn who my operator is and what they want to use me for.
 
 ## Steps

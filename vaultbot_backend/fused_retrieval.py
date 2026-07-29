@@ -65,6 +65,11 @@ class FusedRetriever:
     # near the margin and never overrides content similarity.  See
     # [[Procedure-Subprocess-Architecture]] grading loop.
     VERIFIED_BOOST = 0.05
+    # Flagged-procedure penalty.  A procedure whose status is ``flagged``
+    # (repeatedly failed validation, blocked from execution) has its score
+    # multiplied by this factor so it sinks below usable notes — it should
+    # not crowd the procedure surface when it can't be run.
+    FLAGGED_PENALTY = 0.5
 
     def __init__(
         self,
@@ -420,13 +425,21 @@ class FusedRetriever:
             name = cand.get("name")
             if name and len(backlinks.get(name, set())) >= self.HUB_DEGREE_THRESHOLD:
                 boost *= self.HUB_RERANK
-            # Verified-procedure boost: a procedure note whose status is
-            # "verified" gets a small additive bump.  This is the second
+            # Procedure status-aware boost (tri-state).  This is the second
             # half of the "scooch over time" grading loop: drift moves the
-            # vector, verified-status moves the rank.
-            if (self.procedure_status_index is not None and name
-                    and self.procedure_status_index.get(name) == "verified"):
-                boost += self.VERIFIED_BOOST
+            # vector, status moves the rank.
+            #   verified    -> small additive bump (surface it)
+            #   experimental-> neutral (no boost, no penalty)
+            #   flagged     -> multiplicative penalty (push it down — it
+            #                  failed validation repeatedly and is blocked
+            #                  from execution, so it shouldn't crowd out
+            #                  usable notes at the top of the surface)
+            if self.procedure_status_index is not None and name:
+                _pstatus = self.procedure_status_index.get(name, "")
+                if _pstatus == "verified":
+                    boost += self.VERIFIED_BOOST
+                elif _pstatus == "flagged":
+                    boost *= self.FLAGGED_PENALTY
             cand["score"] = cand["score"] * boost
 
     def _finalize(self, cand: dict[str, Any], query: str) -> dict[str, Any]:

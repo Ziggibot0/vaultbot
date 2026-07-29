@@ -59,6 +59,105 @@ def _detect_llm_backend() -> str:
     return "ollama"
 
 
+# User-facing config keys that /config/effective reports. Each entry is
+# (key, label, is_secret). Secrets are reported as a boolean (has_value),
+# never the actual value. This is the single source of truth for what the
+# Configuration status panel shows — adding a new user-facing key = one
+# entry here + one row in the frontend.
+_CONFIG_KEYS = [
+    ("VAULTBOT_OWNER", "Your name", False),
+    ("LLM_BACKEND", "LLM backend", False),
+    ("OLLAMA_LLM_MODEL", "Ollama model", False),
+    ("OLLAMA_EMBED_MODEL", "Embedding model", False),
+    ("LLM_BASE_URL", "Cloud base URL", False),
+    ("LLM_API_KEY", "Cloud API key", True),
+    ("LLM_MODEL", "Cloud model name", False),
+    ("VAULTBOT_RESEARCH_BACKEND", "Research backend", False),
+    ("TAVILY_API_KEY", "Tavily API key", True),
+    ("OLLAMA_HOST", "Ollama host", False),
+]
+
+
+def _read_env_file() -> dict[str, str]:
+    """Read KEY=VALUE pairs from the .env file (without loading into os.environ).
+
+    Used by /config/effective to distinguish "from .env file" vs "from
+    runtime override / process env". Returns an empty dict if the file
+    doesn't exist or can't be read.
+    """
+    try:
+        if not _ENV_PATH.exists():
+            return {}
+        result: dict[str, str] = {}
+        for line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            result[key.strip()] = val.strip()
+        return result
+    except Exception:
+        return {}
+
+
+@router.get("/config/effective")
+async def config_effective() -> dict[str, Any]:
+    """Return the effective value + source for each user-facing config key.
+
+    For each key, reports:
+      - value: the effective value (from os.getenv, which reflects .env
+        loaded via load_dotenv + any runtime overrides). Secrets are
+        reported as ``has_value: bool``, never the actual string.
+      - source: "env_file" if the value matches what's in the .env file,
+        "runtime" if it's set in the process env but differs from .env
+        (e.g. pushed via the settings panel API), or "default" if unset.
+      - conflict: True if the .env file and the process env disagree on
+        the value (the user edited .env but the panel overrode it, or vice
+        versa). This is what the frontend shows as a warning.
+
+    This is the single source of truth the Configuration status panel reads
+    so the user can see which config source is "winning" without grepping
+    .env or guessing what the settings panel overrode.
+    """
+    env_file = _read_env_file()
+    items = []
+    for key, label, is_secret in _CONFIG_KEYS:
+        process_val = os.getenv(key, "")
+        file_val = env_file.get(key, "")
+        if process_val:
+            value = process_val
+            # Source: if the process env matches the .env file, it came
+            # from the file. If they differ, it's a runtime override.
+            if file_val and process_val == file_val:
+                source = "env_file"
+            elif file_val and process_val != file_val:
+                source = "runtime"
+                conflict = True
+            else:
+                source = "runtime"  # set in process env, not in .env
+        elif file_val:
+            # In .env but not loaded into process env (shouldn't happen
+            # since load_dotenv runs at startup, but handle it).
+            value = file_val
+            source = "env_file"
+        else:
+            value = ""
+            source = "default"
+        conflict = bool(file_val and process_val and file_val != process_val)
+        items.append({
+            "key": key,
+            "label": label,
+            "value": ("" if is_secret else value),
+            "has_value": bool(value),
+            "source": source,
+            "conflict": conflict,
+            "is_secret": is_secret,
+        })
+    return {"config": items}
+
+
 def _rebuild_llm_client(svc: Services) -> None:
     """Rebuild the synthesis + vision clients from the current .env values.
 
@@ -94,7 +193,144 @@ async def list_models(svc: Annotated[Services, Depends(get_services)]) -> dict[s
     list_fn = (getattr(svc.ollama_client, "list_models", None)
                or svc.ollama_client.list_local_models)
     models = await loop.run_in_executor(None, list_fn)
-    return {"models": models, "current": svc.ollama_client.llm_model}
+    # Enrich each model with capability metadata (vision, instruct) so the
+    # frontend can group + tag them. For Ollama this calls /api/show per
+    # model (cached by the client session). For OpenAI-compatible backends
+    # that don't have get_model_capabilities, we fall back to safe defaults.
+    # The enrichment is best-effort: if a single model's show call fails,
+    # it gets default flags and the list still renders.
+    caps_fn = getattr(svc.ollama_client, "get_model_capabilities", None)
+    enriched = []
+    for name in models:
+        caps = {"vision": False, "instruct": True}
+        if caps_fn:
+            try:
+                caps = await loop.run_in_executor(None, caps_fn, name)
+            except Exception:
+                pass  # keep defaults
+        enriched.append({"name": name, "vision": caps.get("vision", False),
+                         "instruct": caps.get("instruct", True)})
+    return {"models": enriched, "current": svc.ollama_client.llm_model}
+
+
+# Recommended models for the "Download a recommended model" button when the
+# user has no models installed. These are small, capable, and cover both
+# text + vision use cases. The frontend offers these as one-click downloads
+# via /models/pull so the user never has to type ``ollama pull``.
+RECOMMENDED_MODELS = [
+    {"name": "qwen3.6:latest", "label": "Qwen 3.6 (recommended)",
+     "desc": "Balanced text model. Good for chat, research, and notes.",
+     "vision": False, "size": "~2 GB"},
+    {"name": "nomic-embed-text", "label": "Nomic Embed (required for search)",
+     "desc": "Embedding model — VaultBot needs this for vault search.",
+     "vision": False, "size": "~270 MB", "required": True},
+]
+
+
+@router.get("/models/recommended")
+async def recommended_models() -> dict[str, Any]:
+    """Return the list of recommended models for first-time setup.
+
+    The frontend's 'No models yet' state shows these as one-click download
+    buttons. Each carries a label, description, and approximate size so the
+    user knows what they're getting before they click.
+    """
+    return {"models": RECOMMENDED_MODELS}
+
+
+@router.post("/models/pull")
+async def pull_model(
+    payload: dict,
+    svc: Annotated[Services, Depends(get_services)],
+) -> dict[str, Any]:
+    """Pull (download) a model via ``ollama pull``, streaming progress over WS.
+
+    Runs ``ollama pull <model>`` in a background thread and broadcasts
+    progress events to all connected WebSocket clients so the sidebar can
+    show a live progress bar. Returns immediately with ``{"status":
+    "pulling"}`` — the actual progress comes over the WS as
+    ``{"type": "model_pull_progress", "model": ..., "progress": ...}``
+    events. When the pull completes, a ``{"type": "model_pull_done"}``
+    event is sent.
+
+    This is the user-facing replacement for typing ``ollama pull`` in a
+    terminal — the non-tech user never sees a command line.
+    """
+    model = (payload.get("model") or "").strip()
+    if not model:
+        return {"status": "error", "error": "No model specified"}
+    import subprocess
+    import threading
+
+    # Capture the running event loop BEFORE starting the thread, so the
+    # thread can safely schedule WS broadcasts back onto it via
+    # run_coroutine_threadsafe. get_event_loop() inside a non-async thread
+    # raises RuntimeError on Python 3.12+ (no running loop in a thread).
+    try:
+        main_loop = asyncio.get_event_loop()
+    except RuntimeError:
+        main_loop = asyncio.new_event_loop()
+
+    def _pull_thread():
+        """Run ollama pull in a background thread, emitting progress."""
+        try:
+            # ollama pull prints progress lines to stderr; we read them
+            # line by line and broadcast percentage updates.
+            proc = subprocess.Popen(
+                ["ollama", "pull", model],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+            )
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                # Ollama pull output looks like:
+                #   pulling manifest...
+                #   pulling abc123... 100% 1.2GB 6.5MB/s
+                #   success
+                # Parse the percentage if present.
+                pct = None
+                if "%" in line:
+                    try:
+                        pct = int(line.split("%")[0].split()[-1])
+                    except (ValueError, IndexError):
+                        pass
+                # Broadcast progress to all WS clients.
+                try:
+                    import json as _json
+                    msg = _json.dumps({
+                        "type": "model_pull_progress",
+                        "model": model,
+                        "progress": pct if pct is not None else -1,
+                        "line": line[:200],
+                    })
+                    if svc.manager:
+                        asyncio.run_coroutine_threadsafe(
+                            svc.manager.broadcast(msg), main_loop)
+                except Exception:
+                    pass
+            proc.wait()
+            done_ok = proc.returncode == 0
+            # Broadcast completion.
+            try:
+                import json as _json
+                msg = _json.dumps({
+                    "type": "model_pull_done",
+                    "model": model,
+                    "success": done_ok,
+                })
+                if svc.manager:
+                    asyncio.run_coroutine_threadsafe(
+                        svc.manager.broadcast(msg), main_loop)
+            except Exception:
+                pass
+        except Exception as e:
+            logger.error("model pull thread error: %s", e)
+
+    thread = threading.Thread(target=_pull_thread, daemon=True)
+    thread.start()
+    return {"status": "pulling", "model": model}
 
 
 @router.post("/set_model")

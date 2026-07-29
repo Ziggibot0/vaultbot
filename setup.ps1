@@ -18,6 +18,44 @@ function Write-OK    { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Gre
 function Write-Warn2 { param($msg) Write-Host "  [!]  $msg" -ForegroundColor Yellow }
 function Write-Err   { param($msg) Write-Host "  [X]  $msg" -ForegroundColor Red }
 
+# ── Install-state resume helpers ──────────────────────────────────────────
+# The installer writes a .vaultbot-install-state.json inside the vault folder
+# tracking which steps have completed. On re-run (e.g. the user killed the
+# terminal mid-download, or a step failed and they're trying again), each
+# step checks the state before running and skips if already done. This makes
+# "re-run the same command — it picks up where it left off" literally true
+# instead of aspirational.
+#
+# The state file lives at $vaultPath/.vaultbot-install-state.json, so it's
+# only available AFTER step 3 (download). Steps 1-2 (prerequisites + name)
+# are interactive and always run — they're safe to repeat.
+$script:stateFile = $null
+
+function Test-StepDone {
+    param([string]$step)
+    if (-not $script:stateFile -or -not (Test-Path $script:stateFile)) { return $false }
+    try {
+        $state = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+        return ($state.$step -eq $true)
+    } catch { return $false }
+}
+
+function Set-StepDone {
+    param([string]$step)
+    if (-not $script:stateFile) { return }
+    try {
+        $state = @{}
+        if (Test-Path $script:stateFile) {
+            $state = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+        }
+        $state.$step = $true
+        # Write UTF-8 WITHOUT BOM (BOM breaks JSON parsers).
+        [System.IO.File]::WriteAllText($script:stateFile, ($state | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        Write-Warn2 "Could not write install state (non-fatal): $_"
+    }
+}
+
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Cyan
 Write-Host "      VaultBot Installer" -ForegroundColor Cyan
@@ -97,50 +135,75 @@ if (Test-Path $vaultPath) {
     Write-OK "Downloaded to $vaultPath"
 }
 
+# Now that $vaultPath exists, set the install-state file path so steps
+# 4-7 can resume if the user re-runs after a partial install.
+$script:stateFile = Join-Path $vaultPath ".vaultbot-install-state.json"
+if (Test-Path $script:stateFile) {
+    Write-Warn2 "Found previous install state — resuming where you left off."
+}
+
 # ── 4. Create the Python virtual environment ────────────────────────────────
 $venvPath = Join-Path $vaultPath "vaultbot_venv"
-if (Test-Path (Join-Path $venvPath "Scripts\python.exe")) {
+if (Test-StepDone "venv_created") {
+    Write-Warn2 "Virtual environment already created -- skipping."
+} elseif (Test-Path (Join-Path $venvPath "Scripts\python.exe")) {
     Write-Warn2 "Virtual environment already exists -- skipping."
+    Set-StepDone "venv_created"
 } else {
     Write-Step "Creating Python environment (a few seconds)..."
     Push-Location $vaultPath
     try { & python -m venv vaultbot_venv } finally { Pop-Location }
     Write-OK "Virtual environment created"
+    Set-StepDone "venv_created"
 }
 
 # ── 5. Install dependencies ─────────────────────────────────────────────────
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
 $reqPath    = Join-Path $vaultPath "vaultbot_backend\requirements.txt"
 
-Write-Step "Installing dependencies (5-15 min, one-time only)..."
-Write-Host "  Grab a coffee. This is the longest step." -ForegroundColor DarkGray
-& $venvPython -m pip install --upgrade pip --quiet
-& $venvPython -m pip install -r $reqPath
-if ($LASTEXITCODE -ne 0) {
-    Write-Err "Dependency installation failed. See errors above."
-    Write-Host "  Try re-running the command. If it keeps failing, ask for help." -ForegroundColor Yellow
-    return
+if (Test-StepDone "deps_installed") {
+    Write-Warn2 "Dependencies already installed -- skipping."
+} else {
+    Write-Step "Installing dependencies (5-15 min, one-time only)..."
+    Write-Host "  Grab a coffee. This is the longest step." -ForegroundColor DarkGray
+    & $venvPython -m pip install --upgrade pip --quiet
+    & $venvPython -m pip install -r $reqPath
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Dependency installation failed. See errors above."
+        Write-Host "  Re-run the same command — it picks up from here." -ForegroundColor Yellow
+        return
+    }
+    Write-OK "Dependencies installed"
+    Set-StepDone "deps_installed"
 }
-Write-OK "Dependencies installed"
 
 # ── 6. Pull AI models via Ollama ────────────────────────────────────────────
-Write-Step "Downloading AI models (~2 GB, one-time only)..."
-Write-Host "  This is the big download. It resumes if interrupted." -ForegroundColor DarkGray
-& ollama pull qwen3.6:latest
-& ollama pull nomic-embed-text
-Write-OK "Models ready"
+if (Test-StepDone "models_pulled") {
+    Write-Warn2 "AI models already downloaded -- skipping."
+} else {
+    Write-Step "Downloading AI models (~2 GB, one-time only)..."
+    Write-Host "  This is the big download. It resumes if interrupted." -ForegroundColor DarkGray
+    & ollama pull qwen3.6:latest
+    & ollama pull nomic-embed-text
+    Write-OK "Models ready"
+    Set-StepDone "models_pulled"
+}
 
 # ── 7. Write .env with the user's name ──────────────────────────────────────
 $envExample = Join-Path $vaultPath ".env.example"
 $envFile    = Join-Path $vaultPath ".env"
-if (Test-Path $envExample) {
+if (Test-StepDone "env_written") {
+    Write-Warn2 "Config already written -- skipping."
+} elseif (Test-Path $envExample) {
     $content = Get-Content $envExample -Raw
     $content = $content -replace 'VAULTBOT_OWNER=.*', "VAULTBOT_OWNER=$ownerName"
     # Write UTF-8 WITHOUT BOM (BOM breaks Python's dotenv parser)
     [System.IO.File]::WriteAllText($envFile, $content, [System.Text.UTF8Encoding]::new($false))
     Write-OK "Configured -- VaultBot will call you $ownerName"
+    Set-StepDone "env_written"
 } else {
     Write-Warn2 ".env.example not found -- skipping .env creation"
+    Set-StepDone "env_written"
 }
 
 # ── 8. Done -- open Obsidian ────────────────────────────────────────────────

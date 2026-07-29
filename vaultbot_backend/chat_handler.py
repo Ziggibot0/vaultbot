@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ from agent_tools import (
     META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_prompt,
     build_system_prompt_briefing,
 )
+from chat_checkpoint import snapshot_working_memory
 
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports — no main dependency.
@@ -50,6 +52,9 @@ from chat_helpers import (
 )
 from conversation_state import save_history
 from fastapi import WebSocket
+from output_validator import corrective_message, validate_tool_call
+from plan_gate import EXPLORE_TOOLS, is_multi_step, lifts_gate, plan_mode_directive
+from procedure_surface import build_procedure_surface, status_allows_execution
 from procedure_tracker import interpret_validation_result, parse_procedures_from_results
 from services import Services
 from task_api import write_partial
@@ -82,6 +87,30 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     if not hasattr(websocket, "working_memory") or websocket.working_memory is None:
         websocket.working_memory = TaskList()
     wm = websocket.working_memory
+
+    # Chat-loop checkpoint/resume (multi-day sturdiness): if a prior turn was
+    # interrupted mid-loop (crash/restart) and left a fresh checkpoint, resume
+    # it — restore the working-memory plan and tell the model what it already
+    # did so it doesn't re-run tools. Cleared on normal completion and /new.
+    _cp = getattr(svc, "chat_checkpointer", None)
+    _resumed_tool_history: list = []
+    if _cp is not None:
+        try:
+            _prior = _cp.load()
+            if _prior and _prior.get("user_message") == user_message:
+                _resumed_tool_history = _prior.get("tool_history", []) or []
+                _wm_snap = _prior.get("working_memory") or {}
+                if _wm_snap and not wm.has_plan():
+                    try:
+                        wm.restore_snapshot(_wm_snap)
+                    except Exception:
+                        pass
+                session_logger.log("chat_checkpoint_resumed", {
+                    "round_idx": _prior.get("round_idx", 0),
+                    "tools_already_run": len(_resumed_tool_history),
+                })
+        except Exception as e:
+            session_logger.log("chat_checkpoint_resume_failed", {"error": str(e)})
 
     # Chat-priority: pause the autonomous researcher so it doesn't compete
     # with this interactive turn for the Ollama GPU. On a single-GPU laptop
@@ -287,6 +316,39 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     wm_block = wm.render_for_prompt()
     if wm_block:
         system_prompt = system_prompt + "\n\n" + wm_block
+
+    # Procedure Discovery Service: surface the COMPACT description lines for
+    # any procedures that FUSED retrieval matched for THIS query — one line
+    # each (description + when-to-use + status), NOT the full procedure body.
+    # This is the "agent only knows about the procedures it needs" insight:
+    # the model sees a one-line capability and calls execute_procedure(name),
+    # instead of reading a 3KB body and deciding. Appended to the protected
+    # briefing message [0] (rebuilt fresh each turn) so the compactor can't
+    # shred it. Empty when no procedures matched (simple Q&A) — zero tokens.
+    try:
+        _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
+        _proc_surface = build_procedure_surface(results, _proc_idx)
+        if _proc_surface:
+            system_prompt = system_prompt + "\n\n" + _proc_surface
+            session_logger.log("procedure_surface", {
+                "lines": _proc_surface.count("\n"),
+            })
+    except Exception as e:
+        session_logger.log("procedure_surface_failed", {"error": str(e)})
+
+    # If we're resuming an interrupted turn, tell the model what it already
+    # did so it continues instead of re-running tools. Compact, one line per
+    # completed tool round. Appended to the protected briefing.
+    if _resumed_tool_history:
+        _lines = ["# RESUMED TURN (you were interrupted mid-task and are "
+                  "continuing — do NOT re-run these tools, build on them):"]
+        for _h in _resumed_tool_history[-15:]:
+            if isinstance(_h, dict):
+                _lines.append(
+                    f"- round {_h.get('round', '?')}: {_h.get('tool', '?')}"
+                    f" → {_h.get('result_summary', '')[:120]}")
+        system_prompt = system_prompt + "\n\n" + "\n".join(_lines)
+
     session_logger.log("prompt_built", {
         "system_prompt_length": len(system_prompt),
         "vault_context_length": len(context),
@@ -363,6 +425,35 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     thinking_text = ""
     total_chunks = 0
     t0 = loop.time()
+    # Per-turn record of tools run this turn (for the chat-loop checkpoint).
+    # Seeded with any resumed history so a continued turn keeps its prior
+    # rounds; appended after each tool result below.
+    _turn_tool_history: list = list(_resumed_tool_history)
+
+    # DETERMINISTIC LOOP DETECTOR (Copilot/Claude "verify each step" pattern):
+    # track consecutive read-only rounds. If the model only explores
+    # (vault_search/vault_list/code_read/vault_gaps/...) for too many rounds
+    # without producing any user-facing text or making forward progress
+    # (no update_task, no plan, no writes), the framework force-breaks the
+    # loop instead of letting it spin to MAX_ROUNDS in silence — the exact
+    # "stopped dead in its tracks" failure. Deterministic, zero LLM.
+    _READ_ONLY_TOOLS = frozenset(EXPLORE_TOOLS) | {"vault_list"}
+    _consecutive_readonly = 0
+    _tool_rounds_executed = 0
+    _LAST_TEXT_ROUND = -1  # round_idx of the last round that streamed user text
+    _MAX_READ_ONLY_STREAK = int(os.getenv("VAULTBOT_MAX_READ_ONLY_STREAK", "6"))
+    _MAX_TOOL_ROUNDS_NO_PLAN = int(os.getenv("VAULTBOT_MAX_TOOL_ROUNDS_NO_PLAN", "3"))
+    _FORCE_PLAN_ON_MULTI = os.getenv("VAULTBOT_FORCE_PLAN_ON_MULTI", "on").lower() != "off"
+
+    _is_multi = bool(is_multi_step(user_message) and not _resumed_tool_history)
+
+    # PLAN-MODE GATE (Copilot/Claude Code Explore→Plan→Implement): if this
+    # turn looks multi-step and no plan exists yet, the model is restricted to
+    # read-only/explore tools until it calls plan_task. Deterministic (no LLM)
+    # via plan_gate.is_multi_step. The gate lifts the moment plan_task fires.
+    _gate_active = bool(_is_multi and not wm.has_plan())
+    if _gate_active:
+        session_logger.log("plan_gate_active", {"user_message_head": user_message[:80]})
 
     # Partial-answer crash protection: write the streamed-so-far answer to a
     # temp file so a crash mid-stream doesn't lose it. On normal completion
@@ -392,6 +483,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
      # accumulated so the user sees the partial work instead of a hang.
      MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "25"))
      while True:
+        session_logger.log("round_loop_top", {
+            "round": round_idx, "t_ms": loop.time() * 1000,
+            "conv_msgs": len(conversation),
+        })
         # Refresh the working-memory block in the system prompt every round
         # so the model always sees the current task list (with the latest
         # completed/in_progress marks). The system prompt is conversation[0];
@@ -406,6 +501,21 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 conversation[0] = {"role": "system", "content": system_prompt}
         except Exception:
             pass  # never let a wm render failure break the chat loop
+
+        # Plan-mode gate: while active (multi-step, no plan yet), overlay the
+        # plan-mode directive onto the working system message [0] so the model
+        # explores + plans before executing. This edits only conversation[0]
+        # (rebuilt every round), never appends to the shared history — so the
+        # directive never duplicates and vanishes once the gate lifts.
+        if _gate_active and not wm.has_plan():
+            try:
+                conversation[0] = {
+                    "role": "system",
+                    "content": conversation[0].get("content", "")
+                               + "\n\n" + plan_mode_directive(),
+                }
+            except Exception:
+                pass
 
         # Pre-flight hard char cap: before sending the conversation to the
         # cloud model, enforce a last-resort char cap so the payload can
@@ -456,10 +566,21 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         round_thinking = ""
         round_tool_calls = []
         chunk_count = 0
+        session_logger.log("llm_stream_start", {
+            "round": round_idx, "conv_msgs": len(conversation),
+            "conv_chars": sum(len(str(m.get("content","") or "")) for m in conversation),
+            "t_ms": loop.time() * 1000,
+        })
         try:
             def sync_stream():
+                session_logger.log("ollama_chat_call_enter", {
+                    "round": round_idx, "t_ms": time.time() * 1000,
+                })
                 for chunk in svc.ollama_client.chat(conversation, tools=all_tools, stream=True):
                     yield chunk
+                session_logger.log("ollama_chat_call_exit", {
+                    "round": round_idx, "t_ms": time.time() * 1000,
+                })
             gen = sync_stream()
             round_t0 = loop.time()
             last_chunk_at = loop.time()
@@ -520,7 +641,15 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             if round_text:
                 conversation.append({"role": "assistant", "content": round_text})
             final_answer = (final_answer + round_text).strip()
-            await svc.manager.send_personal_message(json.dumps({"type": "error", "content": f"LLM error: {e}. Partial answer preserved where possible."}), websocket, session_logger=session_logger)
+            # Translate the raw LLM error into a typed problem so the user
+            # sees a remedy card (e.g. ollama_down with a Restart hint)
+            # instead of "LLM error: <traceback>". The partial answer is
+            # still preserved above + in the partial file.
+            from diagnostics import classify_error
+            diag = classify_error(e, {"stage": "thinking"})
+            await svc.manager.send_personal_message(
+                json.dumps({"type": "problem", "diagnosis": diag.to_dict()}),
+                websocket, session_logger=session_logger)
             break
 
         session_logger.log("agent_round", {
@@ -544,6 +673,40 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             final_answer = round_text
             break
 
+        # Track the last round that streamed any user-facing text. A streak of
+        # tool rounds with NO text is the "silent spin" signature.
+        if round_text.strip():
+            _LAST_TEXT_ROUND = round_idx
+
+        # Classify this round's tool calls for the loop detector.
+        _round_tool_names = []
+        for _tc in round_tool_calls:
+            _fn = _tc.get("function", {})
+            _round_tool_names.append(_fn.get("name", ""))
+        _round_is_readonly = bool(_round_tool_names) and all(
+            n in _READ_ONLY_TOOLS for n in _round_tool_names)
+        _tool_rounds_executed += 1
+
+        # FRAMEWORK-DRIVEN PLAN (the Copilot/Claude enforcement the model can't
+        # skip): on a multi-step task, if the model has used several tool
+        # rounds WITHOUT writing a plan, the framework forces plan mode ON —
+        # it doesn't wait for the model to volunteer. This is the gap Sean's
+        # session fell into: the gate never fired on a signal-less multi-step
+        # message, so no plan meant no all_done() stop and a 20-round spin.
+        if (_FORCE_PLAN_ON_MULTI and _is_multi and not wm.has_plan()
+                and not _gate_active
+                and _tool_rounds_executed >= _MAX_TOOL_ROUNDS_NO_PLAN):
+            _gate_active = True
+            session_logger.log("plan_gate_forced", {
+                "round": round_idx, "reason": "no_plan_after_tool_rounds"})
+
+        # DETERMINISTIC LOOP DETECTOR: a read-only streak that never surfaces
+        # text or progress is a stall. Count it; break the loop below.
+        if _round_is_readonly and not round_text.strip():
+            _consecutive_readonly += 1
+        else:
+            _consecutive_readonly = 0
+
         # Accumulate non-final round text into final_answer so the partial
         # file captures all streamed text across rounds, not just the last.
         final_answer += round_text
@@ -559,6 +722,52 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 tool_args = {}
             tool_call_id = tc.get("id", tool_name)
 
+            # Output validation (deterministic scaffolding): check the model's
+            # tool args against the declared JSON schema BEFORE executing.
+            # Small models emit malformed calls (missing required, wrong types,
+            # hallucinated arg names); executing them crashes the tool or does
+            # the wrong thing silently. A malformed call is rejected with a
+            # precise corrective message so the model fixes + retries, and the
+            # broken call NEVER runs. Skipped for the JSON-decode fallback {}
+            # (already empty) — validation only fires on a parsed dict.
+            if isinstance(tool_args, dict) and tool_args:
+                _problems = validate_tool_call(tool_name, tool_args, all_tools)
+                if _problems:
+                    session_logger.log("tool_call_invalid", {
+                        "tool": tool_name, "problems": _problems,
+                        "round": round_idx})
+                    conversation.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(
+                            corrective_message(tool_name, _problems), default=str),
+                    })
+                    continue  # do NOT execute a malformed call
+
+            # Plan-mode gate enforcement: while the gate is active, only
+            # read-only/explore tools + plan_task may run. Execution tools are
+            # blocked with a corrective message so the model redirects to
+            # planning instead of mutating. plan_task LIFTS the gate.
+            if _gate_active:
+                if lifts_gate(tool_name):
+                    _gate_active = False
+                    session_logger.log("plan_gate_lifted", {"via": tool_name})
+                elif tool_name not in EXPLORE_TOOLS:
+                    session_logger.log("plan_gate_blocked", {
+                        "tool": tool_name, "round": round_idx})
+                    conversation.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps({
+                            "error": f"plan-mode: '{tool_name}' changes state and "
+                                     "cannot run before a plan exists.",
+                            "plan_mode": True,
+                            "action_required": "call plan_task with a goal + "
+                                               "steps first, then re-run this tool.",
+                        }, default=str),
+                    })
+                    continue  # skip execution; next tool call
+
             await svc.manager.send_personal_message(json.dumps({
                 "type": "tool_call", "tool": tool_name, "args": tool_args
             }), websocket, session_logger=session_logger)
@@ -567,6 +776,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             })
 
             t_tool0 = loop.time()
+            session_logger.log("tool_exec_enter", {
+                "tool": tool_name, "round": round_idx,
+                "t_ms": t_tool0 * 1000,
+            })
             try:
                 tool_result = await execute_agent_tool(
                     svc, tool_name, tool_args, session_logger, websocket,
@@ -574,6 +787,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             except Exception as e:
                 session_logger.log_exception(e, context=f"tool_{tool_name}")
                 tool_result = {"error": str(e)}
+            session_logger.log("tool_exec_exit", {
+                "tool": tool_name, "round": round_idx,
+                "duration_ms": (loop.time() - t_tool0) * 1000,
+            })
             # If the agent just created a tool, refresh the tool list so the
             # new tool is callable in the very next round.
             if tool_name == "tool_create":
@@ -624,6 +841,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "tool_call_id": tool_call_id,
                 "content": json.dumps(capped_result, default=str),
             })
+            # Record for the chat-loop checkpoint (compact summary only).
+            _turn_tool_history.append({
+                "round": round_idx,
+                "tool": tool_name,
+                "result_summary": tool_result_summary(tool_name, tool_result)[:200],
+            })
 
         # Mid-loop compaction: the agentic loop adds 2+ messages per tool
         # round (assistant + tool result). Over many rounds the conversation
@@ -634,10 +857,22 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # snowballing one. This is the fix for "read timed out" after a few
         # turns of tool use.
         if svc.compactor.should_compact(conversation):
+            _compact_t0 = loop.time()
+            session_logger.log("mid_loop_compact_enter", {
+                "round": round_idx,
+                "messages": len(conversation),
+                "tokens_est": svc.compactor.estimate_tokens(conversation),
+            })
             conversation = svc.compactor.compact(conversation)
             session_logger.log("mid_loop_compacted", {
                 "messages": len(conversation),
                 "round": round_idx,
+                "duration_ms": (loop.time() - _compact_t0) * 1000,
+            })
+        else:
+            session_logger.log("mid_loop_compact_skipped", {
+                "round": round_idx,
+                "messages": len(conversation),
             })
 
         # Deterministic stop signal (the Copilot/Claude Code pattern): if
@@ -667,6 +902,62 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # Loop back: the LLM now sees the tool results and will produce
         # either another tool call or the final answer.
         round_idx += 1
+
+        # Chat-loop checkpoint: snapshot the in-flight turn so a crash/restart
+        # resumes mid-turn. Records which tools already ran (with a short
+        # result summary) so the resumed turn builds on them instead of
+        # re-running. Best-effort — a save failure never breaks the loop.
+        if _cp is not None:
+            try:
+                _cp.save({
+                    "user_message": user_message,
+                    "round_idx": round_idx,
+                    "accumulated": final_answer,
+                    "thinking": thinking_text,
+                    "tool_history": _turn_tool_history,
+                    "working_memory": snapshot_working_memory(wm),
+                })
+            except Exception as e:
+                session_logger.log("chat_checkpoint_save_failed", {"error": str(e)})
+
+        # DETERMINISTIC LOOP DETECTOR — hard break. If the model has spent a
+        # long streak ONLY on read-only/explore tools, produced no user-facing
+        # text, and isn't checking off plan steps, it is spinning, not working.
+        # Copilot/Claude break out here via a "did the step complete?" check
+        # instead of burning to the round cap in silence. Break and synthesize
+        # whatever was gathered so Sean gets an answer, not a freeze.
+        _no_progress = (not wm.has_plan()) or (wm.snapshot().get("completed", 0) == 0)
+        _silent_streak = (round_idx - _LAST_TEXT_ROUND)
+        if (_consecutive_readonly >= _MAX_READ_ONLY_STREAK
+                and _no_progress and _silent_streak >= _MAX_READ_ONLY_STREAK):
+            session_logger.log("loop_detector_break", {
+                "round": round_idx,
+                "consecutive_readonly": _consecutive_readonly,
+                "silent_streak": _silent_streak,
+                "final_answer_len": len(final_answer),
+            })
+            await svc.manager.send_personal_message(json.dumps({
+                "type": "status",
+                "content": ("I was re-reading the vault without making progress, "
+                            "so I stopped the loop. Here's what I found."),
+            }), websocket, session_logger=session_logger)
+            conversation.append({
+                "role": "system",
+                "content": (
+                    "STOP calling tools. You have been re-reading the vault for "
+                    f"{_consecutive_readonly} rounds without new findings. "
+                    "Synthesize a final answer NOW from what you already have. "
+                    "If the vault genuinely lacks the answer, say so plainly and "
+                    "suggest ONE concrete next step (e.g. vault_research on a "
+                    "specific topic). Do NOT call another read-only tool."),
+            })
+            if not final_answer.strip():
+                final_answer = (
+                    "I dug through the vault but kept circling without finding "
+                    "enough to answer confidently, so I stopped rather than keep "
+                    "spinning. Tell me the specific note/topic to research and "
+                    "I'll run a targeted `vault_research` on it.")
+            break
 
         # Hard round cap: if the model keeps calling tools without
         # converging on a final answer, break out and return what we have.
@@ -715,6 +1006,13 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     })
 
     await svc.manager.send_personal_message(json.dumps({"type": "answer_done", "content": final_answer}), websocket, session_logger=session_logger)
+    # Turn completed normally — clear the chat-loop checkpoint so a stale
+    # in-flight snapshot isn't resumed next session.
+    if _cp is not None:
+        try:
+            _cp.clear()
+        except Exception:
+            pass
     # Refresh the token meter after the full turn: tool rounds added
     # assistant + tool messages, so the window is now fuller than the
     # pre-loop estimate. Best-effort, never blocks.
@@ -1105,19 +1403,89 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
     # Module-level imports from chat_helpers, weaving — no longer deferred
     # from main (circular dependency eliminated).
     loop = asyncio.get_event_loop()
+    session_logger.log("execute_agent_tool_body_start", {
+        "tool": tool_name, "t_ms": loop.time() * 1000,
+    })
 
     if tool_name == "vault_research":
         topic = (args.get("topic") or "").strip()
         depth = args.get("depth", "deep")
         if not topic:
             return {"error": "missing topic"}
+
+        # SUBAGENT CONTEXT ISOLATION (Copilot runSubagent / Claude subagent
+        # pattern): run the full dig + note creation in a SEPARATE PROCESS so
+        # the verbose work (1900+ source-rejection events, scrapes, a 50K
+        # synthesis) never enters the orchestrator's conversation. The
+        # subprocess prints ONLY a compact JSON brief to stdout; the chat
+        # loop gets one bounded tool result, not a flood. The full synthesis
+        # stays on disk in the created note — re-readable via vault_search /
+        # web_read_source. See subagent.py.
+        #
+        # Fallback: if VAULTBOT_SUBAGENT=off (or the import fails), the
+        # in-process path runs below. It still distills the report to a
+        # bounded brief before returning, so the conversation never balloons
+        # either way. The subagent path is strictly safer (hard process
+        # isolation); the in-process path is the safety net.
+        try:
+            from subagent import subagent_enabled, run_research_subagent
+            _use_subagent = subagent_enabled()
+        except Exception:
+            _use_subagent = False
+
+        if _use_subagent:
+            session_logger.log("subagent_research_invoked", {"topic": topic[:80]})
+            # Emit heartbeats while the subprocess runs — the child can't send
+            # websocket events (it's a separate process), so the orchestrator
+            # keeps the UI alive with the existing run_with_heartbeat pattern.
+            t_sub = loop.time()
+            try:
+                brief = await run_with_heartbeat(
+                    svc, websocket, f"research{topic[:40]}",
+                    run_research_subagent, topic, depth, session_logger)
+            except Exception as e:
+                session_logger.log_exception(e, context="subagent_research")
+                brief = {"status": "error",
+                          "error": f"subagent research failed: {e}",
+                          "subagent": True}
+            # The subagent already created + indexed the note. Refresh the
+            # orchestrator's in-memory graph so subsequent rounds see it
+            # (the child's indexer is its own instance).
+            try:
+                await loop.run_in_executor(None, svc.vault_graph.refresh)
+            except Exception as e:
+                session_logger.log("post_subagent_graph_refresh_failed",
+                                    {"error": str(e)})
+            session_logger.log("subagent_research_complete", {
+                "duration_ms": int((loop.time() - t_sub) * 1000),
+                "status": brief.get("status"),
+                "source_count": brief.get("source_count", 0),
+                "note_path": brief.get("note_path"),
+            })
+            # Normalize: an empty-status brief becomes an error so the model
+            # doesn't treat a no-sources dig as a real result.
+            if brief.get("status") == "empty":
+                brief["error"] = brief.get("error", "no web sources found")
+            # Attach the goal hint so the agent can decide whether to record
+            # this research against a larger task (same hint as the
+            # in-process path — the subagent is stateless and can't call
+            # set_goal itself).
+            brief["goal_hint"] = (
+                "If this research advances a multi-step task, consider "
+                "calling set_goal to record the current goal + next step "
+                "so you stay on track across turns. If this was a one-off, "
+                "ignore this."
+            )
+            return brief
+
+        # --- In-process fallback (VAULTBOT_SUBAGENT=off or import fail) ---
+        # Kept as a safety net. Still distills the report to a bounded brief
+        # so the conversation never balloons. The subagent path above is
+        # preferred (hard isolation); this path shares the loop.
         if depth == "quick":
             svc.research_engine.max_rounds = 1
             svc.research_engine.max_follow_ups = 0
 
-        # Live progress: the research engine calls back from a worker thread
-        # at each stage. We marshal those into websocket sends on the loop so
-        # the UI shows "round 2/4, 12 sources…" instead of a black box.
         prev_cb = svc.research_engine.progress_callback
         if websocket is not None:
             def _progress_cb(stage: str, detail: dict):
@@ -1171,12 +1539,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                         skip_refresh=True))
             except Exception as e:
                 session_logger.log("amem_evolve_failed", {"error": str(e)})
-        # Goal hint: after a research pass, nudge the agent to consider
-        # whether this research was part of a larger task that should be
-        # reflected in GOALS.md. This is a HINT in the tool result, not a
-        # forced action — the LLM reads it and decides whether to call
-        # set_goal. If there's nothing to update, it ignores the hint and
-        # moves on. No heuristic, no automatic goal mutation.
+        # Goal hint (same as the subagent path).
         if isinstance(report, dict):
             report["goal_hint"] = (
                 "If this research advances a multi-step task, consider "
@@ -1184,6 +1547,40 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                 "so you stay on track across turns. If this was a one-off, "
                 "ignore this."
             )
+        # Distill the full report to a compact brief before returning so the
+        # conversation never balloons (the in-process path doesn't have hard
+        # isolation, so this is the bound). Same brief shape as the subagent
+        # path so the chat loop + truncate_tool_result work unchanged.
+        if isinstance(report, dict):
+            try:
+                _syn = str(report.get("synthesis", "") or "")
+                _facts = report.get("synthesis_facts") or []
+                if isinstance(_facts, list):
+                    _facts_txt = "\n".join(f"- {str(f)[:300]}" for f in _facts[:8])
+                else:
+                    _facts_txt = str(_facts)[:1500]
+                report = {
+                    "topic": report.get("topic"),
+                    "source_count": report.get("source_count", 0),
+                    "note_path": report.get("note_path"),
+                    "synthesis_brief": _syn[:1500] + (
+                        "\n*[... full synthesis in the note at note_path ...]*"
+                        if len(_syn) > 1500 else ""),
+                    "key_facts": _facts_txt,
+                    "subagent_note": (
+                        "Verbose dig output kept OUT of context (subagent "
+                        "isolation). Full synthesis is in the created note; "
+                        "re-read it via vault_research/web_read_source if you "
+                        "need a specific detail."),
+                    "goal_hint": report.get("goal_hint", ""),
+                }
+                session_logger.log("subagent_result_distilled", {
+                    "tool": "vault_research",
+                    "orig_synthesis_chars": len(_syn),
+                    "brief_chars": len(report.get("synthesis_brief", "")),
+                })
+            except Exception:
+                pass  # distillation is best-effort; never break the tool
         return report
 
     if tool_name == "vault_search":
@@ -1286,6 +1683,30 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         if not proc_file:
             return {"error": f"procedure not found: {proc_name}"}
 
+        # --- Execution gate (extra-safe): check the procedure's status BEFORE
+        # running it. verified -> run clean; experimental -> run with a caution
+        # note; flagged -> BLOCK and route to re-research. This is the
+        # deterministic trust layer: a procedure that repeatedly failed
+        # validation is never executed, no matter how confidently the model
+        # asks for it. See procedure_surface.status_allows_execution.
+        try:
+            _idx = getattr(svc.procedure_tracker, "_stem_index", None) or {}
+            _entry = _idx.get(proc_name) or {}
+            _status = str((_entry.get("frontmatter") or {}).get("status", ""))
+            _allowed, _gate_reason = status_allows_execution(_status)
+            if not _allowed:
+                session_logger.log("procedure_blocked", {
+                    "procedure": proc_name, "status": _status})
+                return {
+                    "error": f"procedure blocked: {proc_name}",
+                    "status": _status or "unknown",
+                    "reason": _gate_reason,
+                    "blocked": True,
+                }
+            _proc_caution = (_gate_reason == "experimental")
+        except Exception:
+            _proc_caution = False  # gate failure must not block execution
+
         proc = _compile_proc(str(proc_file))
         if not proc:
             return {"error": f"not a procedure note: {proc_name}"}
@@ -1326,6 +1747,10 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             "steps_executed": len(result.steps),
             "final_output": result.final_output[:4000],
             "child_procedures": result.child_procedures,
+            # Surface the trust level so the model weighs the output
+            # accordingly (an experimental procedure's result is provisional).
+            "caution": ("experimental — unproven procedure; verify the "
+                        "output before relying on it" if _proc_caution else ""),
             "step_details": [
                 {"step": sr.step_number, "type": sr.step_type,
                  "passed": sr.passed,
@@ -1392,6 +1817,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
     # prompt every round (see handle_chat). This is how the agent stays on
     # track instead of losing the plot to compaction.
     if tool_name == "plan_task":
+        session_logger.log("plan_task_branch_enter", {"t_ms": loop.time() * 1000})
         wm = getattr(websocket, "working_memory", None)
         if wm is None:
             wm = TaskList()
@@ -1403,6 +1829,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         snap = wm.set_plan(goal=goal, items=[s for s in steps if s.strip()])
         session_logger.log("plan_task_set", {
             "goal": goal[:100], "steps": len(steps)})
+        session_logger.log("plan_task_branch_exit", {"t_ms": loop.time() * 1000})
         return snap
 
     if tool_name == "update_task":

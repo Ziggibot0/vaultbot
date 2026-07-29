@@ -341,6 +341,7 @@
 	display: flex;
 	align-items: stretch;
 	gap: 8px;
+	position: relative;  /* positioning context for the slash-command dropdown */
 }
 
 .vaultbot-chat-bar .vaultbot-input {
@@ -439,33 +440,6 @@
 .vaultbot-btn-quiet:hover {
 	background-color: var(--vb-moss-soft);
 	background-image: linear-gradient(180deg, var(--vb-moss-soft) 0%, var(--vb-moss-soft) 100%);
-}
-
-/* Recording state: a warm clay-red pulse */
-.vaultbot-btn.vaultbot-recording {
-	background-color: #a83c2a;
-	background-image: linear-gradient(180deg, #c45a44 0%, #a83c2a 100%);
-	border-color: #8a2f20;
-	animation: vaultbot-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes vaultbot-pulse {
-	0%, 100% { box-shadow: 0 0 0 0 rgba(168, 60, 42, 0.5); }
-	50%      { box-shadow: 0 0 0 6px rgba(168, 60, 42, 0); }
-}
-
-/* Mute pressed (active): a darker, "engaged" clay so the user can tell at
-   a glance that voice is off. The toggle persists across turns/sessions. */
-.vaultbot-btn.vaultbot-mute-active {
-	background-color: #8a4a30;
-	background-image: linear-gradient(180deg, #a35a3e 0%, #8a4a30 100%);
-	border-color: #6e3a26;
-	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
-}
-
-.vaultbot-btn.vaultbot-mute-active:hover {
-	background-color: #a35a3e;
-	background-image: linear-gradient(180deg, #a35a3e 0%, #8a4a30 100%);
 }
 
 /* Restart busy / offline: stay dark until the backend is confirmed back up.
@@ -695,3 +669,458 @@
 	text-decoration: underline;
 	cursor: pointer;
 }
+
+/* =========================================================================
+   Problem cards — the humane error surface
+   A typed Diagnosis (see backend diagnostics.py) renders as a styled card
+   instead of a raw "Error: <traceback>" bubble. Three severity variants
+   reuse the earth-tone palette:
+     info    → moss  (calm; often auto-resolves, e.g. voice downloading)
+     fixable → clay  (amber; the user can do something right now)
+     broken  → bark  (red-brown; needs intervention / support)
+   ========================================================================= */
+.vaultbot-message.system.problem {
+	align-self: stretch;          /* full-width, not a chat bubble */
+	margin: 8px 0;
+	padding: 0;
+	border-radius: 10px;
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-stone);
+	border-left-width: 4px;
+	box-shadow: 0 1px 3px var(--vb-shadow-soft);
+}
+
+/* Severity accent stripe + icon tint */
+.vaultbot-message.problem.severity-info    { border-left-color: var(--vb-moss); }
+.vaultbot-message.problem.severity-fixable { border-left-color: var(--vb-clay); }
+.vaultbot-message.problem.severity-broken  { border-left-color: var(--vb-bark); }
+
+.vaultbot-problem-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 10px 12px 4px 12px;
+}
+
+.vaultbot-problem-icon {
+	font-size: 1.15em;
+	line-height: 1.2;
+	flex: 0 0 auto;
+}
+
+.vaultbot-problem-title {
+	flex: 1 1 auto;
+	color: var(--vb-ink);
+	font-weight: 500;
+	line-height: 1.4;
+}
+
+.vaultbot-problem-remedy {
+	padding: 0 12px 4px 34px;     /* indent past the icon */
+	color: var(--vb-ink-muted);
+	font-size: 0.9em;
+	line-height: 1.45;
+}
+
+.vaultbot-problem-actions {
+	display: flex;
+	gap: 8px;
+	padding: 8px 12px 10px 12px;
+	flex-wrap: wrap;
+}
+
+.vaultbot-problem-actions button {
+	font-size: 0.88em;
+	padding: 4px 12px;
+	border-radius: 8px;
+}
+
+.vaultbot-problem-actions .vaultbot-btn-quiet {
+	background-color: transparent;
+	border: 1px solid var(--vb-stone);
+	color: var(--vb-ink-muted);
+}
+
+/* System info bubble (non-error: /help, "all healthy") — quiet + moss */
+.vaultbot-message.system.info {
+	align-self: stretch;
+	margin: 6px 0;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background-color: var(--vb-bg-elev);
+	border-left: 3px solid var(--vb-moss);
+	color: var(--vb-ink-muted);
+	font-size: 0.9em;
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+/* =========================================================================
+   Typed status line — Phase 2
+   setStatus(kind, text, action) swaps a color class per kind so the user
+   can tell at a glance whether things are fine (online/moss), starting
+   (starting/moss-soft), down (offline/clay), or broken (error/bark).
+   Only offline/error carry a click action, so pure status never looks
+   clickable.
+   ========================================================================= */
+.vaultbot-status.vaultbot-status-online {
+	color: var(--vb-moss);
+}
+.vaultbot-status.vaultbot-status-starting {
+	color: var(--vb-moss-soft);
+}
+.vaultbot-status.vaultbot-status-offline {
+	color: var(--vb-clay);
+	font-weight: 500;
+}
+.vaultbot-status.vaultbot-status-error {
+	color: var(--vb-bark);
+	font-weight: 500;
+}
+.vaultbot-status.vaultbot-status-done {
+	color: var(--vb-ink-muted);
+}
+
+/* =========================================================================
+   Diagnose button + footer cluster — Phase 2
+   The Diagnose button sits in the moss (quiet) group next to Restart so
+   the user's two recovery affordances are visually paired. It uses the
+   same quiet-button styling as Restart for consistency.
+   ========================================================================= */
+.vaultbot-btn-diagnose {
+	/* Inherits vaultbot-btn-quiet; this just adds a subtle leaf tint so
+	   it reads as "health check" not "another action". */
+	font-size: 0.88em;
+}
+.vaultbot-btn-diagnose:hover {
+	border-color: var(--vb-moss);
+}
+
+/* =========================================================================
+   History disclosure — Phase 2
+   A collapsible panel below the header listing recent conversations so
+   a closed/reopened Obsidian doesn't feel like data loss. Items are
+   read-only; clicking loads the turns into the chat panel.
+   ========================================================================= */
+.vaultbot-history-toggle {
+	margin-top: 4px;
+	font-size: 0.8em;
+	color: var(--vb-ink-muted);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: 6px;
+	transition: background-color 0.15s ease;
+}
+.vaultbot-history-toggle:hover {
+	background-color: var(--vb-sand-deep);
+	color: var(--vb-ink);
+}
+
+.vaultbot-history-panel {
+	flex: 0 0 auto;
+	max-height: 220px;
+	overflow-y: auto;
+	margin-bottom: 8px;
+	padding: 4px 8px;
+	border-radius: 8px;
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-sand-deep);
+	box-shadow: 0 1px 2px var(--vb-shadow-soft);
+}
+
+.vaultbot-history-item {
+	display: flex;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	cursor: pointer;
+	align-items: baseline;
+	transition: background-color 0.12s ease;
+}
+.vaultbot-history-item:hover {
+	background-color: var(--vb-sand-deep);
+}
+
+.vaultbot-history-time {
+	flex: 0 0 auto;
+	font-size: 0.78em;
+	color: var(--vb-ink-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.vaultbot-history-preview {
+	flex: 1 1 auto;
+	font-size: 0.85em;
+	color: var(--vb-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.vaultbot-history-empty {
+	padding: 10px 8px;
+	font-size: 0.85em;
+	color: var(--vb-ink-muted);
+	font-style: italic;
+}
+
+/* =========================================================================
+   Setup wizard checklist — Phase 3
+   The Finish-setup wizard calls /preflight and shows a tailored checklist
+   of what's missing (Python, Ollama, venv) with per-item download buttons,
+   instead of a generic one-liner modal. Items use the problem-card
+   severity icons (⚠️ broken, ⚙️ fixable).
+   ========================================================================= */
+.vaultbot-setup-checklist {
+	margin: 8px 0;
+}
+
+.vaultbot-setup-checking {
+	font-size: 0.9em;
+	color: var(--vb-ink-muted);
+	font-style: italic;
+	padding: 4px 0;
+}
+
+.vaultbot-setup-ok {
+	font-size: 0.9em;
+	color: var(--vb-moss);
+	padding: 4px 0;
+}
+
+.vaultbot-setup-item {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	padding: 10px 12px;
+	margin: 6px 0;
+	border-radius: 8px;
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-sand-deep);
+	border-left: 3px solid var(--vb-clay);
+}
+
+.vaultbot-setup-item-icon {
+	flex: 0 0 auto;
+	font-size: 1.1em;
+	line-height: 1.3;
+}
+
+.vaultbot-setup-item-text {
+	flex: 1 1 auto;
+}
+
+.vaultbot-setup-item-msg {
+	color: var(--vb-ink);
+	font-size: 0.9em;
+	line-height: 1.4;
+}
+
+.vaultbot-setup-item-remedy {
+	color: var(--vb-ink-muted);
+	font-size: 0.82em;
+	margin-top: 4px;
+	line-height: 1.4;
+}
+
+/* =========================================================================
+   Model download modal — Phase 4
+   The "No models yet" state shows a download modal with recommended models.
+   Each item has a label, description, size, progress bar, and Download button.
+   ========================================================================= */
+.vaultbot-pull-list {
+	margin: 8px 0;
+}
+
+.vaultbot-pull-item {
+	padding: 12px;
+	margin: 8px 0;
+	border-radius: 8px;
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-sand-deep);
+}
+
+.vaultbot-pull-label {
+	font-weight: 500;
+	color: var(--vb-ink);
+	font-size: 0.95em;
+}
+
+.vaultbot-pull-desc {
+	color: var(--vb-ink-muted);
+	font-size: 0.85em;
+	margin-top: 4px;
+	line-height: 1.4;
+}
+
+.vaultbot-pull-size {
+	color: var(--vb-moss);
+	font-size: 0.8em;
+	margin-top: 2px;
+}
+
+.vaultbot-pull-status {
+	font-size: 0.82em;
+	color: var(--vb-ink-muted);
+	margin-top: 4px;
+	min-height: 1em;
+}
+
+/* =========================================================================
+   Slash-command dropdown — Phase 4
+   Typing "/" in the input shows a dropdown of available commands with
+   their descriptions. Selecting one fills the input.
+   ========================================================================= */
+.vaultbot-cmd-dropdown {
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	right: 0;
+	max-height: 200px;
+	overflow-y: auto;
+	background-color: var(--vb-bg-elev);
+	border: 1px solid var(--vb-stone);
+	border-radius: 8px 8px 0 0;
+	box-shadow: 0 -2px 8px var(--vb-shadow);
+	z-index: 100;
+}
+
+.vaultbot-cmd-item {
+	display: flex;
+	gap: 12px;
+	padding: 8px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--vb-sand-deep);
+	align-items: baseline;
+	transition: background-color 0.12s ease;
+}
+.vaultbot-cmd-item:last-child {
+	border-bottom: none;
+}
+.vaultbot-cmd-item:hover {
+	background-color: var(--vb-sand-deep);
+}
+
+.vaultbot-cmd-name {
+	flex: 0 0 auto;
+	font-family: var(--font-monospace);
+	font-size: 0.88em;
+	color: var(--vb-clay);
+	font-weight: 500;
+}
+
+.vaultbot-cmd-desc {
+	flex: 1 1 auto;
+	font-size: 0.82em;
+	color: var(--vb-ink-muted);
+}
+
+/* =========================================================================
+   Configuration status panel — Phase 5
+   Shows the effective value + source (.env / panel / default) for each
+   user-facing config key. Conflicts (.env and panel disagree) are shown
+   with a clay warning badge so the user can see which source is "winning".
+   ========================================================================= */
+.vaultbot-config-status {
+	margin: 8px 0;
+	padding: 4px 0;
+}
+
+.vaultbot-config-checking {
+	font-size: 0.85em;
+	color: var(--vb-ink-muted);
+	font-style: italic;
+}
+
+.vaultbot-config-offline {
+	font-size: 0.85em;
+	color: var(--vb-clay);
+}
+
+.vaultbot-config-row {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	padding: 4px 8px;
+	border-radius: 6px;
+	font-size: 0.85em;
+	line-height: 1.5;
+}
+.vaultbot-config-row:hover {
+	background-color: var(--vb-sand-deep);
+}
+
+.vaultbot-config-conflict {
+	background-color: rgba(192, 116, 74, 0.08);
+	border-left: 3px solid var(--vb-clay);
+}
+
+.vaultbot-config-label {
+	flex: 0 0 140px;
+	color: var(--vb-bark-soft);
+	font-weight: 500;
+}
+
+.vaultbot-config-value {
+	flex: 1 1 auto;
+	color: var(--vb-ink);
+	font-family: var(--font-monospace);
+	font-size: 0.9em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.vaultbot-config-source {
+	flex: 0 0 auto;
+	font-size: 0.75em;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-weight: 500;
+}
+.vaultbot-config-source-env_file {
+	background-color: var(--vb-moss-soft);
+	color: var(--vb-bg);
+}
+.vaultbot-config-source-runtime {
+	background-color: var(--vb-clay-soft);
+	color: var(--vb-bg);
+}
+.vaultbot-config-source-default {
+	background-color: var(--vb-stone);
+	color: var(--vb-ink-muted);
+}
+
+.vaultbot-config-warn {
+	flex: 0 0 auto;
+	font-size: 0.78em;
+	color: var(--vb-clay);
+	white-space: nowrap;
+}
+
+/* Advanced disclosure (Backend URL) — Phase 5 */
+.vaultbot-advanced {
+	margin-top: 16px;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 8px;
+}
+.vaultbot-advanced-summary {
+	cursor: pointer;
+	font-size: 0.9em;
+	color: var(--vb-ink-muted);
+	font-weight: 500;
+	padding: 4px 0;
+}
+.vaultbot-advanced-summary:hover {
+	color: var(--vb-ink);
+}
+
+/* =========================================================================
+   Directives + Voice sections — Phase 6
+   The directives panel uses Obsidian's built-in Setting component (already
+   styled), so only the section descriptions need minimal styling. The voice
+   progress card reuses the Phase 1 problem-card styles (severity-info).
+   ========================================================================= */

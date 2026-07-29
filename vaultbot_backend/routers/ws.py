@@ -18,6 +18,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app_state import get_services
+from diagnostics import classify_error
 from services import Services
 from session_logger import SessionLogger
 from chat_handler import handle_chat
@@ -113,6 +114,12 @@ async def websocket_endpoint(websocket: WebSocket,
                 session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
             except Exception as e:
                 session_logger.log_exception(e, context="auto_resume")
+                # Surface auto-resume failures as a typed problem so the
+                # UI shows a remedy card, not a raw "Server error: …".
+                diag = classify_error(e, {"stage": "resuming after restart"})
+                await svc.manager.send_personal_message(
+                    json.dumps({"type": "problem", "diagnosis": diag.to_dict()}),
+                    websocket, session_logger=session_logger)
             finally:
                 try:
                     svc.autonomous_researcher.resume_after_chat()
@@ -174,6 +181,86 @@ async def websocket_endpoint(websocket: WebSocket,
                 }), websocket, session_logger=session_logger)
                 continue
 
+            # ── Slash-command surface ──────────────────────────────────
+            # Discoverable in-product via the frontend's "/" dropdown; the
+            # backend is the single source of truth for what commands do.
+            # Unknown "/foo" is intercepted here and answered with the
+            # help text — it NEVER reaches the LLM as a normal message
+            # (a non-tech user typing "/cleer" shouldn't get a hallucinated
+            # reply). Only known commands are recognized; anything else
+            # starting with "/" gets the friendly "try /help" nudge.
+            if msg_type == "chat":
+                cmd = user_message.strip().lower()
+                if cmd == "/help":
+                    await svc.manager.send_personal_message(json.dumps({
+                        "type": "system_info",
+                        "content": (
+                            "Commands you can type here:\n"
+                            "  /new     — start a fresh conversation\n"
+                            "  /clear   — clear the chat window (keeps history)\n"
+                            "  /stop    — stop what I'm doing (same as the Stop button)\n"
+                            "  /diagnose — run a health check and show any problems\n"
+                            "  /help    — show this list"
+                        ),
+                    }), websocket, session_logger=session_logger)
+                    continue
+                if cmd == "/clear":
+                    # Clear the on-screen chat only (history persists). The
+                    # frontend handles the visual wipe; this ack keeps the
+                    # channel in sync.
+                    await svc.manager.send_personal_message(json.dumps({
+                        "type": "session_reset",
+                        "content": "Chat cleared. Your history is saved — I still remember our conversation.",
+                    }), websocket, session_logger=session_logger)
+                    continue
+                if cmd == "/stop":
+                    task = getattr(websocket, "_current_task", None)
+                    if task and not task.done():
+                        task._stopped_by_user = True
+                        task.cancel()
+                    await svc.manager.send_personal_message(
+                        json.dumps({"type": "stopped", "content": "Interrupted"}),
+                        websocket)
+                    continue
+                if cmd == "/diagnose":
+                    # Run the proactive battery + stream results as problem
+                    # cards. Reuses the same check battery as the /diagnose
+                    # endpoint so there's one path for button + command.
+                    try:
+                        from routers.system import _run_diagnose_checks
+                        problems = [d.to_dict()
+                                    for d in _run_diagnose_checks(svc)]
+                        if not problems:
+                            await svc.manager.send_personal_message(
+                                json.dumps({"type": "system_info",
+                                            "content": "Everything looks healthy. No problems found."}),
+                                websocket, session_logger=session_logger)
+                        else:
+                            for p in problems:
+                                await svc.manager.send_personal_message(
+                                    json.dumps({"type": "problem", "diagnosis": p}),
+                                    websocket, session_logger=session_logger)
+                    except Exception as diag_err:
+                        session_logger.log_exception(
+                            diag_err, context="/diagnose command")
+                        await svc.manager.send_personal_message(
+                            json.dumps({"type": "problem",
+                                        "diagnosis": classify_error(
+                                            diag_err, {"stage": "diagnose"}
+                                        ).to_dict()}),
+                            websocket, session_logger=session_logger)
+                    continue
+                if cmd.startswith("/") and cmd not in ("/new",):
+                    # Unknown slash command: nudge, don't hallucinate.
+                    await svc.manager.send_personal_message(json.dumps({
+                        "type": "system_info",
+                        "content": (
+                            f"Unknown command \"{cmd}\". Type /help to see "
+                            "what's available."
+                        ),
+                    }), websocket, session_logger=session_logger)
+                    continue
+
             if not user_message:
                 session_logger.log("empty_message", {"payload": payload})
                 continue
@@ -207,8 +294,15 @@ async def websocket_endpoint(websocket: WebSocket,
                                 websocket)
                     except Exception as e:
                         session_logger.log_exception(e, context=f"handle_{msg_type}")
+                        # Translate the raw exception into a typed, user-
+                        # facing Diagnosis. The frontend renders a remedy
+                        # card; the raw repr stays only in backend.log via
+                        # log_exception above. This is the "classify at the
+                        # edge" rule: no stack trace reaches the chat UI.
+                        diag = classify_error(e, {"stage": msg_type})
                         await svc.manager.send_personal_message(
-                            json.dumps({"type": "error", "content": f"Server error: {e}"}),
+                            json.dumps({"type": "problem",
+                                        "diagnosis": diag.to_dict()}),
                             websocket)
                     finally:
                         # Chat-priority: always release the researcher pause.

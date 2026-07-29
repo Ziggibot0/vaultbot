@@ -144,20 +144,27 @@ class RAGEvaluator:
 
     @staticmethod
     def _normalize_note(note: str) -> str:
-        """Normalize a note identifier for comparison.
+        """Normalize a note identifier to its comparable STEM.
 
-        Strips path prefixes, normalizes case, removes .md extension.
-        Handles both relative (07-Research/X.md) and absolute
-        (C:/Users/.../07-Research/X.md) paths so ground truth
-        and retrieved results match regardless of path format.
+        Notes are identified by their basename (the wikilink stem), not their
+        directory path — a wikilink ``[[No-Wikipedia-Directive]]`` resolves to
+        the note regardless of which folder it lives in. So comparison must
+        strip ALL directory components, not just a few known prefixes.
+
+        Handles every form the pipeline produces:
+          - bare stem:            "No-Wikipedia-Directive"
+          - relative path:        "00-Identity/No-Wikipedia-Directive.md"
+          - absolute path:        "C:/Vault/00-Identity/No-Wikipedia-Directive.md"
+          - forward/back slashes on Windows
+        All normalize to "no-wikipedia-directive".
+
+        Without the basename strip, ground truth stored as a stem never
+        matches a retrieved path in a subfolder (most of the vault), so
+        recall@k would read 0 even when retrieval is correct.
         """
-        n = note.replace("\\", "/").lower()
-        # Find the last known prefix and take everything after it
-        for prefix in ["vaultbot/", "vaultbot_backend/", "learningmaterial/"]:
-            idx = n.rfind(prefix)
-            if idx >= 0:
-                n = n[idx + len(prefix):]
-                break
+        n = note.replace("\\", "/").lower().strip()
+        # Strip every directory component — keep only the basename.
+        n = n.rsplit("/", 1)[-1]
         if n.endswith(".md"):
             n = n[:-3]
         return n.strip()

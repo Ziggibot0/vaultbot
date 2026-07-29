@@ -10,14 +10,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ─── OpenMP conflict guard ──────────────────────────────────────────────────
-# faster-whisper (CTranslate2) ships libomp140.dll while faiss/torch/onnxruntime
-# ship libiomp5md.dll. When both load in one process (e.g. /stt runs whisper
-# after faiss/onnxruntime are already loaded), OpenMP init crashes the whole
-# backend. This must be set BEFORE any numpy/torch/faiss import. The official
-# workaround per the OMP error message.
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
 import uvicorn
 from amem_evolution import AMemeEvolution
 from autonomous_researcher import AutonomousResearcher
@@ -59,10 +51,6 @@ from context_budgeter import ContextBudgeter
 from pattern_extractor import PatternExtractor
 from procedure_tracker import ProcedureTracker
 from rag_eval import RAGEvaluator
-from speech import list_voices as tts_voices
-from speech import set_logger as speech_set_logger
-from speech import synthesize as tts_synthesize
-from speech import transcribe as stt_transcribe
 
 # Load environment variables from the parent directory (Vault2 root).
 # override=True ensures .env values win over any stale env passed by the
@@ -291,7 +279,6 @@ app.add_middleware(
 
 # Default global session logger for startup/shutdown and background tasks.
 default_session_logger = SessionLogger()
-speech_set_logger(default_session_logger)
 
 # Initialize the synthesis LLM client. This is the ONLY step that spends
 # tokens, so it's the one swappable surface: local Ollama (free, private,
@@ -434,6 +421,16 @@ fused_retriever = FusedRetriever(
     embedding_drift=embedding_drift,
     session_logger=default_session_logger)
 
+# Chat-loop checkpoint/resume (multi-day sturdiness): snapshots an in-flight
+# agentic turn (round idx, tool history, working memory, partial answer) so a
+# crash/restart RESUMES mid-turn instead of restarting it. Distinct from the
+# research `checkpointer` (which snapshots the autonomous researcher's gap
+# list). One file, atomic writes, cleared on normal completion.
+from chat_checkpoint import ChatLoopCheckpointer
+chat_checkpointer = ChatLoopCheckpointer(
+    state_path=Path(__file__).with_name("chat_loop_checkpoint.json"),
+    session_logger=default_session_logger)
+
 # Context compactor (OpenHands Condenser pattern): summarizes conversation
 # middle when history grows too long, preventing context overflow on long
 # chats without losing the thread. Thresholds are lowered from the defaults
@@ -464,7 +461,19 @@ health_monitor = HealthMonitor(session_logger=default_session_logger)
 # Context budgeter: ensures retrieved vault context fits within the model's
 # token budget. Pure deterministic -- truncates from the end (lowest-priority
 # detail) if context would overflow. See [[Context-Budgeting-for-Vault-Growth]].
-context_budgeter = ContextBudgeter()
+# Resolve the model's ACTUAL context window (queries Ollama /api/show) instead
+# of hardcoding 32768 — with a large-window model (glm-5.2:cloud = 128K+), a
+# 32K assumption made the budgeter shrink the retrieved context to a useless
+# stub while the REAL flood came from the un-budgeted 49K legacy fallback.
+# Fallback to 128K (not 32K) on failure so a probe error can't silently
+# re-shrink context.
+_ctx_limit = 0
+try:
+    _ctx_limit = ollama_client.context_window() or 0
+except Exception:
+    _ctx_limit = 0
+context_budgeter = ContextBudgeter(
+    model_context_limit=_ctx_limit or int(os.getenv("VAULTBOT_CONTEXT_LIMIT", "131072")))
 
 # Calibration tracker: uses Sean's corrections as ground truth to calibrate
 # automated quality gates (vault_lint, procedure_tracker, etc.).
@@ -572,6 +581,7 @@ svc = Services(
     claim_verifier=claim_verifier,
     pattern_extractor=pattern_extractor,
     session_logger=default_session_logger,
+    chat_checkpointer=chat_checkpointer,
     manager=manager,
 )
 
@@ -607,7 +617,6 @@ from routers import system as _system_router
 from routers import llm as _llm_router
 from routers import config as _config_router
 from routers import research as _research_router
-from routers import voice as _voice_router
 from routers import autonomous as _autonomous_router
 from routers import custom_tools as _custom_tools_router
 from routers import task as _task_router
@@ -617,7 +626,6 @@ app.include_router(_system_router.router)
 app.include_router(_llm_router.router)
 app.include_router(_config_router.router)
 app.include_router(_research_router.router)
-app.include_router(_voice_router.router)
 app.include_router(_autonomous_router.router)
 app.include_router(_custom_tools_router.router)
 app.include_router(_task_router.router)
@@ -673,63 +681,6 @@ async def shutdown_endpoint(request: Request):
 
     threading.Thread(target=_terminate, daemon=True).start()
     return {"status": "shutting_down"}
-
-
-@app.post("/set_owner")
-async def set_owner_endpoint(request: Request):
-    """Set the VaultBot owner's name at runtime.
-
-    Used by the plugin's first-run setup wizard so a non-technical user can
-    type their name into a friendly modal instead of editing `.env` by hand.
-    The handler:
-      1. Updates the VAULTBOT_OWNER line in the vault's `.env` file (creating
-         the file from `.env.example` if it doesn't exist yet).
-      2. Sets the value in `os.environ` so the running backend (and the
-         next system-prompt build) picks it up immediately — no restart.
-
-    Accepts JSON: {"owner": "Sean"}. Empty strings are allowed (clears the
-    owner, so VaultBot falls back to "the user").
-    """
-    try:
-        body = await request.json()
-    except Exception as e:
-        logger.debug("swallowed: %s", e)
-        body = {}
-    owner = str(body.get("owner", "")).strip()
-    if len(owner) > 120:
-        return {"ok": False, "error": "Name too long (max 120 chars)."}
-
-    # Persist to .env so it survives restarts. Reuse the same KEY=VALUE
-    # replace-or-append logic the wizard uses; inline it here to avoid a
-    # cross-module dependency on setup_wizard.py (which lives in the vault
-    # root, not in the backend package).
-    import re as _re
-    env_path = Path(__file__).with_name("..") / ".env"
-    env_example = Path(__file__).with_name("..") / ".env.example"
-    try:
-        if not env_path.exists() and env_example.exists():
-            env_path.write_text(env_example.read_text(encoding="utf-8"), encoding="utf-8")
-        if env_path.exists():
-            lines = env_path.read_text(encoding="utf-8").splitlines()
-            out, found = [], False
-            for line in lines:
-                if _re.match(rf"^\s*VAULTBOT_OWNER\s*=", line) and not line.strip().startswith("#"):
-                    out.append(f"VAULTBOT_OWNER={owner}")
-                    found = True
-                else:
-                    out.append(line)
-            if not found:
-                out.append(f"VAULTBOT_OWNER={owner}")
-            env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
-    except Exception as e:
-        logger.debug("swallowed: %s", e)
-
-    # Update the live environment so build_system_prompt() (which reads
-    # os.getenv("VAULTBOT_OWNER")) sees the new name on the next chat turn,
-    # without requiring a backend restart.
-    os.environ["VAULTBOT_OWNER"] = owner
-    logger.info("Owner set via /set_owner: %r", owner)
-    return {"ok": True, "owner": owner}
 
 
 if __name__ == "__main__":

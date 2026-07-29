@@ -427,9 +427,21 @@ class VaultGraph:
 
 
 def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
-                        query: str, k: int = 5, depth: int = 2) -> str:
+                        query: str, k: int = 5, depth: int = 2,
+                        max_notes: int = 25, per_note_cap: int = 900,
+                        total_cap: int = 20000) -> str:
     """
     Given flat search results, turn them into a rich graph context prompt.
+
+    BOUNDED (the "context flood" fix): the legacy dump appended
+    node["content"][:2000] for EVERY walked node. At 5 seeds × depth 2 that is
+    20-40+ notes — a 40-50K-char blob that got pinned as the sacred head of
+    the conversation and re-sent verbatim every agentic round, inflating the
+    remote model's TTFT into the 13-32s "read-loop wall" where the agent
+    spins without converging. Now: cap the number of notes, shrink each
+    note's snippet, and hard-cap the whole context. The full notes are always
+    reachable via vault_search / the L1 card `> source` link if the model
+    needs more — this is an orientation map, not the whole vault.
     """
     seed_names = []
     for res in search_results[:k]:
@@ -443,7 +455,7 @@ def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
     subgraph = graph.walk(seed_names, depth=depth)
 
     lines = [
-        "VAULT CONTEXT â€” relevant sub-vault graph",
+        "VAULT CONTEXT — relevant sub-vault graph",
         f"Query: {query}",
         f"Graph stats: {subgraph['stats']['selected']} connected notes "
         f"from {subgraph['stats']['seeds']} seed(s), depth {subgraph['stats']['depth']}.",
@@ -451,18 +463,33 @@ def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
         "--- CONNECTED NOTES ---",
     ]
 
-    for node in subgraph["nodes"]:
+    # Bound the note dump: highest-value nodes first (the walk already orders
+    # them by relevance/graph distance from the seeds), capped count + size.
+    nodes = subgraph["nodes"][:max_notes]
+    for node in nodes:
         lines.append(f"\n### [[{node['name']}]]")
         if node["outgoing_links"]:
             lines.append("Links out: " + ", ".join(f"[[{n}]]" for n in node["outgoing_links"]))
         if node["backlinks"]:
             lines.append("Linked from: " + ", ".join(f"[[{n}]]" for n in node["backlinks"]))
         lines.append("")
-        lines.append(node["content"][:2_000])
+        snippet = node["content"][:per_note_cap]
+        if len(node["content"]) > per_note_cap:
+            snippet += "\n*[... full note via vault_search / card > source ...]*"
+        lines.append(snippet)
+    if subgraph["stats"]["selected"] > len(nodes):
+        lines.append(
+            f"\n*[... {subgraph['stats']['selected'] - len(nodes)} more connected "
+            "notes not shown — vault_search for specifics ...]*")
 
     if subgraph["edges"]:
         lines.append("\n--- GRAPH EDGES ---")
         for edge in subgraph["edges"]:
             lines.append(f"[[{edge['from']}]] -> [[{edge['to']}]]")
 
-    return "\n".join(lines)
+    out = "\n".join(lines)
+    if len(out) > total_cap:
+        out = out[:total_cap] + (
+            "\n\n*[... context truncated to stay within budget; vault_search "
+            "for full note content ...]*")
+    return out

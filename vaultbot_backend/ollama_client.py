@@ -100,6 +100,77 @@ class OllamaClient(_BASE):
             self._log_tool("context_window", {"model": model}, error=str(e))
             return 32768
 
+    def get_model_capabilities(self, model: str | None = None) -> dict[str, bool]:
+        """Return capability flags (vision, instruct) for a model.
+
+        Queries Ollama's ``/api/show`` and inspects the response:
+          - ``vision``: True if the response contains a ``projector_info``
+            section (Ollama attaches this only when a vision projector is
+            present). We check for any key starting with ``projector_info``
+            because the exact sub-keys vary by architecture.
+          - ``instruct``: True if the model family/name suggests it's a
+            chat/instruct model (not a base/embed model). We check the
+            families list + model name for common instruct markers. This
+            is a heuristic — Ollama doesn't expose an explicit "instruct"
+            flag — but it's good enough to keep embed models out of the
+            "recommended" group in the dropdown.
+
+        Falls back to ``{vision: False, instruct: True}`` on any error so
+        the dropdown always renders something sensible (a text-only model
+        is the safe default; embed models are rare and already filtered by
+        name in the /models endpoint).
+        """
+        # None → use the configured model (convenience for callers that
+        # don't specify). Empty string → genuinely no model, return defaults.
+        if model is None:
+            model = self.llm_model
+        if not model:
+            return {"vision": False, "instruct": True}
+        try:
+            resp = self._session.post(
+                f"{self.base_url}/api/show",
+                json={"model": model}, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            # Vision: Ollama includes projector_info only when a vision
+            # projector is attached to the model.
+            vision = False
+            for key in data:
+                if key.startswith("projector_info"):
+                    vision = True
+                    break
+            # Also check model_info for a vision-specific arch key
+            # (some models embed the projector info under model_info).
+            if not vision:
+                info = data.get("model_info") or {}
+                for key in info:
+                    if "projector" in key.lower() or "vision" in key.lower():
+                        vision = True
+                        break
+            # Instruct: heuristic — check families + model name for
+            # instruct/chat markers, and exclude embed models.
+            instruct = True
+            details = data.get("details") or {}
+            families = details.get("families") or []
+            name_lower = (model or "").lower()
+            # Embed models are not instruct models.
+            if "embed" in name_lower:
+                instruct = False
+            # Base models (no chat template) are not instruct models.
+            # Ollama exposes templates; if there's no chat template, it's
+            # likely a base model. We check the templates field.
+            templates = data.get("templates") or {}
+            if isinstance(templates, dict) and not templates.get("chat"):
+                # No chat template → probably a base/completion model.
+                # But some models use a different template key, so only
+                # flag as non-instruct if we also see "base" in the name.
+                if "base" in name_lower:
+                    instruct = False
+            return {"vision": vision, "instruct": instruct}
+        except Exception as e:
+            self._log_tool("get_model_capabilities", {"model": model}, error=str(e))
+            return {"vision": False, "instruct": True}
+
     def _log_tool(self, method: str, inputs: dict[str, Any], outputs: Any = None, duration_ms: float | None = None, error: str | None = None):
         if self.session_logger is None:
             return

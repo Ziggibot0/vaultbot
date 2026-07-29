@@ -62,7 +62,12 @@ class TaskList:
     """
     tasks: list[Task] = field(default_factory=list)
     goal: str = ""            # the high-level goal this task list serves
-    lock: threading.Lock = field(default_factory=threading.Lock)
+    # RLock (reentrant), NOT Lock: set_plan / update_task / add_task hold the
+    # lock and then call self.snapshot(), which acquires it AGAIN. A plain
+    # threading.Lock is non-reentrant, so that nested acquire deadlocks the
+    # chat loop on the very first plan_task call. RLock lets the same thread
+    # re-acquire, which is exactly the set_plan -> snapshot call pattern.
+    lock: threading.RLock = field(default_factory=threading.RLock)
 
     # ------------------------------------------------------------------
     # Mutators (called by the model via the plan_task / update_task tools)
@@ -158,7 +163,7 @@ class TaskList:
         with self.lock:
             if not self.tasks:
                 return ""
-            lines = [f"# WORKING MEMORY (your active plan)"]
+            lines = ["# WORKING MEMORY (your active plan)"]
             if self.goal:
                 lines.append(f"Goal: {self.goal}")
             for t in self.tasks:
@@ -185,3 +190,27 @@ class TaskList:
         """Is there an active plan (non-empty task list)?"""
         with self.lock:
             return len(self.tasks) > 0
+
+    def restore_snapshot(self, snap: dict[str, Any]) -> None:
+        """Restore the list from a snapshot dict (the inverse of snapshot()).
+
+        Used by chat-loop checkpoint/resume: after a crash/restart, the
+        in-flight turn's plan is restored so the model picks up where it
+        left off instead of re-planning (and re-running tools) from scratch.
+        Best-effort: malformed entries are skipped, never raise.
+        """
+        with self.lock:
+            self.goal = str(snap.get("goal", ""))[:500]
+            self.tasks = []
+            for i, item in enumerate(snap.get("tasks", [])[:MAX_TASKS]):
+                if not isinstance(item, dict):
+                    continue
+                status = item.get("status", "pending")
+                if status not in ("pending", "in_progress", "completed"):
+                    status = "pending"
+                self.tasks.append(Task(
+                    id=str(item.get("id", i + 1)),
+                    content=str(item.get("content", ""))[:300],
+                    status=status,
+                    notes=str(item.get("notes", ""))[:500],
+                ))

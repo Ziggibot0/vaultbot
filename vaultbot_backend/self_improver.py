@@ -202,7 +202,7 @@ class SelfImprover:
         "llm_client.py", "ollama_client.py", "session_logger.py",
         "vault_guard.py", "supervision.py", "checkpointer.py",
         "free_search.py", "duckduckgo_client.py", "tavily_client.py",
-        "searxng_manager.py", "web_source_store.py", "speech.py",
+        "searxng_manager.py", "web_source_store.py",
         "vault_maintenance.py", "textbook_index.py",
         "services.py",
     }
