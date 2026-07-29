@@ -1,4 +1,4 @@
-const { Plugin, Setting, ItemView, PluginSettingTab, Notice, MarkdownRenderer, Modal } = require('obsidian');
+const { Plugin, Setting, ItemView, PluginSettingTab, Notice, Modal, MarkdownRenderer } = require('obsidian');
 const { spawn } = require('child_process');
 const path = require('path');
 
@@ -15,17 +15,7 @@ class VaultBotPlugin extends Plugin {
 			autoStartMcpServer: true,
 			selectedModel: '',
 			researchBackend: 'tavily',
-			tavilyApiKey: '',
-			ttsEnabled: true,
-			ttsMuted: false,
-			ttsVoice: 'am_michael',
-			ttsRate: 190,
-			ttsMode: 'server',
-			// First-run setup wizard: flips true once the user has completed
-			// (or skipped) the in-Obsidian wizard so it doesn't nag them on
-			// every launch. The wizard asks for their name and offers to run
-			// the one-click bootstrap if the venv/deps aren't ready yet.
-			setupComplete: false
+			tavilyApiKey: ''
 		};
 		this.backendStarting = false;
 		this.mcpProcess = null;
@@ -37,25 +27,19 @@ class VaultBotPlugin extends Plugin {
 		this._backendReadyPromise = null;
 		await this.loadSettings();
 
-		// First-run setup wizard: if the user hasn't completed setup yet,
-		// show a friendly modal that asks for their name and (optionally)
-		// runs the one-click bootstrap. This is the in-Obsidian equivalent
-		// of the Setup VaultBot.bat / .command launchers — non-technical
-		// users never need to touch a terminal. We defer it ~1.5s so the
-		// Obsidian UI is ready before the modal opens.
-		if (!this.settings.setupComplete) {
-			setTimeout(() => {
-				try { new SetupWizardModal(this.app, this); } catch (e) {
-					console.error('VaultBot setup wizard error:', e);
-				}
-			}, 1500);
-		}
-
 		this.addCommand({
 			id: 'open-vaultbot-sidebar',
 			name: 'Open VaultBot Sidebar',
 			callback: () => {
 				this.openSidebar();
+			}
+		});
+
+		this.addCommand({
+			id: 'show-setup-instructions',
+			name: 'Show setup instructions',
+			callback: () => {
+				this._showSetupNeededModal();
 			}
 		});
 
@@ -376,6 +360,68 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
+	// ─────────────────────────────────────────────────────────────────────
+	// Cross-platform venv path helpers.
+	// Windows: vaultbot_venv/Scripts/{pythonw.exe,python.exe}
+	// macOS/Linux: vaultbot_venv/bin/python
+	// ─────────────────────────────────────────────────────────────────────
+	_venvBinDir() {
+		return process.platform === 'win32' ? 'Scripts' : 'bin';
+	}
+
+	_venvPythonExe(vaultRoot) {
+		const bin = this._venvBinDir();
+		const candidates = process.platform === 'win32'
+			? [path.join(vaultRoot, 'vaultbot_venv', bin, 'pythonw.exe'),
+			   path.join(vaultRoot, 'vaultbot_venv', bin, 'python.exe')]
+			: [path.join(vaultRoot, 'vaultbot_venv', bin, 'python')];
+		const fs = require('fs');
+		return candidates.find(p => fs.existsSync(p)) || candidates[0];
+	}
+
+	// Show a friendly modal with the one-liner install command when the
+	// venv or backend code is missing. Detects the platform and shows the
+	// right command (PowerShell on Windows, curl on macOS/Linux). Includes
+	// a copy-to-clipboard button so the user doesn't have to retype it.
+	_showSetupNeededModal() {
+		try { new Notice('VaultBot needs setup. Check the instructions.'); } catch (e) {}
+		const modal = new Modal(this.app);
+		modal.titleEl.setText('Welcome to VaultBot');
+		const isWin = process.platform === 'win32';
+		const cmd = isWin
+			? 'irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex'
+			: 'curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash';
+		const desc = modal.contentEl.createEl('p');
+		desc.setText(
+			'VaultBot isn\'t set up yet. Open a terminal and paste this one line -- ' +
+			'the installer asks your name, downloads everything, and opens Obsidian for you.'
+		);
+		desc.style.opacity = '0.85';
+		const codeEl = modal.contentEl.createEl('pre');
+		codeEl.setText(cmd);
+		codeEl.style.background = 'var(--background-secondary)';
+		codeEl.style.padding = '12px';
+		codeEl.style.borderRadius = '6px';
+		codeEl.style.overflowX = 'auto';
+		codeEl.style.fontSize = '13px';
+		codeEl.style.userSelect = 'all';
+		const btnRow = modal.contentEl.createDiv();
+		btnRow.style.marginTop = '16px';
+		btnRow.style.display = 'flex';
+		btnRow.style.gap = '8px';
+		const copyBtn = btnRow.createEl('button', {text: 'Copy command', cls: 'mod-cta'});
+		copyBtn.addEventListener('click', () => {
+			try {
+				navigator.clipboard.writeText(cmd);
+				copyBtn.setText('Copied!');
+				setTimeout(() => copyBtn.setText('Copy command'), 2000);
+			} catch (e) {}
+		});
+		const closeBtn = btnRow.createEl('button', {text: 'Close'});
+		closeBtn.addEventListener('click', () => modal.close());
+		modal.open();
+	}
+
 	async startMcpServerIfNeeded() {
 		if (this.mcpProcess) return;
 		try {
@@ -391,13 +437,12 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
-			const venvPython = path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'pythonw.exe');
 			const mcpPy = path.join(vaultRoot, 'vaultbot_backend', 'mcp_server.py');
 			const fs = require('fs');
-			// pythonw.exe = no console window. Fall back to python.exe if missing.
-			const mcpPythonExe = fs.existsSync(venvPython) ? venvPython : path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'python.exe');
+			const mcpPythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(mcpPythonExe) || !fs.existsSync(mcpPy)) {
-				console.warn('VaultBot MCP server: missing venv or mcp_server.py');
+				// Not set up yet -- don't crash, just skip silently. The backend
+				// start path will show the setup modal if the venv is missing.
 				return;
 			}
 			// Point the MCP server at this backend and spawn it detached.
@@ -564,10 +609,10 @@ class VaultBotPlugin extends Plugin {
 	//   - .obsidian/plugins/vaultbot/styles.css
 	//
 	// What is PRESERVED (never overwritten):
-	//   - .obsidian/plugins/vaultbot/data.json (your keys, model, voice, etc.)
+	//   - .obsidian/plugins/vaultbot/data.json (your keys, model, etc.)
 	//   - every .md doc in the vault (notes, chat logs, research, textbooks)
 	//   - vaultbot_backend/*_log.json, sessions/, checkpoints/,
-	//     vaultbot_index/, *.log, *.pid, kokoro_models/, stt_models/,
+	//     vaultbot_index/, *.log, *.pid,
 	//     trash/, __pycache__/  — all runtime state stays put
 	//
 	// The backend is stopped first (Windows locks .py files while running),
@@ -676,10 +721,6 @@ class VaultBotPlugin extends Plugin {
 				'--exclude=*/vaultbot_backend/checkpoints/*',
 				'--exclude=*/vaultbot_backend/vaultbot_index',
 				'--exclude=*/vaultbot_backend/vaultbot_index/*',
-				'--exclude=*/vaultbot_backend/kokoro_models',
-				'--exclude=*/vaultbot_backend/kokoro_models/*',
-				'--exclude=*/vaultbot_backend/stt_models',
-				'--exclude=*/vaultbot_backend/stt_models/*',
 				'--exclude=*/vaultbot_backend/trash',
 				'--exclude=*/vaultbot_backend/trash/*',
 				'--exclude=*/vaultbot_backend/__pycache__',
@@ -910,20 +951,17 @@ class VaultBotPlugin extends Plugin {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
 
-			const venvPython = path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'pythonw.exe');
 			const mainPy = path.join(vaultRoot, 'vaultbot_backend', 'main.py');
 			const logFile = path.join(vaultRoot, 'vaultbot_backend', 'backend.log');
 
 			const fs = require('fs');
-			// pythonw.exe is the windowless Python â€” it has no console at all,
-			// so no window flashes on screen. Fall back to python.exe if pythonw
-			// is somehow missing (shouldn't happen, but be safe).
-			const pythonExe = fs.existsSync(venvPython) ? venvPython : path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'python.exe');
-			if (!fs.existsSync(pythonExe)) {
-				throw new Error('Python not found at ' + pythonExe);
-			}
-			if (!fs.existsSync(mainPy)) {
-				throw new Error('Backend script not found at ' + mainPy);
+			const pythonExe = this._venvPythonExe(vaultRoot);
+			if (!fs.existsSync(pythonExe) || !fs.existsSync(mainPy)) {
+				// VaultBot isn't set up yet (no venv or no backend code). Don't
+				// crash -- show a friendly modal with the one-liner install
+				// command so the user knows exactly what to do.
+				this._showSetupNeededModal();
+				return;
 			}
 
 // Open the log file in append mode. The running backend inherits the
@@ -964,11 +1002,7 @@ class VaultBotPlugin extends Plugin {
 					// This fixes the case where the key was set in .env but not
 					// in the plugin settings â€” the backend's load_dotenv('../.env')
 					// will pick it up.
-					TAVILY_API_KEY: this.settings.tavilyApiKey || process.env.TAVILY_API_KEY || '',
-					// OpenMP conflict guard: faster-whisper (libomp140) + faiss/torch
-					// (libiomp5md) in one process crashes without this. Must be set
-					// before Python imports torch/faiss.
-					KMP_DUPLICATE_LIB_OK: 'TRUE'
+					TAVILY_API_KEY: this.settings.tavilyApiKey || process.env.TAVILY_API_KEY || ''
 				})
 		});
 		backendProcess.unref();
@@ -1022,21 +1056,6 @@ class VaultBotSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		containerEl.createEl('h2', {text: 'VaultBot Settings'});
-
-		// One-click re-run of the first-run setup wizard. Useful if a user
-		// skipped it the first time, or wants to re-enter their name / re-run
-		// the bootstrap. Opens the same friendly modal that appears on a
-		// fresh install.
-		new Setting(containerEl)
-			.setName('Setup wizard')
-			.setDesc('Re-run the welcome wizard — set your name or finish one-click backend setup.')
-			.addButton(button => button
-				.setButtonText('Run setup wizard')
-				.onClick(() => {
-					try { new SetupWizardModal(this.app, this.plugin); } catch (e) {
-						new Notice('Could not open setup wizard: ' + (e.message || e));
-					}
-				}));
 
 		new Setting(containerEl)
 			.setName('Backend URL')
@@ -1370,69 +1389,6 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// here anymore — having two entry points could race each other
 		// (one starts while the other restarts), leaving the backend in a
 		// half-up state. Use the sidebar Restart button instead.
-
-		containerEl.createEl('h3', {text: 'Voice'});
-
-		new Setting(containerEl)
-			.setName('Speak replies')
-			.setDesc('When on, VaultBot reads its full reply aloud after each answer.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.ttsEnabled)
-				.onChange(async (value) => {
-					this.plugin.settings.ttsEnabled = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('TTS engine')
-			.setDesc("'browser' uses the built-in speechSynthesis (fast, streaming, no setup). 'server' uses the backend's local Kokoro v1.0 neural voice (offline, natural, JARVIS-like).")
-			.addDropdown(dropdown => dropdown
-				.addOption('browser', 'Browser (speechSynthesis)')
-				.addOption('server', 'Server (Kokoro v1.0)')
-				.setValue(this.plugin.settings.ttsMode || 'server')
-				.onChange(async (value) => {
-					this.plugin.settings.ttsMode = value;
-					await this.plugin.saveSettings();
-				}));
-
-		const voiceSetting = new Setting(containerEl)
-			.setName('Voice')
-			.setDesc('Kokoro voice for server TTS. (recommended) = JARVIS-like male voices.');
-		const voiceDropdown = voiceSetting.controlEl.createEl('select');
-		const setVoiceOptions = (voices) => {
-			const cur = this.plugin.settings.ttsVoice || 'am_michael';
-			voices.forEach(v => {
-				const label = (v.recommended ? '(recommended) ' : '') + v.name;
-				const opt = voiceDropdown.createEl('option', {text: label, attr: {value: v.id}});
-				if (v.id === cur) opt.selected = true;
-			});
-		};
-		voiceDropdown.addEventListener('change', async () => {
-			this.plugin.settings.ttsVoice = voiceDropdown.value;
-			await this.plugin.saveSettings();
-		});
-		// Try fetching voices from the backend; fall back to browser voices.
-		try {
-			const resp = await fetch(this.plugin.settings.backendUrl + '/voices');
-			if (resp.ok) {
-				const data = await resp.json();
-				setVoiceOptions(data.voices || []);
-			}
-		} catch (e) { /* backend may be down */ }
-
-		new Setting(containerEl)
-			.setName('Speech rate (words/min)')
-			.setDesc('Server TTS speed. 190 is a natural default.')
-			.addText(text => text
-				.setPlaceholder('190')
-				.setValue(String(this.plugin.settings.ttsRate || 190))
-				.onChange(async (value) => {
-					const n = parseInt(value, 10);
-					if (!isNaN(n) && n > 0) {
-						this.plugin.settings.ttsRate = n;
-						await this.plugin.saveSettings();
-				}
-			}));
 
 		containerEl.createEl('h3', {text: 'Updates'});
 
@@ -1838,222 +1794,9 @@ class VaultBotSidebarView extends ItemView {
 		const clayGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-clay'});
 		const mossGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-moss'});
 		const ingestButton = clayGroup.createEl('button', {text: 'Ingest', cls: 'vaultbot-btn'});
-		const callButton = clayGroup.createEl('button', {text: 'Call', cls: 'vaultbot-btn'});
-		const muteButton = clayGroup.createEl('button', {text: 'Mute', cls: 'vaultbot-btn vaultbot-btn-mute'});
 		const restartButton = mossGroup.createEl('button', {text: 'Restart', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-restart'});
-		callButton.title = 'Hold to talk, or click to toggle recording. Your speech is transcribed locally and sent as a chat message; the reply is spoken back.';
 		ingestButton.title = 'Ingest any new textbooks from the learningMaterial/ folder into the vault. No AI involved - just parses and links them. Weaving happens in the background.';
-		muteButton.title = 'Toggle voice playback on/off. Interrupts the current utterance + discards the queued audio when muted.';
 		restartButton.title = 'Restart the VaultBot backend. Use this after code changes or if the bot seems stuck. Takes a few seconds.';
-
-		// --- Voice: recording + STT + TTS --------------------------------
-		// Press & hold (or click toggle) the Call button -> MediaRecorder
-		// captures audio -> POST /stt (vosk, offline) -> text goes into the
-		// input and auto-sends as a chat. The assistant's final reply is
-		// spoken aloud via the browser's speechSynthesis or the backend's
-		// local SAPI voice (per settings). No cloud keys, no per-call cost.
-		let mediaRecorder = null;
-		let audioChunks = [];
-		let isRecording = false;
-		let recordingSince = 0;
-		const supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
-		if (!supported) callButton.setAttribute('disabled', 'disabled');
-
-		const setCallState = (recording) => {
-			isRecording = recording;
-			callButton.setText(recording ? 'Recording...' : 'Call');
-			callButton.toggleClass('vaultbot-recording', recording);
-		};
-
-		const stopAndSend = async () => {
-			if (!isRecording || !mediaRecorder) return;
-			setCallState(false);
-			try { mediaRecorder.stop(); } catch (e) {}
-		};
-
-		const startRecording = async () => {
-			if (isRecording) return;
-			if (!supported) { new Notice('This browser cannot capture audio.'); return; }
-			// Don't bother recording/transcribing when muted — mute means go
-			// fully text-only (no voice in either direction).
-			if (ttsMuted) { new Notice('Unmute first to use voice.'); return; }
-			try {
-				const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-				audioChunks = [];
-				// Prefer OGG/Opus: the backend decodes it with pure-Python
-				// soundfile (libsndfile), which has no DLL dependency that a
-				// Windows Application Control policy can block. The default
-				// MediaRecorder format is webm/opus, which needs PyAV or
-				// ffmpeg to decode — both unavailable/blocked on this box.
-				// Fall back to whatever the browser offers if OGG isn't
-				// supported (Chrome records webm; the backend still tries
-				// soundfile/PyAV/pydub on whatever arrives).
-				const candidates = ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm', ''];
-				let pickedMime = '';
-				for (const m of candidates) {
-					if (m === '' || MediaRecorder.isTypeSupported(m)) { pickedMime = m; break; }
-				}
-				mediaRecorder = pickedMime ? new MediaRecorder(stream, {mimeType: pickedMime}) : new MediaRecorder(stream);
-				mediaRecorder.ondataavailable = (e) => {
-					if (e.data && e.data.size) audioChunks.push(e.data);
-				};
-				mediaRecorder.onstop = async () => {
-					stream.getTracks().forEach(t => t.stop());
-					const blob = new Blob(audioChunks, {type: mediaRecorder.mimeType || 'audio/ogg'});
-					audioChunks = [];
-					if (!blob.size) return;
-					statusEl.setText('Transcribing...');
-					try {
-						const resp = await fetch(this.backendUrl + '/stt', {
-							method: 'POST',
-							headers: {'Content-Type': blob.type},
-							body: blob
-						});
-						if (!resp.ok) { new Notice('Transcription failed (' + resp.status + ').'); statusEl.setText('Done'); return; }
-						const data = await resp.json();
-						const text = (data.text || '').trim();
-						if (!text) { new Notice('No speech detected.'); statusEl.setText('Done'); return; }
-						input.value = text;
-						statusEl.setText('Done');
-						send('chat');
-					} catch (e) {
-						new Notice('STT error: ' + e.message);
-						statusEl.setText('Done');
-					}
-				};
-				recordingSince = Date.now();
-				mediaRecorder.start();
-				setCallState(true);
-			} catch (e) {
-				new Notice('Microphone unavailable: ' + e.message);
-			}
-		};
-
-		// Click toggles; press-and-hold is the "walkie-talkie" mode.
-		let holdTimer = null;
-		const onDown = (e) => {
-			if (e.pointerType === 'mouse') {
-				// start on press, stop on release
-				holdTimer = null;
-				startRecording();
-			} else {
-				// touch/pen: also press-and-hold
-				startRecording();
-			}
-		};
-		const onUp = (e) => { stopAndSend(); };
-		callButton.addEventListener('pointerdown', (e) => { e.preventDefault(); onDown(e); });
-		callButton.addEventListener('pointerup', (e) => { e.preventDefault(); onUp(e); });
-		callButton.addEventListener('pointerleave', (e) => { if (isRecording) onUp(e); });
-		callButton.addEventListener('pointercancel', onUp);
-
-		// --- Streaming TTS: speak as tokens stream, not all at the end ----
-		// Accumulates streamed answer text and flushes complete sentences to
-		// the browser's speechSynthesis queue the moment a sentence boundary
-		// is seen. This makes the voice start talking in ~1 sentence of
-		// latency instead of waiting for the whole reply. Server (Kokoro)
-		// TTS is whole-utterance, so streaming mode requires the browser
-		// engine; if ttsMode==='server' we fall back to one-shot at the end.
-		// Mute state is persisted in plugin settings so it survives across
-		// turns, reloads, and sessions.
-		let ttsMuted = !!(this.plugin.settings.ttsMuted);
-		let ttsSentenceBuffer = '';
-		let ttsActiveUtterances = [];
-		const SENTENCE_BOUNDARY = /([.!?])\s+/;
-
-		const updateMuteButton = () => {
-			muteButton.setText(ttsMuted ? 'Unmute' : 'Mute');
-			muteButton.toggleClass('vaultbot-mute-active', ttsMuted);
-		};
-
-		const stopAllTTS = () => {
-			try { window.speechSynthesis.cancel(); } catch (e) {}
-			// Stop + discard the server WAV: pause the Audio element, revoke
-			// its object URL so the browser releases the blob, and null it.
-			if (currentAudio) {
-				try { currentAudio.pause(); } catch (e) {}
-				try {
-					if (currentAudio.src && currentAudio.src.startsWith('blob:')) {
-						URL.revokeObjectURL(currentAudio.src);
-					}
-				} catch (e) {}
-				currentAudio = null;
-			}
-			ttsSentenceBuffer = '';
-			ttsActiveUtterances = [];
-		};
-
-		// Speak a sentence immediately (streaming). No-op if muted.
-		const speakSentence = (sentence) => {
-			sentence = (sentence || '').trim();
-			if (!sentence || ttsMuted || !window.speechSynthesis) return;
-			try {
-				const u = new SpeechSynthesisUtterance(sentence);
-				if (this.plugin.settings.ttsVoice) {
-					const v = window.speechSynthesis.getVoices().find(v => v.name === this.plugin.settings.ttsVoice || v.voiceURI === this.plugin.settings.ttsVoice);
-					if (v) u.voice = v;
-				}
-				u.rate = (this.plugin.settings.ttsRate || 190) / 190;
-				ttsActiveUtterances.push(u);
-				u.onend = () => { ttsActiveUtterances = ttsActiveUtterances.filter(x => x !== u); };
-				u.onerror = () => { ttsActiveUtterances = ttsActiveUtterances.filter(x => x !== u); };
-				window.speechSynthesis.speak(u);
-			} catch (e) {}
-		};
-
-		// Feed a streaming text chunk into the TTS pipeline. Flushes complete
-		// sentences; keeps the trailing fragment buffered for the next chunk.
-		const feedStreamingTTS = (textChunk) => {
-			if (!textChunk || ttsMuted) return;
-			if (this.plugin.settings.ttsMode !== 'browser' || !window.speechSynthesis) return;
-			ttsSentenceBuffer += textChunk;
-			// Split on sentence boundaries; keep the last fragment buffered.
-			let parts = ttsSentenceBuffer.split(SENTENCE_BOUNDARY);
-			while (parts.length >= 3) {
-				// split() with a capturing group yields [text, delim, text, delim, ...]
-				const sentence = parts[0] + parts[1];
-				parts = parts.slice(2);
-				if (sentence.trim()) speakSentence(sentence);
-			}
-			ttsSentenceBuffer = parts.join('');
-		};
-
-		// Stop button: interrupt the backend + kill voice playback. Sits
-		// inline in the chat bar and only appears while a turn is active.
-		stopButton.addEventListener('click', () => {
-			// Ask the backend to cancel the in-flight task. The backend then
-			// emits a 'stopped' event that clears the local turn state.
-			if (ws && ws.readyState === WebSocket.OPEN) {
-				try { ws.send(JSON.stringify({type: 'stop'})); } catch (e) {}
-			}
-			// Kill voice + discard any queued WAV immediately, don't wait on
-			// the backend round-trip.
-			stopAllTTS();
-			endActivity();
-			// Optimistically hide the stop button + flush partial text so the
-			// UI reacts instantly. The 'stopped' handler will finish cleanup.
-			setTurnActive(false);
-			closeCurrentSegment();
-			statusEl.setText('Interrupted');
-			currentAssistantMessage = null;
-			currentThinkingBlock = null;
-			currentAnswerBlock = null;
-			currentSegmentText = '';
-			currentAnswerText = '';
-		});
-
-		// Mute button: toggle voice on/off. Muting kills the current
-		// utterance AND discards the queued server WAV (revoke its blob URL
-		// so the audio is gone, not just paused). State is persisted to
-		// plugin settings so it survives across turns + sessions.
-		muteButton.addEventListener('click', async () => {
-			ttsMuted = !ttsMuted;
-			this.plugin.settings.ttsMuted = ttsMuted;
-			try { await this.plugin.saveSettings(); } catch (e) {}
-			updateMuteButton();
-			if (ttsMuted) stopAllTTS();
-		});
-		updateMuteButton();
 
 		let currentAssistantMessage = null;
 		let currentThinkingBlock = null;
@@ -2355,9 +2098,6 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentText += raw;
 					currentAnswerText += raw;
 					scheduleSegmentRender();
-					// Stream into TTS so the voice starts as soon as a full
-					// sentence is available, not at the very end.
-					if (this.plugin.settings.ttsEnabled) feedStreamingTTS(raw);
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (msg.type === 'tool_call') {
 					if (!currentAssistantMessage) startAssistantMessage();
@@ -2407,27 +2147,11 @@ class VaultBotSidebarView extends ItemView {
 					closeCurrentSegment();
 					statusEl.setText('Done');
 					setTurnActive(false);
-					const spokenText = currentAnswerText;
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
 					currentSegmentText = '';
 					currentAnswerText = '';
-					if (this.plugin.settings.ttsEnabled && spokenText.trim() && !ttsMuted) {
-						// Streaming (browser) mode already spoke sentence-by-
-						// sentence as chunks arrived. Flush any final fragment
-						// left in the buffer (no trailing punctuation).
-						if (this.plugin.settings.ttsMode === 'browser') {
-							if (ttsSentenceBuffer.trim()) {
-								speakSentence(ttsSentenceBuffer);
-								ttsSentenceBuffer = '';
-							}
-						} else {
-							// Server (Kokoro) mode is whole-utterance; speak
-							// the full reply once now.
-							speakReply(spokenText);
-						}
-					}
 				} else if (msg.type === 'error') {
 					endActivity();
 					setTurnActive(false);
@@ -2437,7 +2161,6 @@ class VaultBotSidebarView extends ItemView {
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (msg.type === 'stopped') {
 					// Backend confirmed an interrupt (stop button or new msg).
-					stopAllTTS();
 					endActivity();
 					setTurnActive(false);
 					// Flush whatever text was streamed so far so it stays visible.
@@ -2448,10 +2171,8 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerBlock = null;
 					currentSegmentText = '';
 					currentAnswerText = '';
-					ttsSentenceBuffer = '';
 				} else if (msg.type === 'session_reset') {
 					// /new command: clear the chat UI for a fresh session.
-					stopAllTTS();
 					endActivity();
 					chatContainer.empty();
 					currentAssistantMessage = null;
@@ -2460,7 +2181,6 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentText = '';
 					currentSegmentRenderTimer = null;
 					currentAnswerText = '';
-					ttsSentenceBuffer = '';
 					statusEl.setText('New session');
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system'});
 					div.createSpan({text: msg.content || 'New session started.'});
@@ -2552,25 +2272,20 @@ class VaultBotSidebarView extends ItemView {
 				return;
 			}
 			appendUserMessage(message);
-		// Interrupt any in-flight reply + stop voice so the new message
-		// takes over immediately instead of queueing behind the old one.
-		stopAllTTS();
-		ws.send(JSON.stringify({type, message, model: this.plugin.settings.selectedModel}));
-		input.value = '';
-		input.focus();
-		// A new turn is now in flight: show the inline Stop button.
-		setTurnActive(true);
-		// Reset the think-tag parser state for the new turn.
-		this._inThinkTag = false;
-		// Flush the in-flight text segment so it renders before the new turn.
-		closeCurrentSegment();
-		currentAssistantMessage = null;
-		currentThinkingBlock = null;
-		currentAnswerBlock = null;
-		currentSegmentText = '';
-		currentAnswerText = '';
-		ttsSentenceBuffer = '';
-			currentActivityEl = null;
+			ws.send(JSON.stringify({type, message, model: this.plugin.settings.selectedModel}));
+			input.value = '';
+			input.focus();
+			// A new turn is now in flight: show the inline Stop button.
+			setTurnActive(true);
+			// Reset the think-tag parser state for the new turn.
+			this._inThinkTag = false;
+			// Flush the in-flight text segment so it renders before the new turn.
+			closeCurrentSegment();
+			currentAssistantMessage = null;
+			currentThinkingBlock = null;
+			currentAnswerBlock = null;
+			currentSegmentText = '';
+			currentAnswerText = '';
 		};
 
 		// Ingest button: a one-press way for a non-tech user to feed new
@@ -2663,7 +2378,6 @@ class VaultBotSidebarView extends ItemView {
 				return;
 			}
 			setRestartBusy(true);
-			stopAllTTS();
 			appendUserMessage('(restarting backend)');
 			let statusDiv = appendAssistantMessage('Restarting backend...');
 			try {
@@ -2695,248 +2409,7 @@ class VaultBotSidebarView extends ItemView {
 			}
 		});
 
-		// --- TTS: speak the assistant's reply aloud ----------------------
-		// Two engines, picked per settings:
-		//  - 'browser': window.speechSynthesis â€” zero setup, streams as the
-		//    browser allows, no backend round-trip.
-		//  - 'server': POST the text to /tts; the backend synthesizes with the
-		//    local Windows SAPI voice (truly offline) and returns a WAV we
-		//    play. More robust when the browser has no/enqueued voices.
-		let currentAudio = null;
-		const speakReply = async (text) => {
-			text = (text || '').trim();
-			if (!text) return;
-			// Honor the mute toggle — without this, server (Kokoro) mode kept
-			// talking after the user muted, which is why the Mute button
-			// appeared to do nothing (the default ttsMode is 'server').
-			if (ttsMuted) return;
-			// Cancel anything still playing so a new answer doesn't overlap.
-			try { window.speechSynthesis.cancel(); } catch (e) {}
-			if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
-
-			if (this.plugin.settings.ttsMode === 'browser' && window.speechSynthesis) {
-				try {
-					const u = new SpeechSynthesisUtterance(text);
-					if (this.plugin.settings.ttsVoice) {
-						const v = window.speechSynthesis.getVoices().find(v => v.name === this.plugin.settings.ttsVoice || v.voiceURI === this.plugin.settings.ttsVoice);
-						if (v) u.voice = v;
-					}
-					u.rate = (this.plugin.settings.ttsRate || 190) / 190;
-					window.speechSynthesis.speak(u);
-					return;
-				} catch (e) { /* fall through to server */ }
-			}
-
-			try {
-				const resp = await fetch(this.backendUrl + '/tts', {
-					method: 'POST',
-					headers: {'Content-Type': 'application/json'},
-					body: JSON.stringify({
-						text: text,
-						voice: this.plugin.settings.ttsVoice || undefined,
-						rate: this.plugin.settings.ttsRate || 190
-					})
-				});
-				if (!resp.ok) return;
-				const blob = await resp.blob();
-				const url = URL.createObjectURL(blob);
-				currentAudio = new Audio(url);
-				currentAudio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; };
-				currentAudio.play().catch(() => {});
-			} catch (e) { /* silent fail â€” TTS is best-effort */ }
-		};
-
 		input.focus();
-	}
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// First-run setup wizard modal.
-//
-// This is the in-Obsidian face of the "no terminal needed" install. On a
-// fresh vault (settings.setupComplete === false) it pops automatically and
-// asks the user two questions:
-//   1. "What should VaultBot call you?" — written to .env as VAULTBOT_OWNER
-//      via the backend's POST /set_owner endpoint (so it sticks across
-//      restarts and applies live without a backend restart).
-//   2. "Is the Python backend ready?" — if the venv or deps aren't set up
-//      yet, it offers to launch the one-click `Setup VaultBot.bat` /
-//      `.command` bootstrapper for them (which creates the venv, installs
-//      deps, and configures .env in one go).
-//
-// It's also re-openable from Settings → "Run setup wizard" so a user who
-// skipped it can come back to it later.
-// ─────────────────────────────────────────────────────────────────────────
-class SetupWizardModal extends Modal {
-	constructor(app, plugin) {
-		super(app);
-		this.plugin = plugin;
-		this.ownerName = '';
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.addClass('vaultbot-setup-wizard');
-
-		contentEl.createEl('h2', { text: 'Welcome to VaultBot 👋' });
-		contentEl.createEl('p', {
-			text: 'A self-improving AI research agent that lives inside your Obsidian vault. Let\'s get you set up — it takes about a minute.'
-		});
-
-		// Step 1: owner name.
-		contentEl.createEl('h3', { text: '1. What should VaultBot call you?' });
-		const nameRow = contentEl.createDiv({ attr: { style: 'display:flex;gap:8px;align-items:center;margin-bottom:8px;' } });
-		const nameInput = nameRow.createEl('input', {
-			type: 'text',
-			attr: { placeholder: 'Your name', style: 'flex:1;padding:6px 8px;font-size:1em;' }
-		});
-		// Prefill from existing .env-derived setting if present (none yet,
-		// but defensive). Focus the field so the user can just type.
-		nameInput.focus();
-
-		const statusEl = contentEl.createDiv({ attr: { style: 'min-height:1.2em;font-size:0.85em;opacity:0.8;margin-bottom:12px;' } });
-
-		// Step 2: backend readiness check + bootstrap offer.
-		contentEl.createEl('h3', { text: '2. Set up the backend (one click)' });
-		const backendStatusEl = contentEl.createDiv({ attr: { style: 'margin-bottom:8px;' } });
-		const backendStatusText = backendStatusEl.createEl('p', {
-			text: 'Checking whether the Python backend is ready…',
-			attr: { style: 'opacity:0.8;' }
-		});
-
-		const bootstrapBtn = contentEl.createEl('button', {
-			text: 'Run one-click setup',
-			attr: { style: 'margin-right:8px;' }
-		});
-		bootstrapBtn.style.display = 'none';
-
-		const checkBackend = async () => {
-			const fs = require('fs');
-			let vaultRoot;
-			if (this.app.vault.adapter.getBasePath) {
-				vaultRoot = this.app.vault.adapter.getBasePath();
-			} else {
-				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
-			}
-			const venvPython = path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'pythonw.exe');
-			const venvPythonAlt = path.join(vaultRoot, 'vaultbot_venv', 'bin', 'python');
-			const venvReady = fs.existsSync(venvPython) || fs.existsSync(venvPythonAlt);
-			if (venvReady) {
-				backendStatusText.setText('✅ Python backend environment is ready.');
-				bootstrapBtn.style.display = 'none';
-			} else {
-				backendStatusText.setText('⚠️ The Python backend isn\'t set up yet. Click the button below — it handles everything automatically (no terminal needed).');
-				bootstrapBtn.style.display = '';
-			}
-		};
-		checkBackend();
-
-		bootstrapBtn.addEventListener('click', () => {
-			const fs = require('fs');
-			const { spawn } = require('child_process');
-			let vaultRoot;
-			if (this.app.vault.adapter.getBasePath) {
-				vaultRoot = this.app.vault.adapter.getBasePath();
-			} else {
-				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
-			}
-			try {
-				if (process.platform === 'win32') {
-					const bat = path.join(vaultRoot, 'Setup VaultBot.bat');
-					// Use cmd.exe to launch the .bat in its own console window
-					// so the user sees the wizard's progress output.
-					spawn('cmd.exe', ['/c', 'start', 'VaultBot Setup', '"'+bat+'"'], {
-						cwd: vaultRoot, detached: true, shell: false, windowsHide: false
-					}).unref();
-				} else {
-					const cmd = path.join(vaultRoot, 'Setup VaultBot.command');
-					// chmod +x in case the file lost its executable bit
-					// (e.g. extracted from a zip on macOS).
-					try { fs.chmodSync(cmd, 0o755); } catch (e) {}
-					spawn('open', [cmd], { cwd: vaultRoot, detached: true }).unref();
-				}
-				new Notice('Opened the VaultBot setup wizard in a new window. Come back here when it finishes.');
-				statusEl.setText('Setup wizard launched. Finish it, then come back and click "Done".');
-			} catch (e) {
-				new Notice('Could not launch the setup wizard: ' + (e.message || e));
-			}
-		});
-
-		// Buttons.
-		const btnRow = contentEl.createDiv({ attr: { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px;' } });
-		const skipBtn = btnRow.createEl('button', { text: 'Skip for now', attr: { style: 'opacity:0.7;' } });
-		const doneBtn = btnRow.createEl('button', { text: 'Done', attr: { class: 'mod-cta' } });
-
-		const finish = async (completed) => {
-			if (completed) {
-				const name = nameInput.value.trim();
-				// Send the name to the backend if it's running; otherwise write
-				// to .env directly so the backend picks it up on first boot.
-				let saved = false;
-				try {
-					const running = await this.plugin.isBackendRunning();
-					if (running && name) {
-						const resp = await fetch(this.plugin.settings.backendUrl + '/set_owner', {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ owner: name })
-						});
-						if (resp.ok) saved = true;
-					}
-				} catch (e) { /* fall through to file write */ }
-				if (!saved && name) {
-					// Backend not up yet — write VAULTBOT_OWNER into .env by
-					// hand so it's there when the backend first boots.
-					try {
-						const fs = require('fs');
-						let vaultRoot;
-						if (this.app.vault.adapter.getBasePath) {
-							vaultRoot = this.app.vault.adapter.getBasePath();
-						} else {
-							vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
-						}
-						const envPath = path.join(vaultRoot, '.env');
-						const examplePath = path.join(vaultRoot, '.env.example');
-						if (!fs.existsSync(envPath) && fs.existsSync(examplePath)) {
-							fs.copyFileSync(examplePath, envPath);
-						}
-						if (fs.existsSync(envPath)) {
-							let txt = fs.readFileSync(envPath, 'utf8');
-							const re = /^[ \t]*VAULTBOT_OWNER[ \t]*=.*$/m;
-							if (re.test(txt)) {
-								txt = txt.replace(re, 'VAULTBOT_OWNER=' + name);
-							} else {
-								txt = txt.replace(/\s*$/, '') + '\nVAULTBOT_OWNER=' + name + '\n';
-							}
-							fs.writeFileSync(envPath, txt, 'utf8');
-							saved = true;
-						}
-					} catch (e) {
-						console.warn('VaultBot: could not write .env owner:', e);
-					}
-				}
-				if (name && saved) {
-					new Notice('VaultBot will call you ' + name + '.');
-				} else if (name) {
-					new Notice('Name saved — VaultBot will call you ' + name + ' after the backend starts.');
-				}
-			}
-			this.plugin.settings.setupComplete = true;
-			await this.plugin.saveSettings();
-			this.close();
-		};
-
-		doneBtn.addEventListener('click', () => finish(true));
-		skipBtn.addEventListener('click', () => finish(false));
-		// Enter in the name field == Done.
-		nameInput.addEventListener('keydown', (ev) => {
-			if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
-		});
-	}
-
-	onClose() {
-		this.contentEl.empty();
 	}
 }
 

@@ -16,6 +16,13 @@ venv/
 env/
 
 # ─────────────────────────────────────────────────────────────────────
+# Nested vault from in-repo installer runs
+# If someone runs setup.ps1/setup.sh inside the repo itself, it creates a
+# VaultBot/ subfolder — never commit that.
+# ─────────────────────────────────────────────────────────────────────
+VaultBot/
+
+# ─────────────────────────────────────────────────────────────────────
 # Python cache
 # ─────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -58,17 +65,10 @@ vaultbot_backend/test_out.log
 vaultbot_backend/*.bak
 vaultbot_backend/*.bak.*
 vaultbot_backend/custom_tools/*.bak
-vaultbot_backend/speech.py.vosk_bak
 vaultbot_backend/_test_*.py
 vaultbot_backend/trash/
 vaultbot_backend/partials/
 vaultbot_backend/*_log.json
-
-# ─────────────────────────────────────────────────────────────────────
-# Large model files (downloaded separately, see README)
-# ─────────────────────────────────────────────────────────────────────
-vaultbot_backend/kokoro_models/
-vaultbot_backend/stt_models/
 
 # ─────────────────────────────────────────────────────────────────────
 # The vault itself - the USER'S mind

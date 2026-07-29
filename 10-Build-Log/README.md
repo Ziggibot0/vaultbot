@@ -34,47 +34,25 @@ gets smarter the more you use it.
 
 ### Prerequisites
 
-- [Python 3.11+](https://python.org)
+- [Python 3.11+](https://python.org) — check "Add Python to PATH" during install
 - [Ollama](https://ollama.com) — the local LLM + embedding engine
 - [Obsidian](https://obsidian.md) — your vault is VaultBot's mind
 - (Optional) [Docker](https://docker.com) — for self-hosted SearXNG search
 
-### Setup
+### One-command setup
 
+```powershell
+# Windows (PowerShell)
+irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex
+```
 ```bash
-# 1. Clone this repo into your Obsidian vault (or a new vault folder)
-git clone https://github.com/YOUR_USERNAME/vaultbot.git MyVault
-cd MyVault
-
-# 2. Create a Python virtual environment
-python -m venv vaultbot_venv
-
-# 3. Activate it
-#    Windows:  vaultbot_venv\Scripts\activate
-#    macOS/Linux: source vaultbot_venv/bin/activate
-
-# 4. Install dependencies
-pip install -r vaultbot_backend/requirements.txt
-
-# 5. Pull the Ollama models
-ollama pull qwen3.6:latest      # synthesis LLM (or any model you prefer)
-ollama pull nomic-embed-text    # embeddings (light, ~270MB)
-
-# 6. Configure your environment
-cp .env.example .env
-# Edit .env — set VAULTBOT_OWNER to your name, pick your LLM backend
-
-# 7. Start the backend
-python vaultbot_backend/main.py
-#    Or use the bundled launcher: start_backend.bat (Windows)
-
-# 8. Open the vault in Obsidian
-#    The VaultBot plugin is in .obsidian/plugins/vaultbot/
-#    Enable it in Settings → Community plugins
+# macOS / Linux
+curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
 ```
 
-Open the VaultBot chat panel in Obsidian and say hi. It will introduce
-itself and start learning about you.
+The installer asks your name, downloads everything, and opens Obsidian
+for you. After it finishes, enable VaultBot in Settings → Community
+plugins → say hi.
 
 ## Configuration
 
@@ -149,8 +127,9 @@ Wikipedia") and it will store that as a directive note itself.
 │   ├── identity/                  #   IDENTITY.md, SELF_MODEL.md, GOALS.md
 │   ├── custom_tools/              #   agent-authored tools (grows itself)
 │   └── ...
-├── .env.example                   # Copy to .env and configure
-├── start_backend.bat              # Windows launcher
+├── .env.example                   # Template — installer copies to .env
+├── setup.ps1                      # One-click installer (Windows)
+├── setup.sh                       # One-click installer (macOS/Linux)
 └── requirements.txt
 ```
 

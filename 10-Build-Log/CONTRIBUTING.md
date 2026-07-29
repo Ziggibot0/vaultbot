@@ -29,15 +29,35 @@ folder holds *one user's* live identity. Don't confuse them.
 
 ## Development setup
 
+The fastest way to get a dev environment running is the one-liner installer:
+
+```powershell
+# Windows
+irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex
+```
+```bash
+# macOS / Linux
+curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
+```
+
+This creates a `VaultBot/` folder with a fully set-up venv, deps, models,
+and `.env`. For development, you'll typically want to clone your fork
+instead and run the installer inside it (or set up the venv manually):
+
 ```bash
 git clone <your-fork>.git
 cd vaultbot
 python -m venv vaultbot_venv
-source vaultbot_venv/bin/activate   # or vaultbot_venv\Scripts\activate on Windows
-pip install -r vaultbot_backend/requirements.txt
+# No activation needed — invoke the venv's python directly:
+vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot_backend/requirements.txt   # Windows
+# or: vaultbot_venv/bin/python -m pip install -r vaultbot_backend/requirements.txt       # macOS/Linux
 ollama pull qwen3.6:latest nomic-embed-text
 cp .env.example .env   # fill in your values
-python vaultbot_backend/main.py
+```
+
+The backend is started automatically by the Obsidian plugin. For manual
+testing: `vaultbot_venv/Scripts/python.exe vaultbot_backend/main.py`
+(Windows) or `vaultbot_venv/bin/python vaultbot_backend/main.py` (macOS/Linux).
 ```
 
 ## Safe self-editing
@@ -62,7 +82,7 @@ follow the same safety protocol the agent uses:
 - `baseline/` directive templates
 - `README.md`, `CONTRIBUTING.md`, `LICENSE`
 - `.env.example`, `.gitignore`, `requirements.txt`
-- `start_backend.bat`
+- `setup.ps1`, `setup.sh` (one-click installers)
 
 ## What NOT to commit
 
