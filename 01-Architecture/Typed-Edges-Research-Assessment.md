@@ -97,7 +97,7 @@ Instead:
 ## Research Quality Notes
 
 Two existing research notes should be flagged as low-quality:
-- [[researchwikilinks-and-named-edges]] — findings are about Wikipedia text parsing and nanotechnology. Completely off-topic.
+- [[Wikilink]] — findings are about Wikipedia text parsing and nanotechnology. Completely off-topic.
 - [[researchrag-graph-retrieval-vs-graph-reasoning]] — findings are about "Research in Mathematics" and differential geometry. Completely off-topic.
 
 The new research notes from this round are partially useful but also noisy:

@@ -60,6 +60,15 @@ class _ForumBackend:
     def _in_cooldown(self) -> bool:
         return time.time() < self._cooldown_until
 
+    def _cooldown_remaining(self) -> float:
+        """Seconds left in cooldown (0 if not cooling down).
+
+        Mirrors free_search._Backend._cooldown_remaining so the /config
+        endpoint can report cooldown state uniformly across all backends.
+        """
+        rem = self._cooldown_until - time.time()
+        return max(0.0, rem)
+
     def _mark_failure(self, reason: str) -> None:
         with self._lock:
             self._consecutive_failures += 1

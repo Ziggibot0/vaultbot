@@ -377,6 +377,41 @@ def _facet_keywords(facet: str) -> list[str]:
     }.get(facet, [])
 
 
+# Max length for a focused search topic. Topics longer than this get
+# truncated to their first meaningful clause so search engines don't
+# choke on 200-char roadmap bullets.
+_MAX_SEARCH_TOPIC_CHARS = 80
+
+
+def _focus_topic(topic: str) -> str:
+    """Truncate an overly long topic to its first meaningful clause.
+
+    The agent sometimes passes a full roadmap bullet as the research topic
+    (e.g. "Bacterial communication: quorum sensing, how bacteria talk to
+    each other with chemical signals, biofilm formation, ..."). Search
+    engines can't handle that — they return garbage. This takes the first
+    clause (split on `:`, `,`, or sentence boundary) and caps it at
+    ``_MAX_SEARCH_TOPIC_CHARS``. The full topic stays as the note title;
+    the focused version is what gets searched.
+
+    Short topics (≤ the cap) pass through unchanged.
+    """
+    if len(topic) <= _MAX_SEARCH_TOPIC_CHARS:
+        return topic
+    # Try splitting on the first colon (topic: details pattern).
+    for sep in (":", ",", ". ", " - ", " — "):
+        idx = topic.find(sep)
+        if 0 < idx <= _MAX_SEARCH_TOPIC_CHARS:
+            return topic[:idx].strip()
+    # No clause separator found early — hard-cap at the limit, trying to
+    # break on a word boundary so we don't cut mid-word.
+    cut = topic[:_MAX_SEARCH_TOPIC_CHARS]
+    last_space = cut.rfind(" ")
+    if last_space > 40:
+        return cut[:last_space].strip()
+    return cut.strip()
+
+
 class ResearchEngine:
     """Multi-round, LLM-free deep research over the web.
 
@@ -618,10 +653,18 @@ class ResearchEngine:
         """
         t0 = time.time()
         topic = topic.strip()
-        base_terms = _keyterms(topic)
-        facets = _detect_facets(topic)
+        # Focus overly long topics: the agent sometimes passes a 200-char
+        # roadmap bullet as the topic ("Bacterial communication: quorum
+        # sensing, how bacteria talk to each other with chemical signals,
+        # biofilm formation, ..."). Search engines can't handle that — they
+        # return garbage. The full topic stays as the note title; the focused
+        # version (first clause, ≤80 chars) is what gets searched.
+        search_topic = _focus_topic(topic)
+        base_terms = _keyterms(search_topic)
+        facets = _detect_facets(search_topic)
         self._log("research_begin", {
-            "topic": topic, "keyterms": base_terms, "facets": facets,
+            "topic": topic, "search_topic": search_topic,
+            "keyterms": base_terms, "facets": facets,
         })
 
         all_sources: list[dict[str, Any]] = []
@@ -639,7 +682,7 @@ class ResearchEngine:
             self._progress("search_round", {
                 "round": round_idx + 1, "max_rounds": self.max_rounds,
                 "query": query, "total_sources_so_far": len(all_sources)})
-            sources = self._search_round(query, round_idx, topic=topic)
+            sources = self._search_round(query, round_idx, topic=search_topic)
             # Dedup against already-collected sources.
             new_sources = [s for s in sources if s["url"] not in seen_urls]
             for s in new_sources:
@@ -706,14 +749,14 @@ class ResearchEngine:
         synthesis = "\n".join(synthesis_lines)
 
         # --- Gap fill: targeted follow-ups for under-covered facets ----------
-        gaps = self._identify_gaps(topic, facets, all_sources, base_terms)
+        gaps = self._identify_gaps(search_topic, facets, all_sources, base_terms)
         follow_up_sources: list[dict[str, Any]] = []
         if gaps:
             self._log("research_gap_fill", {"gaps": gaps})
             self._progress("gap_fill", {"queries": len(gaps), "gaps": gaps})
             for gq_idx, gq in enumerate(gaps):
                 gsrc = self._search_round(gq, round_idx=self.max_rounds,
-                                            topic=topic)
+                                            topic=search_topic)
                 for s in gsrc:
                     if s["url"] not in seen_urls:
                         seen_urls.add(s["url"])
@@ -802,3 +845,146 @@ class ResearchEngine:
                   f"{report['synthesis_facts']} facts, "
                   f"{len(report.get('rounds', []))} rounds -->"]
         return "\n".join(lines)
+
+    # --- LLM-assisted note structuring ------------------------------------
+    # The extractive synthesis above is a flat bullet dump of corroborated
+    # sentences — no frontmatter, no section structure, no wikilinks, no
+    # narrative. The notes it produced (Bacterial-communication-...md etc.)
+    # were thin stubs, not the argument-driven research notes the vault
+    # needs. This method takes the extractive synthesis and asks the LLM
+    # (ONE call) to restructure it into a proper research note — same
+    # pattern as lazy_condenser.condense_note / concept_card.refine_card:
+    # the dig stays LLM-free (deterministic search + extractive synthesis),
+    # and the LLM only fires at the final note-structuring step.
+    # Falls back to synthesize_note_markdown() if the LLM is unavailable,
+    # returns garbage, or produces a note below the safety floor (500 chars).
+
+    # Safety floor: reject any LLM output shorter than this (catches an
+    # LLM that collapses a note to nothing). Matches the
+    # lazy_condenser safety floor pattern.
+    _STRUCTURED_MIN_CHARS = 500
+
+    def synthesize_structured_note(
+        self,
+        report: dict[str, Any],
+        summary: str | None = None,
+        ollama_client: Any = None,
+        vault_note_titles: list[str] | None = None,
+    ) -> str:
+        """Restructure the extractive synthesis into a proper research note.
+
+        ONE LLM call. Produces a note with YAML frontmatter, H2 sections,
+        argument-driven narrative, preserved [sources: ...] citations, and
+        [[wikilinks]] to existing vault notes.
+
+        Falls back to ``synthesize_note_markdown`` (the extractive format)
+        if the LLM is unavailable or the output is below the safety floor.
+        Never raises — the caller always gets a valid markdown note.
+        """
+        # Safety: if no LLM client, fall back to the extractive format.
+        if ollama_client is None:
+            return self.synthesize_note_markdown(report, summary)
+        # Safety: if no synthesis content, fall back (nothing to structure).
+        synth = str(report.get("synthesis", "") or "")
+        if len(synth) < 80:
+            return self.synthesize_note_markdown(report, summary)
+
+        topic = report.get("topic", "Research Note")
+        source_count = report.get("source_count", 0)
+        facts = report.get("synthesis_facts", 0)
+
+        # Build the source list for the prompt (title + url).
+        sources_block = "\n".join(
+            f"- {s.get('title') or s.get('url', '')} — {s.get('url', '')}"
+            for s in report.get("sources", [])[:12]
+        )
+
+        # Build a vault-link hint: a compact list of existing note titles so
+        # the LLM can insert [[wikilinks]] to relevant concepts. Capped to
+        # avoid flooding the prompt (the LLM only needs a sample to spot
+        # relevant ones).
+        titles_hint = ""
+        if vault_note_titles:
+            sample = vault_note_titles[:120]
+            titles_hint = (
+                "\n\nEXISTING VAULT NOTES (use [[Note-Name]] to link to any "
+                "that are topically relevant — do NOT force links):\n"
+                + "\n".join(f"- {t}" for t in sample)
+            )
+
+        # Build the prompt. The system message sets the format contract;
+        # the user message provides the raw synthesis + sources.
+        system = (
+            "You are a research note structuring assistant. You take raw "
+            "extractive synthesis (corroborated sentences with [sources: ...] "
+            "tags) and restructure it into a proper Obsidian research note. "
+            "You MUST:\n"
+            "1. Start with YAML frontmatter (--- ... ---) with keys: type, "
+            "status, created, summary, tags, sources, depends_on.\n"
+            "2. Use ## H2 section headings to organize the content into a "
+            "narrative (NOT flat bullet points). Each section should build "
+            "an argument, not just list facts.\n"
+            "3. PRESERVE every [sources: ...] citation tag inline — these "
+            "are the provenance links.\n"
+            "4. Insert [[wikilinks]] to existing vault notes ONLY where "
+            "topically relevant (use the EXISTING VAULT NOTES list). Never "
+            "invent note titles that aren't in that list.\n"
+            "5. Keep ALL the factual content from the synthesis — don't "
+            "drop facts, just restructure them into readable prose.\n"
+            "6. End with a ## Sources section listing each source as a "
+            "markdown link.\n"
+            "Do NOT add a top-level # heading (the caller adds it). Start "
+            "directly with the YAML frontmatter."
+        )
+        user = (
+            f"Topic: {topic}\n\n"
+            f"Summary line: {summary or ''}\n\n"
+            f"Raw extractive synthesis ({source_count} sources, {facts} "
+            f"facts):\n\n{synth}\n\n"
+            f"Sources:\n{sources_block}"
+            f"{titles_hint}\n\n"
+            "Restructure this into a proper research note with YAML "
+            "frontmatter, H2 sections, preserved citations, and "
+            "[[wikilinks]] to relevant existing vault notes. Output ONLY "
+            "the note content (starting with ---)."
+        )
+
+        try:
+            result = ollama_client.generate(
+                prompt=user,
+                system=system,
+                temperature=0.3,
+                max_tokens=2048,
+                stream=False,
+            )
+            if isinstance(result, dict):
+                note_md = result.get("response", "")
+            else:
+                # A generator fallback — drain it (shouldn't happen with
+                # stream=False, but be safe).
+                note_md = "".join(
+                    c.get("response", "") for c in result)
+        except Exception:
+            # LLM unavailable / errored → fall back to extractive format.
+            return self.synthesize_note_markdown(report, summary)
+
+        note_md = (note_md or "").strip()
+        if len(note_md) < self._STRUCTURED_MIN_CHARS:
+            # Too short — the LLM collapsed it. Fall back.
+            return self.synthesize_note_markdown(report, summary)
+
+        # The LLM may have included a top-level # heading despite the
+        # instruction not to. Strip it so the caller's own # heading is
+        # the only one at the top.
+        note_md = re.sub(r"\A#\s+.+\n+", "", note_md)
+
+        # Ensure the research provenance marker is present (the extractive
+        # format has it; the LLM may drop it). Append if missing.
+        marker = (
+            f"<!-- research: {source_count} sources, {facts} facts, "
+            f"{len(report.get('rounds', []))} rounds -->"
+        )
+        if marker not in note_md:
+            note_md = note_md.rstrip() + "\n\n" + marker + "\n"
+
+        return note_md

@@ -57,6 +57,20 @@ async def research_tool_endpoint(payload: dict,
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).debug("swallowed: %s", e)
+            # LLM-assisted note structuring (ONE call, optional): overwrite
+            # the extractive markdown with a structured note (frontmatter,
+            # H2 sections, wikilinks) if the LLM is available and passes the
+            # safety floor. Falls back to the extractive markdown.
+            try:
+                _titles = list(svc.vault_graph.nodes.keys())
+                _structured = svc.research_engine.synthesize_structured_note(
+                    report, summary, ollama_client=svc.ollama_client,
+                    vault_note_titles=_titles)
+                if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+                    Path(note_path).write_text(_structured, encoding="utf-8")
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).debug("swallowed: %s", e)
         except Exception as e:
             svc.session_logger.log_exception(e, context="research_tool_note")
     report["note_path"] = note_path

@@ -288,5 +288,5 @@ The `evidence_count` and `evidence_sources` fields enforce reflection grounding.
 
 ## Related Dreaming Research
 
-- [[AI-agent-dreaming-sleep-time-consolidation-how-do-AI-agents-like-Hermes-OpenClaw]] — research on AI agent dreaming mechanisms
+- [[Automated-experience-consolidation-for-AI-agents-converting-episodic-memory-logs]] — research on AI agent dreaming mechanisms
 - [[open-second-brain-Hermes-Agent-dream-pass-mechanism-how-does-the-dream-pass-work]] — open-second-brain's dream pass mechanism, Hermes Agent integration

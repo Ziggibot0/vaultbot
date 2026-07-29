@@ -113,6 +113,23 @@ async def handle_research(
             Path(note_path).write_text(md, encoding="utf-8")
         except Exception:
             pass
+        # LLM-assisted note structuring (ONE call, optional): overwrite
+        # the extractive markdown with a structured note (frontmatter,
+        # H2 sections, wikilinks) if the LLM is available and passes the
+        # safety floor. Falls back to the extractive markdown.
+        try:
+            _titles = list(svc.vault_graph.nodes.keys())
+            _structured = svc.research_engine.synthesize_structured_note(
+                report, summary, ollama_client=svc.ollama_client,
+                vault_note_titles=_titles)
+            if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+                Path(note_path).write_text(_structured, encoding="utf-8")
+                session_logger.log("research_note_structured",
+                                   {"note_path": note_path,
+                                    "chars": len(_structured)})
+        except Exception as _e:
+            session_logger.log("research_note_structure_failed",
+                               {"error": str(_e)})
         session_logger.log("research_note_created", {"note_path": note_path, "topic": topic})
     except Exception as e:
         session_logger.log_exception(e, context="note_creator.create_note_from_research")

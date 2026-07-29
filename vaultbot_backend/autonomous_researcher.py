@@ -54,6 +54,55 @@ _BAD_TOPIC_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# VaultBot's own tool / API names. Topics that are "how to <tool_name>"
+# are procedural gaps about OUR tools, not web-researchable concepts —
+# they should be documented from the vault's code, not the web. Without
+# this filter the autonomous researcher wasted cycles searching the web
+# for "code_run" (got Haskell c_safe_write + Docker Hub pages) and
+# "safe_write" (got Rust docs). These are internal identifiers; the web
+# has nothing useful on them.
+_INTERNAL_TOOL_NAMES = frozenset({
+    # Builtin vault tools
+    "vault_research", "vault_search", "vault_gaps", "vaultbot_status",
+    "plan_task", "update_task", "set_goal",
+    # Meta / self-improve tools
+    "code_read", "code_run", "code_write", "tool_create", "self_reflect",
+    "git_rollback", "safe_write", "js_safe_write", "capability_audit",
+    "execute_procedure",
+    # Common custom tools
+    "textbook_ingest", "textbook_read_page", "web_read_source",
+    "vault_append", "vault_delete", "vault_graph_analyzer", "vault_lint",
+    "vault_list", "preflight_safety_check", "backend_restart",
+    "plugin_reload",
+})
+
+
+def _is_internal_tool_topic(topic: str) -> bool:
+    """True if the topic is a how-to about one of VaultBot's own tools/APIs.
+
+    Matches "how to code_run", "how to safe_write", "code_run", etc. The
+    core token (after stripping 'how to ' / 'how to') is checked against
+    the internal tool name set, AND any underscored token ≤20 chars is
+    treated as an API/tool name (code_run, safe_write, vault_lint pattern).
+    """
+    t = topic.strip().lower()
+    # Strip leading "how to " / "how to" / "what is " prefixes.
+    for prefix in ("how to ", "how to", "what is ", "what is"):
+        if t.startswith(prefix):
+            t = t[len(prefix):].strip()
+            break
+    # Direct tool-name match (e.g. "code_run", "safe_write").
+    if t in _INTERNAL_TOOL_NAMES:
+        return True
+    # Match the first underscored token in a longer topic
+    # ("how to code_run", "how to safe_write properly").
+    for token in re.split(r"[\s,]+", t):
+        token = token.strip()
+        if "_" in token and len(token) <= 20:
+            # Underscored short token = internal API/tool name.
+            return True
+    return False
+
 # Maximum number of words in a researchable topic. Topics with more words
 # are almost certainly note titles (e.g. "Giant-pandas-biology-habitat-diet-
 # conservation-status-and-ecological-role") not concepts.
@@ -93,6 +142,13 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
 
         # Check bad exact-match patterns.
         if _BAD_TOPIC_PATTERNS.match(topic):
+            return False
+
+        # Reject VaultBot's own tool / API names — "how to code_run",
+        # "how to safe_write", etc. are procedural gaps about OUR tools,
+        # not web-researchable concepts. The web has nothing useful on
+        # internal identifiers; these should be documented from code.
+        if _is_internal_tool_topic(topic):
             return False
 
         # thin_community gaps are "MOC for: ..." — not web-researchable.
@@ -147,6 +203,7 @@ class AutonomousResearcher:
         curriculum=None,
         checkpointer=None,
         procedure_tracker=None,
+        ollama_client=None,
     ):
         self.vault_path = Path(vault_path).resolve()
         self.search_client = search_client
@@ -161,6 +218,7 @@ class AutonomousResearcher:
         self.curriculum = curriculum  # KnowledgeCurriculum (Voyager-style self-directed growth)
         self.checkpointer = checkpointer  # Checkpointer (crash recovery)
         self.procedure_tracker = procedure_tracker  # ProcedureTracker (failure-driven evolution)
+        self.ollama_client = ollama_client  # OllamaClient (LLM-assisted note structuring)
 
         self.engine = ResearchEngine(
             session_logger=session_logger,
@@ -306,6 +364,29 @@ class AutonomousResearcher:
                 Path(note_path).write_text(markdown, encoding="utf-8")
             except Exception:
                 pass
+            # LLM-assisted note structuring (ONE call, optional): overwrite
+            # the extractive markdown with a structured note (frontmatter,
+            # H2 sections, wikilinks) if the LLM is available and passes
+            # the safety floor. Falls back to the extractive markdown.
+            if self.ollama_client is not None:
+                try:
+                    _titles = list(self.vault_graph.nodes.keys())
+                    _structured = self.engine.synthesize_structured_note(
+                        report, summary, ollama_client=self.ollama_client,
+                        vault_note_titles=_titles)
+                    if _structured and len(_structured) >= self.engine._STRUCTURED_MIN_CHARS:
+                        try:
+                            from vault_guard import assert_writable
+                            assert_writable(Path(note_path))
+                            Path(note_path).write_text(_structured, encoding="utf-8")
+                        except Exception:
+                            pass
+                        self._log("autonomous_note_structured",
+                                  {"note_path": note_path,
+                                   "chars": len(_structured)})
+                except Exception as _e:
+                    self._log("autonomous_note_structure_failed",
+                              {"error": str(_e)})
             self._log("autonomous_note_created", {
                 "topic": topic, "note_path": note_path,
                 "sources": report["source_count"],

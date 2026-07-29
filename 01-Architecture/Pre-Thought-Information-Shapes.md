@@ -20,7 +20,7 @@ This is "pre-thought": the information is stored in shapes where the connections
 
 ### 1. Typed Edges (Named Predicates)
 
-From [[typed-wikilinks-and-semantic-relationships-in-personal-knowledge-management-how-|the Penfield/Karpathy research]] and [[researchwikilinks-and-named-edges|Christopher Allen's named edges guide]]:
+From [[typed-wikilinks-and-semantic-relationships-in-personal-knowledge-management-how-|the Penfield/Karpathy research]] and [[Wikilink|Christopher Allen's named edges guide]]:
 
 Instead of flat `[[Note]]`, use typed predicates:
 
@@ -119,7 +119,7 @@ This means: when I research a topic and write a note, I should type the edges as
 ## Sources
 
 - [[typed-wikilinks-and-semantic-relationships-in-personal-knowledge-management-how-|Typed wikilinks and semantic relationships in PKM]] — Penfield/Karpathy article on typed `@` relationships in Obsidian
-- [[researchwikilinks-and-named-edges|Wikilinks and Named Edges]] — Christopher Allen's agent reference guide for typed predicates in markdown
+- [[Wikilink|Wikilinks and Named Edges]] — Christopher Allen's agent reference guide for typed predicates in markdown
 - [[researchrag-graph-retrieval-vs-graph-reasoning|Graph Retrieval vs Graph Reasoning]] — WhyHow.AI on knowledge graphs as reasoning structures
 - [[semantic-knowledge-graph-structure-that-encodes-reasoning-in-edges-between-nodes|Semantic knowledge graph structure]] — general research on encoding reasoning in edges
 

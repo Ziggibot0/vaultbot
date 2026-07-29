@@ -22,7 +22,7 @@ A plain wikilink carries exactly one bit of information: "these two notes are co
 
 The vault has extensive research on whether to add type information to wikilinks (e.g., `@supersedes::[[Note]]`, `@contradicts::[[Note]]`):
 
-- **Research notes**: [[typed-wikilinks-and-semantic-relationships-in-personal-knowledge-management-how-|Typed wikilinks research]] and [[researchwikilinks-and-named-edges|Wikilinks and named edges research]] explore the concept
+- **Research notes**: [[typed-wikilinks-and-semantic-relationships-in-personal-knowledge-management-how-|Typed wikilinks research]] and [[Wikilink|Wikilinks and named edges research]] explore the concept
 - **Architecture note**: [[Pre-Thought-Information-Shapes]] proposes typed edges as "pre-thought" — the graph does reasoning before the LLM is called
 - **Assessment**: [[Typed-Edges-Research-Assessment]] concludes the evidence is weak — the main advocate is a vendor blog, and Karpathy's LLM wiki works fine with plain links + LLM maintenance
 
