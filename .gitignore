@@ -46,7 +46,6 @@ vaultbot_backend/curriculum_state.json
 vaultbot_backend/touch_counts.json
 vaultbot_backend/embedding_drift.json
 vaultbot_backend/conversation_state.json
-vaultbot_backend/conversation_state.*
 vaultbot_backend/procedure_failure_log.json
 vaultbot_backend/calibration_log.json
 vaultbot_backend/claim_verification_log.json
