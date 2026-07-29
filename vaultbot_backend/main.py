@@ -675,6 +675,63 @@ async def shutdown_endpoint(request: Request):
     return {"status": "shutting_down"}
 
 
+@app.post("/set_owner")
+async def set_owner_endpoint(request: Request):
+    """Set the VaultBot owner's name at runtime.
+
+    Used by the plugin's first-run setup wizard so a non-technical user can
+    type their name into a friendly modal instead of editing `.env` by hand.
+    The handler:
+      1. Updates the VAULTBOT_OWNER line in the vault's `.env` file (creating
+         the file from `.env.example` if it doesn't exist yet).
+      2. Sets the value in `os.environ` so the running backend (and the
+         next system-prompt build) picks it up immediately — no restart.
+
+    Accepts JSON: {"owner": "Sean"}. Empty strings are allowed (clears the
+    owner, so VaultBot falls back to "the user").
+    """
+    try:
+        body = await request.json()
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
+        body = {}
+    owner = str(body.get("owner", "")).strip()
+    if len(owner) > 120:
+        return {"ok": False, "error": "Name too long (max 120 chars)."}
+
+    # Persist to .env so it survives restarts. Reuse the same KEY=VALUE
+    # replace-or-append logic the wizard uses; inline it here to avoid a
+    # cross-module dependency on setup_wizard.py (which lives in the vault
+    # root, not in the backend package).
+    import re as _re
+    env_path = Path(__file__).with_name("..") / ".env"
+    env_example = Path(__file__).with_name("..") / ".env.example"
+    try:
+        if not env_path.exists() and env_example.exists():
+            env_path.write_text(env_example.read_text(encoding="utf-8"), encoding="utf-8")
+        if env_path.exists():
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+            out, found = [], False
+            for line in lines:
+                if _re.match(rf"^\s*VAULTBOT_OWNER\s*=", line) and not line.strip().startswith("#"):
+                    out.append(f"VAULTBOT_OWNER={owner}")
+                    found = True
+                else:
+                    out.append(line)
+            if not found:
+                out.append(f"VAULTBOT_OWNER={owner}")
+            env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
+
+    # Update the live environment so build_system_prompt() (which reads
+    # os.getenv("VAULTBOT_OWNER")) sees the new name on the next chat turn,
+    # without requiring a backend restart.
+    os.environ["VAULTBOT_OWNER"] = owner
+    logger.info("Owner set via /set_owner: %r", owner)
+    return {"ok": True, "owner": owner}
+
+
 if __name__ == "__main__":
     # access_log=False: the 5s /health poll from the plugin was producing
     # ~17k log lines/day. Keep error logging on; drop the per-request

@@ -1,4 +1,4 @@
-const { Plugin, Setting, ItemView, PluginSettingTab, Notice, MarkdownRenderer } = require('obsidian');
+const { Plugin, Setting, ItemView, PluginSettingTab, Notice, MarkdownRenderer, Modal } = require('obsidian');
 const { spawn } = require('child_process');
 const path = require('path');
 
@@ -20,7 +20,12 @@ class VaultBotPlugin extends Plugin {
 			ttsMuted: false,
 			ttsVoice: 'am_michael',
 			ttsRate: 190,
-			ttsMode: 'server'
+			ttsMode: 'server',
+			// First-run setup wizard: flips true once the user has completed
+			// (or skipped) the in-Obsidian wizard so it doesn't nag them on
+			// every launch. The wizard asks for their name and offers to run
+			// the one-click bootstrap if the venv/deps aren't ready yet.
+			setupComplete: false
 		};
 		this.backendStarting = false;
 		this.mcpProcess = null;
@@ -31,6 +36,20 @@ class VaultBotPlugin extends Plugin {
 		// this.onceBackendReady() instead of polling independently.
 		this._backendReadyPromise = null;
 		await this.loadSettings();
+
+		// First-run setup wizard: if the user hasn't completed setup yet,
+		// show a friendly modal that asks for their name and (optionally)
+		// runs the one-click bootstrap. This is the in-Obsidian equivalent
+		// of the Setup VaultBot.bat / .command launchers — non-technical
+		// users never need to touch a terminal. We defer it ~1.5s so the
+		// Obsidian UI is ready before the modal opens.
+		if (!this.settings.setupComplete) {
+			setTimeout(() => {
+				try { new SetupWizardModal(this.app, this); } catch (e) {
+					console.error('VaultBot setup wizard error:', e);
+				}
+			}, 1500);
+		}
 
 		this.addCommand({
 			id: 'open-vaultbot-sidebar',
@@ -1003,6 +1022,21 @@ class VaultBotSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		containerEl.createEl('h2', {text: 'VaultBot Settings'});
+
+		// One-click re-run of the first-run setup wizard. Useful if a user
+		// skipped it the first time, or wants to re-enter their name / re-run
+		// the bootstrap. Opens the same friendly modal that appears on a
+		// fresh install.
+		new Setting(containerEl)
+			.setName('Setup wizard')
+			.setDesc('Re-run the welcome wizard — set your name or finish one-click backend setup.')
+			.addButton(button => button
+				.setButtonText('Run setup wizard')
+				.onClick(() => {
+					try { new SetupWizardModal(this.app, this.plugin); } catch (e) {
+						new Notice('Could not open setup wizard: ' + (e.message || e));
+					}
+				}));
 
 		new Setting(containerEl)
 			.setName('Backend URL')
@@ -2713,6 +2747,196 @@ class VaultBotSidebarView extends ItemView {
 		};
 
 		input.focus();
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// First-run setup wizard modal.
+//
+// This is the in-Obsidian face of the "no terminal needed" install. On a
+// fresh vault (settings.setupComplete === false) it pops automatically and
+// asks the user two questions:
+//   1. "What should VaultBot call you?" — written to .env as VAULTBOT_OWNER
+//      via the backend's POST /set_owner endpoint (so it sticks across
+//      restarts and applies live without a backend restart).
+//   2. "Is the Python backend ready?" — if the venv or deps aren't set up
+//      yet, it offers to launch the one-click `Setup VaultBot.bat` /
+//      `.command` bootstrapper for them (which creates the venv, installs
+//      deps, and configures .env in one go).
+//
+// It's also re-openable from Settings → "Run setup wizard" so a user who
+// skipped it can come back to it later.
+// ─────────────────────────────────────────────────────────────────────────
+class SetupWizardModal extends Modal {
+	constructor(app, plugin) {
+		super(app);
+		this.plugin = plugin;
+		this.ownerName = '';
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass('vaultbot-setup-wizard');
+
+		contentEl.createEl('h2', { text: 'Welcome to VaultBot 👋' });
+		contentEl.createEl('p', {
+			text: 'A self-improving AI research agent that lives inside your Obsidian vault. Let\'s get you set up — it takes about a minute.'
+		});
+
+		// Step 1: owner name.
+		contentEl.createEl('h3', { text: '1. What should VaultBot call you?' });
+		const nameRow = contentEl.createDiv({ attr: { style: 'display:flex;gap:8px;align-items:center;margin-bottom:8px;' } });
+		const nameInput = nameRow.createEl('input', {
+			type: 'text',
+			attr: { placeholder: 'Your name', style: 'flex:1;padding:6px 8px;font-size:1em;' }
+		});
+		// Prefill from existing .env-derived setting if present (none yet,
+		// but defensive). Focus the field so the user can just type.
+		nameInput.focus();
+
+		const statusEl = contentEl.createDiv({ attr: { style: 'min-height:1.2em;font-size:0.85em;opacity:0.8;margin-bottom:12px;' } });
+
+		// Step 2: backend readiness check + bootstrap offer.
+		contentEl.createEl('h3', { text: '2. Set up the backend (one click)' });
+		const backendStatusEl = contentEl.createDiv({ attr: { style: 'margin-bottom:8px;' } });
+		const backendStatusText = backendStatusEl.createEl('p', {
+			text: 'Checking whether the Python backend is ready…',
+			attr: { style: 'opacity:0.8;' }
+		});
+
+		const bootstrapBtn = contentEl.createEl('button', {
+			text: 'Run one-click setup',
+			attr: { style: 'margin-right:8px;' }
+		});
+		bootstrapBtn.style.display = 'none';
+
+		const checkBackend = async () => {
+			const fs = require('fs');
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+			}
+			const venvPython = path.join(vaultRoot, 'vaultbot_venv', 'Scripts', 'pythonw.exe');
+			const venvPythonAlt = path.join(vaultRoot, 'vaultbot_venv', 'bin', 'python');
+			const venvReady = fs.existsSync(venvPython) || fs.existsSync(venvPythonAlt);
+			if (venvReady) {
+				backendStatusText.setText('✅ Python backend environment is ready.');
+				bootstrapBtn.style.display = 'none';
+			} else {
+				backendStatusText.setText('⚠️ The Python backend isn\'t set up yet. Click the button below — it handles everything automatically (no terminal needed).');
+				bootstrapBtn.style.display = '';
+			}
+		};
+		checkBackend();
+
+		bootstrapBtn.addEventListener('click', () => {
+			const fs = require('fs');
+			const { spawn } = require('child_process');
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+			}
+			try {
+				if (process.platform === 'win32') {
+					const bat = path.join(vaultRoot, 'Setup VaultBot.bat');
+					// Use cmd.exe to launch the .bat in its own console window
+					// so the user sees the wizard's progress output.
+					spawn('cmd.exe', ['/c', 'start', 'VaultBot Setup', '"'+bat+'"'], {
+						cwd: vaultRoot, detached: true, shell: false, windowsHide: false
+					}).unref();
+				} else {
+					const cmd = path.join(vaultRoot, 'Setup VaultBot.command');
+					// chmod +x in case the file lost its executable bit
+					// (e.g. extracted from a zip on macOS).
+					try { fs.chmodSync(cmd, 0o755); } catch (e) {}
+					spawn('open', [cmd], { cwd: vaultRoot, detached: true }).unref();
+				}
+				new Notice('Opened the VaultBot setup wizard in a new window. Come back here when it finishes.');
+				statusEl.setText('Setup wizard launched. Finish it, then come back and click "Done".');
+			} catch (e) {
+				new Notice('Could not launch the setup wizard: ' + (e.message || e));
+			}
+		});
+
+		// Buttons.
+		const btnRow = contentEl.createDiv({ attr: { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px;' } });
+		const skipBtn = btnRow.createEl('button', { text: 'Skip for now', attr: { style: 'opacity:0.7;' } });
+		const doneBtn = btnRow.createEl('button', { text: 'Done', attr: { class: 'mod-cta' } });
+
+		const finish = async (completed) => {
+			if (completed) {
+				const name = nameInput.value.trim();
+				// Send the name to the backend if it's running; otherwise write
+				// to .env directly so the backend picks it up on first boot.
+				let saved = false;
+				try {
+					const running = await this.plugin.isBackendRunning();
+					if (running && name) {
+						const resp = await fetch(this.plugin.settings.backendUrl + '/set_owner', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ owner: name })
+						});
+						if (resp.ok) saved = true;
+					}
+				} catch (e) { /* fall through to file write */ }
+				if (!saved && name) {
+					// Backend not up yet — write VAULTBOT_OWNER into .env by
+					// hand so it's there when the backend first boots.
+					try {
+						const fs = require('fs');
+						let vaultRoot;
+						if (this.app.vault.adapter.getBasePath) {
+							vaultRoot = this.app.vault.adapter.getBasePath();
+						} else {
+							vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+						}
+						const envPath = path.join(vaultRoot, '.env');
+						const examplePath = path.join(vaultRoot, '.env.example');
+						if (!fs.existsSync(envPath) && fs.existsSync(examplePath)) {
+							fs.copyFileSync(examplePath, envPath);
+						}
+						if (fs.existsSync(envPath)) {
+							let txt = fs.readFileSync(envPath, 'utf8');
+							const re = /^[ \t]*VAULTBOT_OWNER[ \t]*=.*$/m;
+							if (re.test(txt)) {
+								txt = txt.replace(re, 'VAULTBOT_OWNER=' + name);
+							} else {
+								txt = txt.replace(/\s*$/, '') + '\nVAULTBOT_OWNER=' + name + '\n';
+							}
+							fs.writeFileSync(envPath, txt, 'utf8');
+							saved = true;
+						}
+					} catch (e) {
+						console.warn('VaultBot: could not write .env owner:', e);
+					}
+				}
+				if (name && saved) {
+					new Notice('VaultBot will call you ' + name + '.');
+				} else if (name) {
+					new Notice('Name saved — VaultBot will call you ' + name + ' after the backend starts.');
+				}
+			}
+			this.plugin.settings.setupComplete = true;
+			await this.plugin.saveSettings();
+			this.close();
+		};
+
+		doneBtn.addEventListener('click', () => finish(true));
+		skipBtn.addEventListener('click', () => finish(false));
+		// Enter in the name field == Done.
+		nameInput.addEventListener('keydown', (ev) => {
+			if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+		});
+	}
+
+	onClose() {
+		this.contentEl.empty();
 	}
 }
 
