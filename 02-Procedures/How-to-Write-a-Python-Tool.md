@@ -121,3 +121,11 @@ This procedure is working correctly when:
 ## Related Procedure
 
 - [[how-to-code_run]] — companion research on safe code execution patterns
+
+## Python Textbook References
+
+- [[python-9classes]] — class design, __init__, methods
+- [[python-487documentation-strings]] — docstrings
+- [[python-5data-structures]] — data structures for tool parameters
+- [[python-4more-control-flow-tools]] — control flow patterns
+- [[python-6modules]] — module organization

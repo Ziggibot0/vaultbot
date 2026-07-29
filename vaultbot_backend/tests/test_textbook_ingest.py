@@ -2,7 +2,7 @@
 
 These tests exercise ONLY the idempotency primitives — `source_key`,
 `find_prior_ingest`, and `remove_stale_notes` — not the full `run()` ingest
-pipeline (which needs Ollama / marker / network). All filesystem state is
+pipeline (which needs Ollama / network). All filesystem state is
 kept inside pytest's `tmp_path` so no real vault is touched.
 
 Documentation grounding:

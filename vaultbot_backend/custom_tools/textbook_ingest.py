@@ -57,18 +57,10 @@ SCHEMA = {
                 "description": "Override the auto-detected title for the table of contents note.",
                 "default": "",
             },
-            "force_ocr": {
-                "type": "boolean",
-                "description": (
-                    "For PDFs: render every page to an image and OCR it (true, default) "
-                    "so vector-drawn equations are recovered as LaTeX, or use the fast "
-                    "hybrid path that only OCRs pages with a poor text layer (false). "
-                    "Hybrid is much faster but drops math on OpenStax-style PDFs whose "
-                    "text layer looks complete but is missing the equations. Leave true "
-                    "for math/physics/chemistry books."
-                ),
-                "default": True,
-            },
+            # NOTE: force_ocr was for the old marker-pdf OCR fallback.
+            # Removed along with marker-pdf — the vision model reads
+            # pages on-demand via textbook_read_page now. The text-layer
+            # extract (parse_pdf) is always used at ingest time.
         },
         "required": ["source"],
     },
@@ -261,111 +253,17 @@ def remove_stale_notes(stale_slugs):
 
 
 # ---------------------------------------------------------------------------
-# Universal OCR parser (marker-pdf)
-# ---------------------------------------------------------------------------
-#
-# Every textbook that arrives as a PDF -- scanned, vector-math, or hybrid --
-# goes through this one path.  marker renders each page to an image and runs
-# layout + OCR + table + equation recognition, emitting clean Markdown with
-# math as LaTeX ($...$ / $$...$$).  This is the reliable, source-agnostic
-# pipeline: the caller hands us any file and we get usable text back,
-# including the equations that a plain text-layer extract silently drops
-# (the original failure mode -- calculus sections came out as "The power
-# function ___ is an even function if ___ is even").
-#
-# marker is heavy on first use (~2-3 GB one-time model download, then
-# CPU-bound: roughly 30-60 s per page).  We therefore:
-#   * lazy-import marker only when this path is actually taken;
-#   * cache the converter + models on the module so a multi-book ingest
-#     pays the model-load cost once, not once per book;
-#   * fall back to the fast text-layer parsers when marker is unavailable
-#     or a page is trivially text (so prose-only PDFs aren't penalised).
-
-_MARKER_CONVERTER = None
-_MARKER_CONVERTER_FORCE_OCR = None
-
-
-def _get_marker_converter(force_ocr=True):
-    """Lazily build and cache the marker PdfConverter + its models.
-
-    Returns the converter, or None if marker isn't installed/importable.
-    We cache two converters -- one with force_ocr=True (the default,
-    used for math/physics/chemistry PDFs whose equations are vector-drawn
-    and invisible to the text layer) and one with force_ocr=False (the
-    fast hybrid path, used for prose-heavy books where the text layer is
-    already complete).  Caching on the module means a single ingest
-    session loads the models once (~1.4 GB layout + OCR model) and reuses
-    them for every subsequent book.
-    """
-    global _MARKER_CONVERTER, _MARKER_CONVERTER_FORCE_OCR
-    if force_ocr:
-        if _MARKER_CONVERTER_FORCE_OCR is not None:
-            return _MARKER_CONVERTER_FORCE_OCR
-    else:
-        if _MARKER_CONVERTER is not None:
-            return _MARKER_CONVERTER
-    try:
-        from marker.converters.pdf import PdfConverter
-        from marker.models import create_model_dict
-    except Exception:
-        return None
-    converter = PdfConverter(
-        artifact_dict=create_model_dict(),
-        config={
-            # force_ocr=True renders every page to an image and OCRs it,
-            # which is the only way to recover vector-drawn equations
-            # (the common failure mode for OpenStax math PDFs -- the text
-            # layer has the prose but the formulas are vector graphics,
-            # so a text-layer extract silently drops them).  force_ocr=False
-            # is the fast hybrid path: marker uses the text layer where it
-            # looks complete and only OCRs sparse/garbled pages -- good for
-            # prose-heavy books, but it skips OCR on math pages whose text
-            # layer *looks* complete (it isn't -- the math is missing), so
-            # the equations still come out blank.  Default to True for
-            # correctness; the caller can opt into the fast path.
-            "force_ocr": force_ocr,
-            "strip_existing_ocr": False,
-            "format_lines": False,
-            "paginate_output": False,
-        },
-    )
-    if force_ocr:
-        _MARKER_CONVERTER_FORCE_OCR = converter
-    else:
-        _MARKER_CONVERTER = converter
-    return converter
-
-
-def parse_with_marker(file_path, force_ocr=True):
-    """Run marker-pdf on a file and split the result into sections.
-
-    Returns (title, sections) in the same shape as the other parsers:
-    sections is a list of {'heading','level','content'} dicts, or None
-    if marker isn't available (caller falls back to the text-layer
-    parsers).
-
-    marker produces one Markdown document for the whole file; we hand it
-    to parse_markdown() which already knows how to split on # headings,
-    drop TOC/answer-key fragments, and natural-order sort the result.
-    """
-    converter = _get_marker_converter(force_ocr=force_ocr)
-    if converter is None:
-        return None
-    from marker.output import text_from_rendered
-    rendered = converter(str(file_path))
-    md_text, _meta, _images = text_from_rendered(rendered)
-    title, sections = parse_markdown(md_text)
-    if not title or title == "Markdown Document":
-        # Fall back to the first heading marker produced, if any.
-        m = re.search(r'^#\s+(.+)$', md_text, re.MULTILINE)
-        if m:
-            title = m.group(1).strip()
-    return title, sections
-
-
-# ---------------------------------------------------------------------------
 # Source detection and fetching
 # ---------------------------------------------------------------------------
+#
+# NOTE: The old marker-pdf OCR fallback (parse_with_marker) was removed.
+# It pulled in torch + surya-ocr + transformers (~3 GB of downloads), which
+# made the first-time install take forever on a fresh machine.  The vision
+# model now reads individual pages on-demand via textbook_read_page (which
+# uses PyMuPDF to render a page to an image and sends it to the LLM), so
+# the heavy OCR pipeline is no longer needed at ingest time.  parse_pdf()
+# (PyMuPDF font-metadata extraction) builds the TOC index; equations are
+# read later, one page at a time, only when the user asks about them.
 
 def detect_source_type(source):
     """Detect the type of source from URL or file path."""
@@ -1538,7 +1436,6 @@ def run(args):
         subject = args.get("subject", "")
         max_sections = min(args.get("max_sections", 50), MAX_SECTIONS)
         override_title = args.get("title", "")
-        force_ocr = args.get("force_ocr", True)
 
         # Detect source type
         source_type = detect_source_type(source)
@@ -1568,19 +1465,11 @@ def run(args):
         elif source_type == 'pdf_url':
             temp_pdf_path = fetch_pdf_url(source)
             source_url = source
-            # Fast text-layer path FIRST (seconds for a normal digital
-            # textbook). Fall back to marker OCR only when the text layer
-            # is empty or yields too few sections (scanned / image-only
-            # PDFs) -- that's the only case where the multi-second-per-page
-            # OCR cost is actually justified. This keeps a college kid's
-            # "drop PDF, hit ingest" fast instead of taking hours.
+            # PyMuPDF font-metadata extraction builds the TOC index in
+            # seconds. Equations/figures on individual pages are read
+            # later by textbook_read_page (vision model), not here.
             title, sections = parse_pdf(temp_pdf_path)
             result["parser"] = "pdf_text_layer"
-            if len(sections) < 3:
-                marker_result = parse_with_marker(temp_pdf_path, force_ocr=force_ocr)
-                if marker_result is not None:
-                    title, sections = marker_result
-                    result["parser"] = "marker"
 
         elif source_type in ('pdf_file', 'text_file', 'markdown_file', 'html_file', 'auto_file'):
             file_path = Path(source)
@@ -1588,20 +1477,11 @@ def run(args):
                 return {"status": "error", "error": "File not found: %s" % source}
 
             if source_type == 'pdf_file':
-                # Fast text-layer path FIRST (seconds for a normal digital
-                # textbook). Fall back to marker OCR only when the text
-                # layer is empty or yields too few sections (scanned /
-                # image-only PDFs) -- that's the only case where the
-                # multi-second-per-page OCR cost is justified. A college
-                # kid dropping a textbook and hitting ingest should be done
-                # in seconds, not hours.
+                # PyMuPDF font-metadata extraction builds the TOC index
+                # in seconds. Equations/figures on individual pages are
+                # read later by textbook_read_page (vision model).
                 title, sections = parse_pdf(str(file_path))
                 result["parser"] = "pdf_text_layer"
-                if len(sections) < 3:
-                    marker_result = parse_with_marker(str(file_path), force_ocr=force_ocr)
-                    if marker_result is not None:
-                        title, sections = marker_result
-                        result["parser"] = "marker"
             elif source_type == 'text_file':
                 content_text = file_path.read_text(encoding='utf-8', errors='replace')
                 title, sections = parse_plain_text(content_text)

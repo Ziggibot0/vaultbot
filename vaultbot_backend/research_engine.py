@@ -49,11 +49,43 @@ _BLOCKED_DOMAINS = {
     "simple.wikipedia.org",
 }
 
+# Non-academic domains that pollute results with keyword-matched software.
+# See [[How-to-Fix-Research-Engine-Returning-Garbage]].
+_BLOCKED_NONACADEMIC = {
+    "hub.docker.com", "docker.com", "github.com",
+    "stackoverflow.com", "reddit.com", "twitter.com", "x.com",
+    "youtube.com", "npmjs.com", "pypi.org", "bintray.com",
+    "packagist.org", "rubygems.org", "maven.org", "chat.marginalia.nu",
+}
+
+# Academic/authoritative domains get a relevance boost.
+_ACADEMIC_DOMAINS = {
+    "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "pmc.ncbi.nlm.nih.gov",
+    "nature.com", "science.org", "sciencedirect.com", "springer.com",
+    "wiley.com", "oxfordacademic.com", "plos.org", "frontiersin.org",
+    "mdpi.com", "biomedcentral.com", "royalsocietypublishing.org",
+    "cell.com", "elifesciences.org", "ncbi.nlm.nih.gov",
+    "openstax.org", "khanacademy.org", "britannica.com",
+    "sciencedaily.com", "phys.org", "eurekalert.org",
+    "annualreviews.org", "jstor.org", "doi.org", "bmglabtech.com",
+}
+
 def _is_blocked_source(url: str) -> bool:
     if not url:
         return False
     url_lower = url.lower()
-    return any(domain in url_lower for domain in _BLOCKED_DOMAINS)
+    if any(domain in url_lower for domain in _BLOCKED_DOMAINS):
+        return True
+    if any(domain in url_lower for domain in _BLOCKED_NONACADEMIC):
+        return True
+    return False
+
+def _is_academic_source(url: str) -> bool:
+    """Check if a URL is from an academic/authoritative domain."""
+    if not url:
+        return False
+    url_lower = url.lower()
+    return any(domain in url_lower for domain in _ACADEMIC_DOMAINS)
 
 # --- Stopwords for keyterm extraction (no external dep) -------------------
 _STOPWORDS = {
@@ -294,12 +326,17 @@ _GENERIC_TERMS = {
     "old", "best", "good", "bad", "how", "what", "why", "when", "where",
     "without", "with", "from", "into", "using", "use", "used", "uses",
     "research", "study", "paper", "analysis", "study", "results", "method",
+    # Biology terms that are too generic alone — need specific partners
+    "communicate", "communication", "communicating", "signaling",
+    "molecules", "sensing", "formation", "behavior", "coordination",
+    "through", "group", "groups",
     "approach", "based", "proposed", "novel", "new", "recent", "current",
 }
 
 
 def _source_relevance(title: str, text: str, signal: list[str],
-                       all_keyterms: list[str]) -> tuple[float, str]:
+                       all_keyterms: list[str],
+                       url: str = "") -> tuple[float, str]:
     """Score how on-topic a source is. Returns (score, reason).
 
     score >= 1.0 means the source passes the relevance gate.
@@ -345,7 +382,12 @@ def _source_relevance(title: str, text: str, signal: list[str],
             matched.append(s)
     if not matched:
         return 0.0, "no_signal_match"
-    return score, f"signal:{','.join(matched[:4])}"
+    # Require at least 2 signal matches for non-academic sources.
+    # Prevents Docker "quorum" images from passing with just 1 match.
+    is_academic = _is_academic_source(url)
+    if not is_academic and len(matched) < 2:
+        return 0.5, f"insufficient_signal:{len(matched)}/2 (non-academic)"
+    return score, f"signal:{','.join(matched[:4])}{' [academic]' if is_academic else ''}"
 
 
 def _detect_facets(topic: str) -> list[str]:
@@ -380,11 +422,11 @@ def _facet_keywords(facet: str) -> list[str]:
 # Max length for a focused search topic. Topics longer than this get
 # truncated to their first meaningful clause so search engines don't
 # choke on 200-char roadmap bullets.
-_MAX_SEARCH_TOPIC_CHARS = 80
+_MAX_SEARCH_TOPIC_CHARS = 120
 
 
 def _focus_topic(topic: str) -> str:
-    """Truncate an overly long topic to its first meaningful clause.
+    """Truncate an overly long topic but preserve high-specificity terms.
 
     The agent sometimes passes a full roadmap bullet as the research topic
     (e.g. "Bacterial communication: quorum sensing, how bacteria talk to
@@ -395,21 +437,47 @@ def _focus_topic(topic: str) -> str:
     the focused version is what gets searched.
 
     Short topics (≤ the cap) pass through unchanged.
+
+    FIX: Previously cut at the first colon, losing all specific terms after
+    it (autoinducer, AHL, biofilm). Now keeps the first clause PLUS extracts
+    high-specificity terms from the rest of the topic so they're included
+    in the search query.
     """
     if len(topic) <= _MAX_SEARCH_TOPIC_CHARS:
         return topic
-    # Try splitting on the first colon (topic: details pattern).
-    for sep in (":", ",", ". ", " - ", " — "):
+    # Try splitting on the first separator to get the first clause.
+    first_clause = topic
+    for sep in (": ", ", ", " - ", " — ", ". "):
         idx = topic.find(sep)
-        if 0 < idx <= _MAX_SEARCH_TOPIC_CHARS:
-            return topic[:idx].strip()
-    # No clause separator found early — hard-cap at the limit, trying to
-    # break on a word boundary so we don't cut mid-word.
-    cut = topic[:_MAX_SEARCH_TOPIC_CHARS]
-    last_space = cut.rfind(" ")
-    if last_space > 40:
-        return cut[:last_space].strip()
-    return cut.strip()
+        if 0 < idx <= 80:
+            first_clause = topic[:idx].strip()
+            break
+
+    # Extract specific terms from the FULL topic (words > 4 chars, not
+    # stopwords, not generic, not already in the first clause).
+    first_low = first_clause.lower()
+    all_words = re.findall(r'[a-zA-Z][a-zA-Z0-9_-]+', topic.lower())
+    _FOCUS_STOP = _STOPWORDS | _GENERIC_TERMS
+    extras = []
+    seen = set(first_low.split())
+    for w in all_words:
+        if len(w) > 4 and w not in _FOCUS_STOP and w not in seen:
+            extras.append(w)
+            seen.add(w)
+            if len(extras) >= 4:
+                break
+
+    result = first_clause
+    if extras:
+        result += " " + " ".join(extras)
+
+    if len(result) > _MAX_SEARCH_TOPIC_CHARS:
+        cut = result[:_MAX_SEARCH_TOPIC_CHARS]
+        last_space = cut.rfind(" ")
+        if last_space > 40:
+            return cut[:last_space].strip()
+        return cut.strip()
+    return result.strip()
 
 
 class ResearchEngine:
@@ -555,7 +623,8 @@ class ResearchEngine:
             gate_text = text if len(text) >= 200 else (
                 f"{snippet}\n{text}")
             rel_score, rel_reason = _source_relevance(
-                hit.get("title", ""), gate_text, signal, topic_terms)
+                hit.get("title", ""), gate_text, signal, topic_terms,
+                url=url)
             if rel_score < 1.0:
                 self._log("research_source_rejected",
                           {"round": round_idx, "url": url,
