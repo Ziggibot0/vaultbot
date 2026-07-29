@@ -42,6 +42,7 @@ vaultbot_backend/checkpoints/
 vaultbot_backend/vaultbot_index/
 vaultbot_backend/vaultbot/
 vaultbot_backend/vaultbot.pid
+vaultbot_backend/chat_loop_checkpoint.json
 vaultbot_backend/curriculum_state.json
 vaultbot_backend/touch_counts.json
 vaultbot_backend/embedding_drift.json
