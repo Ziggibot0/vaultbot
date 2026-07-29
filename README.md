@@ -82,10 +82,15 @@ curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
 ### What the installer does
 
 The installer asks for your name, downloads the VaultBot files, creates a
-Python environment, installs all dependencies, pulls the AI models (~2 GB),
-writes your config, and opens Obsidian for you — all automatically. It
-takes 10–20 minutes the first time (mostly downloads). You only do this
-once.
+Python environment, installs all dependencies, pulls the lightweight embedding
+model (~270 MB), writes your config, and opens Obsidian for you — all
+automatically. It takes 10–20 minutes the first time (mostly downloads). You
+only do this once.
+
+The installer does **NOT** auto-download a chat LLM — those can be 5–20+ GB
+and overwhelm a laptop. Instead, you provide a chat model via a cloud API
+(recommended, zero local compute) or manually pull a local model later.
+See the [Configuration](#configuration) section below.
 
 If Python or Ollama aren't installed yet, the installer tells you and
 opens the download page for you. Install them, then run the command again.
@@ -145,9 +150,9 @@ close and reopen Obsidian) for changes to take effect.
 | Variable | What it does | Default |
 |----------|-------------|---------|
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
-| `OLLAMA_LLM_MODEL` | The local LLM for synthesis | `qwen3.6:latest` |
-| `OLLAMA_EMBED_MODEL` | The embedding model | `nomic-embed-text` |
-| `LLM_BACKEND` | `ollama` (local, free) or `openai` (cloud, any OpenAI-compatible API) | `ollama` |
+| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; you must manually `ollama pull` it) | `qwen3.6:latest` |
+| `OLLAMA_EMBED_MODEL` | The embedding model (auto-pulled by the installer, ~270 MB) | `nomic-embed-text` |
+| `LLM_BACKEND` | `ollama` (local, free, needs manual model pull) or `openai` (cloud, any OpenAI-compatible API — **recommended for laptops**) | `openai` |
 | `LLM_API_KEY` | Cloud API key (leave blank for local-only) | (empty) |
 | `LLM_BASE_URL` | Cloud API base URL (OpenAI, OpenRouter, LM Studio, vLLM, etc.) | `https://api.openai.com` |
 | `LLM_MODEL` | Cloud model name (only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
@@ -155,11 +160,16 @@ close and reopen Obsidian) for changes to take effect.
 | `TAVILY_API_KEY` | Tavily search API key (only if using `tavily`) | (empty) |
 | `SEARXNG_PORT` | Port for the optional self-hosted SearXNG container | `8080` |
 
-> **Want to use a cloud model (like GPT-4o) instead of local?** Set
-> `LLM_BACKEND=openai`, `LLM_API_KEY=your-key`, and `LLM_MODEL=gpt-4o-mini`
-> (or any OpenAI/OpenRouter model). Embeddings stay local on Ollama either
-> way. You can also switch back and forth live from the plugin settings
-> panel without editing `.env` — the changes persist for you.
+> **Want to use a cloud model (like GPT-4o) instead of local?** That's the
+default now — set `LLM_API_KEY=your-key` and `LLM_MODEL=gpt-4o-mini` (or any
+OpenAI/OpenRouter model). Embeddings stay local on Ollama either way. You
+can also switch between cloud and local back and forth live from the plugin
+settings panel without editing `.env` — the changes persist for you.
+>
+> **Want to run a local LLM instead?** Set `LLM_BACKEND=ollama` in `.env`,
+then manually pull a model: `ollama pull qwen3:latest` (or any model you
+like). The installer does NOT auto-pull chat models — only the lightweight
+embedding model.
 
 ---
 
@@ -183,7 +193,10 @@ one-liner install command to finish setup.
 
 **Model download is slow or fails.** `ollama pull` can be flaky on slow
 connections. Just re-run the same `ollama pull` command — it resumes where
-it left off.
+it left off. Note: the installer only auto-pulls the embedding model
+(`nomic-embed-text`, ~270 MB). If you chose local LLM mode
+(`LLM_BACKEND=ollama`), you'll need to `ollama pull` your chat model
+manually.
 
 **Voice (text-to-speech / speech-to-text) doesn't work.** The voice
 stack needs `numpy` 2.x and a working audio device. First launch

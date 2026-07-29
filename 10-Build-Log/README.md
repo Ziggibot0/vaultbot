@@ -61,9 +61,9 @@ All config lives in `.env` (copy from `.env.example`):
 | Variable | What it does | Default |
 |----------|-------------|---------|
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
-| `OLLAMA_LLM_MODEL` | The local LLM for synthesis | `qwen3.6:latest` |
-| `OLLAMA_EMBED_MODEL` | The embedding model | `nomic-embed-text` |
-| `LLM_BACKEND` | `ollama` (local, free) or `openai` (cloud, any OpenAI-compatible API) | `ollama` |
+| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; must `ollama pull` manually) | `qwen3.6:latest` |
+| `OLLAMA_EMBED_MODEL` | Embedding model (auto-pulled by installer, ~270 MB) | `nomic-embed-text` |
+| `LLM_BACKEND` | `ollama` (local, needs manual model pull) or `openai` (cloud, **recommended for laptops**) | `openai` |
 | `LLM_API_KEY` | Cloud API key (leave blank for local-only) | (empty) |
 | `VAULTBOT_RESEARCH_BACKEND` | `freesearch` (keyless) or `tavily` (API key) | `freesearch` |
 

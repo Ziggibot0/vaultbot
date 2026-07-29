@@ -87,6 +87,24 @@ def _is_academic_source(url: str) -> bool:
     url_lower = url.lower()
     return any(domain in url_lower for domain in _ACADEMIC_DOMAINS)
 
+
+def _normalize_url(url: str) -> str:
+    """Normalize URL for dedup: strip protocol, www., trailing slash, fragments.
+
+    Fixes the duplicate-source bug where the same arXiv paper appeared twice
+    (once as https://arxiv.org/... and once as http://arxiv.org/...). The
+    dedup set used exact string comparison, so protocol variants slipped
+    through. See [[How-to-Fix-Research-Engine-Returning-Garbage]].
+    """
+    if not url:
+        return ""
+    u = url.lower().strip()
+    u = re.sub(r'^https?://', '', u)
+    u = re.sub(r'^www\.', '', u)
+    u = u.split('#')[0]
+    u = u.rstrip('/')
+    return u
+
 # --- Stopwords for keyterm extraction (no external dep) -------------------
 _STOPWORDS = {
     "the", "a", "an", "and", "or", "but", "if", "then", "else", "when", "of",
@@ -298,6 +316,11 @@ def _signal_terms(keyterms: list[str]) -> list[str]:
         # signal alone — they need a signal partner.
         if len(low) >= 5 and low not in _GENERIC_TERMS:
             sig.append(low)
+        # Short all-caps acronyms (AHL, DNA, RNA, ATP) are always signal
+        # even though they're < 5 chars. They're highly specific terms
+        # that disambiguate biology/chemistry topics.
+        elif len(low) >= 2 and low == low.upper() and low.isalpha():
+            sig.append(low)
     # Dedup preserving order.
     seen: set[str] = set()
     out: list[str] = []
@@ -455,11 +478,23 @@ def _focus_topic(topic: str) -> str:
 
     # Extract specific terms from the FULL topic (words > 4 chars, not
     # stopwords, not generic, not already in the first clause).
+    # ALSO preserve short all-caps acronyms (AHL, DNA, RNA, ATP) which are
+    # high-specificity biology/chemistry terms that get dropped by the >4
+    # char filter but are critical for finding the right sources.
     first_low = first_clause.lower()
     all_words = re.findall(r'[a-zA-Z][a-zA-Z0-9_-]+', topic.lower())
+    # Find all-caps acronyms from the ORIGINAL text (case-sensitive).
+    acronyms = re.findall(r'\b([A-Z]{2,5}[0-9]?)\b', topic)
     _FOCUS_STOP = _STOPWORDS | _GENERIC_TERMS
     extras = []
     seen = set(first_low.split())
+    # Add acronyms first (highest specificity per char).
+    for ac in acronyms:
+        if ac.lower() not in seen:
+            extras.append(ac)
+            seen.add(ac.lower())
+            if len(extras) >= 4:
+                break
     for w in all_words:
         if len(w) > 4 and w not in _FOCUS_STOP and w not in seen:
             extras.append(w)
@@ -752,10 +787,12 @@ class ResearchEngine:
                 "round": round_idx + 1, "max_rounds": self.max_rounds,
                 "query": query, "total_sources_so_far": len(all_sources)})
             sources = self._search_round(query, round_idx, topic=search_topic)
-            # Dedup against already-collected sources.
-            new_sources = [s for s in sources if s["url"] not in seen_urls]
+            # Dedup against already-collected sources (normalized URLs
+            # catch http vs https duplicates of the same page).
+            new_sources = [s for s in sources
+                           if _normalize_url(s["url"]) not in seen_urls]
             for s in new_sources:
-                seen_urls.add(s["url"])
+                seen_urls.add(_normalize_url(s["url"]))
             all_sources.extend(new_sources)
             rounds_log.append({
                 "round": round_idx,
@@ -827,8 +864,8 @@ class ResearchEngine:
                 gsrc = self._search_round(gq, round_idx=self.max_rounds,
                                             topic=search_topic)
                 for s in gsrc:
-                    if s["url"] not in seen_urls:
-                        seen_urls.add(s["url"])
+                    if _normalize_url(s["url"]) not in seen_urls:
+                        seen_urls.add(_normalize_url(s["url"]))
                         follow_up_sources.append(s)
                         all_sources.append(s)
             self._progress("gap_fill_done", {

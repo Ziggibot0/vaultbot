@@ -160,15 +160,19 @@ else
     mark_step_done "deps_installed"
 fi
 
-# ── 6. Pull AI models via Ollama ────────────────────────────────────────────
+# ── 6. Pull embedding model via Ollama ────────────────────────────────────
+# Only the lightweight embedding model (nomic-embed-text, ~270 MB) is
+# auto-pulled. The chat/synthesis LLM is NOT auto-pulled — it can be
+# 5-20+ GB and many laptops can't handle that. The user provides a chat
+# model via a cloud API (LLM_BACKEND=openai + LLM_API_KEY in .env) or
+# manually runs `ollama pull <model>` if they want local inference.
 if step_done "models_pulled"; then
-    echo "  [!]  AI models already downloaded -- skipping."
+    echo "  [!]  Embedding model already downloaded -- skipping."
 else
-    echo ">>> Downloading AI models (~2 GB, one-time only)..."
-    echo "  This is the big download. It resumes if interrupted."
-    ollama pull qwen3.6:latest
+    echo ">>> Downloading embedding model (~270 MB, one-time only)..."
+    echo "  The chat LLM is NOT auto-downloaded. See .env.example for cloud API setup."
     ollama pull nomic-embed-text
-    echo "  [OK] Models ready"
+    echo "  [OK] Embedding model ready"
     mark_step_done "models_pulled"
 fi
 
