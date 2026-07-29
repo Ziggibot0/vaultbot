@@ -432,16 +432,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
     # DETERMINISTIC LOOP DETECTOR (Copilot/Claude "verify each step" pattern):
     # track consecutive read-only rounds. If the model only explores
-    # (vault_search/vault_list/code_read/vault_gaps/...) for too many rounds
-    # without producing any user-facing text or making forward progress
-    # (no update_task, no plan, no writes), the framework force-breaks the
-    # loop instead of letting it spin to MAX_ROUNDS in silence — the exact
-    # "stopped dead in its tracks" failure. Deterministic, zero LLM.
     _READ_ONLY_TOOLS = frozenset(EXPLORE_TOOLS) | {"vault_list"}
-    _consecutive_readonly = 0
     _tool_rounds_executed = 0
-    _LAST_TEXT_ROUND = -1  # round_idx of the last round that streamed user text
-    _MAX_READ_ONLY_STREAK = int(os.getenv("VAULTBOT_MAX_READ_ONLY_STREAK", "6"))
+    _empty_answer_retried = False  # empty-answer guard: only retry once per turn
+    # No round cap, no loop detector, no pre-flight char cap — Sean asked for
+    # all artificial limits removed. The model has a 1M-token context window;
+    # let it work as long as it needs. The compactor is disabled too.
     _MAX_TOOL_ROUNDS_NO_PLAN = int(os.getenv("VAULTBOT_MAX_TOOL_ROUNDS_NO_PLAN", "3"))
     _FORCE_PLAN_ON_MULTI = os.getenv("VAULTBOT_FORCE_PLAN_ON_MULTI", "on").lower() != "off"
 
@@ -476,12 +472,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
     try:
      round_idx = 0
-     # Hard round cap: prevents an infinite tool-call loop from running
-     # forever if the model gets stuck repeating tool calls without
-     # converging on a final answer. 25 is generous (real turns use 1-8
-     # rounds); hitting the cap logs a warning and returns whatever was
-     # accumulated so the user sees the partial work instead of a hang.
-     MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "25"))
+     # No round cap — the model works until it's done. Sean explicitly
+     # asked for all caps removed. The model has a 1M-token context window.
      while True:
         session_logger.log("round_loop_top", {
             "round": round_idx, "t_ms": loop.time() * 1000,
@@ -516,50 +508,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 }
             except Exception:
                 pass
-
-        # Pre-flight hard char cap: before sending the conversation to the
-        # cloud model, enforce a last-resort char cap so the payload can
-        # NEVER exceed the size where a remote model times out (>120s
-        # TTFT). The compactor + tool-result capping should keep it bounded,
-        # but this is the tank-grade guarantee.
-        #
-        # DESIGN: drop WHOLE oldest body messages (never shred to 200-char
-        # fragments). Lossy truncation destroyed the semantic thread — the
-        # model saw torn snippets of tool results and couldn't tell what its
-        # tools returned, so it re-called them ("forgetting mid-turn and
-        # redoing things"). Dropping the whole message is clean: the model
-        # knows that round is gone and relies on recent turns. The two
-        # system messages (identity briefing + vault context) are always
-        # protected; the last 2 messages (current round) are protected.
-        _MAX_CHAT_CHARS = int(os.getenv("VAULTBOT_CHAT_MAX_CHARS", "80000"))
-        _conv_chars = sum(
-            len(str(m.get("content", "") or "")) +
-            len(str(m.get("thinking", "") or ""))
-            for m in conversation if isinstance(m, dict))
-        if _conv_chars > _MAX_CHAT_CHARS:
-            _HEAD = 2  # system briefing + vault context
-            _TAIL = 2   # current round
-            while (_conv_chars > _MAX_CHAT_CHARS
-                   and len(conversation) > _HEAD + _TAIL):
-                dropped = conversation.pop(_HEAD)
-                _conv_chars -= (len(str(dropped.get("content", "") or "")) +
-                                len(str(dropped.get("thinking", "") or "")))
-                # Preserve tool-call pairing: if we dropped a tool message,
-                # drop its orphaned parent assistant tool_calls too.
-                if isinstance(dropped, dict) and dropped.get("role") == "tool":
-                    tcid = dropped.get("tool_call_id")
-                    if _HEAD < len(conversation):
-                        nxt = conversation[_HEAD]
-                        if (isinstance(nxt, dict)
-                                and nxt.get("role") == "assistant"
-                                and nxt.get("tool_calls")):
-                            ids = [tc.get("id") for tc in nxt["tool_calls"]
-                                   if isinstance(tc, dict)]
-                            if tcid in ids:
-                                conversation.pop(_HEAD)
-            session_logger.log("pre_flight_char_cap", {
-                "chars": _conv_chars, "cap": _MAX_CHAT_CHARS,
-                "round": round_idx, "messages": len(conversation)})
 
         # Stream the LLM response for this round.
         round_text = ""
@@ -670,21 +618,39 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
         # No tool calls → the LLM produced a final answer. We're done.
         if not round_tool_calls:
+            # Empty-answer guard: if the model produced thinking but NO
+            # user-facing text and no tool calls, it went silent — likely
+            # because compaction ate its tool results and it has nothing to
+            # say. Don't send an empty answer_done (the user sees nothing =
+            # "bot stopped"). Instead, inject a system nudge telling the
+            # model to respond to the user with whatever it knows, and give
+            # it one more round. This only fires once per turn.
+            if not round_text.strip() and round_thinking.strip():
+                if not _empty_answer_retried:
+                    _empty_answer_retried = True
+                    session_logger.log("empty_answer_retry", {
+                        "round": round_idx,
+                        "thinking_length": len(round_thinking),
+                    })
+                    conversation.append({
+                        "role": "system",
+                        "content": (
+                            "You produced reasoning but no answer to the user. "
+                            "Do NOT call any more tools. Based on everything you "
+                            "know so far — including your reasoning above and any "
+                            "tool results in your history — write a direct response "
+                            "to the user now. If you don't have enough information, "
+                            "say so plainly and explain what you need."),
+                    })
+                    round_idx += 1
+                    continue
             final_answer = round_text
             break
 
-        # Track the last round that streamed any user-facing text. A streak of
-        # tool rounds with NO text is the "silent spin" signature.
-        if round_text.strip():
-            _LAST_TEXT_ROUND = round_idx
-
-        # Classify this round's tool calls for the loop detector.
         _round_tool_names = []
         for _tc in round_tool_calls:
             _fn = _tc.get("function", {})
             _round_tool_names.append(_fn.get("name", ""))
-        _round_is_readonly = bool(_round_tool_names) and all(
-            n in _READ_ONLY_TOOLS for n in _round_tool_names)
         _tool_rounds_executed += 1
 
         # FRAMEWORK-DRIVEN PLAN (the Copilot/Claude enforcement the model can't
@@ -699,13 +665,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             _gate_active = True
             session_logger.log("plan_gate_forced", {
                 "round": round_idx, "reason": "no_plan_after_tool_rounds"})
-
-        # DETERMINISTIC LOOP DETECTOR: a read-only streak that never surfaces
-        # text or progress is a stall. Count it; break the loop below.
-        if _round_is_readonly and not round_text.strip():
-            _consecutive_readonly += 1
-        else:
-            _consecutive_readonly = 0
 
         # Accumulate non-final round text into final_answer so the partial
         # file captures all streamed text across rounds, not just the last.
@@ -919,62 +878,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 })
             except Exception as e:
                 session_logger.log("chat_checkpoint_save_failed", {"error": str(e)})
-
-        # DETERMINISTIC LOOP DETECTOR — hard break. If the model has spent a
-        # long streak ONLY on read-only/explore tools, produced no user-facing
-        # text, and isn't checking off plan steps, it is spinning, not working.
-        # Copilot/Claude break out here via a "did the step complete?" check
-        # instead of burning to the round cap in silence. Break and synthesize
-        # whatever was gathered so Sean gets an answer, not a freeze.
-        _no_progress = (not wm.has_plan()) or (wm.snapshot().get("completed", 0) == 0)
-        _silent_streak = (round_idx - _LAST_TEXT_ROUND)
-        if (_consecutive_readonly >= _MAX_READ_ONLY_STREAK
-                and _no_progress and _silent_streak >= _MAX_READ_ONLY_STREAK):
-            session_logger.log("loop_detector_break", {
-                "round": round_idx,
-                "consecutive_readonly": _consecutive_readonly,
-                "silent_streak": _silent_streak,
-                "final_answer_len": len(final_answer),
-            })
-            await svc.manager.send_personal_message(json.dumps({
-                "type": "status",
-                "content": ("I was re-reading the vault without making progress, "
-                            "so I stopped the loop. Here's what I found."),
-            }), websocket, session_logger=session_logger)
-            conversation.append({
-                "role": "system",
-                "content": (
-                    "STOP calling tools. You have been re-reading the vault for "
-                    f"{_consecutive_readonly} rounds without new findings. "
-                    "Synthesize a final answer NOW from what you already have. "
-                    "If the vault genuinely lacks the answer, say so plainly and "
-                    "suggest ONE concrete next step (e.g. vault_research on a "
-                    "specific topic). Do NOT call another read-only tool."),
-            })
-            if not final_answer.strip():
-                final_answer = (
-                    "I dug through the vault but kept circling without finding "
-                    "enough to answer confidently, so I stopped rather than keep "
-                    "spinning. Tell me the specific note/topic to research and "
-                    "I'll run a targeted `vault_research` on it.")
-            break
-
-        # Hard round cap: if the model keeps calling tools without
-        # converging on a final answer, break out and return what we have.
-        # This prevents an infinite loop from hanging the session for hours
-        # (the tank-grade guarantee: the chat always terminates).
-        if round_idx >= MAX_ROUNDS:
-            session_logger.log("max_rounds_reached", {
-                "round": round_idx,
-                "final_answer_len": len(final_answer),
-            })
-            await svc.manager.send_personal_message(json.dumps({
-                "type": "status",
-                "content": f"Reached max tool rounds ({MAX_ROUNDS}). Returning what I have so far.",
-            }), websocket, session_logger=session_logger)
-            if not final_answer:
-                final_answer = round_text or "(no final answer produced)"
-            break
 
     except Exception as e:
         # The whole agentic loop crashed — save whatever was streamed so far.
@@ -1523,6 +1426,24 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     Path(note_path).write_text(md, encoding="utf-8")
                 except Exception:
                     pass
+                # LLM-assisted note structuring (ONE call, optional).
+                # Overwrites the extractive markdown with a structured note
+                # (frontmatter, H2 sections, wikilinks) if the LLM succeeds
+                # and passes the safety floor. Falls back to the extractive
+                # markdown if the LLM is unavailable or produces a thin note.
+                try:
+                    _titles = list(svc.vault_graph.nodes.keys())
+                    _structured = svc.research_engine.synthesize_structured_note(
+                        report, summary, ollama_client=svc.ollama_client,
+                        vault_note_titles=_titles)
+                    if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+                        Path(note_path).write_text(_structured, encoding="utf-8")
+                        session_logger.log("research_note_structured",
+                                           {"note_path": note_path,
+                                            "chars": len(_structured)})
+                except Exception as _e:
+                    session_logger.log("research_note_structure_failed",
+                                       {"error": str(_e)})
                 report["note_path"] = note_path
             except Exception as e:
                 session_logger.log_exception(e, context="agent_research_note")

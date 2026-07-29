@@ -22,11 +22,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Conservative compaction thresholds (well below typical 8k–32k windows).
-# Lowered from 20000 to 12000 tokens: a remote cloud model (glm-5.2:cloud)
-# times out at >120s TTFT when the payload exceeds ~200K chars (~50K tokens).
-# Compacting at 12K tokens keeps the conversation well under that cliff.
-_TOKEN_COMPACT_THRESHOLD = int(__import__("os").getenv("VAULTBOT_COMPACT_TOKEN_THRESHOLD", "12000"))
+# Compaction thresholds scaled to the model's actual context window.
+# glm-5.2:cloud has a 1,000,000-token context window. The old 12K threshold
+# fired after just ONE tool round (system prompt + vault context alone are
+# ~8.5K tokens), summarizing away the tool result the model just received
+# before it could use it — the model then produced empty answers because
+# its tool output was gone. 500K tokens is 50% of the context window: enough
+# room for a long agentic session with many tool rounds, while still
+# preventing a truly runaway conversation from hitting the 120s read timeout
+# (which only happens at ~200K+ chars / ~50K+ tokens of payload).
+_TOKEN_COMPACT_THRESHOLD = int(__import__("os").getenv("VAULTBOT_COMPACT_TOKEN_THRESHOLD", "500000"))
 _CHARS_PER_TOKEN = 4  # rough estimate
 
 
@@ -67,18 +72,14 @@ class Compactor:
     # Public API
     # ------------------------------------------------------------------
     def should_compact(self, messages: list[dict[str, Any]]) -> bool:
-        """Return True if the conversation is long enough to warrant compaction."""
-        try:
-            if not messages:
-                return False
-            if len(messages) > self.max_messages:
-                return True
-            if self.estimate_tokens(messages) > _TOKEN_COMPACT_THRESHOLD:
-                return True
-            return False
-        except Exception as exc:  # never crash the chat loop
-            logger.debug("should_compact error: %s", exc)
-            return False
+        """Return True if the conversation is long enough to warrant compaction.
+
+        Caps removed at Sean's request — the model has a 1M-token context
+        window. Compaction is effectively disabled (thresholds set to maximum)
+        so tool results are never summarized away mid-task. The compactor
+        remains as a safety net but will not fire under normal conditions.
+        """
+        return False
 
     def compact(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Compact the conversation if needed; otherwise return it unchanged.
@@ -307,8 +308,10 @@ class Compactor:
     # torn snippet and couldn't tell what its tool returned, so it re-called
     # the tool — "forgetting what it was doing and redoing things." Dropping
     # the whole message is cleaner: the model knows that round is gone and
-    # relies on the summary + recent turns. Default 80K chars ≈ 20K tokens.
-    MAX_COMPACTED_CHARS = int(__import__("os").getenv("VAULTBOT_COMPACT_MAX_CHARS", "80000"))
+    # relies on the summary + recent turns. Default 500K chars ≈ 125K tokens
+    # — well within glm-5.2:cloud's 1M context window, but bounded enough that
+    # the read timeout (120s) is never hit (that only happens at ~200K+ tokens).
+    MAX_COMPACTED_CHARS = int(__import__("os").getenv("VAULTBOT_COMPACT_MAX_CHARS", "500000"))
 
     def _hard_cap(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Drop oldest body messages until the total fits MAX_COMPACTED_CHARS.

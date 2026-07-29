@@ -374,6 +374,7 @@ autonomous_researcher = AutonomousResearcher(
     curriculum=knowledge_curriculum,
     checkpointer=checkpointer,
     procedure_tracker=procedure_tracker,
+    ollama_client=ollama_client,
 )
 
 # Self-improvement engine: lets VaultBot read/write its own code, run code in
@@ -433,14 +434,15 @@ chat_checkpointer = ChatLoopCheckpointer(
 
 # Context compactor (OpenHands Condenser pattern): summarizes conversation
 # middle when history grows too long, preventing context overflow on long
-# chats without losing the thread. Thresholds are lowered from the defaults
-# (80 msgs / 20K tokens) to 40 msgs / 12K tokens — the agentic loop adds 2+
-# messages per tool round, and a remote cloud model (glm-5.2:cloud) times
-# out at >120s TTFT when the payload exceeds ~200K chars. Compacting earlier
-# keeps the per-round payload bounded so the cloud round-trip stays fast.
+# chats without losing the thread. The token threshold is now 500K (see
+# compactor.py) — scaled to glm-5.2:cloud's 1M context window. The old 40-msg
+# / 12K-token thresholds fired after a single tool round, summarizing away
+# the tool result the model just received and producing empty answers.
+# 200 messages allows a long multi-step agentic session (25 rounds × 2-3
+# messages each = ~50-75 msgs) before compaction touches anything.
 compactor = Compactor(
     ollama_client=ollama_client, session_logger=default_session_logger,
-    max_messages=int(os.getenv("VAULTBOT_COMPACT_MAX_MESSAGES", "40")))
+    max_messages=int(os.getenv("VAULTBOT_COMPACT_MAX_MESSAGES", "200")))
 
 # Lazy note condenser: de-fluffs notes over time as they're queried. After
 # each chat, retrieved notes get a touch; once a note has been queried 3+
