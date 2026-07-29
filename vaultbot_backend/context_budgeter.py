@@ -58,8 +58,21 @@ class ContextBudgeter:
         self.model_context_limit = model_context_limit or int(
             os.getenv("VAULTBOT_CONTEXT_LIMIT", "32768")
         )
+        # The overhead must reserve space for the NON-context portion of the
+        # system prompt: identity files (~3K tokens) + build_system_prompt
+        # boilerplate (~2K) + gaps summary (~1K) + 24 tool schemas (~5K) +
+        # headroom. The old default of 4096 vastly undercounted this, letting
+        # the vault context grow to ~94K chars (~23K tokens) so the system
+        # prompt alone hit 113K chars — larger than the compactor's 80K cap.
+        # The compactor then shredded recent history to 200-char fragments
+        # while leaving the bloated system prompt intact, and the agent
+        # gravitated to the days-old goal in the untouched identity block
+        # ("redoing a prompt from days ago"). 16000 tokens reserves enough
+        # that the vault context shrinks to ~50K chars, keeping the whole
+        # system prompt under the 80K compactor cap and leaving room for
+        # live history + response within a 32K-token window.
         self.system_prompt_overhead = system_prompt_overhead or int(
-            os.getenv("VAULTBOT_CONTEXT_OVERHEAD", "4096")
+            os.getenv("VAULTBOT_CONTEXT_OVERHEAD", "16000")
         )
         self.response_reserve = response_reserve or int(
             os.getenv("VAULTBOT_CONTEXT_RESPONSE", "4096")

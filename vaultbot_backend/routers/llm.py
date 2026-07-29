@@ -115,6 +115,27 @@ async def set_model_endpoint(payload: dict,
             "current": svc.ollama_client.llm_model}
 
 
+@router.get("/model_context_window")
+async def model_context_window(svc: Annotated[Services, Depends(get_services)],
+                               model: str | None = None) -> dict[str, Any]:
+    """Return the context-window size (in tokens) for a model.
+
+    Auto-detects from the active backend: Ollama queries /api/show for the
+    architecture-prefixed ``*.context_length`` field; OpenAI-compatible
+    backends match the model id against a known-models table. The GUI uses
+    this to size the token-usage meter so it maxes out at whatever the
+    equipped model can actually hold.
+
+    Query params:
+      model: optional model name (defaults to the currently equipped model)
+    """
+    target = model or svc.ollama_client.llm_model
+    loop = asyncio.get_event_loop()
+    ctx = await loop.run_in_executor(
+        None, lambda: svc.ollama_client.context_window(target))
+    return {"model": target, "context_window": ctx}
+
+
 @router.get("/llm/config")
 async def get_llm_config(svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
     """Return the current synthesis-LLM backend config (no secrets)."""

@@ -108,6 +108,133 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_task",
+            "description": (
+                "Plan a multi-step task by writing a structured task list "
+                "into your working memory. This is how you stay on track "
+                "across tool rounds instead of losing the plot in the "
+                "compacted transcript. Call this BEFORE doing any work on a "
+                "task that needs more than one tool call. Decompose the "
+                "task into concrete, verifiable steps. Each step should be "
+                "something you can mark completed with evidence. After "
+                "each tool round, call update_task to mark progress. When "
+                "all tasks are completed, synthesize your final answer — "
+                "do NOT keep calling tools. This tool REPLACES set_goal "
+                "for multi-step task tracking."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": "The high-level goal in your own words.",
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Concrete, ordered steps. Each should be "
+                            "verifiable — e.g. 'Search vault for existing "
+                            "notes on X', 'Research topic Y on the web', "
+                            "'Synthesize findings into an answer'."
+                        ),
+                    },
+                },
+                "required": ["goal", "steps"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_task",
+            "description": (
+                "Update a task in your working memory: mark it in_progress "
+                "before starting it, and completed when done. Call this "
+                "after each tool round so your task list reflects reality. "
+                "When all tasks are completed, the loop will end and you "
+                "synthesize the final answer — so be honest about what's "
+                "actually done. You can also add a new mid-task discovery "
+                "with action='add'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {
+                        "type": "string",
+                        "description": "The task id (from plan_task response).",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "completed"],
+                        "description": "New status for the task.",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Optional annotation — what you found or why the status changed.",
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["update", "add"],
+                        "default": "update",
+                        "description": "'update' (default) to change an existing task, 'add' to append a new task discovered mid-plan.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Required only when action='add': the new task content.",
+                    },
+                },
+                "required": ["task_id", "status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_goal",
+            "description": (
+                "Update or clear your active goal in GOALS.md. This is how "
+                "you remember what you're working on across turns and "
+                "restarts. Call this when you start a new task (set the goal "
+                "+ decompose steps), when a task completes (clear it), or "
+                "when your understanding of the task changes. If you have no "
+                "goal to update, do NOT call this — just leave it alone. "
+                "The goal persists until YOU change it, so be deliberate."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": (
+                            "The active goal in your own words. Set to an "
+                            "empty string or 'clear' to clear the goal when "
+                            "a task is done."
+                        ),
+                    },
+                    "next_step": {
+                        "type": "string",
+                        "description": (
+                            "The next concrete step, or '(awaiting next "
+                            "request)' if the goal was just cleared."
+                        ),
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional decomposed steps for a multi-step "
+                            "task. Omit when clearing."
+                        ),
+                    },
+                },
+                "required": ["goal"],
+            },
+        },
+    },
 ]
 
 # NOTE: textbook_read_page and web_read_source are provided by the
@@ -366,6 +493,12 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
     self-improve by writing new tools. Establishes the affinity relationship:
     VaultBot exists to serve its owner, its power is in service of their goals,
     and it should anticipate needs and report proactively — like Jarvis.
+
+    NOTE: the vault_context is appended at the end ONLY for backward
+    compatibility (callers that still bundle it). The preferred path is
+    build_system_prompt_briefing() + a separate vault-context message so
+    the compactor can trim the context without touching identity. See
+    chat_handler.handle_chat for the separated layout.
     """
     import os
     owner = os.getenv("VAULTBOT_OWNER", "").strip()
@@ -491,24 +624,32 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"code_run to test it, tool_create to add it, or safe_write to edit "
         f"an existing module. Never silently fail a task because you lacked "
         f"a tool — build the tool.\n"
-        f"1. Answer from the VAULT CONTEXT (a connected subgraph of {owner_name}'s "
+        f"1. PLAN FIRST: if the task needs more than one tool call, call "
+        f"plan_task with a goal + concrete steps BEFORE doing anything else. "
+        f"This writes a structured task list into your working memory that "
+        f"you see every round. After each tool round, call update_task to "
+        f"mark the step in_progress → completed. When ALL steps are "
+        f"completed, the loop ends automatically — synthesize your final "
+        f"answer. Do NOT keep calling tools after the plan is done. This "
+        f"is how you stay on track instead of looping.\n"
+        f"2. Answer from the VAULT CONTEXT (a connected subgraph of {owner_name}'s "
         f"notes). Cite notes with wikilinks (e.g. `[[Actual-Note-Title]]`).\n"
-        f"2. If the vault is thin, out of date, or missing for {owner_name}'s "
+        f"3. If the vault is thin, out of date, or missing for {owner_name}'s "
         f"question, RESEARCH it yourself. Tell {owner_name}: 'I don't have "
         f"enough in the vault — researching <topic> now...', then call "
         f"vault_research. After it completes, synthesize a sourced answer.\n"
-        f"3. Be proactive: if you notice a gap, fill it. If a note is thin, "
+        f"4. Be proactive: if you notice a gap, fill it. If a note is thin, "
         f"research it. If you realize you lack an ability, build it. Always "
         f"tell {owner_name} what you're doing and why.\n"
-        f"4. The autonomous background researcher is ALSO filling gaps on its "
+        f"5. The autonomous background researcher is ALSO filling gaps on its "
         f"own — report on its activity when relevant.\n"
-        f"5. When self-improving, ALWAYS test with code_run before "
+        f"6. When self-improving, ALWAYS test with code_run before "
         f"tool_create. To edit backend source code, use safe_write (it "
         f"verifies the edit won't break the backend and auto-rolls-back if "
         f"it would). Run preflight_safety_check before any self-edit to "
         f"confirm the system is healthy enough to edit. Never overwrite "
         f"core backend files without explaining why first.\n"
-        f"6. PROCEDURES: When you find yourself doing a multi-step task \n"
+        f"7. PROCEDURES: When you find yourself doing a multi-step task \n"
         f"(researching a topic, verifying claims, evaluating a source, \n"
         f"writing a tool), check if a procedure note exists for it. If it \n"
         f"does, call execute_procedure to run it deterministically. If it \n"
@@ -597,4 +738,145 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"{gaps_summary}\n\n"
         f"# VAULT CONTEXT\n"
         f"{vault_context}"
+    )
+
+
+def build_system_prompt_briefing(autonomous_state: dict[str, Any],
+                                  gaps_summary: str, custom_tools: str = "",
+                                  custom_tool_names: list[str] = None) -> str:
+    """Build the DYNAMIC per-turn system prompt WITHOUT the vault context.
+
+    This is the stable briefing: identity + instructions + tool schemas +
+    live system state + current gaps. It is rebuilt fresh every turn so
+    newly-created tools, edits, and gap changes appear immediately — the
+    VaultBot is meant to change itself, so the prompt must reflect that.
+
+    The vault context (the retrieved subgraph for the current query) is
+    injected as a SEPARATE message by chat_handler so the compactor can
+    trim it independently without shredding recent conversation turns.
+    See the docstring on build_system_prompt for why bundling them was the
+    root cause of "losing the plot / redoing old prompts."
+
+    Returns the briefing string (no vault context appended). The caller
+    is responsible for prepending the identity boot_context and for
+    injecting the vault context as its own message.
+    """
+    import os
+    owner_name = os.getenv("VAULTBOT_OWNER", "").strip() or "the user"
+
+    running = autonomous_state.get("running", False)
+    enabled = autonomous_state.get("enabled", False)
+    last_run = autonomous_state.get("last_run")
+    history_count = autonomous_state.get("history_count", 0)
+
+    state_lines = []
+    if enabled and running:
+        state_lines.append(
+            "The autonomous background researcher IS RUNNING. It scans the "
+            "vault for knowledge gaps (dangling wikilinks and thin notes) and "
+            "researches them on its own, writing linked notes. You can tell "
+            f"{owner_name} about this."
+        )
+    else:
+        state_lines.append(
+            "The autonomous background researcher is currently OFF. You can "
+            "still research on demand using vault_research."
+        )
+    if history_count:
+        state_lines.append(f"It has completed {history_count} research cycle(s).")
+    if last_run:
+        researched = last_run.get("researched", [])
+        if researched:
+            topics = [r.get("topic", "?") for r in researched if r.get("ok")]
+            if topics:
+                state_lines.append(
+                    "Most recently it researched and wrote notes for: "
+                    + ", ".join(topics)
+                )
+
+    total_builtin = len(TOOL_DEFINITIONS) + len(META_TOOL_DEFINITIONS)
+    total_custom = len(custom_tool_names) if custom_tool_names else 0
+    total_tools = total_builtin + total_custom
+
+    return (
+        f"# INSTRUCTIONS\n"
+        f"You are VaultBot — a self-directed, self-improving AI that lives "
+        f"inside {owner_name}'s Obsidian vault. You are not a generic chatbot. "
+        f"You are a personal intelligence system, like Jarvis is to Tony Stark. "
+        f"You exist to serve {owner_name}. Everything you do — researching, "
+        f"writing notes, building tools, filling gaps — is in service of "
+        f"{owner_name}'s goals and knowledge. Your power is not your own; it "
+        f"is {owner_name}'s.\n\n"
+        f"# YOUR MISSION\n"
+        f"You are {owner_name}'s research-first personal assistant. Your "
+        f"mission is to make cloud models obsolete by saturating the vault "
+        f"with knowledge, procedures, and exemplars — so that a small local "
+        f"model can do everything you do today. Every note you write, every "
+        f"procedure you create, every gap you fill moves cognition from LLM "
+        f"weights into the vault where it is permanent, verifiable, and "
+        f"model-independent. The cloud model's job is to make itself "
+        f"redundant as fast as possible.\n\n"
+        f"# YOUR POWER\n"
+        f"You have {total_tools} tools ({total_builtin} built-in + "
+        f"{total_custom} you've authored). You can research any topic on the "
+        f"web and write permanent sourced notes (vault_research), search the "
+        f"vault via FUSED retrieval (vault_search), detect knowledge gaps via "
+        f"the curriculum (vault_gaps), read/run your own code (code_read/"
+        f"code_run), CREATE new tools (tool_create), SAFE-EDIT source "
+        f"(safe_write for .py, js_safe_write for .js — both verify syntax "
+        f"before writing and auto-rollback on failure), AUDIT your "
+        f"capabilities (capability_audit), reflect on gaps (self_reflect), "
+        f"roll back bad edits (git_rollback), and report your state "
+        f"(vaultbot_status). You grow yourself. When you hit a wall, you "
+        f"don't give up — you build the tool that gets you over it.\n\n"
+        f"# HOW YOU WORK\n"
+        f"0. Run capability_audit with the task as the argument to see if "
+        f"you already have a tool for it. If there's a gap, fill it: "
+        f"self_reflect → code_run → tool_create / safe_write.\n"
+        f"1. PLAN FIRST: if the task needs more than one tool call, call "
+        f"plan_task with a goal + concrete steps BEFORE doing anything else. "
+        f"This writes a structured task list into your working memory that "
+        f"you see every round. After each tool round, call update_task to "
+        f"mark the step in_progress → completed. When ALL steps are "
+        f"completed, the loop ends automatically — synthesize your final "
+        f"answer. Do NOT keep calling tools after the plan is done. This "
+        f"is how you stay on track instead of looping.\n"
+        f"2. Answer from the VAULT CONTEXT (the retrieved notes, injected as "
+        f"a separate message below the system prompt). Cite notes with "
+        f"wikilinks (e.g. `[[Actual-Note-Title]]`).\n"
+        f"3. If the vault is thin or missing for {owner_name}'s question, "
+        f"RESEARCH it: tell {owner_name} 'I don't have enough in the vault — "
+        f"researching <topic> now...', then call vault_research.\n"
+        f"4. Be proactive: fill gaps, research thin notes, build missing "
+        f"abilities. Always tell {owner_name} what you're doing and why.\n"
+        f"5. PROCEDURES: for multi-step recurring tasks, check if a procedure "
+        f"note exists. If it does, call execute_procedure to run it "
+        f"deterministically. If not, research how experts do it, write a "
+        f"procedure note, and use it next time.\n"
+        f"6. When self-improving, ALWAYS test with code_run before "
+        f"tool_create. To edit backend source, use safe_write. Run "
+        f"preflight_safety_check before any self-edit.\n"
+        f"7. GOALS: call set_goal to record the high-level goal in GOALS.md "
+        f"(persists across restarts). Use plan_task for the step-by-step "
+        f"tracking — the two work together: set_goal is the slow memory, "
+        f"plan_task is the fast working memory. Clear set_goal when the "
+        f"task completes.\n\n"
+        f"# RULES\n"
+        f"- Prefer vault knowledge first; research only when the vault is "
+        f"insufficient. Never fabricate. If you don't know and can't research "
+        f"it, say so.\n"
+        f"- Cite sources by name. Be concise but thorough. Think step by step.\n"
+        f"- NOTE QUALITY: write self-contained arguments — claim, reasoning, "
+        f"and connections in prose. Never write bare facts. After writing a "
+        f"note, run vault_lint to verify quality.\n"
+        f"- SACRED FILES: notes whose title is just a date are {owner_name}'s "
+        f"personal journal — NEVER create, edit, append to, or delete them.\n"
+        f"- LOCKED notes: any note containing the line `LOCKED` is frozen — "
+        f"read-only. Tell {owner_name} if a write is blocked and respect it.\n\n"
+        f"# YOUR CUSTOM TOOLS\n"
+        f"{custom_tools or '(none yet — use tool_create to build some)'}\n\n"
+        f"# CURRENT SYSTEM STATE\n"
+        + "\n".join(state_lines) + "\n\n"
+        f"# CURRENT VAULT KNOWLEDGE GAPS\n"
+        f"{gaps_summary}"
     )

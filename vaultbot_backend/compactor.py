@@ -43,13 +43,22 @@ class Compactor:
         ollama_client: Any | None = None,
         session_logger: Any | None = None,
         max_messages: int = 80,
-        keep_head: int = 4,
+        keep_head: int = 2,
         keep_tail_ratio: float = 0.4,
         summary_max_tokens: int = 500,
     ) -> None:
         self.ollama_client = ollama_client
         self.session_logger = session_logger
         self.max_messages = max_messages
+        # keep_head=2 protects the two system messages: [0] the identity +
+        # instructions briefing (rebuilt fresh each turn, stable, ~8-12K) and
+        # [1] the vault context (retrieved for this query, compactable but
+        # never shredded — it's part of the head so the model always sees the
+        # current vault briefing). The body ([2..] = prior conversation) is
+        # what gets compacted, so RECENT turns survive and old ones get
+        # summarized. The old keep_head=4 was calibrated for a single
+        # monolithic system prompt + the first user turn; with the context
+        # separated into its own message, 2 is correct.
         self.keep_head = max(0, int(keep_head))
         self.keep_tail_ratio = float(keep_tail_ratio)
         self.summary_max_tokens = int(summary_max_tokens)
@@ -291,45 +300,57 @@ class Compactor:
     # ------------------------------------------------------------------
     # Hard char cap — the last-resort payload guarantee
     # ------------------------------------------------------------------
-    # After compaction, if the tail is still too large (a single vault_research
-    # result can be 50K+ chars), hard-truncate tail messages' content from the
-    # end (oldest tail message first) until the total fits. This guarantees
-    # the payload sent to the LLM can NEVER exceed the size where a remote
-    # cloud model times out (>120s TTFT). Default 80K chars ≈ 20K tokens,
-    # leaving headroom for the system prompt + response within a 32K window.
+    # After compaction, if the tail is still too large, drop WHOLE old body
+    # messages (oldest first) until the total fits — never shred a message
+    # to a 200-char fragment. Lossy truncation (keeping the first 200 chars
+    # of a 50K tool result) destroyed the semantic thread: the model saw a
+    # torn snippet and couldn't tell what its tool returned, so it re-called
+    # the tool — "forgetting what it was doing and redoing things." Dropping
+    # the whole message is cleaner: the model knows that round is gone and
+    # relies on the summary + recent turns. Default 80K chars ≈ 20K tokens.
     MAX_COMPACTED_CHARS = int(__import__("os").getenv("VAULTBOT_COMPACT_MAX_CHARS", "80000"))
 
     def _hard_cap(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Hard-truncate the conversation if it exceeds MAX_COMPACTED_CHARS.
+        """Drop oldest body messages until the total fits MAX_COMPACTED_CHARS.
 
-        Truncates content (and thinking) of the oldest tail messages first
-        (just after the head/summary), since those are the least relevant to
-        the current turn. The very last message (current user/tool round) is
-        never touched. Tool-call structure is preserved — only content
-        strings are shortened.
+        Never shreds a message to a fragment — drops whole messages instead.
+        Protects the head (system + vault context, indices 0..keep_head-1)
+        and the most recent tail (last 2 messages). Tool-call pairing is
+        preserved: if dropping a tool-role message would orphan its parent
+        assistant tool_calls, the parent is dropped too.
         """
         try:
             total = sum(self._msg_chars(m) for m in messages)
             if total <= self.MAX_COMPACTED_CHARS:
                 return messages
 
-            # Work on a copy; truncate from just after the head (oldest tail
-            # messages = least relevant) forward.
-            result = [dict(m) if isinstance(m, dict) else m for m in messages]
-            # Start at index 2 (skip system + first user/tool msg), truncate
-            # oldest tail messages until we fit. Never touch the last 2.
-            idx = 2
-            end = max(2, len(result) - 2)
-            while idx < end and total > self.MAX_COMPACTED_CHARS:
-                m = result[idx]
-                if isinstance(m, dict):
-                    for key in ("content", "thinking"):
-                        val = m.get(key, "")
-                        if val and len(str(val)) > 200:
-                            old_len = len(str(val))
-                            m[key] = str(val)[:200] + "\n[...truncated by hard cap...]"
-                            total -= (old_len - len(str(m[key])))
-                idx += 1
+            head = min(self.keep_head, len(messages))
+            tail_protect = min(2, max(0, len(messages) - head))
+            result = list(messages)
+            # Drop from just after the head, oldest body message first.
+            while total > self.MAX_COMPACTED_CHARS and len(result) > head + tail_protect:
+                # Drop index `head` (oldest unprotected body message).
+                dropped = result.pop(head)
+                total -= self._msg_chars(dropped)
+                # If we dropped a tool message, and the next message is an
+                # assistant with tool_calls whose id matches, drop that too
+                # to avoid orphaned tool_calls (Ollama tool protocol).
+                if isinstance(dropped, dict) and dropped.get("role") == "tool":
+                    tcid = dropped.get("tool_call_id")
+                    if head < len(result):
+                        nxt = result[head]
+                        if (isinstance(nxt, dict)
+                                and nxt.get("role") == "assistant"
+                                and nxt.get("tool_calls")):
+                            # Check if this assistant's tool_calls include
+                            # the dropped tool_call_id; if so drop it too.
+                            ids = []
+                            for tc in nxt.get("tool_calls") or []:
+                                fid = tc.get("id") if isinstance(tc, dict) else None
+                                if fid:
+                                    ids.append(fid)
+                            if tcid in ids:
+                                total -= self._msg_chars(result.pop(head))
             return result
         except Exception:
             return messages

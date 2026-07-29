@@ -206,6 +206,73 @@ class OpenAICompatibleClient(LLMClient):
             self._log("list_models", error=str(e))
             return []
 
+    # Known context windows (in tokens) for common OpenAI-compatible model
+    # families. Used by context_window() when the API doesn't expose the
+    # value (most OpenAI-compatible endpoints don't). Matched by substring
+    # against the model id, most specific first. Values from official docs.
+    _KNOWN_CONTEXT_WINDOWS: list[tuple[str, int]] = [
+        # OpenAI
+        ("gpt-4.1", 1048576),
+        ("gpt-4o-mini", 128000),
+        ("gpt-4o", 128000),
+        ("gpt-4-turbo", 128000),
+        ("gpt-4-", 8192),
+        ("gpt-3.5-turbo", 16385),
+        ("o3-mini", 200000),
+        ("o3", 200000),
+        ("o4-mini", 200000),
+        ("o1-mini", 128000),
+        ("o1", 200000),
+        # Anthropic (via OpenRouter / direct compat)
+        ("claude-opus-4", 200000),
+        ("claude-sonnet-4", 200000),
+        ("claude-3-7-sonnet", 200000),
+        ("claude-3-5-sonnet", 200000),
+        ("claude-3-5-haiku", 200000),
+        ("claude-3-opus", 200000),
+        ("claude-3-haiku", 200000),
+        # Gemini (via OpenRouter / Google compat)
+        ("gemini-2.5-pro", 1048576),
+        ("gemini-2.5-flash", 1048576),
+        ("gemini-2.0-flash", 1048576),
+        ("gemini-1.5-pro", 2000000),
+        ("gemini-1.5-flash", 1000000),
+        # DeepSeek
+        ("deepseek-chat", 64000),
+        ("deepseek-reasoner", 64000),
+        # Qwen (DashScope / OpenRouter)
+        ("qwen3-", 131072),
+        ("qwen2.5-", 131072),
+        ("qwen-max", 32768),
+        # Mistral
+        ("mistral-large", 128000),
+        ("mistral-medium", 32000),
+        ("mistral-small", 32000),
+        ("mixtral", 32000),
+        # Llama
+        ("llama-3.3", 128000),
+        ("llama-3.2", 128000),
+        ("llama-3.1", 128000),
+        ("llama-3", 8192),
+        # Default fallback
+    ]
+
+    def context_window(self, model: str | None = None) -> int:
+        """Return the model's context-window size in tokens.
+
+        OpenAI-compatible endpoints generally don't expose the context
+        window via /v1/models, so we match the model id against a known-
+        models table. Falls back to 32768 for unknown models so the UI
+        meter always has a sane ceiling.
+        """
+        model = (model or self.llm_model or "").lower()
+        if not model:
+            return 32768
+        for needle, ctx in self._KNOWN_CONTEXT_WINDOWS:
+            if needle in model:
+                return ctx
+        return 32768
+
     def is_running(self) -> bool:
         try:
             r = requests.get(f"{self.base_url}/v1/models",

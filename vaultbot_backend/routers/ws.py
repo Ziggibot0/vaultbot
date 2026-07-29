@@ -67,6 +67,10 @@ async def websocket_endpoint(websocket: WebSocket,
     # back up." This is that change.
     restored = load_history()
     websocket.conversation_history = restored
+    # Fresh working memory per websocket connection (the Copilot/Claude Code
+    # TodoList pattern). Cleared on /new and on reconnect.
+    from working_memory import TaskList
+    websocket.working_memory = TaskList()
     if restored:
         session_logger.log("conversation_history_restored", {
             "turns": len(restored),
@@ -153,6 +157,9 @@ async def websocket_endpoint(websocket: WebSocket,
                     task._stopped_by_user = True
                     task.cancel()
                 websocket.conversation_history = []
+                # Clear the working-memory task list too so /new wipes the plan.
+                if hasattr(websocket, "working_memory"):
+                    websocket.working_memory.clear()
                 # Wipe the persisted copy too so a restart after /new doesn't
                 # resurrect the cleared thread.
                 clear_history()

@@ -38,11 +38,16 @@ from pathlib import Path
 from typing import Any
 
 from abstract_context import build_abstract_context
-from agent_tools import META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_prompt
+from agent_tools import (
+    META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_prompt,
+    build_system_prompt_briefing,
+)
 
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports — no main dependency.
-from chat_helpers import run_with_heartbeat, send_progress, tool_result_summary
+from chat_helpers import (
+    run_with_heartbeat, send_progress, tool_result_summary, truncate_tool_result,
+)
 from conversation_state import save_history
 from fastapi import WebSocket
 from procedure_tracker import interpret_validation_result, parse_procedures_from_results
@@ -55,6 +60,7 @@ from weaving import (
     link_outbound,
     weave_textbook_notes,
 )
+from working_memory import TaskList
 
 
 async def handle_chat(svc: Services, websocket: WebSocket,
@@ -67,6 +73,15 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # Module-level imports from chat_helpers, task_api, weaving — no longer
     # deferred from main (circular dependency eliminated).
     session_logger.log("chat_begin", {"user_message": user_message})
+
+    # Working memory: per-session structured task list (the Copilot/Claude
+    # Code TodoList pattern). The model writes a plan via the plan_task tool
+    # and updates it via update_task; the harness re-injects the list into
+    # the system prompt every round so the model never loses the plot to
+    # compaction. One TaskList per websocket connection, reset on /new.
+    if not hasattr(websocket, "working_memory") or websocket.working_memory is None:
+        websocket.working_memory = TaskList()
+    wm = websocket.working_memory
 
     # Chat-priority: pause the autonomous researcher so it doesn't compete
     # with this interactive turn for the Ollama GPU. On a single-GPU laptop
@@ -248,12 +263,33 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         f"- {s['function']['name']}: {s['function']['description'][:100]}"
         for s in custom_schemas) if custom_schemas else "(none yet)"
 
+    # Build the DYNAMIC per-turn system prompt WITHOUT the vault context.
+    # The briefing (identity + instructions + tool schemas + live state +
+    # gaps) is rebuilt fresh every turn so newly-created tools and edits
+    # appear immediately — the VaultBot is meant to change itself. The vault
+    # context (retrieved subgraph for THIS query) is injected as a SEPARATE
+    # message below so the compactor can trim it independently without
+    # shredding recent conversation turns. This separation is the fix for
+    # "losing the plot / redoing old prompts": bundling the context into
+    # the system prompt made the sacred head 113K chars, so the compactor's
+    # 80K cap shredded recent turns to 200-char fragments while leaving the
+    # bloated head (with days-old goals) intact.
     system_prompt = (identity_context + "\n\n" +
-                      build_system_prompt(context, autonomous_state, gaps_summary,
-                                         custom_tools=custom_tools_desc,
-                                         custom_tool_names=custom_tool_names))
+                      build_system_prompt_briefing(
+                          autonomous_state, gaps_summary,
+                          custom_tools=custom_tools_desc,
+                          custom_tool_names=custom_tool_names))
+    # Inject the working-memory task list so the model sees its active plan
+    # every round. This is the Copilot/Claude Code TodoList pattern: the list
+    # lives outside the conversation, so compaction can't shred it and the
+    # model always knows "what's done, what's next." render_for_prompt
+    # returns "" when there's no active plan (simple Q&A is unaffected).
+    wm_block = wm.render_for_prompt()
+    if wm_block:
+        system_prompt = system_prompt + "\n\n" + wm_block
     session_logger.log("prompt_built", {
         "system_prompt_length": len(system_prompt),
+        "vault_context_length": len(context),
         "context_length": len(context),
         "gaps_reported": len(gaps),
         "custom_tools": len(custom_schemas),
@@ -264,9 +300,25 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # This is the amnesia fix: prior turns (user + assistant + tool exchanges)
     # carry over within the same websocket session, so corrections and
     # context survive. History lives on websocket.conversation_history.
-    # On the first turn it's empty; we rebuild the system prompt fresh each
-    # turn (it carries live vault state) and prepend it.
-    conversation = [{"role": "system", "content": system_prompt}]
+    #
+    # LAYOUT (the separation that keeps recent turns intact):
+    #   [0] system   = identity + briefing (rebuilt fresh each turn; small,
+    #                  stable, ~8-12K chars; protected by the compactor's
+    #                  keep_head as sacred — this is the agent's identity)
+    #   [1] system   = "# VAULT CONTEXT (retrieved for this query)\n..." —
+    #                  the retrieved subgraph for THIS query. Compactable:
+    #                  if it's large the compactor summarizes it along with
+    #                  old conversation, NEVER shredding recent turns.
+    #   [2..]        = prior history (user/assistant/tool) + this turn's user
+    #   The compactor's keep_head=2 protects [0]+[1] as the head; the body
+    #   ([2..]) is what gets compacted, so recent turns survive.
+    conversation = [
+        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": (
+            "# VAULT CONTEXT (retrieved for this query; compactable)\n"
+            + context
+        )},
+    ]
     # Append the prior turns (no system prompt — that's rebuilt above each
     # turn so the agent always sees current vault state + gaps).
     conversation.extend(getattr(websocket, "conversation_history", []))
@@ -279,6 +331,28 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     if svc.compactor.should_compact(conversation):
         conversation = svc.compactor.compact(conversation)
         session_logger.log("context_compacted", {"messages": len(conversation)})
+
+    # --- Token-usage meter: report how full the context window is ----------
+    # Estimates the token cost of the full conversation (system prompts +
+    # vault context + history + this turn) and emits a context_usage event
+    # so the plugin can render a live meter that maxes out at the model's
+    # context window. Uses the same ~4 chars/token heuristic as the budgeter.
+    # Best-effort: never blocks the turn on a meter update.
+    try:
+        _total_chars = sum(len(str(m.get("content", "") or ""))
+                           for m in conversation if isinstance(m, dict))
+        _used_tokens = max(1, _total_chars // 4)
+        _ctx_window = svc.ollama_client.context_window(svc.ollama_client.llm_model)
+        await svc.manager.send_personal_message(json.dumps({
+            "type": "context_usage",
+            "model": svc.ollama_client.llm_model,
+            "context_window": _ctx_window,
+            "used_tokens": _used_tokens,
+            "available_tokens": max(0, _ctx_window - _used_tokens),
+            "messages": len(conversation),
+        }), websocket, session_logger=session_logger)
+    except Exception as _e:
+        session_logger.log("context_usage_emit_failed", {"error": str(_e)})
 
     await svc.manager.send_personal_message(json.dumps({"type": "status", "content": "Thinking..."}), websocket, session_logger=session_logger)
 
@@ -318,32 +392,64 @@ async def handle_chat(svc: Services, websocket: WebSocket,
      # accumulated so the user sees the partial work instead of a hang.
      MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "25"))
      while True:
+        # Refresh the working-memory block in the system prompt every round
+        # so the model always sees the current task list (with the latest
+        # completed/in_progress marks). The system prompt is conversation[0];
+        # we rebuild it from the stable briefing + the live wm snapshot.
+        # This is the Copilot/Claude Code pattern: the task list is re-injected
+        # every turn so the model can't lose it to compaction.
+        try:
+            _wm_block = wm.render_for_prompt()
+            if _wm_block:
+                conversation[0] = {"role": "system", "content": system_prompt + "\n\n" + _wm_block}
+            else:
+                conversation[0] = {"role": "system", "content": system_prompt}
+        except Exception:
+            pass  # never let a wm render failure break the chat loop
+
         # Pre-flight hard char cap: before sending the conversation to the
         # cloud model, enforce a last-resort char cap so the payload can
         # NEVER exceed the size where a remote model times out (>120s
-        # TTFT). The compactor should keep it bounded, but this is the
-        # tank-grade guarantee — if compaction failed or was insufficient,
-        # this truncates the oldest non-head messages' content before the
-        # call, never after. Configurable via VAULTBOT_CHAT_MAX_CHARS.
+        # TTFT). The compactor + tool-result capping should keep it bounded,
+        # but this is the tank-grade guarantee.
+        #
+        # DESIGN: drop WHOLE oldest body messages (never shred to 200-char
+        # fragments). Lossy truncation destroyed the semantic thread — the
+        # model saw torn snippets of tool results and couldn't tell what its
+        # tools returned, so it re-called them ("forgetting mid-turn and
+        # redoing things"). Dropping the whole message is clean: the model
+        # knows that round is gone and relies on recent turns. The two
+        # system messages (identity briefing + vault context) are always
+        # protected; the last 2 messages (current round) are protected.
         _MAX_CHAT_CHARS = int(os.getenv("VAULTBOT_CHAT_MAX_CHARS", "80000"))
-        _conv_chars = sum(len(str(m.get("content", "") or "")) +
-                         len(str(m.get("thinking", "") or ""))
-                         for m in conversation if isinstance(m, dict))
+        _conv_chars = sum(
+            len(str(m.get("content", "") or "")) +
+            len(str(m.get("thinking", "") or ""))
+            for m in conversation if isinstance(m, dict))
         if _conv_chars > _MAX_CHAT_CHARS:
-            # Truncate oldest non-head messages' content
-            for i in range(2, max(2, len(conversation) - 2)):
-                if _conv_chars <= _MAX_CHAT_CHARS:
-                    break
-                m = conversation[i]
-                if isinstance(m, dict):
-                    for key in ("content", "thinking"):
-                        val = m.get(key, "")
-                        if val and len(str(val)) > 200:
-                            old_len = len(str(val))
-                            m[key] = str(val)[:200] + "\n[...truncated pre-flight...]"
-                            _conv_chars -= (old_len - len(str(m[key])))
+            _HEAD = 2  # system briefing + vault context
+            _TAIL = 2   # current round
+            while (_conv_chars > _MAX_CHAT_CHARS
+                   and len(conversation) > _HEAD + _TAIL):
+                dropped = conversation.pop(_HEAD)
+                _conv_chars -= (len(str(dropped.get("content", "") or "")) +
+                                len(str(dropped.get("thinking", "") or "")))
+                # Preserve tool-call pairing: if we dropped a tool message,
+                # drop its orphaned parent assistant tool_calls too.
+                if isinstance(dropped, dict) and dropped.get("role") == "tool":
+                    tcid = dropped.get("tool_call_id")
+                    if _HEAD < len(conversation):
+                        nxt = conversation[_HEAD]
+                        if (isinstance(nxt, dict)
+                                and nxt.get("role") == "assistant"
+                                and nxt.get("tool_calls")):
+                            ids = [tc.get("id") for tc in nxt["tool_calls"]
+                                   if isinstance(tc, dict)]
+                            if tcid in ids:
+                                conversation.pop(_HEAD)
             session_logger.log("pre_flight_char_cap", {
-                "chars": _conv_chars, "cap": _MAX_CHAT_CHARS, "round": round_idx})
+                "chars": _conv_chars, "cap": _MAX_CHAT_CHARS,
+                "round": round_idx, "messages": len(conversation)})
 
         # Stream the LLM response for this round.
         round_text = ""
@@ -502,10 +608,21 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "summary": tool_result_summary(tool_name, tool_result),
             }), websocket, session_logger=session_logger)
 
+            # Cap the tool result before appending. Uncapped results
+            # (vault_research syntheses, code_read of large files, graph
+            # dumps) can be 50K+ chars; appended verbatim they balloon the
+            # conversation past the compaction threshold every round. The
+            # compactor then shreds recent user/assistant turns to 200-char
+            # fragments while leaving the bloated result intact, and the
+            # agent loses the thread — redoing old work because the recent
+            # turns are the ones getting truncated. Bounding each result
+            # keeps the agentic loop's context bounded and preserves the
+            # recent turns the model needs to stay on track.
+            capped_result = truncate_tool_result(tool_result)
             conversation.append({
                 "role": "tool",
                 "tool_call_id": tool_call_id,
-                "content": json.dumps(tool_result, default=str),
+                "content": json.dumps(capped_result, default=str),
             })
 
         # Mid-loop compaction: the agentic loop adds 2+ messages per tool
@@ -521,6 +638,30 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             session_logger.log("mid_loop_compacted", {
                 "messages": len(conversation),
                 "round": round_idx,
+            })
+
+        # Deterministic stop signal (the Copilot/Claude Code pattern): if
+        # the model has an active plan and EVERY task is marked completed,
+        # inject a final system instruction telling the model to synthesize
+        # its answer now and NOT emit more tool calls. This is the guard
+        # against the "re-search the same thing forever" loop — the model
+        # can't override a fully-checked list. The next round will produce
+        # a no-tool-call message and the natural stop fires.
+        if wm.has_plan() and wm.all_done():
+            session_logger.log("working_memory_all_done", {
+                "round": round_idx,
+                "tasks": wm.snapshot().get("total", 0),
+            })
+            await svc.manager.send_personal_message(json.dumps({
+                "type": "status",
+                "content": "All plan steps complete — synthesizing final answer.",
+            }), websocket, session_logger=session_logger)
+            conversation.append({
+                "role": "system",
+                "content": (
+                    "All tasks in your working memory are completed. "
+                    "Synthesize your final answer for the user now. "
+                    "Do NOT call any more tools — produce the answer."),
             })
 
         # Loop back: the LLM now sees the tool results and will produce
@@ -574,6 +715,24 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     })
 
     await svc.manager.send_personal_message(json.dumps({"type": "answer_done", "content": final_answer}), websocket, session_logger=session_logger)
+    # Refresh the token meter after the full turn: tool rounds added
+    # assistant + tool messages, so the window is now fuller than the
+    # pre-loop estimate. Best-effort, never blocks.
+    try:
+        _total_chars = sum(len(str(m.get("content", "") or ""))
+                           for m in conversation if isinstance(m, dict))
+        _used_tokens = max(1, _total_chars // 4)
+        _ctx_window = svc.ollama_client.context_window(svc.ollama_client.llm_model)
+        await svc.manager.send_personal_message(json.dumps({
+            "type": "context_usage",
+            "model": svc.ollama_client.llm_model,
+            "context_window": _ctx_window,
+            "used_tokens": _used_tokens,
+            "available_tokens": max(0, _ctx_window - _used_tokens),
+            "messages": len(conversation),
+        }), websocket, session_logger=session_logger)
+    except Exception as _e:
+        session_logger.log("context_usage_emit_failed", {"error": str(_e)})
     session_logger.log("chat_end", {
         "answer_length": len(final_answer),
         "thinking_length": len(thinking_text),
@@ -815,7 +974,26 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             # The conversation list is [system, ...history, user, assistant,
             # tool, assistant, ...]. Strip the leading system message and
             # everything we just added (user msg onward) is the new history.
-            new_turns = [m for m in conversation if m.get("role") != "system"]
+            # Strip the `thinking` field from persisted history. The
+            # thinking field (Qwen/glm reasoning) can be thousands of chars
+            # per round and is per-round scratch space — it doesn't need to
+            # survive across turns. Keeping it bloats the restored history
+            # and crowds out the actual user/assistant exchanges the model
+            # needs to stay on track. Also cap any single message's content
+            # so one huge tool result or answer can't dominate the restored
+            # thread. This is the fix for "redoing a prompt from days ago":
+            # the restored history was so full of stale thinking that the
+            # recent turns were the first thing the compactor shredded.
+            new_turns = []
+            for m in conversation:
+                if m.get("role") == "system":
+                    continue
+                m2 = dict(m)
+                m2.pop("thinking", None)
+                c = m2.get("content")
+                if isinstance(c, str) and len(c) > 4000:
+                    m2["content"] = c[:4000] + "\n[...truncated in history...]"
+                new_turns.append(m2)
             # Only persist if we actually added turns this round (guard
             # against a no-op). Persist even when final_answer is empty —
             # an empty answer (model bailed / tool-only round) still
@@ -847,23 +1025,15 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             session_logger.log_exception(e, context="note_creator.create_note_from_chat")
             print(f"Error creating chat note: {e}")
 
-    # Keep GOALS.md current: if the user's message looks like a task/request
-    # (not a casual greeting), update the active goal so the agent remembers
-    # what it's working on across restarts. This is the Generative Agents
-    # plan-persistence pattern — the goal lives in a file, not in context.
-    try:
-        if len(user_message) > 15 and not user_message.lower().startswith(("hi", "hey", "sup", "hello", "yo")):
-            # Simple heuristic: the user's message IS the current goal.
-            # The self-model already captures what happened; GOALS captures
-            # what's active. If the answer completed the request, the goal
-            # clears next turn; if it's ongoing (e.g. multi-step), it persists.
-            svc.identity.update_goals(
-                goal=user_message[:500],
-                next_step="(in progress)" if len(final_answer) < 200 else "(completed this turn)"
-            )
-            session_logger.log("goals_updated", {"goal": user_message[:100]})
-    except Exception as e:
-        session_logger.log("goals_update_failed", {"error": str(e)})
+    # GOALS.md is now updated by the LLM itself via the set_goal tool — no
+    # heuristic. The agent owns the decision: it calls set_goal when it
+    # starts a task, decomposes steps, or completes one. If it has no goal to
+    # update, it leaves GOALS.md alone. This removes the brittle char-count /
+    # greeting-allowlist heuristic that wiped a live goal mid-task (the
+    # "redoing a prompt from days ago" root cause). The goal persists until
+    # the agent explicitly changes it, so multi-step tasks stay coherent
+    # across turns without external guessing. See [[Generative-Agents]] plan-
+    # persistence pattern: the goal lives in a file, the agent writes it.
 
     # Close the MIRROR loop: regenerate the bounded self-model from this
     # turn's activity so the agent consolidates its reasoning into a durable
@@ -1001,6 +1171,19 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                         skip_refresh=True))
             except Exception as e:
                 session_logger.log("amem_evolve_failed", {"error": str(e)})
+        # Goal hint: after a research pass, nudge the agent to consider
+        # whether this research was part of a larger task that should be
+        # reflected in GOALS.md. This is a HINT in the tool result, not a
+        # forced action — the LLM reads it and decides whether to call
+        # set_goal. If there's nothing to update, it ignores the hint and
+        # moves on. No heuristic, no automatic goal mutation.
+        if isinstance(report, dict):
+            report["goal_hint"] = (
+                "If this research advances a multi-step task, consider "
+                "calling set_goal to record the current goal + next step "
+                "so you stay on track across turns. If this was a one-off, "
+                "ignore this."
+            )
         return report
 
     if tool_name == "vault_search":
@@ -1180,6 +1363,71 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         from custom_tools.web_read_source import run as _read_web
         result = await loop.run_in_executor(None, lambda: _read_web(args))
         return result
+
+    if tool_name == "set_goal":
+        # The LLM owns goal management. No heuristic — the agent decides when
+        # to set, update, or clear its goal. This is the only path to
+        # GOALS.md from the chat loop. See the set_goal tool schema for the
+        # contract. Never raises; a failure returns an error dict, the chat
+        # loop continues.
+        goal = (args.get("goal") or "").strip()
+        next_step = (args.get("next_step") or "(awaiting next request)").strip()
+        steps = args.get("steps") or None
+        if not goal or goal.lower() in ("clear", "none", ""):
+            new_text = svc.identity.update_goals(
+                goal="(no active goal)",
+                steps=None,
+                next_step=next_step or "(awaiting next request)")
+            session_logger.log("goals_cleared_by_agent", {})
+            return {"status": "cleared", "goals_md": new_text[:200]}
+        new_text = svc.identity.update_goals(
+            goal=goal[:500], steps=steps, next_step=next_step)
+        session_logger.log("goals_set_by_agent", {"goal": goal[:100]})
+        return {"status": "set", "goal": goal[:200],
+                "goals_md_chars": len(new_text)}
+
+    # --- Working memory (the Copilot/Claude Code TodoList pattern) ------ #
+    # The model writes a structured task list via plan_task and updates it
+    # via update_task. The harness re-injects the list into the system
+    # prompt every round (see handle_chat). This is how the agent stays on
+    # track instead of losing the plot to compaction.
+    if tool_name == "plan_task":
+        wm = getattr(websocket, "working_memory", None)
+        if wm is None:
+            wm = TaskList()
+            websocket.working_memory = wm
+        goal = (args.get("goal") or "").strip()
+        steps = args.get("steps") or []
+        if not goal or not steps:
+            return {"error": "plan_task requires 'goal' and 'steps'"}
+        snap = wm.set_plan(goal=goal, items=[s for s in steps if s.strip()])
+        session_logger.log("plan_task_set", {
+            "goal": goal[:100], "steps": len(steps)})
+        return snap
+
+    if tool_name == "update_task":
+        wm = getattr(websocket, "working_memory", None)
+        if wm is None:
+            return {"error": "no active plan"}
+        action = args.get("action", "update")
+        if action == "add":
+            content = (args.get("content") or "").strip()
+            if not content:
+                return {"error": "action='add' requires 'content'"}
+            snap = wm.add_task(
+                content=content,
+                status=args.get("status", "pending"),
+                notes=args.get("notes", ""))
+            session_logger.log("plan_task_added", {"content": content[:80]})
+            return snap
+        task_id = args.get("task_id") or ""
+        snap = wm.update_task(
+            task_id=task_id,
+            status=args.get("status", ""),
+            notes=args.get("notes", ""))
+        session_logger.log("plan_task_updated", {
+            "task_id": task_id, "status": args.get("status", "")})
+        return snap
 
     # --- Custom (agent-authored) tools --- #
     if svc.self_improver.has_tool(tool_name):

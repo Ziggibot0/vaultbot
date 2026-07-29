@@ -237,6 +237,22 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
+	// Fetch the context-window size (in tokens) for a model. Auto-detects
+	// from the active backend (Ollama /api/show or OpenAI-compatible known-
+	// models table). Returns 32768 as a safe fallback on any failure.
+	async fetchContextWindow(model) {
+		try {
+			const url = this.settings.backendUrl + '/model_context_window'
+				+ (model ? ('?model=' + encodeURIComponent(model)) : '');
+			const response = await fetch(url);
+			if (!response.ok) return 32768;
+			const data = await response.json();
+			return data.context_window || 32768;
+		} catch (e) {
+			return 32768;
+		}
+	}
+
 	// Read the synthesis-LLM backend config (Ollama local vs an OpenAI-compatible
 	// API key). Lets the settings panel show which backend is active and whether
 	// it's reachable, so a weak-laptop user can confirm their API key is wired up.
@@ -1638,16 +1654,55 @@ class VaultBotSidebarView extends ItemView {
 			this.plugin.settings.selectedModel = selected;
 			await this.plugin.saveSettings();
 			await this.plugin.setBackendModel(selected);
+			// Refresh the meter ceiling for the newly equipped model.
+			const ctxWin = await this.plugin.fetchContextWindow(selected);
+			tokenMeterEl.setAttribute('title',
+				`${ctxWin.toLocaleString()} token context window — ${selected}`);
+			updateTokenMeter(0, ctxWin);
 		};
 		refreshModels();
 		modelSelect.addEventListener('change', async () => {
 			this.plugin.settings.selectedModel = modelSelect.value;
 			await this.plugin.saveSettings();
 			await this.plugin.setBackendModel(modelSelect.value);
+			// Re-size the meter for the new model's context window.
+			const ctxWin = await this.plugin.fetchContextWindow(modelSelect.value);
+			tokenMeterEl.setAttribute('title',
+				`${ctxWin.toLocaleString()} token context window — ${modelSelect.value}`);
+			updateTokenMeter(0, ctxWin);
 		});
 		const refreshBtn = modelBar.createEl('span', {text: '↻', cls: 'vaultbot-model-refresh'});
 		refreshBtn.title = 'Refresh model list';
 		refreshBtn.addEventListener('click', () => refreshModels());
+
+		// --- Token-usage meter ------------------------------------------
+		// A horizontal bar that fills proportional to how many tokens the
+		// current conversation is using, capped at the equipped model's
+		// context window. Updates live from context_usage events the backend
+		// emits each turn (pre-loop + post-answer). Color shifts moss→clay→
+		// bark as it fills so the user can see at a glance how close the
+		// context is to overflowing.
+		const tokenMeterWrap = modelBar.createDiv({cls: 'vaultbot-token-meter-wrap'});
+		tokenMeterWrap.setAttribute('aria-hidden', 'true');
+		const tokenMeterEl = tokenMeterWrap.createDiv({cls: 'vaultbot-token-meter'});
+		const tokenMeterFill = tokenMeterEl.createDiv({cls: 'vaultbot-token-meter-fill'});
+		const tokenMeterLabel = tokenMeterWrap.createEl('span', {cls: 'vaultbot-token-meter-label', text: '—'});
+		tokenMeterEl.setAttribute('title', 'Context usage — fills as the conversation grows');
+		let tokenMeterCtxWindow = 32768;
+		function updateTokenMeter(used, window) {
+			if (window && window > 0) tokenMeterCtxWindow = window;
+			const pct = Math.min(100, Math.max(0, (used / tokenMeterCtxWindow) * 100));
+			tokenMeterFill.style.width = pct.toFixed(1) + '%';
+			// Color thresholds: <60% moss, 60-85% clay, >85% bark
+			tokenMeterFill.removeClass('vaultbot-token-meter-fill-warn',
+				'vaultbot-token-meter-fill-crit');
+			if (pct > 85) tokenMeterFill.addClass('vaultbot-token-meter-fill-crit');
+			else if (pct > 60) tokenMeterFill.addClass('vaultbot-token-meter-fill-warn');
+			const usedK = used >= 1000 ? (used / 1000).toFixed(1) + 'k' : String(used);
+			const winK = tokenMeterCtxWindow >= 1000
+				? (tokenMeterCtxWindow / 1000).toFixed(0) + 'k' : String(tokenMeterCtxWindow);
+			tokenMeterLabel.setText(usedK + ' / ' + winK + ' tok');
+		}
 
 		const inputContainer = footerEl.createDiv({cls: 'vaultbot-input-container'});
 		// The chat bar: textarea + an inline Stop button that only appears
@@ -2305,6 +2360,13 @@ class VaultBotSidebarView extends ItemView {
 					const resDiv = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-result'});
 					resDiv.setText('  - ' + summary);
 					chatContainer.scrollTop = chatContainer.scrollHeight;
+				} else if (msg.type === 'context_usage') {
+					// Live token-usage meter update from the backend. Fires
+					// each turn (pre-loop + post-answer) carrying the model's
+					// context window + estimated used tokens.
+					if (typeof msg.context_window === 'number') {
+						updateTokenMeter(msg.used_tokens || 0, msg.context_window);
+					}
 				} else if (msg.type === 'answer_done') {
 					endActivity();
 					// Flush the final text segment so its markdown renders.

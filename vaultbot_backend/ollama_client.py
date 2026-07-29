@@ -62,6 +62,44 @@ class OllamaClient(_BASE):
     def list_models(self) -> list[str]:
         return self.list_local_models()
 
+    def context_window(self, model: str | None = None) -> int:
+        """Return the model's native context-window size in tokens.
+
+        Queries Ollama's /api/show for the model and extracts the
+        architecture-prefixed ``*.context_length`` field from ``model_info``
+        (e.g. ``qwen35moe.context_length``, ``glm5.2.context_length``).
+        Works for both local and cloud (``:cloud``) Ollama models — both
+        return the same show metadata shape. Falls back to 32768 on any
+        failure so the UI always has a sane meter ceiling.
+        """
+        model = model or self.llm_model
+        if not model:
+            return 32768
+        try:
+            resp = self._session.post(
+                f"{self.base_url}/api/show",
+                json={"model": model}, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            info = data.get("model_info") or {}
+            # The key is "<arch>.context_length" — find it generically.
+            for key, val in info.items():
+                if key.endswith(".context_length") and isinstance(val, (int, float)):
+                    return int(val)
+            # Some older Ollama builds expose it under parameters as a
+            # "num_ctx" string like "262144".
+            params = data.get("parameters") or ""
+            if isinstance(params, str):
+                for tok in params.split():
+                    if tok.startswith("num_ctx"):
+                        # "num_ctx" or "num_ctx:262144"
+                        if ":" in tok:
+                            return int(tok.split(":")[-1])
+            return 32768
+        except Exception as e:
+            self._log_tool("context_window", {"model": model}, error=str(e))
+            return 32768
+
     def _log_tool(self, method: str, inputs: dict[str, Any], outputs: Any = None, duration_ms: float | None = None, error: str | None = None):
         if self.session_logger is None:
             return

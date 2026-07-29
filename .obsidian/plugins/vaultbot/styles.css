@@ -284,6 +284,46 @@
 	transform: rotate(180deg);
 }
 
+/* ---- Token-usage meter (in the model bar) ---- */
+.vaultbot-token-meter-wrap {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 120px;
+}
+
+.vaultbot-token-meter {
+	flex: 1;
+	height: 6px;
+	min-width: 60px;
+	border-radius: 3px;
+	background-color: var(--vb-stone);
+	overflow: hidden;
+}
+
+.vaultbot-token-meter-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 3px;
+	background-color: var(--vb-moss);
+	transition: width 0.4s ease, background-color 0.3s ease;
+}
+
+.vaultbot-token-meter-fill-warn {
+	background-color: var(--vb-clay);
+}
+
+.vaultbot-token-meter-fill-crit {
+	background-color: var(--vb-bark);
+}
+
+.vaultbot-token-meter-label {
+	font-size: 0.78em;
+	color: var(--vb-ink-muted);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
 /* ---- Footer: model picker + input/buttons (fixed at bottom) ---- */
 .vaultbot-footer {
 	flex: 0 0 auto;        /* never shrink or scroll */

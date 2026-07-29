@@ -80,6 +80,50 @@ async def run_with_heartbeat(svc: Services, websocket, label: str,
     return result
 
 
+def truncate_tool_result(result: Any, max_chars: int = 6000) -> Any:
+    """Truncate a tool result so it never overwhelms the conversation.
+
+    Tool results (especially vault_research syntheses, code_read of large
+    files, and vault_graph_analyzer dumps) can be 50K+ chars. Appended
+    verbatim to the conversation, a single result balloons the payload past
+    the compaction threshold, triggering mid-loop compaction that shreds the
+    *recent* user/assistant turns to 200-char fragments while leaving the
+    bloated result intact — the agent then loses the thread and redoes old
+    work. Capping each result to a generous but bounded size (default 6K
+    chars, ~1.5K tokens) keeps the agentic loop's context bounded without
+    losing the actionable summary the model needs.
+
+    Returns a new object; never mutates the input. Preserves dict structure
+    and truncates only string values that exceed a per-key cap, plus an
+    overall serialized cap as a last resort.
+    """
+    try:
+        serialized = json.dumps(result, default=str)
+        if len(serialized) <= max_chars:
+            return result
+        # Per-key truncation for dict results: keep keys, cap long string
+        # values. This preserves the structure the model reasons over.
+        if isinstance(result, dict):
+            capped: dict[str, Any] = {}
+            per_key = max(800, max_chars // max(1, len(result)))
+            for k, v in result.items():
+                if isinstance(v, str) and len(v) > per_key:
+                    capped[k] = v[:per_key] + "\n[...truncated tool result...]"
+                elif isinstance(v, (list, tuple)) and len(json.dumps(v, default=str)) > per_key:
+                    capped[k] = str(v)[:per_key] + "\n[...truncated tool result...]"
+                else:
+                    capped[k] = v
+            # Final serialized cap so the whole dict fits.
+            s2 = json.dumps(capped, default=str)
+            if len(s2) <= max_chars:
+                return capped
+            return s2[:max_chars] + "\n[...truncated tool result...]"
+        # Non-dict: cap the serialized form.
+        return serialized[:max_chars] + "\n[...truncated tool result...]"
+    except Exception:
+        return str(result)[:max_chars]
+
+
 def tool_result_summary(tool_name: str, result: Any) -> str:
     """Human-readable one-line summary of a tool result for the UI."""
     if not isinstance(result, dict):
