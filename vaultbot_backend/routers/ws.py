@@ -56,6 +56,12 @@ async def websocket_endpoint(websocket: WebSocket,
     client_host = websocket.client.host if websocket.client else "unknown"
     session_logger.log("websocket_connect", {"client_host": client_host})
     await svc.manager.connect(websocket)
+    # Send session info (id + title) so the frontend can display it.
+    await svc.manager.send_personal_message(json.dumps({
+        "type": "session_info",
+        "session_id": session_logger.session_id,
+        "title": session_logger.title,
+    }), websocket, session_logger=session_logger)
     # Per-connection conversation history. This is THE fix for the "amnesia"
     # bug: without it, every message started a fresh 2-message conversation
     # (system + this message) with zero memory of prior turns.
@@ -179,6 +185,12 @@ async def websocket_endpoint(websocket: WebSocket,
                     "type": "session_reset",
                     "content": "New session started. I've cleared our conversation history — what would you like to work on?"
                 }), websocket, session_logger=session_logger)
+                # Send updated session info for the new session.
+                await svc.manager.send_personal_message(json.dumps({
+                    "type": "session_info",
+                    "session_id": session_logger.session_id,
+                    "title": session_logger.title,
+                }), websocket, session_logger=session_logger)
                 continue
 
             # ── Slash-command surface ──────────────────────────────────
@@ -261,6 +273,18 @@ async def websocket_endpoint(websocket: WebSocket,
                     }), websocket, session_logger=session_logger)
                     continue
 
+            # Allow the frontend to update the session title inline.
+            if msg_type == "set_title":
+                new_title = payload.get("title", "").strip()
+                if new_title:
+                    session_logger.set_title(new_title)
+                    await svc.manager.send_personal_message(json.dumps({
+                        "type": "session_info",
+                        "session_id": session_logger.session_id,
+                        "title": session_logger.title,
+                    }), websocket, session_logger=session_logger)
+                continue
+
             if not user_message:
                 session_logger.log("empty_message", {"payload": payload})
                 continue
@@ -276,6 +300,17 @@ async def websocket_endpoint(websocket: WebSocket,
             if task and not task.done():
                 task.cancel()
                 session_logger.log("chat_interrupted", {"reason": "new_message"})
+
+            # Auto-generate session title from the first user message if
+            # the title is still the default "New Session".
+            if session_logger.title == "New Session" and user_message.strip():
+                _auto_title = user_message.strip()[:80]
+                session_logger.set_title(_auto_title)
+                await svc.manager.send_personal_message(json.dumps({
+                    "type": "session_info",
+                    "session_id": session_logger.session_id,
+                    "title": session_logger.title,
+                }), websocket, session_logger=session_logger)
 
             # Spawn the handler fire-and-forget so the receive loop stays
             # responsive to stop/new messages.

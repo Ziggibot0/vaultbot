@@ -35,9 +35,10 @@ async def set_goals(svc: Services, payload: dict):
     steps = payload.get("steps", [])
     completed = payload.get("completed_step")
     next_step = payload.get("next_step")
+    context = payload.get("context")
     if not goal:
         return {"error": "missing goal"}, 400
-    text = identity.update_goals(goal, steps, completed, next_step)
+    text = identity.update_goals(goal, steps, completed, next_step, context)
     return {"goals": text, "summary": identity.summary()}
 
 

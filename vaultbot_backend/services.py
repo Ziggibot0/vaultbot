@@ -107,3 +107,16 @@ class Services:
     # ConnectionManager is defined in main.py (kept there for now); typed
     # loosely to avoid importing main here (would create a cycle).
     manager: "object" = None
+
+    @property
+    def vault_path(self) -> str:
+        """Resolved vault root path (single source of truth).
+
+        Several extracted modules (chat_handler's vault-change broadcast,
+        research route's note-title lookup) read ``svc.vault_path``. The
+        canonical path lives on the indexer, which is constructed from
+        ``os.getenv("VAULT_PATH")`` and resolved at startup. Delegating here
+        avoids a second copy of the env read and guarantees every consumer
+        sees the same root even if VAULT_PATH is reconfigured at runtime.
+        """
+        return str(self.vault_indexer.vault_path)

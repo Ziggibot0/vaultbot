@@ -237,7 +237,7 @@ class KnowledgeCurriculum:
                 link-density sink signal (default 5).
             diversity_window: how many recently-completed topics the diversity
                 bonus penalizes against (default 5).
-            skip_vaultbot_paths: drop thin notes under 08-Chat/ or 07-Research/ (the bot's
+            skip_vaultbot_paths: drop thin notes under Memory/Chat/ or Knowledge/Research/ (the bot's
                 own outputs) so the curriculum doesn't chase its own drafts.
         """
         self.graph: VaultGraph = vault_graph
@@ -589,7 +589,7 @@ class KnowledgeCurriculum:
     def _collect_thin_notes(self) -> list[dict[str, Any]]:
         """Signal 2: existing notes with too-short bodies.
 
-        Skips anything under 08-Chat/ or 07-Research/ (the bot's own drafts) so the
+        Skips anything under Memory/Chat/ or Knowledge/Research/ (the bot's own drafts) so the
         curriculum doesn't chase its own work-in-progress.
         """
         try:
@@ -597,7 +597,7 @@ class KnowledgeCurriculum:
             out: list[dict[str, Any]] = []
             for t in thin:
                 file_path = t.get("file_path", "") or ""
-                if self.skip_vaultbot_paths and any(d in file_path.replace("\\", "/") for d in ("08-Chat/", "07-Research/")):
+                if self.skip_vaultbot_paths and any(d in file_path.replace("\\", "/") for d in ("Memory/Chat/", "Knowledge/Research/")):
                     continue
                 out.append({
                     "kind": "thin_note",

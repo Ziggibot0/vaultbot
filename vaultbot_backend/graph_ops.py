@@ -375,7 +375,7 @@ class GraphOpRegistry:
                 return {"error": "missing or invalid 'title'"}
             if body is None:
                 return {"error": "missing 'body'"}
-            folder = args.get("folder", "07-Research")
+            folder = args.get("folder", "Knowledge/Research")
             summary = args.get("summary", "") or ""
 
             slug = self._slugify(title)
@@ -688,7 +688,7 @@ SCHEMAS: list[dict[str, Any]] = [
                     },
                     "folder": {
                         "type": "string",
-                        "description": "Vault subfolder (default '07-Research').",
+                        "description": "Vault subfolder (default 'Knowledge/Research').",
                     },
                     "summary": {
                         "type": "string",

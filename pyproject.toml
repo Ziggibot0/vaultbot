@@ -73,8 +73,8 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "**/tests/*" = ["S101", "BLE001", "E402"]
 "**/__init__.py" = ["E402", "F401"]
 # Phase 4: the long-tail background/cleanup modules are uniformly best-effort
-# (background research cycles, post-ingest weaving, sandbox execution, voice
-# decoder fallbacks, etc.).  Annotating each of ~300 sites individually would
+# (background research cycles, post-ingest weaving, sandbox execution,
+# etc.).  Annotating each of ~300 sites individually would
 # bloat the diff without changing behavior.  Instead, BLE001 is ignored for
 # these modules and STRICTLY enforced on the hot-path files (vault_indexer.py,
 # chat_handler.py, fused_retrieval.py) where narrowing actually surfaces bugs.
@@ -84,7 +84,6 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "vaultbot_backend/weaving.py" = ["BLE001"]
 "vaultbot_backend/self_improver.py" = ["BLE001"]
 "vaultbot_backend/knowledge_curriculum.py" = ["BLE001"]
-"vaultbot_backend/speech.py" = ["BLE001"]
 "vaultbot_backend/compactor.py" = ["BLE001"]
 "vaultbot_backend/lazy_condenser.py" = ["BLE001"]
 "vaultbot_backend/claim_verifier.py" = ["BLE001"]

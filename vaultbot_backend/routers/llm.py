@@ -24,8 +24,14 @@ from llm_client import get_llm_client, get_vision_client
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# .env path — re-derived here so the router doesn't import main.
-_ENV_PATH = Path(__file__).with_name("..") / ".env"
+# .env path — re-derived here so the router doesn't import main. This MUST
+# resolve to the SAME .env that main.py loads at startup (the vault-root
+# .env, one level above vaultbot_backend/). Previously this pointed at
+# vaultbot_backend/.env while main.py loaded Vault2/.env, so a model the
+# user picked in settings (persisted here) was silently ignored on every
+# restart and the boot-time default won. Resolve via .parent chain so it
+# tracks the real location regardless of how the backend is launched.
+_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 
 
 def _persist_env_value(key: str, value: str) -> None:
@@ -264,6 +270,7 @@ async def pull_model(
     if not model:
         return {"status": "error", "error": "No model specified"}
     import subprocess
+    from subprocess_utils import Popen as _popen
     import threading
 
     # Capture the running event loop BEFORE starting the thread, so the
@@ -280,7 +287,7 @@ async def pull_model(
         try:
             # ollama pull prints progress lines to stderr; we read them
             # line by line and broadcast percentage updates.
-            proc = subprocess.Popen(
+            proc = _popen(
                 ["ollama", "pull", model],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
@@ -340,7 +347,11 @@ async def pull_model(
 @router.post("/set_model")
 async def set_model_endpoint(payload: dict,
                               svc: Annotated[Services, Depends(get_services)]):
-    """Set the active LLM model immediately.
+    """Set the active LLM model immediately and persist to .env.
+
+    Persists the selection so subprocesses (subagent) and backend restarts
+    pick up the same model. Writes to OLLAMA_LLM_MODEL (ollama backend) or
+    LLM_MODEL (openai backend) depending on the active backend.
 
     For API backends the user may type a model id that isn't in the cached
     list (e.g. a newly-released model), so we accept any non-empty model and
@@ -351,6 +362,18 @@ async def set_model_endpoint(payload: dict,
     if not requested_model:
         return {"status": "error", "detail": "missing model"}, 400
     svc.ollama_client.set_model(requested_model)
+
+    # Persist to .env so subprocesses (subagent) and restarts respect the
+    # dropdown selection. This is the single source of truth — the dropdown
+    # writes here, and every LLM call reads from here.
+    backend = _detect_llm_backend()
+    if backend == "openai":
+        _persist_env_value("LLM_MODEL", requested_model)
+    else:
+        _persist_env_value("OLLAMA_LLM_MODEL", requested_model)
+    # Reload .env into process env so the factory sees the new value.
+    load_dotenv(str(_ENV_PATH), override=True)
+
     return {"status": "ok", "model": requested_model,
             "current": svc.ollama_client.llm_model}
 

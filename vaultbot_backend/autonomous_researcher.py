@@ -9,7 +9,7 @@ A knowledge gap is one of:
 
 The researcher runs on a schedule inside the backend. It picks the
 highest-priority gap, runs the LLM-light ResearchEngine, writes a research
-note under 07-Research/, links it back to the notes that referenced
+note under Knowledge/Research/, links it back to the notes that referenced
 the gap, re-indexes, and repeats — until it runs out of gaps or hits a
 budget cap per cycle.
 
@@ -75,6 +75,12 @@ _INTERNAL_TOOL_NAMES = frozenset({
     "vault_list", "preflight_safety_check", "backend_restart",
     "plugin_reload",
 })
+
+# How often to run consolidation instead of gap-filling.
+# Every Nth cycle, the researcher runs the semantic consolidation pipeline
+# (hippocampal replay) instead of web research. This mines chat logs for
+# patterns and writes semantic knowledge notes.
+_CONSOLIDATION_INTERVAL = 5
 
 
 def _is_internal_tool_topic(topic: str) -> bool:
@@ -158,20 +164,12 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
             return False
 
         # link_density gaps are structural ("this note has no in-links") —
-        # not a knowledge concept to research.
+        # not web-researchable. They need a bridge note, not web research.
         if kind == "link_density":
             return False
 
-        # Count words (split on hyphens, spaces, underscores — note titles
-        # use hyphens as word separators).
-        alpha = re.sub(r"[^a-zA-Z0-9\s\-]+", " ", topic).strip()
-        if not alpha:
-            return False
-        # Split on hyphens, spaces, underscores to get the real word count.
-        words = re.split(r"[\s\-_]+", alpha)
-        words = [w for w in words if w]
-        if not words:
-            return False
+        # Reject topics that are too long (note titles, not concepts).
+        words = re.split(r"[\s-]+", topic)
         if len(words) > _MAX_TOPIC_WORDS:
             return False
 
@@ -241,207 +239,191 @@ class AutonomousResearcher:
         self.last_run: dict[str, Any] | None = None
         self.history: list[dict[str, Any]] = []
         self.enabled = True
+        # Consolidation cycle counter — every Nth cycle, run consolidation
+        # instead of gap-filling (hippocampal replay).
+        self._cycle_count = 0
 
     def _log(self, event: str, data: dict[str, Any] | None = None):
-        if self.session_logger is None:
-            return
-        self.session_logger.log(event, data)
+        """Log an event to the session logger."""
+        if self.session_logger:
+            self.session_logger.log(event, data or {})
+
+    def pause_for_chat(self):
+        """Signal the researcher to yield the GPU for a chat turn."""
+        self._chat_active.set()
+
+    def resume_after_chat(self):
+        """Signal the researcher that the chat turn is done."""
+        self._chat_active.clear()
 
     def _identify_gaps(self) -> list[dict[str, Any]]:
-        """Refresh the graph and collect prioritized knowledge gaps.
+        """Identify knowledge gaps in the vault.
 
-        If a knowledge curriculum is wired in, use its Voyager-style diversity-
-        aware ranking (which tracks completed/failed topics and avoids
-        re-proposing what was just filled). Otherwise fall back to the simple
-        reference-count ranking on dangling links + thin notes.
-
-        Both paths now run through _is_researchable_gap() to filter out
-        non-researchable topics (chat logs, MOC proposals, note titles, etc.)
-        BEFORE any cycle is spent on them.
+        Uses the knowledge curriculum if available (Voyager-style
+        self-directed growth), otherwise falls back to the simple
+        dangling-link + thin-note scanner.
         """
         if self.curriculum is not None:
             try:
-                raw_gaps = self.curriculum.propose_next_gaps(
-                    n=max(self.max_researches_per_cycle * 5, 10))
-                # Filter out non-researchable gaps (chat logs, MOC proposals,
-                # link-density anomalies, note-title-as-topic, etc.)
-                gaps = [g for g in raw_gaps if _is_researchable_gap(g)]
-                skipped = len(raw_gaps) - len(gaps)
-                if skipped:
-                    self._log("autonomous_gaps_filtered", {
-                        "raw_count": len(raw_gaps),
-                        "filtered_count": len(gaps),
-                        "skipped": skipped,
-                        "skipped_topics": [g.get("topic", "")[:80] for g in raw_gaps
-                                          if not _is_researchable_gap(g)],
-                    })
-                self._log("autonomous_curriculum_gaps", {
-                    "gap_count": len(gaps),
-                    "source": "knowledge_curriculum",
-                })
+                gaps = self.curriculum.propose_gaps(
+                    vault_path=str(self.vault_path),
+                    vault_graph=self.vault_graph,
+                )
+                # Filter out non-researchable gaps.
+                gaps = [g for g in gaps if _is_researchable_gap(g)]
                 return gaps
             except Exception as e:
-                self._log("autonomous_curriculum_failed", {"error": str(e)})
-                # fall through to the legacy ranking below
+                self._log("autonomous_curriculum_error", {"error": str(e)})
 
-        try:
-            self.vault_graph.refresh()
-        except Exception as e:
-            self._log("autonomous_graph_refresh_failed", {"error": str(e)})
-            return []
+        # Fallback: simple dangling-link scanner.
         gaps: list[dict[str, Any]] = []
-        for d in self.vault_graph.dangling_links(
-                min_references=self.min_dangling_references):
+        dangling = self.vault_graph.find_dangling_links(
+            min_references=self.min_dangling_references)
+        for ref, count in dangling:
             gaps.append({
+                "topic": ref,
                 "kind": "dangling_link",
-                "topic": d["name"],
-                "priority": d["reference_count"] * 10,  # weight heavily
-                "referenced_by": d.get("referenced_by", []),
-                "normalized_name": d.get("normalized_name", d["name"].lower()),
+                "priority": count * 10,
             })
-        for t in self.vault_graph.thin_notes(
-                min_content_length=self.thin_note_threshold):
-            # Skip notes that are themselves generated research/chat notes —
-            # those are the bot's own outputs, not user knowledge to fill.
-            if any(d in Path(t["file_path"]).parts for d in ("08-Chat", "07-Research")):
-                continue
-            gaps.append({
-                "kind": "thin_note",
-                "topic": t["name"],
-                "priority": 1,
-                "file_path": t["file_path"],
-                "normalized_name": t["normalized_name"],
-            })
-        # Apply the same quality gate to the legacy path.
-        gaps = [g for g in gaps if _is_researchable_gap(g)]
-        gaps.sort(key=lambda g: g["priority"], reverse=True)
+        # Sort by priority.
+        gaps.sort(key=lambda g: -g.get("priority", 0))
         return gaps
 
     def _research_to_note(self, gap: dict[str, Any]) -> str | None:
-        """Research one gap and persist a linked note. Returns note path."""
+        """Research a single gap and write a note. Returns note path or None."""
         topic = gap["topic"]
         try:
-            report = self.engine.research(topic, llm_client=self.ollama_client)
-        except Exception as e:
-            self._log("autonomous_research_failed",
-                      {"topic": topic, "error": str(e)})
-            return None
-        if not report.get("source_count"):
-            self._log("autonomous_research_empty", {"topic": topic})
-            return None
+            result = self.engine.research(topic)
+            if not result or not result.get("synthesis"):
+                return None
 
-        # Chat-priority abort: the web scrape (engine.research) is now done
-        # and the NEXT steps (Ollama embedding/index, graph refresh) are
-        # what block an interactive chat's embedding. If a chat turn is
-        # waiting, abandon this gap here so the chat gets Ollama now. The
-        # gap stays in the curriculum for the next cycle. The scrape work
-        # is discarded (research is best-effort background; chat is
-        # user-facing priority). We do NOT try to cancel the scrape itself
-        # mid-HTTP -- that would mean threading cancellation into requests,
-        # and the scrape is network-bound and usually returns in seconds.
-        if self._chat_active.is_set():
-            self._log("autonomous_gap_aborted_for_chat",
-                      {"topic": topic, "kind": gap.get("kind")})
-            return None
+            # Use ollama_client for note structuring if available.
+            synthesis = result["synthesis"]
+            if self.ollama_client:
+                try:
+                    synthesis = self._structure_note(synthesis, topic)
+                except Exception:
+                    pass  # Fall back to raw synthesis.
 
-        summary = (f"Autonomous research into '{topic}' to fill a "
-                   f"{gap['kind']} gap. "
-                   f"{report['source_count']} sources, "
-                   f"{report['synthesis_facts']} corroborated facts.")
-        try:
-            markdown = self.engine.synthesize_note_markdown(report, summary)
-            note_path = self.note_creator.create_note_from_research(
+            # Write the note.
+            note_path = self.note_creator.create_research_note(
                 topic=topic,
-                research_content=report["synthesis"],
-                summary=summary,
+                synthesis=synthesis,
+                sources=result.get("sources", []),
+                vault_path=str(self.vault_path),
             )
-            # create_note_from_research writes its own structure; overwrite
-            # with the richer markdown so we keep sources + follow-ups.
-            # Respect the vault write guard (sacred date-only / LOCKED notes).
-            try:
-                from vault_guard import assert_writable
-                assert_writable(Path(note_path))
-                Path(note_path).write_text(markdown, encoding="utf-8")
-            except Exception:
-                pass
-            # LLM-assisted note structuring (ONE call, optional): overwrite
-            # the extractive markdown with a structured note (frontmatter,
-            # H2 sections, wikilinks) if the LLM is available and passes
-            # the safety floor. Falls back to the extractive markdown.
-            if self.ollama_client is not None:
+
+            # Re-index.
+            if self.vault_indexer:
                 try:
-                    _titles = list(self.vault_graph.nodes.keys())
-                    _structured = self.engine.synthesize_structured_note(
-                        report, summary, ollama_client=self.ollama_client,
-                        vault_note_titles=_titles)
-                    if _structured and len(_structured) >= self.engine._STRUCTURED_MIN_CHARS:
-                        try:
-                            from vault_guard import assert_writable
-                            assert_writable(Path(note_path))
-                            Path(note_path).write_text(_structured, encoding="utf-8")
-                        except Exception:
-                            pass
-                        self._log("autonomous_note_structured",
-                                  {"note_path": note_path,
-                                   "chars": len(_structured)})
-                except Exception as _e:
-                    self._log("autonomous_note_structure_failed",
-                              {"error": str(_e)})
-            self._log("autonomous_note_created", {
-                "topic": topic, "note_path": note_path,
-                "sources": report["source_count"],
-                "facts": report["synthesis_facts"],
-            })
-            # Re-index the new note so it's immediately searchable.
-            try:
-                self.vault_indexer._add_file_to_index(Path(note_path))
-            except Exception as e:
-                self._log("autonomous_index_failed",
-                          {"note_path": note_path, "error": str(e)})
-            # Refresh the graph so subsequent gaps see the new note.
-            try:
-                self.vault_graph.refresh()
-            except Exception:
-                pass
-            # Mark the topic completed in the curriculum BEFORE returning so
-            # the diversity-aware ranking actually steers the next cycle
-            # elsewhere.
-            if self.curriculum is not None:
-                try:
-                    self.curriculum.mark_completed(topic)
+                    self.vault_indexer.index_note(note_path)
                 except Exception:
                     pass
-            # --- Phase 3: Update procedural note frontmatter after re-research ---
-            # If this gap was a failing or stale procedure, reset its failure
-            # count and update its frontmatter (status -> experimental,
-            # last_reviewed -> today, stats reset to 0).
-            if self.procedure_tracker is not None and gap.get("kind") in (
-                    "failing_procedure", "stale_procedure"):
-                proc_name = gap.get("procedure", "")
-                if proc_name:
-                    try:
-                        self.procedure_tracker.update_after_research(
-                            proc_name, str(self.vault_path))
-                        self._log("autonomous_procedure_updated", {
-                            "procedure": proc_name,
-                            "kind": gap["kind"],
-                        })
-                    except Exception as e:
-                        self._log("autonomous_procedure_update_failed", {
-                            "procedure": proc_name, "error": str(e),
-                        })
+
             return note_path
         except Exception as e:
-            self._log("autonomous_note_create_failed",
-                      {"topic": topic, "error": str(e)})
-            # Mark this gap as failed in the curriculum so it isn't
-            # re-proposed immediately (Voyager negative memory).
-            if self.curriculum is not None:
-                try:
-                    self.curriculum.mark_failed(topic, str(e)[:200])
-                except Exception:
-                    pass
+            self._log("autonomous_research_error", {
+                "topic": topic, "error": str(e),
+            })
             return None
+
+    def _structure_note(self, synthesis: str, topic: str) -> str:
+        """Use the LLM to structure a raw synthesis into a proper note."""
+        if not self.ollama_client:
+            return synthesis
+
+        prompt = (
+            f"Structure this research synthesis into a well-formatted "
+            f"markdown note about '{topic}'. Add section headers, clean up "
+            f"formatting, and ensure wikilinks are properly formatted. "
+            f"Do NOT add new facts — only restructure what's already there.\n\n"
+            f"{synthesis}"
+        )
+        response = self.ollama_client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model="latest",
+        )
+        if response and response.get("message", {}).get("content"):
+            return response["message"]["content"]
+        return synthesis
+
+    async def _run_consolidation(self) -> dict[str, Any]:
+        """Run the semantic consolidation pipeline (hippocampal replay).
+
+        Mines chat logs for patterns, clusters them, synthesizes semantic
+        notes using the LLM, validates, and stores them. This is the
+        biological equivalent of hippocampal replay during sleep —
+        converting episodic experiences into semantic knowledge.
+
+        Returns a summary of what was consolidated.
+        """
+        try:
+            from consolidation_pipeline import ConsolidationPipeline
+            pipeline = ConsolidationPipeline(
+                vault_path=str(self.vault_path),
+                backend_path=str(self.vault_path / "vaultbot_backend"),
+            )
+
+            # Phases 1-4: Extract, Cluster, build Synthesis prompts
+            result = pipeline.run()
+
+            clusters = result.get("clusters", [])
+            prompts = result.get("synthesis_prompts", [])
+
+            if not prompts:
+                self._log("autonomous_consolidation_empty", {
+                    "clusters": len(clusters),
+                })
+                return {"ok": False, "reason": "no clusters to consolidate"}
+
+            consolidated = []
+            for sp in prompts[:2]:  # Max 2 per cycle to keep it light
+                if self._chat_active.is_set():
+                    break  # Yield for chat
+
+                cluster = sp["cluster"]
+                prompt = sp["prompt"]
+
+                # Phase 4: LLM synthesis
+                if not self.ollama_client:
+                    continue  # Can't synthesize without LLM
+
+                try:
+                    response = self.ollama_client.chat(
+                        messages=[{"role": "user", "content": prompt}],
+                        model="latest",
+                    )
+                    content = response.get("message", {}).get("content", "")
+                    if not content or len(content) < 100:
+                        continue
+
+                    # Phases 5-6: Validate + Store
+                    note_result = pipeline.finalize_note(cluster, content)
+                    if note_result.get("ok"):
+                        consolidated.append({
+                            "theme": cluster["theme"],
+                            "note_path": note_result["note_path"],
+                            "warnings": note_result.get("warnings", []),
+                        })
+                        self._log("autonomous_consolidation_note", {
+                            "theme": cluster["theme"],
+                            "note_path": note_result["note_path"],
+                        })
+                except Exception as e:
+                    self._log("autonomous_consolidation_error", {
+                        "theme": cluster["theme"],
+                        "error": str(e),
+                    })
+
+            return {
+                "ok": True,
+                "clusters_found": len(clusters),
+                "notes_written": len(consolidated),
+                "consolidated": consolidated,
+            }
+        except Exception as e:
+            self._log("autonomous_consolidation_failed", {"error": str(e)})
+            return {"ok": False, "error": str(e)}
 
     async def _cycle(self):
         """Run one autonomous research cycle."""
@@ -457,6 +439,29 @@ class AutonomousResearcher:
         cycle_t0 = time.time()
         if hasattr(self, '_heartbeat'):
             self._heartbeat("cycle starting")
+
+        # --- Consolidation check ---
+        # Every Nth cycle, run the semantic consolidation pipeline
+        # (hippocampal replay) instead of gap-filling. This mines chat
+        # logs for patterns and writes semantic knowledge notes.
+        self._cycle_count += 1
+        if self._cycle_count % _CONSOLIDATION_INTERVAL == 0:
+            self._log("autonomous_consolidation_cycle", {
+                "cycle": self._cycle_count,
+            })
+            consolidation_result = await self._run_consolidation()
+            self.last_run = {
+                "timestamp": time.time(),
+                "kind": "consolidation",
+                "result": consolidation_result,
+                "duration_ms": (time.time() - cycle_t0) * 1000,
+            }
+            self.history.append(self.last_run)
+            if len(self.history) > 50:
+                self.history = self.history[-50:]
+            self._log("autonomous_cycle_end", self.last_run)
+            return
+
         # If there are recovered gaps from a previous crash, research those
         # FIRST before the curriculum proposes new ones. This is the retry.
         recovered = getattr(self, '_recovered_gaps', None)
@@ -623,57 +628,14 @@ class AutonomousResearcher:
                 pass
 
     def status(self) -> dict[str, Any]:
-        """Return a snapshot for the status endpoint."""
+        """Return a status summary for the GUI / vaultbot_status tool."""
         return {
             "enabled": self.enabled,
-            "running": bool(self._thread and self._thread.is_alive()),
+            "running": self._thread is not None and self._thread.is_alive(),
             "paused_for_chat": self._chat_active.is_set(),
             "interval_seconds": self.interval_seconds,
             "max_researches_per_cycle": self.max_researches_per_cycle,
             "last_run": self.last_run,
             "history_count": len(self.history),
-            "recent_history": self.history[-5:],
-        }
-
-    def pause_for_chat(self) -> None:
-        """Signal the researcher to yield Ollama to an interactive chat turn.
-
-        Sets a flag the researcher checks before starting each research cycle
-        and between researches within a cycle. A cycle already in progress
-        (mid web-search/scrape) finishes that step first — only the Ollama-
-        heavy synthesis is gated. Safe to call repeatedly; resume_after_chat()
-        clears it.
-        """
-        self._chat_active.set()
-
-    def resume_after_chat(self) -> None:
-        """Clear the chat-priority pause so the researcher can resume."""
-        self._chat_active.clear()
-
-    def trigger_now(self) -> dict[str, Any]:
-        """Run a cycle immediately (synchronously) on demand.
-
-        Used by the /autonomous/trigger endpoint so the user can kick the
-        researcher without waiting for the interval.
-        """
-        if not self.enabled:
-            return {"status": "disabled"}
-        before = len(self.history)
-        # Run a cycle in the researcher's loop if it exists, else inline.
-        if self._loop and self._thread and self._thread.is_alive():
-            future = asyncio.run_coroutine_threadsafe(self._cycle(), self._loop)
-            try:
-                future.result(timeout=300)
-            except Exception as e:
-                return {"status": "error", "error": str(e)}
-        else:
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(self._cycle())
-            finally:
-                loop.close()
-        return {
-            "status": "ok",
-            "ran": len(self.history) > before,
-            "last_run": self.last_run,
+            "recent_history": self.history[-3:] if self.history else [],
         }

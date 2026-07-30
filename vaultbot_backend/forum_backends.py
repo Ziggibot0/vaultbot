@@ -351,45 +351,18 @@ class ForumEnhancedFreeSearch(FreeSearch):
         """Fan out to all backends in parallel, merge + dedupe.
 
         Overrides FreeSearch.search() to:
-        1. Skip arXiv for technical queries (programming/tools).
+        1. Detect domain and activate appropriate backends (arXiv for
+           science, GitHub/SO for software, etc.).
         2. Merge with forum backends first (github_issues, stackoverflow)
            instead of round-robin, so forum results aren't buried.
+        3. Domain-adaptive source filtering in the merge step.
 
         Returns {"results": [...], "unresponsive_engines": [...]}.
         """
         t0 = time.time()
-        tech = is_technical_query(query)
-        # arXiv is gated on genuine academic intent. arXiv's full-text
-        # search is permissive enough to return "results" for any query
-        # ("index" matches "lobby index in networks", "vector" matches
-        # "fuzzy vectors"), so we only run it when the query carries real
-        # research-paper signal (physics/theorem/neural/…). This replaces
-        # the old "skip arXiv only for technical queries" approach, which
-        # let arXiv fire on procedural/how-to topics and flood the pile
-        # with off-topic papers. See [[How-to-Fix-Research-Engine-
-        # Returning-Garbage]].
-        academic = is_academic_query(query)
-        # Forum backends (GitHub Issues, StackOverflow) are gated on
-        # technical intent. GitHub's issue search is full of SEO spam
-        # ("Dissertation Writing Help in UAE" repos) that pollutes
-        # general/academic topics — the generic-quorum relevance gate
-        # can't catch them because they deliberately stuff "academic",
-        # "research", "sources" into their titles. Running them only for
-        # technical queries (where they're genuinely the best source)
-        # keeps the spam out of soft-topic research.
-        forum_relevant = tech
-
-        # Determine active backends:
-        #  - arxiv only when the query is genuinely academic
-        #  - forum backends only when the query is technical
-        #  - general-web backends (ddg, searxng, marginalia) always run
-        def _skip(b):
-            if b.name == "arxiv":
-                return not academic or tech
-            if b.name in ("github_issues", "stackoverflow"):
-                return not forum_relevant
-            return False
-        active_backends = [b for b in self._backends if not _skip(b)]
+        # All backends always run. The relevance gate + LLM synthesis
+        # handle filtering — no domain-specific backend selection needed.
+        active_backends = list(self._backends)
 
         results_by_backend: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
         threads = []

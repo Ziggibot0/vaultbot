@@ -1,6 +1,7 @@
-"""Chat helpers extracted from main.py.
+"""
+Chat helpers — truncation, formatting, and UI summaries for tool results.
 
-These four helpers were originally module-level functions in main.py
+These helpers were originally module-level functions in main.py
 (``_send_progress``, ``_heartbeat``, ``_run_with_heartbeat``,
 ``_tool_result_summary``) and referenced two module globals — ``manager``
 (the websocket ConnectionManager) and ``default_session_logger`` (a
@@ -10,13 +11,7 @@ After extraction they no longer see those globals as free variables, so
 the three that touch ``manager`` / ``default_session_logger`` accept a
 ``Services`` instance (see ``services.py``) as their first parameter and
 read the singletons off it. ``tool_result_summary`` is pure (only uses
-``Path`` + built-ins) and needs no ``svc`` param.
-
-Import contract:
-- ``services`` is importable without importing main.py (conftest.py adds
-  the backend dir to sys.path), so this module is safe to import in tests.
-- ``main.py`` keeps thin shims that forward to these public functions,
-  passing its module-level ``svc`` registry.
+built-ins) and needs no ``svc`` param.
 """
 from __future__ import annotations
 
@@ -80,7 +75,7 @@ async def run_with_heartbeat(svc: Services, websocket, label: str,
     return result
 
 
-def truncate_tool_result(result: Any, max_chars: int = 6000) -> Any:
+def truncate_tool_result(result: Any, max_chars: int = 10000) -> Any:
     """Truncate a tool result so it never overwhelms the conversation.
 
     Tool results (especially vault_research syntheses, code_read of large
@@ -89,9 +84,13 @@ def truncate_tool_result(result: Any, max_chars: int = 6000) -> Any:
     the compaction threshold, triggering mid-loop compaction that shreds the
     *recent* user/assistant turns to 200-char fragments while leaving the
     bloated result intact — the agent then loses the thread and redoes old
-    work. Capping each result to a generous but bounded size (default 6K
-    chars, ~1.5K tokens) keeps the agentic loop's context bounded without
+    work. Capping each result to a generous but bounded size (default 10K
+    chars, ~2.5K tokens) keeps the agentic loop's context bounded without
     losing the actionable summary the model needs.
+
+    Truncation messages are informative — they report how many chars were
+    dropped and from which key, so the model knows what it's missing and can
+    re-read with tighter parameters if needed.
 
     Returns a new object; never mutates the input. Preserves dict structure
     and truncates only string values that exceed a per-key cap, plus an
@@ -105,27 +104,42 @@ def truncate_tool_result(result: Any, max_chars: int = 6000) -> Any:
         # values. This preserves the structure the model reasons over.
         if isinstance(result, dict):
             capped: dict[str, Any] = {}
-            per_key = max(800, max_chars // max(1, len(result)))
+            per_key = max(1000, max_chars // max(1, len(result)))
+            truncated_keys: list[str] = []
             for k, v in result.items():
                 if isinstance(v, str) and len(v) > per_key:
-                    capped[k] = v[:per_key] + "\n[...truncated tool result...]"
+                    dropped = len(v) - per_key
+                    capped[k] = v[:per_key] + f"\n[...truncated: {dropped} chars dropped from '{k}' — re-read with narrower parameters if needed...]"
+                    truncated_keys.append(k)
                 elif isinstance(v, (list, tuple)) and len(json.dumps(v, default=str)) > per_key:
-                    capped[k] = str(v)[:per_key] + "\n[...truncated tool result...]"
+                    dropped = len(json.dumps(v, default=str)) - per_key
+                    capped[k] = str(v)[:per_key] + f"\n[...truncated: ~{dropped} chars dropped from '{k}'...]"
+                    truncated_keys.append(k)
                 else:
                     capped[k] = v
             # Final serialized cap so the whole dict fits.
             s2 = json.dumps(capped, default=str)
             if len(s2) <= max_chars:
+                if truncated_keys:
+                    capped["_truncation_notice"] = f"Result was truncated. Keys affected: {truncated_keys}. Total original size: {len(serialized)} chars, cap: {max_chars} chars."
                 return capped
-            return s2[:max_chars] + "\n[...truncated tool result...]"
+            dropped = len(s2) - max_chars
+            return s2[:max_chars] + f"\n[...truncated: {dropped} chars dropped from overall result — original size was {len(serialized)} chars...]"
         # Non-dict: cap the serialized form.
-        return serialized[:max_chars] + "\n[...truncated tool result...]"
+        dropped = len(serialized) - max_chars
+        return serialized[:max_chars] + f"\n[...truncated: {dropped} chars dropped — original size was {len(serialized)} chars...]"
     except Exception:
         return str(result)[:max_chars]
 
 
 def tool_result_summary(tool_name: str, result: Any) -> str:
-    """Human-readable one-line summary of a tool result for the UI."""
+    """Human-readable one-line summary of a tool result for the UI.
+
+    NEVER returns None — every branch returns a string so callers that
+    slice the result (``summary[:200]``) can't crash with
+    ``'NoneType' object is not subscriptable`` when a tool returns a dict
+    the per-tool branches below don't explicitly handle.
+    """
     if not isinstance(result, dict):
         return str(result)[:200]
     if result.get("error"):
@@ -160,7 +174,6 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
         if st == "dry_run_ok":
             return "safe_write dry_run: OK — would write safely"
         return f"safe_write {st}: {str(result.get('error', ''))[:80]}"
-
     if tool_name == "js_safe_write":
         st = result.get("status", "?")
         if st == "written":

@@ -116,12 +116,17 @@ def plan_mode_directive() -> str:
         "# PLAN MODE (explore + plan BEFORE executing)\n"
         "This looks like a multi-step task. Before doing any work that "
         "changes the vault, runs research, or edits code, you MUST call "
-        "plan_task with a goal + concrete ordered steps. You may first use "
-        f"read-only tools to explore ({allowed}), but do NOT call any "
-        "execution tool (vault_research, safe_write, js_safe_write, "
-        "tool_create, textbook_ingest, execute_procedure, git_rollback, or "
-        "any custom tool that writes) until a plan exists. Once you call "
-        "plan_task, this restriction lifts and you proceed step by step."
+        "plan_task with a goal + concrete ordered steps. You SHOULD first "
+        "use read-only tools to explore and understand the problem "
+        f"({allowed}) — reading files, searching the vault, and checking "
+        "capabilities are all encouraged BEFORE planning. Take as many "
+        "exploration rounds as you need, then call plan_task when you "
+        "understand the problem well enough to write concrete steps. "
+        "Do NOT call any execution tool (vault_research, safe_write, "
+        "js_safe_write, tool_create, textbook_ingest, execute_procedure, "
+        "git_rollback, or any custom tool that writes) until a plan "
+        "exists. Once you call plan_task, this restriction lifts and "
+        "you proceed step by step."
     )
 
 

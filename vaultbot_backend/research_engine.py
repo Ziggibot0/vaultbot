@@ -47,15 +47,6 @@ _BLOCKED_DOMAINS = {
     "simple.wikipedia.org",
 }
 
-# Non-academic domains that pollute results with keyword-matched software.
-# See [[How-to-Fix-Research-Engine-Returning-Garbage]].
-_BLOCKED_NONACADEMIC = {
-    "hub.docker.com", "docker.com", "github.com",
-    "stackoverflow.com", "reddit.com", "twitter.com", "x.com",
-    "youtube.com", "npmjs.com", "pypi.org", "bintray.com",
-    "packagist.org", "rubygems.org", "maven.org", "chat.marginalia.nu",
-}
-
 # Academic/authoritative domains get a relevance boost.
 _ACADEMIC_DOMAINS = {
     "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "pmc.ncbi.nlm.nih.gov",
@@ -73,8 +64,6 @@ def _is_blocked_source(url: str) -> bool:
         return False
     url_lower = url.lower()
     if any(domain in url_lower for domain in _BLOCKED_DOMAINS):
-        return True
-    if any(domain in url_lower for domain in _BLOCKED_NONACADEMIC):
         return True
     return False
 
@@ -775,14 +764,15 @@ class ResearchEngine:
         return gaps[: self.max_follow_ups]
 
     def _llm_synthesize(self, topic: str, sources: list[dict[str, Any]],
-                        llm_client: Any) -> str | None:
-        """One LLM call to synthesize a research summary from source texts.
+                        llm_client: Any,
+                        vault_note_titles: list[str] | None = None) -> str | None:
+        """One LLM call to synthesize a structured research note from source texts.
 
-        Takes all gathered source texts and asks the LLM to produce a
-        coherent synthesis with inline [sources: ...] citations. The LLM
-        naturally filters irrelevant sources (Docker containers, off-topic
-        papers) because it understands the topic. Returns the synthesis
-        string or None if the LLM fails / produces too-short output.
+        Produces YAML frontmatter + H2 prose sections with inline
+        [sources: ...] citations and [[wikilinks]] to existing vault notes.
+        The LLM naturally filters irrelevant sources because it understands
+        the topic. Returns the synthesis string or None if the LLM fails /
+        produces too-short output.
         """
         # Build source texts block, capped to avoid overflowing context.
         source_blocks = []
@@ -799,24 +789,61 @@ class ResearchEngine:
 
         sources_text = "\n\n".join(source_blocks)
 
+        # Build vault titles hint so the LLM can insert real wikilinks.
+        titles_hint = ""
+        if vault_note_titles:
+            sample = vault_note_titles[:150]
+            titles_hint = (
+                "\n\nEXISTING VAULT NOTES (link to any that are topically "
+                "relevant using [[Note-Name]] -- do NOT force links, do NOT "
+                "invent titles not in this list):\n"
+                + "\n".join(f"- {t}" for t in sample)
+            )
+
         system = (
-            "You are a research synthesis assistant. You take multiple source "
-            "texts on a topic and produce a concise, factual synthesis. "
-            "You MUST:\n"
-            "1. Output bullet points, one per key finding.\n"
-            "2. After each finding, cite the source title in [sources: ...] tags.\n"
-            "3. SKIP any source that is not relevant to the topic (e.g. software "
-            "packages, Docker containers, unrelated papers).\n"
-            "4. Focus on the most important, fundamental facts about the topic.\n"
-            "5. Do NOT include filler, meta-commentary, or repetition.\n"
-            "6. Output ONLY the bullet points, nothing else."
+            "You are a research synthesis assistant for an Obsidian knowledge "
+            "vault. You take multiple source texts on a topic and produce a "
+            "structured research note. You MUST follow ALL of these rules:\n"
+            "1. START with YAML frontmatter (--- ... ---) containing: type: "
+            "research, status: raw, created: today\'s date, summary: one-line "
+            "description, tags: [research, <topic-keywords>], source_count, "
+            "fact_count. The frontmatter is MANDATORY.\n"
+            "2. Write 2-4 ## H2 section headings that organize the content "
+            "into a narrative. Each section MUST be PROSE PARAGRAPHS that "
+            "build an argument -- NOT bullet points, NOT flat lists. Write "
+            "connected sentences that flow. This is non-negotiable.\n"
+            "3. After each claim, cite the source title in [sources: ...] tags.\n"
+            "4. SKIP any source that is not relevant to the topic.\n"
+            "5. Insert [[wikilinks]] to existing vault notes ONLY where "
+            "topically relevant (use the EXISTING VAULT NOTES list). Never "
+            "invent note titles that aren\'t in that list. Link to at least "
+            "2 relevant existing notes if any are topically related.\n"
+            "6. Keep ALL the factual content -- don\'t drop facts, just "
+            "weave them into readable prose.\n"
+            "7. End with a ## Sources section listing each source as a "
+            "markdown link: - [Title](URL)\n"
+            "8. Do NOT add a top-level # heading. Start with the YAML "
+            "frontmatter.\n"
+            "9. Output ONLY the note content, nothing else."
+        )
+
+        # Build source list for the Sources section
+        source_list = "\n".join(
+            f"- [{s.get('title', s.get('url', f'Source {i+1}'))}]"
+            f"({s.get('url', '')})"
+            for i, s in enumerate(sources)
         )
 
         user = (
             f"Topic: {topic}\n\n"
             f"Source texts:\n\n{sources_text}\n\n"
-            f"Synthesize the key findings about '{topic}' from these sources. "
-            f"Output bullet points with [sources: ...] citations. Skip irrelevant sources."
+            f"{titles_hint}\n\n"
+            f"Source list for the Sources section:\n{source_list}\n\n"
+            f"Write a structured research note about '{topic}' from these "
+            f"sources. Start with YAML frontmatter, then 2-4 H2 prose "
+            f"sections with [sources: ...] citations and [[wikilinks]] to "
+            f"relevant existing vault notes. End with a ## Sources section "
+            f"using the source list above. Skip irrelevant sources."
         )
 
         try:
@@ -831,8 +858,13 @@ class ResearchEngine:
                 synthesis = ""
 
             synthesis = (synthesis or "").strip()
-            if len(synthesis) < 100:
+            if len(synthesis) < 200:
                 return None
+
+            # Deterministic wikilink repair: fix case mismatches and remove
+            # hallucinated titles. Pure string matching, zero LLM calls.
+            if vault_note_titles:
+                synthesis = self._repair_wikilinks(synthesis, vault_note_titles)
 
             return synthesis
         except Exception:
@@ -870,7 +902,8 @@ class ResearchEngine:
             total_len += len(line)
         return "\n".join(synthesis_lines), used
 
-    def research(self, topic: str, llm_client: Any = None) -> dict[str, Any]:
+    def research(self, topic: str, llm_client: Any = None,
+                  vault_note_titles: list[str] | None = None) -> dict[str, Any]:
         """Run a full multi-round research dig. Returns a structured report.
 
         If llm_client is provided, uses one LLM call for the final synthesis
@@ -997,11 +1030,14 @@ class ResearchEngine:
         # FALLBACK: if the LLM fails or produces too-short output, fall back
         # to the extractive synthesis (deterministic, no LLM).
         used: set = set()
+        llm_synthesized = False
         if llm_client is not None:
             self._progress("llm_synthesizing", {"sources": len(all_sources)})
-            llm_synth = self._llm_synthesize(topic, all_sources, llm_client)
+            llm_synth = self._llm_synthesize(topic, all_sources, llm_client,
+                                         vault_note_titles=vault_note_titles)
             if llm_synth and len(llm_synth) >= 100:
                 synthesis = llm_synth
+                llm_synthesized = True
                 used = set(range(len([
                     l for l in llm_synth.split('\n')
                     if l.strip().startswith('-')
@@ -1024,6 +1060,7 @@ class ResearchEngine:
             "topic": topic,
             "keyterms": base_terms,
             "facets_detected": facets,
+            "llm_synthesized": llm_synthesized,
             "rounds": rounds_log,
             "gaps_filled": gaps,
             "sources": [{"url": s["url"], "title": s["title"]}
@@ -1047,8 +1084,29 @@ class ResearchEngine:
 
     def synthesize_note_markdown(self, report: dict[str, Any],
                                  summary: str | None = None) -> str:
-        """Render a research report as Obsidian markdown (no LLM)."""
-        lines = [f"# {report['topic']}", ""]
+        """Render a research report as Obsidian markdown (no LLM).
+
+        This is the deterministic fallback when LLM synthesis is unavailable.
+        Includes YAML frontmatter so even the fallback has metadata.
+        """
+        from datetime import date
+        _topic = report.get("topic", "Research Note")
+        _src_count = report.get("source_count", 0)
+        _facts = report.get("synthesis_facts", 0)
+        # Build frontmatter
+        fm = [
+            "---",
+            f"type: research",
+            f"status: raw",
+            f"created: {date.today().isoformat()}",
+            f"summary: {summary or f'Deep research into {_topic}'}",
+            f"tags: [research]",
+            f"source_count: {_src_count}",
+            f"fact_count: {_facts}",
+            "---",
+            "",
+        ]
+        lines = fm + [f"# {_topic}", ""]
         if summary:
             lines += ["## Summary", summary, ""]
         lines += [
@@ -1096,6 +1154,68 @@ class ResearchEngine:
     # Safety floor: reject any LLM output shorter than this (catches an
     # LLM that collapses a note to nothing). Matches the
     # lazy_condenser safety floor pattern.
+
+    @staticmethod
+    def _get_vault_note_titles(vault_path: str) -> list[str]:
+        """Get actual note titles (preserving case) from the vault directory.
+
+        VaultGraph.nodes.keys() returns lowercase titles, but _repair_wikilinks
+        needs the actual filename casing to fix case-mismatched wikilinks.
+        This scans disk for real .md filenames.
+        """
+        import glob, os as _os
+        titles = []
+        for f in glob.glob(_os.path.join(vault_path, "**", "*.md"), recursive=True):
+            title = _os.path.splitext(_os.path.basename(f))[0]
+            titles.append(title)
+        return titles
+
+    @staticmethod
+    def _repair_wikilinks(note_md: str, valid_titles: list[str]) -> str:
+        """Fix wikilinks in LLM-generated note text. Zero LLM calls.
+
+        Two problems this fixes:
+        1. Case mismatch: LLM writes [[cell-structure-organelles]] but the actual
+           note is [[Cell-Structure-Organelles]]. Fixed by case-insensitive match.
+        2. Hallucinated titles: LLM writes [[some-note-that-doesnt-exist]].
+           Fixed by converting to plain text (strip the brackets).
+
+        Also handles piped wikilinks: [[Note-Name|display text]].
+        """
+        if not valid_titles:
+            return note_md
+
+        # Build a case-insensitive lookup: lowercase_title -> actual_title
+        title_lookup = {}
+        for t in valid_titles:
+            clean = t[:-3] if t.endswith(".md") else t
+            title_lookup[clean.lower()] = clean
+
+        def _fix_link(m):
+            inner = m.group(1)
+            if "|" in inner:
+                target, display = inner.split("|", 1)
+            else:
+                target, display = inner, inner
+
+            target_lower = target.strip().lower()
+            if target_lower in title_lookup:
+                actual = title_lookup[target_lower]
+                if display.strip() == target.strip():
+                    return f"[[{actual}]]"
+                else:
+                    return f"[[{actual}|{display.strip()}]]"
+            else:
+                return display.strip()
+
+        # Match [[...]] but not inside code blocks
+        parts = note_md.split("```")
+        for i in range(0, len(parts), 2):
+            parts[i] = re.sub(r"\[\[([^\]]+)\]\]", _fix_link, parts[i])
+        return "```".join(parts)
+
+
+    # Safety floor for LLM-structured notes (reject output shorter than this).
     _STRUCTURED_MIN_CHARS = 500
 
     def synthesize_structured_note(
@@ -1220,5 +1340,11 @@ class ResearchEngine:
         )
         if marker not in note_md:
             note_md = note_md.rstrip() + "\n\n" + marker + "\n"
+
+        # Deterministic wikilink repair: the LLM often generates wikilinks
+        # with wrong casing or hallucinates titles. Fix without extra LLM
+        # calls -- pure string matching against actual vault note titles.
+        if vault_note_titles:
+            note_md = self._repair_wikilinks(note_md, vault_note_titles)
 
         return note_md

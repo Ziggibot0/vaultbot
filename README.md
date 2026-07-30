@@ -42,8 +42,6 @@ gets smarter the more you use it.
 - **Gets smarter over time** — four compounding loops: embedding drift
   (relevance feedback re-ranks retrieval), lazy condensing (notes de-fluff
   as you use them), concept-card refinement, and self-model regeneration.
-- **Talks to you** — voice in/out (Kokoro TTS + faster-whisper STT), with
-  streaming speech and interrupt.
 
 ---
 
@@ -202,12 +200,6 @@ it left off. Note: the installer only auto-pulls the embedding model
 (`LLM_BACKEND=ollama`), you'll need to `ollama pull` your chat model
 manually.
 
-**Voice (text-to-speech / speech-to-text) doesn't work.** The voice
-stack needs `numpy` 2.x and a working audio device. First launch
-downloads the Kokoro + Whisper models automatically (~hundreds of MB) —
-give it time. If it still fails, voice is optional; text chat works
-without it.
-
 **FAISS / numpy ABI error.** Make sure you installed `faiss-cpu>=1.11`
 (it's pinned in `requirements.txt`). If you upgraded numpy separately,
 reinstall: `pip install --force-reinstall faiss-cpu>=1.11`.
@@ -278,7 +270,7 @@ Wikipedia") and it will store that as a directive note itself.
 
 ```
 .
-├── .obsidian/plugins/vaultbot/   # The Obsidian plugin (chat UI, voice, TTS)
+├── .obsidian/plugins/vaultbot/   # The Obsidian plugin (chat UI)
 ├── baseline/                      # Starter directive templates (not active)
 ├── learningMaterial/              # Your PDFs / textbooks (gitignored)
 ├── vaultbot/                      # The vault: your notes (gitignored)

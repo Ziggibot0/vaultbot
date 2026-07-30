@@ -1,5 +1,7 @@
 import json
 import subprocess
+from subprocess_utils import run as _subprocess_run
+import os
 import time
 from collections.abc import Generator
 from typing import Any
@@ -16,7 +18,7 @@ except Exception:  # pragma: no cover - circular-import safety
     _BASE = object
 
 class OllamaClient(_BASE):
-    def __init__(self, base_url: str = "http://localhost:11434", llm_model: str = "qwen3.6:latest", embed_model: str = "nomic-embed-text", session_logger=None):
+    def __init__(self, base_url: str = "http://localhost:11434", llm_model: str = "", embed_model: str = "nomic-embed-text", session_logger=None):
         self.base_url = base_url
         self.llm_model = llm_model
         self.embed_model = embed_model
@@ -36,7 +38,7 @@ class OllamaClient(_BASE):
     def list_local_models(self) -> list[str]:
         """Return model names installed in the local Ollama daemon via `ollama list`."""
         try:
-            result = subprocess.run(
+            result = _subprocess_run(
                 ["ollama", "list"],
                 capture_output=True, text=True, timeout=10,
                 encoding="utf-8", errors="replace",
@@ -384,16 +386,24 @@ class OllamaClient(_BASE):
 
         t0 = time.time()
         try:
-            # Streaming chat: a read timeout so a stalled cloud model
-            # (glm-5.2:cloud is a remote ollama.com model) raises
+            # Streaming chat: a read timeout so a stalled model raises
             # ReadTimeout instead of blocking the chat loop forever. The
-            # connect timeout is short (the server is local); the read
-            # timeout is generous (120s) so a slow-but-alive stream isn't
-            # killed. The non-stream path already uses timeout=60.
+            # connect timeout is short (the server is local). The read
+            # timeout is generous and env-configurable: thinking models
+            # (qwen3.6) can spend several minutes reasoning before the
+            # first token flushes, and the chat loop already emits its own
+            # heartbeats so the user sees liveness during the silence. The
+            # default (600s) covers long thinking passes without killing a
+            # genuinely-alive slow stream. Override with
+            # VAULTBOT_OLLAMA_READ_TIMEOUT_SECONDS. The non-stream path uses
+            # timeout=60 (a non-streaming call that hasn't returned in 60s is
+            # truly stuck).
             if stream:
+                _read_timeout = float(os.environ.get(
+                    "VAULTBOT_OLLAMA_READ_TIMEOUT_SECONDS", "600"))
                 response = self._session.post(
                     f"{self.base_url}/api/chat", json=payload,
-                    stream=True, timeout=(5, 120))
+                    stream=True, timeout=(5, _read_timeout))
             else:
                 response = self._session.post(
                     f"{self.base_url}/api/chat", json=payload,

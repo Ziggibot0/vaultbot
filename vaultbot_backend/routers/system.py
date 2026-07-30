@@ -120,7 +120,7 @@ def _check_model_present(svc: Services) -> Diagnosis | None:
     if model in available:
         return None
     # Heuristic: a non-empty model id that the backend recognizes the shape
-    # of (contains a ':' tag separator, like "qwen3.6:latest") is probably
+    # of (contains a ':' tag separator, like "model-name:latest") is probably
     # just not pulled; a bare/garbage id is "missing".
     if ":" in model and " " not in model:
         return diagnose_from_message(
@@ -295,10 +295,21 @@ def _extract_session_preview(path: Path) -> dict[str, Any] | None:
                 msg = (data.get("user_message") or "")
                 if msg:
                     preview = msg[:120]
+    # Also look for a session_title event (set by the user or auto-generated).
+    title = ""
+    for line in lines:
+        try:
+            evt = _json.loads(line)
+        except _json.JSONDecodeError:
+            continue
+        if evt.get("event") == "session_title":
+            title = evt.get("title", "")
+            break  # last one wins, but there's typically only one
     return {
         "session_id": session_id,
         "started_at": started_at,
         "preview": preview or "(no messages)",
+        "title": title or (preview[:60] if preview else "New Session"),
     }
 
 
@@ -419,11 +430,11 @@ async def preflight(request: Request) -> dict[str, Any]:
 
     # Python + Ollama presence: shell out to --version. Missing either is
     # a setup_incomplete diagnosis so the wizard offers download buttons.
-    import subprocess
+    from subprocess_utils import run as _subprocess_run
     for tool, label in (("python", "Python"), ("ollama", "Ollama")):
         present = False
         try:
-            result = subprocess.run(
+            result = _subprocess_run(
                 [tool, "--version"],
                 capture_output=True, timeout=5,
                 encoding="utf-8", errors="replace",
@@ -475,20 +486,31 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
 async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
     """Ask the Obsidian plugin to restart the backend via WebSocket.
 
-    Broadcasts ``{"type": "restart"}`` to all connected WebSocket clients.
-    The plugin's message handler calls ``restartBackend()`` — the exact same
-    code path as the GUI restart button. The plugin then calls ``/shutdown``
-    and spawns a fresh backend process.
+    Broadcasts ``{"type": "restart"}`` to all connected WebSocket clients
+    after a short delay. The plugin's message handler calls
+    ``restartBackend()`` — the exact same code path as the GUI restart
+    button. The plugin then calls ``/shutdown`` and spawns a fresh backend
+    process.
 
-    This is the clean way for the agent to self-restart: the plugin (a
-    separate process that survives the backend dying) handles the actual
-    shutdown + respawn, not a fragile batch script.
+    DELAYED BROADCAST: When the agent calls this endpoint via the
+    backend_restart tool, the HTTP response must return to the chat loop
+    BEFORE the plugin kills the backend. If we broadcast immediately, the
+    plugin calls stopBackend() while the chat handler is still mid-iteration
+    — the tool result never reaches the LLM, the MCP client loses
+    connection, and the session dies dead in the water. The 3-second delay
+    gives the chat loop time to process the tool result, let the LLM
+    generate a final message, and send it to the user before the backend
+    gets killed.
     """
-    await svc.manager.broadcast(json.dumps({
-        "type": "restart",
-        "content": "Backend is restarting. This is the same code path as the restart button."
-    }), session_logger=svc.session_logger)
-    return {"status": "restart_requested", "message": "WebSocket broadcast sent. Plugin will restart the backend."}
+    async def _delayed_broadcast():
+        await asyncio.sleep(3)
+        await svc.manager.broadcast(json.dumps({
+            "type": "restart",
+            "content": "Backend is restarting. This is the same code path as the restart button."
+        }), session_logger=svc.session_logger)
+
+    asyncio.ensure_future(_delayed_broadcast())
+    return {"status": "restart_requested", "message": "Restart scheduled in 3 seconds. Chat loop will finish first, then plugin will restart the backend."}
 
 
 @router.post("/reload-plugin")

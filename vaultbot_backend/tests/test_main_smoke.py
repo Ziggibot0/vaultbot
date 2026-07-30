@@ -18,6 +18,7 @@ Documentation grounding:
   pattern safe_write's _verify_import_in_subprocess uses.
 """
 import subprocess
+from subprocess_utils import run as _subprocess_run
 import sys
 from pathlib import Path
 
@@ -66,7 +67,7 @@ def test_main_imports_without_name_error():
     env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", "")
     env["PYTHONPATH"] = str(backend_dir)
 
-    result = subprocess.run(
+    result = _subprocess_run(
         [sys.executable, "-c", code],
         capture_output=True, text=True, timeout=30, env=env,
     )

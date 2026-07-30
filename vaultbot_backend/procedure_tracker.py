@@ -37,7 +37,7 @@ from typing import Any
 # vault_indexer) so this module stays dependency-free.
 _TRACKER_IGNORED_DIRS = {
     "vaultbot_venv", "vaultbot_index", "sessions", "partials",
-    ".git", ".obsidian",
+    ".git", ".obsidian", "trash",
 }
 
 

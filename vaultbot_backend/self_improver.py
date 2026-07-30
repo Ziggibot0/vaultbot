@@ -33,6 +33,7 @@ import os
 import re
 import shutil
 import subprocess
+from subprocess_utils import run as _subprocess_run
 import sys
 import time
 import traceback
@@ -275,6 +276,26 @@ class SelfImprover:
                     "error": f"SyntaxError: {e.msg} (line {e.lineno})",
                     "hint": "Fix the syntax error; nothing was written."}
 
+        # --- 1b. Import-target check (any backend .py, before disk touch) ---
+        # Catches "I wrote `from chat_helpers import run_with_heartbeat` but
+        # the function doesn't exist" — even for files NOT in _CORE_FILES.
+        # Runs against the CURRENT backend (no disk mutation yet), so it's
+        # safe in dry_run and real-write modes alike.
+        is_backend_py = (full.suffix == ".py"
+                         and BACKEND_DIR in full.resolve().parents)
+        if is_backend_py:
+            ok, err = self._verify_import_targets(content, str(BACKEND_DIR))
+            checks["import_refs"] = "ok" if ok else f"FAIL: {err}"
+            if not ok:
+                self._log("safe_write_import_refs_rejected", {
+                    "file_path": str(full), "error": err})
+                return {"status": "rejected", "checks": checks,
+                        "error": err,
+                        "hint": ("The edit imports a name that doesn't exist "
+                                 "on the target module yet. Did you finish "
+                                 "writing the function/class you're importing? "
+                                 "Nothing was written.")}
+
         # --- dry_run: stop here, report whether it WOULD be safe ---
         if dry_run:
             # For a dry run of a core file, do the import check against a
@@ -482,7 +503,7 @@ class SelfImprover:
                     "error": f"failed to create temp file: {e}"}
 
         try:
-            result = subprocess.run(
+            result = _subprocess_run(
                 [node_path, '--check', tmp_path],
                 capture_output=True, text=True, timeout=15)
         except subprocess.TimeoutExpired:
@@ -513,6 +534,27 @@ class SelfImprover:
 
         checks["syntax"] = "ok (node --check passed)"
         os.unlink(tmp_path)
+
+        # --- 2b. Load test: require() the module with a stub for 'obsidian'
+        # and a hard timeout. Catches load-time hangs (infinite recursion /
+        # infinite loops at module top level) that `node --check` (syntax
+        # only) misses. The Obsidian plugin's main.js requires 'obsidian'
+        # (the plugin API, unavailable outside Obsidian), so we inject a
+        # Proxy-based no-op stub into the child process's module cache before
+        # requiring the file. A load that throws a non-Obsidian error OR
+        # doesn't exit within the timeout is rejected.
+        load_ok, load_err = self._verify_js_load(content)
+        if not load_ok:
+            checks["load_check"] = f"FAIL: {load_err}"
+            self._log("js_safe_write_load_rejected", {
+                "file_path": str(full), "load_error": (load_err or "")[:500]})
+            return {"status": "rejected", "checks": checks,
+                    "error": (load_err or "load check failed")[:500],
+                    "hint": ("The file has valid syntax but fails to load "
+                             "(hangs or throws at module level). This is "
+                             "often an infinite recursion or loop at the "
+                             "top level. Nothing was written.")}
+        checks["load_check"] = "ok (require exited cleanly)"
 
         # --- dry_run: stop here, report it WOULD be safe ---
         if dry_run:
@@ -577,6 +619,18 @@ class SelfImprover:
         # Copy only .py files (skip venv, index, models, etc.) to keep it fast.
         for py in BACKEND_DIR.glob("*.py"):
             shutil.copy2(py, Path(tmpdir) / py.name)
+        # Copy the routers package (main.py does `from routers import ws`).
+        # Without this, an edit to routers/llm.py would be verified against
+        # the LIVE routers, not the proposed edit — defeating the check.
+        routers_src = BACKEND_DIR / "routers"
+        if routers_src.exists():
+            routers_dst = Path(tmpdir) / "routers"
+            routers_dst.mkdir(exist_ok=True)
+            (routers_dst / "__init__.py").touch()
+            for py in routers_src.glob("*.py"):
+                if py.name == "__init__.py":
+                    continue
+                shutil.copy2(py, routers_dst / py.name)
         # Copy the custom_tools package + identity dir (main.py imports them).
         ct_dst = Path(tmpdir) / "custom_tools"
         ct_dst.mkdir(exist_ok=True)
@@ -619,7 +673,7 @@ class SelfImprover:
                "VAULTBOT_SKIP_LOCK": "1",
                "VAULT_PATH": backend_dir}
         try:
-            proc = subprocess.run(
+            proc = _subprocess_run(
                 [venv_python, "-c", check_code],
                 capture_output=True, text=True, timeout=30,
                 cwd=str(BACKEND_ROOT), env=env,
@@ -635,6 +689,294 @@ class SelfImprover:
             return False, "import check timed out (30s) — likely a startup hang"
         except Exception as e:
             return False, f"import check could not run: {e}"
+
+    def _verify_import_targets(self, content: str,
+                               backend_dir: str) -> tuple[bool, str | None]:
+        """Statically verify every ``from X import Y`` (and ``from X
+        import Y as Z``) in ``content`` actually resolves against the
+        *current* backend (before the write). This is the check that
+        catches the "I imported a name that doesn't exist" class of bug
+        (``from chat_helpers import run_with_heartbeat`` when the
+        function was never written) — even for files NOT in
+        ``_CORE_FILES`` and even when ``main`` doesn't transitively
+        import the target.
+
+        Runs in a subprocess so a broken import never crashes the live
+        backend. Returns (ok, error). A single failing name fails the
+        whole check (fail-fast); the error names the offending import so
+        the agent can fix it. ``ImportError`` / ``AttributeError`` are
+        hard failures; a module that itself fails to import for an
+        *unrelated* reason (e.g. a third-party dep missing in the venv)
+        is reported but does NOT fail the check — we only fail on a
+        named ``Y`` that the module exposes but the agent referenced
+        wrongly. We cannot always distinguish, so the rule is: if
+        ``import X`` succeeds but ``getattr(X, Y)`` raises, it's a hard
+        fail (the name genuinely doesn't exist); if ``import X`` itself
+        raises, we skip that import (the live backend may not even need
+        it, e.g. a new optional dep) and report it as ``skipped``.
+        """
+        import ast as _ast
+        try:
+            tree = _ast.parse(content)
+        except SyntaxError:
+            # The caller already syntax-checked; if we somehow re-hit it,
+            # don't block on it.
+            return True, None
+
+        targets: list[tuple[str, str]] = []  # (module, name)
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.ImportFrom):
+                mod = node.module or ""
+                if not mod or node.level:  # skip relative imports (".foo")
+                    continue
+                for alias in node.names:
+                    name = alias.name
+                    if name == "*":
+                        continue
+                    targets.append((mod, name))
+
+        if not targets:
+            return True, None
+
+        venv_python = str(
+            BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+        if not Path(venv_python).exists():
+            venv_python = sys.executable
+
+        # Build one check script that imports each module once and
+        # getattr's each name, printing IMPORT_REFS_OK only if every name
+        # resolves. Relative-import and stdlib modules resolve normally
+        # because PYTHONPATH points at the backend dir.
+        checks = "\n".join(
+            "try:\n"
+            "    import {mod}\n"
+            "    getattr({mod}, {name!r})\n"
+            "except ImportError:\n"
+            "    print('SKIP {mod} {name}')\n"
+            "except AttributeError:\n"
+            "    print('MISSING {mod} {name}')\n"
+            "    raise SystemExit(1)\n"
+            .format(mod=mod, name=name)
+            for (mod, name) in targets)
+        check_code = (
+            "import sys, os\n"
+            "sys.path.insert(0, os.environ['CHECK_DIR'])\n"
+            "os.environ.setdefault('VAULTBOT_SKIP_LOCK','1')\n"
+            "os.environ.setdefault('VAULT_PATH', os.environ['CHECK_DIR'])\n"
+            + checks
+            + "print('IMPORT_REFS_OK')\n"
+        )
+        env = {**os.environ,
+               "CHECK_DIR": backend_dir,
+               "PYTHONPATH": backend_dir,
+               "VAULTBOT_SKIP_LOCK": "1",
+               "VAULT_PATH": backend_dir}
+        try:
+            proc = _subprocess_run(
+                [venv_python, "-c", check_code],
+                capture_output=True, text=True, timeout=40,
+                cwd=str(BACKEND_ROOT), env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "import-targets check timed out (40s)"
+        except Exception as e:
+            # If we can't run the check at all, don't block the write —
+            # the import-main check (for core files) is the hard gate.
+            return True, None
+        if proc.returncode == 0 and "IMPORT_REFS_OK" in proc.stdout:
+            return True, None
+        # Find the MISSING line for a precise error.
+        for line in (proc.stdout or "").splitlines():
+            if line.startswith("MISSING "):
+                _, mod, name = line.split(" ", 2)
+                return False, (f"ImportError: cannot import name '{name}' "
+                               f"from '{mod}' — the name doesn't exist on "
+                               f"that module. Did you finish the edit?")
+        err = (proc.stderr or proc.stdout or "unknown").strip()
+        tail = err.splitlines()[-1] if err.splitlines() else err
+        return False, tail[:500]
+
+    def _verify_js_load(self, content: str,
+                        timeout_s: int = 8) -> tuple[bool, str | None]:
+        """Require() a JS module in a child Node process with a hard
+        timeout and an 'obsidian' stub, to catch load-time hangs (infinite
+        recursion / infinite loops at module top level) that ``node --check``
+        (syntax only) misses.
+
+        The Obsidian plugin's main.js does
+        ``require('obsidian')`` at the top — the 'obsidian' module only
+        exists inside Obsidian, so a bare ``require('./main.js')`` would
+        throw MODULE_NOT_FOUND before reaching any recursion. We inject a
+        Proxy-based stub into the child's module cache first: any property
+        access on 'obsidian' returns a no-op function or a Proxy, so
+        ``const { Plugin } = require('obsidian')`` and
+        ``class X extends Plugin`` both succeed. The require then runs the
+        module's top-level code; if it hangs (infinite recursion at module
+        scope) the timeout fires and we reject.
+
+        Returns (ok, error). A clean exit (the script prints LOAD_OK and
+        exits 0) means the module loads without hanging; ok=True. A throw
+        is ok=True if it's the harmless "obsidian not the real module" kind
+        — but a Proxy stub prevents that, so any throw is treated as a real
+        load failure. A timeout is a hard reject.
+        """
+        import tempfile
+        node_path = shutil.which("node")
+        if not node_path:
+            return True, None  # can't check; don't block the write
+        # Write the candidate content to a temp .js file.
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.js',
+                                         delete=False,
+                                         encoding='utf-8') as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        # Node script: stub obsidian, set a watchdog timeout that kills the
+        # process if the require hangs, then require the file.
+        loader = (
+            "const Module = require('module');\n"
+            "const origResolve = Module._resolveFilename;\n"
+            # Stub 'obsidian': intercept the resolve so require('obsidian')
+            # returns a Proxy whose every property is a no-op class/fn.
+            "Module._resolveFilename = function(req, parent, ...rest) {\n"
+            "  if (req === 'obsidian') return 'obsidian-stub';\n"
+            "  return origResolve.call(this, req, parent, ...rest);\n"
+            "};\n"
+            "const stub = new Proxy({}, { get: () => {\n"
+            "  return new Proxy(function(){}, {\n"
+            "    get: (t, p) => p === 'prototype' ? Object.prototype : undefined,\n"
+            "    construct: () => ({}),\n"
+            "    apply: () => ({}),\n"
+            "  });\n"
+            "}});\n"
+            "require.cache['obsidian-stub'] = { exports: stub, id: 'obsidian-stub', filename: 'obsidian-stub', loaded: true, children: [], paths: [] };\n"
+            "const watchdog = setTimeout(() => {\n"
+            "  console.error('LOAD_TIMEOUT'); process.exit(2);\n"
+            "}, " + str(timeout_s * 1000) + ");\n"
+            "try {\n"
+            "  require(" + repr(tmp_path).replace('\\\\', '/') + ");\n"
+            "  clearTimeout(watchdog);\n"
+            "  console.log('LOAD_OK'); process.exit(0);\n"
+            "} catch (e) {\n"
+            "  clearTimeout(watchdog);\n"
+            "  console.error('LOAD_THROW ' + (e && e.message ? e.message : String(e)));\n"
+            "  process.exit(3);\n"
+            "}\n"
+        )
+        try:
+            result = _subprocess_run(
+                [node_path, "-e", loader],
+                capture_output=True, text=True, timeout=timeout_s + 5,
+            )
+        except subprocess.TimeoutExpired:
+            os.unlink(tmp_path)
+            return False, f"load check timed out ({timeout_s}s) — likely infinite recursion"
+        except Exception as e:
+            os.unlink(tmp_path)
+            return True, None  # can't run the check; don't block
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        if result.returncode == 0 and "LOAD_OK" in (result.stdout or ""):
+            return True, None
+        if result.returncode == 2 or "LOAD_TIMEOUT" in (result.stderr or ""):
+            return False, f"load hung (infinite recursion/loop at module level, {timeout_s}s)"
+        if "LOAD_THROW" in (result.stderr or ""):
+            err = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "load threw"
+            return False, f"load threw: {err[:400]}"
+        err = (result.stderr or result.stdout or "unknown load failure").strip()
+        tail = err.splitlines()[-1] if err.splitlines() else err
+        return False, tail[:400]
+
+    def _verify_startup_smoke(self, backend_dir: str,
+                               timeout_s: int = 40) -> tuple[bool, str | None]:
+        """Actually START the backend in a subprocess (import main, run
+        uvicorn on a throwaway port) and hit /health. Catches runtime
+        AttributeErrors (``svc.vault_path`` missing, ``log_event`` not on
+        SessionLogger) that import-only checks miss because they surface
+        only when the app builds its service graph and starts the lifespan.
+
+        Returns (ok, error). The backend is started with a throwaway
+        VAULT_PATH and a non-default port so it never clashes with the
+        live backend (port 8000) or touches the real index. We kill it as
+        soon as /health responds (or the timeout fires).
+
+        NOTE: this is NOT wired into the default safe_write path (too slow
+        for every write). It's available for explicit hardening of risky
+        edits; the import-targets check + contract tests catch the
+        attribute bugs more reliably and cheaply.
+        """
+        import urllib.request
+        venv_python = str(
+            BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+        if not Path(venv_python).exists():
+            venv_python = sys.executable
+        # Bind a high, almost-certainly-free port. We can't reuse 8000
+        # (the live backend holds it) and we don't want to disturb the
+        # real vault index, so point VAULT_PATH at the throwaway backend
+        # dir itself.
+        smoke_port = "18099"
+        check_code = (
+            "import sys, os, threading, time, urllib.request; "
+            "sys.path.insert(0, os.environ['CHECK_DIR']); "
+            "os.environ['VAULTBOT_SKIP_LOCK']='1'; "
+            "os.environ['VAULT_PATH']=os.environ['CHECK_DIR']; "
+            "os.environ['VAULTBOT_SMOKE_PORT']='" + smoke_port + "'; "
+            "import main; "
+            # Run uvicorn on the smoke port in this same process so we
+            # exercise the real lifespan (Services build, indexer load,
+            # autonomous researcher thread start). The lifespan is what
+            # surfaces svc.vault_path-style AttributeErrors.
+            "import uvicorn; "
+            "uvicorn.run(main.app, host='127.0.0.1', port=" + smoke_port + ", "
+            "access_log=False, log_level='error')\n"
+        )
+        env = {**os.environ,
+               "CHECK_DIR": backend_dir,
+               "PYTHONPATH": backend_dir,
+               "VAULTBOT_SKIP_LOCK": "1",
+               "VAULT_PATH": backend_dir}
+        try:
+            proc = subprocess.Popen(
+                [venv_python, "-c", check_code],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                cwd=str(BACKEND_ROOT), env=env,
+                text=True,
+            )
+        except Exception as e:
+            return False, f"startup smoke could not launch: {e}"
+        try:
+            # Poll /health until it responds or the timeout fires.
+            health_url = f"http://127.0.0.1:{smoke_port}/health"
+            deadline = time.time() + timeout_s
+            last_err = ""
+            while time.time() < deadline:
+                if proc.poll() is not None:
+                    # Process exited before serving — a startup crash.
+                    out = (proc.stdout.read() or "")
+                    err = (proc.stderr.read() or "")
+                    tail = (err or out).strip().splitlines()
+                    line = tail[-1] if tail else (err or out or "exited")
+                    return False, f"startup crashed: {line[:400]}"
+                try:
+                    r = urllib.request.urlopen(health_url, timeout=3)
+                    if r.status == 200:
+                        return True, None
+                    last_err = f"health status {r.status}"
+                except Exception as e:
+                    last_err = str(e)[:120]
+                time.sleep(0.5)
+            return False, f"startup smoke timed out ({timeout_s}s): {last_err}"
+        finally:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
     def _run_pytest_in_subprocess(self, backend_dir: str
                                    ) -> tuple[bool, str | None]:
@@ -668,7 +1010,7 @@ class SelfImprover:
             if not cand or not Path(cand).exists():
                 continue
             try:
-                probe = subprocess.run(
+                probe = _subprocess_run(
                     [cand, "-c", "import pytest"],
                     capture_output=True, text=True, timeout=10)
                 if probe.returncode == 0:
@@ -686,7 +1028,7 @@ class SelfImprover:
                "VAULTBOT_SKIP_LOCK": "1",
                "VAULT_PATH": backend_dir}
         try:
-            proc = subprocess.run(
+            proc = _subprocess_run(
                 [chosen, "-m", "pytest", "-q", "--tb=short"],
                 capture_output=True, text=True, timeout=60,
                 cwd=backend_dir, env=env,
@@ -813,7 +1155,7 @@ class SelfImprover:
         if not Path(venv_python).exists():
             venv_python = sys.executable
         try:
-            proc = subprocess.run(
+            proc = _subprocess_run(
                 [venv_python, "-c", code],
                 capture_output=True, text=True, timeout=timeout,
                 cwd=str(BACKEND_ROOT),
@@ -903,11 +1245,11 @@ class SelfImprover:
         try:
             rel = str(target.relative_to(BACKEND_ROOT)).replace("\\", "/")
             if file_path:
-                proc = subprocess.run(
+                proc = _subprocess_run(
                     ["git", "checkout", "HEAD", "--", rel],
                     capture_output=True, text=True, cwd=str(BACKEND_ROOT), timeout=10)
             else:
-                proc = subprocess.run(
+                proc = _subprocess_run(
                     ["git", "checkout", "HEAD", "--", "vaultbot_backend"],
                     capture_output=True, text=True, cwd=str(BACKEND_ROOT), timeout=10)
             return {"stdout": proc.stdout, "stderr": proc.stderr,

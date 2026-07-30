@@ -13,7 +13,7 @@ class VaultMaintenance:
     Continuous self-cleaning for a vaultbot-managed vault.
 
     Rules:
-    1. Generated notes live under 08-Chat/ and 07-Research/.
+    1. Generated notes live under Memory/Chat/ and Knowledge/Research/.
     2. Chat notes on the same topic are merged into one running log.
     3. Orphan generated notes (no wikilinks in, no wikilinks out, empty body) are removed.
     4. Near-duplicate generated notes are merged.
@@ -24,8 +24,8 @@ class VaultMaintenance:
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.similarity_threshold = similarity_threshold
-        self.chat_dir = self.vault_path / "08-Chat"
-        self.research_dir = self.vault_path / "07-Research"
+        self.chat_dir = self.vault_path / "Memory/Chat"
+        self.research_dir = self.vault_path / "Knowledge/Research"
         self.log_file = self.vault_path / "vaultbot_backend" / "maintenance.log"
         self._ensure_dirs()
 

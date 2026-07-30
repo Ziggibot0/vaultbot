@@ -27,6 +27,12 @@ class VaultBotPlugin extends Plugin {
 		this._backendReadyPromise = null;
 		await this.loadSettings();
 
+		// Ensure Obsidian ignores VaultBot's internal directories. The backend
+		// writes frequently (session logs, conversation state, FAISS index) and
+		// every file event triggers Obsidian's metadata cache + graph refresh.
+		// Without this, Obsidian bogs down when VaultBot is actively working.
+		this._ensureIgnoredDirs();
+
 		this.addCommand({
 			id: 'open-vaultbot-sidebar',
 			name: 'Open VaultBot Sidebar',
@@ -167,6 +173,34 @@ class VaultBotPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	_ensureIgnoredDirs() {
+		// Add VaultBot's internal directories to Obsidian's userIgnoreFilters
+		// so Obsidian's file watcher doesn't fire on every backend file write.
+		// This is the root-cause fix for "Obsidian bogs down when VaultBot is
+		// cooking" — the backend writes session logs, conversation state, and
+		// FAISS index files many times per second, and each event triggers
+		// Obsidian's metadata cache update.
+		const required = ['vaultbot_backend/', 'vaultbot_index/'];
+		try {
+			const current = this.app.vault.getConfig('userIgnoreFilters') || [];
+			let changed = false;
+			const updated = [...current];
+			for (const dir of required) {
+				if (!updated.includes(dir)) {
+					updated.push(dir);
+					changed = true;
+				}
+			}
+			if (changed) {
+				this.app.vault.setConfig('userIgnoreFilters', updated);
+				console.log('VaultBot: added internal dirs to userIgnoreFilters', updated);
+			}
+		} catch (e) {
+			// Non-fatal: if the Obsidian API doesn't support this, just skip.
+			console.warn('VaultBot: could not update userIgnoreFilters', e);
+		}
 	}
 
 	async openSidebar() {
@@ -1877,28 +1911,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 			dirToggles.push(toggle);
 		}
 
-		// ── Voice first-launch progress (infrastructure) ───────────────
-		// Voice isn't fully implemented yet, but the WS event + card
-		// infrastructure is here so when voice downloads are wired up,
-		// the progress is shown as a styled info card (not a silent hang).
-		// The handler renders a VOICE_MODEL_DOWNLOAD diagnosis as an
-		// info-severity problem card with a live progress line.
-		containerEl.createEl('h3', {text: 'Voice'});
-		const voiceDesc = containerEl.createEl('div');
-		voiceDesc.setText(
-			'Voice (text-to-speech + speech-to-text) downloads models on ' +
-			'first use (~hundreds of MB). When a download is in progress, ' +
-			'a progress card appears in the chat so you know it\'s working, ' +
-			'not frozen. Voice is optional — text chat works without it.');
-		voiceDesc.style.opacity = '0.7';
-		voiceDesc.style.fontSize = '0.85em';
-		voiceDesc.style.marginBottom = '10px';
-
 		containerEl.createEl('h3', {text: 'Updates'});
 
 		// One-click self-updater. Pulls the latest CODE from GitHub and
 		// applies it over the live vault. User state is never touched:
-		//   - data.json (your keys/model/voice) is preserved
+		//   - data.json (your keys/model) is preserved
 		//   - all your .md notes, chat logs, research, textbooks stay put
 		//   - backend runtime state (sessions, checkpoints, indexes, logs,
 		//     models, pid) is left exactly as-is
@@ -2192,7 +2209,47 @@ class VaultBotSidebarView extends ItemView {
 
 		const statusEl = this.contentEl.createDiv({cls: 'vaultbot-status'});
 
+		// Session title: shows the current session's title above the chat.
+		// Click to edit inline; Enter or blur saves via WebSocket set_title.
+		const sessionTitleEl = this.contentEl.createDiv({cls: 'vaultbot-session-title'});
+		sessionTitleEl.setText('New Session');
+		sessionTitleEl.title = 'Click to rename this session';
+		sessionTitleEl.addEventListener('click', () => {
+			sessionTitleEl.setAttribute('contenteditable', 'true');
+			sessionTitleEl.addClass('vaultbot-session-title-editing');
+			sessionTitleEl.focus();
+			const range = document.createRange();
+			range.selectNodeContents(sessionTitleEl);
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange(range);
+		});
+		const saveSessionTitle = () => {
+			sessionTitleEl.removeAttribute('contenteditable');
+			sessionTitleEl.removeClass('vaultbot-session-title-editing');
+			const newTitle = sessionTitleEl.getText().trim();
+			if (newTitle && ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({type: 'set_title', title: newTitle}));
+			}
+		};
+		sessionTitleEl.addEventListener('blur', saveSessionTitle);
+		sessionTitleEl.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') { e.preventDefault(); sessionTitleEl.blur(); }
+			if (e.key === 'Escape') { e.preventDefault(); sessionTitleEl.blur(); }
+		});
+
 		const chatContainer = this.contentEl.createDiv({cls: 'vaultbot-chat-container'});
+
+		// Smart auto-scroll: only scroll to bottom when the user is already near
+		// the bottom. This lets the user scroll up to read history while
+		// VaultBot is streaming without being yanked back down on every chunk.
+		const SCROLL_THRESHOLD = 80; // px from bottom to still count as "at bottom"
+		const smartScrollToBottom = () => {
+			const isNearBottom = (chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight) < SCROLL_THRESHOLD;
+			if (isNearBottom) {
+				chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+			}
+		};
 
 	// Delegated click handler: make [[wikilinks]] and external links clickable
 	// in chat messages. Works for both user and assistant messages.
@@ -2255,10 +2312,7 @@ class VaultBotSidebarView extends ItemView {
 				const ready = await this.plugin.onceBackendReady();
 				if (!ready) {
 					backendWasOnline = false;
-					setStatus('offline', 'Backend offline — click to start', async () => {
-						await this.plugin.startBackendIfNeeded();
-						startBackendAndConnect();
-					});
+					setStatus('offline', 'Backend offline');
 				}
 				return;
 			}
@@ -2285,10 +2339,7 @@ class VaultBotSidebarView extends ItemView {
 				return;
 			}
 			backendWasOnline = false;
-			setStatus('offline', 'Backend offline — click to start', async () => {
-				await this.plugin.startBackendIfNeeded();
-				startBackendAndConnect();
-			});
+			setStatus('offline', 'Backend offline');
 		};
 
 		ensureConnection();
@@ -2430,7 +2481,7 @@ class VaultBotSidebarView extends ItemView {
 			attr: {placeholder: 'Ask VaultBot...', rows: '3'}
 		});
 		const stopButton = chatBar.createEl('button', {text: 'Stop', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-stop'});
-		stopButton.title = 'Interrupt VaultBot immediately. Also stops any voice playback.';
+		stopButton.title = 'Interrupt VaultBot immediately.';
 		stopButton.style.display = 'none'; // hidden until a turn is active
 
 		// --- Drag & drop file support -----------------------------------
@@ -2568,6 +2619,7 @@ class VaultBotSidebarView extends ItemView {
 		const appendUserMessage = (text) => {
 			const div = chatContainer.createDiv({cls: 'vaultbot-message user'});
 			renderMarkdownInto(div, text).then(() => {
+				// Force scroll on user send — user explicitly wants to see the response
 				chatContainer.scrollTop = chatContainer.scrollHeight;
 			});
 		};
@@ -2602,7 +2654,7 @@ class VaultBotSidebarView extends ItemView {
 				currentSegmentRenderTimer = null;
 				if (!currentAnswerBlock) return;
 				renderMarkdownInto(currentAnswerBlock, currentSegmentText).then(() => {
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				});
 			};
 			if (immediate) run();
@@ -2619,7 +2671,7 @@ class VaultBotSidebarView extends ItemView {
 			if (currentAnswerBlock && currentSegmentText) {
 				// Final render in case a debounced one is pending.
 				renderMarkdownInto(currentAnswerBlock, currentSegmentText).then(() => {
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				});
 			}
 			currentAnswerBlock = null;
@@ -2633,9 +2685,9 @@ class VaultBotSidebarView extends ItemView {
 			const div = chatContainer.createDiv({cls: 'vaultbot-message assistant'});
 			const block = div.createEl('div', {cls: 'vaultbot-answer-block'});
 			renderMarkdownInto(block, text).then(() => {
-				chatContainer.scrollTop = chatContainer.scrollHeight;
+				smartScrollToBottom();
 			});
-			chatContainer.scrollTop = chatContainer.scrollHeight;
+			smartScrollToBottom();
 			// Return the block so callers (e.g. the Restart button) can
 			// update its text in place as a status line changes.
 			return block;
@@ -2748,7 +2800,7 @@ class VaultBotSidebarView extends ItemView {
 					new Notice('Could not copy — see the console.');
 				}
 			});
-			chatContainer.scrollTop = chatContainer.scrollHeight;
+			smartScrollToBottom();
 			return card;
 		};
 
@@ -2774,7 +2826,7 @@ class VaultBotSidebarView extends ItemView {
 			// NOTE: no answer block is created up front. Text segments are
 			// created on demand so they sit in true stream order relative to
 			// tool calls, instead of always above them.
-			chatContainer.scrollTop = chatContainer.scrollHeight;
+			smartScrollToBottom();
 		};
 
 		// --- Live activity line (kills the black box) ---
@@ -2812,7 +2864,7 @@ class VaultBotSidebarView extends ItemView {
 				if (parts.length) text += '\n   ' + parts.join(' | ');
 			}
 			currentActivityEl.setText(text);
-			chatContainer.scrollTop = chatContainer.scrollHeight;
+			smartScrollToBottom();
 		};
 		const endActivity = (summary) => {
 			if (activityTimer) { window.clearInterval(activityTimer); activityTimer = null; }
@@ -2854,7 +2906,7 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentText += event.data;
 					currentAnswerText += event.data;
 					scheduleSegmentRender();
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 					return;
 				}
 
@@ -2865,7 +2917,7 @@ class VaultBotSidebarView extends ItemView {
 					// Show the thinking block live while the model reasons.
 					setThinkingVisible(true);
 					currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + msg.content);
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				} else if (msg.type === 'answer_chunk') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					// Some models embed reasoning as <think>...</think> tags
@@ -2921,7 +2973,7 @@ class VaultBotSidebarView extends ItemView {
 						raw = outText;
 					}
 					if (!raw) {
-						chatContainer.scrollTop = chatContainer.scrollHeight;
+						smartScrollToBottom();
 						return;
 					}
 					// The real answer is starting: auto-collapse the thinking
@@ -2938,7 +2990,7 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentText += raw;
 					currentAnswerText += raw;
 					scheduleSegmentRender();
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				} else if (msg.type === 'tool_call') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					// The model moved past reasoning to act: auto-collapse the
@@ -2973,7 +3025,7 @@ class VaultBotSidebarView extends ItemView {
 					endActivity(summary);
 					const resDiv = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-result'});
 					resDiv.setText('  - ' + summary);
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				} else if (msg.type === 'context_usage') {
 					// Live token-usage meter update from the backend. Fires
 					// each turn (pre-loop + post-answer) carrying the model's
@@ -3008,7 +3060,7 @@ class VaultBotSidebarView extends ItemView {
 						action: 'restart',
 						raw_for_log: ''
 					});
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				} else if (msg.type === 'problem') {
 					// Typed, classified failure from the backend (see
 					// diagnostics.py). The diagnosis carries a plain-English
@@ -3021,14 +3073,14 @@ class VaultBotSidebarView extends ItemView {
 					const d = msg.diagnosis || {};
 					statusEl.setText((d.user_message || 'Problem').split('.')[0] + '.');
 					renderProblem(d);
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				} else if (msg.type === 'system_info') {
 					// Non-error informational messages (/help output, "all
 					// healthy"). Rendered as a quiet system bubble, distinct
 					// from error/problem cards.
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system info'});
 					renderMarkdownInto(div, msg.content || '').then(() => {
-						chatContainer.scrollTop = chatContainer.scrollHeight;
+						smartScrollToBottom();
 					});
 				} else if (msg.type === 'stopped') {
 					// Backend confirmed an interrupt (stop button or new msg).
@@ -3042,7 +3094,11 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerBlock = null;
 					currentSegmentText = '';
 					currentAnswerText = '';
-				} else if (msg.type === 'session_reset') {
+				} else if (msg.type === 'session_info') {
+				// Backend sent session metadata (id + title). Update the title
+				// display so the user knows which session they're in.
+				if (msg.title) sessionTitleEl.setText(msg.title);
+			} else if (msg.type === 'session_reset') {
 					// /new command: clear the chat UI for a fresh session.
 					endActivity();
 					chatContainer.empty();
@@ -3053,9 +3109,10 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentRenderTimer = null;
 					currentAnswerText = '';
 					statusEl.setText('New session');
+				sessionTitleEl.setText('New Session');
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system'});
 					div.createSpan({text: msg.content || 'New session started.'});
-					chatContainer.scrollTop = chatContainer.scrollHeight;
+					smartScrollToBottom();
 				} else if (msg.type === 'restart') {
 					// Backend requested restart — same code path as the GUI button.
 					statusEl.setText('Backend requested restart...');
@@ -3086,44 +3143,6 @@ class VaultBotSidebarView extends ItemView {
 					refreshModels();
 				} else {
 					setStatus('error', `Could not download ${msg.model}. Check that Ollama is running and try again.`);
-				}
-			} else if (msg.type === 'voice_download_progress') {
-				// Voice model download in progress (first use). Shown as an
-				// info-severity problem card with a live progress line so the
-				// user knows it's downloading, not frozen. Voice is optional;
-				// text chat works without it.
-				if (msg.progress >= 0) {
-					renderProblem({
-						category: 'voice_model_download',
-						severity: 'info',
-						user_message: `Downloading voice models... ${msg.progress}%`,
-						remedy_hint: 'This is a one-time download. Text chat works while it downloads.',
-						action: '',
-						raw_for_log: ''
-					});
-				} else {
-					renderProblem({
-						category: 'voice_model_download',
-						severity: 'info',
-						user_message: 'Downloading voice models...',
-						remedy_hint: 'This is a one-time download. Text chat works while it downloads.',
-						action: '',
-						raw_for_log: ''
-					});
-				}
-			} else if (msg.type === 'voice_download_done') {
-				// Voice download complete (or failed). Show the result.
-				if (msg.success) {
-					setStatus('online', 'Voice models ready.');
-				} else {
-					renderProblem({
-						category: 'faiss_abi',
-						severity: 'broken',
-						user_message: 'Voice models could not be downloaded.',
-						remedy_hint: 'Voice is optional — text chat still works. Check your internet connection and try again.',
-						action: '',
-						raw_for_log: ''
-					});
 				}
 			} else if (msg.type === 'vault_changed') {
 					// The backend wrote files directly to disk, bypassing
@@ -3183,10 +3202,7 @@ class VaultBotSidebarView extends ItemView {
 					connectWebSocket();
 				} else if (attempts > 30) {
 					window.clearInterval(poll);
-					setStatus('error', 'Backend did not start in time', async () => {
-					await this.plugin.startBackendIfNeeded();
-					startBackendAndConnect();
-				});
+					setStatus('error', 'Backend did not start in time');
 				}
 			}, 1000);
 		};

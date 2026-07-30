@@ -47,6 +47,13 @@ class FusedRetriever:
     ALL_CHANNEL_RERANK = 1.3   # appears in vector + graph + backlink
     HUB_RERANK = 1.1       # high backlink degree
     HUB_DEGREE_THRESHOLD = 3   # min backlinks to count as a hub
+    # Minimum normalized score to be included in results. Results below
+    # this threshold are dropped — they're semantically too distant from
+    # the query to be useful and just waste context budget with noise.
+    # Applied AFTER reranking so boosted notes can still make the cut.
+    # 0.15 is conservative — drops the bottom ~20% that are barely above
+    # random for a 768-dim embedding space.
+    MIN_SCORE_THRESHOLD = 0.15
     # Drift re-ranking: over-fetch this many candidates from the vector
     # channel, then re-rank with drifted embeddings. 3x gives the drift
     # layer room to promote a note that raw similarity ranked lower but
@@ -140,12 +147,22 @@ class FusedRetriever:
             # ---- (e) rerank ----
             self._rerank(merged)
 
-            # ---- (f) truncate to top-k ----
+            # ---- (f) filter by minimum score + truncate to top-k ----
             ranked = sorted(
                 merged.values(), key=lambda c: c["score"], reverse=True
-            )[:k]
+            )
+            # Drop results below the relevance threshold — they waste
+            # context budget with semantically distant noise.
+            filtered = [c for c in ranked if c["score"] >= self.MIN_SCORE_THRESHOLD]
+            # If filtering removed everything, keep the top result rather
+            # than returning empty (better one marginal hit than nothing).
+            if not filtered and ranked:
+                filtered = [ranked[0]]
+                self._log("retrieve.threshold_fallback",
+                          f"All {len(ranked)} results below threshold {self.MIN_SCORE_THRESHOLD} — keeping top result")
+            top_k = filtered[:k]
 
-            results = [self._finalize(c, query) for c in ranked]
+            results = [self._finalize(c, query) for c in top_k]
 
             return {
                 "results": results,

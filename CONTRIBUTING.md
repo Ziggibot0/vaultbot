@@ -91,8 +91,6 @@ follow the same safety protocol the agent uses:
 - `vaultbot/` (the user's vault contents)
 - `vaultbot_backend/sessions/`, `vaultbot_backend/identity/` (personal data)
 - `vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
-- `vaultbot_backend/kokoro_models/`, `stt_models/` (large model files —
-  document how to download them instead)
 - `learningMaterial/` (user's PDFs)
 
 ## Coding style
@@ -165,3 +163,32 @@ material, email skelogg124@gmail.com to have it taken down.
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — the development plan
 - [[Vault-Longevity-Architecture]] — long-term architecture
 - [[Exemplar-Tool-Creation]] — how to create tools properly
+
+### How to use the `submit_contribution` tool
+
+If your VaultBot has made changes to the framework code that you think would
+benefit other users, you can ask it to submit a pull request directly:
+
+1. **Set up a GitHub token.** Create a personal access token with `repo`
+   scope at https://github.com/settings/tokens and add it to your `.env`:
+   ```
+   GITHUB_TOKEN=ghp_your_token_here
+   GITHUB_USERNAME=your_github_username
+   ```
+
+2. **Ask your VaultBot to submit.** Tell it something like:
+   > "Submit your changes to the GitHub repo as a PR"
+
+3. **What happens.** VaultBot will:
+   - Stage the uncommitted changes (or specific files you name)
+   - Create a contribution branch
+   - Commit and push to origin
+   - Open a pull request targeting `main`
+   - Switch back to your `main` branch
+
+4. **Review.** Sean (the maintainer) reviews every PR manually. Nothing
+   auto-merges. If your change benefits the community, it ships.
+
+The tool will refuse to run without a `GITHUB_TOKEN` and will never include
+vault contents, chat logs, or personal data — only the code files you've
+changed.

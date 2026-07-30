@@ -35,12 +35,30 @@ class SessionLogger:
         self.started_at: str = datetime.now(UTC).isoformat()
         self._file_path = self.log_dir / f"{self.session_id}.jsonl"
         self._closed = False
+        self.title: str = "New Session"
 
         self._write({
             "event": "session_start",
             "session_id": self.session_id,
             "timestamp": self._now(),
             "started_at": self.started_at,
+            "title": self.title,
+        })
+
+    def set_title(self, title: str) -> None:
+        """Set the session title and persist it to the log.
+
+        Called when the user edits the title inline in the sidebar, or
+        auto-generated from the first user message. The title is written
+        as a ``session_title`` event so the /sessions listing can read it
+        back without parsing the full conversation.
+        """
+        self.title = title[:200] if title else "New Session"
+        self._write({
+            "event": "session_title",
+            "session_id": self.session_id,
+            "timestamp": self._now(),
+            "title": self.title,
         })
 
     def _now(self) -> float:

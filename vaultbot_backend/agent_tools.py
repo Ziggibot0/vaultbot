@@ -230,6 +230,17 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "task. Omit when clearing."
                         ),
                     },
+                    "context": {
+                        "type": "string",
+                        "description": (
+                            "Optional brief state snapshot: what files "
+                            "have been modified, what has been completed, "
+                            "any blockers. Written to GOALS.md as a "
+                            "'Current State' section so it survives "
+                            "session clears. Keep under 500 chars. Omit "
+                            "when clearing."
+                        ),
+                    },
                 },
                 "required": ["goal"],
             },

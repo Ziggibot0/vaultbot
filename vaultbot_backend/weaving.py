@@ -111,7 +111,7 @@ def existing_note_titles(svc: Services) -> dict:
             if not fp:
                 continue
             # Skip the textbooks/ folder — those are what we're weaving.
-            if ("09-Textbooks" + os.sep
+            if ("Knowledge/Textbooks" + os.sep
                     not in fp + os.sep):
                 pass  # not a textbook note — keep it
             else:
@@ -224,7 +224,7 @@ def cross_link_textbooks(svc: Services,
     out: dict[str, Any] = {"cross_links_added": 0, "notes_linked": 0}
     try:
         textbooks_dir = (Path(os.getenv("VAULT_PATH", "."))
-                         / "09-Textbooks")
+                         / "Knowledge/Textbooks")
         if not textbooks_dir.exists():
             return out
         # Build the set of all textbook note paths (candidates for cross-linking).
@@ -257,7 +257,7 @@ def cross_link_textbooks(svc: Services,
                     if fp_norm == new_norm:
                         continue
                     # Must be a textbook note.
-                    if "09-Textbooks" + os.sep not in fp_norm + os.sep:
+                    if "Knowledge/Textbooks" + os.sep not in fp_norm + os.sep:
                         continue
                     # Exclude same-book notes if we have source_keys.
                     if source_keys and fp_norm in source_keys:
@@ -533,7 +533,7 @@ async def weave_textbook_notes(svc: Services,
                 _cn, card_embs = await loop.run_in_executor(
                     None, svc.vault_indexer.batch_add_files, card_paths, True)
                 svc.vault_graph.refresh()
-                textbooks_dir = (Path(os.getenv("VAULT_PATH", ".")) / "09-Textbooks")
+                textbooks_dir = (Path(os.getenv("VAULT_PATH", ".")) / "Knowledge/Textbooks")
                 # Gather ALL L1 cards in the vault (incremental mode needs
                 # the full set to preserve existing cluster assignments;
                 # only the new subset gets assigned).  Merge the new

@@ -7,6 +7,7 @@ SCHEMA = {"name": "preflight_safety_check", "description": "Pre-flight safety ch
 import importlib.util
 import shutil
 import subprocess
+from subprocess_utils import run as _subprocess_run
 import time
 from pathlib import Path
 
@@ -15,26 +16,17 @@ from pathlib import Path
 try:
     BACKEND_DIR = Path(__file__).resolve().parent.parent
 except NameError:
-    r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=10)
-    git_root = Path(r.stdout.strip()) if r.returncode == 0 else Path(".").resolve()
+    r = _subprocess_run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=10)
+    git_root = Path(r.stdout.strip()) if r.returncode == 0 else Path.cwd()
     BACKEND_DIR = git_root / "vaultbot_backend"
 
 
-def run(args):
-    """
-    Pre-flight safety check before self-modifying operations.
-    
-    Verifies:
-    1. Git has a HEAD (so rollback is possible if a self-edit breaks something)
-    2. All critical backend files are present
-    3. Identity files (IDENTITY.md, SELF_MODEL.md, GOALS.md) are intact
-    4. Disk space is adequate (>5% free)
-    5. All existing custom tools still import cleanly
-    6. Vault notes directory is accessible
-    
-    Returns:
-        status: "PASS" (all clear), "WARN" (proceed with caution), or "BLOCK" (do not proceed)
-        checks: detailed results for each check
+def run(args: dict) -> dict:
+    """Run pre-flight safety checks before self-modifying operations.
+
+    Returns a dict with:
+        status: PASS / WARN / BLOCK
+        checks: per-check details
         warnings: non-blocking issues
         blocks: blocking issues that make self-edit unsafe
     """
@@ -51,7 +43,7 @@ def run(args):
     # --- 1. Git state check ---
     try:
         def git(*cmd):
-            r = subprocess.run(["git"] + list(cmd), capture_output=True, text=True,
+            r = _subprocess_run(["git"] + list(cmd), capture_output=True, text=True,
                              cwd=str(backend_dir), timeout=10)
             return r.stdout.strip(), r.stderr.strip(), r.returncode
 
@@ -71,10 +63,9 @@ def run(args):
         if not has_head:
             results["blocks"].append("No git HEAD — cannot roll back if self-edit fails")
             results["status"] = "BLOCK"
-        elif len(uncommitted) > 0:
+        elif uncommitted:
             results["warnings"].append(
-                f"Working tree has {len(uncommitted)} uncommitted change(s) — "
-                "rollback will revert these too"
+                f"Working tree not clean ({len(uncommitted)} uncommitted files) — rollback will lose these changes"
             )
             if results["status"] == "PASS":
                 results["status"] = "WARN"
@@ -167,9 +158,10 @@ def run(args):
             results["status"] = "WARN"
 
     # --- 6. Vault notes directory ---
-    # Check for the hierarchical folder structure (00-Identity, 07-Research, 08-Chat, etc.)
+    # Check for the current vault folder structure (post-reorganization)
+    # The vault uses function-based top-level folders: Knowledge/, Memory/, System/, User/
     vault_dir = backend_dir.parent
-    expected_folders = ["00-Identity", "07-Research", "08-Chat"]
+    expected_folders = ["Knowledge", "Memory", "System", "User"]
     found_folders = [f for f in expected_folders if (vault_dir / f).exists()]
     note_count = sum(1 for f in vault_dir.rglob("*.md")
                      if "vaultbot_backend" not in str(f) and "vaultbot_venv" not in str(f))
@@ -179,7 +171,7 @@ def run(args):
         "note_count": note_count
     }
     if len(found_folders) < 2:
-        results["blocks"].append("Vault notes directory not found (expected folders like 00-Identity/, 07-Research/)")
+        results["blocks"].append("Vault notes directory not found (expected folders like Knowledge/, Memory/, System/, User/)")
         results["status"] = "BLOCK"
 
     # --- Final status ---

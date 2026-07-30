@@ -99,7 +99,7 @@ def run(args: dict) -> dict:
         result = json.loads(resp.read())
         return {
             "status": "restart_requested",
-            "message": "Plugin received restart signal. Backend will restart in ~5 seconds. MCP client reconnects automatically.",
+            "message": "Restart scheduled. Backend will restart in ~3 seconds — the chat loop will finish processing this tool result first, then the plugin will kill and respawn the backend. MCP client reconnects automatically.",
             "context_cached": cached,
             "cache_message": cache_msg,
             "response": result,

@@ -32,7 +32,7 @@ class ProblemCategory(str, Enum):  # noqa: UP042 - str+Enum for JSON serializati
     Ordering is roughly by "how fixable without a developer":
         ollama_down / model_missing  → one user action (open app / pull)
         port_in_use / synced_folder → one VaultBot action (restart / move)
-        faiss_abi / voice_model_*    → environmental, needs a reinstall
+        faiss_abi                     → environmental, needs a reinstall
         config_conflict / generic     → least actionable
     """
 
@@ -48,8 +48,6 @@ class ProblemCategory(str, Enum):  # noqa: UP042 - str+Enum for JSON serializati
     SYNCED_FOLDER = "synced_folder"
     # FAISS / numpy ABI mismatch — needs a clean reinstall of faiss-cpu.
     FAISS_ABI = "faiss_abi"
-    # Voice model is still downloading on first use (informational, not fatal).
-    VOICE_MODEL_DOWNLOAD = "voice_model_download"
     # A self-update failed partway; the backup exists and can be restored.
     UPDATE_PARTIAL = "update_partial"
     # Two config sources (plugin settings vs .env) disagree on a value.
@@ -77,7 +75,7 @@ class Severity(str, Enum):  # noqa: UP042 - str+Enum for JSON serialization on 3
 # Default severity per category. Kept here (next to the enum) so a
 # contributor adding a category sees the severity decision in the same
 # file. ``Diagnosis`` carries its own severity field so callers can
-# override (e.g. a downloaded-but-corrupt voice model is BROKEN, not INFO).
+# override (e.g. a corrupt FAISS install is BROKEN, not INFO).
 _DEFAULT_SEVERITY: dict[ProblemCategory, Severity] = {
     ProblemCategory.OLLAMA_DOWN: Severity.FIXABLE,
     ProblemCategory.MODEL_NOT_PULLED: Severity.FIXABLE,
@@ -85,7 +83,6 @@ _DEFAULT_SEVERITY: dict[ProblemCategory, Severity] = {
     ProblemCategory.PORT_IN_USE: Severity.FIXABLE,
     ProblemCategory.SYNCED_FOLDER: Severity.BROKEN,
     ProblemCategory.FAISS_ABI: Severity.BROKEN,
-    ProblemCategory.VOICE_MODEL_DOWNLOAD: Severity.INFO,
     ProblemCategory.UPDATE_PARTIAL: Severity.FIXABLE,
     ProblemCategory.CONFIG_CONFLICT: Severity.INFO,
     ProblemCategory.SETUP_INCOMPLETE: Severity.FIXABLE,

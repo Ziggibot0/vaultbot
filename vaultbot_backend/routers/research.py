@@ -35,7 +35,11 @@ async def research_tool_endpoint(payload: dict,
         svc.research_engine.max_rounds = 1
         svc.research_engine.max_follow_ups = 0
     try:
-        report = await loop.run_in_executor(None, svc.research_engine.research, topic)
+        _titles = svc.research_engine._get_vault_note_titles(svc.vault_path)
+        report = await loop.run_in_executor(
+            None, lambda: svc.research_engine.research(
+                topic, llm_client=svc.ollama_client,
+                vault_note_titles=_titles))
     finally:
         # Restore defaults so the autonomous researcher isn't affected.
         svc.research_engine.max_rounds = int(os.getenv("VAULTBOT_RESEARCH_ROUNDS", "4"))
@@ -50,27 +54,34 @@ async def research_tool_endpoint(payload: dict,
             note_path = await loop.run_in_executor(
                 None, svc.note_creator.create_note_from_research,
                 topic, report["synthesis"], summary)
-            # Overwrite with the richer markdown so sources are preserved.
-            md = svc.research_engine.synthesize_note_markdown(report, summary)
-            try:
-                Path(note_path).write_text(md, encoding="utf-8")
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).debug("swallowed: %s", e)
-            # LLM-assisted note structuring (ONE call, optional): overwrite
-            # the extractive markdown with a structured note (frontmatter,
-            # H2 sections, wikilinks) if the LLM is available and passes the
-            # safety floor. Falls back to the extractive markdown.
-            try:
-                _titles = list(svc.vault_graph.nodes.keys())
-                _structured = svc.research_engine.synthesize_structured_note(
-                    report, summary, ollama_client=svc.ollama_client,
-                    vault_note_titles=_titles)
-                if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
-                    Path(note_path).write_text(_structured, encoding="utf-8")
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).debug("swallowed: %s", e)
+            if report.get("llm_synthesized"):
+                # LLM synthesis already produced a structured note with
+                # frontmatter, H2 prose sections, wikilinks, and Sources.
+                # Write it directly -- skip double-processing.
+                try:
+                    Path(note_path).write_text(
+                        report["synthesis"], encoding="utf-8")
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).debug("swallowed: %s", e)
+            else:
+                # Extractive fallback: wrap in markdown, then try LLM
+                # structuring (ONE call) for frontmatter + H2 sections.
+                md = svc.research_engine.synthesize_note_markdown(report, summary)
+                try:
+                    Path(note_path).write_text(md, encoding="utf-8")
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).debug("swallowed: %s", e)
+                try:
+                    _structured = svc.research_engine.synthesize_structured_note(
+                        report, summary, ollama_client=svc.ollama_client,
+                        vault_note_titles=_titles)
+                    if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+                        Path(note_path).write_text(_structured, encoding="utf-8")
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).debug("swallowed: %s", e)
         except Exception as e:
             svc.session_logger.log_exception(e, context="research_tool_note")
     report["note_path"] = note_path

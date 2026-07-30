@@ -21,41 +21,47 @@ DESIGN (grounded in how production agents stay on track)
 - The model writes the plan at the start of a multi-step task, updates
   entries after each tool round, and the harness prepends the current
   list to the system prompt every round.
-- When all tasks are done, the harness tells the model to stop looping.
-- Bounded: caps at MAX_TASKS=30 entries so a confused model can't spam
-  thousands of micro-tasks.
-- Pure stdlib, no LLM calls, no I/O except the in-memory list.
+- Mutators return MINIMAL confirmations (not full snapshots) to avoid
+  conversation bloat. The model sees the full list in the system prompt
+  every round via ``render_for_prompt()``, so echoing it back in the tool
+  result is redundant data that inflates the conversation — every
+  update_task call was adding ~1KB of task content that the model already
+  had, and with compaction disabled this accumulated across 138 rounds.
 
-THE STOP SIGNAL
----------------
-This is the key piece both Claude Code and Copilot use that VaultBot was
-missing: a deterministic stop condition. The loop ends when (a) the model
-emits no tool calls (the existing path), OR (b) all tasks are marked
-completed. The second path is the one that prevents the "re-search the
-same thing forever" loop — the model can't override a fully-checked list.
+RETURN VALUE DESIGN
+-------------------
+All mutators (``set_plan``, ``update_task``, ``add_task``) return a small
+dict with just the action result:
+
+    {"status": "ok", "action": "update", "task_id": "3",
+     "task_status": "completed", "total": 9, "completed": 4}
+
+The full task list is available via ``snapshot()`` (for the harness/UI)
+and ``render_for_prompt()`` (injected into the system prompt every round).
+The model never needs the full snapshot in the tool result — it's already
+in the system prompt.
 """
-
 from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
 from typing import Any
 
-MAX_TASKS = 30
+
+MAX_TASKS = 20
 
 
 @dataclass
 class Task:
-    """A single item in the working-memory task list."""
     id: str
     content: str
     status: str = "pending"  # pending | in_progress | completed
-    notes: str = ""           # free-text annotation by the model
+    notes: str = ""
 
 
 @dataclass
 class TaskList:
-    """Per-session structured working memory.
+    """Per-session working-memory task list.
 
     Owned by the websocket session (one per chat connection). Thread-safe
     because the chat loop and any background heartbeat thread may read it.
@@ -69,15 +75,18 @@ class TaskList:
     # re-acquire, which is exactly the set_plan -> snapshot call pattern.
     lock: threading.RLock = field(default_factory=threading.RLock)
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
     # Mutators (called by the model via the plan_task / update_task tools)
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
 
     def set_plan(self, goal: str, items: list[str]) -> dict[str, Any]:
         """Replace the entire task list with a fresh plan.
 
         Called at the start of a multi-step task. Clears any prior list
         so the model can re-plan when the user redirects.
+
+        Returns a minimal confirmation — the full list is in the system
+        prompt via ``render_for_prompt()``.
         """
         with self.lock:
             self.goal = goal[:500]
@@ -88,14 +97,20 @@ class TaskList:
                     content=item[:300],
                     status="pending",
                 ))
-            return self.snapshot()
+            return {
+                "status": "ok",
+                "action": "plan_set",
+                "goal": self.goal[:100],
+                "total": len(self.tasks),
+            }
 
     def update_task(self, task_id: str, status: str = "",
                     notes: str = "") -> dict[str, Any]:
         """Update a single task's status and/or notes.
 
         The model calls this after each tool round to mark progress.
-        Returns the updated snapshot so the model sees the result.
+        Returns a minimal confirmation — the full list is in the system
+        prompt via ``render_for_prompt()``.
         """
         with self.lock:
             for t in self.tasks:
@@ -104,7 +119,16 @@ class TaskList:
                         t.status = status
                     if notes:
                         t.notes = notes[:500]
-                    return self.snapshot()
+                    return {
+                        "status": "ok",
+                        "action": "update",
+                        "task_id": task_id,
+                        "task_status": t.status,
+                        "total": len(self.tasks),
+                        "completed": sum(1 for x in self.tasks if x.status == "completed"),
+                        "pending": sum(1 for x in self.tasks if x.status == "pending"),
+                        "in_progress": sum(1 for x in self.tasks if x.status == "in_progress"),
+                    }
             return {"error": f"task {task_id} not found"}
 
     def add_task(self, content: str, status: str = "pending",
@@ -113,6 +137,9 @@ class TaskList:
 
         Lets the model add a step it discovered mid-task without re-planning
         the whole list. Bounded by MAX_TASKS.
+
+        Returns a minimal confirmation — the full list is in the system
+        prompt via ``render_for_prompt()``.
         """
         with self.lock:
             if len(self.tasks) >= MAX_TASKS:
@@ -124,7 +151,15 @@ class TaskList:
                 status=status if status in ("pending", "in_progress", "completed") else "pending",
                 notes=notes[:500],
             ))
-            return self.snapshot()
+            return {
+                "status": "ok",
+                "action": "add",
+                "task_id": new_id,
+                "total": len(self.tasks),
+                "completed": sum(1 for x in self.tasks if x.status == "completed"),
+                "pending": sum(1 for x in self.tasks if x.status == "pending"),
+                "in_progress": sum(1 for x in self.tasks if x.status == "in_progress"),
+            }
 
     def clear(self) -> None:
         """Wipe the list (called on /new session reset)."""
@@ -132,12 +167,17 @@ class TaskList:
             self.tasks = []
             self.goal = ""
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
     # Readers (called by the harness, not the model)
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
 
     def snapshot(self) -> dict[str, Any]:
-        """Return a JSON-serializable view of the current list."""
+        """Return a JSON-serializable view of the current list.
+
+        Used by the harness/UI (NOT returned to the model as a tool result).
+        The model sees the list via ``render_for_prompt()`` in the system
+        prompt instead.
+        """
         with self.lock:
             return {
                 "goal": self.goal,
@@ -171,46 +211,37 @@ class TaskList:
                         "pending": "[ ]"}.get(t.status, "[ ]")
                 line = f"{mark} {t.id}. {t.content}"
                 if t.notes:
-                    line += f"  — {t.notes}"
+                    line += f" — {t.notes}"
                 lines.append(line)
             done = sum(1 for t in self.tasks if t.status == "completed")
-            lines.append(f"Progress: {done}/{len(self.tasks)} done")
-            if done == len(self.tasks) and self.tasks:
-                lines.append("ALL TASKS COMPLETE — synthesize your final "
-                             "answer now. Do NOT call more tools.")
+            total = len(self.tasks)
+            lines.append(f"Progress: {done}/{total} done")
             return "\n".join(lines)
 
+    def has_plan(self) -> bool:
+        """True if there's at least one task in the list."""
+        with self.lock:
+            return len(self.tasks) > 0
+
     def all_done(self) -> bool:
-        """Deterministic stop signal: is every task completed?"""
+        """True if every task is completed."""
         with self.lock:
             return bool(self.tasks) and all(
                 t.status == "completed" for t in self.tasks)
 
-    def has_plan(self) -> bool:
-        """Is there an active plan (non-empty task list)?"""
-        with self.lock:
-            return len(self.tasks) > 0
-
     def restore_snapshot(self, snap: dict[str, Any]) -> None:
-        """Restore the list from a snapshot dict (the inverse of snapshot()).
+        """Restore a prior state from a snapshot (used by checkpoint/resume
+        after a crash or backend restart).
 
-        Used by chat-loop checkpoint/resume: after a crash/restart, the
-        in-flight turn's plan is restored so the model picks up where it
-        left off instead of re-planning (and re-running tools) from scratch.
-        Best-effort: malformed entries are skipped, never raise.
+        Accepts the format produced by ``snapshot()``.
         """
         with self.lock:
-            self.goal = str(snap.get("goal", ""))[:500]
+            self.goal = (snap.get("goal") or "")[:500]
             self.tasks = []
-            for i, item in enumerate(snap.get("tasks", [])[:MAX_TASKS]):
-                if not isinstance(item, dict):
-                    continue
-                status = item.get("status", "pending")
-                if status not in ("pending", "in_progress", "completed"):
-                    status = "pending"
+            for t in snap.get("tasks", []):
                 self.tasks.append(Task(
-                    id=str(item.get("id", i + 1)),
-                    content=str(item.get("content", ""))[:300],
-                    status=status,
-                    notes=str(item.get("notes", ""))[:500],
+                    id=str(t.get("id", "")),
+                    content=(t.get("content") or "")[:300],
+                    status=t.get("status", "pending"),
+                    notes=(t.get("notes") or "")[:500],
                 ))

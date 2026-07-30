@@ -56,6 +56,7 @@ vaultbot_backend/backend.log
 vaultbot_backend/backend.err
 vaultbot_backend/backend_stdout.log
 vaultbot_backend/backend_stderr.log
+vaultbot_backend/backend_live.log
 vaultbot_backend/pythonw_stdout.log
 vaultbot_backend/pythonw_stderr.log
 vaultbot_backend/boot.log
@@ -98,6 +99,27 @@ vaultbot/textbooks/
 vaultbot/*.md
 vaultbot/maintenance.log
 
+# Hierarchical-layout personal vault content (post-reorg)
+# These are the USER'S mind: chat logs, personal knowledge, personal notes.
+# System/ ships framework defaults (filtered below) but the rest is personal.
+Memory/
+Knowledge/
+User/
+
+# Personal files inside the shippable System/ framework tree
+System/Identity/Sean-Communication-Preferences.md
+System/Identity/Auto-Resume-Directive.md
+System/Identity/Autonomy-Directive.md
+System/Identity/IDK-Fallback-Directive.md
+System/Identity/No-Wikipedia-Directive.md
+System/Identity/Vault-Knowledge-Only-Directive.md
+System/Identity/Fractal-Entropy-Principle.md
+System/Identity/Self-Edit-Verification-Directive.md
+System/Patterns/Cross-Session-Patterns-*.md
+System/Quality-Gates/Calibration-via-Operator-Feedback.md
+System/Architecture/Small-Model-Path-to-AGI.md
+System/Architecture/Vault-Longevity-Architecture.md
+
 # Personal root directives + notes (operator relationship with their bot)
 2026-*.md
 *-Directive.md
@@ -113,6 +135,12 @@ Calibration-via-Operator-Feedback.md
 Cross-Session-Patterns-*.md
 GOALS.md
 LICENSE
+
+# Personal consolidation/pattern notes (root-level, derived from chat logs)
+Autonomy-Interruption-and-Goal-Staleness-Pattern.md
+Research-Engine-Robustness-Requirement.md
+*-Pattern.md
+*-Requirement.md
 
 # ─────────────────────────────────────────────────────────────────────
 # Learning materials (user-supplied PDFs)

@@ -1124,3 +1124,25 @@
    styled), so only the section descriptions need minimal styling. The voice
    progress card reuses the Phase 1 problem-card styles (severity-info).
    ========================================================================= */
+
+/* Session title: editable inline, sits between status and chat */
+.vaultbot-session-title {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    padding: 4px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--background-modifier-border);
+    transition: color 0.15s, background 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vaultbot-session-title:hover {
+    color: var(--text-normal);
+    background: var(--background-secondary);
+}
+.vaultbot-session-title-editing {
+    outline: 1px solid var(--interactive-accent);
+    background: var(--background-primary);
+    cursor: text;
+}

@@ -41,6 +41,7 @@ import json
 import os
 import re
 import subprocess
+from subprocess_utils import run as _subprocess_run
 import sys
 import textwrap
 from typing import Optional
@@ -464,7 +465,7 @@ def dry_run_procedure(
         }
 
         try:
-            r = subprocess.run(
+            r = _subprocess_run(
                 [sys.executable, "-c", script],
                 capture_output=True, text=True, timeout=timeout,
                 cwd=vault_path, env=env,

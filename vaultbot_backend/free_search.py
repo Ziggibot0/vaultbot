@@ -50,8 +50,13 @@ _BLOCKED_DOMAINS = {
     "simple.wikipedia.org",
 }
 
-
 def _is_blocked_source(url: str) -> bool:
+    """Check if a URL should be blocked.
+
+    Only Wikipedia is hard-blocked (per [[No-Wikipedia-Directive]]).
+    All other filtering is done by the relevance gate and LLM synthesis
+    in the research engine — no domain-specific blocklists.
+    """
     if not url:
         return False
     u = url.lower()

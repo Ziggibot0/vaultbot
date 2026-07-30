@@ -26,7 +26,7 @@ TF-IDF term across the cluster's cards).  The MOC is a flat list of
 GraphRAG's LLM-summarized communities — it's an INDEX, not a synthesis.
 The LLM only fires at the final synthesis step, exactly as Sean wants.
 
-A MOC note is `09-Textbooks/moc-<cluster-id>.md`:
+A MOC note is `Knowledge/Textbooks/moc-<cluster-id>.md`:
 
     # Map of Content: <label>
     > cluster-id: <hex>

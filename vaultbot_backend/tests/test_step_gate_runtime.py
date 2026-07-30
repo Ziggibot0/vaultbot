@@ -290,6 +290,7 @@ def test_run_procedure_cycle_detection(_fixture_procedures, monkeypatch):
     """A procedure that calls itself should be caught as a cycle."""
     import os
     import subprocess
+from subprocess_utils import run as _subprocess_run
     import sys as _sys
 
     cycle_proc = _fixture_procedures / "Cycle-Proc.md"
@@ -301,7 +302,7 @@ def test_run_procedure_cycle_detection(_fixture_procedures, monkeypatch):
 
     backend = Path(__file__).parent.parent.resolve()
     env = {**os.environ, "PYTHONPATH": str(backend)}
-    r = subprocess.run(
+    r = _subprocess_run(
         [_sys.executable, str(backend / "run_procedure.py"),
          "--procedure-name", "Cycle-Proc",
          "--vault-path", str(_fixture_procedures),
@@ -328,7 +329,7 @@ def test_run_procedure_depth_limit(_fixture_procedures):
 
     backend = Path(__file__).parent.parent.resolve()
     env = {**os.environ, "PYTHONPATH": str(backend)}
-    r = subprocess.run(
+    r = _subprocess_run(
         [_sys.executable, str(backend / "run_procedure.py"),
          "--procedure-name", "Parent-Proc",
          "--vault-path", str(_fixture_procedures),

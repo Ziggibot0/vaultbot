@@ -45,6 +45,7 @@ import json
 import os
 import re
 import subprocess
+from subprocess_utils import run as _subprocess_run
 import sys
 import traceback
 from dataclasses import dataclass, field
@@ -387,7 +388,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
         # [[Procedure-Subprocess-Architecture]] and run_procedure.py.
         snippets.append(
             'if "run_procedure" in allowed:\n'
-            '    import subprocess as _sp\n'
+            '    from subprocess_utils import run as _sp_run\n'
             '    import json as _json\n'
             '    _backend_dir = Path(os.environ.get("PYTHONPATH", ".").split(os.pathsep)[0])\n'
             '    _venv_py = _backend_dir.parent / "vaultbot_venv" / "Scripts" / "python.exe"\n'
@@ -407,7 +408,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '               "--procedure-name", str(procedure_name),\n'
             '               "--vault-path", os.environ.get("VAULT_PATH", "."),\n'
             '               "--call-stack", _json.dumps(_call_stack)]\n'
-            '        r = _sp.run(cmd, capture_output=True, text=True, timeout=120)\n'
+            '        r = _sp_run(cmd, capture_output=True, text=True, timeout=120)\n'
             '        if not r.stdout.strip():\n'
             '            raise RuntimeError("run_procedure produced no output; "\n'
             '                               "stderr: " + r.stderr[:500])\n'
@@ -528,7 +529,7 @@ def _run_code_step(
     }
 
     try:
-        proc = subprocess.run(
+        proc = _subprocess_run(
             [venv_python, "-c", wrapper],
             capture_output=True, text=True, timeout=timeout,
             cwd=str(Path(vault_path).resolve()),

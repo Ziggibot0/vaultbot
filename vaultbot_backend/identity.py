@@ -379,9 +379,14 @@ class Identity:
         steps: list[str] | None = None,
         completed_step: str | None = None,
         next_step: str | None = None,
+        context: str | None = None,
     ) -> str:
         """Full-replace GOALS.md with the current goal + decomposition +
-        last-completed + next-step. Returns the new text.
+        last-completed + next-step + optional context snapshot. Returns the new text.
+
+        The context parameter captures a brief state snapshot (files modified,
+        progress, blockers) that survives session clears. Written as a
+        'Current State' section in GOALS.md.
         """
         try:
             lines: list[str] = []
@@ -411,6 +416,11 @@ class Identity:
             if next_step:
                 lines.append("## Next Step")
                 lines.append(next_step.strip())
+                lines.append("")
+
+            if context and context.strip():
+                lines.append("## Current State")
+                lines.append(context.strip()[:500])
                 lines.append("")
 
             text = "\n".join(lines).rstrip() + "\n"
