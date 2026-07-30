@@ -1,25 +1,23 @@
 """
-LLM-light deep research engine.
+Deep research engine with LLM synthesis.
 
-Design goal: "get to the bottom of" a topic while keeping the burden on the
-vault/web, NOT on the LLM. The LLM is used only for the *final* synthesis in
-the caller (handle_chat), never inside the research loop itself.
+Design goal: "get to the bottom of" a topic. The search/fetch/clean pipeline
+is deterministic (no LLM); the synthesis uses ONE LLM call when a client is
+provided, falling back to deterministic extractive synthesis if the LLM is
+unavailable or fails.
 
-Pipeline (no LLM calls):
+Pipeline:
   1. Extract key terms from the topic (noun phrases, no LLM).
-  2. Multi-round Tavily queries with progressive refinement — each round
-     adds terms that the previous round's sources revealed but that the
-     query didn't yet contain. Digging continues until coverage plateaus.
+  2. Multi-round search queries with progressive refinement.
   3. Fetch the top sources per round, clean to article text.
-  4. Extractive synthesis: score sentences by keyword density + source
-     agreement (corroboration across multiple sources), then assemble the
-     highest-scoring sentences into a structured, faceted summary.
-  5. Gap detection: after synthesis, identify facets/questions that remain
-     under-covered, and run targeted follow-up queries to fill them.
-  6. Return a structured ResearchReport the caller can turn into a note.
+  4. Gap detection: identify under-covered facets, run follow-up queries.
+  5. Synthesis: ONE LLM call to synthesize all source texts (primary path).
+     Falls back to extractive sentence-scoring if LLM unavailable.
+  6. Return a structured ResearchReport.
 
-Everything here is deterministic/extractive — the LLM only ever sees the
-finished, sourced summary, so the model's weights stay out of the dig.
+The LLM naturally filters irrelevant sources because it understands the
+topic. The deterministic pipeline ensures search/fetch/clean is
+model-independent and cacheable.
 """
 
 import math
@@ -349,9 +347,6 @@ _GENERIC_TERMS = {
     "old", "best", "good", "bad", "how", "what", "why", "when", "where",
     "without", "with", "from", "into", "using", "use", "used", "uses",
     "research", "study", "paper", "analysis", "study", "results", "method",
-    # Biology terms that are too generic alone — need specific partners
-    "communicate", "communication", "communicating", "signaling",
-    "molecules", "sensing", "formation", "behavior", "coordination",
     "through", "group", "groups",
     "approach", "based", "proposed", "novel", "new", "recent", "current",
 }
@@ -394,9 +389,25 @@ def _source_relevance(title: str, text: str, signal: list[str],
     text_low = (text or "").lower()[:8000]
     score = 0.0
     matched: list[str] = []
+    def _sig_match(s: str, text: str) -> bool:
+        """Check if signal term s appears in text, allowing morphological variants.
+        For terms >= 7 chars, match on a stem of max(7, len(s)-3) chars so
+        'communicate' catches 'communication', 'communicating', etc. but NOT
+        'community' (unrelated). For shorter terms, use exact substring match.
+        """
+        if s in text:
+            return True
+        if len(s) >= 7:
+            stem_len = max(7, len(s) - 3)
+            stem = s[:stem_len]
+            # Word-boundary match on the stem.
+            if re.search(r'\b' + re.escape(stem), text):
+                return True
+        return False
+
     for s in signal:
-        in_title = s in title_low
-        in_text = s in text_low
+        in_title = _sig_match(s, title_low)
+        in_text = _sig_match(s, text_low)
         if in_title and in_text:
             score += 2.0
             matched.append(s)
@@ -405,11 +416,25 @@ def _source_relevance(title: str, text: str, signal: list[str],
             matched.append(s)
     if not matched:
         return 0.0, "no_signal_match"
-    # Require at least 2 signal matches for non-academic sources.
-    # Prevents Docker "quorum" images from passing with just 1 match.
+    # Require at least 50% of signal terms to match for ALL sources.
+    # Previously academic sources only needed 1 match, letting through
+    # off-topic arXiv papers that happened to contain one signal word
+    # (e.g. "Bacteria are not Lamarckian" matched "bacteria" but had
+    # nothing about communication). With 2 signal terms, 50% = 1, but
+    # with 3+ terms it requires 2+, filtering out marginally-related sources.
     is_academic = _is_academic_source(url)
-    if not is_academic and len(matched) < 2:
-        return 0.5, f"insufficient_signal:{len(matched)}/2 (non-academic)"
+    # Require ALL signal terms to match when there are <= 3 (typical case).
+    # With 4+ signal terms, require at least 60%. This prevents sources that
+    # match just one generic signal word (e.g. "bacteria" in a paper about
+    # bacterial mutation) from passing the gate.
+    if len(signal) <= 3:
+        min_matches = len(signal)  # ALL must match
+    else:
+        min_matches = max(2, int(len(signal) * 0.6))
+    if not is_academic:
+        min_matches = max(2, min_matches)  # non-academic needs at least 2
+    if len(matched) < min_matches:
+        return 0.5, f"insufficient_signal:{len(matched)}/{min_matches}{' (non-academic)' if not is_academic else ''}"
     return score, f"signal:{','.join(matched[:4])}{' [academic]' if is_academic else ''}"
 
 
@@ -813,6 +838,38 @@ class ResearchEngine:
         except Exception:
             return None
 
+
+    def _extractive_synthesis(self, all_sources: list[dict[str, Any]],
+                              base_terms: list[str]) -> tuple[str, set]:
+        """Deterministic extractive synthesis (fallback when no LLM available).
+
+        Scores sentences by keyword density + source agreement, dedups
+        near-identical sentences, and returns the top findings as bullet
+        points with [sources: ...] citations. Returns (synthesis, used_set).
+        """
+        sentences: list[tuple[str, dict[str, Any]]] = []
+        for src in all_sources:
+            for sent in _split_sentences(src["text"]):
+                sentences.append((sent, src))
+        facts = self._corroborated_facts(sentences, base_terms)
+        synthesis_lines: list[str] = []
+        total_len = 0
+        max_synth = 3500
+        used: set = set()
+        for fact in facts:
+            s = fact["sentence"]
+            sig = tuple(sorted(_tokenize_light(s)))
+            if sig in used:
+                continue
+            used.add(sig)
+            srcs = ", ".join(f["title"] or f["url"] for f in fact["sources"][:2])
+            line = f"- {s}  [sources: {srcs}]"
+            if total_len + len(line) > max_synth:
+                break
+            synthesis_lines.append(line)
+            total_len += len(line)
+        return "\n".join(synthesis_lines), used
+
     def research(self, topic: str, llm_client: Any = None) -> dict[str, Any]:
         """Run a full multi-round research dig. Returns a structured report.
 
@@ -847,7 +904,16 @@ class ResearchEngine:
             "max_rounds": self.max_rounds, "keyterms": base_terms,
             "facets": facets})
         for round_idx in range(self.max_rounds):
-            query = self._expand_query(base_terms, discovered_terms)
+            # FIRST ROUND: use the natural-language topic string directly as
+            # the search query. Search engines (Tavily, SearXNG) understand
+            # natural language far better than space-joined keyterms.
+            # "how bacteria communicate" gets much better results than
+            # "communicate bacteria". Subsequent rounds use keyterm-based
+            # queries with progressive refinement.
+            if round_idx == 0:
+                query = search_topic
+            else:
+                query = self._expand_query(base_terms, discovered_terms)
             round_t0 = time.time()
             self._progress("search_round", {
                 "round": round_idx + 1, "max_rounds": self.max_rounds,
@@ -855,10 +921,14 @@ class ResearchEngine:
             sources = self._search_round(query, round_idx, topic=search_topic)
             # Dedup against already-collected sources (normalized URLs
             # catch http vs https duplicates of the same page).
-            new_sources = [s for s in sources
-                           if _normalize_url(s["url"]) not in seen_urls]
-            for s in new_sources:
-                seen_urls.add(_normalize_url(s["url"]))
+            # FIX: update seen_urls DURING the loop, not after, so that
+            # within-round duplicates (http vs https of same URL) are caught.
+            new_sources = []
+            for s in sources:
+                norm = _normalize_url(s["url"])
+                if norm not in seen_urls:
+                    seen_urls.add(norm)
+                    new_sources.append(s)
             all_sources.extend(new_sources)
             rounds_log.append({
                 "round": round_idx,
@@ -894,33 +964,11 @@ class ResearchEngine:
                           {"round": round_idx, "reason": "no_new_sources"})
                 break
 
-        # --- Extractive synthesis -------------------------------------------
-        self._progress("synthesizing", {"sources": len(all_sources)})
-        sentences: list[tuple[str, dict[str, Any]]] = []
-        for src in all_sources:
-            for sent in _split_sentences(src["text"]):
-                sentences.append((sent, src))
-        facts = self._corroborated_facts(sentences, base_terms)
-        # Take the top facts but cap total synthesis length.
-        synthesis_lines: list[str] = []
-        total_len = 0
-        max_synth = 3500
-        used = set()
-        for fact in facts:
-            s = fact["sentence"]
-            sig = tuple(sorted(_tokenize_light(s)))
-            if sig in used:
-                continue
-            used.add(sig)
-            srcs = ", ".join(f["title"] or f["url"] for f in fact["sources"][:2])
-            line = f"- {s}  [sources: {srcs}]"
-            if total_len + len(line) > max_synth:
-                break
-            synthesis_lines.append(line)
-            total_len += len(line)
-        synthesis = "\n".join(synthesis_lines)
-
         # --- Gap fill: targeted follow-ups for under-covered facets ----------
+        # Gap detection uses source TEXTS, not synthesis output, so it
+        # works regardless of whether we use extractive or LLM synthesis.
+        # Running gap fill BEFORE synthesis ensures the LLM (when available)
+        # sees ALL sources including gap-fill results in one call.
         gaps = self._identify_gaps(search_topic, facets, all_sources, base_terms)
         follow_up_sources: list[dict[str, Any]] = []
         if gaps:
@@ -937,34 +985,18 @@ class ResearchEngine:
             self._progress("gap_fill_done", {
                 "follow_up_sources": len(follow_up_sources),
                 "total_sources": len(all_sources)})
-            # Re-synthesize with the new sources included.
-            more_sentences = []
-            for src in follow_up_sources:
-                for sent in _split_sentences(src["text"]):
-                    more_sentences.append((sent, src))
-            more_facts = self._corroborated_facts(more_sentences, base_terms)
-            for fact in more_facts:
-                s = fact["sentence"]
-                sig = tuple(sorted(_tokenize_light(s)))
-                if sig in used:
-                    continue
-                used.add(sig)
-                srcs = ", ".join(f["title"] or f["url"]
-                                 for f in fact["sources"][:2])
-                line = f"- {s}  [sources: {srcs}]"
-                if total_len + len(line) > max_synth:
-                    break
-                synthesis_lines.append(line)
-                total_len += len(line)
-            synthesis = "\n".join(synthesis_lines)
 
-        # --- LLM synthesis (one call, optional) ---------------------------
-        # Replace the extractive synthesis with a single LLM call if a
-        # client is provided. The LLM gets all source texts and produces
-        # a coherent synthesis that naturally filters irrelevant sources
-        # (Docker containers, off-topic papers) because it understands
-        # the topic. Falls back to the extractive synthesis above if the
-        # LLM fails or produces too-short output.
+        # --- Synthesis -----------------------------------------------------
+        # PRIMARY PATH: when an LLM client is provided, use ONE LLM call to
+        # synthesize all source texts into a coherent summary. The LLM
+        # naturally filters irrelevant sources (Docker containers, off-topic
+        # papers) because it understands the topic. This replaces the old
+        # extractive sentence-scoring approach which was keyword-matching
+        # garbage into bullet points.
+        #
+        # FALLBACK: if the LLM fails or produces too-short output, fall back
+        # to the extractive synthesis (deterministic, no LLM).
+        used: set = set()
         if llm_client is not None:
             self._progress("llm_synthesizing", {"sources": len(all_sources)})
             llm_synth = self._llm_synthesize(topic, all_sources, llm_client)
@@ -974,6 +1006,19 @@ class ResearchEngine:
                     l for l in llm_synth.split('\n')
                     if l.strip().startswith('-')
                 ])))
+            else:
+                # LLM failed or too short -- fall back to extractive.
+                self._log("research_llm_synthesis_failed", {
+                    "llm_synth_len": len(llm_synth) if llm_synth else 0})
+                self._progress("synthesizing_extractive_fallback", {
+                    "sources": len(all_sources)})
+                synthesis, used = self._extractive_synthesis(
+                    all_sources, base_terms)
+        else:
+            # No LLM client -- extractive synthesis only.
+            self._progress("synthesizing", {"sources": len(all_sources)})
+            synthesis, used = self._extractive_synthesis(
+                all_sources, base_terms)
 
         report = {
             "topic": topic,

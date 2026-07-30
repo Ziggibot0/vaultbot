@@ -171,11 +171,15 @@ def _rebuild_llm_client(svc: Services) -> None:
     svc.ollama_client = new_client
     svc.vision_client = get_vision_client(session_logger=svc.session_logger)
     # Mirror to main.py globals so the chat loop's free-variable refs still
-    # resolve.  Imported lazily to avoid a cycle at module load.
+    # resolve.  Grab the already-loaded module from sys.modules instead of a
+    # bare `import main`, which would re-execute main.py (it's running as
+    # __main__ under uvicorn) and crash the server with duplicate bindings.
     try:
-        import main as _main
-        _main.ollama_client = new_client
-        _main.vision_client = svc.vision_client
+        import sys
+        _main = sys.modules.get("__main__") or sys.modules.get("main")
+        if _main is not None:
+            _main.ollama_client = new_client
+            _main.vision_client = svc.vision_client
     except Exception as e:
         logger.debug("swallowed: could not mirror to main globals: %s", e)
 

@@ -1,5 +1,7 @@
 fastapi>=0.115.0
-uvicorn>=0.30.0
+# [standard] extras pull in websockets, httptools, watchfiles, etc.
+# Without websockets the FastAPI WebSocket endpoints crash on startup.
+uvicorn[standard]>=0.30.0
 requests>=2.31.0
 beautifulsoup4>=4.12.2
 # faiss-cpu 1.8.0 is built against numpy 1.x and breaks on numpy 2
