@@ -182,7 +182,7 @@ class VaultBotPlugin extends Plugin {
 		// cooking" — the backend writes session logs, conversation state, and
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
-		const required = ['vaultbot_backend/', 'vaultbot_index/'];
+		const required = ['vaultbot_stuff/vaultbot_backend/', 'vaultbot_venv/', 'vaultbot_stuff/vaultbot_backend/vaultbot_index/'];
 		try {
 			const current = this.app.vault.getConfig('userIgnoreFilters') || [];
 			let changed = false;
@@ -757,7 +757,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
-			const mcpPy = path.join(vaultRoot, 'vaultbot_backend', 'mcp_server.py');
+			const mcpPy = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'mcp_server.py');
 			const fs = require('fs');
 			const mcpPythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(mcpPythonExe) || !fs.existsSync(mcpPy)) {
@@ -809,7 +809,7 @@ class VaultBotPlugin extends Plugin {
 		} else {
 			vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 		}
-		const pidFile = path.join(vaultRoot, 'vaultbot_backend', 'vaultbot.pid');
+		const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
 
 		// 1) Ask the backend to self-terminate. Best-effort, short timeout.
 		try {
@@ -923,7 +923,7 @@ class VaultBotPlugin extends Plugin {
 	// live vault, WITHOUT touching any user state.
 	//
 	// What gets updated (code only):
-	//   - vaultbot_backend/**/*.py            (the backend engine)
+	//   - vaultbot_stuff/vaultbot_backend/**/*.py  (the backend engine)
 	//   - .obsidian/plugins/vaultbot/main.js   (this plugin file)
 	//   - .obsidian/plugins/vaultbot/manifest.json
 	//   - .obsidian/plugins/vaultbot/styles.css
@@ -972,7 +972,7 @@ class VaultBotPlugin extends Plugin {
 		// first; if GitHub 404s, retry as a tag so users can pin a release.
 
 		const pluginDir = path.join(vaultRoot, '.obsidian', 'plugins', 'vaultbot');
-		const backendDir = path.join(vaultRoot, 'vaultbot_backend');
+		const backendDir = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend');
 		const dataJsonPath = path.join(pluginDir, 'data.json');
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vaultbot-update-'));
 		const stagingDir = path.join(tmpDir, 'staging');
@@ -1025,29 +1025,29 @@ class VaultBotPlugin extends Plugin {
 				'-xzf', tarballPath,
 				'-C', stagingDir,
 				'--exclude=*/.obsidian/plugins/vaultbot/data.json',
-				'--exclude=*/vaultbot_backend/*.log',
-				'--exclude=*/vaultbot_backend/*_log.json',
-				'--exclude=*/vaultbot_backend/calibration_log.json',
-				'--exclude=*/vaultbot_backend/claim_verification_log.json',
-				'--exclude=*/vaultbot_backend/consolidation_log.json',
-				'--exclude=*/vaultbot_backend/embedding_drift.json',
-				'--exclude=*/vaultbot_backend/procedure_failure_log.json',
-				'--exclude=*/vaultbot_backend/rag_eval_log.json',
-				'--exclude=*/vaultbot_backend/touch_counts.json',
-				'--exclude=*/vaultbot_backend/vaultbot.pid',
-				'--exclude=*/vaultbot_backend/sessions',
-				'--exclude=*/vaultbot_backend/sessions/*',
-				'--exclude=*/vaultbot_backend/checkpoints',
-				'--exclude=*/vaultbot_backend/checkpoints/*',
-				'--exclude=*/vaultbot_backend/vaultbot_index',
-				'--exclude=*/vaultbot_backend/vaultbot_index/*',
-				'--exclude=*/vaultbot_backend/trash',
-				'--exclude=*/vaultbot_backend/trash/*',
-				'--exclude=*/vaultbot_backend/__pycache__',
-				'--exclude=*/vaultbot_backend/__pycache__/*',
-				'--exclude=*/vaultbot_backend/*/__pycache__',
-				'--exclude=*/vaultbot_backend/*/__pycache__/*',
-				'--exclude=*/vaultbot_backend/**/*.pyc'
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/*.log',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/*_log.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/calibration_log.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/claim_verification_log.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/consolidation_log.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/embedding_drift.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/procedure_failure_log.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/rag_eval_log.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/touch_counts.json',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/vaultbot.pid',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/sessions',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/sessions/*',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/checkpoints',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/checkpoints/*',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/vaultbot_index',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/vaultbot_index/*',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/trash',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/trash/*',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/__pycache__',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/__pycache__/*',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/*/__pycache__',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/*/__pycache__/*',
+				'--exclude=*/vaultbot_stuff/vaultbot_backend/**/*.pyc'
 			];
 			execFileSync('tar.exe', extractArgs, { stdio: 'ignore' });
 
@@ -1064,8 +1064,8 @@ class VaultBotPlugin extends Plugin {
 			// tracked files rather than nuking the whole directory, so any
 			// untracked local state files (sessions/, logs, models, etc.) that
 			// the exclusions left untouched in the LIVE vault are preserved.
-			const srcBackend = path.join(archiveRoot, 'vaultbot_backend');
-			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot_backend/ folder.');
+			const srcBackend = path.join(archiveRoot, 'vaultbot_stuff', 'vaultbot_backend');
+			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot_stuff/vaultbot_backend/ folder.');
 			await copyCodeTree(srcBackend, backendDir);
 
 			notify(`Applying plugin files…`);
@@ -1271,8 +1271,8 @@ class VaultBotPlugin extends Plugin {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
 
-			const mainPy = path.join(vaultRoot, 'vaultbot_backend', 'main.py');
-			const logFile = path.join(vaultRoot, 'vaultbot_backend', 'backend.log');
+			const mainPy = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'main.py');
+			const logFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'backend.log');
 
 			const fs = require('fs');
 			const pythonExe = this._venvPythonExe(vaultRoot);
@@ -1298,7 +1298,7 @@ class VaultBotPlugin extends Plugin {
 			openedHandles = [fd];
 		} catch (e) {
 			const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-			const altLog = path.join(vaultRoot, 'vaultbot_backend', `backend-${stamp}.log`);
+			const altLog = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', `backend-${stamp}.log`);
 			try {
 				const fd = fs.openSync(altLog, 'a');
 				out = fd;
@@ -1352,7 +1352,7 @@ class VaultBotPlugin extends Plugin {
 				if (await this.isBackendRunning()) {
 					running = true;
 				} else {
-					throw new Error('Backend process started but did not respond in time. Check vaultbot_backend/backend.log.');
+					throw new Error('Backend process started but did not respond in time. Check vaultbot_stuff/vaultbot_backend/backend.log.');
 				}
 			}
 			new Notice('VaultBot backend is ready.');
@@ -1800,7 +1800,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 		// ── Directives panel ────────────────────────────────────────────
 		// High-leverage behavioral toggles that map to writing/removing
-		// directive .md files in 00-Identity/ via the Obsidian vault API.
+		// directive .md files at the vault root via the Obsidian vault API.
 		// A non-tech user can flip "Autonomy on/off" or "Keep replies short"
 		// without navigating folders or editing markdown — the panel writes
 		// the file (and the directive takes effect on the next chat turn
@@ -1810,25 +1810,25 @@ class VaultBotSettingTab extends PluginSettingTab {
 		dirDesc.setText(
 			'These toggles shape how VaultBot behaves. Each one writes a ' +
 			'short directive note that VaultBot reads on its next turn. ' +
-			'You can also edit the notes directly in 00-Identity/ — the ' +
+			'You can also edit the notes directly at the vault root — the ' +
 			'toggles are just a quick way to turn them on or off.');
 		dirDesc.style.opacity = '0.7';
 		dirDesc.style.fontSize = '0.85em';
 		dirDesc.style.marginBottom = '10px';
 
-		// Each directive: path in 00-Identity/, short title, description,
+		// Each directive: path at vault root, short title, description,
 		// and the content to write when enabled. The content is a concise
 		// version of the baseline template — short enough to be readable
 		// in the settings panel but complete enough to direct the model.
 		const DIRECTIVES = [
-			{path: '00-Identity/Autonomy-Directive.md',
+			{path: 'Autonomy-Directive.md',
 			 title: 'Autonomy',
 			 desc: 'Let VaultBot act on its own — store, organize, research, ' +
 				'and self-improve without asking permission each time. Report after.',
 			 on: '# Autonomy Directive\n\nAct on your own. Store, organize, ' +
 				'research, and self-improve without asking permission each ' +
 				'time. Report what you did after the fact.\n'},
-			{path: '00-Identity/Vault-Knowledge-Only-Directive.md',
+			{path: 'Vault-Knowledge-Only-Directive.md',
 			 title: 'Vault knowledge only',
 			 desc: 'The vault is the ONLY knowledge source. Never reference ' +
 				'training data. If the vault has nothing, say "I don\'t know."',
@@ -1836,14 +1836,14 @@ class VaultBotSettingTab extends PluginSettingTab {
 				'knowledge source. Never reference training data. If the ' +
 				'vault has nothing on a topic, say "I don\'t know" and offer ' +
 				'to research it.\n'},
-			{path: '00-Identity/IDK-Fallback-Directive.md',
+			{path: 'IDK-Fallback-Directive.md',
 			 title: 'Honest "I don\'t know"',
 			 desc: 'When the vault is empty AND research is down, say ' +
 				'"I don\'t know." No hedging, no training-data leakage.',
 			 on: '# IDK Fallback Directive\n\nWhen the vault has nothing on ' +
 				'a topic AND research is unavailable, say "I don\'t know." ' +
 				'No hedging, no guessing from training data, no filler.\n'},
-			{path: '00-Identity/No-Wikipedia-Directive.md',
+			{path: 'No-Wikipedia-Directive.md',
 			 title: 'No Wikipedia',
 			 desc: 'Never cite Wikipedia as a source. Use primary sources, ' +
 				'academic papers, or specialist forums instead.',
@@ -1851,7 +1851,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				'source. Prefer primary sources, academic papers, and ' +
 				'specialist forums. If the only available source is ' +
 				'Wikipedia, say so and offer to find better sources.\n'},
-			{path: '00-Identity/Sean-Communication-Preferences.md',
+			{path: 'Communication-Preferences.md',
 			 title: 'Keep replies short',
 			 desc: 'Bottom line up front. Bullet points over paragraphs. ' +
 				'Report accomplishments, not regurgitation.',
@@ -2704,7 +2704,7 @@ class VaultBotSidebarView extends ItemView {
 		//      open_download_ollama / open_download_python / restore_backup).
 		//   4. Offers "Copy for support" that copies a REDACTED bundle
 		//      (category + user_message + timestamp) — never raw_for_log,
-		//      never paths, never keys — so Sean can paste it to a helper.
+		//      never paths, never keys — so the operator can paste it to a helper.
 		// This is the frontend half of the classify-at-the-edge contract:
 		// the backend translates exceptions into Diagnoses; the frontend
 		// renders Diagnoses. Raw strings never cross the boundary.

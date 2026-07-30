@@ -36,89 +36,70 @@ __pycache__/
 # VaultBot runtime state (regenerated on first run)
 # These are YOUR vault's state - another user's VaultBot makes its own.
 # ─────────────────────────────────────────────────────────────────────
-vaultbot_backend/identity/
-vaultbot_backend/sessions/
-vaultbot_backend/checkpoints/
-vaultbot_backend/vaultbot_index/
-vaultbot_backend/vaultbot/
-vaultbot_backend/vaultbot.pid
-vaultbot_backend/chat_loop_checkpoint.json
-vaultbot_backend/curriculum_state.json
-vaultbot_backend/touch_counts.json
-vaultbot_backend/embedding_drift.json
-vaultbot_backend/conversation_state.json
-vaultbot_backend/procedure_failure_log.json
-vaultbot_backend/calibration_log.json
-vaultbot_backend/claim_verification_log.json
-vaultbot_backend/consolidation_log.json
-vaultbot_backend/rag_eval_log.json
-vaultbot_backend/backend.log
-vaultbot_backend/backend.err
-vaultbot_backend/backend_stdout.log
-vaultbot_backend/backend_stderr.log
-vaultbot_backend/backend_live.log
-vaultbot_backend/pythonw_stdout.log
-vaultbot_backend/pythonw_stderr.log
-vaultbot_backend/boot.log
-vaultbot_backend/maintenance.log
-vaultbot_backend/test_err.log
-vaultbot_backend/test_out.log
-vaultbot_backend/*.bak
-vaultbot_backend/*.bak.*
-vaultbot_backend/custom_tools/*.bak
-vaultbot_backend/_test_*.py
-vaultbot_backend/trash/
-vaultbot_backend/partials/
-vaultbot_backend/*_log.json
+vaultbot_stuff/vaultbot_backend/identity/
+vaultbot_stuff/vaultbot_backend/sessions/
+vaultbot_stuff/vaultbot_backend/checkpoints/
+vaultbot_stuff/vaultbot_backend/vaultbot_index/
+vaultbot_stuff/vaultbot_backend/vaultbot/
+vaultbot_stuff/vaultbot_backend/vaultbot.pid
+vaultbot_stuff/vaultbot_backend/chat_loop_checkpoint.json
+vaultbot_stuff/vaultbot_backend/curriculum_state.json
+vaultbot_stuff/vaultbot_backend/touch_counts.json
+vaultbot_stuff/vaultbot_backend/embedding_drift.json
+vaultbot_stuff/vaultbot_backend/conversation_state.json
+vaultbot_stuff/vaultbot_backend/procedure_failure_log.json
+vaultbot_stuff/vaultbot_backend/calibration_log.json
+vaultbot_stuff/vaultbot_backend/claim_verification_log.json
+vaultbot_stuff/vaultbot_backend/consolidation_log.json
+vaultbot_stuff/vaultbot_backend/rag_eval_log.json
+vaultbot_stuff/vaultbot_backend/backend.log
+vaultbot_stuff/vaultbot_backend/backend.err
+vaultbot_stuff/vaultbot_backend/backend_stdout.log
+vaultbot_stuff/vaultbot_backend/backend_stderr.log
+vaultbot_stuff/vaultbot_backend/backend_live.log
+vaultbot_stuff/vaultbot_backend/pythonw_stdout.log
+vaultbot_stuff/vaultbot_backend/pythonw_stderr.log
+vaultbot_stuff/vaultbot_backend/boot.log
+vaultbot_stuff/vaultbot_backend/maintenance.log
+vaultbot_stuff/vaultbot_backend/test_err.log
+vaultbot_stuff/vaultbot_backend/test_out.log
+vaultbot_stuff/vaultbot_backend/*.bak
+vaultbot_stuff/vaultbot_backend/*.bak.*
+vaultbot_stuff/vaultbot_backend/custom_tools/*.bak
+vaultbot_stuff/vaultbot_backend/_test_*.py
+vaultbot_stuff/vaultbot_backend/trash/
+vaultbot_stuff/vaultbot_backend/partials/
+vaultbot_stuff/vaultbot_backend/*_log.json
 
 # ─────────────────────────────────────────────────────────────────────
 # The vault itself - the USER'S mind
 # The vault is personal knowledge, chat history, directives, and notes.
 # A baseline vault ships empty; each user grows their own.
-# These hierarchical folders are where VaultBot writes its output:
+# These hierarchical folders (now under vaultbot_stuff/) are where VaultBot writes its output:
 # ─────────────────────────────────────────────────────────────────────
-00-Identity/Auto-Resume-Directive.md
-00-Identity/Autonomy-Directive.md
-00-Identity/IDK-Fallback-Directive.md
-00-Identity/No-Wikipedia-Directive.md
-00-Identity/Vault-Knowledge-Only-Directive.md
-00-Identity/Fractal-Entropy-Principle.md
-00-Identity/Sean-Communication-Preferences.md
-00-Identity/Self-Edit-Verification-Directive.md
 
-06-Playbooks/
-07-Research/
-08-Biology/
-08-Chat/
-09-Textbooks/
 
-# Old flat-layout vault contents (pre-hierarchical reorg)
-vaultbot/chat/
-vaultbot/research/
-vaultbot/textbooks/
-vaultbot/*.md
-vaultbot/maintenance.log
 
 # Hierarchical-layout personal vault content (post-reorg)
 # These are the USER'S mind: chat logs, personal knowledge, personal notes.
-# System/ ships framework defaults (filtered below) but the rest is personal.
-Memory/
-Knowledge/
+# vaultbot_stuff/System/ ships framework defaults (filtered below) but the rest is personal.
+vaultbot_stuff/Memory/
+vaultbot_stuff/Knowledge/
 User/
 
 # Personal files inside the shippable System/ framework tree
-System/Identity/Sean-Communication-Preferences.md
-System/Identity/Auto-Resume-Directive.md
-System/Identity/Autonomy-Directive.md
-System/Identity/IDK-Fallback-Directive.md
-System/Identity/No-Wikipedia-Directive.md
-System/Identity/Vault-Knowledge-Only-Directive.md
-System/Identity/Fractal-Entropy-Principle.md
-System/Identity/Self-Edit-Verification-Directive.md
-System/Patterns/Cross-Session-Patterns-*.md
-System/Quality-Gates/Calibration-via-Operator-Feedback.md
-System/Architecture/Small-Model-Path-to-AGI.md
-System/Architecture/Vault-Longevity-Architecture.md
+vaultbot_stuff/System/Identity/Sean-Communication-Preferences.md
+vaultbot_stuff/System/Identity/Auto-Resume-Directive.md
+vaultbot_stuff/System/Identity/Autonomy-Directive.md
+vaultbot_stuff/System/Identity/IDK-Fallback-Directive.md
+vaultbot_stuff/System/Identity/No-Wikipedia-Directive.md
+vaultbot_stuff/System/Identity/Vault-Knowledge-Only-Directive.md
+vaultbot_stuff/System/Identity/Fractal-Entropy-Principle.md
+vaultbot_stuff/System/Identity/Self-Edit-Verification-Directive.md
+vaultbot_stuff/System/Patterns/Cross-Session-Patterns-*.md
+vaultbot_stuff/System/Quality-Gates/Calibration-via-Operator-Feedback.md
+vaultbot_stuff/System/Architecture/Small-Model-Path-to-AGI.md
+vaultbot_stuff/System/Architecture/Vault-Longevity-Architecture.md
 
 # Personal root directives + notes (operator relationship with their bot)
 2026-*.md
@@ -145,7 +126,7 @@ Research-Engine-Robustness-Requirement.md
 # ─────────────────────────────────────────────────────────────────────
 # Learning materials (user-supplied PDFs)
 # ─────────────────────────────────────────────────────────────────────
-learningMaterial/
+vaultbot_stuff/learningMaterial/
 
 # ─────────────────────────────────────────────────────────────────────
 # Obsidian config (user local workspace settings)
@@ -173,3 +154,7 @@ desktop.ini
 # Stray boot/test logs
 # ─────────────────────────────────────────────────────────────────────
 boot_*.log
+
+# MCP client config (generated dynamically by plugin on startup)
+.obsidian/plugins/vaultbot/mcp.json
+.vscode/mcp.json
