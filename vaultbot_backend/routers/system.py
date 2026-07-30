@@ -14,7 +14,7 @@ from typing import Annotated, Any
 
 from app_state import get_services
 from diagnostics import diagnose_from_message
-from error_types import Diagnosis
+from error_types import Diagnosis, ProblemCategory, Severity, make_diagnosis
 from fastapi import APIRouter, Depends, Request
 from services import Services
 from supervision import generate_nssm_install, generate_nssm_uninstall
@@ -203,6 +203,40 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
         problems.append(diagnose_from_message(
             f"faiss error: {e}",
         ))
+
+    # 5) LLM backend misconfigured? If the user set LLM_BACKEND=openai but
+    #    didn't provide an API key/model, the backend fell back to Ollama
+    #    at startup (so it always starts). Surface this so the user knows
+    #    their cloud model isn't being used and can fix .env. This is the
+    #    "backend starts but chat uses the wrong model" silent failure.
+    try:
+        import os as _os
+        _configured = (_os.getenv("LLM_BACKEND") or "").strip().lower()
+        _api_key = (_os.getenv("LLM_API_KEY") or "").strip()
+        _model = (_os.getenv("LLM_MODEL") or "").strip()
+        _actual_url = getattr(svc.ollama_client, "base_url", "") or ""
+        # If configured for openai but the client is actually Ollama
+        # (base_url points at localhost:11434), the fallback fired.
+        if _configured == "openai" and "11434" in _actual_url:
+            problems.append(make_diagnosis(
+                ProblemCategory.CONFIG_CONFLICT,
+                user_message=(
+                    "You set LLM_BACKEND=openai in .env but didn't provide "
+                    "an API key or model. VaultBot fell back to local Ollama "
+                    "so it could still start. Add your LLM_API_KEY and "
+                    "LLM_MODEL to .env (or set LLM_BACKEND=ollama to stop "
+                    "this message)."
+                ),
+                remedy_hint=(
+                    "Edit .env: set LLM_API_KEY=sk-... and "
+                    "LLM_MODEL=gpt-4o-mini (or your provider's model id). "
+                    "Then click Restart."
+                ),
+                action="open_settings",
+                severity=Severity.INFO,
+            ))
+    except Exception:
+        pass
 
     return problems
 

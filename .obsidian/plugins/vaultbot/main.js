@@ -14,7 +14,7 @@ class VaultBotPlugin extends Plugin {
 			autoStartBackend: true,
 			autoStartMcpServer: true,
 			selectedModel: '',
-			researchBackend: 'tavily',
+			researchBackend: 'freesearch',
 			tavilyApiKey: ''
 		};
 		this.backendStarting = false;

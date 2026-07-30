@@ -334,7 +334,7 @@ class GraphOpRegistry:
                 return {"error": "missing or invalid 'topic'"}
             min_sources = int(args.get("min_sources", 3))
 
-            report = self.research_engine.research(topic)
+            report = self.research_engine.research(topic, llm_client=self.ollama_client)
             source_count = report.get("source_count", 0)
             if source_count < min_sources:
                 return {

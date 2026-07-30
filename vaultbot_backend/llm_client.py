@@ -455,6 +455,17 @@ class OpenAICompatibleClient(LLMClient):
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
+def _make_ollama_client(session_logger: Any = None) -> LLMClient:
+    """Build the default Ollama-backed client. Never raises."""
+    from ollama_client import OllamaClient
+    return OllamaClient(
+        base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+        llm_model=os.getenv("OLLAMA_LLM_MODEL", ""),
+        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+        session_logger=session_logger,
+    )
+
+
 def get_llm_client(session_logger: Any = None) -> LLMClient:
     """Build the synthesis LLM client from .env.
 
@@ -462,6 +473,12 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
       1. LLM_BACKEND explicitly set -> honor it ("ollama" | "openai").
       2. Legacy: OLLAMA_LLM_MODEL set + no LLM_BACKEND -> Ollama (back-compat).
       3. Default -> Ollama (free, zero-config, the original behavior).
+
+    **Never raises.** A fresh clone with incomplete .env (e.g.
+    ``LLM_BACKEND=openai`` but no ``LLM_API_KEY``) silently falls back to
+    Ollama so the backend ALWAYS starts. The user sees a clear message in
+    the chat UI / Diagnose panel instead of a silent crash swallowed by
+    ``pythonw.exe`` (which has no console to print the traceback to).
     """
     backend = (os.getenv("LLM_BACKEND") or "").strip().lower()
 
@@ -469,16 +486,30 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
         base_url = (os.getenv("LLM_BASE_URL") or "https://api.openai.com").strip()
         api_key = (os.getenv("LLM_API_KEY") or "").strip()
         model = (os.getenv("LLM_MODEL") or "").strip()
-        if not api_key:
-            raise RuntimeError(
-                "LLM_BACKEND=openai but LLM_API_KEY is not set. "
-                "Add LLM_API_KEY=sk-... to your .env (or pick LLM_BACKEND=ollama)."
+        if not api_key or not model:
+            # Graceful degradation: fall back to Ollama instead of crashing.
+            # The backend must always start — a RuntimeError here is silent
+            # (pythonw swallows stderr) and the user just sees "backend won't
+            # start" with no clue why. Log the fallback so it's discoverable
+            # via Diagnose, then use Ollama (which is already required for
+            # embeddings anyway).
+            import logging
+            logging.getLogger(__name__).warning(
+                "LLM_BACKEND=openai but %s is missing — falling back to Ollama. "
+                "Set %s in .env to use a cloud model.",
+                "LLM_API_KEY" if not api_key else "LLM_MODEL",
+                "LLM_API_KEY=sk-..." if not api_key else "LLM_MODEL=<model-id>",
             )
-        if not model:
-            raise RuntimeError(
-                "LLM_BACKEND=openai but LLM_MODEL is not set. "
-                "Add LLM_MODEL=gpt-4o-mini (or your endpoint's model id) to .env."
-            )
+            if session_logger is not None:
+                try:
+                    session_logger.log("llm_backend_fallback", {
+                        "reason": "missing_api_key" if not api_key else "missing_model",
+                        "configured_backend": "openai",
+                        "fallback": "ollama",
+                    })
+                except Exception:
+                    pass
+            return _make_ollama_client(session_logger)
         return OpenAICompatibleClient(
             base_url=base_url, api_key=api_key, llm_model=model,
             session_logger=session_logger,
@@ -488,13 +519,7 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
     # already implements the LLMClient surface (chat, list_models, set_model,
     # is_running). Imported lazily so an OpenAI-only install never loads the
     # Ollama requests surface unnecessarily.
-    from ollama_client import OllamaClient
-    return OllamaClient(
-        base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-        llm_model=os.getenv("OLLAMA_LLM_MODEL", ""),
-        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-        session_logger=session_logger,
-    )
+    return _make_ollama_client(session_logger)
 
 
 def get_vision_client(session_logger: Any = None) -> LLMClient | None:

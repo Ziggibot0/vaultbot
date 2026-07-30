@@ -162,28 +162,86 @@ fi
 
 # ── 6. Pull embedding model via Ollama ────────────────────────────────────
 # Only the lightweight embedding model (nomic-embed-text, ~270 MB) is
-# auto-pulled. The chat/synthesis LLM is NOT auto-pulled — it can be
-# 5-20+ GB and many laptops can't handle that. The user provides a chat
-# model via a cloud API (LLM_BACKEND=openai + LLM_API_KEY in .env) or
-# manually runs `ollama pull <model>` if they want local inference.
+# auto-pulled. The chat/synthesis LLM is handled in step 6b based on the
+# user's choice (local Ollama vs cloud API).
 if step_done "models_pulled"; then
     echo "  [!]  Embedding model already downloaded -- skipping."
 else
     echo ">>> Downloading embedding model (~270 MB, one-time only)..."
-    echo "  The chat LLM is NOT auto-downloaded. See .env.example for cloud API setup."
     ollama pull nomic-embed-text
     echo "  [OK] Embedding model ready"
     mark_step_done "models_pulled"
 fi
 
-# ── 7. Write .env with the user's name ──────────────────────────────────────
+# ── 6b. Ask: local chat model or cloud API? ────────────────────────────────
+# The embedding model (above) is mandatory and always local. The CHAT
+# model is the user's choice: a local Ollama model (free, private, heavy)
+# or a cloud API key (zero local compute, recommended for laptops).
+CHAT_BACKEND="ollama"  # default
+CHAT_MODEL=""
+if ! step_done "chat_backend_chosen"; then
+    echo ""
+    echo "  VaultBot needs a chat model to talk to you."
+    echo "  Two options:"
+    echo "    1. Local (free, private, uses Ollama — already installed)"
+    echo "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM."
+    echo "    2. Cloud API (zero local compute, recommended for laptops)"
+    echo "       You provide an API key later (OpenAI, OpenRouter, etc.)."
+    echo ""
+    read -p "  Pick 1 or 2 (default: 1): " CHOICE
+    if [ "$CHOICE" = "2" ]; then
+        CHAT_BACKEND="openai"
+        echo ""
+        echo "  You'll need an API key from OpenAI, OpenRouter, or any"
+        echo "  OpenAI-compatible provider. Add it to .env after setup:"
+        echo "    LLM_API_KEY=sk-..."
+        echo "    LLM_MODEL=gpt-4o-mini"
+        echo "  (Or set LLM_BACKEND=ollama in .env to use local instead.)"
+    else
+        CHAT_BACKEND="ollama"
+        echo ""
+        echo "  Which model? Popular choices:"
+        echo "    qwen3:latest       (4-8B, good balance, ~4 GB)"
+        echo "    llama3.2:latest    (3B, lightweight, ~2 GB)"
+        echo "    qwen3.6:latest      (larger, best quality, ~8 GB)"
+        echo "  Type a model name or press Enter for qwen3:latest"
+        read -p "  Model name: " CHAT_MODEL
+        CHAT_MODEL="${CHAT_MODEL:-qwen3:latest}"
+    fi
+    mark_step_done "chat_backend_chosen"
+fi
+
+# ── 6c. Pull the chat model if local ──────────────────────────────────────
+if [ "$CHAT_BACKEND" = "ollama" ] && [ -n "$CHAT_MODEL" ] && ! step_done "chat_model_pulled"; then
+    echo ">>> Downloading chat model: $CHAT_MODEL (this can take a while)..."
+    echo "  Grab a coffee. Large models take 5-30 min depending on your connection."
+    if ollama pull "$CHAT_MODEL"; then
+        echo "  [OK] Chat model ready: $CHAT_MODEL"
+    else
+        echo "  [!]  Chat model pull failed. You can run 'ollama pull $CHAT_MODEL' manually later."
+        echo "  VaultBot will still start — you'll just need to pull a model before chatting."
+    fi
+    mark_step_done "chat_model_pulled"
+fi
+
+# ── 7. Write .env with the user's name + LLM config ────────────────────────
 ENV_EXAMPLE="$VAULT_PATH/.env.example"
 ENV_FILE="$VAULT_PATH/.env"
 if step_done "env_written"; then
     echo "  [!]  Config already written -- skipping."
 elif [ -f "$ENV_EXAMPLE" ]; then
     sed "s/^VAULTBOT_OWNER=.*/VAULTBOT_OWNER=$OWNER_NAME/" "$ENV_EXAMPLE" > "$ENV_FILE"
+    sed -i.bak "s/^LLM_BACKEND=.*/LLM_BACKEND=$CHAT_BACKEND/" "$ENV_FILE" 2>/dev/null || \
+        sed "s/^LLM_BACKEND=.*/LLM_BACKEND=$CHAT_BACKEND/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+    if [ "$CHAT_BACKEND" = "ollama" ] && [ -n "$CHAT_MODEL" ]; then
+        sed -i.bak "s/^OLLAMA_LLM_MODEL=.*/OLLAMA_LLM_MODEL=$CHAT_MODEL/" "$ENV_FILE" 2>/dev/null || \
+            sed "s/^OLLAMA_LLM_MODEL=.*/OLLAMA_LLM_MODEL=$CHAT_MODEL/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+    fi
+    rm -f "${ENV_FILE}.bak" 2>/dev/null
     echo "  [OK] Configured -- VaultBot will call you $OWNER_NAME"
+    if [ "$CHAT_BACKEND" = "openai" ]; then
+        echo "  Don't forget: add your LLM_API_KEY to .env to use your cloud model."
+    fi
     mark_step_done "env_written"
 else
     echo "  [!]  .env.example not found -- skipping .env creation"

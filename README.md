@@ -83,14 +83,15 @@ curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
 
 The installer asks for your name, downloads the VaultBot files, creates a
 Python environment, installs all dependencies, pulls the lightweight embedding
-model (~270 MB), writes your config, and opens Obsidian for you — all
-automatically. It takes 10–20 minutes the first time (mostly downloads). You
-only do this once.
+model (~270 MB), asks whether you want a local or cloud chat model (and
+pulls a local model for you if you pick local), writes your config, and
+opens Obsidian for you — all automatically. It takes 10–30 minutes the
+first time (mostly downloads). You only do this once.
 
-The installer does **NOT** auto-download a chat LLM — those can be 5–20+ GB
-and overwhelm a laptop. Instead, you provide a chat model via a cloud API
-(recommended, zero local compute) or manually pull a local model later.
-See the [Configuration](#configuration) section below.
+If you choose the cloud API path, you'll add your API key to `.env` after
+setup (the installer tells you exactly what to write). If you choose
+local, the installer pulls the model for you. Either way, the backend
+starts automatically when you open Obsidian — no terminal needed.
 
 If Python or Ollama aren't installed yet, the installer tells you and
 opens the download page for you. Install them, then run the command again.
@@ -150,26 +151,29 @@ close and reopen Obsidian) for changes to take effect.
 | Variable | What it does | Default |
 |----------|-------------|---------|
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
-| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; you must manually `ollama pull` it) | `qwen3.6:latest` |
+| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; the installer can pull it for you, or manually `ollama pull` it) | `qwen3.6:latest` |
 | `OLLAMA_EMBED_MODEL` | The embedding model (auto-pulled by the installer, ~270 MB) | `nomic-embed-text` |
-| `LLM_BACKEND` | `ollama` (local, free, needs manual model pull) or `openai` (cloud, any OpenAI-compatible API — **recommended for laptops**) | `openai` |
-| `LLM_API_KEY` | Cloud API key (leave blank for local-only) | (empty) |
+| `LLM_BACKEND` | `ollama` (local, free, **default — zero-config**) or `openai` (cloud, any OpenAI-compatible API — recommended for laptops) | `ollama` |
+| `LLM_API_KEY` | Cloud API key (leave blank for local-only; if `LLM_BACKEND=openai` but this is empty, the backend falls back to Ollama so it still starts) | (empty) |
 | `LLM_BASE_URL` | Cloud API base URL (OpenAI, OpenRouter, LM Studio, vLLM, etc.) | `https://api.openai.com` |
 | `LLM_MODEL` | Cloud model name (only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
 | `VAULTBOT_RESEARCH_BACKEND` | `freesearch` (keyless) or `tavily` (API key) | `freesearch` |
 | `TAVILY_API_KEY` | Tavily search API key (only if using `tavily`) | (empty) |
 | `SEARXNG_PORT` | Port for the optional self-hosted SearXNG container | `8080` |
 
-> **Want to use a cloud model (like GPT-4o) instead of local?** That's the
-default now — set `LLM_API_KEY=your-key` and `LLM_MODEL=gpt-4o-mini` (or any
-OpenAI/OpenRouter model). Embeddings stay local on Ollama either way. You
-can also switch between cloud and local back and forth live from the plugin
-settings panel without editing `.env` — the changes persist for you.
+> **Want to use a cloud model (like GPT-4o) instead of local?** Set
+> `LLM_BACKEND=openai`, `LLM_API_KEY=your-key`, and `LLM_MODEL=gpt-4o-mini`
+> (or any OpenAI/OpenRouter model) in `.env`. Embeddings stay local on
+> Ollama either way. You can also switch between cloud and local back and
+> forth live from the plugin settings panel without editing `.env` — the
+> changes persist for you. If you set `LLM_BACKEND=openai` but forget the
+> API key, the backend silently falls back to Ollama so it always starts —
+> you'll see a note in the Diagnose panel.
 >
-> **Want to run a local LLM instead?** Set `LLM_BACKEND=ollama` in `.env`,
-then manually pull a model: `ollama pull qwen3:latest` (or any model you
-like). The installer does NOT auto-pull chat models — only the lightweight
-embedding model.
+> **Want to run a local LLM instead?** That's the default — just `ollama pull
+> qwen3:latest` (or any model you like). The installer can pull it for you
+> during setup, or you can pull it manually later. Embeddings always use
+> Ollama regardless.
 
 ---
 

@@ -321,7 +321,7 @@ class AutonomousResearcher:
         """Research one gap and persist a linked note. Returns note path."""
         topic = gap["topic"]
         try:
-            report = self.engine.research(topic)
+            report = self.engine.research(topic, llm_client=self.ollama_client)
         except Exception as e:
             self._log("autonomous_research_failed",
                       {"topic": topic, "error": str(e)})

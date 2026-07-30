@@ -179,21 +179,76 @@ if (Test-StepDone "deps_installed") {
 
 # ── 6. Pull embedding model via Ollama ─────────────────────────────────────
 # Only the lightweight embedding model (nomic-embed-text, ~270 MB) is
-# auto-pulled. The chat/synthesis LLM is NOT auto-pulled — it can be
-# 5-20+ GB and many laptops can't handle that. The user provides a chat
-# model via a cloud API (LLM_BACKEND=openai + LLM_API_KEY in .env) or
-# manually runs `ollama pull <model>` if they want local inference.
+# auto-pulled. The chat/synthesis LLM is handled in step 6b based on the
+# user's choice (local Ollama vs cloud API).
 if (Test-StepDone "models_pulled") {
     Write-Warn2 "Embedding model already downloaded -- skipping."
 } else {
     Write-Step "Downloading embedding model (~270 MB, one-time only)..."
-    Write-Host "  The chat LLM is NOT auto-downloaded. See .env.example for cloud API setup." -ForegroundColor DarkGray
     & ollama pull nomic-embed-text
     Write-OK "Embedding model ready"
     Set-StepDone "models_pulled"
 }
 
-# ── 7. Write .env with the user's name ──────────────────────────────────────
+# ── 6b. Ask: local chat model or cloud API? ────────────────────────────────
+# The embedding model (above) is mandatory and always local. The CHAT
+# model is the user's choice: a local Ollama model (free, private, heavy)
+# or a cloud API key (zero local compute, recommended for laptops).
+#
+# We default to local (LLM_BACKEND=ollama) because it's zero-config: the
+# user already has Ollama installed for embeddings. If they choose cloud,
+# we write LLM_BACKEND=openai into .env and they add their key later.
+$chatBackend = "ollama"  # default
+$chatModel   = ""
+if (-not (Test-StepDone "chat_backend_chosen")) {
+    Write-Host ""
+    Write-Host "  VaultBot needs a chat model to talk to you." -ForegroundColor Cyan
+    Write-Host "  Two options:" -ForegroundColor White
+    Write-Host "    1. Local (free, private, uses Ollama — already installed)" -ForegroundColor White
+    Write-Host "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM." -ForegroundColor DarkGray
+    Write-Host "    2. Cloud API (zero local compute, recommended for laptops)" -ForegroundColor White
+    Write-Host "       You provide an API key later (OpenAI, OpenRouter, etc.)." -ForegroundColor DarkGray
+    Write-Host ""
+    $choice = Read-Host "  Pick 1 or 2 (default: 1)"
+    if ($choice -eq "2") {
+        $chatBackend = "openai"
+        Write-Host ""
+        Write-Host "  You'll need an API key from OpenAI, OpenRouter, or any" -ForegroundColor Yellow
+        Write-Host "  OpenAI-compatible provider. Add it to .env after setup:" -ForegroundColor Yellow
+        Write-Host "    LLM_API_KEY=sk-..." -ForegroundColor White
+        Write-Host "    LLM_MODEL=gpt-4o-mini" -ForegroundColor White
+        Write-Host "  (Or set LLM_BACKEND=ollama in .env to use local instead.)" -ForegroundColor DarkGray
+    } else {
+        $chatBackend = "ollama"
+        Write-Host ""
+        Write-Host "  Which model? Popular choices:" -ForegroundColor Cyan
+        Write-Host "    qwen3:latest       (4-8B, good balance, ~4 GB)" -ForegroundColor White
+        Write-Host "    llama3.2:latest    (3B, lightweight, ~2 GB)" -ForegroundColor White
+        Write-Host "    qwen3.6:latest      (larger, best quality, ~8 GB)" -ForegroundColor White
+        Write-Host "  Type a model name or press Enter for qwen3:latest" -ForegroundColor DarkGray
+        $chatModel = Read-Host "  Model name"
+        if ([string]::IsNullOrWhiteSpace($chatModel)) { $chatModel = "qwen3:latest" }
+    }
+    Set-StepDone "chat_backend_chosen"
+} elseif (Test-StepDone "chat_model_pulled") {
+    Write-Warn2 "Chat model choice already made -- skipping."
+}
+
+# ── 6c. Pull the chat model if local ──────────────────────────────────────
+if ($chatBackend -eq "ollama" -and $chatModel -and -not (Test-StepDone "chat_model_pulled")) {
+    Write-Step "Downloading chat model: $chatModel (this can take a while)..."
+    Write-Host "  Grab a coffee. Large models take 5-30 min depending on your connection." -ForegroundColor DarkGray
+    & ollama pull $chatModel
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn2 "Chat model pull failed. You can run 'ollama pull $chatModel' manually later."
+        Write-Host "  VaultBot will still start — you'll just need to pull a model before chatting." -ForegroundColor Yellow
+    } else {
+        Write-OK "Chat model ready: $chatModel"
+    }
+    Set-StepDone "chat_model_pulled"
+}
+
+# ── 7. Write .env with the user's name + LLM config ─────────────────────────
 $envExample = Join-Path $vaultPath ".env.example"
 $envFile    = Join-Path $vaultPath ".env"
 if (Test-StepDone "env_written") {
@@ -201,9 +256,16 @@ if (Test-StepDone "env_written") {
 } elseif (Test-Path $envExample) {
     $content = Get-Content $envExample -Raw
     $content = $content -replace 'VAULTBOT_OWNER=.*', "VAULTBOT_OWNER=$ownerName"
+    $content = $content -replace 'LLM_BACKEND=.*', "LLM_BACKEND=$chatBackend"
+    if ($chatBackend -eq "ollama" -and $chatModel) {
+        $content = $content -replace 'OLLAMA_LLM_MODEL=.*', "OLLAMA_LLM_MODEL=$chatModel"
+    }
     # Write UTF-8 WITHOUT BOM (BOM breaks Python's dotenv parser)
     [System.IO.File]::WriteAllText($envFile, $content, [System.Text.UTF8Encoding]::new($false))
     Write-OK "Configured -- VaultBot will call you $ownerName"
+    if ($chatBackend -eq "openai") {
+        Write-Host "  Don't forget: add your LLM_API_KEY to .env to use your cloud model." -ForegroundColor Yellow
+    }
     Set-StepDone "env_written"
 } else {
     Write-Warn2 ".env.example not found -- skipping .env creation"

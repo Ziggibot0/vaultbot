@@ -749,11 +749,77 @@ class ResearchEngine:
                 gaps.append(f"{base_query} {kt}")
         return gaps[: self.max_follow_ups]
 
-    def research(self, topic: str) -> dict[str, Any]:
+    def _llm_synthesize(self, topic: str, sources: list[dict[str, Any]],
+                        llm_client: Any) -> str | None:
+        """One LLM call to synthesize a research summary from source texts.
+
+        Takes all gathered source texts and asks the LLM to produce a
+        coherent synthesis with inline [sources: ...] citations. The LLM
+        naturally filters irrelevant sources (Docker containers, off-topic
+        papers) because it understands the topic. Returns the synthesis
+        string or None if the LLM fails / produces too-short output.
+        """
+        # Build source texts block, capped to avoid overflowing context.
+        source_blocks = []
+        total_chars = 0
+        max_chars = 12000  # Leave room for the prompt itself
+        for i, src in enumerate(sources):
+            title = src.get("title") or src.get("url", f"Source {i+1}")
+            text = src.get("text", "")[:3000]  # Cap each source
+            block = f"### Source {i+1}: {title}\n{text}"
+            if total_chars + len(block) > max_chars:
+                break
+            source_blocks.append(block)
+            total_chars += len(block)
+
+        sources_text = "\n\n".join(source_blocks)
+
+        system = (
+            "You are a research synthesis assistant. You take multiple source "
+            "texts on a topic and produce a concise, factual synthesis. "
+            "You MUST:\n"
+            "1. Output bullet points, one per key finding.\n"
+            "2. After each finding, cite the source title in [sources: ...] tags.\n"
+            "3. SKIP any source that is not relevant to the topic (e.g. software "
+            "packages, Docker containers, unrelated papers).\n"
+            "4. Focus on the most important, fundamental facts about the topic.\n"
+            "5. Do NOT include filler, meta-commentary, or repetition.\n"
+            "6. Output ONLY the bullet points, nothing else."
+        )
+
+        user = (
+            f"Topic: {topic}\n\n"
+            f"Source texts:\n\n{sources_text}\n\n"
+            f"Synthesize the key findings about '{topic}' from these sources. "
+            f"Output bullet points with [sources: ...] citations. Skip irrelevant sources."
+        )
+
+        try:
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ]
+            result = llm_client.chat(messages, temperature=0.3, stream=False)
+            if isinstance(result, dict):
+                synthesis = result.get("response", "")
+            else:
+                synthesis = ""
+
+            synthesis = (synthesis or "").strip()
+            if len(synthesis) < 100:
+                return None
+
+            return synthesis
+        except Exception:
+            return None
+
+    def research(self, topic: str, llm_client: Any = None) -> dict[str, Any]:
         """Run a full multi-round research dig. Returns a structured report.
 
-        No LLM is used here. The caller may pass the report's `synthesis`
-        to an LLM for a final prose answer if desired.
+        If llm_client is provided, uses one LLM call for the final synthesis
+        instead of the extractive sentence-scoring. The deterministic
+        search/fetch/clean pipeline is unchanged. Falls back to extractive
+        synthesis if the LLM is unavailable or produces too-short output.
         """
         t0 = time.time()
         topic = topic.strip()
@@ -891,6 +957,23 @@ class ResearchEngine:
                 synthesis_lines.append(line)
                 total_len += len(line)
             synthesis = "\n".join(synthesis_lines)
+
+        # --- LLM synthesis (one call, optional) ---------------------------
+        # Replace the extractive synthesis with a single LLM call if a
+        # client is provided. The LLM gets all source texts and produces
+        # a coherent synthesis that naturally filters irrelevant sources
+        # (Docker containers, off-topic papers) because it understands
+        # the topic. Falls back to the extractive synthesis above if the
+        # LLM fails or produces too-short output.
+        if llm_client is not None:
+            self._progress("llm_synthesizing", {"sources": len(all_sources)})
+            llm_synth = self._llm_synthesize(topic, all_sources, llm_client)
+            if llm_synth and len(llm_synth) >= 100:
+                synthesis = llm_synth
+                used = set(range(len([
+                    l for l in llm_synth.split('\n')
+                    if l.strip().startswith('-')
+                ])))
 
         report = {
             "topic": topic,
