@@ -581,3 +581,37 @@ def get_vision_client(session_logger: Any = None) -> LLMClient | None:
         embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         session_logger=session_logger,
     )
+
+
+def get_small_client(session_logger: Any = None) -> LLMClient | None:
+    """Build the OPTIONAL small (local-only) LLM client from .env.
+
+    The small model is the "tiny dance partner" — a very small local Ollama
+    model (e.g. qwen3.5:0.8b) that procedures can delegate to for cheap
+    classification, tagging, routing, and other low-complexity LLM work.
+    It runs on any laptop, costs zero cloud tokens, and lets the cloud
+    model do less over time as more procedures use the small cartridge.
+
+    The small model is ALWAYS local (Ollama). There is no cloud path —
+    the whole point is to save cloud tokens by running locally. If
+    SMALL_MODEL is unset, returns None and callers fall back to the big
+    client (the synthesis client).
+
+    Settings:
+      SMALL_MODEL       : Ollama model name (required; local-only)
+      SMALL_OLLAMA_HOST  : Ollama host if the small model lives on a
+                          different daemon (defaults to OLLAMA_HOST)
+    """
+    model = (os.getenv("SMALL_MODEL") or "").strip()
+    if not model:
+        return None
+
+    from ollama_client import OllamaClient
+    host = (os.getenv("SMALL_OLLAMA_HOST") or os.getenv("OLLAMA_HOST")
+            or "http://localhost:11434")
+    return OllamaClient(
+        base_url=host,
+        llm_model=model,
+        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+        session_logger=session_logger,
+    )

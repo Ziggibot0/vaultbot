@@ -91,6 +91,7 @@ def procedure_surface_line(stem: str, frontmatter: dict[str, Any]) -> str:
     desc = _fm_get(frontmatter, "description")
     when = _fm_get(frontmatter, "when_to_use") or _fm_get(frontmatter, "when")
     status = _fm_get(frontmatter, "status").lower()
+    cartridge = _fm_get(frontmatter, "model_cartridge").lower()
 
     if status in _BLOCKED:
         tag = "⛔ FLAGGED — do not use"
@@ -98,6 +99,11 @@ def procedure_surface_line(stem: str, frontmatter: dict[str, Any]) -> str:
         tag = "verified"
     else:
         tag = "⚠ experimental"
+
+    # Show the model cartridge so the agent knows which model the procedure
+    # will use (big = cloud/main, small = tiny local, vision = vision model).
+    if cartridge and cartridge != "big":
+        tag += f" · model:{cartridge}"
 
     line = f"- {stem}"
     if desc:

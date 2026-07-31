@@ -71,6 +71,16 @@ from rag_eval import RAGEvaluator
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
 load_dotenv(dotenv_path, override=True)
 
+# Resolve VAULT_PATH relative to the vault root (two levels up from this
+# file).  When .env says VAULT_PATH=. and the process cwd is the backend
+# dir, "." resolves to the backend dir — not the vault root.  This makes
+# every vault_path=os.getenv("VAULT_PATH", ".") call site resolve correctly
+# regardless of the process working directory.
+_VAULT_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_vp = os.environ.get("VAULT_PATH", ".")
+if not os.path.isabs(_vp):
+    os.environ["VAULT_PATH"] = os.path.normpath(os.path.join(_VAULT_ROOT, _vp))
+
 # NOTE: The hand-rolled _verify_imports() AST checker that used to live here
 # has been replaced by `ruff check` (F821 — undefined-name) configured in
 # pyproject.toml.  ruff catches the same "forgot the import" bugs but on

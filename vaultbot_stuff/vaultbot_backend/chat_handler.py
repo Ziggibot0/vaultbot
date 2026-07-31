@@ -609,7 +609,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         _empty_answer_retried = False
         _synthesize_requested = False  # empty-answer guard: only retry once per turn
         _incomplete_plan_nudged = False  # 1-shot guard: don't let the model abandon a partial plan
-        _force_synthesize_nudged = False  # 1-shot: when model goes empty with incomplete plan after nudge
+        _force_synthesize_nudged = False  # 1-shot guard: re-enabled — True enables the fallback that kills us  # 1-shot: when model goes empty with incomplete plan after nudge
         # No round cap, no hard char cap — the operator asked for all artificial
         # limits removed. The model has a 1M-token context window; let it work
         # as long as it needs. The compactor is disabled too.
@@ -626,7 +626,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # completing any plan tasks. After N such rounds, inject a nudge.
         _READ_LOOP_STREAK = 0
         _READ_LOOP_NUDGE_SENT = False
-        _MAX_READ_ONLY_STREAK = int(os.getenv("VAULTBOT_MAX_READ_ONLY_STREAK", "8"))
+        _MAX_READ_ONLY_STREAK = 999999  # DISABLED by Remove-All-Stops procedure
         # Track which files have been code_read this turn (for dedup awareness).
         _files_read_this_turn: dict[str, int] = {}  # {file_path: times_read}
 
@@ -701,6 +701,60 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 except Exception as e:
                     session_logger.log("plan_mode_overlay_failed",
                         {"error": str(e)})
+
+            # --- Per-step RAG retrieval (the user's design) --- #
+            # For each step of the plan, RAG shows a new curated recollection
+            # of notes that the vaultbot might not have seen from the user query
+            # alone. Retrieval is evoked based on the vaultbot's intentions (the
+            # active task step), not just what the user said. This surfaces
+            # procedures, exemplars, and relevant knowledge that the original
+            # query didn't retrieve but the current step needs.
+            #
+            # Only fires when: (1) there's an active plan, (2) a task is
+            # in_progress, (3) the active task content changed since last
+            # retrieval (avoids re-retrieving the same thing every round).
+            # The retrieved notes are injected as a compact system message
+            # appended to conversation[0] so the compactor can't shred them.
+            try:
+                _wm_snap = wm.snapshot() if wm.has_plan() else {}
+                _active_task = None
+                for _t in _wm_snap.get("tasks", []):
+                    if _t.get("status") == "in_progress":
+                        _active_task = _t
+                        break
+                if _active_task and _active_task.get("content"):
+                    _step_key = _active_task.get("id", "") + ":" + _active_task["content"][:100]
+                    if _step_key != getattr(websocket, "_last_step_rag_key", ""):
+                        # Build a retrieval query from the goal + active task
+                        _rag_query = (_wm_snap.get("goal", "") + " " + _active_task["content"]).strip()
+                        _step_results = await run_with_heartbeat(
+                            svc, websocket, "retrieving context for step",
+                            svc.fused_retriever.retrieve, _rag_query, 3, 0)
+                        _step_notes = _step_results.get("results", []) if isinstance(_step_results, dict) else (_step_results or [])
+                        if _step_notes:
+                            # Build compact context from the step-retrieved notes
+                            _step_ctx_parts = ["# STEP CONTEXT (retrieved for your current task step — use these)"]
+                            for _r in _step_notes[:3]:
+                                _fp = _r.get("file_path", "")
+                                _stem = Path(_fp).stem if _fp else "?"
+                                _snippet = (_r.get("content") or _r.get("snippet") or "")[:500]
+                                _step_ctx_parts.append(f"## [[{_stem}]]\n{_snippet}")
+                            _step_ctx = "\n\n".join(_step_ctx_parts)
+                            # Append to the system prompt so the model sees it
+                            conversation[0] = {
+                                "role": "system",
+                                "content": conversation[0].get("content", "")
+                                           + "\n\n" + _step_ctx,
+                            }
+                            session_logger.log("step_rag_retrieved", {
+                                "round": round_idx,
+                                "task_id": _active_task.get("id"),
+                                "task_content": _active_task["content"][:80],
+                                "notes_found": len(_step_notes),
+                            })
+                        websocket._last_step_rag_key = _step_key
+            except Exception as e:
+                session_logger.log("step_rag_failed", {"error": str(e)})
 
             # Stream the LLM response for this round.
             round_text = ""
@@ -894,7 +948,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 # that demands a response — the model must always deliver
                 # SOMETHING, even if it's partial findings.
                 if (not round_text.strip() and not _force_synthesize_nudged):
-                    _force_synthesize_nudged = True
+                    _force_synthesize_nudged = True  # 1-shot: mark as nudged so it only fires once
                     session_logger.log("force_synthesize_nudge", {
                         "round": round_idx,
                         "reason": "empty_after_plan_nudge",
@@ -917,7 +971,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 # force-synthesize nudge. Deliver a framework-generated
                 # fallback so the user NEVER sees silence. Summarize what
                 # the model was doing based on the tool history.
-                if not round_text.strip() and _force_synthesize_nudged:
+                if False and not round_text.strip() and _force_synthesize_nudged:  # DISABLED: never generate fake "unable to synthesize" response
                     session_logger.log("empty_answer_fallback", {
                         "round": round_idx,
                         "tool_history_count": len(_turn_tool_history),
@@ -944,7 +998,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         "type": "status",
                         "content": "Synthesizing final answer.",
                     }), websocket, session_logger=session_logger)
-                final_answer = round_text
+                if round_text.strip():
+                    final_answer = round_text
                 break
 
             _round_tool_names = []
@@ -1167,7 +1222,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             else:
                 _READ_LOOP_STREAK = 0  # reset on any non-read-only round
 
-            if (_READ_LOOP_STREAK >= _MAX_READ_ONLY_STREAK
+            if (False and _READ_LOOP_STREAK >= _MAX_READ_ONLY_STREAK
                     and not _READ_LOOP_NUDGE_SENT):
                 _READ_LOOP_NUDGE_SENT = True
                 _snap = wm.snapshot() if wm.has_plan() else {}
@@ -2070,10 +2125,48 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         if not proc:
             return {"error": f"not a procedure note: {proc_name}"}
 
+        # --- Model cartridge selection --- #
+        # Procedures declare model_cartridge: big|small|vision in frontmatter.
+        # big    → the main chat LLM (svc.ollama_client, local or cloud)
+        # small  → the tiny local model (get_small_client, local-only)
+        # vision → the vision model (get_vision_client)
+        # If the small/vision client isn't configured, fall back to big so
+        # the procedure still runs. This is the "tiny dance partner" design:
+        # procedures that don't need the big model's reasoning power delegate
+        # to the small one, saving cloud tokens. As more procedures use the
+        # small cartridge, the cloud model does less and less.
+        _cartridge = getattr(proc, "model_cartridge", "big") or "big"
+        _proc_llm_client = svc.ollama_client  # default: big
+        _cartridge_note = ""
+        try:
+            if _cartridge == "small":
+                from llm_client import get_small_client
+                _small = get_small_client(session_logger)
+                if _small is not None:
+                    _proc_llm_client = _small
+                    _cartridge_note = " (using small model)"
+                else:
+                    _cartridge_note = " (small model not configured, using big)"
+            elif _cartridge == "vision":
+                from llm_client import get_vision_client
+                _vision = get_vision_client(session_logger)
+                if _vision is not None:
+                    _proc_llm_client = _vision
+                    _cartridge_note = " (using vision model)"
+                else:
+                    _cartridge_note = " (vision model not configured, using big)"
+        except Exception as e:
+            session_logger.log("cartridge_select_failed", {
+                "procedure": proc_name, "cartridge": _cartridge, "error": str(e)})
+        session_logger.log("procedure_cartridge", {
+            "procedure": proc_name, "cartridge": _cartridge,
+            "model": getattr(_proc_llm_client, "llm_model", "?"),
+        })
+
         result = await _run_proc(
             procedure=proc,
             context="",
-            llm_client=svc.ollama_client,
+            llm_client=_proc_llm_client,
             vault_path=str(vault_root),
             procedure_tracker=svc.procedure_tracker,
         )

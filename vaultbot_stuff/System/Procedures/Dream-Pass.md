@@ -1,8 +1,9 @@
 ---
 type: procedure
 status: verified
+model_cartridge: big
 created: 2026-07-27
-last_reviewed: 2026-07-27
+last_reviewed: 2026-07-31
 review_interval_days: 30
 success_count: 23
 failure_count: 1

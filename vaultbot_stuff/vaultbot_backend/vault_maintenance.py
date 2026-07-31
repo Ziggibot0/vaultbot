@@ -24,8 +24,8 @@ class VaultMaintenance:
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.similarity_threshold = similarity_threshold
-        self.chat_dir = self.vault_path / "vaultbot_stuff/Memory/Chat"
-        self.research_dir = self.vault_path / "vaultbot_stuff/Knowledge/Research"
+        self.chat_dir = self.vault_path / "Memory/Chat"
+        self.research_dir = self.vault_path / "Knowledge/Research"
         self.log_file = self.vault_path / "vaultbot_stuff/vaultbot_backend" / "maintenance.log"
         self._ensure_dirs()
 

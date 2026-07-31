@@ -1,0 +1,24 @@
+---
+type: procedure
+status: experimental
+created: 2026-07-31
+description: "Verify Python file syntax before restarting backend."
+allowed_tools: []
+spec_version: 2
+success_count: 0
+failure_count: 0
+---
+
+## Steps
+
+1. ```python
+   import py_compile
+   import sys
+   filepath = r"C:\Users\skell\Desktop\Vault2\vaultbot_stuff\vaultbot_backend\chat_handler.py"
+   try:
+       py_compile.compile(filepath, doraise=True)
+       print("VALID: chat_handler.py compiles without errors")
+   except py_compile.PyCompileError as e:
+       print(f"SYNTAX ERROR: {e}")
+       sys.exit(1)
+   ```

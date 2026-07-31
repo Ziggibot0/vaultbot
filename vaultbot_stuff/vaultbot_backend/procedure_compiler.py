@@ -122,6 +122,7 @@ class Procedure:
     frontmatter: dict
     description: str = ""
     allowed_tools: list[str] = field(default_factory=list)
+    model_cartridge: str = "big"  # "big", "small", or "vision"
 
 
 # ── Regex patterns ────────────────────────────────────────────────────────
@@ -416,4 +417,5 @@ def compile_from_text(note_name: str, text: str) -> Optional[Procedure]:
         frontmatter=fm,
         description=fm.get('description', ''),
         allowed_tools=allowed,
+        model_cartridge=str(fm.get('model_cartridge', 'big')).strip().lower(),
     )

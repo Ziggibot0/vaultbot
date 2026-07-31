@@ -519,8 +519,7 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {
         "backend_restart", "plugin_reload",
     ],
     "vault_maintenance": [
-        "vault_gaps", "vaultbot_status", "vault_list", "vault_safe_write",
-        "vault_append", "vault_delete", "vault_lint",
+        "vault_safe_write", "vault_append", "vault_delete",
     ],
     "self_improvement": ["tool_create"],
 }
@@ -529,11 +528,19 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {
 # via RAG as procedure description cards). These are specific workflows that
 # are only relevant in narrow contexts -- they are noise in the tool list 90%
 # of the time, per the [[Tool-vs-Procedure-Decision-Guide]] decision test.
+# The user's directive: "most tools should be procedures." Procedures are
+# preferable over tools for repetitive specific tasks. Each of these has a
+# corresponding note in System/Procedures/ that the step-gate runtime executes.
 PROCEDURE_CANDIDATE_NAMES: set[str] = {
     "self_reflect", "capability_audit", "preflight_safety_check",
     "vault_graph_analyzer", "vault_cluster_analyzer",
     "textbook_ingest", "textbook_read_page",
     "review_contributions", "submit_contribution", "torture_test",
+    # Moved from contextual tools to procedures:
+    "vault_gaps",        # has Vault-Gaps procedure pattern
+    "vaultbot_status",   # deterministic status report = procedure
+    "vault_list",        # listing notes = procedure
+    "vault_lint",        # Fix-Indentation + Verify-Syntax procedures
 }
 
 
@@ -1009,7 +1016,10 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"tell you're making progress and will nudge you to synthesize.\n"
         f"2. Answer from the VAULT CONTEXT (the retrieved notes, injected as "
         f"a separate message below the system prompt). Cite notes with "
-        f"wikilinks (e.g. `[[Actual-Note-Title]]`).\n"
+        f"wikilinks (e.g. `[[Actual-Note-Title]]`). For each step of your "
+        f"plan, the framework retrieves NEW notes relevant to that step's "
+        f"intent — so you see fresh context as you work, not just what the "
+        f"original query surfaced. Use this step context.\n"
         f"3. If the vault is thin or missing for {owner_name}'s question, "
         f"RESEARCH it: tell {owner_name} 'I don't have enough in the vault — "
         f"researching <topic> now...', then call vault_research.\n"
@@ -1019,6 +1029,14 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"note exists. If it does, call execute_procedure to run it "
         f"deterministically. If not, research how experts do it, write a "
         f"procedure note, and use it next time.\n"
+        f"   MODEL CARTRIDGES: each procedure declares a model_cartridge in "
+        f"frontmatter — big (the main chat model), small (a tiny local model "
+        f"like qwen3.5:0.8b), or vision. When you write a procedure, set "
+        f"model_cartridge: small for tasks that don't need heavy reasoning "
+        f"(classification, tagging, routing, simple extraction). This saves "
+        f"cloud tokens — the small model runs locally for free. As more "
+        f"procedures use the small cartridge, the cloud model does less "
+        f"and less. Use big only for synthesis and complex reasoning.\n"
         f"6. When self-improving, ALWAYS test with code_run before "
         f"tool_create. To edit backend source, use safe_write. Run "
         f"preflight_safety_check before any self-edit.\n"

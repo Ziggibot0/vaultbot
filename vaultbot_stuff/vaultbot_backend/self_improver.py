@@ -399,7 +399,7 @@ class SelfImprover:
                 p_ok, p_out = self._run_pytest_in_subprocess(str(BACKEND_DIR))
             except Exception as e:
                 checks["pytest"] = f"skipped: could not run pytest: {e}"
-                p_ok = True  # treat as pass; soft gate
+                p_ok = False  # FAIL LOUD: if pytest can't run, the edit is rejected
                 p_out = None
             if p_out and not p_ok:
                 checks["pytest"] = f"FAIL: {p_out[:500]}"

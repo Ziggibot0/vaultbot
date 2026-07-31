@@ -255,8 +255,14 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "llm_generate" in allowed_tools:
         snippets.append(
             'if "llm_generate" in allowed:\n'
-            '    from llm_client import get_llm_client\n'
-            '    _client = get_llm_client()\n'
+            '    from llm_client import get_llm_client, get_small_client, get_vision_client\n'
+            '    _cartridge = os.environ.get("PROCEDURE_MODEL_CARTRIDGE", "big")\n'
+            '    if _cartridge == "small":\n'
+            '        _client = get_small_client() or get_llm_client()\n'
+            '    elif _cartridge == "vision":\n'
+            '        _client = get_vision_client() or get_llm_client()\n'
+            '    else:\n'
+            '        _client = get_llm_client()\n'
             '    def llm_generate(prompt, system="You are a procedure executor. Follow the instruction. Output only the result."):\n'
             '        result = _client.generate(prompt=prompt, system=system, stream=False)\n'
             '        return result.get("response", "")\n'
@@ -453,6 +459,7 @@ def _run_code_step(
     timeout: int = 120,
     procedure_name: str = "",
     call_stack: list[str] | None = None,
+    model_cartridge: str = "big",
 ) -> tuple[bool, str, Optional[str], Optional[str]]:
     """Execute a code step in a subprocess.
 
@@ -526,6 +533,7 @@ def _run_code_step(
         "PRIOR_RESULTS": json.dumps(prior_results, default=str),
         "PROCEDURE_SELF_NAME": procedure_name,
         "PROCEDURE_CALL_STACK": json.dumps(call_stack or []),
+        "PROCEDURE_MODEL_CARTRIDGE": model_cartridge,
     }
 
     try:
@@ -566,8 +574,9 @@ def _run_code_step(
 def _run_llm_step(
     step: Step,
     prior_results: list[tuple[int, str]],
+    llm_client: Any = None,
 ) -> tuple[bool, str, Optional[str]]:
-    """Execute an LLM step via get_llm_client() with minimal context.
+    """Execute an LLM step via the cartridge-selected client with minimal context.
 
     Returns ``(success, output, error)``.
 
@@ -577,6 +586,10 @@ def _run_llm_step(
 
     No vault context, no system prompt, no identity — the procedure-bot
     is NOT VaultBot.
+
+    Args:
+        llm_client: The cartridge-selected LLM client (big/small/vision).
+            If None, falls back to get_llm_client() (the big model).
     """
     if step.llm_instruction is None:
         return False, "", "LLM step has no instruction"
@@ -606,8 +619,10 @@ def _run_llm_step(
     )
 
     try:
-        from llm_client import get_llm_client
-        client = get_llm_client()
+        client = llm_client
+        if client is None:
+            from llm_client import get_llm_client
+            client = get_llm_client()
         result = client.generate(
             prompt=prompt,
             system=system,
@@ -916,6 +931,7 @@ async def execute_procedure(
                 timeout=_step_timeout,
                 procedure_name=procedure.name,
                 call_stack=call_stack,
+                model_cartridge=getattr(procedure, "model_cartridge", "big"),
             )
             if success:
                 # Capture any child procedures the step spawned (the
@@ -956,7 +972,7 @@ async def execute_procedure(
                 break
 
         elif step.step_type == "llm":
-            success, output, error = _run_llm_step(step, step_outputs)
+            success, output, error = _run_llm_step(step, step_outputs, llm_client)
             if success:
                 sr = StepResult(
                     step_number=step.number,
