@@ -9,6 +9,16 @@ import re
 from collections import defaultdict
 from datetime import datetime
 
+# --- Token-economy claim-verification mode ---
+# det     = deterministic only (default) — zero LLM calls
+# llm     = LLM only (fails if no LLM)
+# hybrid  = deterministic first, LLM only for borderline (match ratio 0.1–0.3)
+_CLAIM_VERIFY_MODE = os.getenv("VAULTBOT_CLAIM_VERIFY_MODE", "det").lower()
+
+# Borderline match-ratio zone for hybrid entailment (between these → use LLM).
+_BORDERLINE_LOW = 0.1
+_BORDERLINE_HIGH = 0.3
+
 
 class ClaimVerifier:
     SUPPORTED = "supported"
@@ -137,10 +147,26 @@ class ClaimVerifier:
     def extract_claims(self, note_content):
         synthesis_match = re.search(r'##\s*(?:Key Findings|Synthesis|Summary)\s*\n(.*?)(?:\n##\s|\Z)', note_content, re.DOTALL)
         synthesis_text = synthesis_match.group(1) if synthesis_match else note_content
-        if self._llm_available():
-            claims = self._llm_extract_claims(synthesis_text)
-            if claims:
-                return claims
+
+        mode = _CLAIM_VERIFY_MODE
+        if mode == "llm":
+            if self._llm_available():
+                claims = self._llm_extract_claims(synthesis_text)
+                if claims:
+                    return claims
+            return self._deterministic_extract_claims(synthesis_text)
+
+        if mode == "hybrid":
+            # Deterministic first; only escalate to LLM if it found too few
+            # claims (likely missed complex multi-sentence claims).
+            claims = self._deterministic_extract_claims(synthesis_text)
+            if len(claims) < 3 and self._llm_available():
+                llm_claims = self._llm_extract_claims(synthesis_text)
+                if len(llm_claims) > len(claims):
+                    return llm_claims
+            return claims
+
+        # det (default): deterministic only.
         return self._deterministic_extract_claims(synthesis_text)
 
     def _llm_check_entailment(self, claim, source_text):
@@ -198,10 +224,28 @@ class ClaimVerifier:
             return {"verdict": self.UNSUPPORTED, "reasoning": "No key phrase overlap with source"}
 
     def check_entailment(self, claim, source_text):
-        if self._llm_available():
-            result = self._llm_check_entailment(claim, source_text)
-            if result["verdict"] != self.ERROR:
-                return result
+        mode = _CLAIM_VERIFY_MODE
+        if mode == "llm":
+            if self._llm_available():
+                result = self._llm_check_entailment(claim, source_text)
+                if result["verdict"] != self.ERROR:
+                    return result
+            return self._deterministic_check_entailment(claim, source_text)
+
+        if mode == "hybrid":
+            # Deterministic first; escalate to LLM only for borderline ratios.
+            det_result = self._deterministic_check_entailment(claim, source_text)
+            # Extract the match ratio from the reasoning if present.
+            ratio_match = re.search(r'(\d+)%', det_result.get("reasoning", ""))
+            if ratio_match:
+                ratio = int(ratio_match.group(1)) / 100.0
+                if _BORDERLINE_LOW < ratio < _BORDERLINE_HIGH and self._llm_available():
+                    llm_result = self._llm_check_entailment(claim, source_text)
+                    if llm_result["verdict"] != self.ERROR:
+                        return llm_result
+            return det_result
+
+        # det (default): deterministic only.
         return self._deterministic_check_entailment(claim, source_text)
 
     def verify_note(self, note_path):

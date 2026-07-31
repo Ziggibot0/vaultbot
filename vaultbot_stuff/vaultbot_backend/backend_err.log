@@ -1,6 +1,17 @@
-INFO:     Started server process [18744]
+INFO:     Started server process [9020]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:64513 - "WebSocket /ws" [accepted]
+INFO:     127.0.0.1:62264 - "WebSocket /ws" [accepted]
 INFO:     connection open
+INFO:     127.0.0.1:59428 - "WebSocket /ws" [accepted]
+INFO:     connection open
+LLM self-model came back empty; using fallback.
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\skell\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 84, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\skell\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host

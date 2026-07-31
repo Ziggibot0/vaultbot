@@ -53,6 +53,18 @@ SELF_MODEL_MAX_CHARS = 12000
 # Rough chars/token estimate for the status endpoint.
 _CHARS_PER_TOKEN = 4
 
+# --- Self-model regeneration throttle (token economy) ---
+# Regenerating the MIRROR self-model after every chat turn burns an LLM
+# call per turn. Most turns are trivial (greetings, "thanks", quick
+# lookups) and the self-model doesn't change. These thresholds skip
+# regeneration for low-value turns. Tunable via env.
+_REGEN_MIN_ANSWER_CHARS = int(os.getenv("VAULTBOT_REGEN_MIN_ANSWER", "200"))
+_REGEN_MIN_THINKING_CHARS = int(os.getenv("VAULTBOT_REGEN_MIN_THINKING", "500"))
+_REGEN_MAX_TURNS_BETWEEN = int(os.getenv("VAULTBOT_REGEN_MAX_TURNS", "3"))
+
+# Heuristic keywords that always force a regen (goal changes, self-improvement).
+_REGEN_FORCE_KEYWORDS = ("goal", "plan", "task", "improve", "fix", "build", "learn", "research")
+
 # Filenames inside identity_dir.
 _IDENTITY_FILENAME = "IDENTITY.md"
 _SELF_MODEL_FILENAME = "SELF_MODEL.md"
@@ -158,6 +170,20 @@ class Identity:
         # stat() per turn is far cheaper than three read_text() calls.
         self._boot_cache: str | None = None
         self._boot_cache_mtime: float = 0.0
+
+        # ---- self-model regeneration throttle ----------------------------
+        # Tracks turns since the last LLM-based regeneration so trivial turns
+        # (short answer, no tools, no thinking) skip the LLM call entirely.
+        # Reset when the self-model is regenerated. Persisted across restarts
+        # via a small file in the identity dir so the counter survives crashes.
+        self._turns_since_regen: int = 0
+        self._regen_counter_path = os.path.join(identity_dir, ".regen_counter")
+        try:
+            if os.path.exists(self._regen_counter_path):
+                self._turns_since_regen = int(
+                    open(self._regen_counter_path, encoding="utf-8").read().strip() or "0")
+        except Exception:
+            self._turns_since_regen = 0
 
     # ------------------------------------------------------------------
     # Seeding
@@ -271,10 +297,58 @@ class Identity:
     # MIRROR bounded reconstruction
     # ------------------------------------------------------------------
 
+    def should_regenerate(self, recent_activity: str) -> bool:
+        """Token-economy gate: should this turn trigger an LLM self-model regen?
+
+        Skips regeneration for trivial turns (short answer, no tools, no
+        thinking) so a greeting or quick lookup doesn't burn an LLM call.
+        Forces regeneration when:
+          - The activity summary mentions goal/plan/task/improve/research.
+          - The answer was substantive (> _REGEN_MIN_ANSWER_CHARS).
+          - There was significant thinking (> _REGEN_MIN_THINKING_CHARS).
+          - It's been more than _REGEN_MAX_TURNS_BETWEEN turns since the last
+            regeneration (safety: the self-model should refresh periodically
+            even if all turns were trivial).
+        Never raises.
+        """
+        try:
+            self._turns_since_regen += 1
+            # Force keywords (goal/plan/task/improve) always regenerate.
+            activity_lower = recent_activity.lower()
+            if any(kw in activity_lower for kw in _REGEN_FORCE_KEYWORDS):
+                return True
+            # Substantive answer: activity includes an "Answer:" line with
+            # real content. The activity string is built by the chat loop as
+            # "User asked: ...\nAnswer: ...\nReasoning: ...\nTools used: ...".
+            # Check for non-trivial answer or reasoning or tool usage.
+            has_tools = "Tools used:" in recent_activity
+            has_long_answer = len(recent_activity) > _REGEN_MIN_ANSWER_CHARS
+            has_reasoning = "Reasoning:" in recent_activity and \
+                len(recent_activity.split("Reasoning:", 1)[-1]) > _REGEN_MIN_THINKING_CHARS
+            if has_tools or has_long_answer or has_reasoning:
+                return True
+            # Periodic safety regen: even trivial turns should refresh
+            # eventually so the self-model doesn't go stale.
+            if self._turns_since_regen >= _REGEN_MAX_TURNS_BETWEEN:
+                return True
+            self._save_regen_counter()
+            return False
+        except Exception:
+            return True  # on any error, regen (safe default)
+
+    def _save_regen_counter(self) -> None:
+        """Persist the turn counter so it survives restarts. Never raises."""
+        try:
+            with open(self._regen_counter_path, "w", encoding="utf-8") as f:
+                f.write(str(self._turns_since_regen))
+        except Exception:
+            pass
+
     def regenerate_self_model(
         self,
         recent_activity: str,
         threads: dict[str, str] | None = None,
+        force: bool = False,
     ) -> str:
         """MIRROR bounded reconstruction of the self-model.
 
@@ -287,9 +361,22 @@ class Identity:
         If ``ollama_client`` is None, performs a simple truncation-based
         fallback: keep the first 3000 chars of the prior self-model and append
         the new activity.
+
+        Token economy: ``should_regenerate()`` gates the LLM call. Trivial turns
+        (short answer, no tools, no thinking) skip regeneration entirely and
+        the self-model stays as-is. Pass ``force=True`` to bypass the gate
+        (used by the /identity/self_model endpoint for explicit regen).
         """
         try:
             prior = self.get_self_model()
+
+            # Token-economy gate: skip LLM regen for trivial turns.
+            if not force and self.ollama_client is not None:
+                if not self.should_regenerate(recent_activity):
+                    self._safe_log("identity_self_model_skipped_trivial", {
+                        "turns_since_regen": self._turns_since_regen,
+                    })
+                    return prior
 
             if self.ollama_client is None:
                 # Fallback: truncation-based, no LLM.
@@ -301,6 +388,9 @@ class Identity:
             new_text = self._enforce_ceiling(new_text)
 
             self._atomic_write(self._self_model_path, new_text)
+            # Reset the turn counter on a successful regeneration.
+            self._turns_since_regen = 0
+            self._save_regen_counter()
             self._safe_log(
                 "identity_self_model_regenerated",
                 {"chars": len(new_text)},

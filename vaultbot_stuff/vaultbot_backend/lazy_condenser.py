@@ -82,6 +82,38 @@ TOUCH_THRESHOLD = 3
 # somehow produces something tiny.
 CONDENSE_FLOOR_CHARS = 1500
 
+# --- Token-economy condense mode ---
+# auto       = LLM if available, extractive fallback if not (default)
+# llm        = always LLM (fails if no LLM)
+# extractive = never call LLM, always TF-IDF sentence selection
+_CONDENSE_MODE = os.getenv("VAULTBOT_CONDENSE_MODE", "auto").lower()
+
+# Scaffolding sentence patterns to drop during extractive condense.
+_SCAFFOLDING_PATTERNS = re.compile(
+    r"^\s*(let's review|let us review|recall that|now we turn to|having established|"
+    r"as we have seen|as mentioned earlier|to summarize|in this section we|"
+    r"it is worth noting|note that we|we begin by|we have already)",
+    re.IGNORECASE,
+)
+# Lines that MUST be preserved (contain wikilinks, formulas, or definitions).
+_MUST_KEEP_PATTERNS = re.compile(
+    r"(\[\[|\$\$?|is defined as|means that|is called|consists of|is equal to)"
+)
+
+# TF-IDF stopword set for extractive condense sentence scoring.
+_CONDENSE_STOPWORDS = {
+    "the", "and", "for", "are", "was", "were", "but", "not", "you", "that",
+    "this", "with", "from", "they", "have", "has", "had", "its", "it",
+    "is", "be", "been", "being", "as", "at", "by", "an", "or", "if", "so",
+    "do", "does", "did", "about", "we", "us", "our", "chapter", "section",
+    "figure", "table", "example", "exercise", "note", "see", "shown",
+    "shows", "using", "use", "used", "one", "two", "three", "first",
+    "second", "third", "also", "these", "those", "which", "who", "whom",
+    "what", "when", "where", "why", "how", "will", "would", "could",
+    "should", "may", "might", "must", "can", "into", "upon", "such",
+    "very", "more", "most", "some", "any", "all", "both", "each", "other",
+}
+
 
 class LazyCondenser:
     """Lazy de-fluff: condense notes only after they're queried repeatedly."""
@@ -135,14 +167,19 @@ class LazyCondenser:
 
     def needs_condense(self, note_path: str) -> bool:
         """True if the note should be condensed (enough touches + long enough
-        + not already condensed + LLM available)."""
+        + not already condensed + a condense method available).
+
+        In ``auto``/``llm`` mode, needs an LLM client. In ``extractive`` mode,
+        works without any LLM (pure TF-IDF sentence selection).
+        """
         try:
             key = self._key(note_path)
             if not key:
                 return False
             if self.touch_counts.get(key, 0) < TOUCH_THRESHOLD:
                 return False
-            if self.ollama_client is None:
+            # In extractive mode, no LLM is needed.
+            if _CONDENSE_MODE != "extractive" and self.ollama_client is None:
                 return False
             p = Path(note_path)
             if not p.exists():
@@ -190,9 +227,9 @@ class LazyCondenser:
                 out["error"] = "too_short"
                 return out
 
-            condensed_body = self._llm_condense(body, p.stem)
+            condensed_body = self._condense_body(body, p.stem)
             if not condensed_body:
-                out["error"] = "llm_empty"
+                out["error"] = "condense_empty"
                 return out
             # Safety floor — never let the LLM collapse a note to nothing.
             if len(condensed_body) < CONDENSE_FLOOR_CHARS:
@@ -256,6 +293,96 @@ class LazyCondenser:
         if summary["condensed"]:
             self._log_event("batch_condensed", summary)
         return summary
+
+    # ------------------------------------------------------------------ #
+    # Condense body (mode-routed: LLM or extractive)
+    # ------------------------------------------------------------------ #
+    def _condense_body(self, body: str, note_title: str) -> str:
+        """Route to the configured condense method.
+
+        ``auto`` (default): LLM if available, else extractive fallback.
+        ``llm``: always LLM (returns "" if no LLM).
+        ``extractive``: always TF-IDF sentence selection (zero LLM).
+        """
+        mode = _CONDENSE_MODE
+        if mode == "extractive":
+            return self._extractive_condense(body)
+        if mode == "llm":
+            return self._llm_condense(body, note_title)
+        # auto: prefer LLM, fall back to extractive.
+        if self.ollama_client is not None:
+            try:
+                result = self._llm_condense(body, note_title)
+                if result and len(result) >= CONDENSE_FLOOR_CHARS:
+                    return result
+            except Exception as e:
+                self._log_error("llm_condense_failed_fallback", e)
+        return self._extractive_condense(body)
+
+    # ------------------------------------------------------------------ #
+    # Extractive condense (zero LLM)
+    # ------------------------------------------------------------------ #
+    def _extractive_condense(self, body: str) -> str:
+        """TF-IDF sentence selection condense — zero LLM calls.
+
+        Splits the body into sentences, scores each by content-word density,
+        drops scaffolding sentences, and keeps the top ~40% by score in
+        document order.  Preserves every line containing [[wikilinks]],
+        formulas ($...$, $$...$$), or definitions.  Headings (# / ## / ###)
+        are always kept.
+
+        This is dumber than the LLM (it can't rephrase) but perfectly
+        preserves wikilinks and formulas — they're in the kept sentences.
+        """
+        lines = body.splitlines()
+        kept: list[str] = []  # lines kept unconditionally (headings, wikilinks, etc.)
+        candidates: list[tuple[float, int, str]] = []  # (score, orig_index, line)
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Always keep headings.
+            if stripped.startswith(("#", "> source:", "> cluster:", "<!--")):
+                kept.append(line)
+                continue
+            # Always keep lines with wikilinks, formulas, or definitions.
+            if _MUST_KEEP_PATTERNS.search(stripped):
+                kept.append(line)
+                continue
+            # Drop scaffolding sentences.
+            if _SCAFFOLDING_PATTERNS.match(stripped):
+                continue
+            # Score by content-word density.
+            tokens = re.findall(r"\b[a-z][a-z0-9-]{2,}\b", stripped.lower())
+            content_words = [t for t in tokens if t not in _CONDENSE_STOPWORDS]
+            score = len(content_words) / max(len(tokens), 1) if tokens else 0
+            if len(stripped) > 100:
+                score *= 1.2  # bonus for substantive sentences
+            candidates.append((score, i, line))
+
+        if not candidates:
+            return body.strip()
+
+        # Keep top ~40% by score, at least 3.
+        target_count = max(3, int(len(candidates) * 0.4))
+        ranked = sorted(candidates, key=lambda c: -c[0])
+        selected_indices = set(c[1] for c in ranked[:target_count])
+
+        # Rebuild in document order: kept lines + selected candidates.
+        result_lines: list[str] = []
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped:
+                if result_lines and result_lines[-1].strip():
+                    result_lines.append(line)
+                continue
+            if line in kept or i in selected_indices:
+                result_lines.append(line)
+
+        condensed = "\n".join(result_lines).strip()
+        if len(condensed) < CONDENSE_FLOOR_CHARS:
+            return body.strip()
+        return condensed
 
     # ------------------------------------------------------------------ #
     # LLM condense

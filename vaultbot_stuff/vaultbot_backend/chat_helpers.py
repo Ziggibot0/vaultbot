@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,213 @@ async def send_progress(svc: Services, websocket, stage: str,
             json.dumps({"type": "progress", "stage": stage,
                          "detail": detail or {}}),
             websocket, session_logger=svc.session_logger)
+    except Exception:
+        pass
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# User-facing problem / info notification helpers
+# ───────────────────────────────────────────────────────────────────────────
+# These are the single chokepoint for surfacing failures and degradation
+# to the user via the WebSocket.  Every background task crash, every
+# graceful-degradation fallback, and every raw-error site should call one
+# of these instead of silently swallowing or leaking a raw exception.
+#
+# Both helpers:
+#   - wrap the WS send in try/except (a dead websocket must never cascade)
+#   - log to session_logger so the problem is in the JSONL even if the WS
+#     is gone
+#   - rate-limit: the same user_message within 60s is suppressed so a
+#     failing background loop doesn't spam the chat with identical cards
+
+_NOTIFY_DEDUP_WINDOW = 60.0  # seconds
+_notify_dedup: dict[str, float] = {}  # user_message -> last-sent epoch
+
+
+def _should_dedup(key: str) -> bool:
+    """True if this exact key was sent within the dedup window."""
+    now = time.time()
+    last = _notify_dedup.get(key)
+    if last is not None and (now - last) < _NOTIFY_DEDUP_WINDOW:
+        return True
+    # Prune stale entries occasionally so the dict doesn't grow unbounded.
+    if len(_notify_dedup) > 100:
+        cutoff = now - _NOTIFY_DEDUP_WINDOW
+        for k in [k for k, v in _notify_dedup.items() if v <= cutoff]:
+            del _notify_dedup[k]
+    _notify_dedup[key] = now
+    return False
+
+
+async def notify_problem(
+    svc: Services,
+    websocket,
+    exc_or_diagnosis: Any,
+    *,
+    context: dict[str, Any] | None = None,
+    user_message: str = "",
+    remedy_hint: str = "",
+) -> None:
+    """Send a typed ``type:"problem"`` WS event to the user.
+
+    This is the function every background-task except block and every
+    degraded-path fallback should call. It translates a raw exception
+    into a ``Diagnosis`` via ``classify_error`` (so the frontend renders
+    a remedy card, not a stack trace) or accepts a pre-built ``Diagnosis``.
+
+    Args:
+        svc: the Services registry (for manager + session_logger).
+        websocket: the live WS connection (may be None for broadcasts —
+            use ``notify_problem_broadcast`` instead).
+        exc_or_diagnosis: a raw Exception (classified via classify_error)
+            or a pre-built ``Diagnosis`` instance.
+        context: optional hints passed to ``classify_error`` (e.g.
+            ``{"stage": "weaving"}``).
+        user_message: optional override for the Diagnosis user_message.
+            When non-empty, replaces the classified message so callers
+            can provide a more specific human description.
+        remedy_hint: optional override for the Diagnosis remedy_hint.
+
+    A dead websocket, a missing manager, or a classification failure never
+    raises — the problem is always logged to ``session_logger``.
+    """
+    from error_types import Diagnosis as _Diagnosis  # noqa: PLC0415
+    from diagnostics import classify_error  # noqa: PLC0415
+
+    try:
+        if isinstance(exc_or_diagnosis, _Diagnosis):
+            diag = exc_or_diagnosis
+        else:
+            diag = classify_error(exc_or_diagnosis, context or {})
+        if user_message:
+            diag = _Diagnosis(
+                category=diag.category,
+                user_message=user_message,
+                remedy_hint=remedy_hint or diag.remedy_hint,
+                action=diag.action,
+                severity=diag.severity,
+                raw_for_log=diag.raw_for_log,
+            )
+        elif remedy_hint:
+            diag = _Diagnosis(
+                category=diag.category,
+                user_message=diag.user_message,
+                remedy_hint=remedy_hint,
+                action=diag.action,
+                severity=diag.severity,
+                raw_for_log=diag.raw_for_log,
+            )
+
+        # Rate-limit: don't spam the same card repeatedly.
+        dedup_key = diag.user_message
+        if _should_dedup(dedup_key):
+            return
+
+        payload = json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
+        if websocket is not None and svc.manager is not None:
+            await svc.manager.send_personal_message(
+                payload, websocket,
+                session_logger=getattr(svc, "session_logger", None))
+        # Also log so the problem is traceable even if the WS is dead.
+        slog = getattr(svc, "session_logger", None)
+        if slog is not None:
+            slog.log("problem_notified", {
+                "category": diag.category.value,
+                "user_message": diag.user_message,
+                "context": context or {},
+            })
+    except Exception:
+        # This helper must never be the source of a cascade.
+        pass
+
+
+async def notify_info(svc: Services, websocket, message: str) -> None:
+    """Send a quiet ``type:"system_info"`` WS event — for degradation
+    signals (e.g. "using a simpler search") that are informational, not
+    errors.
+
+    The plugin renders these as a low-key bubble. Rate-limited identically
+    to ``notify_problem``.
+    """
+    try:
+        if _should_dedup(message):
+            return
+        payload = json.dumps({"type": "system_info", "content": message})
+        if websocket is not None and svc.manager is not None:
+            await svc.manager.send_personal_message(
+                payload, websocket,
+                session_logger=getattr(svc, "session_logger", None))
+        slog = getattr(svc, "session_logger", None)
+        if slog is not None:
+            slog.log("info_notified", {"message": message})
+    except Exception:
+        pass
+
+
+def notify_problem_broadcast(
+    svc: Services,
+    exc_or_diagnosis: Any,
+    *,
+    context: dict[str, Any] | None = None,
+    user_message: str = "",
+    remedy_hint: str = "",
+) -> None:
+    """Synchronous broadcast variant for non-async contexts (daemon threads).
+
+    Schedules ``notify_problem`` on all active websocket connections via
+    ``manager.broadcast``. Use from background threads that don't own the
+    event loop (e.g. the autonomous researcher's crash callback).
+    """
+    from error_types import Diagnosis as _Diagnosis  # noqa: PLC0415
+    from diagnostics import classify_error  # noqa: PLC0415
+
+    try:
+        if isinstance(exc_or_diagnosis, _Diagnosis):
+            diag = exc_or_diagnosis
+        else:
+            diag = classify_error(exc_or_diagnosis, context or {})
+        if user_message:
+            diag = _Diagnosis(
+                category=diag.category,
+                user_message=user_message,
+                remedy_hint=remedy_hint or diag.remedy_hint,
+                action=diag.action,
+                severity=diag.severity,
+                raw_for_log=diag.raw_for_log,
+            )
+        elif remedy_hint:
+            diag = _Diagnosis(
+                category=diag.category,
+                user_message=diag.user_message,
+                remedy_hint=remedy_hint,
+                action=diag.action,
+                severity=diag.severity,
+                raw_for_log=diag.raw_for_log,
+            )
+
+        dedup_key = diag.user_message
+        if _should_dedup(dedup_key):
+            return
+
+        payload = json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
+        manager = getattr(svc, "manager", None)
+        if manager is not None:
+            loop = getattr(svc, "_main_loop", None)
+            if loop is not None and loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast(payload), loop)
+            elif manager.active_connections:
+                # No loop reference — try a fire-and-forget via a new loop.
+                # This is a last resort; the normal path is via _main_loop.
+                pass
+        slog = getattr(svc, "session_logger", None)
+        if slog is not None:
+            slog.log("problem_notified", {
+                "category": diag.category.value,
+                "user_message": diag.user_message,
+                "context": context or {},
+                "broadcast": True,
+            })
     except Exception:
         pass
 

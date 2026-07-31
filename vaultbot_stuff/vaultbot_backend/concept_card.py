@@ -77,6 +77,30 @@ MIN_SENTENCE_LEN = 40  # skip headings-as-sentences and stray list items
 REFINE_TOUCH_THRESHOLD = 3
 REFINE_MIN_CHARS = 250  # don't bother refining an already-tight card
 
+# --- Token-economy card-refine mode ---
+# auto       = LLM if available, extractive fallback if not (default)
+# llm        = always LLM (no-op if no LLM)
+# extractive = never call LLM, always TextRank-style sentence selection
+_CARD_REFINE_MODE = os.getenv("VAULTBOT_CARD_REFINE_MODE", "auto").lower()
+
+# Scaffolding patterns to drop during extractive refine (same as condenser).
+_CARD_SCAFFOLDING_RE = re.compile(
+    r"^\s*(let's review|recall that|now we turn to|having established|"
+    r"as we have seen|as mentioned earlier|to summarize|in this section we|"
+    r"it is worth noting|note that we|we begin by|we have already)",
+    re.IGNORECASE,
+)
+
+# Card refine stopwords (subset of the sketch stopwords).
+_CARD_REFINE_STOPWORDS = {
+    "the", "and", "for", "are", "was", "were", "but", "not", "you", "that",
+    "this", "with", "from", "they", "have", "has", "had", "its", "it",
+    "is", "be", "been", "being", "as", "at", "by", "an", "or", "if", "so",
+    "do", "does", "did", "about", "chapter", "section", "figure", "table",
+    "example", "exercise", "note", "see", "shown", "shows", "using", "use",
+    "used", "one", "two", "three", "first", "second", "third", "also",
+}
+
 
 # ---------------------------------------------------------------------------
 # Path helpers
@@ -372,9 +396,14 @@ def needs_refine(card_path: str | Path, touch_count: int) -> bool:
 def refine_card(card_path: str | Path,
                 ollama_client: Any,
                 l0_text: str | None = None) -> dict[str, Any]:
-    """One-shot LLM rewrite of an extractive card into a tight semantic
+    """One-shot rewrite of an extractive card into a tight semantic
     summary.  Preserves the header, the `> source:` pointer, the links,
     and the markers — only the sketch body is rewritten.  Idempotent.
+
+    TOKEN ECONOMY: routed by ``VAULTBOT_CARD_REFINE_MODE``:
+      ``auto`` (default) — LLM if available, extractive TextRank fallback.
+      ``llm``           — always LLM (returns not-refined if no LLM).
+      ``extractive``    — never call LLM, always sentence selection.
 
     Returns {"refined": bool, "before_chars": int, "after_chars": int}.
     Never raises.
@@ -390,31 +419,30 @@ def refine_card(card_path: str | Path,
             if l0 is None or not l0.exists():
                 return {"refined": False, "reason": "no_source"}
             l0_text = l0.read_text(encoding="utf-8", errors="replace")
-        # Cap the L0 input to the model — 6K chars is plenty for a
-        # one-paragraph abstraction; more would burn context for nothing.
+        # Cap the L0 input.
         l0_excerpt = l0_text[:6000]
 
-        prompt = (
-            "Rewrite the following textbook section as a tight concept-card "
-            "summary: 2-4 sentences capturing the core idea, definitions, "
-            "and key formulas. Preserve every [[wikilink]] target verbatim. "
-            "Do NOT include the heading, source pointer, or link list — only "
-            "the summary prose. Drop pedagogical scaffolding and worked "
-            "examples.\n\nSECTION:\n" + l0_excerpt)
-        resp = ollama_client.chat(
-            [{"role": "system",
-              "content": "You are a concept-card writer. Be terse and dense."},
-             {"role": "user", "content": prompt}],
-            stream=False)
-        summary = ""
-        if isinstance(resp, dict):
-            summary = (resp.get("message") or {}).get("content", "") or resp.get("content", "")
-        summary = summary.strip()
+        # Route to the configured refine method.
+        mode = _CARD_REFINE_MODE
+        if mode == "extractive":
+            summary = _extractive_refine(l0_excerpt)
+        elif mode == "llm":
+            if ollama_client is None:
+                return {"refined": False, "reason": "no_llm"}
+            summary = _llm_refine(ollama_client, l0_excerpt)
+        else:  # auto
+            if ollama_client is not None:
+                summary = _llm_refine(ollama_client, l0_excerpt)
+                if not summary or len(summary) < 80:
+                    summary = _extractive_refine(l0_excerpt)
+            else:
+                summary = _extractive_refine(l0_excerpt)
+
+        summary = (summary or "").strip()
         if len(summary) < 80:
             return {"refined": False, "reason": "too_short"}
 
         # Reassemble: header + pointer + markers + new summary + links.
-        # Re-extract the links block from the old card.
         links_block = ""
         m = re.search(r"(## Links out\n.*)$", text, flags=re.DOTALL)
         if m:
@@ -428,6 +456,62 @@ def refine_card(card_path: str | Path,
         before = len(text)
         after = len(new_body)
         _atomic_write(p, new_body)
-        return {"refined": True, "before_chars": before, "after_chars": after}
+        return {"refined": True, "before_chars": before, "after_chars": after,
+                "method": mode if mode != "auto" else ("llm" if ollama_client else "extractive")}
     except Exception as e:
         return {"refined": False, "reason": f"error:{type(e).__name__}"}
+
+
+def _extractive_refine(l0_text: str) -> str:
+    """TextRank-style extractive summary of an L0 section — zero LLM calls.
+
+    Scores sentences by content-word density (same TF approach as the
+    sketch) and keeps the top 2-3 sentences in document order.  Drops
+    scaffolding.  Preserves [[wikilinks]] and formulas in kept sentences.
+    """
+    sentences = _split_sentences(l0_text)
+    if not sentences:
+        # Fallback: first 400 chars of stripped body.
+        body = re.sub(r'[\s\n]+', ' ', l0_text).strip()
+        return body[:SKETCH_MAX_CHARS]
+    terms = _top_tfidf_terms(sentences)
+    term_set = set(terms)
+
+    def sent_score(s: str) -> float:
+        toks = set(_tokenize(s))
+        base = len(toks & term_set)
+        # Bonus for sentences with wikilinks or formulas (must-keep).
+        if WIKILINK_RE.search(s) or '$' in s:
+            base += 2.0
+        # Penalty for scaffolding sentences.
+        if _CARD_SCAFFOLDING_RE.match(s):
+            base *= 0.3
+        return base
+
+    ranked = sorted(sentences, key=sent_score, reverse=True)
+    top_n = min(3, len(ranked))
+    top = sorted(ranked[:top_n], key=lambda s: sentences.index(s))
+    summary = " ".join(top)
+    if len(summary) > SKETCH_MAX_CHARS:
+        summary = summary[:SKETCH_MAX_CHARS].rsplit(" ", 1)[0] + "\u2026"
+    return summary
+
+
+def _llm_refine(ollama_client: Any, l0_excerpt: str) -> str:
+    """Ask the LLM for a tight concept-card summary (the old path)."""
+    prompt = (
+        "Rewrite the following textbook section as a tight concept-card "
+        "summary: 2-4 sentences capturing the core idea, definitions, "
+        "and key formulas. Preserve every [[wikilink]] target verbatim. "
+        "Do NOT include the heading, source pointer, or link list — only "
+        "the summary prose. Drop pedagogical scaffolding and worked "
+        "examples.\n\nSECTION:\n" + l0_excerpt)
+    resp = ollama_client.chat(
+        [{"role": "system",
+          "content": "You are a concept-card writer. Be terse and dense."},
+         {"role": "user", "content": prompt}],
+        stream=False)
+    summary = ""
+    if isinstance(resp, dict):
+        summary = (resp.get("message") or {}).get("content", "") or resp.get("content", "")
+    return summary

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import pickle
 import threading
@@ -12,6 +13,8 @@ import numpy as np
 from ollama_client import OllamaClient
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+_logger = logging.getLogger(__name__)
 
 IGNORED_DIRS = {
     "vaultbot_venv",
@@ -68,11 +71,11 @@ class VaultChangeHandler(FileSystemEventHandler):
             try:
                 self.indexer._remove_file(src_path)
             except Exception as e:
-                print(f"[VaultChangeHandler] Error removing moved src {src_path}: {e}")
+                _logger.warning("Error removing moved src %s: %s", src_path, e)
             try:
                 self.indexer._add_file(dest_path)
             except Exception as e:
-                print(f"[VaultChangeHandler] Error adding moved dest {dest_path}: {e}")
+                _logger.warning("Error adding moved dest %s: %s", dest_path, e)
 
         for path, evt_type in pending.items():
             try:
@@ -83,7 +86,7 @@ class VaultChangeHandler(FileSystemEventHandler):
                 else:
                     self.indexer._update_file(path)
             except Exception as e:
-                print(f"[VaultChangeHandler] Error processing {path}: {e}")
+                _logger.warning("Error processing %s: %s", path, e)
 
     def on_modified(self, event):
         if not event.is_directory and event.src_path.endswith('.md'):

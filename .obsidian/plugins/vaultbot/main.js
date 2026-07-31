@@ -246,8 +246,23 @@ class VaultBotPlugin extends Plugin {
 		if (this._backendReadyPromise) return this._backendReadyPromise;
 		this._backendReadyPromise = (async () => {
 			const start = Date.now();
+			// Determine the PID file path once for the whole poll loop.
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$|^/, '');
+			}
+			const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
+			const fs = require('fs');
 			while (Date.now() - start < timeoutMs) {
-				if (await this.isBackendRunning()) return true;
+				// Only probe with fetch if the PID file exists — the backend
+				// writes it early in startup. If the file is absent, the
+				// backend hasn't started yet, so a fetch would just generate
+				// ERR_CONNECTION_REFUSED console spam. Wait for the file.
+				if (fs.existsSync(pidFile)) {
+					if (await this.isBackendRunning()) return true;
+				}
 				await new Promise(r => setTimeout(r, intervalMs));
 			}
 			return await this.isBackendRunning();
@@ -745,7 +760,10 @@ class VaultBotPlugin extends Plugin {
 	async startMcpServerIfNeeded() {
 		if (this.mcpProcess) return;
 		try {
-			const running = await this.isBackendRunning();
+			// Use the single-flight ready promise instead of probing directly
+			// — avoids ERR_CONNECTION_REFUSED console spam while the backend
+			// is still booting.
+			const running = await this.onceBackendReady();
 			if (!running) {
 				// Backend not ready yet; retry shortly.
 				setTimeout(() => this.startMcpServerIfNeeded(), 5000);
@@ -824,12 +842,15 @@ class VaultBotPlugin extends Plugin {
 			// Expected if the backend is already gone or unreachable.
 		}
 
-		// 2) Wait briefly for the process to actually exit, then verify with
-		//    taskkill against the PID file as a hard fallback.
+		// 2) Wait briefly for the process to actually exit. Check the PID
+		//    file instead of probing with fetch — the backend deletes
+		//    vaultbot.pid on graceful shutdown (release_lock), so the file
+		//    disappearing is a reliable signal. Using fetch here generates
+		//    ERR_CONNECTION_REFUSED console spam that worries users.
 		const waitMs = 1500;
 		const start = Date.now();
 		while (Date.now() - start < waitMs) {
-			if (!await this.isBackendRunning()) break;
+			if (!fs.existsSync(pidFile)) break;
 			await new Promise(r => setTimeout(r, 150));
 		}
 
@@ -1456,7 +1477,27 @@ class VaultBotPlugin extends Plugin {
 		this.backendStarting = true;
 
 		try {
-			let running = await this.isBackendRunning();
+			// Check if the backend is already running via the PID file first.
+			// The backend writes vaultbot.pid on startup and deletes it on
+			// graceful shutdown. If the file exists, the backend is likely up
+			// — confirm with a fetch probe (which succeeds silently). If the
+			// file does NOT exist, the backend is definitely down, so we skip
+			// the fetch entirely and go straight to spawning. This avoids the
+			// ERR_CONNECTION_REFUSED console spam that Chromium logs for every
+			// failed fetch, regardless of try/catch.
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/].obsidian[\\/]?$|^/, '');
+			}
+			const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
+			const fs = require('fs');
+			let running = false;
+			if (fs.existsSync(pidFile)) {
+				// PID file exists — backend may be running. Probe to confirm.
+				running = await this.isBackendRunning();
+			}
 			if (running) {
 				new Notice('VaultBot backend is already running.');
 				return;
@@ -1464,17 +1505,9 @@ class VaultBotPlugin extends Plugin {
 
 			new Notice('Starting VaultBot backend...');
 
-			let vaultRoot;
-			if (this.app.vault.adapter.getBasePath) {
-				vaultRoot = this.app.vault.adapter.getBasePath();
-			} else {
-				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
-			}
-
 			const mainPy = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'main.py');
 			const logFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'backend.log');
 
-			const fs = require('fs');
 			const pythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(pythonExe) || !fs.existsSync(mainPy)) {
 				// VaultBot isn't set up yet (no venv or no backend code). Don't

@@ -23,7 +23,7 @@ from chat_handler import handle_chat
 
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports — no main dependency.
-from chat_helpers import run_with_heartbeat, send_progress
+from chat_helpers import notify_problem, run_with_heartbeat, send_progress
 from fastapi import WebSocket
 from services import Services
 from session_logger import SessionLogger
@@ -57,8 +57,8 @@ async def handle_research(
         try:
             asyncio.run_coroutine_threadsafe(
                 send_progress(svc, websocket, stage, detail), loop)
-        except Exception:
-            pass
+        except Exception as e:
+            session_logger.log("research_progress_cb_failed", {"error": str(e)})
 
     svc.research_engine.progress_callback = _progress_cb
     try:
@@ -67,9 +67,12 @@ async def handle_research(
     except Exception as e:
         svc.research_engine.progress_callback = prev_cb
         session_logger.log_exception(e, context="research_engine.research")
-        await svc.manager.send_personal_message(
-            json.dumps({"type": "error", "content": f"Research failed: {e}"}),
-            websocket, session_logger=session_logger)
+        await notify_problem(svc, websocket, e,
+            context={"stage": "researching the web"},
+            user_message=(
+                "Something went wrong while researching the web for "
+                "this topic. Your notes are safe."),
+            remedy_hint="Try again in a minute, or rephrase your question.")
         return
     finally:
         svc.research_engine.progress_callback = prev_cb
@@ -82,9 +85,15 @@ async def handle_research(
     })
 
     if not report.get("source_count"):
-        await svc.manager.send_personal_message(
-            json.dumps({"type": "error", "content": "No web sources found."}),
-            websocket, session_logger=session_logger)
+        from error_types import make_diagnosis, ProblemCategory, Severity  # noqa: PLC0415
+        _diag = make_diagnosis(
+            ProblemCategory.GENERIC,
+            user_message=(
+                "I couldn't find any web sources for this topic. "
+                "This might be a temporary issue with the search service."),
+            remedy_hint="Try again in a minute, or rephrase your question.",
+            severity=Severity.INFO)
+        await notify_problem(svc, websocket, _diag)
         session_logger.log("research_error", {"stage": "search", "error": "no_sources"})
         return
 
@@ -111,8 +120,8 @@ async def handle_research(
         try:
             md = svc.research_engine.synthesize_note_markdown(report, summary)
             Path(note_path).write_text(md, encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            session_logger.log("research_note_md_failed", {"error": str(e)})
         # LLM-assisted note structuring (ONE call, optional): overwrite
         # the extractive markdown with a structured note (frontmatter,
         # H2 sections, wikilinks) if the LLM is available and passes the
@@ -133,9 +142,13 @@ async def handle_research(
         session_logger.log("research_note_created", {"note_path": note_path, "topic": topic})
     except Exception as e:
         session_logger.log_exception(e, context="note_creator.create_note_from_research")
-        await svc.manager.send_personal_message(
-            json.dumps({"type": "error", "content": f"Note creation failed: {e}"}),
-            websocket, session_logger=session_logger)
+        await notify_problem(svc, websocket, e,
+            context={"stage": "saving the research note"},
+            user_message=(
+                "I found web sources but couldn't save the research note "
+                "to your vault. The research is in my memory for this "
+                "chat, but it won't be saved permanently."),
+            remedy_hint="Try restarting VaultBot and running the research again.")
         return
 
     await svc.manager.send_personal_message(

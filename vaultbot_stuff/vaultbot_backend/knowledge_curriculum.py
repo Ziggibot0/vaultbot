@@ -85,15 +85,26 @@ _SINGLE_WORD_STOPICS: set[str] = {
     "untitled", "new", "old", "next", "prev", "previous", "back", "top",
     "yes", "no", "ok", "okay", "test", "example", "examples", "sample",
     "here", "there", "now", "today", "yesterday", "tomorrow",
+    # generic terms used as illustrative wikilinks in exemplar/chat notes
+    # ([[Wikilink]], [[Note]], [[Target]], [[TODO]]) — not research concepts
+    "wikilink", "wikilinks", "target", "chat-name",
 }
 # Template / placeholder patterns that show up as dangling links from
 # scaffolding or example notes ("Actual-Note-Title", "Note Name", "Topic").
+# Also covers multi-word illustrative wikilinks from exemplar notes
+# ([[Related Note]], [[Other post]], [[Note C]], [[Some-Note]]) and
+# code-template placeholders ([[{n}]]) that the graph treats as dangling.
 _PLACEHOLDER_RE = re.compile(
     r"^(?:note[-_ ]?name|actual[-_ ]?note[-_ ]?title|note[-_ ]?title|"
     r"topic|placeholder|untitled|example[-_ ]?note|new[-_ ]?note|"
-    r"lorem[-_ ]?ipsum|todo|tbd|foo|bar|baz|qux|test[-_ ]?note)$",
+    r"lorem[-_ ]?ipsum|todo|tbd|foo|bar|baz|qux|test[-_ ]?note|"
+    r"related[-_ ]?note|other[-_ ]?post|other[-_ ]?procedure|"
+    r"note[-_ ]?[a-z]|some[-_ ]?note)$",
     re.IGNORECASE,
 )
+# Code-template placeholder patterns like [[{n}]], [[{variable}]], [[%s]].
+_TEMPLATE_VAR_RE = re.compile(r"^\{[^}]+\}$|^\%[sd]$")
+
 # Minimum number of alphabetic characters a single-word topic must have to
 # be worth researching (filters "to", "up", "ok", ...).
 _MIN_SINGLE_WORD_LEN: int = 3
@@ -132,6 +143,16 @@ def _is_researchable_topic(gap: dict[str, Any]) -> bool:
         if topic.lower().startswith("chat-"):
             return False
         if _PLACEHOLDER_RE.match(topic):
+            return False
+        # Reject code-template placeholders ([[{n}]], [[%s]]) that the graph
+        # treats as dangling links. These are code artifacts, not concepts.
+        if _TEMPLATE_VAR_RE.match(topic):
+            return False
+        # Reject file paths — dead links to learningMaterial/web/*.html or
+        # any path with "/" or a file extension. These are broken file
+        # references, not researchable concepts.
+        if "/" in topic or topic.endswith((".html", ".md", ".pdf", ".py",
+                                            ".js", ".json", ".txt")):
             return False
         # Strip non-alpha for length/word checks but keep the original for
         # the placeholder regex above.

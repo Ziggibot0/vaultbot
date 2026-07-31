@@ -30,6 +30,29 @@ from services import Services
 # returning a half-built Services.
 _services: Optional[Services] = None
 
+# Module-level flag set by the background_index() task in main.py if the
+# startup reindex fails. Read on the first WS connect (routers/ws.py) so the
+# user sees the problem the moment they open the chat. Cleared after
+# surfacing so it doesn't repeat. Lives HERE (not on main.py) so ws.py can
+# read it via `from app_state import get_startup_reindex_failed` instead of
+# `import main` — a bare `import main` re-executes main.py's top-level code
+# (including acquire_lock() → sys.exit) and crashes every WebSocket.
+startup_reindex_failed: Optional[str] = None
+
+
+def set_startup_reindex_failed(value: Optional[str]) -> None:
+    """Set the startup-reindex-failure flag. Called by main.py's background_index."""
+    global startup_reindex_failed
+    startup_reindex_failed = value
+
+
+def get_startup_reindex_failed() -> Optional[str]:
+    """Read + CLEAR the startup-reindex-failure flag (one-shot notification)."""
+    global startup_reindex_failed
+    value = startup_reindex_failed
+    startup_reindex_failed = None
+    return value
+
 
 def set_services(svc: Services) -> None:
     """Set the global Services singleton. Called once by main.py at startup."""

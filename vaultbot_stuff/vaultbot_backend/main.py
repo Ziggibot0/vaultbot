@@ -10,6 +10,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# NOTE: the startup-reindex-failure flag lives in app_state.py (not here)
+# so routers/ws.py can read it via `from app_state import
+# get_startup_reindex_failed` instead of `import main` — a bare
+# `import main` re-executes this module's top-level code (including
+# acquire_lock() → sys.exit) and crashes every WebSocket handler.
+# main.py writes to it via app_state.set_startup_reindex_failed().
+
+# Main event loop reference, set during lifespan startup. Used by
+# background-thread callbacks (e.g. researcher crash) to schedule
+# coroutines on the main loop via run_coroutine_threadsafe.
+main_event_loop: asyncio.AbstractEventLoop | None = None
+
+import app_state
 import uvicorn
 from amem_evolution import AMemeEvolution
 from autonomous_researcher import AutonomousResearcher
@@ -158,7 +171,9 @@ async def lifespan(app: FastAPI):
     startup_logger = SessionLogger()
     startup_logger.log("server_startup", {"stage": "begin"})
     try:
+        global main_event_loop
         loop = asyncio.get_event_loop()
+        main_event_loop = loop
         # Purge stale crash-recovery partials. The old in-vault location
         # (vaultbot_backend/partials/) caused Obsidian's file-recovery core
         # plugin to race the backend's delete and spam ENOENT errors, so
@@ -190,6 +205,7 @@ async def lifespan(app: FastAPI):
                 await loop.run_in_executor(None, vault_indexer.index_missing_or_changed)
             except Exception as e:
                 startup_logger.log_exception(e, context="background_index")
+                app_state.set_startup_reindex_failed(str(e))
         asyncio.create_task(background_index())
 
         startup_logger.log("server_startup", {"stage": "end", "status": "ok",
@@ -360,6 +376,40 @@ procedure_tracker = ProcedureTracker(
 
 # Autonomous researcher: scans the vault for knowledge gaps and fills them
 # in the background. Started on server startup; can be toggled via the API.
+
+def _researcher_crash_callback(error: str) -> None:
+    """Broadcast a type:"problem" WS event when the researcher thread crashes.
+
+    Called from the researcher's daemon thread (not the main event loop), so
+    it uses asyncio.run_coroutine_threadsafe to bridge into the main loop.
+    If no loop is available or no connections are active, the problem is
+    still logged to the default session logger.
+    """
+    import json as _json  # noqa: PLC0415
+    from diagnostics import classify_error  # noqa: PLC0415
+    try:
+        diag = classify_error(RuntimeError(error),
+                               {"stage": "autonomous researcher"})
+        diag.user_message = (
+            "VaultBot's autonomous researcher stopped unexpectedly. "
+            "It won't fill knowledge gaps on its own until you restart. "
+            "Your chat still works normally.")
+        diag.remedy_hint = "Click Restart to start the researcher again."
+        payload = _json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
+        # manager is module-level (defined below); at call time (crash) it
+        # will already be assigned. The researcher thread outlives startup.
+        if manager is not None and manager.active_connections:
+            if main_event_loop is not None and main_event_loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast(payload), main_event_loop)
+        default_session_logger.log("problem_notified", {
+            "category": diag.category.value,
+            "user_message": diag.user_message,
+            "source": "autonomous_researcher_crash",
+        })
+    except Exception:
+        pass  # the callback must never raise
+
 autonomous_researcher = AutonomousResearcher(
     vault_path=os.getenv("VAULT_PATH", "."),
     vault_graph=vault_graph,
@@ -375,6 +425,7 @@ autonomous_researcher = AutonomousResearcher(
     checkpointer=checkpointer,
     procedure_tracker=procedure_tracker,
     ollama_client=ollama_client,
+    on_crash=_researcher_crash_callback,
 )
 
 # Self-improvement engine: lets VaultBot read/write its own code, run code in
@@ -633,6 +684,19 @@ app.include_router(_custom_tools_router.router)
 app.include_router(_task_router.router)
 app.include_router(_identity_router.router)
 app.include_router(_ws_router.router)
+
+@app.post("/reload-plugin")
+async def reload_plugin_endpoint():
+    """Broadcast a reload_plugin WebSocket message so the Obsidian plugin
+    reloads its main.js without the user manually toggling it in Settings.
+    Used after editing the plugin code (main.js/styles.css) so changes take
+    effect immediately. The backend stays running — only the plugin reloads.
+    """
+    import asyncio
+    asyncio.ensure_future(
+        manager.broadcast(json.dumps({"type": "reload_plugin"})),
+        main_event_loop)
+    return {"status": "reload_broadcast"}
 
 @app.post("/shutdown")
 async def shutdown_endpoint(request: Request):

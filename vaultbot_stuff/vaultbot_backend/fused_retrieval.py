@@ -26,11 +26,14 @@ mirrors the low-level path and leaves the community path as a drop-in extension.
 from __future__ import annotations
 
 import re
+import logging
 from typing import Any
 
 import numpy as np
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
+
+_frlog = logging.getLogger(__name__)
 
 try:
     from session_logger import SessionLogger
@@ -523,8 +526,8 @@ class FusedRetriever:
             for n, node in (self.vault_graph.nodes or {}).items():
                 if node.get("file_path") == fp:
                     return n
-        except Exception:
-            pass
+        except Exception as e:
+            _frlog.debug("graph name lookup failed: %s", e)
         return self._normalize_name(fp)
 
     @staticmethod
@@ -566,7 +569,7 @@ class FusedRetriever:
             if self.session_logger is not None:
                 self.session_logger.log("fused_retrieval", {"event": event, "detail": detail})
         except Exception:
-            pass
+            _frlog.debug("fused_retrieval log failed")
 
     @staticmethod
     def _empty() -> dict[str, Any]:

@@ -220,14 +220,25 @@ class AMemeEvolution:
             )
             if heuristic_match:
                 suggested_tags = [new_note_title]
-            elif (not heuristic_only) and self.ollama_client is not None:
+            elif not heuristic_only:
+                # Tier 2: embedding-based tag suggestion (local Ollama embedding,
+                # NOT the cloud LLM). Extracts noun phrases from the highest-
+                # similarity sentence fragments. Zero generative LLM calls.
                 try:
-                    suggested_tags = self._llm_suggest_tags(
-                        new_note_title, new_note_content, content
-                    )
+                    suggested_tags = self._embedding_suggest_tags(
+                        new_note_title, new_note_content, content)
                 except Exception as e:  # noqa: BLE001
-                    self._log_error("llm_suggest_tags_failed", e)
+                    self._log_error("embedding_suggest_tags_failed", e)
                     suggested_tags = []
+                # Tier 3 (last resort): LLM tag suggestion.
+                if not suggested_tags and self.ollama_client is not None:
+                    try:
+                        suggested_tags = self._llm_suggest_tags(
+                            new_note_title, new_note_content, content
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        self._log_error("llm_suggest_tags_failed", e)
+                        suggested_tags = []
 
             if not suggested_tags:
                 # Fallback heuristic: if the new note's title token appears in the
@@ -272,6 +283,64 @@ class AMemeEvolution:
         except Exception as e:  # noqa: BLE001
             self._log_error("evolve_neighbor_failed", e, {"path": neighbor_path})
         return out
+
+    # ------------------------------------------------------------------ #
+    # Embedding-based tag suggestion (Tier 2: local Ollama, no cloud LLM)
+    # ------------------------------------------------------------------ #
+    def _embedding_suggest_tags(
+        self,
+        new_title: str,
+        new_content: str,
+        neighbor_content: str,
+    ) -> list[str]:
+        """Suggest tags via embedding similarity — zero generative LLM calls.
+
+        Embeds the new note title+preview and the neighbor content, then
+        extracts noun phrases from the neighbor as tag candidates. Only
+        suggests tags if there's meaningful semantic overlap (cosine
+        similarity > 0.3). Uses the local Ollama embedding model
+        (nomic-embed-text), NOT the cloud LLM key.
+        """
+        if self.vault_indexer is None:
+            return []
+        try:
+            import numpy as _np
+            import re as _re
+            # Embed the new note: title + first 500 chars.
+            new_text = (new_title + " " + new_content[:500]).strip()
+            new_emb = self.vault_indexer._get_embedding(new_text)
+            if new_emb is None:
+                return []
+            neighbor_emb = self.vault_indexer._get_embedding(
+                neighbor_content[:4000])
+            if neighbor_emb is None:
+                return []
+            new_v = _np.asarray(new_emb, dtype=_np.float32)
+            neigh_v = _np.asarray(neighbor_emb, dtype=_np.float32)
+            cos_sim = float(_np.dot(new_v, neigh_v) / (
+                _np.linalg.norm(new_v) * _np.linalg.norm(neigh_v) + 1e-8))
+            if cos_sim < 0.3:
+                return []
+            # Extract noun phrases from the neighbor (capitalized phrases).
+            phrases = _re.findall(
+                r"\b([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+){0,2})\b",
+                neighbor_content)
+            stop = {"The", "This", "That", "These", "Those", "It", "They",
+                    "We", "You", "He", "She", "There", "Here", "Note", "Notes",
+                    "Section", "Chapter", "Figure", "Table", "Example"}
+            candidates = [p for p in phrases if p not in stop and len(p) >= 3]
+            seen: set[str] = set()
+            tags: list[str] = []
+            for c in candidates:
+                cl = c.lower()
+                if cl not in seen:
+                    seen.add(cl)
+                    tags.append(c)
+                if len(tags) >= 3:
+                    break
+            return tags
+        except Exception:
+            return []
 
     # ------------------------------------------------------------------ #
     # LLM tag suggestion

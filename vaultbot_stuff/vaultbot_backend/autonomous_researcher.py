@@ -25,13 +25,23 @@ import threading
 import time
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from note_creator import NoteCreator
 from research_engine import ResearchEngine
 from session_logger import SessionLogger
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
+
+# Reuse the curriculum's structural filters so the researcher's second-layer
+# gate and the curriculum's first-layer gate apply the SAME rules — no
+# duplicated, divergent blocklists. The curriculum owns the canonical set
+# of placeholder patterns, single-word stopics, and template-var patterns.
+from knowledge_curriculum import (
+    _PLACEHOLDER_RE as _CURRICULUM_PLACEHOLDER_RE,
+    _SINGLE_WORD_STOPICS as _CURRICULUM_SINGLE_WORD_STOPICS,
+    _TEMPLATE_VAR_RE as _CURRICULUM_TEMPLATE_VAR_RE,
+)
 
 # ---------------------------------------------------------------------------
 # Gap quality gate — prevents the researcher from wasting cycles on topics
@@ -48,7 +58,8 @@ _BAD_TOPIC_PREFIXES = (
 )
 
 # Topics matching these regex patterns are note titles / file artifacts,
-# not researchable concepts.
+# not researchable concepts. Extends the curriculum's _PLACEHOLDER_RE with
+# researcher-specific exact-match patterns (file artifacts like README/LICENSE).
 _BAD_TOPIC_PATTERNS = re.compile(
     r"^(?:partial|untitled|draft|todo|tbd|readme|license)$",
     re.IGNORECASE,
@@ -150,6 +161,27 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
         if _BAD_TOPIC_PATTERNS.match(topic):
             return False
 
+        # Apply the curriculum's structural filters so both layers use the
+        # same rules: placeholder patterns ([[Related Note]], [[Note-Title]]),
+        # code-template vars ([[{n}]]), and single-word stopics (note, target,
+        # wikilink, todo, etc.). This avoids a divergent bespoke blocklist.
+        if _CURRICULUM_PLACEHOLDER_RE.match(topic):
+            return False
+        if _CURRICULUM_TEMPLATE_VAR_RE.match(topic):
+            return False
+        # Single-word stopic check (mirrors the curriculum's logic).
+        alpha = re.sub(r"[^a-zA-Z\s]+", " ", topic).strip()
+        alpha_words = [w for w in alpha.split() if w]
+        if len(alpha_words) == 1 and alpha_words[0].lower() in _CURRICULUM_SINGLE_WORD_STOPICS:
+            return False
+
+        # Reject file paths — dead links to learningMaterial/web/*.html or
+        # any path containing "/" or ending in a file extension. These are
+        # broken file references, not researchable concepts.
+        if "/" in topic or topic.endswith((".html", ".md", ".pdf", ".py",
+                                           ".js", ".json", ".txt")):
+            return False
+
         # Reject VaultBot's own tool / API names — "how to code_run",
         # "how to safe_write", etc. are procedural gaps about OUR tools,
         # not web-researchable concepts. The web has nothing useful on
@@ -202,6 +234,7 @@ class AutonomousResearcher:
         checkpointer=None,
         procedure_tracker=None,
         ollama_client=None,
+        on_crash: Callable[[str], None] | None = None,
     ):
         self.vault_path = Path(vault_path).resolve()
         self.search_client = search_client
@@ -217,6 +250,7 @@ class AutonomousResearcher:
         self.checkpointer = checkpointer  # Checkpointer (crash recovery)
         self.procedure_tracker = procedure_tracker  # ProcedureTracker (failure-driven evolution)
         self.ollama_client = ollama_client  # OllamaClient (LLM-assisted note structuring)
+        self.on_crash = on_crash  # called if the background thread crashes
 
         self.engine = ResearchEngine(
             session_logger=session_logger,
@@ -297,28 +331,28 @@ class AutonomousResearcher:
             if not result or not result.get("synthesis"):
                 return None
 
-            # Use ollama_client for note structuring if available.
+            # Use deterministic note structuring (token economy: the note_creator
+            # + synthesize_note_markdown already handle frontmatter + sections).
+            # The old LLM _structure_note call was a redundant second LLM call per
+            # note — the synthesis LLM call already produced the content.
             synthesis = result["synthesis"]
-            if self.ollama_client:
-                try:
-                    synthesis = self._structure_note(synthesis, topic)
-                except Exception:
-                    pass  # Fall back to raw synthesis.
 
-            # Write the note.
-            note_path = self.note_creator.create_research_note(
+            # Write the note. NoteCreator.create_note_from_research takes
+            # (topic, research_content, summary) — synthesis is the content,
+            # a short slice of it serves as the summary blurb.
+            note_path = self.note_creator.create_note_from_research(
                 topic=topic,
-                synthesis=synthesis,
-                sources=result.get("sources", []),
-                vault_path=str(self.vault_path),
+                research_content=synthesis,
+                summary=synthesis[:500] if synthesis else None,
             )
 
             # Re-index.
             if self.vault_indexer:
                 try:
                     self.vault_indexer.index_note(note_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._log("autonomous_index_note_failed",
+                        {"path": note_path, "error": str(e)})
 
             return note_path
         except Exception as e:
@@ -328,23 +362,14 @@ class AutonomousResearcher:
             return None
 
     def _structure_note(self, synthesis: str, topic: str) -> str:
-        """Use the LLM to structure a raw synthesis into a proper note."""
-        if not self.ollama_client:
-            return synthesis
+        """Deterministic note structuring (token economy: no LLM call).
 
-        prompt = (
-            f"Structure this research synthesis into a well-formatted "
-            f"markdown note about '{topic}'. Add section headers, clean up "
-            f"formatting, and ensure wikilinks are properly formatted. "
-            f"Do NOT add new facts — only restructure what's already there.\n\n"
-            f"{synthesis}"
-        )
-        response = self.ollama_client.chat(
-            messages=[{"role": "user", "content": prompt}],
-            model="latest",
-        )
-        if response and response.get("message", {}).get("content"):
-            return response["message"]["content"]
+        The old version called the LLM to "structure" the synthesis. But the
+        synthesis already has the content, and the note_creator +
+        synthesize_note_markdown already produce frontmatter + H2 sections +
+        citations. This method is kept for backward compat but now just returns
+        the synthesis unchanged — the caller handles formatting.
+        """
         return synthesis
 
     async def _run_consolidation(self) -> dict[str, Any]:
@@ -384,35 +409,53 @@ class AutonomousResearcher:
                 cluster = sp["cluster"]
                 prompt = sp["prompt"]
 
-                # Phase 4: LLM synthesis
-                if not self.ollama_client:
-                    continue  # Can't synthesize without LLM
+                # Phase 4: Synthesis (template by default, LLM only if enabled)
+                import os as _os
+                _use_llm = _os.getenv(
+                    "VAULTBOT_CONSOLIDATION_MODE", "template").lower() == "llm"
 
-                try:
-                    response = self.ollama_client.chat(
-                        messages=[{"role": "user", "content": prompt}],
-                        model="latest",
-                    )
-                    content = response.get("message", {}).get("content", "")
-                    if not content or len(content) < 100:
+                content = None
+                if _use_llm and self.ollama_client:
+                    # LLM synthesis path (old behavior).
+                    try:
+                        response = self.ollama_client.chat(
+                            messages=[{"role": "user", "content": prompt}],
+                            model="latest",
+                        )
+                        content = response.get("message", {}).get("content", "")
+                        if not content or len(content) < 100:
+                            content = None
+                    except Exception as e:
+                        self._log("autonomous_consolidation_error", {
+                            "theme": cluster["theme"],
+                            "error": str(e),
+                        })
+
+                if content is None:
+                    # Template synthesis (zero LLM, default path).
+                    try:
+                        content = pipeline.build_synthesis_template(cluster)
+                    except Exception as e:
+                        self._log("autonomous_consolidation_error", {
+                            "theme": cluster["theme"],
+                            "error": str(e),
+                        })
                         continue
 
-                    # Phases 5-6: Validate + Store
-                    note_result = pipeline.finalize_note(cluster, content)
-                    if note_result.get("ok"):
-                        consolidated.append({
-                            "theme": cluster["theme"],
-                            "note_path": note_result["note_path"],
-                            "warnings": note_result.get("warnings", []),
-                        })
-                        self._log("autonomous_consolidation_note", {
-                            "theme": cluster["theme"],
-                            "note_path": note_result["note_path"],
-                        })
-                except Exception as e:
-                    self._log("autonomous_consolidation_error", {
+                if not content or len(content) < 100:
+                    continue
+
+                # Phases 5-6: Validate + Store
+                note_result = pipeline.finalize_note(cluster, content)
+                if note_result.get("ok"):
+                    consolidated.append({
                         "theme": cluster["theme"],
-                        "error": str(e),
+                        "note_path": note_result["note_path"],
+                        "warnings": note_result.get("warnings", []),
+                    })
+                    self._log("autonomous_consolidation_note", {
+                        "theme": cluster["theme"],
+                        "note_path": note_result["note_path"],
                     })
 
             return {
@@ -526,8 +569,8 @@ class AutonomousResearcher:
                     self.checkpointer.save([
                         __import__("checkpointer").ResearchCheckpoint(**c) for c in cycle_checkpoints
                     ])
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._log("checkpoint_save_failed", {"error": str(e)})
             note_path = self._research_to_note(gap)
             # Update the checkpoint with the result.
             ckpt["status"] = "done" if note_path else "failed"
@@ -570,8 +613,8 @@ class AutonomousResearcher:
         if self.checkpointer is not None:
             try:
                 self.checkpointer.clear()
-            except Exception:
-                pass
+            except Exception as e:
+                self._log("checkpoint_clear_failed", {"error": str(e)})
 
     async def _run(self):
         """Main loop: sleep, cycle, repeat until stopped."""
@@ -609,6 +652,14 @@ class AutonomousResearcher:
                 loop.run_until_complete(self._run())
             except Exception as e:
                 self._log("autonomous_thread_crashed", {"error": str(e)})
+                # Notify the user via the on_crash callback (wired in main.py
+                # to broadcast a type:"problem" WS event). Without this the
+                # vault silently stops growing and the user has no idea.
+                if self.on_crash is not None:
+                    try:
+                        self.on_crash(str(e))
+                    except Exception:
+                        pass  # the callback must never crash the thread
             finally:
                 loop.close()
 
@@ -625,7 +676,7 @@ class AutonomousResearcher:
                 for task in asyncio.all_tasks(loop=self._loop):
                     task.cancel()
             except Exception:
-                pass
+                pass  # best-effort cleanup during shutdown
 
     def status(self) -> dict[str, Any]:
         """Return a status summary for the GUI / vaultbot_status tool."""

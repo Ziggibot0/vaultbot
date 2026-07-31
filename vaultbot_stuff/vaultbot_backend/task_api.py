@@ -123,7 +123,9 @@ async def create_task(svc: Services, payload: dict) -> Any:
         return {"error": f"execution failed: {e}", "plan_id": plan_id}, 500
     svc.plan_executor.save_plan(plan, str(plan_path))
 
-    # Judge completion (deterministic fallback if no LLM).
+    # Judge completion (deterministic — the verifier IS the judge; the LLM
+    # judge path is intentionally not used, as the deterministic verifier is
+    # the whole point of the plan executor's design).
     judgment = svc.plan_executor.judge(plan)
     return {"plan_id": plan_id, "plan": svc.plan_executor.plan_to_json(plan),
             "judgment": judgment, "executed": True}

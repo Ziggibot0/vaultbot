@@ -23,6 +23,11 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
+# --- Token-economy consolidation mode ---
+# llm        = always LLM synthesis (old behavior)
+# template   = always deterministic template (default) — zero LLM calls
+_CONSOLIDATION_MODE = os.getenv("VAULTBOT_CONSOLIDATION_MODE", "template").lower()
+
 
 class ConsolidationPipeline:
     """The full consolidation pipeline: extract → cluster → synthesize → validate → store.
@@ -189,8 +194,105 @@ class ConsolidationPipeline:
         return labeled
 
     # ------------------------------------------------------------------
-    # Phase 4: Synthesize (LLM-Assisted, Scaffolded)
+    # Phase 4: Synthesize (LLM-Assisted or Template)
     # ------------------------------------------------------------------
+
+    _TEMPLATE_IMPLICATIONS = {
+        "recurring_topic": (
+            "This topic has appeared across multiple sessions, suggesting it "
+            "is a recurring focus area for the operator. Consider whether "
+            "dedicated notes or a Map of Content would help consolidate the "
+            "related knowledge."
+        ),
+        "correction_pattern": (
+            "The operator frequently corrects responses of this type. This "
+            "indicates a systematic misunderstanding or a style preference "
+            "that should be adjusted in future interactions."
+        ),
+        "over_reporting": (
+            "The operator prefers more concise communication. Future "
+            "responses of this type should be trimmed to the essential "
+            "information only."
+        ),
+        "workflow_pattern": (
+            "This tool sequence is used frequently and could be a candidate "
+            "for a custom procedure or composite tool."
+        ),
+    }
+
+    def build_synthesis_template(self, cluster: dict) -> str:
+        """Build a semantic note deterministically from pre-extracted patterns.
+
+        Zero LLM calls. The patterns are already the analysis; this method
+        just wraps them in note structure. The result has:
+          - A # heading (theme)
+          - A body paragraph (template per pattern kind)
+          - Per-pattern bullets (deterministic extraction of description + evidence)
+          - A ## What This Means section (templated per kind)
+          - A ## Evidence section (wikilinks to evidence sources)
+        """
+        theme = cluster.get("theme", "unknown")
+        kind = cluster.get("kind", "general")
+        evidence_count = cluster.get("evidence_count", 0)
+        evidence_sources = cluster.get("evidence_sources", [])
+        patterns = cluster.get("patterns", [])
+
+        lines: list[str] = []
+        lines.append(f"# {theme.replace('-', ' ').title()}")
+        lines.append("")
+
+        # Body: describe the pattern type.
+        lines.append(
+            f"This note consolidates {evidence_count} observations of a "
+            f"**{kind.replace('_', ' ')}** pattern across chat sessions."
+        )
+        lines.append("")
+
+        # Per-pattern bullets.
+        lines.append("## Observed Patterns")
+        for p in patterns[:10]:
+            desc = ""
+            if isinstance(p, dict):
+                desc = (p.get("topic") or p.get("description")
+                        or p.get("name") or json.dumps(p, default=str)[:200])
+                mentions = p.get("total_mentions") or p.get("count") or ""
+                if mentions:
+                    desc += f" ({mentions} mentions)"
+            elif isinstance(p, str):
+                desc = p[:200]
+            if desc:
+                lines.append(f"- {desc}")
+        lines.append("")
+
+        # What This Means (template per kind).
+        lines.append("## What This Means")
+        implication = self._TEMPLATE_IMPLICATIONS.get(
+            kind,
+            "This pattern recurs across sessions and may warrant dedicated "
+            "knowledge structure (a note or a Map of Content)."
+        )
+        lines.append(implication)
+        lines.append("")
+
+        # Evidence section (wikilinks).
+        lines.append("## Evidence")
+        if evidence_sources:
+            for src in evidence_sources[:10]:
+                if src:
+                    lines.append(f"- [[{src}]]")
+        else:
+            lines.append("- (no specific evidence sources recorded)")
+        lines.append("")
+
+        # Limitation note if evidence is thin.
+        if evidence_count < 3:
+            lines.append(
+                f"> [!warning] Tentative pattern — only {evidence_count} "
+                f"instance(s) observed. Confirm with more sessions."
+            )
+            lines.append("")
+
+        return "\n".join(lines)
 
     def build_synthesis_prompt(self, cluster: dict) -> str:
         """Build the LLM prompt for synthesizing a cluster into a semantic note.

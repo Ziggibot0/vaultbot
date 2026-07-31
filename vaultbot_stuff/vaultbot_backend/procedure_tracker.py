@@ -25,6 +25,7 @@ failure detection and re-research targeting. See
 
 import json
 import os
+import re
 from collections import defaultdict
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,35 @@ _TRACKER_IGNORED_DIRS = {
     "vaultbot_venv", "vaultbot_index", "sessions", "partials",
     ".git", ".obsidian", "trash",
 }
+
+
+# --- Task-name validation for procedural gap detection ---
+# Prevents leaked chat messages (user_message[:100]) from becoming
+# "how to {chat_message}" research topics. Valid task names are short
+# identifiers like "code_run", "safe_write", "vault_lint", "tool_create".
+# A task name with spaces + sentence punctuation + >5 words is prose, not
+# an identifier — reject it so the autonomous researcher doesn't waste a
+# web-search cycle on the user's literal chat message.
+
+_MAX_TASK_WORDS = 5          # "code_run" = 1 word; a sentence = 10+
+_MAX_TASK_LEN = 40          # tool names are short; chat messages are 100
+_TASK_PROSE_RE = re.compile(r"[.!?,;:'\"]")  # sentence punctuation = prose
+
+
+def _is_valid_task_name(task: str) -> bool:
+    """True if ``task`` looks like a real tool/task identifier, not prose."""
+    if not task or not task.strip():
+        return False
+    t = task.strip()
+    if len(t) > _MAX_TASK_LEN:
+        return False
+    # Sentence punctuation = leaked prose, not an identifier.
+    if _TASK_PROSE_RE.search(t):
+        return False
+    words = t.split()
+    if len(words) > _MAX_TASK_WORDS:
+        return False
+    return True
 
 
 # --- Structured failure categories (not free-text) ---
@@ -433,6 +463,14 @@ class ProcedureTracker:
             gaps = []
             for task, count in task_counts.items():
                 if count >= FAILURE_THRESHOLD:
+                    # Guard: only emit gaps for task values that look like
+                    # actual tool/task identifiers, not leaked chat messages
+                    # or prose. A raw user message ("keep going yes please...")
+                    # would become "how to keep going yes please..." and waste
+                    # a web-research cycle. Valid task names are short
+                    # identifiers (code_run, safe_write, vault_lint, etc.).
+                    if not _is_valid_task_name(task):
+                        continue
                     gaps.append({
                         "kind": "procedural_gap",
                         "topic": f"how to {task}",

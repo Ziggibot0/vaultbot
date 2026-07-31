@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -31,6 +32,8 @@ from concept_card import build_cards_batch
 from fastapi import WebSocket
 from moc_builder import build_mocs_incremental
 from services import Services
+
+_wlog = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Cross-book concept linking (LLM-free, semantic)
@@ -83,8 +86,8 @@ async def _send_progress(svc: Services, websocket: WebSocket | None,
             json.dumps({"type": "progress", "stage": stage,
                          "detail": detail or {}}),
             websocket, session_logger=svc.session_logger)
-    except Exception:
-        pass
+    except Exception as e:
+        _wlog.debug("weaving progress send failed: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +123,8 @@ def existing_note_titles(svc: Services) -> dict:
             if len(stem) < 3:
                 continue  # too short to link safely (e.g. "a", "is")
             titles[stem.lower()] = fp
-    except Exception:
-        pass
+    except Exception as e:
+        _wlog.warning("existing_note_titles failed: %s", e)
     return titles
 
 
@@ -192,8 +195,8 @@ def index_note_now(svc: Services, note_path: str) -> None:
     try:
         svc.vault_indexer._add_file(note_path)
         svc.vault_indexer.persist()
-    except Exception:
-        pass
+    except Exception as e:
+        _wlog.warning("index_add for %s failed: %s", note_path, e)
 
 
 def cross_link_textbooks(svc: Services,
@@ -288,8 +291,8 @@ def cross_link_textbooks(svc: Services,
                     out["notes_linked"] += 1
             except Exception:
                 continue
-    except Exception:
-        pass
+    except Exception as e:
+        _wlog.warning("outbound linking failed: %s", e)
     return out
 
 
@@ -424,8 +427,8 @@ async def weave_textbook_notes(svc: Services,
         # rescans.  A-MEM is told to skip its own refresh via skip_refresh.
         try:
             svc.vault_graph.refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            _wlog.warning("vault_graph.refresh failed: %s", e)
 
         # --- Pass 2: outbound links + A-MEM (sequential, fast) --- #
         # A-MEM runs in heuristic_only mode here: the per-neighbor LLM
@@ -510,7 +513,7 @@ async def weave_textbook_notes(svc: Services,
             try:
                 sl.log("concept_card_build_failed", {"error": str(e)})
             except Exception:
-                pass
+                _wlog.debug("concept_card_build_failed log failed: %s", e)
 
         # --- Pass 5: L2 maps of content (incremental, graph-integrity-
         # preserving).  Cluster the L1 cards by embedding similarity and
@@ -551,8 +554,8 @@ async def weave_textbook_notes(svc: Services,
                         _mn, recovered = await loop.run_in_executor(
                             None, svc.vault_indexer.batch_add_files, missing, True)
                         full_embs.update(recovered)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        _wlog.warning("batch_add missing cards failed: %s", e)
                 moc_result = await loop.run_in_executor(
                     None, build_mocs_incremental, all_card_paths, full_embs,
                     str(textbooks_dir), card_paths, None)
@@ -575,13 +578,13 @@ async def weave_textbook_notes(svc: Services,
                         "new_clusters": out.get("new_clusters", 0),
                         "clusters": len(out.get("clusters", []))})
                 except Exception:
-                    pass
+                    _wlog.debug("hierarchy_built log failed")
             except Exception as e:
                 out["mocs_built"] = 0
                 try:
                     sl.log("moc_build_failed", {"error": str(e)})
                 except Exception:
-                    pass
+                    _wlog.debug("moc_build_failed log failed: %s", e)
         else:
             out["mocs_built"] = 0
 

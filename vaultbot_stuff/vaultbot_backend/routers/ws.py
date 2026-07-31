@@ -17,7 +17,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from app_state import get_services
+from app_state import get_services, get_startup_reindex_failed
 from diagnostics import classify_error
 from services import Services
 from session_logger import SessionLogger
@@ -62,6 +62,32 @@ async def websocket_endpoint(websocket: WebSocket,
         "session_id": session_logger.session_id,
         "title": session_logger.title,
     }), websocket, session_logger=session_logger)
+
+    # ── Startup reindex failure check ────────────────────────────────
+    # If the background reindex crashed on startup (before any WS was
+    # connected), the flag is set. Surface it now so the user knows their
+    # vault may not be fully searchable. Cleared after surfacing.
+    #
+    # The flag lives in app_state (NOT on main.py) so this router never
+    # needs to `import main` — a bare `import main` re-executes main.py's
+    # top-level code (including acquire_lock() → sys.exit) and crashes the
+    # WebSocket handler. See app_state.py docstring.
+    try:
+        _reindex_err = get_startup_reindex_failed()  # reads + clears (one-shot)
+        if _reindex_err:
+            from chat_helpers import notify_problem  # noqa: PLC0415
+            from diagnostics import classify_error  # noqa: PLC0415
+            _diag = classify_error(
+                RuntimeError(_reindex_err),
+                {"stage": "indexing the vault on startup"})
+            # Override with a more specific user message.
+            _diag.user_message = (
+                "VaultBot couldn't finish indexing your vault on startup. "
+                "Some notes might not appear in search until you restart.")
+            _diag.remedy_hint = "Click Restart to re-index your vault."
+            await notify_problem(svc, websocket, _diag)
+    except Exception:
+        pass  # never block the WS connect on a notification failure
     # Per-connection conversation history. This is THE fix for the "amnesia"
     # bug: without it, every message started a fresh 2-message conversation
     # (system + this message) with zero memory of prior turns.

@@ -21,6 +21,7 @@ The ops wrap the existing building blocks (vault_graph, vault_indexer,
 note_creator, research_engine, ollama_client) without modifying them.
 """
 
+import os
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -216,8 +217,14 @@ class GraphOpRegistry:
                 if 20 <= len(fact) <= 240 and fact not in key_facts:
                     key_facts.append(fact)
 
-            # Optionally enrich with an LLM pass if a client is wired in.
-            if self.ollama_client is not None:
+            # Optionally enrich with an LLM pass if a client is wired in
+            # AND the user has explicitly enabled it. Default: off (token
+            # economy — the regex extraction above is good enough for most
+            # cases, and the LLM enrichment is a polish step, not a knowledge
+            # step). Enable with VAULTBOT_EXTRACT_LLM_ENRICH=on.
+            _ENRICH = os.getenv("VAULTBOT_EXTRACT_LLM_ENRICH", "off").lower() in (
+                "on", "true", "1", "yes")
+            if _ENRICH and self.ollama_client is not None:
                 try:
                     prompt = (
                         "Extract the most important entities (proper nouns, "
