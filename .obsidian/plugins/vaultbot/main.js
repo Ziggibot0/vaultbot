@@ -1322,7 +1322,10 @@ class VaultBotPlugin extends Plugin {
 					// This fixes the case where the key was set in .env but not
 					// in the plugin settings â€” the backend's load_dotenv('../.env')
 					// will pick it up.
-					TAVILY_API_KEY: this.settings.tavilyApiKey || process.env.TAVILY_API_KEY || ''
+					TAVILY_API_KEY: this.settings.tavilyApiKey || process.env.TAVILY_API_KEY || '',
+					// Pass the allowContributions setting so the submit_contribution
+					// tool can check it without reading data.json directly.
+					VAULTBOT_ALLOW_CONTRIBUTIONS: this.settings.allowContributions ? 'true' : 'false'
 				})
 		});
 		backendProcess.unref();
@@ -1910,6 +1913,26 @@ class VaultBotSettingTab extends PluginSettingTab {
 				}));
 			dirToggles.push(toggle);
 		}
+
+		containerEl.createEl('h3', {text: 'Community contributions'});
+		containerEl.createEl('div', {text:
+			'Allow your VaultBot to submit improvements (bug fixes, new tools, ' +
+			'documentation) to the upstream VaultBot repo as pull requests. ' +
+			'Your notes, chat logs, and personal data are NEVER included \u2014 ' +
+			'only code files. You also need a GITHUB_TOKEN in your .env file. ' +
+			'See CONTRIBUTING.md for details.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+
+		new Setting(containerEl)
+			.setName('Allow contributions')
+			.setDesc('Let your VaultBot submit pull requests to the VaultBot project')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.allowContributions || false)
+				.onChange(async (value) => {
+					this.plugin.settings.allowContributions = value;
+					await this.plugin.saveSettings();
+					new Notice(value ? 'Contributions enabled' : 'Contributions disabled');
+				}));
 
 		containerEl.createEl('h3', {text: 'Updates'});
 
