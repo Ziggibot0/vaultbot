@@ -271,32 +271,36 @@ Wikipedia") and it will store that as a directive note itself.
 ```
 .
 ├── .obsidian/plugins/vaultbot/   # The Obsidian plugin (chat UI)
-├── baseline/                      # Starter directive templates (not active)
-├── learningMaterial/              # Your PDFs / textbooks (gitignored)
-├── vaultbot/                      # The vault: your notes (gitignored)
-│   ├── chat/                      #   conversation logs
-│   ├── research/                  #   autonomous research notes
-│   └── textbooks/                 #   ingested textbook sections
-├── vaultbot_backend/              # The Python backend
-│   ├── main.py                    #   FastAPI server + chat loop
-│   ├── agent_tools.py             #   tool schemas + system prompt
-│   ├── self_improver.py           #   safe self-edit + capability audit
-│   ├── fused_retrieval.py         #   vector + graph + backlink retrieval
-│   ├── research_engine.py         #   LLM-free web research
-│   ├── vault_indexer.py            #   FAISS index + chunked embeddings
-│   ├── vault_graph.py             #   wikilink graph + context builder
-│   ├── abstract_context.py        #   L2/L1/L0 multi-resolution context
-│   ├── embedding_drift.py         #   relevance-feedback drift
-│   ├── concept_card.py            #   L1 extractive concept cards
-│   ├── moc_builder.py             #   L2 map-of-content clustering
-│   ├── identity/                  #   IDENTITY.md, SELF_MODEL.md, GOALS.md
-│   ├── custom_tools/              #   agent-authored tools (grows itself)
-│   └── ...
-├── .env.example                   # Template — installer copies to .env
-├── setup.ps1                      # One-click installer (Windows)
-├── setup.sh                       # One-click installer (macOS/Linux)
-└── vaultbot_backend/requirements.txt
+├── vaultbot_stuff/
+│   ├── baseline/                  # Starter directive templates (not active)
+│   ├── vaultbot_backend/          # The Python backend
+│   │   ├── main.py                #   FastAPI server + chat loop
+│   │   ├── agent_tools.py         #   tool schemas + system prompt
+│   │   ├── self_improver.py       #   safe self-edit + capability audit
+│   │   ├── fused_retrieval.py     #   vector + graph + backlink retrieval
+│   │   ├── research_engine.py     #   LLM-free web research
+│   │   ├── vault_indexer.py       #   FAISS index + chunked embeddings
+│   │   ├── vault_graph.py         #   wikilink graph + context builder
+│   │   ├── custom_tools/          #   agent-authored tools (grows itself)
+│   │   ├── identity/              #   IDENTITY.md, SELF_MODEL.md, GOALS.md
+│   │   └── ...
+│   ├── System/                    # Architecture docs, procedures, playbooks
+│   ├── .env.example                # Template for .env (API keys, model config)
+│   ├── CONTRIBUTING.md            # How to contribute
+│   ├── README.md                  # This file
+│   └── setup.ps1 / setup.sh       # One-click installers
+├── README.md                      # GitHub-facing README
+├── CONTRIBUTING.md                # GitHub-facing contributing guide
+├── SECURITY.md                    # Security policy
+└── LICENSE                        # MIT license
 ```
+
+Your personal content stays at the vault root:
+- `User/` — your notes (gitignored)
+- `vaultbot_stuff/Memory/` — chat logs (gitignored)
+- `vaultbot_stuff/Knowledge/` — research notes (gitignored)
+- `vaultbot_stuff/learningMaterial/` — PDFs / textbooks (gitignored)
+- `.env` — API keys (gitignored)
 
 ## License & contact
 

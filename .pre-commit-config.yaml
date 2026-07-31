@@ -1,6 +1,5 @@
 # Pre-commit hooks for VaultBot.
-# Sean doesn't run these himself, but they're here for when help arrives
-# (or for me, GitHub Copilot, when editing).  Install once with:
+# Install once with:
 #   pre-commit install
 # Then every commit auto-runs ruff + ruff-format.
 repos:

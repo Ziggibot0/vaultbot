@@ -158,3 +158,10 @@ boot_*.log
 # MCP client config (generated dynamically by plugin on startup)
 .obsidian/plugins/vaultbot/mcp.json
 .vscode/mcp.json
+
+# Personal Obsidian settings (regenerated per user)
+.obsidian/appearance.json
+.obsidian/hotkeys.json
+.obsidian/core-plugins.json
+# Backup files
+*.bak
