@@ -23,7 +23,7 @@ from services import Services
 from session_logger import SessionLogger
 from chat_handler import handle_chat
 from research_handler import handle_research
-from conversation_state import load_history, clear_history
+from conversation_state import load_history, clear_history, clear_trail_tracker
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -176,6 +176,7 @@ async def websocket_endpoint(websocket: WebSocket,
                 # Wipe the persisted copy too so a restart after /new doesn't
                 # resurrect the cleared thread.
                 clear_history()
+                clear_trail_tracker()
                 old_session_id = session_logger.session_id
                 session_logger = SessionLogger()
                 session_logger.log("session_reset", {

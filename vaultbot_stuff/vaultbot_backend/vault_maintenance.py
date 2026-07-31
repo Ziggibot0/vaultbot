@@ -71,6 +71,54 @@ class VaultMaintenance:
             return 0.0
         return SequenceMatcher(None, a, b).ratio()
 
+
+    # --- Conversation trail linking ---
+    # Track the most recently created/updated chat note so consecutive
+    # chat notes can be linked in chronological order (Previous/Next).
+    # The tracker file lives in the chat directory's parent (Memory/).
+    _TRAIL_TRACKER = "Memory/_last_chat_note.txt"
+
+    def _trail_tracker_path(self) -> Path:
+        return self.chat_dir.parent / "_last_chat_note.txt"
+
+    def _read_last_chat_note(self) -> str | None:
+        """Read the stem of the most recent chat note, or None if not set."""
+        try:
+            p = self._trail_tracker_path()
+            if p.exists():
+                return p.read_text(encoding="utf-8").strip() or None
+        except Exception:
+            return None
+        return None
+
+    def _write_last_chat_note(self, stem: str) -> None:
+        """Record the stem of the most recently created/updated chat note."""
+        try:
+            p = self._trail_tracker_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(stem, encoding="utf-8")
+        except Exception:
+            pass  # never break the chat loop over trail tracking
+
+    def _inject_trail_link(self, content: str, direction: str, target_stem: str) -> str:
+        """Add or update a Previous/Next trail link in the note content.
+
+        If the link already exists, update it. If not, insert it after the
+        title line (first ``# heading``). Idempotent: never duplicates.
+        """
+        pattern = rf'\*\*{direction}:\*\* \[\[[^\]]+\]\]'
+        replacement = f'**{direction}:** [[{target_stem}]]'
+
+        if re.search(pattern, content):
+            return re.sub(pattern, replacement, content)
+        else:
+            lines = content.split('\n')
+            for i, line in enumerate(lines):
+                if line.startswith('# '):
+                    lines.insert(i + 1, f'\n**{direction}:** [[{target_stem}]]')
+                    return '\n'.join(lines)
+            return f'**{direction}:** [[{target_stem}]]\n' + content
+
     def merge_chat_note(self, topic: str, new_entry: str) -> Path:
         """
         Append a new chat exchange to an existing chat note for this topic,
@@ -113,7 +161,25 @@ class VaultMaintenance:
                 "inputs": {"topic": topic},
             })
 
+        # --- Conversation trail: link this note to the previous one ---
+        prev_stem = self._read_last_chat_note()
+        if prev_stem and prev_stem != safe_topic:
+            # Add "Previous" link to this note
+            content = self._inject_trail_link(content, "Previous", prev_stem)
+            # Add "Next" link to the previous note
+            prev_path = self.chat_dir / f"{prev_stem}.md"
+            if prev_path.exists():
+                try:
+                    prev_text = prev_path.read_text(encoding="utf-8")
+                    prev_text = self._inject_trail_link(prev_text, "Next", safe_topic)
+                    prev_path.write_text(prev_text, encoding="utf-8")
+                except Exception:
+                    pass  # never break the chat loop over trail tracking
+
         note_path.write_text(content, encoding="utf-8")
+
+        # Update the tracker so the next chat note links to this one
+        self._write_last_chat_note(safe_topic)
         return note_path
 
     def create_research_note(self, topic: str, summary: str, research_content: str,

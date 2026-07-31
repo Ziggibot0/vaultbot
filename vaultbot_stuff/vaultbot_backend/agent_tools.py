@@ -494,6 +494,137 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
+# -- Tool tier classification (progressive disclosure) -----------------------
+# Core tools are ALWAYS sent to the LLM. Contextual tools are sent when the
+# task matches their category (keyword-based selection in chat_handler.py).
+# Procedure candidates are tools that should become procedures -- surfaced via
+# RAG as one-line description cards, not full tool schemas.
+#
+# See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]] Feature 3.
+# See [[Tool-vs-Procedure-Decision-Guide]] for the decision test.
+
+CORE_TOOL_NAMES: set[str] = {
+    "vault_search",       # always needed for retrieval
+    "plan_task",           # always needed for multi-step tasks
+    "update_task",         # always needed for multi-step tasks
+    "set_goal",            # always needed for goal management
+    "execute_procedure",   # always needed to invoke procedures
+    "code_read",           # general capability -- reading files
+}
+
+CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {
+    "research": ["vault_research", "web_read_source"],
+    "code_edit": [
+        "code_run", "safe_write", "js_safe_write", "git_rollback",
+        "backend_restart", "plugin_reload",
+    ],
+    "vault_maintenance": [
+        "vault_gaps", "vaultbot_status", "vault_list", "vault_safe_write",
+        "vault_append", "vault_delete", "vault_lint",
+    ],
+    "self_improvement": ["tool_create"],
+}
+
+# Tools that should become procedures (removed from tool schemas, surfaced
+# via RAG as procedure description cards). These are specific workflows that
+# are only relevant in narrow contexts -- they are noise in the tool list 90%
+# of the time, per the [[Tool-vs-Procedure-Decision-Guide]] decision test.
+PROCEDURE_CANDIDATE_NAMES: set[str] = {
+    "self_reflect", "capability_audit", "preflight_safety_check",
+    "vault_graph_analyzer", "vault_cluster_analyzer",
+    "textbook_ingest", "textbook_read_page",
+    "review_contributions", "submit_contribution", "torture_test",
+}
+
+
+def get_core_tools() -> list[dict[str, Any]]:
+    """Return the tool schemas for core tools (always sent to the LLM)."""
+    all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
+    return [all_defs[name] for name in CORE_TOOL_NAMES if name in all_defs]
+
+
+def get_contextual_tools(category: str) -> list[dict[str, Any]]:
+    """Return the tool schemas for a contextual category."""
+    all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
+    names = CONTEXTUAL_TOOL_CATEGORIES.get(category, [])
+    return [all_defs[name] for name in names if name in all_defs]
+
+
+def select_contextual_categories(user_message: str, plan_text: str = "") -> set[str]:
+    """Deterministic keyword-based selection of which contextual tool
+    categories are relevant for the current task.
+
+    No LLM cost. Matches the user message + current plan against keyword
+    categories. Returns a set of category names.
+    """
+    text = (user_message + " " + plan_text).lower()
+    selected: set[str] = set()
+
+    if any(kw in text for kw in [
+        "research", "investigate", "look up", "find out",
+        "what is", "how does", "source", "web", "article",
+    ]):
+        selected.add("research")
+
+    if any(kw in text for kw in [
+        "code", "fix", "edit", "write", "modify", "bug",
+        "implement", "function", "python", "javascript",
+        ".py", ".js", "backend", "plugin",
+    ]):
+        selected.add("code_edit")
+
+    if any(kw in text for kw in [
+        "vault", "graph", "gaps", "note", "link",
+        "wikilink", "cluster", "lint", "delete", "orphan",
+        "island", "merge", "maintenance",
+    ]):
+        selected.add("vault_maintenance")
+
+    if any(kw in text for kw in [
+        "tool", "build", "create", "improve", "self-improve",
+        "reflect", "ability", "capability",
+    ]):
+        selected.add("self_improvement")
+
+    return selected
+
+
+def build_tool_list(user_message: str, plan_text: str = "",
+                    custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Build the tool list for the LLM call using progressive disclosure.
+
+    Core tools are always included. Contextual tools are added based on
+    keyword matching. Custom tools are always included (agent-authored
+    tools are generally task-specific and the model chose to create them).
+    Procedure candidates are NOT included -- they are surfaced via RAG.
+    """
+    tools = get_core_tools()
+    categories = select_contextual_categories(user_message, plan_text)
+    for cat in categories:
+        tools.extend(get_contextual_tools(cat))
+
+    if custom_schemas:
+        # Filter out procedure candidates from custom tools — they should
+        # be surfaced via RAG as procedure description cards, not as tool
+        # schemas. See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]].
+        for s in custom_schemas:
+            name = s.get("function", {}).get("name", "")
+            if name not in PROCEDURE_CANDIDATE_NAMES:
+                tools.append(s)
+
+    # Dedupe by function name (a tool might appear in both core and contextual)
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for t in tools:
+        name = t.get("function", {}).get("name", "")
+        if name and name not in seen:
+            seen.add(name)
+            deduped.append(t)
+
+    return deduped
+
+
+
 def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
                         gaps_summary: str, custom_tools: str = "",
                         custom_tool_names: list[str] = None) -> str:

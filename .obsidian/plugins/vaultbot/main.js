@@ -1099,6 +1099,23 @@ class VaultBotPlugin extends Plugin {
 				newVersion = man.version || '?';
 			} catch (e) {}
 
+			// Re-run pip install in case the update added new dependencies.
+			try {
+				const venvPython = this._venvPythonExe(vaultRoot);
+				const reqPath = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'requirements.txt');
+				if (fs.existsSync(venvPython) && fs.existsSync(reqPath)) {
+					notify('Checking for new dependencies...');
+					const { execFileSync } = require('child_process');
+					execFileSync(venvPython, ['-m', 'pip', 'install', '-r', reqPath, '--quiet'], {
+						cwd: vaultRoot, stdio: 'ignore', timeout: 120000,
+					});
+					notify('Dependencies updated.');
+				}
+			} catch (e) {
+				console.warn('VaultBot: pip install during update failed (non-fatal):', e);
+				notify('Could not check new dependencies - will try starting anyway.');
+			}
+
 			notify(`Update applied (v${newVersion}). Restarting backend…`);
 			// Bring the backend + MCP back up so the user is not left dark.
 			await this.startBackendIfNeeded();
@@ -1247,6 +1264,189 @@ class VaultBotPlugin extends Plugin {
 		return await this.isBackendRunning();
 	}
 
+
+	// Read the last N lines of backend.log for diagnostics.
+	_readBackendLog(vaultRoot, maxLines = 50) {
+		const fs = require('fs');
+		const logFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'backend.log');
+		try {
+			if (!fs.existsSync(logFile)) return '';
+			const content = fs.readFileSync(logFile, 'utf8');
+			const lines = content.split('\n');
+			return lines.slice(-maxLines).join('\n');
+		} catch (e) {
+			return '';
+		}
+	}
+
+	// Diagnose backend startup failure by reading backend.log.
+	// Returns {title, message, remedy, action} or null if no pattern matched.
+	_diagnoseStartupFailure(vaultRoot) {
+		const log = this._readBackendLog(vaultRoot);
+		if (!log) return null;
+
+		const patterns = [
+			{
+				test: /faiss|numpy.*multiarray|numpy\.core\.size|undefined symbol.*faiss/i,
+				title: 'Library version mismatch',
+				message: 'VaultBot\'s search index library (FAISS) and numpy don\'t match versions. This can happen after an update.',
+				remedy: 'Click "Repair libraries" below to reinstall the matching libraries automatically.',
+				action: 'repair_faiss',
+			},
+			{
+				test: /ModuleNotFoundError|ImportError|No module named/i,
+				title: 'Missing Python packages',
+				message: 'Some Python packages VaultBot needs are not installed. This can happen after an update adds new dependencies.',
+				remedy: 'Click "Install packages" below to get everything needed.',
+				action: 'install_deps',
+			},
+			{
+				test: /Ollama|connection refused.*11434|ollama.*not/i,
+				title: 'Ollama is not running',
+				message: 'VaultBot needs Ollama running for its embedding model. Ollama doesn\'t seem to be started right now.',
+				remedy: 'Open the Ollama app (look for its icon in your system tray or Start menu), then click "Restart backend" below.',
+				action: 'restart_backend',
+			},
+			{
+				test: /Address already in use|port.*8000|bind.*8000/i,
+				title: 'Port 8000 is in use',
+				message: 'Another program is using VaultBot\'s port (8000). This is usually a stale VaultBot process.',
+				remedy: 'Click "Restart backend" below to stop the stale process and start fresh.',
+				action: 'restart_backend',
+			},
+			{
+				test: /Permission denied|Access denied|WinError 5/i,
+				title: 'Permission issue',
+				message: 'VaultBot can\'t access some of its files. This can happen if an antivirus or sync tool is locking files.',
+				remedy: 'Try restarting your computer, then reopen Obsidian. If it persists, try moving your vault to a plain local folder.',
+				action: 'none',
+			},
+		];
+
+		for (const p of patterns) {
+			if (p.test.test(log)) return p;
+		}
+		return null;
+	}
+
+	// Show a diagnostic modal when the backend fails to start.
+	_showStartupFailureModal(vaultRoot) {
+		const diagnosis = this._diagnoseStartupFailure(vaultRoot);
+		const modal = new Modal(this.app);
+		modal.titleEl.setText('VaultBot couldn\'t start');
+		modal.titleEl.style.color = 'var(--text-error)';
+
+		if (diagnosis) {
+			const desc = modal.contentEl.createEl('p');
+			desc.setText(diagnosis.message);
+			desc.style.opacity = '0.85';
+			desc.style.lineHeight = '1.5';
+
+			const remedy = modal.contentEl.createEl('p');
+			remedy.setText(diagnosis.remedy);
+			remedy.style.opacity = '0.7';
+			remedy.style.fontSize = '0.9em';
+
+			if (diagnosis.action === 'repair_faiss') {
+				const btn = modal.contentEl.createEl('button', {text: 'Repair libraries', cls: 'mod-cta'});
+				btn.addEventListener('click', async () => {
+					modal.close();
+					await this._repairFaiss(vaultRoot);
+				});
+			} else if (diagnosis.action === 'install_deps') {
+				const btn = modal.contentEl.createEl('button', {text: 'Install packages', cls: 'mod-cta'});
+				btn.addEventListener('click', async () => {
+					modal.close();
+					await this._installDeps(vaultRoot);
+				});
+			} else if (diagnosis.action === 'restart_backend') {
+				const btn = modal.contentEl.createEl('button', {text: 'Restart backend', cls: 'mod-cta'});
+				btn.addEventListener('click', async () => {
+					modal.close();
+					await this.restartBackend();
+				});
+			}
+		} else {
+			const desc = modal.contentEl.createEl('p');
+			desc.setText('VaultBot\'s backend started but didn\'t respond in time. This can happen for various reasons.');
+			desc.style.opacity = '0.85';
+			desc.style.lineHeight = '1.5';
+
+			const logTail = this._readBackendLog(vaultRoot, 10);
+			if (logTail) {
+				const logEl = modal.contentEl.createEl('pre');
+				logEl.setText(logTail);
+				logEl.style.background = 'var(--background-secondary)';
+				logEl.style.padding = '8px';
+				logEl.style.borderRadius = '4px';
+				logEl.style.fontSize = '11px';
+				logEl.style.maxHeight = '150px';
+				logEl.style.overflow = 'auto';
+				logEl.style.whiteSpace = 'pre-wrap';
+				logEl.style.wordBreak = 'break-all';
+			}
+
+			const remedy = modal.contentEl.createEl('p');
+			remedy.setText('Try clicking "Restart backend" below. If it keeps happening, use the "Show setup instructions" command to re-run the installer.');
+			remedy.style.opacity = '0.7';
+			remedy.style.fontSize = '0.9em';
+		}
+
+		const restartBtn = modal.contentEl.createEl('button', {text: 'Restart backend', cls: 'mod-cta'});
+		restartBtn.style.marginTop = '12px';
+		restartBtn.addEventListener('click', async () => {
+			modal.close();
+			await this.restartBackend();
+		});
+
+		modal.open();
+	}
+
+	// Repair faiss/numpy ABI mismatch by force-reinstalling both.
+	async _repairFaiss(vaultRoot) {
+		const { execFile } = require('child_process');
+		const venvPython = this._venvPythonExe(vaultRoot);
+		const notify = (msg) => { try { new Notice(msg); } catch (e) {} };
+		notify('Repairing FAISS + numpy... this takes a minute.');
+		try {
+			execFile(venvPython, ['-m', 'pip', 'install', '--force-reinstall', 'faiss-cpu>=1.11.0', 'numpy>=2.0.0'], {
+				cwd: vaultRoot, stdio: 'inherit',
+			}, (err) => {
+				if (err) {
+					notify('Repair failed: ' + err.message + '. Try re-running the installer.');
+				} else {
+					notify('Libraries repaired. Restarting backend...');
+					this.restartBackend();
+				}
+			});
+		} catch (e) {
+			notify('Repair failed: ' + e.message);
+		}
+	}
+
+	// Re-run pip install to get any new dependencies.
+	async _installDeps(vaultRoot) {
+		const { execFile } = require('child_process');
+		const venvPython = this._venvPythonExe(vaultRoot);
+		const reqPath = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'requirements.txt');
+		const notify = (msg) => { try { new Notice(msg); } catch (e) {} };
+		notify('Installing missing packages... this can take a few minutes.');
+		try {
+			execFile(venvPython, ['-m', 'pip', 'install', '-r', reqPath], {
+				cwd: vaultRoot, stdio: 'inherit',
+			}, (err) => {
+				if (err) {
+					notify('Install failed: ' + err.message + '. Try re-running the installer.');
+				} else {
+					notify('Packages installed. Restarting backend...');
+					this.restartBackend();
+				}
+			});
+		} catch (e) {
+			notify('Install failed: ' + e.message);
+		}
+	}
+
 	async startBackendIfNeeded() {
 		if (this.backendStarting) {
 			new Notice('VaultBot backend is already starting...');
@@ -1355,12 +1555,17 @@ class VaultBotPlugin extends Plugin {
 				if (await this.isBackendRunning()) {
 					running = true;
 				} else {
-					throw new Error('Backend process started but did not respond in time. Check vaultbot_stuff/vaultbot_backend/backend.log.');
+					this._showStartupFailureModal(vaultRoot);
+				return;
 				}
 			}
 			new Notice('VaultBot backend is ready.');
 		} catch (err) {
-			new Notice('Failed to start VaultBot backend: ' + err.message);
+			if (err && err.message && err.message.includes('did not respond')) {
+				this._showStartupFailureModal(vaultRoot);
+			} else {
+				new Notice('Failed to start VaultBot backend: ' + err.message);
+			}
 			console.error('VaultBot backend spawn error:', err);
 		} finally {
 			this.backendStarting = false;

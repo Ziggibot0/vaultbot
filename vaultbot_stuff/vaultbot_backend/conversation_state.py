@@ -161,3 +161,18 @@ def clear_history(path: str | None = None) -> None:
             os.remove(p)
     except Exception as exc:  # noqa: BLE001
         logger.warning("conversation_state clear failed: %s", exc)
+
+def clear_trail_tracker(vault_path: str | None = None) -> None:
+    """Wipe the conversation trail tracker (called on ``/new``).
+
+    Deletes ``Memory/_last_chat_note.txt`` so the next chat note starts a
+    fresh trail instead of linking to the pre-reset conversation.
+    Best-effort: never raises.
+    """
+    try:
+        vp = Path(vault_path or os.getenv("VAULT_PATH", "."))
+        tracker = vp / "vaultbot_stuff" / "Memory" / "_last_chat_note.txt"
+        if tracker.exists():
+            tracker.unlink()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("trail tracker clear failed: %s", exc)

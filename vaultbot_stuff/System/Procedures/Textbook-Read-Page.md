@@ -1,0 +1,21 @@
+---
+type: procedure
+status: verified
+created: 2026-07-31
+description: "Read one page of an ingested textbook PDF and get its content as text. The page is rendered to an image and read by a vision model so equations, figures, and tables come through exactly as printed."
+when: "When reading a specific page from an ingested textbook"
+allowed_tools: [vault_search]
+---
+
+# Textbook-Read-Page
+
+Read one page of an ingested textbook PDF and get its content as text. The page is rendered to an image and read by a vision-capable model so equations, figures, and tables come through exactly as printed — unlike a text-layer extract which drops vector-drawn math.
+
+## Steps
+
+1. ```python
+   # Call the textbook_read_page tool's run() function
+   from custom_tools.textbook_read_page import run as _read_page
+   result = _read_page({"pdf": args.get("pdf", ""), "page": args.get("page", 1)})
+   print(result)
+   ```

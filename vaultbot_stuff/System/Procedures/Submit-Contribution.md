@@ -1,0 +1,25 @@
+---
+type: procedure
+status: verified
+created: 2026-07-31
+description: "Submit uncommitted changes as a GitHub pull request for community review. Forks the repo if needed, pushes, and creates a cross-fork PR."
+when: "When submitting code changes for community review"
+allowed_tools: [code_read, vault_search]
+---
+
+# Submit-Contribution
+
+Submit uncommitted changes as a GitHub pull request for community review. If the user has write access to the upstream repo, pushes directly and creates a PR. If not, forks the repo, pushes to the fork, and creates a cross-fork PR.
+
+## Steps
+
+1. ```python
+   # Call the submit_contribution tool's run() function
+   from custom_tools.submit_contribution import run as _submit
+   result = _submit({
+       "title": args.get("title", ""),
+       "description": args.get("description", ""),
+       "files": args.get("files", []),
+   })
+   print(result)
+   ```

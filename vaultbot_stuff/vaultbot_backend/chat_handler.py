@@ -41,7 +41,7 @@ from typing import Any
 from abstract_context import build_abstract_context
 from agent_tools import (
     META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_prompt,
-    build_system_prompt_briefing,
+    build_system_prompt_briefing, build_tool_list,
 )
 from chat_checkpoint import snapshot_working_memory
 
@@ -67,6 +67,43 @@ from weaving import (
 )
 from working_memory import TaskList
 
+
+
+
+def _apply_sliding_window(
+    conversation: list[dict[str, Any]],
+    window_size: int = 0,
+) -> list[dict[str, Any]]:
+    """Bound the conversation sent to the LLM to the last N messages.
+
+    Replaces lossy compaction (LLM summarization) with a deterministic slice.
+    The first 2 messages (system prompt + vault context) are always kept;
+    the last ``window_size`` messages are kept; everything in between is
+    dropped. The full conversation is on disk in chat notes
+    (``Memory/Chat/Chat-*.md``) and retrievable via ``vault_search``.
+
+    Tool-call-pair safety: if the window boundary lands on a ``tool`` message
+    whose parent ``assistant`` message (with ``tool_calls``) would be outside
+    the window, walk the boundary backward until it lands on a non-tool
+    message. This prevents orphaned tool results that break the Ollama tool
+    protocol.
+
+    See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]].
+    """
+    if window_size <= 0:
+        window_size = int(os.getenv("VAULTBOT_SLIDING_WINDOW", "20"))
+    if len(conversation) <= window_size + 2:
+        return conversation
+
+    head = conversation[:2]
+    split_point = len(conversation) - window_size
+
+    # Walk backward past tool messages so we don't split a tool-call pair.
+    while split_point > 2 and isinstance(conversation[split_point], dict) \
+            and conversation[split_point].get("role") == "tool":
+        split_point -= 1
+
+    return head + conversation[split_point:]
 
 async def handle_chat(svc: Services, websocket: WebSocket,
                      user_message: str, session_logger) -> None:
@@ -288,7 +325,9 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # improvement) + any agent-authored custom tools currently loaded.
         custom_schemas = svc.self_improver.custom_tool_schemas()
         custom_tool_names = [s["function"]["name"] for s in custom_schemas]
-        all_tools = TOOL_DEFINITIONS + META_TOOL_DEFINITIONS + custom_schemas
+        # Progressive disclosure: send only core + contextually relevant tools
+        # instead of all 32 schemas every call. See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]] Feature 3.
+        all_tools = build_tool_list(user_message, "", custom_schemas)
         custom_tools_desc = "\n".join(
             f"- {s['function']['name']}: {s['function']['description'][:100]}"
             for s in custom_schemas) if custom_schemas else "(none yet)"
@@ -394,6 +433,20 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         if svc.compactor.should_compact(conversation):
             conversation = svc.compactor.compact(conversation)
             session_logger.log("context_compacted", {"messages": len(conversation)})
+
+        # --- Sliding window: bound the conversation sent to the LLM ---
+        # The compactor is disabled (should_compact returns False). Instead
+        # of summarizing old messages (lossy, costs an LLM call), we keep
+        # only the last N messages. Everything older is in chat notes
+        # (Memory/Chat/) and retrievable via vault_search if the model
+        # needs it. This is non-lossy: no information is destroyed.
+        _pre_window_len = len(conversation)
+        conversation = _apply_sliding_window(conversation)
+        if len(conversation) < _pre_window_len:
+            session_logger.log("sliding_window_applied", {
+                "messages_before": _pre_window_len,
+                "messages_after": len(conversation),
+            })
 
         # --- Token-usage meter: report how full the context window is ----------
         # Estimates the token cost of the full conversation (system prompts +
@@ -761,7 +814,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 # new tool is callable in the very next round.
                 if tool_name == "tool_create":
                     custom_schemas = svc.self_improver.custom_tool_schemas()
-                    all_tools = TOOL_DEFINITIONS + META_TOOL_DEFINITIONS + custom_schemas
+                    all_tools = build_tool_list(user_message, "", custom_schemas)
                 tool_duration = (loop.time() - t_tool0) * 1000
                 session_logger.log("tool_call_result", {
                     "tool": tool_name, "duration_ms": tool_duration,
@@ -844,6 +897,20 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 session_logger.log("mid_loop_compact_skipped", {
                     "round": round_idx,
                     "messages": len(conversation),
+                })
+
+            # --- Sliding window (mid-loop): re-apply after tool results ---
+            # Each tool round adds 2+ messages (assistant + tool result).
+            # Over many rounds the conversation balloons even though it
+            # started windowed. Re-apply the sliding window here so the
+            # next LLM round sees a bounded conversation.
+            _pre_mid_len = len(conversation)
+            conversation = _apply_sliding_window(conversation)
+            if len(conversation) < _pre_mid_len:
+                session_logger.log("mid_loop_sliding_window", {
+                    "round": round_idx,
+                    "messages_before": _pre_mid_len,
+                    "messages_after": len(conversation),
                 })
 
             # Deterministic stop signal (the Copilot/Claude Code pattern): if
