@@ -63,7 +63,7 @@ def build_graph(vault_path, exclude_patterns=None):
         try:
             with open(full_path, encoding='utf-8') as f:
                 content = f.read()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             continue
         node_id = to_node_id(fp)
         links = parse_wikilinks(content)
@@ -189,6 +189,6 @@ def run(args: dict) -> dict:
     try:
         result = analyze_graph(vault_path, exclude_patterns, max_hops)
         return {'status': 'success', 'analysis': result}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         import traceback
         return {'status': 'error', 'message': str(e), 'traceback': traceback.format_exc()}

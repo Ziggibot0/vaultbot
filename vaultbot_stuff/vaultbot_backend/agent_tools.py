@@ -115,8 +115,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": (
                 "Plan a multi-step task by writing a structured task list "
                 "into your working memory. This is how you stay on track "
-                "across tool rounds instead of losing the plot in the "
-                "compacted transcript. Call this BEFORE doing any work on a "
+                "across tool rounds instead of losing the plot when old "
+                "messages fall out of the sliding window. Call this BEFORE doing any work on a "
                 "task that needs more than one tool call. Decompose the "
                 "task into concrete, verifiable steps. Each step should be "
                 "something you can mark completed with evidence. After "
@@ -494,53 +494,39 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
-# -- Tool tier classification (progressive disclosure) -----------------------
-# Core tools are ALWAYS sent to the LLM. Contextual tools are sent when the
-# task matches their category (keyword-based selection in chat_handler.py).
-# Procedure candidates are tools that should become procedures -- surfaced via
-# RAG as one-line description cards, not full tool schemas.
+# -- Tool list (the model sees all of these every turn) --------------------
+# Every tool the system prompt references is in this set. The model was
+# told to "test with code_run", "use safe_write to edit", "call
+# tool_create" — so all of those MUST be in the tool list or the model
+# truthfully reports it can't find the tool it was instructed to use.
 #
-# See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]] Feature 3.
+# Narrow-purpose repetitive tasks are still procedures (System/Procedures/),
+# discovered via RAG and run via execute_procedure. But the self-edit /
+# self-improvement meta-tools can't be procedures: they run model-invented
+# code/text, so they're inherently open-ended. They stay tools.
+#
 # See [[Tool-vs-Procedure-Decision-Guide]] for the decision test.
 
 CORE_TOOL_NAMES: set[str] = {
-    "vault_search",       # always needed for retrieval
-    "plan_task",           # always needed for multi-step tasks
-    "update_task",         # always needed for multi-step tasks
-    "set_goal",            # always needed for goal management
-    "execute_procedure",   # always needed to invoke procedures
-    "code_read",           # general capability -- reading files
-}
-
-CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {
-    "research": ["vault_research", "web_read_source"],
-    "code_edit": [
-        "code_run", "safe_write", "js_safe_write", "git_rollback",
-        "backend_restart", "plugin_reload",
-    ],
-    "vault_maintenance": [
-        "vault_safe_write", "vault_append", "vault_delete",
-    ],
-    "self_improvement": ["tool_create"],
-}
-
-# Tools that should become procedures (removed from tool schemas, surfaced
-# via RAG as procedure description cards). These are specific workflows that
-# are only relevant in narrow contexts -- they are noise in the tool list 90%
-# of the time, per the [[Tool-vs-Procedure-Decision-Guide]] decision test.
-# The user's directive: "most tools should be procedures." Procedures are
-# preferable over tools for repetitive specific tasks. Each of these has a
-# corresponding note in System/Procedures/ that the step-gate runtime executes.
-PROCEDURE_CANDIDATE_NAMES: set[str] = {
-    "self_reflect", "capability_audit", "preflight_safety_check",
-    "vault_graph_analyzer", "vault_cluster_analyzer",
-    "textbook_ingest", "textbook_read_page",
-    "review_contributions", "submit_contribution", "torture_test",
-    # Moved from contextual tools to procedures:
-    "vault_gaps",        # has Vault-Gaps procedure pattern
-    "vaultbot_status",   # deterministic status report = procedure
-    "vault_list",        # listing notes = procedure
-    "vault_lint",        # Fix-Indentation + Verify-Syntax procedures
+    # Fundamental capabilities needed in every session:
+    "vault_search",          # semantic search over the vault
+    "vault_research",        # web research when the vault is thin
+    "code_read",             # read any file (vault or backend source)
+    "plan_task",             # plan a multi-step task (working memory)
+    "update_task",           # mark plan progress
+    "execute_procedure",     # run a procedure note
+    "vault_safe_write",      # write/create notes
+    "vault_append",          # append to existing notes
+    "web_read_source",       # re-read saved web sources
+    # Self-improvement / self-edit meta-tools (referenced by the system
+    # prompt — must be in the tool list or the model can't call them):
+    "code_run",              # test Python in a sandboxed subprocess
+    "safe_write",            # verified self-edit of backend .py files
+    "js_safe_write",         # verified self-edit of plugin .js files
+    "tool_create",           # create + register a new custom tool
+    "self_reflect",          # propose new tools from a task description
+    "capability_audit",      # inventory tools + assess coverage for a task
+    "git_rollback",          # recover from a bad self-edit
 }
 
 
@@ -550,73 +536,21 @@ def get_core_tools() -> list[dict[str, Any]]:
     return [all_defs[name] for name in CORE_TOOL_NAMES if name in all_defs]
 
 
-def get_contextual_tools(category: str) -> list[dict[str, Any]]:
-    """Return the tool schemas for a contextual category."""
-    all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
-    names = CONTEXTUAL_TOOL_CATEGORIES.get(category, [])
-    return [all_defs[name] for name in names if name in all_defs]
-
-
-def select_contextual_categories(user_message: str, plan_text: str = "") -> set[str]:
-    """Deterministic keyword-based selection of which contextual tool
-    categories are relevant for the current task.
-
-    No LLM cost. Matches the user message + current plan against keyword
-    categories. Returns a set of category names.
-    """
-    text = (user_message + " " + plan_text).lower()
-    selected: set[str] = set()
-
-    if any(kw in text for kw in [
-        "research", "investigate", "look up", "find out",
-        "what is", "how does", "source", "web", "article",
-    ]):
-        selected.add("research")
-
-    if any(kw in text for kw in [
-        "code", "fix", "edit", "write", "modify", "bug",
-        "implement", "function", "python", "javascript",
-        ".py", ".js", "backend", "plugin",
-    ]):
-        selected.add("code_edit")
-
-    if any(kw in text for kw in [
-        "vault", "graph", "gaps", "note", "link",
-        "wikilink", "cluster", "lint", "delete", "orphan",
-        "island", "merge", "maintenance",
-    ]):
-        selected.add("vault_maintenance")
-
-    if any(kw in text for kw in [
-        "tool", "build", "create", "improve", "self-improve",
-        "reflect", "ability", "capability",
-    ]):
-        selected.add("self_improvement")
-
-    return selected
-
-
 def build_tool_list(user_message: str, plan_text: str = "",
                     custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
-    """Build the tool list for the LLM call using progressive disclosure.
+    """Build the tool list for the LLM call.
 
-    Core tools are always included. Contextual tools are added based on
-    keyword matching. Custom tools are always included (agent-authored
-    tools are generally task-specific and the model chose to create them).
-    Procedure candidates are NOT included -- they are surfaced via RAG.
+    Only core tools are sent. Narrow-purpose tools are procedure notes
+    (System/Procedures/) — discovered via RAG, executed via execute_procedure.
+    Custom tool schemas that aren't in CORE_TOOL_NAMES are ignored (they
+    should be procedures, not tools).
     """
     tools = get_core_tools()
-    categories = select_contextual_categories(user_message, plan_text)
-    for cat in categories:
-        tools.extend(get_contextual_tools(cat))
 
     if custom_schemas:
-        # Filter out procedure candidates from custom tools — they should
-        # be surfaced via RAG as procedure description cards, not as tool
-        # schemas. See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]].
         for s in custom_schemas:
             name = s.get("function", {}).get("name", "")
-            if name not in PROCEDURE_CANDIDATE_NAMES:
+            if name in CORE_TOOL_NAMES:
                 tools.append(s)
 
     # Dedupe by function name (a tool might appear in both core and contextual)
@@ -684,10 +618,8 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
                     + ", ".join(topics)
                 )
 
-    # Count total tools so the LLM knows its own scope of power.
-    total_builtin = len(TOOL_DEFINITIONS) + len(META_TOOL_DEFINITIONS)
-    total_custom = len(custom_tool_names) if custom_tool_names else 0
-    total_tools = total_builtin + total_custom
+    # Count core tools so the LLM knows its own scope of power.
+    total_tools = len(CORE_TOOL_NAMES)
 
     return (
         f"# IDENTITY\n"
@@ -719,41 +651,26 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"customer service bot. You have personality: capable, concise, "
         f"warmly loyal, occasionally dry. You are, in short, built to serve.\n\n"
         f"# YOUR POWER\n"
-        f"You are remarkably capable. Right now you have {total_tools} tools "
-        f"({total_builtin} built-in + {total_custom} you've authored). You can:\n"
+        f"You have {total_tools} core tools. You can:\n"
         f"- Research any topic on the web and write permanent, sourced notes "
         f"(vault_research). The research engine is LLM-light — the burden is "
         f"on the vault and web, not your weights.\n"
         f"- Search the vault via FUSED retrieval (vault_search): vector + "
         f"wikilink graph + backlinks combined, so you find notes that are "
         f"semantically OR structurally related — not just keyword matches.\n"
-        f"- Detect the vault's own knowledge gaps via the knowledge curriculum "
-        f"(vault_gaps): a Voyager-style self-directed curriculum that ranks "
-        f"gaps by diversity + achievability, not just reference count.\n"
-        f"- Read your own source code (code_read), run code in a sandbox "
-        f"(code_run), and CREATE entirely new tools for yourself "
-        f"(tool_create) — which are instantly callable by you and external "
-        f"MCP clients.\n"
-        f"- SAFE-EDIT your own source: safe_write verifies an edit won't "
-        f"break the backend (syntax + import check in a subprocess, auto-"
-        f"rollback on failure). Use it INSTEAD of code_write for any .py "
-        f"- SAFE-EDIT JavaScript files: js_safe_write validates "
-        f"JS syntax with node --check before writing (atomic "
-        f"pattern). Use it for the Obsidian plugin main.js and "
-        f"any .js file. NEVER use safe_write for .js files or "
-        f"js_safe_write for .py files.\n"
-        f"file under vaultbot_backend/. git_rollback restores a bad edit.\n"
-        f"- AUDIT your own capabilities: capability_audit lists every tool "
-        f"you have and, given a task, tells you whether you have a gap. Run "
-        f"it before attempting a task to see where your capabilities end "
-        f"and the request begins.\n"
-        f"- Reflect on what abilities you lack and propose new ones "
-        f"(self_reflect), then build them.\n"
-        f"- Roll back bad self-edits (git_rollback).\n"
-        f"- Report your own operational state (vaultbot_status).\n"
+        f"- Read any file in the vault or backend (code_read).\n"
+        f"- Write and append notes (vault_safe_write, vault_append).\n"
+        f"- Re-read saved web sources (web_read_source).\n"
+        f"- Plan multi-step tasks (plan_task, update_task).\n"
+        f"- Execute PROCEDURES (execute_procedure): notes in "
+        f"System/Procedures/ that encode specific workflows. When one "
+        f"surfaces in vault context and matches your task, run it. "
+        f"Procedures include: Safe-Write (self-edit code), Write-Python-Tool "
+        f"(create new tools), Code-Run (execute Python), Vault-List (list "
+        f"notes), Vault-Gaps (find knowledge gaps), Vault-Lint (check note "
+        f"quality), System-Status (report state), Backend-Restart, and more. "
         f"You grow yourself. When you hit a wall, you don't give up — you "
-        f"build the tool that gets you over it. This is what makes you "
-        f"powerful: you are not static.\n\n"
+        f"build the procedure that gets you over it.\n\n"
         f"# YOUR MIND\n"
         f"Your mind is the vault's interconnected notes — NOT your model "
         f"weights. The model is swappable plumbing. This is why you stay "
@@ -793,6 +710,18 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"read this turn. ALWAYS call update_task after completing each "
         f"planned step — if you don't mark progress, the framework can't "
         f"tell you're making progress and will nudge you to synthesize.\n"
+        f"   TURN PROTOCOL (how you end each response): Every response you "
+        f"write MUST end with exactly one of two signals:\n"
+        f"   - To CONTINUE working: emit a tool call (any tool). The loop "
+        f"     runs it and gives you the result.\n"
+        f"   - To FINISH your answer: end your text with the literal marker "
+        f"     `<done>` on its own line. The loop strips it and delivers your "
+        f"     text to the user.\n"
+        f"   Never write a response that has neither a tool call nor `<done>`. "
+        f"   If you write 'Let me check that file...' and then stop without a "
+        f"   tool call, the framework cannot tell if you meant to continue or "
+        f"   finished — it will nudge you once. If you mean to finish, write "
+        f"   your answer and end with `<done>`.\n"
         f"2. Answer from the VAULT CONTEXT (a connected subgraph of {owner_name}'s "
         f"notes). Cite notes with wikilinks (e.g. `[[Actual-Note-Title]]`).\n"
         f"3. If the vault is thin, out of date, or missing for {owner_name}'s "
@@ -955,10 +884,6 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
                     + ", ".join(topics)
                 )
 
-    total_builtin = len(TOOL_DEFINITIONS) + len(META_TOOL_DEFINITIONS)
-    total_custom = len(custom_tool_names) if custom_tool_names else 0
-    total_tools = total_builtin + total_custom
-
     return (
         f"# INSTRUCTIONS\n"
         f"You are VaultBot — a self-directed, self-improving AI that lives "
@@ -978,42 +903,44 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"model-independent. The cloud model's job is to make itself "
         f"redundant as fast as possible.\n\n"
         f"# YOUR POWER\n"
-        f"You have {total_tools} tools ({total_builtin} built-in + "
-        f"{total_custom} you've authored). You can research any topic on the "
-        f"web and write permanent sourced notes (vault_research), search the "
-        f"vault via FUSED retrieval (vault_search), detect knowledge gaps via "
-        f"the curriculum (vault_gaps), read/run your own code (code_read/"
-        f"code_run), CREATE new tools (tool_create), SAFE-EDIT source "
-        f"(safe_write for .py, js_safe_write for .js — both verify syntax "
-        f"before writing and auto-rollback on failure), AUDIT your "
-        f"capabilities (capability_audit), reflect on gaps (self_reflect), "
-        f"roll back bad edits (git_rollback), and report your state "
-        f"(vaultbot_status). You grow yourself. When you hit a wall, you "
-        f"don't give up — you build the tool that gets you over it.\n\n"
+        f"You have {len(CORE_TOOL_NAMES)} core tools. You can research any "
+        f"topic on the web and write permanent sourced notes (vault_research), "
+        f"search the vault via FUSED retrieval (vault_search), read any file "
+        f"(code_read), write notes (vault_safe_write, vault_append), re-read "
+        f"saved web sources (web_read_source), plan multi-step tasks "
+        f"(plan_task, update_task), and execute PROCEDURES (execute_procedure). "
+        f"Procedures are notes in System/Procedures/ that encode specific "
+        f"workflows — when one surfaces in vault context and matches your "
+        f"task, call execute_procedure to run it deterministically. "
+        f"Procedures include: self-editing code (Safe-Write), creating tools "
+        f"(Write-Python-Tool), running code (Code-Run), listing notes "
+        f"(Vault-List), checking vault gaps (Vault-Gaps), linting notes "
+        f"(Vault-Lint), checking system status (System-Status), restarting "
+        f"the backend (Backend-Restart), and more. You grow yourself. When "
+        f"you hit a wall, you don't give up — you build the procedure that "
+        f"gets you over it.\n\n"
         f"# HOW YOU WORK\n"
-        f"0. Run capability_audit with the task as the argument to see if "
-        f"you already have a tool for it. If there's a gap, fill it: "
-        f"self_reflect → code_run → tool_create / safe_write.\n"
         f"1. PLAN FIRST: if the task needs more than one tool call, call "
         f"plan_task with a goal + concrete steps BEFORE doing anything else. "
-        f"This writes a structured task list into your working memory that "
-        f"you see every round. THE FRAMEWORK ENFORCES THIS: on a multi-step "
-        f"task it will force plan mode if you start firing tools without a "
-        f"plan, and it will nudge you if you spend too many rounds only "
-        f"reading without making plan progress. So plan early, then work "
-        f"the plan. After each tool round, call update_task to mark the "
-        f"step in_progress → completed. When ALL steps are completed, the "
-        f"loop ends automatically — synthesize your final answer. Do NOT "
-        f"keep calling tools after the plan is done. This is how you stay "
-        f"on track instead of looping.\n"
+        f"After each tool round, call update_task to mark the step "
+        f"in_progress → completed. When ALL steps are completed, synthesize "
+        f"your final answer. Do NOT keep calling tools after the plan is done.\n"
         f"   READING CODE: When using code_read, use start_line/end_line to "
         f"read specific sections — do NOT re-read the same file multiple "
         f"times in one turn. If the file is large, read it in chunks by "
-        f"line range. Once you've read a section, move on to the next task. "
-        f"The framework will warn you if you re-read a file you've already "
-        f"read this turn. ALWAYS call update_task after completing each "
-        f"planned step — if you don't mark progress, the framework can't "
-        f"tell you're making progress and will nudge you to synthesize.\n"
+        f"line range. Once you've read a section, move on to the next task.\n"
+        f"   TURN PROTOCOL (how you end each response): Every response you "
+        f"write MUST end with exactly one of two signals:\n"
+        f"   - To CONTINUE working: emit a tool call (any tool). The loop "
+        f"     runs it and gives you the result.\n"
+        f"   - To FINISH your answer: end your text with the literal marker "
+        f"     `<done>` on its own line. The loop strips it and delivers your "
+        f"     text to the user.\n"
+        f"   Never write a response that has neither a tool call nor `<done>`. "
+        f"   If you write 'Let me check that file...' and then stop without a "
+        f"   tool call, the framework cannot tell if you meant to continue or "
+        f"   finished — it will nudge you once. If you mean to finish, write "
+        f"   your answer and end with `<done>`.\n"
         f"2. Answer from the VAULT CONTEXT (the retrieved notes, injected as "
         f"a separate message below the system prompt). Cite notes with "
         f"wikilinks (e.g. `[[Actual-Note-Title]]`). For each step of your "
@@ -1050,6 +977,10 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"insufficient. Never fabricate. If you don't know and can't research "
         f"it, say so.\n"
         f"- Cite sources by name. Be concise but thorough. Think step by step.\n"
+        f"- END OF TURN: every turn MUST end with a direct response to "
+        f"{owner_name}. When you stop calling tools, write your answer as "
+        f"normal text — never end a turn with only thinking and no prose. "
+        f"If you have nothing to say, say that. Silence is a bug.\n"
         f"- NOTE QUALITY: write self-contained arguments — claim, reasoning, "
         f"and connections in prose. Never write bare facts. After writing a "
         f"note, run vault_lint to verify quality.\n"

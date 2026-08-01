@@ -35,7 +35,7 @@ def run(args: dict) -> dict:
             "message": "Plugin reload signal sent. The plugin will disable and re-enable itself in ~1s. Backend stays running.",
             "response": result,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {
             "status": "error",
             "message": f"Could not reach /reload-plugin endpoint: {e}. Make sure the backend is running and the plugin is connected.",

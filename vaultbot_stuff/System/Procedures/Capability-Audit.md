@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+model_cartridge: small
 created: 2026-07-31
 description: "Inventory every available tool and assess whether you have a capability gap for a specific task. Run before attempting a task."
 when: "Before attempting a task to see where your capabilities end"

@@ -18,10 +18,8 @@ from typing import Any
 import pytest
 
 from procedure_compiler import compile_from_text
+from subprocess_utils import run as _subprocess_run
 from step_gate_runtime import (
-    ExecutionResult,
-    Step,
-    StepResult,
     _count_thing,
     _evaluate_condition,
     _parse_validation,
@@ -289,8 +287,7 @@ def _fixture_procedures(tmp_path):
 def test_run_procedure_cycle_detection(_fixture_procedures, monkeypatch):
     """A procedure that calls itself should be caught as a cycle."""
     import os
-    import subprocess
-from subprocess_utils import run as _subprocess_run
+    from subprocess_utils import run as _subprocess_run
     import sys as _sys
 
     cycle_proc = _fixture_procedures / "Cycle-Proc.md"
@@ -324,7 +321,6 @@ from subprocess_utils import run as _subprocess_run
 def test_run_procedure_depth_limit(_fixture_procedures):
     """Exceeding max-depth should be caught loudly."""
     import os
-    import subprocess
     import sys as _sys
 
     backend = Path(__file__).parent.parent.resolve()

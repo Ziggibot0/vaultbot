@@ -169,7 +169,7 @@ def _is_researchable_topic(gap: dict[str, Any]) -> bool:
             if w in _SINGLE_WORD_STOPICS:
                 return False
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
 
 
@@ -343,7 +343,7 @@ class KnowledgeCurriculum:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, ensure_ascii=False, indent=2, default=str)
             os.replace(tmp, p)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("persist_state", e)
 
     def _log_error(self, context: str, exc: BaseException) -> None:
@@ -355,14 +355,14 @@ class KnowledgeCurriculum:
                     "error": f"{type(exc).__name__}: {exc}",
                     "traceback": traceback.format_exc(),
                 })
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def _log_event(self, event: str, data: dict[str, Any] | None = None) -> None:
         try:
             if self.session_logger is not None:
                 self.session_logger.log(event, data)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     # ------------------------------------------------------------------
@@ -382,9 +382,8 @@ class KnowledgeCurriculum:
         Results are cached for ``VAULTBOT_GAPS_TTL`` seconds (default 60) so
         consecutive chat messages in a warm session don't re-score the whole
         vault — gaps only change when notes are created/edited or when the
-        curriculum state (completed/failed) changes. Never raises — on any
-        failure it returns an empty list so the calling autonomous loop can
-        keep running.
+        curriculum state (completed/failed) changes. Raises on failure so
+        the caller knows gap detection is broken.
         """
         # Fast path: serve cached gaps if still fresh. Slicing respects the
         # caller's `n` without recomputing.
@@ -396,7 +395,7 @@ class KnowledgeCurriculum:
                         "age_s": round(time.time() - self._gaps_cache_ts, 1),
                         "returned": min(len(self._gaps_cache), max(0, int(n))),
                     })
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
             return self._gaps_cache[:max(0, int(n))] if self._gaps_cache else []
 
@@ -404,7 +403,7 @@ class KnowledgeCurriculum:
             self.graph.refresh()
         except Exception as e:
             self._log_error("graph_refresh", e)
-            return []
+            raise
 
         self.state["last_run"] = _now_iso()
         # Persist last_run even if scoring below fails — it's cheap and useful.
@@ -445,7 +444,7 @@ class KnowledgeCurriculum:
             return top[:max(0, int(n))]
         except Exception as e:
             self._log_error("propose_next_gaps", e)
-            return []
+            raise
 
     def mark_completed(self, topic: str) -> None:
         """Record a topic as successfully researched. Persists immediately."""
@@ -474,7 +473,7 @@ class KnowledgeCurriculum:
             # A completion changes what gaps should surface next; drop the cache.
             self._gaps_cache = None
             self._log_event("curriculum_completed", {"topic": topic})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("mark_completed", e)
 
     def mark_failed(self, topic: str, reason: str = "") -> None:
@@ -522,7 +521,7 @@ class KnowledgeCurriculum:
                     1,
                 ),
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("mark_failed", e)
 
     def state_summary(self) -> dict[str, Any]:
@@ -544,7 +543,7 @@ class KnowledgeCurriculum:
                 "last_run": self.state.get("last_run"),
                 "state_path": self.state_path,
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("state_summary", e)
             return {"error": str(e)}
 
@@ -565,7 +564,7 @@ class KnowledgeCurriculum:
         # Compute the dangling-link set once; reuse for both signal 1 and 3.
         try:
             dangling = self.graph.dangling_links(min_references=1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_dangling_links", e)
             dangling = []
 
@@ -603,7 +602,7 @@ class KnowledgeCurriculum:
                     "base_priority": int(d.get("reference_count", 1)) * 10,
                 })
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_dangling_links", e)
             return []
 
@@ -633,7 +632,7 @@ class KnowledgeCurriculum:
                     "base_priority": 1,
                 })
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_thin_notes", e)
             return []
 
@@ -703,7 +702,7 @@ class KnowledgeCurriculum:
                     "base_priority": count * 10,
                 })
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_missing_entities", e)
             return []
 
@@ -792,7 +791,7 @@ class KnowledgeCurriculum:
             self._thin_communities_cache = list(out)
             self._thin_communities_graph_mtime = graph_mtime
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_thin_communities", e)
             return []
 
@@ -820,7 +819,7 @@ class KnowledgeCurriculum:
                         "base_priority": 1,  # deliberately low
                     })
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_link_density_anomalies", e)
             return []
 
@@ -1009,7 +1008,7 @@ class KnowledgeCurriculum:
             parts.append(f"ctx={breakdown['context_bonus']:.2f}")
             parts.append(f"priority={breakdown['priority']:.2f}")
             return " | ".join(parts)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return "curriculum-selected gap"
 
 

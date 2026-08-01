@@ -3,16 +3,16 @@ Deep research engine with LLM synthesis.
 
 Design goal: "get to the bottom of" a topic. The search/fetch/clean pipeline
 is deterministic (no LLM); the synthesis uses ONE LLM call when a client is
-provided, falling back to deterministic extractive synthesis if the LLM is
-unavailable or fails.
+provided. If the LLM is unavailable or fails, the synthesis raises — no
+silent extractive fallback.
 
 Pipeline:
   1. Extract key terms from the topic (noun phrases, no LLM).
   2. Multi-round search queries with progressive refinement.
   3. Fetch the top sources per round, clean to article text.
   4. Gap detection: identify under-covered facets, run follow-up queries.
-  5. Synthesis: ONE LLM call to synthesize all source texts (primary path).
-     Falls back to extractive sentence-scoring if LLM unavailable.
+  5. Synthesis: ONE LLM call to synthesize all source texts. Raises on
+     LLM failure — no extractive fallback.
   6. Return a structured ResearchReport.
 
 The LLM naturally filters irrelevant sources because it understands the
@@ -28,12 +28,12 @@ from typing import Any, Optional
 
 try:
     from tavily_client import TavilyClient
-except Exception:
+except Exception:  # noqa: BLE001 — type-hint-only import; module instance is injected at runtime
     TavilyClient = None  # type: ignore
 
 try:
     from free_search import FreeSearch
-except Exception:
+except Exception:  # noqa: BLE001 — type-hint-only import; module instance is injected at runtime
     FreeSearch = None  # type: ignore
 
 
@@ -301,12 +301,7 @@ def _signal_terms(keyterms: list[str]) -> list[str]:
         # chars that aren't in a broad generic-tech stoplist are treated as
         # signal. Short common words ("python", "index", "vector") are NOT
         # signal alone — they need a signal partner.
-        if len(low) >= 5 and low not in _GENERIC_TERMS:
-            sig.append(low)
-        # Short all-caps acronyms (AHL, DNA, RNA, ATP) are always signal
-        # even though they're < 5 chars. They're highly specific terms
-        # that disambiguate biology/chemistry topics.
-        elif len(low) >= 2 and low == low.upper() and low.isalpha():
+        if (len(low) >= 5 and low not in _GENERIC_TERMS) or (len(low) >= 2 and low == low.upper() and low.isalpha()):
             sig.append(low)
     # Dedup preserving order.
     seen: set[str] = set()
@@ -327,17 +322,16 @@ _GENERIC_TERMS = {
     "code", "function", "method", "class", "object", "value", "values",
     "list", "dict", "string", "file", "files", "system", "server", "client",
     "model", "models", "training", "learning", "search", "query", "database",
-    "api", "config", "config", "build", "run", "test", "error", "bug",
+    "api", "config", "build", "run", "test", "error", "bug",
     "issue", "problem", "solution", "example", "tutorial", "guide",
     "library", "package", "module", "import", "install", "version",
     "performance", "memory", "time", "size", "type", "name", "key", "keys",
     "add", "delete", "remove", "update", "create", "read", "write", "load",
-    "save", "load", "open", "close", "start", "stop", "set", "get", "new",
+    "save", "open", "close", "start", "stop", "set", "get", "new",
     "old", "best", "good", "bad", "how", "what", "why", "when", "where",
     "without", "with", "from", "into", "using", "use", "used", "uses",
-    "research", "study", "paper", "analysis", "study", "results", "method",
-    "through", "group", "groups",
-    "approach", "based", "proposed", "novel", "new", "recent", "current",
+    "research", "study", "paper", "analysis", "results", "through", "group", "groups",
+    "approach", "based", "proposed", "novel", "recent", "current",
 }
 
 
@@ -567,7 +561,7 @@ class ResearchEngine:
             return
         try:
             self.progress_callback(stage, detail or {})
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # A UI callback failure must never break research.
             pass
 
@@ -591,7 +585,7 @@ class ResearchEngine:
         try:
             results = self.search_client.search(
                 query, max_results=self.max_sources_per_round)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("research_search_failed",
                       {"round": round_idx, "query": query,
                        "backend": getattr(self.search_client, "name",
@@ -644,8 +638,9 @@ class ResearchEngine:
                 else:
                     fetch_and_save(url, title=hit.get("title", ""),
                                    topic=topic)
-            except Exception:
-                pass  # archiving is best-effort; never blocks the dig
+            except Exception as e:
+                self._log("research_archive_failed",
+                          {"url": url, "error": str(e)})
             # Tavily often returns raw_content inline; use it directly and
             # skip scraping. Only fetch when raw_content is missing/short.
             if not text or len(text) < 80:
@@ -658,10 +653,10 @@ class ResearchEngine:
                     self._log("research_scrape_failed",
                               {"url": url, "error": str(e)})
                     text = ""
-            if (not text or len(text) < 80) and snippet and len(snippet) > 30:
-                text = snippet
-                self._log("research_scrape_fallback_snippet", {"url": url})
             if not text or len(text) < 30:
+                # Scrape failed or returned nothing useful — skip this
+                # source. Do NOT fall back to the search-result snippet
+                # (different content, different quality).
                 continue
             # Relevance gate: drop sources that don't carry the topic's
             # signal terms. This is what separates the "good stuff" from
@@ -867,8 +862,12 @@ class ResearchEngine:
                 synthesis = self._repair_wikilinks(synthesis, vault_note_titles)
 
             return synthesis
-        except Exception:
-            return None
+        except Exception as e:
+            # Log the error and re-raise — no silent extractive fallback.
+            # The caller will see the LLM synthesis failed.
+            self._log("llm_synthesis_exception",
+                      f"{type(e).__name__}: {e}")
+            raise
 
 
     def _extractive_synthesis(self, all_sources: list[dict[str, Any]],
@@ -1027,8 +1026,10 @@ class ResearchEngine:
         # extractive sentence-scoring approach which was keyword-matching
         # garbage into bullet points.
         #
-        # FALLBACK: if the LLM fails or produces too-short output, fall back
-        # to the extractive synthesis (deterministic, no LLM).
+        # If the LLM is available, it is the ONLY synthesis path. If it
+        # fails or produces too-short output, raise — no extractive
+        # fallback. If no LLM client is available, use extractive only
+        # (explicit choice, not a fallback).
         used: set = set()
         llm_synthesized = False
         if llm_client is not None:
@@ -1043,15 +1044,13 @@ class ResearchEngine:
                     if l.strip().startswith('-')
                 ])))
             else:
-                # LLM failed or too short -- fall back to extractive.
-                self._log("research_llm_synthesis_failed", {
-                    "llm_synth_len": len(llm_synth) if llm_synth else 0})
-                self._progress("synthesizing_extractive_fallback", {
-                    "sources": len(all_sources)})
-                synthesis, used = self._extractive_synthesis(
-                    all_sources, base_terms)
+                # LLM returned too-short output — raise, don't fall back.
+                raise RuntimeError(
+                    f"LLM synthesis produced insufficient output "
+                    f"({len(llm_synth) if llm_synth else 0} chars, need >=100)")
         else:
-            # No LLM client -- extractive synthesis only.
+            # No LLM client — extractive synthesis is the explicit path,
+            # not a fallback. The caller chose to run without an LLM.
             self._progress("synthesizing", {"sources": len(all_sources)})
             synthesis, used = self._extractive_synthesis(
                 all_sources, base_terms)
@@ -1096,11 +1095,11 @@ class ResearchEngine:
         # Build frontmatter
         fm = [
             "---",
-            f"type: research",
-            f"status: raw",
+            "type: research",
+            "status: raw",
             f"created: {date.today().isoformat()}",
             f"summary: {summary or f'Deep research into {_topic}'}",
-            f"tags: [research]",
+            "tags: [research]",
             f"source_count: {_src_count}",
             f"fact_count: {_facts}",
             "---",
@@ -1122,7 +1121,7 @@ class ResearchEngine:
             try:
                 from web_source_store import find_source
                 archived = find_source(s["url"])
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 archived = None
             if archived:
                 local = f"[[learningMaterial/web/{archived['file']}|archived]]"
@@ -1231,17 +1230,19 @@ class ResearchEngine:
         argument-driven narrative, preserved [sources: ...] citations, and
         [[wikilinks]] to existing vault notes.
 
-        Falls back to ``synthesize_note_markdown`` (the extractive format)
-        if the LLM is unavailable or the output is below the safety floor.
-        Never raises — the caller always gets a valid markdown note.
+        Raises if the LLM is unavailable or produces insufficient output —
+        no silent fallback to the extractive format. The caller must
+        decide whether to use ``synthesize_note_markdown`` explicitly.
         """
-        # Safety: if no LLM client, fall back to the extractive format.
         if ollama_client is None:
-            return self.synthesize_note_markdown(report, summary)
-        # Safety: if no synthesis content, fall back (nothing to structure).
+            raise ValueError(
+                "synthesize_structured_note: ollama_client is required — "
+                "use synthesize_note_markdown() for the extractive format")
         synth = str(report.get("synthesis", "") or "")
         if len(synth) < 80:
-            return self.synthesize_note_markdown(report, summary)
+            raise ValueError(
+                f"synthesize_structured_note: synthesis too short "
+                f"({len(synth)} chars, need >=80)")
 
         topic = report.get("topic", "Research Note")
         source_count = report.get("source_count", 0)
@@ -1318,14 +1319,15 @@ class ResearchEngine:
                 # stream=False, but be safe).
                 note_md = "".join(
                     c.get("response", "") for c in result)
-        except Exception:
-            # LLM unavailable / errored → fall back to extractive format.
-            return self.synthesize_note_markdown(report, summary)
+        except Exception as e:
+            raise RuntimeError(
+                f"synthesize_structured_note: LLM call failed: {e}") from e
 
         note_md = (note_md or "").strip()
         if len(note_md) < self._STRUCTURED_MIN_CHARS:
-            # Too short — the LLM collapsed it. Fall back.
-            return self.synthesize_note_markdown(report, summary)
+            raise RuntimeError(
+                f"synthesize_structured_note: LLM output too short "
+                f"({len(note_md)} chars, need >= {self._STRUCTURED_MIN_CHARS})")
 
         # The LLM may have included a top-level # heading despite the
         # instruction not to. Strip it so the caller's own # heading is

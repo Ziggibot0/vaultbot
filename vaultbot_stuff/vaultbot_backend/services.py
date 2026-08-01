@@ -38,7 +38,6 @@ if TYPE_CHECKING:
     from amem_evolution import AMemeEvolution
     from fused_retrieval import FusedRetriever
     from embedding_drift import EmbeddingDrift
-    from compactor import Compactor
     from lazy_condenser import LazyCondenser
     from context_budgeter import ContextBudgeter
     from supervision import HealthMonitor
@@ -88,8 +87,7 @@ class Services:
     amem: AMemeEvolution
     fused_retriever: FusedRetriever
     embedding_drift: EmbeddingDrift
-    # Context management
-    compactor: Compactor
+    # Context management (sliding window — no LLM compaction)
     lazy_condenser: LazyCondenser
     context_budgeter: ContextBudgeter
     # Health + monitoring
@@ -103,10 +101,10 @@ class Services:
     session_logger: SessionLogger
     # Chat-loop checkpoint/resume (multi-day sturdiness). Optional so older
     # wiring and tests that build Services without it still work.
-    chat_checkpointer: "object | None" = None
+    chat_checkpointer: object | None = None
     # ConnectionManager is defined in main.py (kept there for now); typed
     # loosely to avoid importing main here (would create a cycle).
-    manager: "object" = None
+    manager: object = None
 
     @property
     def vault_path(self) -> str:

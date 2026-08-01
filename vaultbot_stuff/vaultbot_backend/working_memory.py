@@ -4,10 +4,10 @@ THE PROBLEM THIS SOLVES
 -----------------------
 The agentic chat loop had no structured working memory. The model's only
 memory of "what am I doing" was buried in the raw conversation transcript,
-which the compactor shreds every few rounds. When the transcript got
-compacted, the model literally forgot the plan — which is why it re-read
-Research-Roadmap.md 14 times and re-ran the same vault_search queries in
-a loop until it hit MAX_ROUNDS.
+which the sliding window drops when it grows too long. When old messages
+fell out of the window, the model literally forgot the plan — which is why
+it re-read Research-Roadmap.md 14 times and re-ran the same vault_search
+queries in a loop until it hit MAX_ROUNDS.
 
 This module is the VaultBot equivalent of Claude Code's TodoWrite / GitHub
 Copilot's plan checklist. It maintains a structured, per-session task list
@@ -46,7 +46,6 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 from typing import Any
-
 
 MAX_TASKS = 20
 
@@ -239,9 +238,18 @@ class TaskList:
             self.goal = (snap.get("goal") or "")[:500]
             self.tasks = []
             for t in snap.get("tasks", []):
+                # Skip malformed entries (non-dict, missing fields) so a
+                # corrupt snapshot can't crash the restore.
+                if not isinstance(t, dict):
+                    continue
+                # Validate status the same way add_task / update_task do —
+                # a corrupt or unknown status is coerced to "pending"
+                # rather than propagating garbage into the task list.
+                raw_status = t.get("status", "pending")
+                valid = raw_status if raw_status in ("pending", "in_progress", "completed") else "pending"
                 self.tasks.append(Task(
                     id=str(t.get("id", "")),
                     content=(t.get("content") or "")[:300],
-                    status=t.get("status", "pending"),
+                    status=valid,
                     notes=(t.get("notes") or "")[:500],
                 ))

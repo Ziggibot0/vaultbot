@@ -40,7 +40,6 @@ from typing import Any
 
 from abstract_context import build_abstract_context
 from agent_tools import (
-    META_TOOL_DEFINITIONS, TOOL_DEFINITIONS, build_system_prompt,
     build_system_prompt_briefing, build_tool_list,
 )
 from chat_checkpoint import snapshot_working_memory
@@ -52,6 +51,7 @@ from chat_helpers import (
     tool_result_summary, truncate_tool_result,
 )
 from conversation_state import save_history
+from error_types import AgentSilentError
 from fastapi import WebSocket
 from output_validator import corrective_message, validate_tool_call
 from plan_gate import EXPLORE_TOOLS, is_multi_step, lifts_gate, plan_mode_directive
@@ -59,7 +59,6 @@ from procedure_surface import build_procedure_surface, status_allows_execution
 from procedure_tracker import interpret_validation_result, parse_procedures_from_results
 from services import Services
 from task_api import write_partial
-from vault_graph import build_graph_context
 from weaving import (
     cross_link_textbooks,
     existing_note_titles,
@@ -164,7 +163,7 @@ def _sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str,
             try:
                 args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
                 args_str = json.dumps(args, default=str)[:300]
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 args_str = str(args_raw)[:300]
             # Build the combined system message
             result_text = tool_content
@@ -237,13 +236,13 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 if _wm_snap and not wm.has_plan():
                     try:
                         wm.restore_snapshot(_wm_snap)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log("wm_restore_failed", {"error": str(e)})
                 session_logger.log("chat_checkpoint_resumed", {
                     "round_idx": _prior.get("round_idx", 0),
                     "tools_already_run": len(_resumed_tool_history),
                 })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("chat_checkpoint_resume_failed", {"error": str(e)})
 
     # Chat-priority: pause the autonomous researcher so it doesn't compete
@@ -271,7 +270,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 svc.calibration_tracker.log_correction(
                     user_message, _prev_answer, failure_type=_ftype)
                 session_logger.log("correction_detected", {"failure_type": _ftype})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("correction_detection_failed", {"error": str(e)})
         await svc.manager.send_personal_message(json.dumps({"type": "status", "content": "Searching vault..."}), websocket, session_logger=session_logger)
         loop = asyncio.get_event_loop()
@@ -290,7 +289,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "node_count": len(svc.vault_graph.nodes),
                 "duration_ms": (loop.time() - _t_graph) * 1000,
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log_exception(e, context="graph_refresh")
 
         t0 = loop.time()
@@ -304,29 +303,20 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 svc, websocket, "retrieving vault",
                 svc.fused_retriever.retrieve, user_message, 5, 1)
             results = fused_result.get("results", []) if isinstance(fused_result, dict) else (fused_result or [])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log_exception(e, context="fused_retriever.retrieve")
-            # Tell the user the search quality degraded so they can
-            # judge the answer accordingly.
-            await notify_info(svc, websocket,
-                "My graph-based search hit a problem, so I'm using a "
-                "simpler search. Results may be less connected.")
-            # Degrade gracefully to flat vector search.
-            try:
-                results = await run_with_heartbeat(
-                    svc, websocket, "retrieving vault (fallback)",
-                    svc.vault_indexer.search, user_message, 5)
-            except Exception:
-                results = []
-                # Both search systems failed — the LLM will answer with
-                # zero vault context. The user needs to know this.
-                await notify_problem(svc, websocket, e,
-                    context={"stage": "searching the vault"},
-                    user_message=(
-                        "I couldn't search your vault at all for this "
-                        "question. I'll answer from what I know, but it "
-                        "may not be grounded in your notes."),
-                    remedy_hint="Try restarting VaultBot.")
+            # No fallback to flat vector search — trying a second mechanism
+            # after the first fails is the exact pattern the fail-loud law
+            # prohibits. Surface the error to the user immediately; the
+            # model answers from its own knowledge with zero vault context.
+            await notify_problem(svc, websocket, e,
+                context={"category": "retrieval_broken", "stage": "searching the vault"},
+                user_message=(
+                    "I couldn't search your vault for this question. "
+                    "I'll answer from what I know, but it may not be "
+                    "grounded in your notes."),
+                remedy_hint="Try restarting VaultBot.")
+            results = []
         session_logger.log("vault_search", {
             "query": user_message,
             "k": 5,
@@ -340,7 +330,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # See [[RAG-Evaluation-for-FUSED-Retrieval]].
         try:
             svc.rag_evaluator.log_retrieval(user_message, results, k=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("rag_eval_log_failed", {"error": str(e)})
 
         # Lazy-condenser touch tracking: record that each retrieved note was
@@ -358,7 +348,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             # Persist the batched touch counts once per chat turn, not once per
             # retrieved note (each note_touched() only marks the dict dirty).
             svc.lazy_condenser.flush_touch_counts()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("lazy_condenser_touch_failed", {"error": str(e)})
 
         # Procedure context tracking: which procedural notes were in the vault
@@ -371,28 +361,19 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
         # Multi-resolution context: L2 MOC (bird's-eye) + L1 concept cards
         # (the thought highway — terse, hop-able) + L0 drill-down (full raw of
-        # the single top seed only).  Replaces the old `build_graph_context`
-        # content dump, which truncated every note to its first 2000 chars and
-        # flooded the context with low-density detail.  Falls back to the legacy
-        # builder if no L1 cards exist yet (pre-hierarchy vault regions).
-        try:
-            abs_ctx = await run_with_heartbeat(
-                svc, websocket, "building context",
-                build_abstract_context, svc.vault_graph, results,
-                user_message, 5, 2, None)
-            context = abs_ctx.get("context", "")
-            session_logger.log("context_resolution", {
-                "resolution": abs_ctx.get("resolution"),
-                "l1_cards": abs_ctx.get("l1_cards", 0),
-                "drill_down_used": abs_ctx.get("drill_down_used", False),
-                "l0_drill": abs_ctx.get("l0_drill"),
-                "context_length": len(context)})
-        except Exception as e:
-            session_logger.log_exception(e, context="build_abstract_context")
-            await notify_info(svc, websocket,
-                "I'm using a simpler context format for this answer. "
-                "It may include more detail than needed.")
-            context = build_graph_context(svc.vault_graph, results, user_message, k=5, depth=2)
+        # the single top seed only).  No legacy fallback — if the hierarchy
+        # builder fails, surface the error so the operator knows.
+        abs_ctx = await run_with_heartbeat(
+            svc, websocket, "building context",
+            build_abstract_context, svc.vault_graph, results,
+            user_message, 5, 2, None)
+        context = abs_ctx.get("context", "")
+        session_logger.log("context_resolution", {
+            "resolution": abs_ctx.get("resolution"),
+            "l1_cards": abs_ctx.get("l1_cards", 0),
+            "drill_down_used": abs_ctx.get("drill_down_used", False),
+            "l0_drill": abs_ctx.get("l0_drill"),
+            "context_length": len(context)})
 
         # Context budgeting: ensure the retrieved context fits within the
         # model's token budget. Truncates from the end (lowest-priority L0
@@ -410,7 +391,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     "budget": _budgeted["budget"],
                     "chars_dropped": _budgeted["chars_dropped"],
                 })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("context_budget_failed", {"error": str(e)})
 
         # Inject the identity boot context so the agent wakes up coherent across
@@ -429,7 +410,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "gap_count": len(gaps),
                 "duration_ms": (loop.time() - _t_gaps) * 1000,
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("gaps_propose_failed", {"error": str(e)})
             await notify_info(svc, websocket,
                 "I couldn't scan for knowledge gaps right now. "
@@ -491,7 +472,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 session_logger.log("procedure_surface", {
                     "lines": _proc_surface.count("\n"),
                 })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("procedure_surface_failed", {"error": str(e)})
 
         # If we're resuming an interrupted turn, tell the model what it already
@@ -545,19 +526,15 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # Add this turn's user message.
         conversation.append({"role": "user", "content": user_message})
 
-        # Compact if the conversation is getting long (OpenHands Condenser pattern).
-        # Prevents context overflow on long chats; keeps head + tail verbatim,
-        # summarizes the middle. Now this actually has something to compact.
-        if svc.compactor.should_compact(conversation):
-            conversation = svc.compactor.compact(conversation)
-            session_logger.log("context_compacted", {"messages": len(conversation)})
-
         # --- Sliding window: bound the conversation sent to the LLM ---
-        # The compactor is disabled (should_compact returns False). Instead
-        # of summarizing old messages (lossy, costs an LLM call), we keep
-        # only the last N messages. Everything older is in chat notes
-        # (Memory/Chat/) and retrievable via vault_search if the model
-        # needs it. This is non-lossy: no information is destroyed.
+        # No LLM-based compaction — the vault IS the memory. Chat history is
+        # persisted as notes (Memory/Chat/Chat-*.md) and the agent can walk
+        # the wikilink trail back in time via vault_search if it needs
+        # context from earlier in the conversation. GOALS.md + the planning
+        # framework (working_memory.py) keep the agent on task across
+        # turns. The sliding window is a deterministic, non-lossy safety
+        # net: it keeps the last N messages + the system prompt, dropping
+        # older messages that are already preserved as notes on disk.
         _pre_window_len = len(conversation)
         conversation = _apply_sliding_window(conversation)
         if len(conversation) < _pre_window_len:
@@ -585,7 +562,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "available_tokens": max(0, _ctx_window - _used_tokens),
                 "messages": len(conversation),
             }), websocket, session_logger=session_logger)
-        except Exception as _e:
+        except Exception as _e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("context_usage_emit_failed", {"error": str(_e)})
 
         await svc.manager.send_personal_message(json.dumps({"type": "status", "content": "Thinking..."}), websocket, session_logger=session_logger)
@@ -606,10 +583,9 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # track consecutive read-only rounds. If the model only explores
         _READ_ONLY_TOOLS = frozenset(EXPLORE_TOOLS) | {"vault_list", "code_read"}
         _tool_rounds_executed = 0
-        _empty_answer_retried = False
-        _synthesize_requested = False  # empty-answer guard: only retry once per turn
-        _incomplete_plan_nudged = False  # 1-shot guard: don't let the model abandon a partial plan
-        _force_synthesize_nudged = False  # 1-shot guard: re-enabled — True enables the fallback that kills us  # 1-shot: when model goes empty with incomplete plan after nudge
+        _synthesize_requested = False  # set when all_done() fires → next empty is NOT a nudge case
+        _empty_nudge_used = False  # ONE nudge per turn for empty turns, then fail-loud
+        _protocol_nudge_used = False  # ONE nudge for missing <done>, then accept
         # No round cap, no hard char cap — the operator asked for all artificial
         # limits removed. The model has a 1M-token context window; let it work
         # as long as it needs. The compactor is disabled too.
@@ -680,7 +656,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     conversation[0] = {"role": "system", "content": system_prompt + "\n\n" + _wm_block}
                 else:
                     conversation[0] = {"role": "system", "content": system_prompt}
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("wm_render_failed", {"error": str(e)})
                 # Still set the system prompt without the wm block so the
                 # model gets *something* instead of a stale [0].
@@ -698,7 +674,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         "content": conversation[0].get("content", "")
                                    + "\n\n" + plan_mode_directive(),
                     }
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     session_logger.log("plan_mode_overlay_failed",
                         {"error": str(e)})
 
@@ -753,7 +729,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                 "notes_found": len(_step_notes),
                             })
                         websocket._last_step_rag_key = _step_key
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("step_rag_failed", {"error": str(e)})
 
             # Stream the LLM response for this round.
@@ -826,6 +802,30 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                             raise
                     if chunk.get("done") and not chunk.get("response") and not chunk.get("tool_calls"):
                         break
+                    # Check for eval_stats terminal chunk (Ollama's done chunk
+                    # stats forwarded from ollama_client).  Send to the plugin
+                    # so the GUI can show tokens/s, load time, etc.
+                    if chunk.get("eval_stats"):
+                        _es = chunk["eval_stats"]
+                        # Compute human-readable rates (tokens/s) from ns durations
+                        _prompt_tps = 0.0
+                        _gen_tps = 0.0
+                        if _es.get("prompt_eval_duration", 0) > 0:
+                            _prompt_tps = _es["prompt_eval_count"] / (_es["prompt_eval_duration"] / 1e9)
+                        if _es.get("eval_duration", 0) > 0:
+                            _gen_tps = _es["eval_count"] / (_es["eval_duration"] / 1e9)
+                        await svc.manager.send_personal_message(json.dumps({
+                            "type": "ollama_stats",
+                            "load_duration_ms": _es.get("load_duration", 0) / 1e6,
+                            "prompt_eval_count": _es.get("prompt_eval_count", 0),
+                            "prompt_eval_duration_ms": _es.get("prompt_eval_duration", 0) / 1e6,
+                            "prompt_tokens_per_s": round(_prompt_tps, 1),
+                            "eval_count": _es.get("eval_count", 0),
+                            "eval_duration_ms": _es.get("eval_duration", 0) / 1e6,
+                            "gen_tokens_per_s": round(_gen_tps, 1),
+                            "total_duration_ms": _es.get("total_duration", 0) / 1e6,
+                        }), websocket, session_logger=session_logger)
+                        continue
                     chunk_count += 1
                     total_chunks += 1
                     last_chunk_at = loop.time()
@@ -846,24 +846,20 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         round_tool_calls.extend(tcs)
             except Exception as e:
                 session_logger.log_exception(e, context="ollama_client.chat")
-                # Don't drop the turn — salvage whatever was streamed so far so
-                # the user's message + any tool work + partial answer is
-                # persisted to history and the agent can recover on the next
-                # turn. This is the tank-grade recovery: a transient cloud
-                # timeout (Read timed out) shouldn't lose the whole turn.
+                # The LLM stream failed mid-turn. Save whatever was streamed
+                # so far to the partial file for recovery, then surface the
+                # error loudly. Do NOT salvage the partial text as the final
+                # answer — the user needs to know the turn failed, not get a
+                # truncated answer that looks complete.
                 if round_text:
-                    conversation.append({"role": "assistant", "content": round_text})
-                final_answer = (final_answer + round_text).strip()
-                # Translate the raw LLM error into a typed problem so the user
-                # sees a remedy card (e.g. ollama_down with a Restart hint)
-                # instead of "LLM error: <traceback>". The partial answer is
-                # still preserved above + in the partial file.
+                    write_partial(partial_path, user_message,
+                                  final_answer + round_text, thinking_text)
                 from diagnostics import classify_error
                 diag = classify_error(e, {"stage": "thinking"})
                 await svc.manager.send_personal_message(
                     json.dumps({"type": "problem", "diagnosis": diag.to_dict()}),
                     websocket, session_logger=session_logger)
-                break
+                raise
 
             session_logger.log("agent_round", {
                 "round": round_idx,
@@ -881,125 +877,120 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 assistant_msg["tool_calls"] = round_tool_calls
             conversation.append(assistant_msg)
 
-            # No tool calls → the LLM produced a final answer. We're done.
+            # ───────────────────────────────────────────────────────────────
+            # TURN PROTOCOL: <done> marker
+            # ───────────────────────────────────────────────────────────────
+            # The system prompt tells the model: "To finish, end your text
+            # with <done>. To continue, call a tool." This is the ONLY
+            # deterministic signal the framework uses to decide if the
+            # turn is over. No heuristics, no plan checks, no text-content
+            # inspection — just a structured marker the model emits.
+            #
+            # This works for any model size: a 14b can follow "end with
+            # <done>" because it's a single token pattern, not a judgment
+            # call about whether the work "looks done".
+            #
+            # The protocol has exactly three outcomes when there are no
+            # tool calls:
+            #   1. Text contains <done> → strip marker, accept as answer.
+            #   2. Text is empty → nudge once, then fail loud.
+            #   3. Text without <done> → protocol violation. Nudge once.
+            #      If the model still omits <done>, accept the text — the
+            #      user sees the fragment and can re-ask. We do NOT try to
+            #      guess whether the text is "intent to continue" vs "a
+            #      real answer" — that's a heuristic and there will always
+            #      be an edge case.
             if not round_tool_calls:
-                # Empty-answer guard: if the model produced thinking but NO
-                # user-facing text and no tool calls, it went silent — likely
-                # because compaction ate its tool results and it has nothing to
-                # say. Don't send an empty answer_done (the user sees nothing =
-                # "bot stopped"). Instead, inject a system nudge telling the
-                # model to respond to the user with whatever it knows, and give
-                # it one more round. This only fires once per turn.
-                if not round_text.strip() and round_thinking.strip():
-                    if not _empty_answer_retried:
-                        _empty_answer_retried = True
-                        session_logger.log("empty_answer_retry", {
+                _has_done = "<done>" in round_text
+                if _has_done:
+                    # Strip the marker (and any trailing whitespace around it)
+                    # so the user never sees <done> in the chat UI.
+                    final_answer = round_text.replace("<done>", "").strip()
+                    if _synthesize_requested:
+                        await svc.manager.send_personal_message(json.dumps({
+                            "type": "status",
+                            "content": "Synthesizing final answer.",
+                        }), websocket, session_logger=session_logger)
+                    session_logger.log("turn_done_marker", {
+                        "round": round_idx,
+                        "answer_length": len(final_answer),
+                        "tool_rounds": _tool_rounds_executed,
+                    })
+                    break
+
+                if not round_text.strip():
+                    # Empty turn — nudge once, then fail loud.
+                    if not _empty_nudge_used:
+                        _empty_nudge_used = True
+                        session_logger.log("empty_answer_nudge", {
                             "round": round_idx,
                             "thinking_length": len(round_thinking),
+                            "has_plan": wm.has_plan(),
+                            "plan_all_done": wm.all_done() if wm.has_plan() else None,
                         })
                         conversation.append({
                             "role": "system",
                             "content": (
-                                "You produced reasoning but no answer to the user. "
-                                "Do NOT call any more tools. Based on everything you "
-                                "know so far — including your reasoning above and any "
-                                "tool results in your history — write a direct response "
-                                "to the user now. If you don't have enough information, "
-                                "say so plainly and explain what you need."),
+                                "You stopped without responding to the user "
+                                "and without the <done> marker. You MUST write "
+                                "a direct response now. End it with <done> on "
+                                "its own line when you're finished. If you "
+                                "want to continue working, call a tool."),
                         })
                         round_idx += 1
                         continue
-                # Incomplete-plan guard: the model produced a final answer
-                # (no tool calls) BUT there is an active plan with unfinished
-                # tasks. This is the "stops in its tracks" failure — the
-                # model abandons a partial plan and synthesizes early. The
-                # operator explicitly expects work to continue until the plan
-                # is complete. Nudge ONCE: tell the model how many tasks
-                # remain and to keep working. If it still produces no tool
-                # calls on the very next round, it genuinely has nothing more
-                # to do and we let it synthesize (don't trap it forever).
-                if (wm.has_plan() and not wm.all_done()
-                        and not _incomplete_plan_nudged
-                        and not _synthesize_requested):
-                    _incomplete_plan_nudged = True
-                    _snap = wm.snapshot()
-                    _pending = (_snap.get("total", 0)
-                                - _snap.get("completed", 0))
-                    session_logger.log("incomplete_plan_nudge", {
+
+                    # Second empty turn = fail loud.
+                    session_logger.log("agent_silent_fail_loud", {
                         "round": round_idx,
-                        "pending_tasks": _pending,
+                        "thinking_length": len(round_thinking),
+                        "tool_rounds": _tool_rounds_executed,
+                        "nudge_used": _empty_nudge_used,
+                    })
+                    raise AgentSilentError(
+                        "Agent ended turn with no user-facing text after a "
+                        "nudge. This is a contract violation — the turn is "
+                        "not done until the user has a response.")
+
+                # Text without <done> — protocol violation. Nudge once,
+                # then accept (we don't guess whether it's a fragment or
+                # a real answer; the user can re-ask if it's incomplete).
+                if not _protocol_nudge_used:
+                    _protocol_nudge_used = True
+                    session_logger.log("no_done_marker_nudge", {
+                        "round": round_idx,
+                        "text_length": len(round_text),
+                        "thinking_length": len(round_thinking),
+                        "tool_rounds_executed": _tool_rounds_executed,
                     })
                     conversation.append({
                         "role": "system",
                         "content": (
-                            f"You have {_pending} unfinished task(s) in your "
-                            "plan. Do NOT synthesize a final answer yet — "
-                            "continue working through the remaining tasks. "
-                            "Call the appropriate tool(s) to make progress. "
-                            "If you have gathered enough information to "
-                            "answer, call update_task to mark tasks completed, "
-                            "then synthesize."),
+                            "Your response did not end with the <done> marker "
+                            "and did not include a tool call. The turn protocol "
+                            "requires one or the other: call a tool to continue "
+                            "working, or end your text with <done> to finish. "
+                            "If you were about to call a tool, call it now. "
+                            "If you're done answering, write your complete "
+                            "answer and end with <done>."),
                     })
                     round_idx += 1
                     continue
-                # FINAL FALLBACK: the model went empty, the incomplete-plan
-                # nudge was already used, and it STILL produced nothing. This
-                # is the exact "stops dead" failure. Force a synthesis nudge
-                # that demands a response — the model must always deliver
-                # SOMETHING, even if it's partial findings.
-                if (not round_text.strip() and not _force_synthesize_nudged):
-                    _force_synthesize_nudged = True  # 1-shot: mark as nudged so it only fires once
-                    session_logger.log("force_synthesize_nudge", {
-                        "round": round_idx,
-                        "reason": "empty_after_plan_nudge",
-                    })
-                    conversation.append({
-                        "role": "system",
-                        "content": (
-                            "You have not produced any response. You MUST "
-                            "write a response to the user NOW. Do not call "
-                            "any more tools. Based on everything you've read "
-                            "and done so far, write a summary of your findings. "
-                            "If your audit is incomplete, say what you found "
-                            "so far and what remains to be done. If you found "
-                            "nothing useful, say so. NEVER produce an empty "
-                            "response — the user is waiting."),
-                    })
-                    round_idx += 1
-                    continue
-                # ULTIMATE FALLBACK: the model went empty even after the
-                # force-synthesize nudge. Deliver a framework-generated
-                # fallback so the user NEVER sees silence. Summarize what
-                # the model was doing based on the tool history.
-                if False and not round_text.strip() and _force_synthesize_nudged:  # DISABLED: never generate fake "unable to synthesize" response
-                    session_logger.log("empty_answer_fallback", {
-                        "round": round_idx,
-                        "tool_history_count": len(_turn_tool_history),
-                    })
-                    _tools_summary = ", ".join(
-                        t.get("tool", "?") for t in _turn_tool_history[-10:])
-                    _snap = wm.snapshot() if wm.has_plan() else {}
-                    _goal = _snap.get("goal", user_message[:100])
-                    _completed = _snap.get("completed", 0)
-                    _total = _snap.get("total", 0)
-                    final_answer = (
-                        f"I was working on: {_goal}\n\n"
-                        f"I completed {_completed}/{_total} planned tasks. "
-                        f"Tools I used: {_tools_summary}. "
-                        f"I gathered information but was unable to synthesize "
-                        f"a complete response. This may be a context or model "
-                        f"limitation — please ask me again or break the task "
-                        f"into smaller steps.")
-                    conversation.append({
-                        "role": "assistant", "content": final_answer})
-                    break
+
+                # Already nudged — accept the text as-is. We refuse to
+                # guess whether it's a fragment or a complete answer.
+                session_logger.log("no_done_marker_accepted", {
+                    "round": round_idx,
+                    "text_length": len(round_text),
+                    "tool_rounds_executed": _tool_rounds_executed,
+                    "reason": "nudged once, model still omitted <done>",
+                })
                 if _synthesize_requested:
                     await svc.manager.send_personal_message(json.dumps({
                         "type": "status",
                         "content": "Synthesizing final answer.",
                     }), websocket, session_logger=session_logger)
-                if round_text.strip():
-                    final_answer = round_text
+                final_answer = round_text
                 break
 
             _round_tool_names = []
@@ -1103,7 +1094,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     tool_result = await execute_agent_tool(
                         svc, tool_name, tool_args, session_logger, websocket,
                         user_message=user_message)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     session_logger.log_exception(e, context=f"tool_{tool_name}")
                     tool_result = {"error": str(e)}
                 session_logger.log("tool_exec_exit", {
@@ -1145,7 +1136,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                             error_details=v_details,
                             category=v_category,
                         )
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log("procedure_tracking_failed", {"error": str(e)})
                 await svc.manager.send_personal_message(json.dumps({
                     "type": "tool_result", "tool": tool_name,
@@ -1248,38 +1239,13 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         f"Do NOT re-read files you've already read this turn."),
                 })
 
-            # Mid-loop compaction: the agentic loop adds 2+ messages per tool
-            # round (assistant + tool result). Over many rounds the conversation
-            # balloons to 100K+ chars even though it started compacted. A remote
-            # cloud model (glm-5.2:cloud) takes >120s to process a 400K-char
-            # payload before the first token, hitting the read timeout. Re-compact
-            # here so the next LLM round sees a bounded conversation, not a
-            # snowballing one. This is the fix for "read timed out" after a few
-            # turns of tool use.
-            if svc.compactor.should_compact(conversation):
-                _compact_t0 = loop.time()
-                session_logger.log("mid_loop_compact_enter", {
-                    "round": round_idx,
-                    "messages": len(conversation),
-                    "tokens_est": svc.compactor.estimate_tokens(conversation),
-                })
-                conversation = svc.compactor.compact(conversation)
-                session_logger.log("mid_loop_compacted", {
-                    "messages": len(conversation),
-                    "round": round_idx,
-                    "duration_ms": (loop.time() - _compact_t0) * 1000,
-                })
-            else:
-                session_logger.log("mid_loop_compact_skipped", {
-                    "round": round_idx,
-                    "messages": len(conversation),
-                })
-
             # --- Sliding window (mid-loop): re-apply after tool results ---
             # Each tool round adds 2+ messages (assistant + tool result).
-            # Over many rounds the conversation balloons even though it
-            # started windowed. Re-apply the sliding window here so the
-            # next LLM round sees a bounded conversation.
+            # Over many rounds the conversation balloons. Re-apply the
+            # sliding window here so the next LLM round sees a bounded
+            # conversation. No LLM-based compaction — the vault IS the
+            # memory (chat notes + GOALS.md + working_memory.py keep the
+            # agent on task). This is a deterministic, non-lossy slice.
             _pre_mid_len = len(conversation)
             conversation = _apply_sliding_window(conversation)
             if len(conversation) < _pre_mid_len:
@@ -1336,10 +1302,20 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         "tool_history": _turn_tool_history,
                         "working_memory": snapshot_working_memory(wm),
                     })
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     session_logger.log("chat_checkpoint_save_failed", {"error": str(e)})
+                    # Surface to user — they need to know their session
+                    # won't survive a restart. The chat continues.
+                    await notify_problem(svc, websocket, e,
+                        context={"category": "compaction_broken",
+                                 "stage": "saving checkpoint"},
+                        user_message=(
+                            "I couldn't save my progress checkpoint. "
+                            "If I restart, I won't be able to resume this "
+                            "task. Your chat still works."),
+                        remedy_hint="Check disk space and file permissions.")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # The whole agentic loop crashed — save whatever was streamed so far.
             session_logger.log_exception(e, context="handle_chat_agentic_loop")
             write_partial(partial_path, user_message, final_answer, thinking_text)
@@ -1355,7 +1331,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 try:
                     if partial_path.exists():
                         partial_path.unlink()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     session_logger.log("partial_cleanup_failed", {"error": str(e)})
 
         session_logger.log("llm_generate", {
@@ -1374,7 +1350,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         if _cp is not None:
             try:
                 _cp.clear()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("checkpoint_clear_failed", {"error": str(e)})
         # Refresh the token meter after the full turn: tool rounds added
         # assistant + tool messages, so the window is now fuller than the
@@ -1392,7 +1368,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "available_tokens": max(0, _ctx_window - _used_tokens),
                 "messages": len(conversation),
             }), websocket, session_logger=session_logger)
-        except Exception as _e:
+        except Exception as _e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("context_usage_emit_failed", {"error": str(_e)})
         session_logger.log("chat_end", {
             "answer_length": len(final_answer),
@@ -1435,7 +1411,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 session_logger.log("vault_changed_broadcast", {
                     "file_count": len(changed_files),
                 })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("vault_changed_failed", {"error": str(e)})
 
         # Embedding-drift feedback (relevance feedback, LLM-free): nudge the
@@ -1456,7 +1432,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         if retrieved_paths:
             try:
                 # did the agent research on round 0? (vault context unhelpful)
-                researched_first = False
                 # round_idx 0 + a research tool call in the first round.
                 # We approximate: if final_answer is short AND round_idx > 0,
                 # the agent looped through tools (likely research).  A cleaner
@@ -1475,7 +1450,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     "helpful": (len(final_answer) > 50 and not first_round_researched),
                     "answer_len": len(final_answer),
                     "rounds": round_idx + 1})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("drift_feedback_failed", {"error": str(e)})
 
         # Lazy de-fluff: after the answer is delivered, condense any retrieved
@@ -1505,7 +1480,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                             if CONDENSE_MARKER in Path(fp).read_text(
                                     encoding="utf-8", errors="replace"):
                                 condensed_paths.append(fp)
-                        except Exception:
+                        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             continue
                     if not condensed_paths:
                         return
@@ -1526,7 +1501,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         try:
                             await loop.run_in_executor(
                                 None, link_outbound, fp, title_map)
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             session_logger.log("post_condense_linkoutbound_failed",
                                 {"path": fp, "error": str(e)})
                     # Re-run cross-book linking on the condensed notes only.
@@ -1544,7 +1519,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                             "condensed": len(condensed_paths),
                             "cross_links": cross.get("cross_links_added", 0),
                         })
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log("post_condense_crosslink_failed",
                                            {"error": str(e)})
                     # --- L1 concept-card lazy refine (rehearsal-gated) --- #
@@ -1577,7 +1552,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                     from concept_card import REFINED_MARKER
                                     if REFINED_MARKER not in old:
                                         build_card_for(fp, vault_graph=svc.vault_graph)
-                                except Exception as e:
+                                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                                     session_logger.log("card_rebuild_failed",
                                         {"path": fp, "error": str(e)})
                             # Drift reset: content changed, old drift is invalid.
@@ -1585,7 +1560,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                 svc.embedding_drift.reset(fp)
                                 if card.exists():
                                     svc.embedding_drift.reset(str(card))
-                            except Exception as e:
+                            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                                 session_logger.log("drift_reset_failed",
                                     {"path": fp, "error": str(e)})
                         # Then: LLM-refine any retrieved cards that have crossed
@@ -1599,7 +1574,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                             try:
                                 tc = svc.lazy_condenser.touch_counts.get(
                                     str(Path(card).resolve()), 0)
-                            except Exception:
+                            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                                 tc = 0
                             if needs_refine(card, tc):
                                 r = await loop.run_in_executor(
@@ -1615,17 +1590,17 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                     # drift is invalid.
                                     try:
                                         svc.embedding_drift.reset(str(card))
-                                    except Exception as e:
+                                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                                         session_logger.log("drift_reset_failed",
                                             {"card": str(card),
                                              "error": str(e)})
                         if refined:
                             session_logger.log("card_refine_done",
                                                {"refined": refined})
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log("card_refine_failed",
                                            {"error": str(e)})
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     session_logger.log("lazy_condense_bg_failed", {"error": str(e)})
                     # Surface the crash so the user knows background
                     # condensing stopped (notes stay verbose, but safe).
@@ -1688,15 +1663,24 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     # survives restarts, not just the slow identity files.
                     # Best-effort, never blocks.
                     save_history(new_turns)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("history_persist_failed", {"error": str(e)})
+            # Surface to user — they need to know their conversation
+            # won't survive a restart. The chat continues.
+            await notify_problem(svc, websocket, e,
+                context={"category": "history_lost",
+                         "stage": "persisting chat history"},
+                user_message=(
+                    "I couldn't save our conversation history. "
+                    "If I restart, I won't remember this chat."),
+                remedy_hint="Check disk space and file permissions.")
 
         # Save a chat note if the answer is substantive
         if len(final_answer) > 100:
             try:
                 note_path = await loop.run_in_executor(None, svc.note_creator.create_note_from_chat, user_message, final_answer, thinking_text)
                 session_logger.log("chat_note_created", {"note_path": note_path})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log_exception(e, context="note_creator.create_note_from_chat")
                 print(f"Error creating chat note: {e}")
 
@@ -1728,10 +1712,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 activity_parts.append(f"Answer: {final_answer[:500]}")
             else:
                 activity_parts.append("Answer: (empty — model produced no final text)")
-            if thinking_text:
-                # Include a slice of the reasoning so the self-model records
-                # what the agent was actually working through.
-                activity_parts.append(f"Reasoning: {thinking_text[:600]}")
             # Tool calls across all rounds, summarized.
             _tool_summary = []
             for m in conversation:
@@ -1749,7 +1729,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 session_logger.log("self_model_regen_skipped_or_done", {
                     "turns_since_regen": getattr(
                         svc.identity, "_turns_since_regen", 0)})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("self_model_regenerate_failed", {"error": str(e)})
 
         # Pattern extraction: check for new consolidation gaps after each chat.
@@ -1770,7 +1750,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         for g in _gaps[:5]
                     ],
                 })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("pattern_extraction_failed", {"error": str(e)})
     finally:
         svc.autonomous_researcher.resume_after_chat()
@@ -1815,7 +1795,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         try:
             from subagent import subagent_enabled, run_research_subagent
             _use_subagent = subagent_enabled()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             _use_subagent = False
 
         if _use_subagent:
@@ -1828,7 +1808,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                 brief = await run_with_heartbeat(
                     svc, websocket, f"research{topic[:40]}",
                     run_research_subagent, topic, depth, session_logger)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log_exception(e, context="subagent_research")
                 brief = {"status": "error",
                           "error": f"subagent research failed: {e}",
@@ -1838,7 +1818,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             # (the child's indexer is its own instance).
             try:
                 await loop.run_in_executor(None, svc.vault_graph.refresh)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("post_subagent_graph_refresh_failed",
                                     {"error": str(e)})
             session_logger.log("subagent_research_complete", {
@@ -1877,7 +1857,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                 try:
                     asyncio.run_coroutine_threadsafe(
                         send_progress(svc, websocket, stage, detail), loop)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     session_logger.log("tool_progress_cb_failed",
                         {"error": str(e)})
             svc.research_engine.progress_callback = _progress_cb
@@ -1911,31 +1891,23 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     try:
                         Path(note_path).write_text(
                             report["synthesis"], encoding="utf-8")
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log("research_note_write_failed",
                             {"path": note_path, "error": str(e)})
                 else:
                     # Extractive fallback: wrap in markdown, then try LLM
                     # structuring (ONE call) for frontmatter + H2 sections.
                     md = svc.research_engine.synthesize_note_markdown(report, summary)
-                    try:
-                        Path(note_path).write_text(md, encoding="utf-8")
-                    except Exception as e:
-                        session_logger.log("research_note_md_write_failed",
-                            {"path": note_path, "error": str(e)})
-                    try:
-                        _titles = svc.research_engine._get_vault_note_titles(svc.vault_path)
-                        _structured = svc.research_engine.synthesize_structured_note(
-                            report, summary, ollama_client=svc.ollama_client,
-                            vault_note_titles=_titles)
-                        if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
-                            Path(note_path).write_text(_structured, encoding="utf-8")
-                            session_logger.log("research_note_structured",
-                                               {"note_path": note_path,
-                                                "chars": len(_structured)})
-                    except Exception as _e:
-                        session_logger.log("research_note_structure_failed",
-                                           {"error": str(_e)})
+                    Path(note_path).write_text(md, encoding="utf-8")
+                    _titles = svc.research_engine._get_vault_note_titles(svc.vault_path)
+                    _structured = svc.research_engine.synthesize_structured_note(
+                        report, summary, ollama_client=svc.ollama_client,
+                        vault_note_titles=_titles)
+                    if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+                        Path(note_path).write_text(_structured, encoding="utf-8")
+                        session_logger.log("research_note_structured",
+                                           {"note_path": note_path,
+                                            "chars": len(_structured)})
                 report["note_path"] = note_path
             except Exception as e:
                 session_logger.log_exception(e, context="agent_research_note")
@@ -1950,7 +1922,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     lambda: svc.amem.evolve_on_create(
                         report.get("note_path", ""), report.get("synthesis", ""),
                         skip_refresh=True))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("amem_evolve_failed", {"error": str(e)})
         # Goal hint (same as the subagent path).
         if isinstance(report, dict):
@@ -1992,7 +1964,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     "orig_synthesis_chars": len(_syn),
                     "brief_chars": len(report.get("synthesis_brief", "")),
                 })
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # distillation is best-effort; never break the tool
         return report
 
@@ -2083,7 +2055,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             entry = idx.get(proc_name)
             if entry:
                 proc_file = Path(entry["path"])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("procedure_lookup_failed",
                 {"proc": proc_name, "error": str(e)})
 
@@ -2118,7 +2090,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     "blocked": True,
                 }
             _proc_caution = (_gate_reason == "experimental")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             _proc_caution = False  # gate failure must not block execution
 
         proc = _compile_proc(str(proc_file))
@@ -2155,7 +2127,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     _cartridge_note = " (using vision model)"
                 else:
                     _cartridge_note = " (vision model not configured, using big)"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("cartridge_select_failed", {
                 "procedure": proc_name, "cartridge": _cartridge, "error": str(e)})
         session_logger.log("procedure_cartridge", {
@@ -2188,7 +2160,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                     "helpful": helpful,
                     "failed_step": result.failed_step,
                 })
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("procedure_drift_feedback_failed",
                                     {"error": str(e)})
 
@@ -2339,7 +2311,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
                         await weave_textbook_notes(svc,
                             result, websocket=websocket,
                             session_logger=session_logger)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log("textbook_weave_bg_failed",
                                            {"error": str(e)})
                         # Surface the crash to the user so they know the

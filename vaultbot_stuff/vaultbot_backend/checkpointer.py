@@ -87,7 +87,7 @@ class Checkpointer:
         self.cycle_state_path = self.checkpoint_dir / "cycle_state.json"
         try:
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log(
                 "checkpointer_init_failed", {"dir": str(self.checkpoint_dir), "error": str(e)}
             )
@@ -103,7 +103,7 @@ class Checkpointer:
         try:
             if self.session_logger is not None:
                 self.session_logger.log(event, data)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     @staticmethod
@@ -140,11 +140,11 @@ class Checkpointer:
                             time.sleep(0.1 * (attempt + 1))
                 if last_err:
                     raise last_err
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 try:
                     if os.path.exists(tmp_path):
                         os.remove(tmp_path)
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
                 raise
 
@@ -155,7 +155,7 @@ class Checkpointer:
                 return None
             with open(path, encoding="utf-8") as fh:
                 return json.load(fh)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log("checkpointer_read_failed", {"path": str(path), "error": str(e)})
             logger.warning("Checkpointer: could not read %s: %s", path, e)
             return None
@@ -169,7 +169,7 @@ class Checkpointer:
         try:
             payload = json.dumps([asdict(c) for c in checkpoints], indent=2, ensure_ascii=False)
             self._atomic_write(str(self.checkpoint_path), payload)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log(
                 "checkpointer_save_failed",
                 {"path": str(self.checkpoint_path), "error": str(e), "count": len(checkpoints)},
@@ -198,7 +198,7 @@ class Checkpointer:
                         gap=item.get("gap") if isinstance(item.get("gap"), dict) else {},
                     )
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._safe_log("checkpointer_item_decode_failed", {"error": str(e)})
                 logger.warning("Checkpointer: skipping corrupt checkpoint item: %s", e)
                 continue
@@ -208,7 +208,7 @@ class Checkpointer:
         """True if any checkpoint has status='running' (in-flight when crash hit)."""
         try:
             return any(c.status == "running" for c in self.load())
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log("checkpointer_has_interrupted_failed", {"error": str(e)})
             return False
 
@@ -216,7 +216,7 @@ class Checkpointer:
         """Return only the checkpoints with status='running' — the work to resume."""
         try:
             return [c for c in self.load() if c.status == "running"]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log("checkpointer_get_interrupted_failed", {"error": str(e)})
             return []
 
@@ -229,7 +229,7 @@ class Checkpointer:
         try:
             payload = json.dumps(cycle_state, indent=2, ensure_ascii=False)
             self._atomic_write(str(self.cycle_state_path), payload)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log(
                 "checkpointer_save_cycle_failed",
                 {"path": str(self.cycle_state_path), "error": str(e)},
@@ -253,7 +253,7 @@ class Checkpointer:
             try:
                 if path.exists():
                     path.unlink()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._safe_log("checkpointer_clear_failed", {"path": str(path), "error": str(e)})
                 logger.warning("Checkpointer: could not remove %s: %s", path, e)
 
@@ -271,7 +271,7 @@ class Checkpointer:
                 "failed": failed,
                 "has_interrupted": running > 0,
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log("checkpointer_summary_failed", {"error": str(e)})
             return {"total": 0, "running": 0, "done": 0, "failed": 0, "has_interrupted": False}
 
@@ -305,7 +305,7 @@ class Checkpointer:
                 [c.topic for c in interrupted],
             )
             return {"recovered": interrupted, "skipped": False}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log("checkpointer_recover_failed", {"error": str(e)})
             logger.warning("Checkpointer: recover failed (non-fatal): %s", e)
             return {"recovered": [], "skipped": True}

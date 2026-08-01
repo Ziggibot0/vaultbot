@@ -116,7 +116,7 @@ class _Backend:
             self.session_logger.log_tool_call(
                 tool=self.name, method=method, inputs=inputs, outputs=outputs,
                 duration_ms=duration_ms, error=error)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     # -- throttle ---------------------------------------------------------
@@ -173,7 +173,7 @@ class _Backend:
             self._log("search", {"query": query}, error=reason,
                       duration_ms=(time.time() - t0) * 1000)
             return [], reason
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._mark_failure("exception")
             self._log("search", {"query": query}, error=str(e),
                       duration_ms=(time.time() - t0) * 1000)
@@ -394,7 +394,7 @@ class ArxivBackend(_Backend):
         # fall back to html.parser (the feed is well-formed enough).
         try:
             soup = BeautifulSoup(resp.text, "xml")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             soup = BeautifulSoup(resp.text, "html.parser")
         results: list[dict[str, Any]] = []
         for entry in soup.find_all("entry"):
@@ -549,7 +549,7 @@ class FreeSearch:
         def _run(b: _Backend):
             try:
                 results_by_backend[b.name] = b.search(query, max_results)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 # Should never happen (backend.search catches), but be safe.
                 results_by_backend[b.name] = ([], f"agg_error:{e}")
 
@@ -603,7 +603,7 @@ class FreeSearch:
                              "engines_up": len(results_by_backend) - len(unresponsive),
                              "engines_down": len(unresponsive)},
                     duration_ms=(time.time() - t0) * 1000)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         return {"results": out, "unresponsive_engines": unresponsive}
 
@@ -665,5 +665,5 @@ class FreeSearch:
             # Collapse runs of blank lines.
             text = re.sub(r"\n{3,}", "\n\n", text)
             return text[:20000]
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return ""

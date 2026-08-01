@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
@@ -58,32 +58,24 @@ async def research_tool_endpoint(payload: dict,
                 # LLM synthesis already produced a structured note with
                 # frontmatter, H2 prose sections, wikilinks, and Sources.
                 # Write it directly -- skip double-processing.
-                try:
-                    Path(note_path).write_text(
-                        report["synthesis"], encoding="utf-8")
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).debug("swallowed: %s", e)
+                Path(note_path).write_text(
+                    report["synthesis"], encoding="utf-8")
             else:
-                # Extractive fallback: wrap in markdown, then try LLM
+                # Extractive synthesis: wrap in markdown, then try LLM
                 # structuring (ONE call) for frontmatter + H2 sections.
                 md = svc.research_engine.synthesize_note_markdown(report, summary)
-                try:
-                    Path(note_path).write_text(md, encoding="utf-8")
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).debug("swallowed: %s", e)
-                try:
-                    _structured = svc.research_engine.synthesize_structured_note(
-                        report, summary, ollama_client=svc.ollama_client,
-                        vault_note_titles=_titles)
-                    if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
-                        Path(note_path).write_text(_structured, encoding="utf-8")
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).debug("swallowed: %s", e)
+                Path(note_path).write_text(md, encoding="utf-8")
+                # LLM structuring is a separate explicit step — if it fails,
+                # raise so the user sees the error. The extractive markdown
+                # is already saved; the user can re-run structuring later.
+                _structured = svc.research_engine.synthesize_structured_note(
+                    report, summary, ollama_client=svc.ollama_client,
+                    vault_note_titles=_titles)
+                if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+                    Path(note_path).write_text(_structured, encoding="utf-8")
         except Exception as e:
             svc.session_logger.log_exception(e, context="research_tool_note")
+            raise
     report["note_path"] = note_path
 
     # Run claim verification on the newly written note.
@@ -98,7 +90,7 @@ async def research_tool_endpoint(payload: dict,
                     f"Note {note_path}: {verification['verified']}/{verification['total_claims']} verified, "
                     f"{verification['unsupported']} unsupported, {verification['contradicted']} contradicted"
                 )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             svc.session_logger.log_exception(e, context="claim_verification")
 
     return report

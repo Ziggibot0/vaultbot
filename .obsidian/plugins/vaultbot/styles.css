@@ -329,6 +329,43 @@
 	flex: 0 0 auto;        /* never shrink or scroll */
 }
 
+/* ---- Ollama status bar (model + VRAM + perf) ---- */
+.vaultbot-stats-bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 6px;
+	font-size: 0.78em;
+	color: var(--vb-ink-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.vaultbot-stats-model {
+	font-weight: 600;
+	color: var(--vb-bark-soft);
+	flex-shrink: 0;
+}
+
+.vaultbot-stats-model-loaded {
+	color: var(--vb-moss);
+}
+
+.vaultbot-stats-vram,
+.vaultbot-stats-ctx {
+	opacity: 0.8;
+	flex-shrink: 0;
+}
+
+.vaultbot-stats-perf {
+	margin-left: auto;
+	opacity: 0.7;
+	flex-shrink: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 /* ---- Input area ---- */
 .vaultbot-input-container {
 	display: flex;

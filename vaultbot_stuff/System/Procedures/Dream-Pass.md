@@ -9,6 +9,7 @@ success_count: 23
 failure_count: 1
 success_rate: 0.96
 description: "Vault dreaming: scan for orphan nodes, connect them to the graph (idempotent), consolidate cross-session patterns into semantic notes via LLM synthesis, prune junk, and validate the graph is healthier. 6 steps, all deterministic except Step 3 (LLM synthesis). Safe to run repeatedly."
+when_to_use: "when the vault feels disorganized — orphan notes accumulating, cross-session patterns unconsolidated, or periodic memory-consolidation maintenance is due"
 falsifiable_if: "the vault has more orphan islands after dreaming than before, or the operator reports the vault is still disorganized"
 applies_to:
   - vault-maintenance

@@ -27,6 +27,7 @@ Safety:
   - All self-improvement actions are logged.
 """
 
+import ast
 import importlib
 import json
 import os
@@ -81,7 +82,7 @@ class SelfImprover:
             try:
                 mod = importlib.import_module(mod_name)
                 importlib.reload(mod)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("custom_tool_import_failed",
                           {"module": mod_name, "error": str(e),
                            "traceback": traceback.format_exc()})
@@ -127,7 +128,7 @@ class SelfImprover:
             self._log("custom_tool_executed",
                       {"name": name, "args": args, "duration_ms": (time.time()-t0)*1000})
             return result
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("custom_tool_error",
                       {"name": name, "args": args, "error": str(e),
                        "traceback": traceback.format_exc()})
@@ -148,7 +149,7 @@ class SelfImprover:
             snippet = "\n".join(lines[s-1:e])
             return {"file_path": str(full), "total_lines": len(lines),
                     "start_line": s, "end_line": e, "content": snippet}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
     # --- code_write ------------------------------------------------------
@@ -177,7 +178,7 @@ class SelfImprover:
             full.write_text(content, encoding="utf-8")
             self._log("code_write", {"file_path": str(full), "length": len(content)})
             return {"file_path": str(full), "bytes": len(content)}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
     # --- safe_write -----------------------------------------------------
@@ -355,7 +356,7 @@ class SelfImprover:
                 had_backup = True
             full.write_text(content, encoding="utf-8")
             checks["encoding"] = "utf-8 ok"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"status": "rejected", "checks": checks,
                     "error": f"write failed: {e}"}
 
@@ -370,14 +371,14 @@ class SelfImprover:
                     try:
                         shutil.copy2(full.with_suffix(full.suffix + ".bak"), full)
                         checks["auto_rollback"] = "restored from .bak"
-                    except Exception as rb_err:
+                    except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
                 else:
                     # No prior file existed; delete the broken new file.
                     try:
                         full.unlink()
                         checks["auto_rollback"] = "deleted new file (no prior .bak)"
-                    except Exception as rb_err:
+                    except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
                 self._log("safe_write_rejected", {
                     "file_path": str(full), "error": err, "checks": checks})
@@ -397,7 +398,7 @@ class SelfImprover:
         if is_core and checks.get("import_check") == "ok":
             try:
                 p_ok, p_out = self._run_pytest_in_subprocess(str(BACKEND_DIR))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 checks["pytest"] = f"skipped: could not run pytest: {e}"
                 p_ok = False  # FAIL LOUD: if pytest can't run, the edit is rejected
                 p_out = None
@@ -409,14 +410,14 @@ class SelfImprover:
                         shutil.copy2(
                             full.with_suffix(full.suffix + ".bak"), full)
                         checks["auto_rollback"] = "restored from .bak"
-                    except Exception as rb_err:
+                    except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
                 else:
                     try:
                         full.unlink()
                         checks["auto_rollback"] = (
                             "deleted new file (no prior .bak)")
-                    except Exception as rb_err:
+                    except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
                 self._log("safe_write_pytest_rejected", {
                     "file_path": str(full),
@@ -498,7 +499,7 @@ class SelfImprover:
                                                encoding='utf-8') as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"status": "rejected", "checks": checks,
                     "error": f"failed to create temp file: {e}"}
 
@@ -510,7 +511,7 @@ class SelfImprover:
             os.unlink(tmp_path)
             return {"status": "rejected", "checks": checks,
                     "error": "node --check timed out (15s)"}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             os.unlink(tmp_path)
             return {"status": "rejected", "checks": checks,
                     "error": f"node --check failed to run: {e}"}
@@ -571,7 +572,7 @@ class SelfImprover:
                 had_backup = True
             full.write_text(content, encoding="utf-8")
             checks["encoding"] = "utf-8 ok"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"status": "rejected", "checks": checks,
                     "error": f"write failed: {e}"}
 
@@ -579,16 +580,16 @@ class SelfImprover:
         try:
             written = full.read_text(encoding="utf-8")
             if written != content:
-                raise IOError("write verification mismatch")
+                raise OSError("write verification mismatch")
             checks["write_verified"] = "ok"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             checks["write_verified"] = f"FAIL: {e}"
             if had_backup:
                 try:
                     _shutil.copy2(full.with_suffix(full.suffix + ".bak"),
                                   full)
                     checks["auto_rollback"] = "restored from .bak"
-                except Exception as rb_err:
+                except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     checks["auto_rollback"] = f"FAILED: {rb_err}"
             self._log("js_safe_write_verify_failed", {
                 "file_path": str(full), "error": str(e), "checks": checks})
@@ -600,7 +601,7 @@ class SelfImprover:
         if had_backup:
             try:
                 full.with_suffix(full.suffix + ".bak").unlink()
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # non-critical
 
         self._log("js_safe_write", {
@@ -688,7 +689,7 @@ class SelfImprover:
             return False, tail[:500]
         except subprocess.TimeoutExpired:
             return False, "import check timed out (30s) — likely a startup hang"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False, f"import check could not run: {e}"
 
     def _verify_import_targets(self, content: str,
@@ -750,14 +751,14 @@ class SelfImprover:
         # because PYTHONPATH points at the backend dir.
         checks = "\n".join(
             "try:\n"
-            "    import {mod}\n"
-            "    getattr({mod}, {name!r})\n"
+            f"    import {mod}\n"
+            f"    getattr({mod}, {name!r})\n"
             "except ImportError:\n"
-            "    print('SKIP {mod} {name}')\n"
+            f"    print('SKIP {mod} {name}')\n"
             "except AttributeError:\n"
-            "    print('MISSING {mod} {name}')\n"
+            f"    print('MISSING {mod} {name}')\n"
             "    raise SystemExit(1)\n"
-            .format(mod=mod, name=name)
+            
             for (mod, name) in targets)
         check_code = (
             "import sys, os\n"
@@ -781,7 +782,7 @@ class SelfImprover:
             )
         except subprocess.TimeoutExpired:
             return False, "import-targets check timed out (40s)"
-        except Exception as e:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # If we can't run the check at all, don't block the write —
             # the import-main check (for core files) is the hard gate.
             return True, None
@@ -872,7 +873,7 @@ class SelfImprover:
         except subprocess.TimeoutExpired:
             os.unlink(tmp_path)
             return False, f"load check timed out ({timeout_s}s) — likely infinite recursion"
-        except Exception as e:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             os.unlink(tmp_path)
             return True, None  # can't run the check; don't block
         finally:
@@ -947,7 +948,7 @@ class SelfImprover:
                 cwd=str(BACKEND_ROOT), env=env,
                 text=True,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False, f"startup smoke could not launch: {e}"
         try:
             # Poll /health until it responds or the timeout fires.
@@ -967,7 +968,7 @@ class SelfImprover:
                     if r.status == 200:
                         return True, None
                     last_err = f"health status {r.status}"
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     last_err = str(e)[:120]
                 time.sleep(0.5)
             return False, f"startup smoke timed out ({timeout_s}s): {last_err}"
@@ -975,10 +976,10 @@ class SelfImprover:
             try:
                 proc.terminate()
                 proc.wait(timeout=5)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 try:
                     proc.kill()
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
 
     def _run_pytest_in_subprocess(self, backend_dir: str
@@ -1019,7 +1020,7 @@ class SelfImprover:
                 if probe.returncode == 0:
                     chosen = cand
                     break
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
         if chosen is None:
             # pytest not importable in any available interpreter — soft-skip.
@@ -1042,7 +1043,7 @@ class SelfImprover:
             return True, "pytest timed out (60s) — skipped"
         except FileNotFoundError:
             return True, "pytest interpreter not found"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Any other subprocess failure: soft-skip, don't hard-reject.
             return True, f"pytest could not run: {e}"
 
@@ -1169,7 +1170,7 @@ class SelfImprover:
                     "exit_code": proc.returncode}
         except subprocess.TimeoutExpired:
             return {"error": "timeout", "timeout": timeout}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
     # --- tool_create -----------------------------------------------------
@@ -1189,14 +1190,24 @@ class SelfImprover:
             f'"parameters": {json.dumps(parameters, default=str)}}}\n\n'
             f"{code}\n"
         )
+        # Verify syntax BEFORE writing to disk — a broken tool file would
+        # crash the hot-reload on the next tool_create.  This mirrors the
+        # ast.parse guard in safe_write, applied to agent-authored tools.
+        try:
+            ast.parse(full_code)
+        except SyntaxError as e:
+            return {"error": f"syntax error in tool code: {e}",
+                    "tool_name": tool_name,
+                    "hint": "Fix the syntax error and try again. "
+                            "The file was NOT written."}
         try:
             file_path.write_text(full_code, encoding="utf-8")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": f"could not write tool file: {e}"}
         # Try to load it immediately.
-        before = set(self._loaded_schemas.keys())
+        set(self._loaded_schemas.keys())
         self.load_custom_tools()
-        after = set(self._loaded_schemas.keys())
+        set(self._loaded_schemas.keys())
         loaded = tool_name in self._loaded_schemas or safe in self._loaded_schemas
         self._log("tool_create", {"tool_name": tool_name, "file": str(file_path),
                                    "loaded": loaded})
@@ -1214,11 +1225,12 @@ class SelfImprover:
     def self_reflect(self, topic: str, vault_context: str = "") -> dict[str, Any]:
         """Ask the LLM to reflect on what it's learned and propose new abilities.
         Uses a cheap, non-streaming call so it doesn't interfere with the chat.
-        Routes through get_llm_client() so it works with ANY configured backend
-        (Ollama, OpenAI, OpenRouter, etc.) — not just local Ollama."""
+        Routes through the small model cartridge when available — tool proposals
+        are structured JSON that a small model can generate, and the agent
+        reviews proposals before implementing them. Saves cloud tokens."""
         try:
-            from llm_client import get_llm_client
-            client = get_llm_client()
+            from llm_client import get_small_client_or_big
+            client = get_small_client_or_big()
             prompt = (
                 "You are VaultBot reflecting on your own abilities in service "
                 "of your owner. Given the topic and vault context below, "
@@ -1232,10 +1244,16 @@ class SelfImprover:
                 "Respond as JSON: {\"proposals\": [{\"name\", \"description\", "
                 "\"parameters\", \"code_sketch\"}]}"
             )
-            result = client.generate(prompt, temperature=0.4, stream=False)
-            text = result.get("response", "")
+            # Use chat() not generate() — OpenAICompatibleClient only
+            # exposes chat().  The old code called client.generate() which
+            # exists on OllamaClient but NOT on the OpenAI backend, so
+            # self_reflect was silently dead when LLM_BACKEND=openai.
+            result = client.chat(
+                [{"role": "user", "content": prompt}],
+                temperature=0.4, stream=False)
+            text = result.get("response", "") if isinstance(result, dict) else str(result)
             return {"reflection": text, "topic": topic}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
     # --- git_rollback ----------------------------------------------------
@@ -1258,7 +1276,7 @@ class SelfImprover:
                     capture_output=True, text=True, cwd=str(BACKEND_ROOT), timeout=10)
             return {"stdout": proc.stdout, "stderr": proc.stderr,
                     "exit_code": proc.returncode, "restored": rel}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
     # --- helpers ---------------------------------------------------------

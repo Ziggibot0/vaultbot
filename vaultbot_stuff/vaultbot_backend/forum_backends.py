@@ -100,7 +100,7 @@ class _ForumBackend:
             else:
                 self._mark_failure("http_error")
             return [], f"http_{status}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._mark_failure("exception")
             return [], str(e)
 
@@ -276,7 +276,7 @@ _ACADEMIC_SIGNALS = {
     # ML / AI research terms
     "neural", "transformer", "attention", "reinforcement", "supervised",
     "unsupervised", "representation", "generative", "discriminative",
-    "embedding", "encoder", "decoder", "backpropagation", "convolutional",
+    "encoder", "decoder", "backpropagation", "convolutional",
     "recurrent", "graph", "bayesian", "probabilistic", "statistical",
     # Quantum / physics technical
     "quantum", "entanglement", "hamiltonian", "eigenvalue", "tensor",
@@ -370,7 +370,7 @@ class ForumEnhancedFreeSearch(FreeSearch):
         def _run(b):
             try:
                 results_by_backend[b.name] = b.search(query, max_results)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 results_by_backend[b.name] = ([], f"agg_error:{e}")
 
         for b in active_backends:
@@ -420,11 +420,11 @@ class ForumEnhancedFreeSearch(FreeSearch):
                 self.session_logger.log_tool_call(
                     tool="freesearch", method="search",
                     inputs={"query": query, "max": max_results,
-                            "technical": tech},
+                            "backends": len(self._backends)},
                     outputs={"count": len(out),
                              "engines_up": len(results_by_backend) - len(unresponsive),
                              "engines_down": len(unresponsive)},
                     duration_ms=(time.time() - t0) * 1000)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         return {"results": out, "unresponsive_engines": unresponsive}

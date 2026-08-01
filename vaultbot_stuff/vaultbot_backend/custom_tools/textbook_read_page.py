@@ -123,7 +123,7 @@ def _render_page_image(pdf_path: Path, page_num: int,
         png_bytes = pix.tobytes("png")
         doc.close()
         return base64.b64encode(png_bytes).decode("ascii")
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return None
 
 
@@ -138,7 +138,7 @@ def _extract_page_text(pdf_path: Path, page_num: int) -> str:
         text = doc[page_num - 1].get_text("text")
         doc.close()
         return text
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return ""
 
 
@@ -168,7 +168,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     if llm_client is not None:
         try:
             capable = llm_client.vision_capable()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             capable = False
         if capable:
             content = _read_with_vision(llm_client, img_b64, pdf_path.name, page)
@@ -252,5 +252,5 @@ def _read_with_vision(llm_client, img_b64: str, pdf_name: str,
         if hasattr(result, "__iter__"):
             return "".join(c.get("response", "") for c in result)
         return ""
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return ""

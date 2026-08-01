@@ -48,7 +48,7 @@ try:
     import faiss
     if not hasattr(faiss, "IndexIDMap2"):
         pytest.skip("faiss module has no IndexIDMap2 (stub loaded)", allow_module_level=True)
-except Exception:
+except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     pytest.skip("faiss not available in this env", allow_module_level=True)
 
 
@@ -279,9 +279,17 @@ def test_reconstruct_embedding_returns_none_for_unknown(tmp_vault):
 
 
 def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
-    """A legacy list-format metadata.pkl + IndexFlatL2 should migrate to
-    IndexIDMap2 on load WITHOUT calling Ollama (vectors reconstructed from
-    the old flat index)."""
+    """A legacy list-format metadata.pkl + IndexFlatL2 should be detected as
+    schema-v1 on load. Because the embedding schema has since changed
+    (procedures now embed their description surface, not full content), the
+    stale reconstructed vectors are DISCARDED and the indexer flags itself
+    for a full re-embed on the next index_missing_or_changed() call.
+
+    The load itself still does zero Ollama calls — the migration reconstructs
+    from the old flat index first, then the schema check wipes the result.
+    The actual re-embedding happens later (in index_missing_or_changed),
+    which is the production startup path.
+    """
     vault = tmp_path / "vault"
     vault.mkdir()
     index_dir = tmp_path / "index"
@@ -301,8 +309,7 @@ def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
         {"file_path": str(vault / "b.md"), "last_modified": 2.0, "content_hash": "h2"},
         {"file_path": str(vault / "c.md"), "last_modified": 3.0, "content_hash": "h3"},
     ]
-    # Write the files so they exist on disk (the migration doesn't re-embed
-    # but _rebuild_index would prune missing files — we want all 3 to survive).
+    # Write the files so they exist on disk for the later re-embed.
     for p, content in zip(["a.md", "b.md", "c.md"], ["aaa", "bbb", "ccc"]):
         (vault / p).write_text(content, encoding="utf-8")
 
@@ -322,20 +329,24 @@ def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
         importlib.reload(vault_indexer)
     VaultIndexer = vault_indexer.VaultIndexer
     indexer = VaultIndexer(vault_path=str(vault), index_path=str(index_dir))
-    # Replace ollama with a counter to assert zero calls during migration.
-    # (The migration already ran in __init__ before we swapped the client,
-    # so the count is 0 — the migration reconstructs from the old index,
-    # never calls ollama_client.embeddings.)
+    # Replace ollama with a counter to assert zero calls during load.
     indexer.ollama_client = _CountingOllama()
 
     assert indexer.ollama_client.embeddings_call_count == 0, (
-        "Legacy migration must reconstruct from the old index, not re-embed"
+        "Load must not re-embed — re-embedding is deferred to "
+        "index_missing_or_changed()"
     )
-    assert isinstance(indexer.index, faiss.IndexIDMap2), (
-        f"Expected IndexIDMap2 after migration, got {type(indexer.index)}"
+    # The schema-version check discards the stale reconstructed vectors and
+    # flags for a full rebuild.
+    assert indexer._needs_full_rebuild is True
+    assert indexer.index is None or indexer.index.ntotal == 0, (
+        "Stale legacy vectors should have been discarded"
     )
+    # A subsequent index_missing_or_changed() re-embeds all files and clears
+    # the flag.
+    indexer.index_missing_or_changed()
+    assert indexer._needs_full_rebuild is False
+    assert isinstance(indexer.index, faiss.IndexIDMap2)
     assert indexer.index.ntotal == 3
-    assert indexer._next_id == 3
-    # All three paths should be in _path_to_id.
     for p in ["a.md", "b.md", "c.md"]:
         assert str(vault / p) in indexer._path_to_id

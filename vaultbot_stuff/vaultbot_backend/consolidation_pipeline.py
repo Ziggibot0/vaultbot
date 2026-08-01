@@ -520,7 +520,7 @@ class ConsolidationPipeline:
                 "last_consolidation": None,
             }
             if os.path.exists(self.log_path):
-                with open(self.log_path, "r", encoding="utf-8") as f:
+                with open(self.log_path, encoding="utf-8") as f:
                     log = json.load(f)
 
             log["consolidations"].append({
@@ -538,5 +538,5 @@ class ConsolidationPipeline:
 
             with open(self.log_path, "w", encoding="utf-8") as f:
                 json.dump(log, f, indent=2, ensure_ascii=False)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass  # Logging is best-effort

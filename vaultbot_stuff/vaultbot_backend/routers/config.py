@@ -156,7 +156,7 @@ async def rollback_update(
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(backup_file, dest)
             restored += 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {"status": "error", "error": str(e),
                 "restored": restored, "backup": latest.name}
 

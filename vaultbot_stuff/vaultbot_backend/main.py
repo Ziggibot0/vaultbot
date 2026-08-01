@@ -4,9 +4,9 @@ import json
 import logging
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +27,10 @@ import uvicorn
 from amem_evolution import AMemeEvolution
 from autonomous_researcher import AutonomousResearcher
 from checkpointer import Checkpointer
-from compactor import Compactor
 from dotenv import load_dotenv
 from embedding_drift import EmbeddingDrift
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from free_search import FreeSearch
 from fused_retrieval import FusedRetriever
 from graph_ops import GraphOpRegistry
@@ -47,17 +45,14 @@ from plan_executor import PlanExecutor
 from research_engine import ResearchEngine
 from self_improver import SelfImprover
 from session_logger import SessionLogger
-from supervision import HealthMonitor, generate_nssm_install, generate_nssm_uninstall
+from supervision import HealthMonitor
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 
-try:
-    from forum_backends import ForumEnhancedFreeSearch
-    # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
-    # backends, skips arXiv for technical queries, prioritizes forum results.
-    FreeSearch = ForumEnhancedFreeSearch
-except Exception as _forum_err:
-    print(f"[startup] Forum backends unavailable, using base FreeSearch: {_forum_err}")
+from forum_backends import ForumEnhancedFreeSearch
+# Use the forum-enhanced version: adds GitHub Issues + StackOverflow
+# backends, skips arXiv for technical queries, prioritizes forum results.
+FreeSearch = ForumEnhancedFreeSearch
 from calibration import CalibrationTracker
 from claim_verifier import ClaimVerifier
 from context_budgeter import ContextBudgeter
@@ -131,7 +126,7 @@ def acquire_lock() -> None:
                 raise
         try:
             old_pid = int(PID_FILE.read_text().strip())
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             logger.debug("swallowed: %s", e)
             old_pid = None
         if old_pid and _check_pid_alive(old_pid):
@@ -153,7 +148,7 @@ def release_lock() -> None:
     try:
         if PID_FILE.exists() and PID_FILE.read_text().strip() == str(os.getpid()):
             PID_FILE.unlink()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.debug("swallowed: %s", e)
 
 acquire_lock()
@@ -175,7 +170,7 @@ async def lifespan(app: FastAPI):
         try:
             if _log_path.exists() and _log_path.stat().st_size > 10 * 1024 * 1024:
                 _log_path.with_name(_log_name).write_bytes(b"")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             logger.debug("swallowed: %s", e)
 
     startup_logger = SessionLogger()
@@ -201,7 +196,7 @@ async def lifespan(app: FastAPI):
                 for p in d.glob("partial_*.md"):
                     try:
                         p.unlink()
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                         logger.debug("swallowed: %s", e)
         await loop.run_in_executor(None, _purge_partials)
         # Load the persisted index and start watching for live edits immediately.
@@ -213,13 +208,61 @@ async def lifespan(app: FastAPI):
         async def background_index():
             try:
                 await loop.run_in_executor(None, vault_indexer.index_missing_or_changed)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 startup_logger.log_exception(e, context="background_index")
                 app_state.set_startup_reindex_failed(str(e))
         asyncio.create_task(background_index())
 
         startup_logger.log("server_startup", {"stage": "end", "status": "ok",
                                    "vectors": vault_indexer.index.ntotal if vault_indexer.index else 0})
+
+        # ── Model preload ──────────────────────────────────────────────
+        # Ollama loads models lazily: the first request to a cold model
+        # triggers a full load from disk (up to 5 min for a 27B model).  By
+        # preloading at startup, the model is resident in GPU memory before
+        # the user ever sends their first message.  This runs in a background
+        # thread so it never blocks the server from accepting connections.
+        # The preload is a no-op for cloud backends (OpenAICompatibleClient).
+        # Skip if disabled via VAULTBOT_PRELOAD_ON_STARTUP=0.
+        if os.environ.get("VAULTBOT_PRELOAD_ON_STARTUP", "1") != "0":
+            def _preload_models():
+                import llm_client as _llm_mod
+                _preloaded = []
+
+                def _preload_with_retry(client, label):
+                    """Preload a model with retry — keeps trying until Ollama
+                    is available (it may not be up yet when the backend starts)
+                    or the max wait is reached."""
+                    _max_wait = int(os.environ.get(
+                        "VAULTBOT_PRELOAD_MAX_WAIT_S", "300"))
+                    _interval = 10  # retry every 10s
+                    _elapsed = 0
+                    while _elapsed < _max_wait:
+                        try:
+                            if client.preload_model():
+                                return True
+                        except Exception:
+                            pass
+                        time.sleep(_interval)
+                        _elapsed += _interval
+                    startup_logger.log("model_preload_timeout", {
+                        "model": label, "waited_s": _elapsed})
+                    return False
+
+                # Big model (chat/reasoning).
+                _preload_with_retry(ollama_client, "big")
+                _preloaded.append(ollama_client.llm_model)
+                # Small model (tiny dance partner for procedures).
+                try:
+                    _small = _llm_mod.get_small_client(default_session_logger)
+                    if _small is not None:
+                        _preload_with_retry(_small, "small")
+                        _preloaded.append(_small.llm_model)
+                except Exception as e:  # noqa: BLE001
+                    startup_logger.log("model_preload_startup_failed", {"model": "small", "error": str(e)})
+                startup_logger.log("models_preloaded", {"models": _preloaded})
+            loop.run_in_executor(None, _preload_models)
+
         # Start the autonomous researcher so it begins filling vault gaps
         # in the background. It waits a short grace period before its first
         # cycle so the index/graph are settled.
@@ -258,12 +301,12 @@ async def lifespan(app: FastAPI):
                             "count": len(recovered_gaps),
                             "topics": [g["topic"] for g in recovered_gaps],
                         })
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 startup_logger.log("checkpointer_recovery_failed", {"error": str(e)})
             startup_logger.log("autonomous_researcher_started", {})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             startup_logger.log_exception(e, context="autonomous_researcher_start")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         startup_logger.log_exception(e, context="server_startup")
     finally:
         startup_logger.close()
@@ -278,14 +321,14 @@ async def lifespan(app: FastAPI):
         try:
             autonomous_researcher.stop()
             shutdown_logger.log("autonomous_researcher_stopped", {})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             shutdown_logger.log_exception(e, context="autonomous_researcher_stop")
         # Stop watching the vault for changes and persist the index
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, vault_indexer.stop_watching)
         await loop.run_in_executor(None, vault_indexer.persist)
         shutdown_logger.log("server_shutdown", {"stage": "end", "status": "ok"})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         shutdown_logger.log_exception(e, context="server_shutdown")
     finally:
         shutdown_logger.close()
@@ -314,7 +357,28 @@ default_session_logger = SessionLogger()
 # compute; the research loop stays token-free either way. See llm_client.py.
 # Embeddings are a SEPARATE concern and stay on OllamaClient (nomic-embed-text,
 # ~270MB, light enough for a weak laptop) inside vault_indexer.
-ollama_client = get_llm_client(session_logger=default_session_logger)
+try:
+    ollama_client = get_llm_client(session_logger=default_session_logger)
+except RuntimeError as _llm_cfg_err:
+    # The user configured LLM_BACKEND=openai but is missing the API key
+    # or model. get_llm_client now raises instead of silently falling back
+    # to Ollama. Surface a Diagnosis so the user knows exactly what's
+    # wrong, then fall back to Ollama so the backend still starts (the
+    # user can fix their .env and restart). This is NOT silent — the
+    # Diagnosis is logged + printed so it's visible in every channel.
+    from diagnostics import classify_error
+    _llm_diag = classify_error(_llm_cfg_err, {"stage": "startup"})
+    default_session_logger.log("llm_backend_config_error", {
+        "error": str(_llm_cfg_err),
+        "category": _llm_diag.category.value,
+        "user_message": _llm_diag.user_message,
+    })
+    print(f"[CONFIG ERROR] {_llm_diag.user_message}")
+    print(f"[CONFIG ERROR] Raw: {_llm_cfg_err}")
+    # Still fall back to Ollama so the backend starts, but the user has
+    # been loudly notified. This is a notified fallback, not a silent one.
+    from llm_client import _make_ollama_client
+    ollama_client = _make_ollama_client(session_logger=default_session_logger)
 # OPTIONAL dedicated vision model for reading textbook pages. This is a
 # SEPARATE concern from the synthesis client: a user can keep a fast/cheap
 # text-only chat model and delegate page-reading (textbook_read_page) to a
@@ -339,7 +403,7 @@ searxng_manager = None
 try:
     from searxng_manager import SearxngManager
     searxng_manager = SearxngManager(session_logger=default_session_logger)
-except Exception as _searxng_err:
+except Exception as _searxng_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     print(f"[startup] SearXNG backend disabled (Docker/SearxngManager unavailable: {_searxng_err})")
 
 search_client = FreeSearch(
@@ -395,8 +459,8 @@ def _researcher_crash_callback(error: str) -> None:
     If no loop is available or no connections are active, the problem is
     still logged to the default session logger.
     """
-    import json as _json  # noqa: PLC0415
-    from diagnostics import classify_error  # noqa: PLC0415
+    import json as _json
+    from diagnostics import classify_error
     try:
         diag = classify_error(RuntimeError(error),
                                {"stage": "autonomous researcher"})
@@ -417,8 +481,14 @@ def _researcher_crash_callback(error: str) -> None:
             "user_message": diag.user_message,
             "source": "autonomous_researcher_crash",
         })
-    except Exception:
-        pass  # the callback must never raise
+    except Exception as notify_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        # The crash notification itself failed — log it loudly.
+        # This is the one place where we MUST not silently pass:
+        # if the user doesn't know the researcher crashed, they think
+        # the vault is being maintained when it isn't.
+        default_session_logger.log_exception(
+            notify_err, context="autonomous_researcher_crash_notification")
+        print(f"[CRITICAL] Researcher crashed AND crash notification failed: {notify_err}")
 
 autonomous_researcher = AutonomousResearcher(
     vault_path=os.getenv("VAULT_PATH", "."),
@@ -493,17 +563,17 @@ chat_checkpointer = ChatLoopCheckpointer(
     state_path=Path(__file__).with_name("chat_loop_checkpoint.json"),
     session_logger=default_session_logger)
 
-# Context compactor (OpenHands Condenser pattern): summarizes conversation
-# middle when history grows too long, preventing context overflow on long
-# chats without losing the thread. The token threshold is now 500K (see
-# compactor.py) — scaled to glm-5.2:cloud's 1M context window. The old 40-msg
-# / 12K-token thresholds fired after a single tool round, summarizing away
-# the tool result the model just received and producing empty answers.
-# 200 messages allows a long multi-step agentic session (25 rounds × 2-3
-# messages each = ~50-75 msgs) before compaction touches anything.
-compactor = Compactor(
-    ollama_client=ollama_client, session_logger=default_session_logger,
-    max_messages=int(os.getenv("VAULTBOT_COMPACT_MAX_MESSAGES", "200")))
+# Context management: a sliding window (not LLM-based compaction) bounds
+# the conversation sent to the LLM. The vault IS the memory — chat history
+# is persisted as notes (Memory/Chat/Chat-*.md) and the agent can walk the
+# wikilink trail back via vault_search. GOALS.md + working_memory.py keep
+# it on task. The old Compactor (LLM summarization of old messages) was
+# lossy, costly, and introduced its own failure modes (summarization
+# failure → silent degradation). The sliding window is deterministic,
+# non-lossy, and zero-cost. See chat_handler._apply_sliding_window.
+#
+# The lazy_condenser + context_budgeter remain — they manage VAULT note
+# density and retrieved-context size, not conversation history.
 
 # Lazy note condenser: de-fluffs notes over time as they're queried. After
 # each chat, retrieved notes get a touch; once a note has been queried 3+
@@ -528,15 +598,30 @@ health_monitor = HealthMonitor(session_logger=default_session_logger)
 # of hardcoding 32768 — with a large-window model (glm-5.2:cloud = 128K+), a
 # 32K assumption made the budgeter shrink the retrieved context to a useless
 # stub while the REAL flood came from the un-budgeted 49K legacy fallback.
-# Fallback to 128K (not 32K) on failure so a probe error can't silently
-# re-shrink context.
+# On probe failure, fall back to the VAULTBOT_CONTEXT_LIMIT env var (which
+# the user explicitly set). If that's also unset, log loudly — do NOT
+# silently guess 128K (wrong for an 8K model).
 _ctx_limit = 0
 try:
     _ctx_limit = ollama_client.context_window() or 0
-except Exception:
+except Exception as _ctx_probe_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+    default_session_logger.log("context_window_probe_failed", {
+        "error": str(_ctx_probe_err),
+    })
     _ctx_limit = 0
-context_budgeter = ContextBudgeter(
-    model_context_limit=_ctx_limit or int(os.getenv("VAULTBOT_CONTEXT_LIMIT", "131072")))
+if not _ctx_limit:
+    _env_limit = int(os.getenv("VAULTBOT_CONTEXT_LIMIT", "0") or "0")
+    if not _env_limit:
+        # Neither probe nor env var gave us a limit. Default to 128K as a
+        # generous ceiling for modern models, but log it so it's visible
+        # — this is a notified default, not a silent guess.
+        default_session_logger.log("context_window_defaulted", {
+            "reason": "probe failed and VAULTBOT_CONTEXT_LIMIT not set",
+            "default": 131072,
+        })
+        _env_limit = 131072
+    _ctx_limit = _env_limit
+context_budgeter = ContextBudgeter(model_context_limit=_ctx_limit)
 
 # Calibration tracker: uses the operator's corrections as ground truth to calibrate
 # automated quality gates (vault_lint, procedure_tracker, etc.).
@@ -579,7 +664,7 @@ class ConnectionManager:
     async def send_personal_message(self, message: str, websocket: WebSocket, session_logger: SessionLogger = None):
         try:
             await websocket.send_text(message)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             # Client likely disconnected; don't crash the server
             if session_logger is not None:
                 session_logger.log("websocket_send_failed", {"error": str(e)})
@@ -594,7 +679,7 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 if session_logger is not None:
                     session_logger.log("websocket_broadcast_failed", {"error": str(e)})
                 continue
@@ -614,7 +699,7 @@ manager = ConnectionManager()
 # services.py. The globals above stay in place; only the extracted
 # functions change to `svc.<name>` access.
 from services import Services
-from app_state import set_services, get_services  # Phase 3: DI surface for routers
+from app_state import set_services  # Phase 3: DI surface for routers
 
 svc = Services(
     ollama_client=ollama_client,
@@ -635,7 +720,6 @@ svc = Services(
     amem=amem,
     fused_retriever=fused_retriever,
     embedding_drift=embedding_drift,
-    compactor=compactor,
     lazy_condenser=lazy_condenser,
     context_budgeter=context_budgeter,
     health_monitor=health_monitor,
@@ -661,7 +745,7 @@ try:
         stem: entry.get("frontmatter", {}).get("status", "")
         for stem, entry in _proc_idx.items()
     }
-except Exception as e:
+except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     default_session_logger.log("procedure_status_index_failed", {"error": str(e)})
 
 # Phase 3: register the singleton so routers using Depends(get_services)
@@ -729,7 +813,7 @@ async def shutdown_endpoint(request: Request):
     # log a warning about an unread body; the content is irrelevant.
     try:
         await request.body()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.debug("swallowed: %s", e)
 
     def _terminate():
@@ -740,17 +824,17 @@ async def shutdown_endpoint(request: Request):
             # Run the graceful shutdown path synchronously (best effort).
             try:
                 autonomous_researcher.stop()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
             try:
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(vault_indexer.stop_watching())
                 loop.run_until_complete(vault_indexer.persist())
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
             try:
                 release_lock()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
         finally:
             os._exit(0)

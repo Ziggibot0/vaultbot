@@ -56,6 +56,6 @@ async def regenerate_self_model(svc: Services, payload: dict):
     try:
         new_model = await loop.run_in_executor(
             None, lambda: identity.regenerate_self_model(activity))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
     return {"self_model": new_model, "summary": identity.summary()}

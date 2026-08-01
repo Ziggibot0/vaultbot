@@ -206,7 +206,7 @@ def _cluster_label(card_paths: list[str]) -> str:
         # take the top 1-2 terms as the label
         top = [t for t, _ in ranked[:2] if ranked[0][1] >= 2]
         return "-".join(top) if top else ranked[0][0]
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return "cluster"
 
 
@@ -267,7 +267,7 @@ def build_mocs(card_paths: list[str],
         for old in tdir.glob(f"{MOC_PREFIX}*.md"):
             try:
                 old.unlink()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
         clusters = cluster_cards(card_paths, emb_by_path)
         if progress_callback is not None:
@@ -275,7 +275,7 @@ def build_mocs(card_paths: list[str],
                 progress_callback("moc_build", {
                     "clusters": len(clusters),
                     "message": f"Building {len(clusters)} maps of content..."})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
         moc_paths: list[str] = []
         cluster_meta: list[dict[str, Any]] = []
@@ -308,11 +308,11 @@ def build_mocs(card_paths: list[str],
             for cp in cl:
                 try:
                     _stamp_card_cluster(cp, cid)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     logger.debug("swallowed: %s", e)
         return {"mocs_built": len(moc_paths), "clusters": cluster_meta,
                 "moc_paths": moc_paths}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {"mocs_built": 0, "clusters": [], "moc_paths": [],
                 "error": f"{type(e).__name__}: {e}"}
 
@@ -340,14 +340,15 @@ def _stamp_card_cluster(card_path: str | Path, cluster_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _read_card_cluster(card_path: str | Path) -> str | None:
-    """Read a card's existing cluster id from its `> cluster:` line."""
-    try:
-        text = Path(card_path).read_text(encoding="utf-8", errors="replace")
-        m = re.search(r"> cluster: \[\[" + re.escape(MOC_PREFIX) +
-                      r"([^\]]+)\]\]", text)
-        return m.group(1).strip() if m else None
-    except Exception:
-        return None
+    """Read a card's existing cluster id from its `> cluster:` line.
+
+    Returns None when the file doesn't exist or has no cluster line.
+    Filesystem errors (permissions, IO) propagate.
+    """
+    text = Path(card_path).read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"> cluster: \[\[" + re.escape(MOC_PREFIX) +
+                  r"([^\]]+)\]\]", text)
+    return m.group(1).strip() if m else None
 
 
 def _cluster_centroid(card_paths: list[str],
@@ -476,7 +477,7 @@ def build_mocs_incremental(card_paths: list[str],
                     "new_seeded": new_clusters_seeded,
                     "message": (f"Updating {len(affected_cids)} of "
                                 f"{len(cluster_members)} MOCs...")})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
 
         # 4. Rewrite ONLY the affected MOC notes.  Unaffected MOCs stay on
@@ -529,7 +530,7 @@ def build_mocs_incremental(card_paths: list[str],
                 if cp in new_set:
                     try:
                         _stamp_card_cluster(cp, cid)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                         logger.debug("swallowed: %s", e)
 
         # 5. Delete MOC notes for clusters that no longer exist (all members
@@ -540,13 +541,13 @@ def build_mocs_incremental(card_paths: list[str],
             if old_cid not in current_cids:
                 try:
                     old_moc.unlink()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     logger.debug("swallowed: %s", e)
 
         return {"mocs_built": len(moc_paths), "mocs_updated": mocs_updated,
                 "mocs_unchanged": mocs_unchanged,
                 "new_clusters": new_clusters_seeded,
                 "clusters": cluster_meta, "moc_paths": moc_paths}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {"mocs_built": 0, "clusters": [], "moc_paths": [],
                 "error": f"{type(e).__name__}: {e}"}

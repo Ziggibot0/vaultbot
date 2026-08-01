@@ -1,4 +1,5 @@
 import re
+import threading
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,12 @@ class VaultGraph:
         # Max mtime seen at the last refresh; cheap stat-only fast path checks
         # against this to skip all work when nothing has changed on disk.
         self._last_refresh_mtime: float = 0.0
+        # Concurrency guard: the watchdog / autonomous researcher thread
+        # calls refresh() while the chat loop reads nodes/edges/backlinks.
+        # Without a lock this raises "RuntimeError: dictionary changed size
+        # during iteration" on the read paths.  RLock so refresh can call
+        # internal helpers that also acquire the lock.
+        self._lock = threading.RLock()
         self._build_graph()
 
     def _log_tool(self, method: str, inputs: dict[str, Any] | None = None,
@@ -77,7 +84,7 @@ class VaultGraph:
             if len(text) > self.max_note_size:
                 return text[:self.max_note_size] + "\n\n[truncated]"
             return text
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("read_note", {"file_path": str(path)}, error=str(e))
             return ""
 
@@ -221,25 +228,26 @@ class VaultGraph:
         `handle_chat` and `propose_next_gaps` rely on so consecutive messages
         in a warm session don't pay for a full vault rescan.
         """
-        changed, deleted = self._detect_changes()
-        if not changed and not deleted:
-            return False
-        # Apply only the delta. Edges are global, so each changed/removed
-        # node's edges are rewired individually.
-        max_mtime = self._last_refresh_mtime
-        for path in changed:
-            name = self._add_or_update_node(path)
-            max_mtime = max(max_mtime, self._mtimes.get(name, 0.0))
-        for name in deleted:
-            self._remove_node(name)
-        self._last_refresh_mtime = max_mtime
-        self._log_tool("incremental_refresh", {
-            "changed_count": len(changed),
-            "deleted_count": len(deleted),
-            "note_count": len(self.nodes),
-            "edge_count": sum(len(v) for v in self.edges.values()),
-        })
-        return True
+        with self._lock:
+            changed, deleted = self._detect_changes()
+            if not changed and not deleted:
+                return False
+            # Apply only the delta. Edges are global, so each changed/removed
+            # node's edges are rewired individually.
+            max_mtime = self._last_refresh_mtime
+            for path in changed:
+                name = self._add_or_update_node(path)
+                max_mtime = max(max_mtime, self._mtimes.get(name, 0.0))
+            for name in deleted:
+                self._remove_node(name)
+            self._last_refresh_mtime = max_mtime
+            self._log_tool("incremental_refresh", {
+                "changed_count": len(changed),
+                "deleted_count": len(deleted),
+                "note_count": len(self.nodes),
+                "edge_count": sum(len(v) for v in self.edges.values()),
+            })
+            return True
 
     def refresh(self):
         """Refresh the graph from disk, incrementally when possible.
@@ -251,21 +259,23 @@ class VaultGraph:
         curriculum both call this per message. Falls back to a full rebuild
         if incremental tracking has no state yet.
         """
-        if not self.nodes and self._last_refresh_mtime == 0.0:
-            # First-ever build: do the full scan once.
-            self._build_graph()
-            return
-        self.refresh_if_changed()
+        with self._lock:
+            if not self.nodes and self._last_refresh_mtime == 0.0:
+                # First-ever build: do the full scan once.
+                self._build_graph()
+                return
+            self.refresh_if_changed()
 
     def neighbors(self, name: str, direction: str = "both") -> list[str]:
         """Return linked notes and/or backlinked notes."""
-        norm = self._normalize_name(name)
-        result = set()
-        if direction in ("out", "both"):
-            result.update(self.edges.get(norm, set()))
-        if direction in ("in", "both"):
-            result.update(self.backlinks.get(norm, set()))
-        return sorted(result)
+        with self._lock:
+            norm = self._normalize_name(name)
+            result = set()
+            if direction in ("out", "both"):
+                result.update(self.edges.get(norm, set()))
+            if direction in ("in", "both"):
+                result.update(self.backlinks.get(norm, set()))
+            return sorted(result)
 
     def walk(self, start_names: list[str], depth: int = 2,
              min_backlinks: int = 1) -> dict[str, Any]:
@@ -344,10 +354,12 @@ class VaultGraph:
         }
 
     def note_exists(self, name: str) -> bool:
-        return self._normalize_name(name) in self.nodes
+        with self._lock:
+            return self._normalize_name(name) in self.nodes
 
     def get_note(self, name: str) -> dict[str, Any] | None:
-        return self.nodes.get(self._normalize_name(name))
+        with self._lock:
+            return self.nodes.get(self._normalize_name(name))
 
     def dangling_links(self, min_references: int = 1) -> list[dict[str, Any]]:
         """Return wikilink targets that do NOT resolve to any note.
@@ -360,70 +372,72 @@ class VaultGraph:
             min_references: only report a gap if at least this many notes link
                 to the missing target. Default 1 = every red link is a gap.
         """
-        # Count how many distinct notes link to each unresolved target.
-        # `edges` only contains resolved targets, so we must re-scan raw
-        # content for *unresolved* wikilinks.
-        ref_counts: dict[str, int] = {}
-        ref_sources: dict[str, set[str]] = {}
-        # Re-scan every note's raw content for ALL wikilinks (resolved or not).
-        for name, node in self.nodes.items():
-            raw_links = WIKILINK_RE.findall(node["content"])
-            for link in raw_links:
-                norm = self._normalize_name(link)
-                if norm not in self.nodes:  # dangling
-                    ref_counts[norm] = ref_counts.get(norm, 0) + 1
-                    ref_sources.setdefault(norm, set()).add(name)
+        with self._lock:
+            # Count how many distinct notes link to each unresolved target.
+            # `edges` only contains resolved targets, so we must re-scan raw
+            # content for *unresolved* wikilinks.
+            ref_counts: dict[str, int] = {}
+            ref_sources: dict[str, set[str]] = {}
+            # Re-scan every note's raw content for ALL wikilinks (resolved or not).
+            for name, node in self.nodes.items():
+                raw_links = WIKILINK_RE.findall(node["content"])
+                for link in raw_links:
+                    norm = self._normalize_name(link)
+                    if norm not in self.nodes:  # dangling
+                        ref_counts[norm] = ref_counts.get(norm, 0) + 1
+                        ref_sources.setdefault(norm, set()).add(name)
 
-        gaps = []
-        for norm, count in ref_counts.items():
-            if count < min_references:
-                continue
-            # Recover a human-readable display name from the first source's
-            # raw link text; fall back to the normalized form.
-            display = norm
-            for src in ref_sources.get(norm, set()):
-                node = self.nodes.get(src)
-                if not node:
+            gaps = []
+            for norm, count in ref_counts.items():
+                if count < min_references:
                     continue
-                for m in WIKILINK_RE.findall(node["content"]):
-                    if self._normalize_name(m) == norm:
-                        # Strip stray leading '[' from malformed nested links
-                        # like [[[[Note]]|Note]] which the regex can capture.
-                        display = m.strip().lstrip("[")
+                # Recover a human-readable display name from the first source's
+                # raw link text; fall back to the normalized form.
+                display = norm
+                for src in ref_sources.get(norm, set()):
+                    node = self.nodes.get(src)
+                    if not node:
+                        continue
+                    for m in WIKILINK_RE.findall(node["content"]):
+                        if self._normalize_name(m) == norm:
+                            # Strip stray leading '[' from malformed nested links
+                            # like [[[[Note]]|Note]] which the regex can capture.
+                            display = m.strip().lstrip("[")
+                            break
+                    if display != norm:
                         break
-                if display != norm:
-                    break
-            gaps.append({
-                "name": display,
-                "normalized_name": norm,
-                "reference_count": count,
-                "referenced_by": sorted(ref_sources.get(norm, set())),
-            })
-        gaps.sort(key=lambda g: g["reference_count"], reverse=True)
-        return gaps
+                gaps.append({
+                    "name": display,
+                    "normalized_name": norm,
+                    "reference_count": count,
+                    "referenced_by": sorted(ref_sources.get(norm, set())),
+                })
+            gaps.sort(key=lambda g: g["reference_count"], reverse=True)
+            return gaps
 
     def thin_notes(self, min_content_length: int = 200) -> list[dict[str, Any]]:
         """Return notes whose body is shorter than min_content_length.
 
-        These are notes that exist but don't yet say enough â€” another kind of
+        These are notes that exist but don't yet say enough — another kind of
         knowledge gap the autonomous researcher can fill.
         """
-        thin = []
-        for name, node in self.nodes.items():
-            content = node.get("content", "") or ""
-            # Strip frontmatter and wikilinks for a truer body length.
-            body = re.sub(r"^\s*---.*?---\s*", "", content, count=1, flags=re.DOTALL)
-            body = WIKILINK_RE.sub("", body)
-            body = re.sub(r"\s+", " ", body).strip()
-            if len(body) < min_content_length:
-                thin.append({
-                    "name": node["name"],
-                    "normalized_name": name,
-                    "file_path": node["file_path"],
-                    "content_length": len(body),
-                })
-        thin.sort(key=lambda n: n["content_length"])
-        return thin
+        with self._lock:
+            thin = []
+            for name, node in self.nodes.items():
+                content = node.get("content", "") or ""
+                # Strip frontmatter and wikilinks for a truer body length.
+                body = re.sub(r"^\s*---.*?---\s*", "", content, count=1, flags=re.DOTALL)
+                body = WIKILINK_RE.sub("", body)
+                body = re.sub(r"\s+", " ", body).strip()
+                if len(body) < min_content_length:
+                    thin.append({
+                        "name": node["name"],
+                        "normalized_name": name,
+                        "file_path": node["file_path"],
+                        "content_length": len(body),
+                    })
+            thin.sort(key=lambda n: n["content_length"])
+            return thin
 
 
 def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],

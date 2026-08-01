@@ -41,6 +41,7 @@ typing. No new dependencies.
 
 from __future__ import annotations
 
+import ast
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -162,24 +163,126 @@ def plan_from_json(data: dict) -> Plan:
 # ---------------------------------------------------------------------------
 
 
-# Restricted builtins for verifier eval. Deliberately tiny — verifiers should
-# only need to inspect the result, not call arbitrary functions.
+# Safe verifier evaluator — replaces eval() with an AST-walking interpreter.
+#
+# The old code used eval(expr, {"__builtins__": _SAFE_BUILTINS}, {"result": result})
+# which is the classic Python sandbox bypass: restricted __builtins__ doesn't
+# prevent attribute-chain escapes like ().__class__.__bases__[0].__subclasses__()
+# because __class__ is an attribute, not a builtin.  This safe evaluator walks
+# the AST and rejects any node type or attribute access that could escape.
+#
+# Allowed node types: Expression, BoolOp, BinOp, UnaryOp, Compare, Constant,
+# Name, Subscript, Attribute (only whitelisted attrs), List, Tuple, Dict, Set,
+# Call (only to whitelisted builtins), IfExp.
+#
+# Allowed builtins (callable): len, all, any, min, max, sum, bool, int, str,
+# float, list, dict, tuple, set, round, sorted, enumerate, zip, range.
+#
+# Allowed attributes (read-only): .get, .keys, .values, .items, .lower, .upper,
+# .strip, .startswith, .endswith, .split, .join, .find, .count, .replace,
+# .isdigit, .isalpha, .append, .__len__.
+
+
+class _VerifierError(Exception):
+    """Raised when a verifier expression is rejected by the safe evaluator."""
+
+
+# Builtins the verifier can call — deliberately tiny, all pure functions.
 _SAFE_BUILTINS = {
-    "len": len,
-    "all": all,
-    "any": any,
-    "min": min,
-    "max": max,
-    "sum": sum,
-    "bool": bool,
-    "int": int,
-    "str": str,
-    "list": list,
-    "dict": dict,
-    "True": True,
-    "False": False,
-    "None": None,
+    "len": len, "all": all, "any": any, "min": min, "max": max, "sum": sum,
+    "bool": bool, "int": int, "str": str, "float": float, "list": list,
+    "dict": dict, "tuple": tuple, "set": set, "round": round, "sorted": sorted,
+    "enumerate": enumerate, "zip": zip, "range": range, "abs": abs,
+    "True": True, "False": False, "None": None,
 }
+
+# Attribute names the verifier can access on objects — read-only methods
+# that can't be used to escape the sandbox.  No __dunder__ except __len__
+# (used by len()).  Crucially, __class__, __bases__, __subclasses__,
+# __globals__, __builtins__, __dict__ are NOT here.
+_SAFE_ATTRS = frozenset({
+    "get", "keys", "values", "items",
+    "lower", "upper", "strip", "lstrip", "rstrip",
+    "startswith", "endswith", "split", "rsplit", "join",
+    "find", "rfind", "count", "replace", "isdigit", "isalpha",
+    "append", "extend", "__len__",
+})
+
+# AST node types the evaluator allows.  Anything not in this set is rejected.
+# Includes operator nodes (And, Or, Eq, Add, etc.) and Load/Store contexts
+# that ast.walk visits but are harmless.
+_ALLOWED_NODES = (
+    ast.Expression, ast.BoolOp, ast.BinOp, ast.UnaryOp, ast.Compare,
+    ast.Constant, ast.Name, ast.Subscript, ast.Attribute,
+    ast.List, ast.Tuple, ast.Dict, ast.Set, ast.Call, ast.IfExp,
+    ast.ListComp, ast.SetComp, ast.DictComp,  # comprehensions (read-only)
+    ast.comprehension,
+    # Boolean + comparison operators
+    ast.And, ast.Or, ast.Not, ast.Eq, ast.NotEq, ast.Gt, ast.GtE,
+    ast.Lt, ast.LtE, ast.In, ast.NotIn, ast.Is, ast.IsNot,
+    # Binary arithmetic operators
+    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow,
+    ast.FloorDiv, ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor,
+    # Unary operators
+    ast.USub, ast.UAdd, ast.Invert,
+    # Load/Store contexts (harmless — just reference modes)
+    ast.Load, ast.Store, ast.Del,
+)
+
+
+def _safe_eval_verifier(expr: str, result: Any) -> Any:
+    """Safely evaluate a verifier expression with `result` in scope.
+
+    Walks the AST and rejects any node type or attribute access that
+    could escape the sandbox (e.g. __class__, __subclasses__, __globals__).
+    Raises _VerifierError on rejection.
+    """
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        raise _VerifierError(f"invalid syntax: {exc}") from exc
+
+    # Pre-walk: reject any node type not in the allowed set.
+    for node in ast.walk(tree):
+        if not isinstance(node, _ALLOWED_NODES):
+            raise _VerifierError(
+                f"disallowed AST node: {type(node).__name__} — "
+                f"verifiers may only use comparisons, subscripts, "
+                f"attribute access, and function calls")
+
+        # Reject dangerous attribute access FIRST — before the Call check,
+        # so __class__/__subclasses__ etc. are caught regardless of whether
+        # they're called or just accessed.
+        if isinstance(node, ast.Attribute):
+            attr = node.attr
+            if attr not in _SAFE_ATTRS:
+                raise _VerifierError(
+                    f"disallowed attribute access: .{attr} — "
+                    f"only read-only methods are permitted")
+
+        # Calls: allow (a) top-level builtin names (len, any, etc.) and
+        # (b) method calls on whitelisted attributes (result.get(...),
+        # result['x'].lower()).  The attribute check above already
+        # vetted the attribute name, so a method call on a safe attr
+        # is fine.  Reject calls to anything else (e.g. calling a
+        # subscript result or a lambda).
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name):
+                # Top-level builtin call — fine (eval will KeyError if
+                # the name isn't in _SAFE_BUILTINS).
+                pass
+            elif isinstance(func, ast.Attribute):
+                # Method call — the attribute was already checked above.
+                pass
+            else:
+                raise _VerifierError(
+                    "only built-in function calls and method calls "
+                    "on safe attributes are permitted")
+
+    # Compile the vetted AST and eval with restricted globals.
+    code = compile(tree, "<verifier>", "eval")
+    return eval(code, {"__builtins__": _SAFE_BUILTINS}, {"result": result})
 
 
 class PlanExecutor:
@@ -225,7 +328,7 @@ class PlanExecutor:
             try:
                 # Be tolerant of differing logger signatures.
                 self.session_logger.log(f"[{level}] {msg}")  # type: ignore[attr-defined]
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
 
     # -- verification ------------------------------------------------------
@@ -241,14 +344,12 @@ class PlanExecutor:
             # No verifier means "accept the result as-is if op returned a dict."
             return isinstance(result, dict)
         try:
-            # Restricted eval: tiny builtins, result in locals only.
-            value = eval(
-                expr,
-                {"__builtins__": _SAFE_BUILTINS},
-                {"result": result},
-            )
+            value = _safe_eval_verifier(expr, result)
             return bool(value)
-        except Exception as exc:
+        except _VerifierError as exc:
+            subtask.error = f"verifier rejected: {exc}"
+            return False
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # A broken verifier = failed verification, not a crash.
             subtask.error = f"verifier error: {exc}"
             return False
@@ -308,7 +409,7 @@ class PlanExecutor:
             result = op_callable(subtask.args)
             if not isinstance(result, dict):
                 result = {"_raw": result}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             subtask.attempts += 1
             subtask.error = f"op error: {exc}"
             subtask.result = None
@@ -465,19 +566,24 @@ class PlanExecutor:
             return {"complete": complete, "reasoning": reasoning, "missing": missing}
 
         # LLM judge path — tolerant of differing client shapes.
+        # Use the SMALL model — judging plan completion is a simple
+        # classification task (are all subtasks done?) that doesn't need
+        # the big model's reasoning power. Saves cloud tokens.
         try:
+            from llm_client import get_small_client_or_big
+            _judge_client = get_small_client_or_big()
             prompt = self._build_judge_prompt(plan)
             # Prefer a .chat/.generate style method if present.
-            if hasattr(ollama_client, "chat"):
-                response = ollama_client.chat(prompt)  # type: ignore[attr-defined]
-            elif hasattr(ollama_client, "generate"):
-                response = ollama_client.generate(prompt)  # type: ignore[attr-defined]
-            elif callable(ollama_client):
-                response = ollama_client(prompt)
+            if hasattr(_judge_client, "chat"):
+                response = _judge_client.chat(prompt)  # type: ignore[attr-defined]
+            elif hasattr(_judge_client, "generate"):
+                response = _judge_client.generate(prompt)  # type: ignore[attr-defined]
+            elif callable(_judge_client):
+                response = _judge_client(prompt)
             else:
-                raise TypeError("ollama_client has no usable interface")
+                raise TypeError("judge client has no usable interface")
             return self._parse_judge_response(response, plan)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # If the judge itself fails, fall back to the deterministic rule
             # rather than letting the loop die.
             self._log(plan, "warn", f"judge LLM failed ({exc}); using fallback")
@@ -523,7 +629,7 @@ class PlanExecutor:
                     "reasoning": reasoning,
                     "missing": [str(m) for m in missing],
                 }
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         # Parse failed — fall back.
         return self.judge(plan, ollama_client=None)

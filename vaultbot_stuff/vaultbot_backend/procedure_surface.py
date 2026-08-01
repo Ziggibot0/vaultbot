@@ -191,7 +191,7 @@ def build_procedure_surface(
             if not text:
                 try:
                     text = Path(fp).read_text(encoding="utf-8", errors="replace")
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     continue
             fm = _frontmatter_from_text(text)
 

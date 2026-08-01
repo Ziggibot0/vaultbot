@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+model_cartridge: small
 created: 2026-07-31
 description: "Submit uncommitted changes as a GitHub pull request for community review. Forks the repo if needed, pushes, and creates a cross-fork PR."
 when: "When submitting code changes for community review"

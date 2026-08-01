@@ -17,7 +17,6 @@ Documentation grounding:
   separate process to avoid import side effects. This is the same
   pattern safe_write's _verify_import_in_subprocess uses.
 """
-import subprocess
 from subprocess_utils import run as _subprocess_run
 import sys
 from pathlib import Path

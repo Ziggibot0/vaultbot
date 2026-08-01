@@ -44,9 +44,8 @@ import subprocess
 from subprocess_utils import run as _subprocess_run
 import sys
 import textwrap
-from typing import Optional
 
-from procedure_compiler import compile_from_text, Procedure, Step
+from procedure_compiler import compile_from_text
 
 
 # ── Safe functions (builtins + stdlib, not tools) ─────────────────────
@@ -137,9 +136,7 @@ def _parse_frontmatter(text: str) -> dict:
             key, _, value = line.partition(":")
             key = key.strip()
             value = value.strip()
-            if value.startswith('"') and value.endswith('"'):
-                value = value[1:-1]
-            elif value.startswith("'") and value.endswith("'"):
+            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
                 value = value[1:-1]
             if value:
                 fm[key] = value
@@ -197,6 +194,15 @@ def validate_procedure_text(text: str) -> dict:
         errors.append(
             "Frontmatter missing 'description' "
             "(one-line summary for retrieval)"
+        )
+
+    checks_run.append("when_to_use_exists")
+    if not fm.get("when_to_use") and not fm.get("when"):
+        errors.append(
+            "Frontmatter missing 'when_to_use' (or 'when') "
+            "(the procedure is embedded by its description + when-to-use "
+            "surface, NOT its body — without this, the procedure can't be "
+            "discovered by intent)"
         )
 
     checks_run.append("allowed_tools_exists")
@@ -505,7 +511,7 @@ def dry_run_procedure(
                 "timeout": timeout,
             })
             all_passed = False
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             results.append({
                 "step": step.number,
                 "type": "code",

@@ -78,7 +78,12 @@ vaultbot_stuff/vaultbot_backend/*_log.json
 # These hierarchical folders (now under vaultbot_stuff/) are where VaultBot writes its output:
 # ─────────────────────────────────────────────────────────────────────
 
-
+# Vault-root hygiene: VaultBot must NEVER create Memory/, Knowledge/, or
+# System/ at the vault root. All generated content lives under vaultbot_stuff/.
+# These ignores are a safety net in case a code path drifts back to the root.
+/Memory/
+/Knowledge/
+/System/
 
 # Hierarchical-layout personal vault content (post-reorg)
 # These are the USER'S mind: chat logs, personal knowledge, personal notes.

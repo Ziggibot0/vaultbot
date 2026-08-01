@@ -83,7 +83,6 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "vaultbot_backend/weaving.py" = ["BLE001"]
 "vaultbot_backend/self_improver.py" = ["BLE001"]
 "vaultbot_backend/knowledge_curriculum.py" = ["BLE001"]
-"vaultbot_backend/compactor.py" = ["BLE001"]
 "vaultbot_backend/lazy_condenser.py" = ["BLE001"]
 "vaultbot_backend/claim_verifier.py" = ["BLE001"]
 "vaultbot_backend/concept_card.py" = ["BLE001"]

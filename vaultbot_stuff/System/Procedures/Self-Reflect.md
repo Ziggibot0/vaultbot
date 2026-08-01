@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+model_cartridge: big
 created: 2026-07-31
 description: "Reflect on a topic and propose 1-3 new tool abilities you could create for yourself. Use when you realize you lack an ability."
 when: "When you hit a wall and need to propose new capabilities"

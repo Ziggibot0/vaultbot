@@ -20,7 +20,6 @@ inject fakes (see test_endpoints.py).
 """
 from __future__ import annotations
 
-from typing import Optional
 
 from services import Services
 
@@ -28,7 +27,7 @@ from services import Services
 # router handler via Depends(get_services).  Typed Optional so a missing
 # set_services() call fails loudly at the first request instead of silently
 # returning a half-built Services.
-_services: Optional[Services] = None
+_services: Services | None = None
 
 # Module-level flag set by the background_index() task in main.py if the
 # startup reindex fails. Read on the first WS connect (routers/ws.py) so the
@@ -37,16 +36,16 @@ _services: Optional[Services] = None
 # read it via `from app_state import get_startup_reindex_failed` instead of
 # `import main` — a bare `import main` re-executes main.py's top-level code
 # (including acquire_lock() → sys.exit) and crashes every WebSocket.
-startup_reindex_failed: Optional[str] = None
+startup_reindex_failed: str | None = None
 
 
-def set_startup_reindex_failed(value: Optional[str]) -> None:
+def set_startup_reindex_failed(value: str | None) -> None:
     """Set the startup-reindex-failure flag. Called by main.py's background_index."""
     global startup_reindex_failed
     startup_reindex_failed = value
 
 
-def get_startup_reindex_failed() -> Optional[str]:
+def get_startup_reindex_failed() -> str | None:
     """Read + CLEAR the startup-reindex-failure flag (one-shot notification)."""
     global startup_reindex_failed
     value = startup_reindex_failed

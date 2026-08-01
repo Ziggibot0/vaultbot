@@ -37,8 +37,8 @@ _BACKEND = Path(__file__).parent.resolve()
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-from procedure_compiler import compile_procedure  # noqa: E402
-from step_gate_runtime import MAX_PROC_DEPTH, execute_procedure  # noqa: E402
+from procedure_compiler import compile_procedure
+from step_gate_runtime import MAX_PROC_DEPTH, execute_procedure
 
 
 def _resolve_llm_client():
@@ -114,7 +114,7 @@ def main() -> int:
     # --- Execute via the async runtime ---
     try:
         llm_client = _resolve_llm_client()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         print(json.dumps({
             "error": f"LLM client unavailable: {e}",
         }))
@@ -128,7 +128,7 @@ def main() -> int:
             vault_path=args.vault_path,
             call_stack=call_stack + [args.procedure_name],
         ))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         print(json.dumps({
             "error": f"runtime error: {e}",
             "traceback": __import__("traceback").format_exc(),

@@ -25,6 +25,13 @@ IGNORED_DIRS = {
     ".obsidian",
 }
 
+# Embedding schema version. Bumped whenever the text we embed for a note
+# changes meaningfully (e.g. procedures now embed their description surface
+# instead of full content). On load, if the persisted version doesn't match,
+# the index is rebuilt from scratch so every vector reflects the current
+# embedding strategy. See _embedding_text_for_note.
+EMBEDDING_SCHEMA_VERSION = 2
+
 def _is_ignored_path(path: Path) -> bool:
     for part in path.parts:
         if part in IGNORED_DIRS:
@@ -70,11 +77,11 @@ class VaultChangeHandler(FileSystemEventHandler):
         for src_path, dest_path in moved_pairs.items():
             try:
                 self.indexer._remove_file(src_path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 _logger.warning("Error removing moved src %s: %s", src_path, e)
             try:
                 self.indexer._add_file(dest_path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 _logger.warning("Error adding moved dest %s: %s", dest_path, e)
 
         for path, evt_type in pending.items():
@@ -85,7 +92,7 @@ class VaultChangeHandler(FileSystemEventHandler):
                     self.indexer._add_file(path)
                 else:
                     self.indexer._update_file(path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 _logger.warning("Error processing %s: %s", path, e)
 
     def on_modified(self, event):
@@ -186,6 +193,9 @@ class VaultIndexer:
         # graph_ops.search 240, build_context 1500). A-MEM's write-back path
         # re-reads from disk itself, so it is unaffected by this cap.
         self.preview_chars = int(os.getenv("VAULTBOT_INDEX_PREVIEW_CHARS", "2000"))
+        # Set by _load_index when the persisted embedding schema version
+        # doesn't match EMBEDDING_SCHEMA_VERSION (see index_missing_or_changed).
+        self._needs_full_rebuild = False
 
         self.observer = None
         self._load_index()
@@ -235,8 +245,13 @@ class VaultIndexer:
                 with open(self.timestamp_file) as f:
                     self.timestamps = json.load(f)
 
-                # Detect format: tuple of length 3 = new; list = legacy.
-                if isinstance(loaded, tuple) and len(loaded) == 3:
+                # Detect format: tuple of length 3 = new (v1); tuple of
+                # length 4 = new (v2+, carries embedding schema version);
+                # list = legacy.
+                _stored_schema_version = 1
+                if isinstance(loaded, tuple) and len(loaded) == 4:
+                    self._metadata, self._path_to_id, self._next_id, _stored_schema_version = loaded
+                elif isinstance(loaded, tuple) and len(loaded) == 3:
                     self._metadata, self._path_to_id, self._next_id = loaded
                     # Normalize any stale relative paths to absolute.
                     for fid, meta in list(self._metadata.items()):
@@ -249,7 +264,7 @@ class VaultIndexer:
                             self._path_to_id[str(resolved)] = fid
                 else:
                     # Legacy list format — migrate to id-keyed dict.
-                    print("[migration] Detected legacy list-format metadata; "
+                    _logger.info("[migration] Detected legacy list-format metadata; "
                           "converting to IndexIDMap2 (zero re-embedding)...")
                     legacy_list = loaded if isinstance(loaded, list) else []
                     self._metadata = {}
@@ -266,8 +281,8 @@ class VaultIndexer:
                             meta['file_path'] = str(fp)
                         try:
                             vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
-                        except Exception:  # noqa: BLE001  migration best-effort — skip any bad legacy vector
-                            print(f"[migration] Skipping unreconstructable "
+                        except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+                            _logger.info(f"[migration] Skipping unreconstructable "
                                   f"legacy vector {i} ({meta['file_path']})")
                             continue
                         # Use the internal add path so the id map + metadata
@@ -277,17 +292,35 @@ class VaultIndexer:
                             meta.get('content_hash', ''),
                             content_preview=meta.get('content_preview', ''))
                     self.dimension = dim
-                    print(f"[migration] Migrated {self._next_id} vectors "
+                    _logger.info(f"[migration] Migrated {self._next_id} vectors "
                           f"to IndexIDMap2.")
+
+                # If the embedding schema changed since this index was
+                # built, the stored vectors no longer match the text we now
+                # embed (e.g. procedures embedded from full content instead
+                # of their description surface). Discard the old vectors and
+                # force a full rebuild on the next index_missing_or_changed
+                # / batch_add_files call by clearing the index.
+                if _stored_schema_version != EMBEDDING_SCHEMA_VERSION:
+                    _logger.info(
+                        f"[migration] Embedding schema version changed "
+                        f"({_stored_schema_version} -> {EMBEDDING_SCHEMA_VERSION}); "
+                        f"discarding {self.index.ntotal if self.index else 0} "
+                        f"stale vectors for a full re-embed.")
+                    self._init_new_index()
+                    self._needs_full_rebuild = True
+                else:
+                    self._needs_full_rebuild = False
 
                 if self.index is not None:
                     self.dimension = self.index.d
-                    print(f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}")
-            except Exception as e:  # noqa: BLE001  corruption recovery — fall back to a fresh index on any load error
-                print(f"Error loading existing index: {e}. Creating new index.")
+                    _logger.info(f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}")
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+                _logger.warning(f"Error loading existing index: {e}. Creating new index.")
                 self._init_new_index()
+                self._needs_full_rebuild = True
         else:
-            print("No existing index found. Creating new index.")
+            _logger.info("No existing index found. Creating new index.")
             self._init_new_index()
 
     def _init_new_index(self):
@@ -298,6 +331,11 @@ class VaultIndexer:
         self._path_to_id = {}
         self._next_id = 0
         self.timestamps = {}
+        # Set by _load_index when the persisted embedding schema version
+        # doesn't match EMBEDDING_SCHEMA_VERSION. index_missing_or_changed
+        # checks this to force a full re-embed instead of skipping
+        # unchanged files by content hash.
+        self._needs_full_rebuild = getattr(self, "_needs_full_rebuild", False)
 
     def _get_file_hash(self, file_path: Path) -> str:
         """Compute a hash of the file content to detect changes."""
@@ -381,6 +419,77 @@ class VaultIndexer:
         # Filter out empty / tiny chunks.
         return [c for c in chunks if len(c.strip()) > 50]
 
+    @staticmethod
+    def _embedding_text_for_note(file_path: Path, content: str) -> str:
+        """Return the text that should be EMBEDDED for a note.
+
+        For ordinary notes this is the full content (current behaviour): a
+        note is retrieved when the query semantically matches what the note
+        *says*.
+
+        For PROCEDURE notes (``type: procedure``) this returns only the
+        *discovery surface* — the title, ``description``, and
+        ``when_to_use``/``when`` frontmatter fields — NOT the step body or
+        code. The operator's insight: a procedure should be discovered when
+        the user's need matches *when to use it*, not when the query happens
+        to lexically overlap the procedure's implementation (code blocks,
+        tool names, step prose). Embedding the full body meant a procedure
+        about "verify Python syntax" would surface for any Python-syntax
+        question even when the user didn't want a procedure; and a procedure
+        whose steps mention "FAISS" would surface for FAISS questions
+        unrelated to the procedure's purpose.
+
+        Embedding the description surface instead means the procedure's
+        FAISS vector represents its *capability*, so retrieval matches on
+        intent ("I need to check syntax before restart" → Verify-Syntax)
+        rather than on incidental content overlap. The full body is only
+        loaded at execution time via ``execute_procedure``.
+
+        Falls back to full content if the note has no description
+        (procedures without a description can't be retrieved by intent
+        anyway, and the validator flags the missing field).
+        """
+        if not content.startswith("---"):
+            return content
+        end = content.find("\n---", 3)
+        if end == -1:
+            return content
+        fm_block = content[3:end]
+        # Only special-case procedures; everything else embeds full content.
+        if "type: procedure" not in fm_block:
+            return content
+        # Parse the few scalar keys that form the discovery surface.
+        # Mirrors the lightweight frontmatter parse in procedure_surface.py
+        # / procedure_tracker.py (no YAML dep, no nested mappings).
+        description = ""
+        when = ""
+        for line in fm_block.split("\n"):
+            line = line.rstrip()
+            if not line or line.startswith("  "):
+                continue
+            if ":" not in line:
+                continue
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if not value:
+                continue
+            if key == "description":
+                description = value
+            elif key in ("when_to_use", "when"):
+                when = value
+        # No description → can't do intent-based retrieval; embed full
+        # content as a degraded fallback (validator will have flagged it).
+        if not description and not when:
+            return content
+        title = file_path.stem
+        surface = f"{title}"
+        if description:
+            surface += f"\n{description}"
+        if when:
+            surface += f"\nUse when: {when}"
+        return surface
+
     def _add_file_to_index(self, file_path: Path):
         """Read a file, compute embedding, and add to index."""
         try:
@@ -389,7 +498,7 @@ class VaultIndexer:
         except FileNotFoundError:
             return  # file was deleted between the watcher event and open — normal race
         except OSError as e:  # permission error / IO error
-            print(f"Error reading file {file_path}: {e}")
+            _logger.warning(f"Error reading file {file_path}: {e}")
             return
 
         # Compute hash to detect changes
@@ -409,11 +518,16 @@ class VaultIndexer:
                 # Update existing: remove old vector (O(1), no re-embedding)
                 self._remove_file_internal(file_path)
 
-        # Get embedding
+        # Get embedding.  Procedures embed only their description/when-to-use
+        # surface (intent-based discovery); other notes embed full content.
+        # The full content is still cached as the preview below so search
+        # results and the procedure surface can read frontmatter/snippets
+        # without a disk read.
+        embed_text = self._embedding_text_for_note(file_path, content)
         try:
-            embedding = self._get_embedding(content)
+            embedding = self._get_embedding(embed_text)
         except (RuntimeError, ConnectionError) as e:  # Ollama down / API error
-            print(f"Error getting embedding for {file_path}: {e}")
+            _logger.warning(f"Error getting embedding for {file_path}: {e}")
             return
 
         self._add_embedding_to_index(
@@ -432,16 +546,16 @@ class VaultIndexer:
         """
         embed_dim = len(embedding)
         if embed_dim == 0:
-            print(f"Skipping {file_path}: received empty embedding from Ollama.")
+            _logger.warning(f"Skipping {file_path}: received empty embedding from Ollama.")
             self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error="empty embedding")
             return
 
         if self.index is None:
             self.dimension = embed_dim
             self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
-            print(f"Initialized new IndexIDMap2 with dimension {self.dimension}")
+            _logger.info(f"Initialized new IndexIDMap2 with dimension {self.dimension}")
         elif embed_dim != self.index.d:
-            print(f"Skipping {file_path}: embedding dimension {embed_dim} does not match index dimension {self.index.d}.")
+            _logger.warning(f"Skipping {file_path}: embedding dimension {embed_dim} does not match index dimension {self.index.d}.")
             self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error=f"dimension mismatch: {embed_dim} vs {self.index.d}")
             return
 
@@ -470,7 +584,7 @@ class VaultIndexer:
         self._metadata[faiss_id] = meta_entry
         self._path_to_id[abs_path_str] = faiss_id
         self.timestamps[abs_path_str] = last_modified
-        print(f"Added {file_path} to index. Total vectors: {self.index.ntotal}")
+        _logger.debug(f"Added {file_path} to index. Total vectors: {self.index.ntotal}")
         self._log_tool("add_file", {"file_path": abs_path_str, "last_modified": last_modified, "content_hash": content_hash})
 
     def batch_add_files(self, file_paths: list[str],
@@ -524,21 +638,31 @@ class VaultIndexer:
         # so the note's FULL content contributes to its vector, not just the
         # first 4K chars.  We dispatch each file to the right path and still
         # parallelize across files via a thread pool.
+        #
+        # Procedures embed only their description/when-to-use surface
+        # (intent-based discovery — see _embedding_text_for_note); other
+        # notes embed full content.  The surface is typically short, so it
+        # goes through the single-embedding path (no chunking needed).
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        embed_texts = [
+            self._embedding_text_for_note(fp, content)
+            for fp, content in zip(valid_paths, contents)
+        ]
 
         def _embed_one(text: str):
             if len(text) > 4000:
                 return self._get_chunked_embedding(text)
             return np.array(self.ollama_client.embeddings(text), dtype=np.float32)
 
-        embeddings: list[np.ndarray | None] = [None] * len(contents)
+        embeddings: list[np.ndarray | None] = [None] * len(embed_texts)
         with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(_embed_one, t): i for i, t in enumerate(contents)}
+            futures = {executor.submit(_embed_one, t): i for i, t in enumerate(embed_texts)}
             for future in as_completed(futures):
                 i = futures[future]
                 try:
                     embeddings[i] = future.result()
-                except Exception:  # noqa: BLE001  embedding best-effort — a failed embed shouldn't abort the batch
+                except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     embeddings[i] = None
 
         # Add to index
@@ -581,10 +705,10 @@ class VaultIndexer:
         if self.index is not None:
             try:
                 self.index.remove_ids(np.array([faiss_id], dtype=np.int64))  # type: ignore
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_tool("remove_file", {"file_path": key}, error=str(e))
                 raise
-        print(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
+        _logger.debug(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
         self._log_tool("remove_file", {"file_path": key})
 
     def _rebuild_index(self):
@@ -623,11 +747,11 @@ class VaultIndexer:
                 vec = self.index.reconstruct(fid).astype(np.float32).reshape(1, -1)  # type: ignore
                 live_ids.append(fid)
                 live_vecs.append(vec)
-            except Exception as e:  # noqa: BLE001  compaction best-effort — prune tombstoned/unreconstructable ids
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 # reconstruct can fail if the id was already tombstoned;
                 # treat as dead and prune.
                 dead_keys.append((fid, meta['file_path']))
-                print(f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}")
+                _logger.warning(f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}")
                 continue
 
         for fid, fp_str in dead_keys:
@@ -651,7 +775,7 @@ class VaultIndexer:
         self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
         self.index.add_with_ids(stacked, ids_arr)  # type: ignore
         # _next_id stays as-is (ids are reused, not reassigned).
-        print(f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)")
+        _logger.info(f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)")
 
     def _update_file(self, file_path_str: str):
         """Update a file in the index (called on modification)."""
@@ -683,7 +807,7 @@ class VaultIndexer:
         self.observer.schedule(event_handler, str(self.vault_path), recursive=True)
         # Filter later by path checks in event handler
         self.observer.start()
-        print(f"Started watching vault at {self.vault_path}")
+        _logger.info(f"Started watching vault at {self.vault_path}")
 
     def stop_watching(self):
         """Stop watching the vault."""
@@ -698,20 +822,31 @@ class VaultIndexer:
 
     def load(self):
         """Load a persisted index quickly without making Ollama calls."""
-        print("Loading vault index...")
+        _logger.info("Loading vault index...")
         # _load_index already ran in __init__; just report the state.
         total = self.index.ntotal if self.index is not None else 0
         md_files = self._collect_md_files()
-        print(f"Loaded index with {total} vectors. {len(md_files)} markdown files in vault.")
+        _logger.info(f"Loaded index with {total} vectors. {len(md_files)} markdown files in vault.")
 
     def index_missing_or_changed(self):
         """Re-index only new or changed markdown files. This is safe to run in the background."""
-        print("Starting background vault indexing...")
+        _logger.info("Starting background vault indexing...")
         md_files = self._collect_md_files()
         changed_or_missing = []
 
         # Build a quick lookup from metadata by file path.
         meta_by_path = {meta["file_path"]: meta for meta in self.metadata}
+
+        # If the embedding schema changed (or the index was just created),
+        # re-embed EVERY file — content hashes haven't changed but the
+        # vectors are stale relative to the current embedding strategy
+        # (e.g. procedures now embed their description surface, not full
+        # content). The flag is set by _load_index and cleared after.
+        force_full = getattr(self, "_needs_full_rebuild", False)
+        if force_full:
+            _logger.info(
+                "[migration] Forcing full re-embed of all %d notes "
+                "(embedding schema version changed).", len(md_files))
 
         for file_path in md_files:
             key = str(file_path)
@@ -725,6 +860,10 @@ class VaultIndexer:
             if not file_path.exists():
                 continue
 
+            if force_full:
+                changed_or_missing.append(file_path)
+                continue
+
             # Only re-embed if the content hash changed.
             current_hash = self._get_file_hash(file_path)
             if meta.get("content_hash") != current_hash:
@@ -734,7 +873,7 @@ class VaultIndexer:
         current_paths = {str(p) for p in md_files}
         removed_paths = [Path(p) for p in meta_by_path if p not in current_paths]
 
-        print(f"Background indexing: {len(changed_or_missing)} changed/missing, {len(removed_paths)} removed out of {len(md_files)} total files.")
+        _logger.info(f"Background indexing: {len(changed_or_missing)} changed/missing, {len(removed_paths)} removed out of {len(md_files)} total files.")
 
         for file_path in removed_paths:
             self._remove_file_internal(file_path)
@@ -742,8 +881,13 @@ class VaultIndexer:
         for file_path in changed_or_missing:
             self._add_file_to_index(file_path)
 
+        # Schema-version forced re-embed is done; clear the flag so we don't
+        # re-embed everything on every subsequent call.
+        if force_full:
+            self._needs_full_rebuild = False
+
         self.persist()
-        print(f"Background indexing complete. Index now has {self.index.ntotal if self.index else 0} vectors.")
+        _logger.info(f"Background indexing complete. Index now has {self.index.ntotal if self.index else 0} vectors.")
 
     def initialize(self):
         """Perform initial indexing of the vault and start watching.
@@ -765,7 +909,7 @@ class VaultIndexer:
 
         try:
             query_embedding = self._get_embedding(query)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("search", {"query": query, "k": k}, error=str(e))
             raise
 
@@ -858,10 +1002,11 @@ class VaultIndexer:
         if self.index is not None:
             faiss.write_index(self.index, str(self.index_file))
         with open(self.metadata_file, 'wb') as f:
-            pickle.dump((self._metadata, self._path_to_id, self._next_id), f)
+            pickle.dump((self._metadata, self._path_to_id, self._next_id,
+                         EMBEDDING_SCHEMA_VERSION), f)
         with open(self.timestamp_file, 'w') as f:
             json.dump(self.timestamps, f)
-        print(f"Index persisted to {self.index_path}")
+        _logger.info(f"Index persisted to {self.index_path}")
 
 # Example usage (for testing)
 if __name__ == "__main__":
@@ -876,7 +1021,7 @@ if __name__ == "__main__":
 
     # Try a search
     results = indexer.search("test query", k=3)
-    print(f"Search results: {results}")
+    _logger.debug(f"Search results: {results}")
 
     # Keep the script running to allow watching
     try:

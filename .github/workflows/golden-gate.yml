@@ -1,0 +1,111 @@
+# Live golden-set retrieval gate — scores the REAL fused retriever against
+# golden_set.json using a service container running Ollama + nomic-embed-text.
+#
+# Runs on PRs that touch retrieval-affecting code (paths filter) and on
+# manual dispatch. Fails the workflow if aggregate recall@5 < 0.5 on the
+# seed golden set.
+#
+# The Ollama model (~270 MB) is cached in the Actions cache so only the
+# first run downloads it.
+name: Golden-gate retrieval
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "vaultbot_stuff/vaultbot_backend/fused_retrieval.py"
+      - "vaultbot_stuff/vaultbot_backend/vault_indexer.py"
+      - "vaultbot_stuff/vaultbot_backend/vault_graph.py"
+      - "vaultbot_stuff/vaultbot_backend/abstract_context.py"
+      - "vaultbot_stuff/vaultbot_backend/weaving.py"
+      - "vaultbot_stuff/vaultbot_backend/embedding_drift.py"
+      - "vaultbot_stuff/vaultbot_backend/golden_eval.py"
+      - "vaultbot_stuff/vaultbot_backend/golden_set.json"
+      - "vaultbot_stuff/vaultbot_backend/run_golden_gate.py"
+      - ".github/workflows/golden-gate.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden-gate:
+    name: recall@5 ≥ 0.5 against seed golden set
+    runs-on: ubuntu-latest
+
+    # Ollama service container — exposes 11434 to the job container.
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+        options: >-
+          --health-cmd "ollama list"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt
+
+      - name: Cache Ollama nomic-embed-text model
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-nomic-embed-text-1
+          lookup-only: true
+
+      - name: Pull nomic-embed-text (only if not cached)
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama pull nomic-embed-text
+
+      - name: Save Ollama model to cache
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ollama
+          key: ollama-nomic-embed-text-1
+
+      - name: Confirm nomic-embed-text is available
+        run: ollama list
+
+      - name: Build index + run golden gate
+        working-directory: vaultbot_stuff/vaultbot_backend
+        env:
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_EMBED_MODEL: nomic-embed-text
+          VAULT_PATH: ${{ github.workspace }}
+          VAULTBOT_SKIP_LOCK: "1"
+          VAULTBOT_SKIP_WATCHER: "1"
+        run: |
+          python -c "
+          import os, sys
+          sys.path.insert(0, '.')
+          from vault_indexer import VaultIndexer
+          idx = VaultIndexer(vault_path=os.environ['VAULT_PATH'])
+          # Seed-index the directive/principle notes the golden set queries.
+          import pathlib
+          md = [str(p) for p in pathlib.Path(os.environ['VAULT_PATH']).rglob('*.md')
+                if 'vaultbot_venv' not in str(p) and 'vaultbot_backend' not in str(p)
+                and 'baseline' in str(p).lower() or 'directive' in str(p).lower()]
+          if md:
+            idx.batch_add_files(md)
+            idx.persist()
+          print(f'Indexed {len(md)} notes for golden-gate run.')
+          "
+          python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.5 --k 5

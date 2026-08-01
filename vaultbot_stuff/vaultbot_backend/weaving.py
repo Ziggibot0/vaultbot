@@ -63,10 +63,22 @@ _CROSS_LINK_DISTANCE_RATIO = 2.0
 _CROSS_LINK_MAX_PER_NOTE = 5  # cap links per note to avoid link spam
 # Absolute floor: never link if the nearest cross-book candidate is farther
 # than this.  Prevents linking in a vault where everything is roughly
-# equidistant (no real semantic structure).  300 is well above the
-# thermo-kinematics gap (195) so genuine matches always pass; a vault with
-# only loosely-related notes won't get spam.
-_CROSS_LINK_MAX_ABS_DISTANCE = 300.0
+# equidistant (no real semantic structure).
+#
+# IMPORTANT: embeddings are normalized via faiss.normalize_L2(), so for unit
+# vectors ||a-b||^2 = 2(1-cos(a,b)) and L2 distance ranges from 0 (identical)
+# to 4 (opposite).  The old value (300.0) was calibrated for un-normalized
+# raw L2 in 768-dim space and was completely dead — every note passed
+# regardless of distance, so every note got 5 links to its nearest neighbors
+# even if they were unrelated.
+#
+# The new value (3.0) is near the maximum possible distance (4.0 = opposite
+# vectors).  Genuine cross-book concept matches (same topic, different
+# textbook) typically score 0.05-0.6 in normalized L2; unrelated notes
+# score 1.5-3.0.  3.0 as the absolute floor lets the relative ratio do the
+# real filtering (only link within 2x of the nearest), while blocking the
+# degenerate case where even the nearest candidate is maximally distant.
+_CROSS_LINK_MAX_ABS_DISTANCE = 3.0
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +98,7 @@ async def _send_progress(svc: Services, websocket: WebSocket | None,
             json.dumps({"type": "progress", "stage": stage,
                          "detail": detail or {}}),
             websocket, session_logger=svc.session_logger)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         _wlog.debug("weaving progress send failed: %s", e)
 
 
@@ -123,7 +135,7 @@ def existing_note_titles(svc: Services) -> dict:
             if len(stem) < 3:
                 continue  # too short to link safely (e.g. "a", "is")
             titles[stem.lower()] = fp
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         _wlog.warning("existing_note_titles failed: %s", e)
     return titles
 
@@ -184,7 +196,7 @@ def link_outbound(note_path: str, title_map: dict) -> int:
         if links_added:
             p.write_text("\n".join(lines), encoding="utf-8")
         return links_added
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return 0
 
 
@@ -195,7 +207,7 @@ def index_note_now(svc: Services, note_path: str) -> None:
     try:
         svc.vault_indexer._add_file(note_path)
         svc.vault_indexer.persist()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         _wlog.warning("index_add for %s failed: %s", note_path, e)
 
 
@@ -289,9 +301,9 @@ def cross_link_textbooks(svc: Services,
                 if added:
                     out["cross_links_added"] += added
                     out["notes_linked"] += 1
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 continue
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         _wlog.warning("outbound linking failed: %s", e)
     return out
 
@@ -346,10 +358,10 @@ def insert_related_block(note_path: str,
                              + back_block + ttext[tnav_idx:])
                 tp.write_text(ttext, encoding="utf-8")
                 added += 1
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 continue
         return added + len(links)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return 0
 
 
@@ -427,7 +439,7 @@ async def weave_textbook_notes(svc: Services,
         # rescans.  A-MEM is told to skip its own refresh via skip_refresh.
         try:
             svc.vault_graph.refresh()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             _wlog.warning("vault_graph.refresh failed: %s", e)
 
         # --- Pass 2: outbound links + A-MEM (sequential, fast) --- #
@@ -453,7 +465,7 @@ async def weave_textbook_notes(svc: Services,
             # because we refreshed the graph once above.
             try:
                 content = Path(abs_path).read_text(encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 content = ""
             ev = await loop.run_in_executor(
                 None, lambda c=content, a=abs_path: svc.amem.evolve_on_create(
@@ -507,12 +519,12 @@ async def weave_textbook_notes(svc: Services,
                 None, build_cards_batch, abs_paths, svc.vault_graph, None)
             out["cards_built"] = card_result.get("cards_built", 0)
             card_paths = card_result.get("card_paths", [])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             out["cards_built"] = 0
             card_paths = []
             try:
                 sl.log("concept_card_build_failed", {"error": str(e)})
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 _wlog.debug("concept_card_build_failed log failed: %s", e)
 
         # --- Pass 5: L2 maps of content (incremental, graph-integrity-
@@ -554,7 +566,7 @@ async def weave_textbook_notes(svc: Services,
                         _mn, recovered = await loop.run_in_executor(
                             None, svc.vault_indexer.batch_add_files, missing, True)
                         full_embs.update(recovered)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                         _wlog.warning("batch_add missing cards failed: %s", e)
                 moc_result = await loop.run_in_executor(
                     None, build_mocs_incremental, all_card_paths, full_embs,
@@ -577,13 +589,13 @@ async def weave_textbook_notes(svc: Services,
                         "mocs_unchanged": out.get("mocs_unchanged", 0),
                         "new_clusters": out.get("new_clusters", 0),
                         "clusters": len(out.get("clusters", []))})
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     _wlog.debug("hierarchy_built log failed")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 out["mocs_built"] = 0
                 try:
                     sl.log("moc_build_failed", {"error": str(e)})
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     _wlog.debug("moc_build_failed log failed: %s", e)
         else:
             out["mocs_built"] = 0
@@ -615,7 +627,7 @@ async def weave_textbook_notes(svc: Services,
             "notes_cross_linked": out.get("notes_cross_linked", 0),
             "cards_built": out.get("cards_built", 0),
             "mocs_built": out.get("mocs_built", 0)})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         out["error"] = str(e)
         out["status"] = "error"
         sl.log("textbook_weave_failed", {"error": str(e)})

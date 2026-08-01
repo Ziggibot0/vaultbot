@@ -128,7 +128,7 @@ class PatternExtractor:
         try:
             with open(filepath, encoding='utf-8') as f:
                 content = f.read()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             return {'title': '', 'file': os.path.basename(filepath), 'exchanges': []}
 
         title_match = re.match(r'^# Chat:\s*(.+)$', content, re.MULTILINE)
@@ -367,8 +367,8 @@ class PatternExtractor:
         try:
             with open(self_model_path, encoding='utf-8') as f:
                 self_model_text = f.read()
-        except Exception:
-            return None
+        except (OSError, PermissionError):
+            return None  # file exists but can't be read — not a drift issue
 
         drifts = []
 
@@ -415,7 +415,7 @@ class PatternExtractor:
                             head = f.read(500)
                         if 'type: procedure' in head:
                             actual += 1
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                         continue
             if actual != claimed:
                 drifts.append({

@@ -253,7 +253,7 @@ def _write_stdout(obj: dict[str, Any]) -> None:
     try:
         sys.stdout.write(json.dumps(obj, default=str) + "\n")
         sys.stdout.flush()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         sys.stderr.write(f"[vaultbot-mcp] stdout write failed: {e}\n")
 
 
@@ -271,7 +271,7 @@ def main():
                 continue
             try:
                 response = _handle_request(msg)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 response = _make_error(msg.get("id"), -32603, f"Internal error: {e}")
             if response is not None:
                 _write_stdout(response)

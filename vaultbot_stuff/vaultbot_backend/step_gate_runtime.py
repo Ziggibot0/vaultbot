@@ -50,7 +50,8 @@ import sys
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 from procedure_compiler import Procedure, Step
 
@@ -76,9 +77,9 @@ class StepResult:
     step_type: str
     passed: bool
     output: str
-    validation_error: Optional[str] = None
-    error: Optional[str] = None
-    traceback: Optional[str] = None
+    validation_error: str | None = None
+    error: str | None = None
+    traceback: str | None = None
 
 
 @dataclass
@@ -98,7 +99,7 @@ class ExecutionResult:
     steps: list[StepResult]
     overall_passed: bool
     final_output: str
-    failed_step: Optional[int] = None
+    failed_step: int | None = None
     child_procedures: list[dict] = field(default_factory=list)
         # Each entry: {"name": str, "overall_passed": bool,
         # "steps_executed": int}. Populated when a step invokes
@@ -117,8 +118,8 @@ _STOP_WORDS = frozenset({
     'and', 'or', 'but', 'if', 'than', 'that', 'this', 'these', 'those',
     'it', 'its', 'your', 'our', 'their', 'his', 'her', 'my', 'me', 'you',
     'he', 'she', 'they', 'we', 'them', 'us', 'i', 'him',
-    'output', 'must', 'should', 'contain', 'include', 'mention',
-    'at', 'least', 'more', 'most', 'some', 'any', 'all', 'each', 'every',
+    'output', 'contain', 'include', 'mention',
+    'least', 'more', 'most', 'some', 'any', 'all', 'each', 'every',
     'not', 'no', 'nor', 'so', 'too', 'very', 'just', 'only', 'also',
     'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
     'own', 'words',
@@ -146,7 +147,7 @@ _VMATCHES_RE = re.compile(
     r'matches\s+/(?P<pattern>.*)/', re.IGNORECASE)
 
 
-def _parse_validation(text: str) -> Optional[dict]:
+def _parse_validation(text: str) -> dict | None:
     """Parse a validation string into a structured predicate, or None.
 
     Returns one of:
@@ -169,7 +170,7 @@ def _parse_validation(text: str) -> Optional[dict]:
     return None
 
 
-def _validate_word_overlap(output: str, validation: Optional[str]) -> tuple[bool, Optional[str]]:
+def _validate_word_overlap(output: str, validation: str | None) -> tuple[bool, str | None]:
     """Deterministic validation using word-overlap heuristic.
 
     Extracts content words from the validation criteria (filtering
@@ -197,7 +198,7 @@ def _validate_word_overlap(output: str, validation: Optional[str]) -> tuple[bool
     return False, f"Validation terms not found in output: {', '.join(missing[:5])}"
 
 
-def _validate_structured(output: str, validation: str) -> tuple[bool, Optional[str]]:
+def _validate_structured(output: str, validation: str) -> tuple[bool, str | None]:
     """Run a structured validation predicate. Returns (passed, error).
 
     Falls back to word-overlap if the string can't be parsed into a
@@ -228,7 +229,7 @@ def _validate_structured(output: str, validation: str) -> tuple[bool, Optional[s
     return _validate_word_overlap(output, validation)
 
 
-def _validate_step(output: str, validation: Optional[str]) -> tuple[bool, Optional[str]]:
+def _validate_step(output: str, validation: str | None) -> tuple[bool, str | None]:
     """Dispatch validation: structured predicates first, word-overlap fallback."""
     if validation is None:
         return True, None
@@ -287,7 +288,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '                    matches = sum(1 for t in query_terms if t in text_lower)\n'
             '                    if matches > 0:\n'
             '                        results.append({"file_path": str(Path(root, f)), "name": f[:-3], "score": matches / max(len(query_terms), 1)})\n'
-            '                except Exception:\n'
+            '                except Exception:  # noqa: BLE001 — best-effort, returns error to caller\n'
             '                    continue\n'
             '        results.sort(key=lambda r: r["score"], reverse=True)\n'
             '        return results[:k]\n'
@@ -460,7 +461,7 @@ def _run_code_step(
     procedure_name: str = "",
     call_stack: list[str] | None = None,
     model_cartridge: str = "big",
-) -> tuple[bool, str, Optional[str], Optional[str]]:
+) -> tuple[bool, str, str | None, str | None]:
     """Execute a code step in a subprocess.
 
     Returns ``(success, output, error, traceback)``.
@@ -510,7 +511,7 @@ def _run_code_step(
         '    except (TypeError, ValueError):\n'
         '        result = str(result)\n'
         '    print(json.dumps({"status": "ok", "result": result}))\n'
-        'except Exception as e:\n'
+        'except Exception as e:  # noqa: BLE001 — best-effort, returns error to caller\n'
         '    print(json.dumps({\n'
         '        "status": "error",\n'
         '        "error": str(e),\n'
@@ -545,7 +546,7 @@ def _run_code_step(
         )
     except subprocess.TimeoutExpired:
         return False, "", f"subprocess timeout after {timeout}s", ""
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False, "", f"subprocess error: {e}", traceback.format_exc()
 
     # Parse output
@@ -575,7 +576,7 @@ def _run_llm_step(
     step: Step,
     prior_results: list[tuple[int, str]],
     llm_client: Any = None,
-) -> tuple[bool, str, Optional[str]]:
+) -> tuple[bool, str, str | None]:
     """Execute an LLM step via the cartridge-selected client with minimal context.
 
     Returns ``(success, output, error)``.
@@ -632,7 +633,7 @@ def _run_llm_step(
         if not output:
             return False, "", "LLM returned empty response"
         return True, output, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False, "", f"LLM error: {e}"
 
 
@@ -825,7 +826,7 @@ async def execute_procedure(
     llm_client: Any,
     vault_path: str = ".",
     session_logger: Any = None,
-    progress_callback: Optional[Callable] = None,
+    progress_callback: Callable | None = None,
     procedure_tracker: Any = None,
     call_stack: list[str] | None = None,
 ) -> ExecutionResult:
@@ -872,7 +873,7 @@ async def execute_procedure(
     executed_steps: set[int] = set()
     current_step_num = procedure.steps[0].number
     max_iterations = len(procedure.steps) * 3
-    failed_step: Optional[int] = None
+    failed_step: int | None = None
     child_procedures: list[dict] = []
 
     iterations = 0
@@ -1022,7 +1023,7 @@ async def execute_procedure(
                             "validation_error": val_error,
                         })
                     break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 sr = StepResult(
                     step_number=step.number,
                     step_type="text",
@@ -1052,7 +1053,7 @@ async def execute_procedure(
                     procedure.name, step.number, sr.passed,
                     sr.error or sr.validation_error or "",
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
 
         if session_logger:
@@ -1122,7 +1123,7 @@ async def execute_procedure(
                 error_details=f"failed at step {failed_step}" if failed_step else "",
                 category="validation_error",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     return ExecutionResult(

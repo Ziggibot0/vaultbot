@@ -21,6 +21,18 @@ from enum import Enum
 from typing import Any
 
 
+class AgentSilentError(RuntimeError):
+    """Raised when the agent loop ends a turn with no user-facing text.
+
+    This is a framework-detected contract violation, not a normal stop.
+    The turn is not done until the user has a response. Raising this (vs
+    shipping an empty answer_done) makes the failure loud: the outer
+    handler classifies it via ``classify_error`` and the user sees a
+    problem card instead of silence. The diagnostics registry matches
+    this type specifically (see ``_is_agent_silent`` in diagnostics.py).
+    """
+
+
 class ProblemCategory(str, Enum):  # noqa: UP042 - str+Enum for JSON serialization on 3.11+
     """The closed set of user-facing failure kinds.
 
@@ -54,6 +66,31 @@ class ProblemCategory(str, Enum):  # noqa: UP042 - str+Enum for JSON serializati
     CONFIG_CONFLICT = "config_conflict"
     # The Python environment / backend code isn't installed yet.
     SETUP_INCOMPLETE = "setup_incomplete"
+    # Fused retrieval (vector + graph + backlinks) couldn't search the vault.
+    RETRIEVAL_BROKEN = "retrieval_broken"
+    # Context compaction (summarizing old conversation) failed — context
+    # may grow unbounded or the LLM summarizer is dead.
+    COMPACTION_BROKEN = "compaction_broken"
+    # Embedding drift state (user feedback on note helpfulness) was lost
+    # or corrupted — retrieval reverts to pre-feedback quality.
+    DRIFT_LOST = "drift_lost"
+    # Conversation history file is corrupt — the agent starts fresh with
+    # no memory of prior turns.
+    HISTORY_LOST = "history_lost"
+    # Research engine fell back to extractive synthesis (keyword scoring)
+    # instead of LLM reasoning — research notes are lower quality.
+    RESEARCH_DEGRADED = "research_degraded"
+    # Claim verification couldn't run (source text unreachable or LLM
+    # unavailable) — claims in research notes are unverified.
+    VERIFICATION_BROKEN = "verification_broken"
+    # Vault maintenance / weaving / trail tracking failed — vault
+    # organization features (wikilinks, chat trail) stopped working.
+    MAINTENANCE_BROKEN = "maintenance_broken"
+    # The agent loop ended a turn without producing any user-facing text.
+    # This is a framework-detected contract violation ("the turn isn't
+    # done until the user has text"), not a normal stop. Fail-loud: the
+    # user sees a problem card, never silence.
+    AGENT_SILENT = "agent_silent"
     # Catch-all: nothing more specific matched. Last resort.
     GENERIC = "generic"
 
@@ -86,6 +123,14 @@ _DEFAULT_SEVERITY: dict[ProblemCategory, Severity] = {
     ProblemCategory.UPDATE_PARTIAL: Severity.FIXABLE,
     ProblemCategory.CONFIG_CONFLICT: Severity.INFO,
     ProblemCategory.SETUP_INCOMPLETE: Severity.FIXABLE,
+    ProblemCategory.RETRIEVAL_BROKEN: Severity.FIXABLE,
+    ProblemCategory.COMPACTION_BROKEN: Severity.BROKEN,
+    ProblemCategory.DRIFT_LOST: Severity.INFO,
+    ProblemCategory.HISTORY_LOST: Severity.BROKEN,
+    ProblemCategory.RESEARCH_DEGRADED: Severity.INFO,
+    ProblemCategory.VERIFICATION_BROKEN: Severity.INFO,
+    ProblemCategory.MAINTENANCE_BROKEN: Severity.INFO,
+    ProblemCategory.AGENT_SILENT: Severity.BROKEN,
     ProblemCategory.GENERIC: Severity.BROKEN,
 }
 

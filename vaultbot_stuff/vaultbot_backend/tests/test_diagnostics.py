@@ -194,3 +194,70 @@ class TestRegistryOrdering:
         exc = Exception("ConnectionError: model 'x' not found")
         d = classify_error(exc, {"model": "x"})
         assert d.category is ProblemCategory.MODEL_NOT_PULLED
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Subsystem-failure categories (context-tagged)
+# ─────────────────────────────────────────────────────────────────────────
+class TestSubsystemCategories:
+    """Context-tagged categories for subsystem failures that don't have
+    a distinctive exception signature. Callers pass
+    ``context={"category": "retrieval_broken"}`` and the classification
+    is unambiguous."""
+
+    @pytest.mark.parametrize("tag,expected_category", [
+        ("retrieval_broken",   ProblemCategory.RETRIEVAL_BROKEN),
+        ("compaction_broken",  ProblemCategory.COMPACTION_BROKEN),
+        ("drift_lost",         ProblemCategory.DRIFT_LOST),
+        ("history_lost",       ProblemCategory.HISTORY_LOST),
+        ("research_degraded",  ProblemCategory.RESEARCH_DEGRADED),
+        ("verification_broken", ProblemCategory.VERIFICATION_BROKEN),
+        ("maintenance_broken", ProblemCategory.MAINTENANCE_BROKEN),
+    ])
+    def test_context_tag_classifies_correctly(self, tag, expected_category):
+        """Each tag maps to the right ProblemCategory."""
+        exc = RuntimeError("something broke")
+        d = classify_error(exc, {"category": tag})
+        assert d.category is expected_category
+
+    def test_retrieval_broken_has_actionable_message(self):
+        d = classify_error(RuntimeError("x"), {"category": "retrieval_broken"})
+        assert d.severity is Severity.FIXABLE
+        assert "vault" in d.user_message.lower()
+        assert d.action == "restart"
+        assert "x" not in d.user_message  # no raw leak
+
+    def test_history_lost_is_broken_severity(self):
+        d = classify_error(ValueError("corrupt"), {"category": "history_lost"})
+        assert d.severity is Severity.BROKEN
+        assert "fresh" in d.user_message.lower()
+
+    def test_drift_lost_is_info_severity(self):
+        d = classify_error(OSError("x"), {"category": "drift_lost"})
+        assert d.severity is Severity.INFO
+
+    def test_research_degraded_is_info_severity(self):
+        d = classify_error(RuntimeError("x"), {"category": "research_degraded"})
+        assert d.severity is Severity.INFO
+        assert "simpler" in d.user_message.lower()
+
+    def test_verification_broken_mentions_unverified(self):
+        d = classify_error(RuntimeError("x"), {"category": "verification_broken"})
+        assert "unverified" in d.user_message.lower()
+
+    def test_unknown_tag_falls_to_generic(self):
+        """An unrecognized tag must not crash; falls to generic."""
+        d = classify_error(RuntimeError("x"), {"category": "unknown_tag"})
+        assert d.category is ProblemCategory.GENERIC
+
+    def test_context_tag_beats_conn_refused(self):
+        """A context-tagged category must beat the connection-refused
+        predicate — the tag is an explicit caller directive."""
+        exc = ConnectionRefusedError("connection refused")
+        d = classify_error(exc, {"category": "retrieval_broken"})
+        assert d.category is ProblemCategory.RETRIEVAL_BROKEN
+
+    def test_raw_for_log_preserved(self):
+        exc = RuntimeError("detailed internal error trace")
+        d = classify_error(exc, {"category": "compaction_broken"})
+        assert "detailed internal error trace" in d.raw_for_log

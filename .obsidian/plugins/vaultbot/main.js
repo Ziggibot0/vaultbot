@@ -2733,6 +2733,83 @@ class VaultBotSidebarView extends ItemView {
 			tokenMeterLabel.setText(usedK + ' / ' + winK + ' tok');
 		}
 
+		// --- Ollama status bar -----------------------------------------
+		// A compact bar below the model picker showing live Ollama stats:
+		// loaded model name, VRAM usage, context length, and after each
+		// chat round: tokens/s (prompt + generation), load time.
+		// Polls /ollama/stats every 5s for model/VRAM status; updates
+		// instantly when ollama_stats WS messages arrive during chat.
+		const statsBar = footerEl.createDiv({cls: 'vaultbot-stats-bar'});
+		const statsModelEl = statsBar.createEl('span', {cls: 'vaultbot-stats-model', text: '—'});
+		const statsVramEl = statsBar.createEl('span', {cls: 'vaultbot-stats-vram', text: ''});
+		const statsCtxEl = statsBar.createEl('span', {cls: 'vaultbot-stats-ctx', text: ''});
+		const statsPerfEl = statsBar.createEl('span', {cls: 'vaultbot-stats-perf', text: ''});
+
+		function formatBytes(b) {
+			if (!b || b <= 0) return '';
+			const gb = b / 1073741824;
+			if (gb >= 1) return gb.toFixed(1) + ' GB';
+			const mb = b / 1048576;
+			return mb.toFixed(0) + ' MB';
+		}
+		function formatMs(ms) {
+			if (ms < 1) return ms.toFixed(2) + 'ms';
+			if (ms < 1000) return Math.round(ms) + 'ms';
+			return (ms / 1000).toFixed(1) + 's';
+		}
+		function updateStatsFromPoll(data) {
+			if (!data) return;
+			const models = data.models || [];
+			if (models.length === 0) {
+				statsModelEl.setText('No model loaded');
+				statsModelEl.removeClass('vaultbot-stats-model-loaded');
+				statsVramEl.setText('');
+				statsCtxEl.setText('');
+			} else {
+				// Show the first (primary) loaded model
+				const m = models[0];
+				statsModelEl.setText(m.name || '—');
+				statsModelEl.addClass('vaultbot-stats-model-loaded');
+				const vram = formatBytes(m.size_vram);
+				const total = formatBytes(m.size_total);
+				statsVramEl.setText(vram ? 'VRAM: ' + vram : '');
+				statsCtxEl.setText(m.context_length ? 'ctx: ' + (m.context_length / 1000).toFixed(0) + 'k' : '');
+			}
+		}
+		function updateStatsFromChat(stats) {
+			// Called when an ollama_stats WS message arrives after a chat round.
+			// Shows tokens/s for prompt processing and generation.
+			const parts = [];
+			if (stats.load_duration_ms > 0) {
+				parts.push('load: ' + formatMs(stats.load_duration_ms));
+			}
+			if (stats.prompt_tokens_per_s > 0) {
+				parts.push('prompt: ' + stats.prompt_tokens_per_s + ' t/s');
+			}
+			if (stats.gen_tokens_per_s > 0) {
+				parts.push('gen: ' + stats.gen_tokens_per_s + ' t/s');
+			}
+			if (stats.eval_count > 0) {
+				parts.push(stats.eval_count + ' tok');
+			}
+			statsPerfEl.setText(parts.join(' · '));
+		}
+		// Poll /ollama/stats every 5s for model/VRAM status
+		let statsPollTimer = null;
+		async function pollOllamaStats() {
+			try {
+				const resp = await fetch(this.plugin.settings.backendUrl + '/ollama/stats');
+				if (resp.ok) {
+					const data = await resp.json();
+					updateStatsFromPoll(data);
+				}
+			} catch (e) { /* backend may be briefly down during restart */ }
+		}
+		const _pollFn = pollOllamaStats.bind(this);
+		statsPollTimer = setInterval(_pollFn, 5000);
+		// Initial poll after a short delay (backend may not be ready yet)
+		setTimeout(_pollFn, 2000);
+
 		const inputContainer = footerEl.createDiv({cls: 'vaultbot-input-container'});
 		// The chat bar: textarea + an inline Stop button that only appears
 		// while a turn is in flight (so there's always something to stop).
@@ -3294,6 +3371,11 @@ class VaultBotSidebarView extends ItemView {
 					if (typeof msg.context_window === 'number') {
 						updateTokenMeter(msg.used_tokens || 0, msg.context_window);
 					}
+				} else if (msg.type === 'ollama_stats') {
+					// Per-round Ollama eval stats from the backend (tokens/s,
+					// load time, prompt processing speed). Updates the perf
+					// section of the stats bar.
+					updateStatsFromChat(msg);
 				} else if (msg.type === 'answer_done') {
 					endActivity();
 					// Flush the final text segment so its markdown renders.

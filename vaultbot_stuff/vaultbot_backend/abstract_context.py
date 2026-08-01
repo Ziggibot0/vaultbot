@@ -51,7 +51,7 @@ def _read(path: str | Path) -> str:
     """Read a file as UTF-8, returning '' on any error (never raises)."""
     try:
         return Path(path).read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return ""
 
 
@@ -144,7 +144,7 @@ def build_abstract_context(
     l0_notes: list[dict[str, Any]] = []
     mocs: list[dict[str, Any]] = []
     for node in subgraph["nodes"]:
-        name = node["name"]
+        node["name"]
         fp = Path(node["file_path"])
         if is_card(fp):
             l1_cards.append(node)

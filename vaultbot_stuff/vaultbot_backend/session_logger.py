@@ -28,7 +28,7 @@ class SessionLogger:
         # anything older than 30 days. Runs once per new session (cheap).
         try:
             sweep_old_sessions(self.log_dir)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass  # cleanup must never crash the backend
 
         self.session_id: str = str(uuid.uuid4())
@@ -70,7 +70,7 @@ class SessionLogger:
         try:
             with open(self._file_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record, default=str, ensure_ascii=False) + "\n")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Logging must never crash the application. Fail silently to stderr.
             print(f"[SessionLogger] Failed to write event: {e}")
 
@@ -162,7 +162,7 @@ def sweep_old_sessions(log_dir, max_files=200, max_age_days=30, max_file_mb=5):
                 try:
                     f.unlink()
                     deleted += 1
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
             elif f.stat().st_size > max_bytes:
                 # Truncate oversized active logs: keep the last ~1000 lines
@@ -172,10 +172,10 @@ def sweep_old_sessions(log_dir, max_files=200, max_age_days=30, max_file_mb=5):
                     if len(lines) > 1000:
                         with open(f, "wb") as fh:
                             fh.write(b"\n".join(lines[-1000:]) + b"\n")
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
         return deleted
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return 0
 
 

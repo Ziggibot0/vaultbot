@@ -47,7 +47,6 @@ def _stub_services(**overrides):
         amem=MagicMock(),
         fused_retriever=MagicMock(),
         embedding_drift=MagicMock(),
-        compactor=MagicMock(),
         lazy_condenser=MagicMock(),
         context_budgeter=MagicMock(),
         health_monitor=MagicMock(),
@@ -99,10 +98,13 @@ def test_services_required_fields_present():
     consumers actually dereference.
     """
     svc = _stub_services()
-    # The core consumers (chat_handler, ws, research) dereference these:
+    # The core consumers (chat_handler, ws, research) dereference these.
+    # NOTE: 'compactor' removed — the sliding-window refactor replaced
+    #   compaction; no live consumer reads svc.compactor (the Compactor
+    #   class is a no-op shim kept for import compat only).
     for attr in ("ollama_client", "manager", "session_logger",
                  "vault_indexer", "research_engine", "fused_retriever",
-                 "compactor", "identity", "vault_graph", "note_creator",
+                 "identity", "vault_graph", "note_creator",
                  "amem", "pattern_extractor", "procedure_tracker",
                  "autonomous_researcher", "vault_path"):
         assert hasattr(svc, attr), (

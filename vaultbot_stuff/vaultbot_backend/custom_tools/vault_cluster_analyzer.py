@@ -9,7 +9,6 @@ import re
 import random
 from collections import defaultdict, Counter
 from pathlib import Path
-import json
 
 WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")
 IGNORED_DIRS = {"vaultbot_venv", "vaultbot_index", "sessions", "partials",
@@ -153,8 +152,8 @@ def run(args: dict) -> dict:
     
     # Build human-readable summary
     lines = []
-    lines.append(f"VAULT CLUSTER ANALYSIS")
-    lines.append(f"=" * 50)
+    lines.append("VAULT CLUSTER ANALYSIS")
+    lines.append("=" * 50)
     lines.append(f"Total nodes: {len(nodes)}")
     lines.append(f"Total edges: {len(edges_set)}")
     lines.append(f"Clusters found: {len(sorted_comm)}")

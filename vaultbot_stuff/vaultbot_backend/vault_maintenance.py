@@ -13,7 +13,8 @@ class VaultMaintenance:
     Continuous self-cleaning for a vaultbot-managed vault.
 
     Rules:
-    1. Generated notes live under Memory/Chat/ and Knowledge/Research/.
+    1. Generated notes live under vaultbot_stuff/Memory/Chat/ and
+       vaultbot_stuff/Knowledge/Research/ (keeps the user's vault root clean).
     2. Chat notes on the same topic are merged into one running log.
     3. Orphan generated notes (no wikilinks in, no wikilinks out, empty body) are removed.
     4. Near-duplicate generated notes are merged.
@@ -24,8 +25,12 @@ class VaultMaintenance:
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.similarity_threshold = similarity_threshold
-        self.chat_dir = self.vault_path / "Memory/Chat"
-        self.research_dir = self.vault_path / "Knowledge/Research"
+        # All vaultbot-generated content lives under vaultbot_stuff/ so the
+        # user's vault root stays clean (their notes, not framework cruft).
+        # These paths match the readers in pattern_extractor.py and
+        # consolidation_pipeline.py, which already target vaultbot_stuff/.
+        self.chat_dir = self.vault_path / "vaultbot_stuff/Memory/Chat"
+        self.research_dir = self.vault_path / "vaultbot_stuff/Knowledge/Research"
         self.log_file = self.vault_path / "vaultbot_stuff/vaultbot_backend" / "maintenance.log"
         self._ensure_dirs()
 
@@ -42,7 +47,7 @@ class VaultMaintenance:
         try:
             with open(self.log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record, default=str, ensure_ascii=False) + "\n")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
         if self.session_logger is not None:
             self.session_logger.log_tool_call(
@@ -56,7 +61,7 @@ class VaultMaintenance:
         try:
             resolved = path.resolve()
             return self.chat_dir in resolved.parents or self.research_dir in resolved.parents
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
     def _body_text(self, content: str) -> str:
@@ -75,8 +80,9 @@ class VaultMaintenance:
     # --- Conversation trail linking ---
     # Track the most recently created/updated chat note so consecutive
     # chat notes can be linked in chronological order (Previous/Next).
-    # The tracker file lives in the chat directory's parent (Memory/).
-    _TRAIL_TRACKER = "Memory/_last_chat_note.txt"
+    # The tracker file lives in the chat directory's parent
+    # (vaultbot_stuff/Memory/), matching conversation_state.clear_trail_tracker.
+    _TRAIL_TRACKER = "vaultbot_stuff/Memory/_last_chat_note.txt"
 
     def _trail_tracker_path(self) -> Path:
         return self.chat_dir.parent / "_last_chat_note.txt"
@@ -87,7 +93,7 @@ class VaultMaintenance:
             p = self._trail_tracker_path()
             if p.exists():
                 return p.read_text(encoding="utf-8").strip() or None
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return None
         return None
 
@@ -97,7 +103,7 @@ class VaultMaintenance:
             p = self._trail_tracker_path()
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(stem, encoding="utf-8")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass  # never break the chat loop over trail tracking
 
     def _inject_trail_link(self, content: str, direction: str, target_stem: str) -> str:
@@ -148,7 +154,7 @@ class VaultMaintenance:
                     "file_path": str(note_path),
                     "inputs": {"topic": topic},
                 })
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("chat_append", {
                     "file_path": str(note_path),
                     "error": str(e),
@@ -173,7 +179,7 @@ class VaultMaintenance:
                     prev_text = prev_path.read_text(encoding="utf-8")
                     prev_text = self._inject_trail_link(prev_text, "Next", safe_topic)
                     prev_path.write_text(prev_text, encoding="utf-8")
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass  # never break the chat loop over trail tracking
 
         note_path.write_text(content, encoding="utf-8")
@@ -211,7 +217,7 @@ class VaultMaintenance:
                 if existing.resolve() != note_path.resolve():
                     try:
                         existing.unlink()
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         self._log("research_replace", {"error": str(e)})
                 break
 
@@ -254,7 +260,7 @@ class VaultMaintenance:
                 norm = name.lower()
 
                 has_backlinks = norm in graph.backlinks and len(graph.backlinks[norm]) > 0
-                has_outgoing = len(links) > 0
+                len(links) > 0
                 is_empty = len(body) < 80
 
                 if is_empty and not has_backlinks:
@@ -262,7 +268,7 @@ class VaultMaintenance:
                         path.unlink()
                         removed.append(str(path))
                         self._log("remove_orphan", {"file_path": str(path)})
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         self._log("remove_orphan", {"file_path": str(path), "error": str(e)})
 
         # 2. Merge near-duplicate generated notes (within same folder)
@@ -290,7 +296,7 @@ class VaultMaintenance:
                         try:
                             dup.unlink()
                             merged.append(str(dup))
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             self._log("merge_duplicates", {"file_path": str(dup), "error": str(e)})
                     self._log("merge_duplicates", {
                         "kept": str(keeper),
@@ -337,7 +343,7 @@ class VaultMaintenance:
                 new_note.unlink()
                 removed.append(str(new_note))
                 self._log("remove_orphan", {"file_path": str(new_note)})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("remove_orphan", {"file_path": str(new_note), "error": str(e)})
         return {"removed": removed, "merged": []}
 

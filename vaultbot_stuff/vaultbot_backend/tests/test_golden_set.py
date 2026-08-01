@@ -10,7 +10,6 @@ Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 """
 from __future__ import annotations
 
-import golden_eval
 from golden_eval import check_regression, load_golden_set, run_golden_eval
 
 

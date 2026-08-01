@@ -25,9 +25,8 @@ DESIGN
 - Atomic write (temp + os.replace) with a lock — the chat loop and any
   background thread never tear the file.
 - Bounded: only the last ``MAX_TURNS`` messages are kept on disk so the
-  file doesn't grow unbounded across months. The in-memory compactor
-  already trims at 80 messages / 20k tokens; this is a second bound for
-  the disk copy.
+  file doesn't grow unbounded across months. The in-memory sliding window
+  bounds the LLM payload; this is a second bound for the disk copy.
 - ``clear()`` wipes it (called on ``/new``).
 - All operations are best-effort: a persistence failure must NEVER crash
   the chat loop. Errors are logged and swallowed.
@@ -44,6 +43,7 @@ import logging
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -74,24 +74,47 @@ def _resolve_path(path: str | None) -> str:
 
 
 def load_history(path: str | None = None) -> list[dict[str, Any]]:
-    """Load the persisted conversation history. Returns [] on any failure
-    (missing file, corrupt JSON, etc.) — never raises."""
+    """Load the persisted conversation history.
+
+    Returns ``[]`` when the file doesn't exist yet (first run — no history
+    is correct, not an error). Raises ``ValueError`` when the file exists
+    but is corrupt (JSON parse failure, wrong structure) — the caller
+    should catch this and call ``notify_problem`` with the
+    ``history_lost`` category so the user knows their conversation was
+    lost, rather than silently starting fresh with no indication.
+    """
     p = _resolve_path(path)
+    if not os.path.exists(p):
+        return []  # first run — no history is correct
     try:
-        if not os.path.exists(p):
-            return []
         with open(p, encoding="utf-8") as fh:
             data = json.load(fh)
         if not isinstance(data, list):
-            logger.warning("conversation_state: not a list, ignoring")
-            return []
+            raise ValueError(
+                f"conversation_state: history file is not a list "
+                f"({type(data).__name__}): {p}"
+            )
         # Defensive: each entry must be a dict with a role.
         clean = [m for m in data
                  if isinstance(m, dict) and m.get("role")]
         return clean
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("conversation_state load failed: %s", exc)
-        return []
+    except (json.JSONDecodeError, ValueError) as exc:
+        # Re-raise with context so the caller can notify the user.
+        # Auto-backup the corrupt file before raising so the user's
+        # data isn't lost if they want to try manual recovery.
+        try:
+            import shutil
+            backup = f"{p}.corrupt.{int(time.time())}"
+            shutil.copy2(p, backup)
+            logger.warning(
+                "conversation_state: corrupt history backed up to %s: %s",
+                backup, exc)
+        except OSError:
+            pass  # backup failure shouldn't mask the original error
+        raise ValueError(
+            f"Conversation history is corrupt and can't be loaded: {exc}. "
+            f"A backup was saved. Starting fresh."
+        ) from exc
 
 
 def save_history(history: list[dict[str, Any]],
@@ -131,7 +154,7 @@ def save_history(history: list[dict[str, Any]],
     # Strip any non-serializable leftovers defensively.
     try:
         payload = json.dumps(bounded, ensure_ascii=False, default=str)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.warning("conversation_state serialize failed: %s", exc)
         return
     try:
@@ -143,13 +166,13 @@ def save_history(history: list[dict[str, Any]],
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     fh.write(payload)
                 os.replace(tmp, p)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 try:
                     os.unlink(tmp)
                 except OSError:
                     pass
                 raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.warning("conversation_state save failed: %s", exc)
 
 
@@ -159,7 +182,7 @@ def clear_history(path: str | None = None) -> None:
     try:
         if os.path.exists(p):
             os.remove(p)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.warning("conversation_state clear failed: %s", exc)
 
 def clear_trail_tracker(vault_path: str | None = None) -> None:
@@ -174,5 +197,5 @@ def clear_trail_tracker(vault_path: str | None = None) -> None:
         tracker = vp / "vaultbot_stuff" / "Memory" / "_last_chat_note.txt"
         if tracker.exists():
             tracker.unlink()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.warning("trail tracker clear failed: %s", exc)

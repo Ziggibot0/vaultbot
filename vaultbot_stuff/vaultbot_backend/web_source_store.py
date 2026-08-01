@@ -61,12 +61,59 @@ def _ensure_dirs() -> None:
 
 
 def _load_index() -> list[dict[str, Any]]:
+    """Load the web source index. Returns [] when the file doesn't exist.
+
+    On corruption (JSON parse error), attempts to rebuild the index from
+    the HTML files on disk so archived sources aren't lost. Logs the
+    corruption event.
+    """
+    if not INDEX_PATH.exists():
+        return []
     try:
-        if INDEX_PATH.exists():
-            return json.loads(INDEX_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        pass
+        data = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+    except (json.JSONDecodeError, ValueError) as e:
+        # Index is corrupt — rebuild from disk so archived sources
+        # aren't lost. This is a notified recovery, not a silent reset.
+        import logging
+        logging.getLogger(__name__).error(
+            "web_source_store: index corrupt (%s), rebuilding from disk", e)
+        return _rebuild_index_from_disk()
     return []
+
+
+def _rebuild_index_from_disk() -> list[dict[str, Any]]:
+    """Rebuild the index by scanning WEB_DIR for .html files."""
+    _ensure_dirs()
+    entries: list[dict[str, Any]] = []
+    for html_file in WEB_DIR.glob("*.html"):
+        # The filename is the slug; the URL is stored in the HTML's
+        # <meta name="source-url"> tag if available, otherwise we
+        # use the filename as a fallback identifier.
+        slug = html_file.stem
+        url = ""
+        title = ""
+        try:
+            content = html_file.read_text(encoding="utf-8", errors="replace")
+            import re
+            m = re.search(r'<meta\s+name="source-url"\s+content="([^"]+)"', content)
+            if m:
+                url = m.group(1)
+            m2 = re.search(r"<title>([^<]+)</title>", content)
+            if m2:
+                title = m2.group(1).strip()
+        except OSError:
+            pass
+        entries.append({
+            "url": url or f"unknown:{slug}",
+            "file": html_file.name,
+            "title": title or slug,
+            "date": "",
+            "topics": [],
+        })
+    _save_index(entries)
+    return entries
 
 
 def _save_index(entries: list[dict[str, Any]]) -> None:
@@ -109,10 +156,7 @@ def save_source(url: str, html: str, title: str = "",
     slug = _slugify(url)
     filename = f"{slug}.html"
     path = WEB_DIR / filename
-    try:
-        path.write_text(html, encoding="utf-8", errors="replace")
-    except Exception:
-        return None
+    path.write_text(html, encoding="utf-8", errors="replace")
 
     entry = {
         "url": url,
@@ -131,24 +175,22 @@ def fetch_and_save(url: str, title: str = "", topic: str = "",
     """Fetch the raw HTML for a URL and save it.
 
     Used when we have a URL but not yet the HTML (e.g. a search hit that
-    only returned a snippet). Returns the index entry, or None on failure.
+    only returned a snippet). Returns the index entry, or None if the
+    URL is empty/short. Raises on fetch or save failure.
     """
-    try:
-        import requests
-        headers = {
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/125.0.0.0 Safari/537.36"),
-            "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        resp = requests.get(url, headers=headers, timeout=timeout,
-                            allow_redirects=True)
-        resp.raise_for_status()
-        html = resp.text
-        return save_source(url, html, title=title, topic=topic)
-    except Exception:
-        return None
+    import requests
+    headers = {
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/125.0.0.0 Safari/537.36"),
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    resp = requests.get(url, headers=headers, timeout=timeout,
+                        allow_redirects=True)
+    resp.raise_for_status()
+    html = resp.text
+    return save_source(url, html, title=title, topic=topic)
 
 
 def find_source(url: str) -> dict[str, Any] | None:
@@ -191,5 +233,5 @@ def read_source_text(filename: str) -> str:
         text = (main.get_text(separator="\n", strip=True) if main
                 else soup.get_text(separator="\n", strip=True))
         return re.sub(r"\n{3,}", "\n\n", text)[:50000]
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return ""

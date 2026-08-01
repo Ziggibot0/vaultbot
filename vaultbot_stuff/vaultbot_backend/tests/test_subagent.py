@@ -8,11 +8,7 @@ wrapper or exercise the error/timeout paths.
 See [[Procedure-Subprocess-Architecture]] and subagent.py docstring.
 """
 import json
-import os
-import sys
-from pathlib import Path
 
-import pytest
 
 # conftest adds the backend dir to sys.path so leaf modules import.
 from subagent import (
@@ -44,7 +40,7 @@ def _wrapper_that_prints(brief: dict) -> str:
     """A minimal wrapper that prints a fixed JSON brief to stdout."""
     return (
         "import json, sys\n"
-        "print(json.dumps(" + repr(json.dumps(brief)) + "))\n"
+        "print(json.dumps(" + json.dumps(brief) + "))\n"
     )
 
 

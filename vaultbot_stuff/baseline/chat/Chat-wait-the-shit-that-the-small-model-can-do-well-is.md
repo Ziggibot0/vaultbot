@@ -1,5 +1,7 @@
 # Chat: wait the shit that the small model can do well is 
 
+**Next:** [[Chat-yes-please]]
+
 **Previous:** [[Chat-i-want-you-to-research-what-the-hell-qwen3508b]]
 
 ## 2026-07-31 20:23 UTC

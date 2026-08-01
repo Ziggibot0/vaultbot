@@ -63,14 +63,14 @@ def run(args: dict) -> dict:
         parts.append("## Recent Chat History")
         for mtime, fpath in chat_files[:5]:
             try:
-                with open(fpath, "r", encoding="utf-8") as f:
+                with open(fpath, encoding="utf-8") as f:
                     content = f.read()
                 if len(content) > 3000:
                     content = "...[truncated]...\n" + content[-3000:]
                 parts.append(f"### {os.path.basename(fpath)}")
                 parts.append(content)
                 parts.append("")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 parts.append(f"### {os.path.basename(fpath)}")
                 parts.append(f"Error reading: {e}")
                 parts.append("")
@@ -83,7 +83,7 @@ def run(args: dict) -> dict:
 
         cached = True
         cache_msg = f"Cached {len(chat_files[:5])} recent chats to RESTART_CONTEXT.md"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         cached = False
         cache_msg = f"Failed to cache context: {e}"
 
@@ -104,7 +104,7 @@ def run(args: dict) -> dict:
             "cache_message": cache_msg,
             "response": result,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {
             "status": "error",
             "message": f"Could not reach /restart endpoint: {e}. Make sure the backend is running and the plugin is connected.",

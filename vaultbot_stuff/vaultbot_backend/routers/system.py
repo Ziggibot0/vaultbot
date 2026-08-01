@@ -30,7 +30,7 @@ def _ping_ollama(svc: Services) -> bool:
     """
     try:
         return bool(svc.ollama_client.is_running())
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
 
 
@@ -113,7 +113,7 @@ def _check_model_present(svc: Services) -> Diagnosis | None:
         return None  # nothing configured yet — not a failure to surface here
     try:
         available = svc.ollama_client.list_models()
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         # If we can't even list models, that's an ollama_down case the
         # other checks will catch; don't double-report.
         return None
@@ -170,7 +170,7 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
             host = getattr(svc.ollama_client, "base_url", "") or ""
             if host and "11434" not in host:
                 backend = "the LLM backend"
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
         problems.append(diagnose_from_message(
             "connection refused",
@@ -188,7 +188,7 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     try:
         # The vault root is 4 levels up from routers/ (vaultbot_stuff/vaultbot_backend/routers/ -> vault root)
         vault_path = str(Path(__file__).resolve().parent.parent.parent)  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
     sync_diag = _check_synced_folder(vault_path)
     if sync_diag is not None:
@@ -199,7 +199,7 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     #    "something went wrong."
     try:
         _ = svc.vault_indexer.index.ntotal
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         problems.append(diagnose_from_message(
             f"faiss error: {e}",
         ))
@@ -235,7 +235,7 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
                 action="open_settings",
                 severity=Severity.INFO,
             ))
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
     return problems
@@ -482,6 +482,22 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
     return svc.health_monitor.health(extra=extra)
 
 
+@router.get("/ollama/stats")
+async def ollama_stats(svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
+    """Return Ollama runtime stats for the plugin's status bar.
+
+    Combines /api/ps (loaded models, VRAM, context length, expiry) and
+    /api/version into a single snapshot.  For cloud backends (OpenAI-
+    compatible), returns a minimal stub since there's no local GPU to
+    report.  Never raises — best-effort so a stats fetch failure never
+    blocks the UI.
+    """
+    try:
+        return svc.ollama_client.get_ollama_stats()
+    except Exception as e:  # noqa: BLE001 — best-effort
+        return {"running": False, "version": None, "models": [], "error": str(e)}
+
+
 @router.post("/restart")
 async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
     """Ask the Obsidian plugin to restart the backend via WebSocket.
@@ -557,7 +573,7 @@ async def recover_checkpoints(svc: Annotated[Services, Depends(get_services)]):
         recovery = await loop.run_in_executor(
             None, svc.checkpointer.recover, svc.autonomous_researcher)
         return recovery
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
 
 

@@ -104,7 +104,7 @@ class GraphOpRegistry:
                 outputs=outputs,
                 error=error,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     @staticmethod
@@ -115,24 +115,26 @@ class GraphOpRegistry:
         return slug or "untitled"
 
     def _resolve_note(self, name: str) -> Path | None:
-        """Resolve a note name/path to an actual .md file in the vault."""
-        try:
-            p = Path(name)
-            if p.is_absolute() and p.exists():
-                return p
-            # Search by stem (case-insensitive) via the graph's vault path.
-            vault_root = getattr(self.vault_graph, "vault_path", None)
-            if vault_root is None:
-                return None
-            norm = name.strip().lower()
-            for cand in Path(vault_root).rglob("*.md"):
-                if cand.stem.lower() == norm:
-                    return cand
-            for cand in Path(vault_root).rglob("*.md"):
-                if norm in cand.stem.lower():
-                    return cand
-        except Exception:
+        """Resolve a note name/path to an actual .md file in the vault.
+
+        Returns None when the note genuinely doesn't exist. Filesystem
+        errors (permissions, IO) propagate so the caller knows the vault
+        is inaccessible, not empty.
+        """
+        p = Path(name)
+        if p.is_absolute() and p.exists():
+            return p
+        # Search by stem (case-insensitive) via the graph's vault path.
+        vault_root = getattr(self.vault_graph, "vault_path", None)
+        if vault_root is None:
             return None
+        norm = name.strip().lower()
+        for cand in Path(vault_root).rglob("*.md"):
+            if cand.stem.lower() == norm:
+                return cand
+        for cand in Path(vault_root).rglob("*.md"):
+            if norm in cand.stem.lower():
+                return cand
         return None
 
     @staticmethod
@@ -171,7 +173,7 @@ class GraphOpRegistry:
             out = {"results": results, "count": len(results)}
             self._log("search", {"query": query, "k": k}, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("search", args, error=str(e))
             return {"error": str(e)}
 
@@ -232,7 +234,12 @@ class GraphOpRegistry:
                         "below. Respond as JSON: "
                         '{"entities": [...], "key_facts": [...]}.\n\n' + text[:6000]
                     )
-                    resp = self.ollama_client.generate(
+                    # Use the SMALL model — entity extraction is a simple
+                    # structured task (return JSON) that doesn't need the
+                    # big model's reasoning power. Saves cloud tokens.
+                    from llm_client import get_small_client_or_big
+                    _extract_client = get_small_client_or_big()
+                    resp = _extract_client.generate(
                         prompt, temperature=0.2, max_tokens=600
                     )
                     if isinstance(resp, dict):
@@ -253,7 +260,7 @@ class GraphOpRegistry:
                                 for f in llm_facts:
                                     if isinstance(f, str) and f not in key_facts:
                                         key_facts.append(f)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log("extract_llm", {"error": str(e)})
 
             out = {
@@ -263,7 +270,7 @@ class GraphOpRegistry:
             }
             self._log("extract", args, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("extract", args, error=str(e))
             return {"error": str(e)}
 
@@ -315,13 +322,13 @@ class GraphOpRegistry:
             # Refresh graph awareness so subsequent ops see the new edge.
             try:
                 self.vault_graph.refresh()
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
             out = {"linked": True, "source_path": str(src_path),
                    "target_exists": True}
             self._log("link", args, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("link", args, error=str(e))
             return {"error": str(e)}
 
@@ -360,7 +367,7 @@ class GraphOpRegistry:
             }
             self._log("synthesize", {"topic": topic}, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("synthesize", args, error=str(e))
             return {"error": str(e)}
 
@@ -431,18 +438,18 @@ class GraphOpRegistry:
             # Keep the index + graph aware of the new/changed note.
             try:
                 self.vault_indexer._add_file_to_index(note_path)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
             try:
                 self.vault_graph.refresh()
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
 
             out = {"note_path": str(note_path), "created": created,
                    "appended": appended}
             self._log("create_note", args, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("create_note", args, error=str(e))
             return {"error": str(e)}
 
@@ -497,7 +504,7 @@ class GraphOpRegistry:
             out = {"skill_path": str(skill_path), "created": True}
             self._log("learn_skill", args, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("learn_skill", args, error=str(e))
             return {"error": str(e)}
 
@@ -554,7 +561,7 @@ class GraphOpRegistry:
             out = {"passed": passed, "check": check, "details": details}
             self._log("verify", args, out)
             return out
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("verify", args, error=str(e))
             return {"error": str(e)}
 

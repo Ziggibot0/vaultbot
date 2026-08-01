@@ -54,7 +54,6 @@ import re
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 
 # ── Data structures ───────────────────────────────────────────────────────
@@ -83,11 +82,11 @@ class Step:
     number: int
     instruction: str
     step_type: str = "text"
-    code: Optional[str] = None
-    llm_instruction: Optional[str] = None
-    validation: Optional[str] = None
-    condition: Optional[str] = None
-    branch_target: Optional[int] = None
+    code: str | None = None
+    llm_instruction: str | None = None
+    validation: str | None = None
+    condition: str | None = None
+    branch_target: int | None = None
 
 
 @dataclass
@@ -182,9 +181,7 @@ def _parse_frontmatter(text: str) -> tuple[dict, str, str]:
             key, _, value = line.partition(':')
             key = key.strip()
             value = value.strip()
-            if value.startswith('"') and value.endswith('"'):
-                value = value[1:-1]
-            elif value.startswith("'") and value.endswith("'"):
+            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
                 value = value[1:-1]
             if value:
                 fm[key] = value
@@ -201,15 +198,15 @@ def _parse_frontmatter(text: str) -> tuple[dict, str, str]:
 
 def _extract_annotations(
     text: str,
-) -> tuple[str, Optional[str], Optional[str], Optional[int]]:
+) -> tuple[str, str | None, str | None, int | None]:
     """Extract inline annotations from a step instruction.
 
     Returns ``(clean_instruction, validation, condition, branch_target)``.
     Annotations are removed from the returned instruction text.
     """
-    validation: Optional[str] = None
-    condition: Optional[str] = None
-    branch_target: Optional[int] = None
+    validation: str | None = None
+    condition: str | None = None
+    branch_target: int | None = None
 
     m = _VALIDATE_RE.search(text)
     if m:
@@ -366,7 +363,7 @@ def _parse_steps(body: str) -> list[Step]:
 
 # ── Public API ────────────────────────────────────────────────────────────
 
-def compile_procedure(file_path: str) -> Optional[Procedure]:
+def compile_procedure(file_path: str) -> Procedure | None:
     """Compile a markdown procedure note from disk.
 
     Returns a :class:`Procedure` if the note has ``type: procedure`` or
@@ -383,7 +380,7 @@ def compile_procedure(file_path: str) -> Optional[Procedure]:
     return proc
 
 
-def compile_from_text(note_name: str, text: str) -> Optional[Procedure]:
+def compile_from_text(note_name: str, text: str) -> Procedure | None:
     """Compile a procedure from raw markdown text.
 
     Same as :func:`compile_procedure` but works on in-memory text

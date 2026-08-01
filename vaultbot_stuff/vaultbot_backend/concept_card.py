@@ -78,10 +78,10 @@ REFINE_TOUCH_THRESHOLD = 3
 REFINE_MIN_CHARS = 250  # don't bother refining an already-tight card
 
 # --- Token-economy card-refine mode ---
-# auto       = LLM if available, extractive fallback if not (default)
-# llm        = always LLM (no-op if no LLM)
+# llm        = always LLM (raises if no LLM client)
 # extractive = never call LLM, always TextRank-style sentence selection
-_CARD_REFINE_MODE = os.getenv("VAULTBOT_CARD_REFINE_MODE", "auto").lower()
+# There is no "auto" mode — it silently degraded LLM→extractive on failure.
+_CARD_REFINE_MODE = os.getenv("VAULTBOT_CARD_REFINE_MODE", "llm").lower()
 
 # Scaffolding patterns to drop during extractive refine (same as condenser).
 _CARD_SCAFFOLDING_RE = re.compile(
@@ -142,7 +142,7 @@ def l0_path_for_card(card_abs_path: str | Path) -> Path | None:
             for q in p.parent.glob("*.md"):
                 if q.stem.lower() == target.lower():
                     return q
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         logger.debug("swallowed: %s", e)
     return None
 
@@ -322,11 +322,12 @@ def build_card_for(l0_abs_path: str | Path,
                 if REFINED_MARKER in old and CARD_MARKER in old:
                     # already refined: keep it (refinement is sticky)
                     return card
-            except Exception as e:
-                logger.debug("swallowed: %s", e)
+            except OSError:
+                pass  # file doesn't exist yet — proceed to create
         _atomic_write(card, text)
         return card
-    except Exception:
+    except (OSError, PermissionError) as e:
+        logger.warning("build_card_for failed: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -335,10 +336,11 @@ def build_cards_batch(l0_abs_paths: list[str],
                       progress_callback: Any = None) -> dict[str, Any]:
     """Build L1 cards for many L0 sections.  LLM-free.
 
-    Returns {"cards_built": int, "cards_skipped": int, "card_paths": [...]}.
+    Returns {"cards_built": int, "cards_skipped": int, "cards_failed": int, "card_paths": [...]}.
     """
     built = 0
     skipped = 0
+    failed = 0
     out_paths: list[str] = []
     n = len(l0_abs_paths)
     for i, fp in enumerate(l0_abs_paths):
@@ -359,18 +361,19 @@ def build_cards_batch(l0_abs_paths: list[str],
                 built += 1
                 out_paths.append(str(card))
             else:
-                skipped += 1
-        except Exception:
-            skipped += 1
+                failed += 1
+        except (OSError, PermissionError) as e:
+            failed += 1
+            logger.warning("card build failed for %s: %s", fp, e)
         if progress_callback is not None and (i % 10 == 0 or i == n - 1):
             try:
                 progress_callback("concept_card", {
                     "note": i + 1, "total": n,
                     "message": f"Abstracting note {i+1}/{n}..."})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
     return {"cards_built": built, "cards_skipped": skipped,
-            "card_paths": out_paths}
+            "cards_failed": failed, "card_paths": out_paths}
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +387,7 @@ def needs_refine(card_path: str | Path, touch_count: int) -> bool:
         return False
     try:
         text = Path(card_path).read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
     if REFINED_MARKER in text:
         return False  # already refined
@@ -401,12 +404,10 @@ def refine_card(card_path: str | Path,
     and the markers — only the sketch body is rewritten.  Idempotent.
 
     TOKEN ECONOMY: routed by ``VAULTBOT_CARD_REFINE_MODE``:
-      ``auto`` (default) — LLM if available, extractive TextRank fallback.
-      ``llm``           — always LLM (returns not-refined if no LLM).
-      ``extractive``    — never call LLM, always sentence selection.
+      ``llm`` (default)  — always LLM (raises if no LLM client or LLM fails).
+      ``extractive``     — never call LLM, always sentence selection.
 
     Returns {"refined": bool, "before_chars": int, "after_chars": int}.
-    Never raises.
     """
     try:
         p = Path(card_path)
@@ -428,15 +429,14 @@ def refine_card(card_path: str | Path,
             summary = _extractive_refine(l0_excerpt)
         elif mode == "llm":
             if ollama_client is None:
-                return {"refined": False, "reason": "no_llm"}
+                raise ValueError(
+                    "refine_card: VAULTBOT_CARD_REFINE_MODE=llm but "
+                    "ollama_client is None")
             summary = _llm_refine(ollama_client, l0_excerpt)
-        else:  # auto
-            if ollama_client is not None:
-                summary = _llm_refine(ollama_client, l0_excerpt)
-                if not summary or len(summary) < 80:
-                    summary = _extractive_refine(l0_excerpt)
-            else:
-                summary = _extractive_refine(l0_excerpt)
+        else:
+            raise ValueError(
+                f"refine_card: unknown VAULTBOT_CARD_REFINE_MODE={mode!r} "
+                f"(use 'llm' or 'extractive')")
 
         summary = (summary or "").strip()
         if len(summary) < 80:
@@ -458,7 +458,7 @@ def refine_card(card_path: str | Path,
         _atomic_write(p, new_body)
         return {"refined": True, "before_chars": before, "after_chars": after,
                 "method": mode if mode != "auto" else ("llm" if ollama_client else "extractive")}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"refined": False, "reason": f"error:{type(e).__name__}"}
 
 
@@ -498,7 +498,14 @@ def _extractive_refine(l0_text: str) -> str:
 
 
 def _llm_refine(ollama_client: Any, l0_excerpt: str) -> str:
-    """Ask the LLM for a tight concept-card summary (the old path)."""
+    """Ask the LLM for a tight concept-card summary (the old path).
+
+    Uses the SMALL model — concept-card refinement is a simple summarization
+    task (2-4 sentences capturing the core idea) that doesn't need the big
+    model's reasoning power. Saves cloud tokens.
+    """
+    from llm_client import get_small_client_or_big
+    _card_client = get_small_client_or_big()
     prompt = (
         "Rewrite the following textbook section as a tight concept-card "
         "summary: 2-4 sentences capturing the core idea, definitions, "
@@ -506,7 +513,7 @@ def _llm_refine(ollama_client: Any, l0_excerpt: str) -> str:
         "Do NOT include the heading, source pointer, or link list — only "
         "the summary prose. Drop pedagogical scaffolding and worked "
         "examples.\n\nSECTION:\n" + l0_excerpt)
-    resp = ollama_client.chat(
+    resp = _card_client.chat(
         [{"role": "system",
           "content": "You are a concept-card writer. Be terse and dense."},
          {"role": "user", "content": prompt}],

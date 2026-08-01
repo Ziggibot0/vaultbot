@@ -6,7 +6,6 @@ SCHEMA = {"name": "preflight_safety_check", "description": "Pre-flight safety ch
 
 import importlib.util
 import shutil
-import subprocess
 from subprocess_utils import run as _subprocess_run
 import time
 from pathlib import Path
@@ -69,7 +68,7 @@ def run(args: dict) -> dict:
             )
             if results["status"] == "PASS":
                 results["status"] = "WARN"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         results["warnings"].append(f"Git check failed: {e}")
         results["checks"]["git"] = {"error": str(e)}
 
@@ -122,7 +121,7 @@ def run(args: dict) -> dict:
             results["warnings"].append(f"Disk getting full: {disk_pct:.1f}%")
             if results["status"] == "PASS":
                 results["status"] = "WARN"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         results["warnings"].append(f"Disk check failed: {e}")
 
     # --- 5. Custom tools integrity ---
@@ -142,7 +141,7 @@ def run(args: dict) -> dict:
                 spec.loader.exec_module(mod)
                 if not hasattr(mod, "run"):
                     broken_tools.append({"file": tf.name, "error": "No run() function"})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             broken_tools.append({"file": tf.name, "error": str(e)})
 
     results["checks"]["custom_tools"] = {

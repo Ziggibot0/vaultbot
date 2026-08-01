@@ -51,8 +51,6 @@ def run(args: dict) -> dict:
     import re
     import sys
     import time
-    import json
-    import subprocess
     import requests
 
     # Add backend to path for subprocess_utils
@@ -65,7 +63,7 @@ def run(args: dict) -> dict:
         try:
             r = _subprocess_run(["git"] + git_args, capture_output=True, text=True, timeout=60, cwd=cwd)
             return r.returncode == 0, r.stdout.strip(), r.stderr.strip()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             return False, "", str(e)
 
     title = args.get("title", "").strip()
@@ -125,7 +123,7 @@ def run(args: dict) -> dict:
         gh_username = resp.json().get("login", "")
         if not gh_username:
             return {"error": "Could not determine GitHub username from token"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": f"Failed to get GitHub user info: {e}"}
 
     # 4. Check if user has push access to the upstream repo
@@ -139,7 +137,7 @@ def run(args: dict) -> dict:
             return {"error": f"Could not access upstream repo: {resp.status_code}"}
         permissions = resp.json().get("permissions", {})
         has_push_access = permissions.get("push", False)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": f"Failed to check repo permissions: {e}"}
 
     # 5. Safety scan — never commit sensitive files
@@ -210,7 +208,7 @@ def run(args: dict) -> dict:
                 run_git(["checkout", "main"], vault_root)
                 run_git(["branch", "-D", branch_name], vault_root)
                 return {"error": f"Could not fork repo: {resp.status_code} {resp.text[:200]}"}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             run_git(["checkout", "main"], vault_root)
             run_git(["branch", "-D", branch_name], vault_root)
             return {"error": f"Failed to fork repo: {e}"}
@@ -293,7 +291,7 @@ def run(args: dict) -> dict:
                     f"https://github.com/{upstream_owner}/{upstream_repo}/compare/main...{pr_head.replace(':', '-')}"
                 ),
             }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         run_git(["checkout", "main"], vault_root)
         return {
             "error": f"Failed to create PR: {e}",

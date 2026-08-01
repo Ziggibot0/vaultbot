@@ -69,7 +69,7 @@ def load_golden_set(path: str | Path | None = None) -> list[dict[str, Any]]:
         return []
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001  a hand-edited file must not crash the gate
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return []
     entries = raw.get("queries", raw) if isinstance(raw, dict) else raw
     out: list[dict[str, Any]] = []
@@ -177,7 +177,7 @@ def run_golden_eval(retriever: Any,
         try:
             out = retriever.retrieve(query, k=k)
             results = out.get("results", []) if isinstance(out, dict) else []
-        except Exception:  # noqa: BLE001  a retrieval error scores 0, never crashes
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             results = []
         retrieved = _retrieved_identifiers(results)
         if retrieved:

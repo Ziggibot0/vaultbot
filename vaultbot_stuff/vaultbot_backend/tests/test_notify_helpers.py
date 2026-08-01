@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from chat_helpers import notify_info, notify_problem
-from error_types import Diagnosis, ProblemCategory, Severity
+from error_types import Diagnosis, ProblemCategory
 
 
 def _mock_svc(manager=None, session_logger=None):

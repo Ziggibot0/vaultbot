@@ -72,7 +72,7 @@ class HealthMonitor:
         try:
             self._last_heartbeat = time.time()
             self._current_task = task
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Heartbeat must never crash the caller.
             pass
 
@@ -104,10 +104,10 @@ class HealthMonitor:
             if extra:
                 try:
                     snapshot.update(extra)
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
             return snapshot
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Never let health() crash a caller (e.g. an HTTP handler).
             return {
                 "ok": False,
@@ -122,7 +122,7 @@ class HealthMonitor:
         try:
             age = time.time() - self._last_heartbeat
             return age < HEARTBEAT_STALE_SECONDS
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
     # ------------------------------------------------------------------
@@ -166,13 +166,13 @@ class HealthMonitor:
                                 if on_stale is not None:
                                     try:
                                         on_stale()
-                                    except Exception as exc:
+                                    except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                                         self._log(
                                             f"watchdog: on_stale callback raised: {exc!r}"
                                         )
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             self._log(f"watchdog: check raised: {exc!r}")
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log(f"watchdog: thread loop crashed: {exc!r}")
 
             thread = threading.Thread(
@@ -182,7 +182,7 @@ class HealthMonitor:
             )
             self._heartbeat_thread = thread
             thread.start()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log(f"start_watchdog failed: {exc!r}")
 
     def stop_watchdog(self) -> None:
@@ -194,7 +194,7 @@ class HealthMonitor:
                 # Don't join forever — the daemon should exit promptly on stop.
                 thread.join(timeout=5)
             self._heartbeat_thread = None
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log(f"stop_watchdog failed: {exc!r}")
 
     # ------------------------------------------------------------------
@@ -214,7 +214,7 @@ class HealthMonitor:
                     return
             if callable(logger):
                 logger(msg)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Logging must never crash the monitor.
             pass
 

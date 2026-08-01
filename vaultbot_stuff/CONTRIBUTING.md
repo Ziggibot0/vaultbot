@@ -75,6 +75,42 @@ follow the same safety protocol the agent uses:
    overwrite on core modules.
 4. **If something breaks, `git_rollback`** restores from HEAD.
 
+## No silent fallbacks
+
+VaultBot follows a fail-loud principle: **all code must fail loudly. No
+fallbacks, no silent degradation.** Checking multiple sources is fine,
+but trying different mechanisms in a row is lazy — there will always be
+more edge cases. If it breaks, it breaks visibly.
+
+When you write an `except` block, choose one of four approaches:
+
+1. **Raise** — remove the try/except entirely. The caller already has
+   exception handling and can surface the error.
+2. **Surface** — call `notify_problem(svc, websocket, e, context=...)`
+   so the user gets a `Diagnosis` card explaining what failed. The chat
+   continues, but the user knows.
+3. **Narrow** — catch only the specific exception type (e.g.
+   `FileNotFoundError`, `PermissionError`) instead of broad `Exception`.
+   Let unexpected exceptions propagate.
+4. **Keep** — if the except is genuinely best-effort (heartbeat, shutdown
+   cleanup, logging-of-logging), add `# noqa: BLE001 — <reason>` so the
+   linter stops flagging it and the justification is documented.
+
+**Never** write `except Exception: pass` or `except Exception: return []`
+without one of the above. The ruff config selects `BLE001` (blind-except)
+and the test `tests/test_no_silent_swallow.py` AST-scans for silent-swallow
+patterns. Both will catch new violations.
+
+The project has a typed error layer for surfacing:
+- `error_types.py` — `Diagnosis` dataclass + `ProblemCategory` enum
+- `diagnostics.py` — `classify_error(exc, context)` translates any
+  exception into a `Diagnosis`
+- `chat_helpers.py` — `notify_problem(svc, websocket, exc, context=,
+  user_message=, remedy_hint=)` sends a typed WS event to the user
+
+Use `context={"category": "retrieval_broken"}` (or other subsystem
+categories) to tag errors that don't have a distinctive exception signature.
+
 ## What to commit
 
 - Backend source code (`vaultbot_stuff/vaultbot_backend/*.py`)

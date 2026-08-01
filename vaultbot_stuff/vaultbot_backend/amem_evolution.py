@@ -110,21 +110,21 @@ class AMemeEvolution:
                     hits = self.vault_indexer.search_by_vector(
                         np.asarray(query_embedding, dtype=np.float32),
                         k=self.DEFAULT_K)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_error("indexer_search_failed", e)
                     hits = []
             else:
                 query = (title + " " + note_content[: self.CONTENT_PREVIEW_CHARS]).strip()
                 try:
                     hits = self.vault_indexer.search(query, k=self.DEFAULT_K)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_error("indexer_search_failed", e)
                     hits = []
 
             # Resolve new note's absolute path for exclusion.
             try:
                 new_note_abs = str(note_p.resolve())
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 new_note_abs = str(note_p)
 
             neighbors: list[dict] = []
@@ -135,7 +135,7 @@ class AMemeEvolution:
                 try:
                     if str(Path(fp).resolve()) == new_note_abs:
                         continue
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     if os.path.normpath(fp) == os.path.normpath(str(note_p)):
                         continue
                 neighbors.append(hit)
@@ -152,7 +152,7 @@ class AMemeEvolution:
                 # content field is a snippet for display/retrieval only.
                 try:
                     ncontent = Path(npath).read_text(encoding="utf-8")
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_error("read_neighbor_failed", e, {"path": npath})
                     continue
 
@@ -174,7 +174,7 @@ class AMemeEvolution:
                     "tags_updated": result["tags_updated"],
                 },
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("evolve_on_create_failed", e)
         return result
 
@@ -227,7 +227,7 @@ class AMemeEvolution:
                 try:
                     suggested_tags = self._embedding_suggest_tags(
                         new_note_title, new_note_content, content)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_error("embedding_suggest_tags_failed", e)
                     suggested_tags = []
                 # Tier 3 (last resort): LLM tag suggestion.
@@ -236,7 +236,7 @@ class AMemeEvolution:
                         suggested_tags = self._llm_suggest_tags(
                             new_note_title, new_note_content, content
                         )
-                    except Exception as e:  # noqa: BLE001
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         self._log_error("llm_suggest_tags_failed", e)
                         suggested_tags = []
 
@@ -280,7 +280,7 @@ class AMemeEvolution:
                     self._log_event(
                         "neighbor_write_failed", {"neighbor_path": neighbor_path}
                     )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("evolve_neighbor_failed", e, {"path": neighbor_path})
         return out
 
@@ -339,7 +339,7 @@ class AMemeEvolution:
                 if len(tags) >= 3:
                     break
             return tags
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return []
 
     # ------------------------------------------------------------------ #
@@ -351,7 +351,12 @@ class AMemeEvolution:
         new_content: str,
         neighbor_content: str,
     ) -> list[str]:
-        """Ask the LLM for 1-3 new tags for the neighbor. Returns [] on failure."""
+        """Ask the LLM for 1-3 new tags for the neighbor. Returns [] on failure.
+
+        Uses the SMALL model cartridge when available — tag suggestion is a
+        simple structured task (return a JSON array of 1-3 strings) that
+        doesn't need the big model's reasoning power. Saves cloud tokens.
+        """
         if self.ollama_client is None:
             return []
         neighbor_preview = neighbor_content[: self.MAX_NEIGHBOR_CHARS_FOR_LLM]
@@ -365,11 +370,14 @@ class AMemeEvolution:
             f"Neighbor note content (excerpt):\n{neighbor_preview}\n"
         )
         messages = [{"role": "user", "content": prompt}]
-        resp = self.ollama_client.chat(messages, temperature=0.3, stream=False)
+        # Use the small model for tag suggestion (simple structured task).
+        from llm_client import get_small_client_or_big
+        _tag_client = get_small_client_or_big()
+        resp = _tag_client.chat(messages, temperature=0.3, stream=False)
         text = ""
         try:
             text = resp["message"]["content"]
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             text = str(resp) if isinstance(resp, str) else ""
         if not text:
             return []
@@ -383,7 +391,7 @@ class AMemeEvolution:
             val = json.loads(text)
             if isinstance(val, list):
                 return [str(x).strip() for x in val if str(x).strip()]
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
         # Find the first JSON array in the text.
         m = re.search(r"\[[\s\S]*?\]", text)
@@ -392,7 +400,7 @@ class AMemeEvolution:
                 val = json.loads(m.group(0))
                 if isinstance(val, list):
                     return [str(x).strip() for x in val if str(x).strip()]
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         return []
 
@@ -433,7 +441,7 @@ class AMemeEvolution:
             m = re.search(r"^tags\s*:\s+(\S+)\s*$", fm, re.MULTILINE)
             if m:
                 return [m.group(1).strip().strip("\"'")]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("extract_tags_failed", e)
         return []
 
@@ -538,7 +546,6 @@ class AMemeEvolution:
         # Remove existing tags lines (inline or block) then insert new line.
         lines = fm_text.split("\n")
         out_lines: list[str] = []
-        skip_block = False
         i = 0
         while i < len(lines):
             line = lines[i]
@@ -652,10 +659,10 @@ class AMemeEvolution:
                     with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
                         f.write(content)
                     os.replace(tmp_path, str(p))
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     try:
                         os.unlink(tmp_path)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         pass
                     raise
                 return True
@@ -667,7 +674,7 @@ class AMemeEvolution:
                     continue
                 self._log_error("atomic_write_failed", e, {"path": path, "retries": max_retries})
                 return False
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_error("atomic_write_failed", e, {"path": path})
                 return False
         return False
@@ -677,12 +684,12 @@ class AMemeEvolution:
         try:
             if hasattr(self.vault_graph, "refresh"):
                 self.vault_graph.refresh()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("graph_refresh_failed", e)
         try:
             if hasattr(self.vault_indexer, "refresh"):
                 self.vault_indexer.refresh()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("indexer_refresh_failed", e)
 
     # ------------------------------------------------------------------ #
@@ -694,7 +701,7 @@ class AMemeEvolution:
                 self.session_logger.log(event, data)
             else:
                 log.info("amem:%s %s", event, data)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             log.info("amem:%s %s", event, data)
 
     def _log_error(self, event: str, err: Exception, extra: dict | None = None) -> None:
@@ -706,7 +713,7 @@ class AMemeEvolution:
                 self.session_logger.log(f"error:{event}", data)
             else:
                 log.warning("amem:%s %s %s", event, data, err, exc_info=True)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             log.warning("amem:%s %s", event, err, exc_info=True)
 
 

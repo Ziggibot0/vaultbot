@@ -73,34 +73,48 @@ class EmbeddingDrift:
         self.state_path = Path(state_path)
         self.embedding_dim = embedding_dim
         self.session_logger = session_logger
-        self.drift: dict[str, dict] = self._load()
+        # Load drift state — if the file is corrupt, log loudly and start
+        # fresh rather than crashing the backend. This is a notified
+        # fallback, not a silent one: the operator sees the log event.
+        try:
+            self.drift = self._load()
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+            if self.session_logger:
+                self.session_logger.log("drift_state_lost", {
+                    "error": str(e), "category": "drift_lost",
+                })
+            logger.warning("drift state lost, starting fresh: %s", e)
+            self.drift = {}
 
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
     def _load(self) -> dict[str, dict]:
-        try:
-            if self.state_path.exists():
-                return json.loads(self.state_path.read_text(encoding="utf-8"))
-        except Exception as e:
-            if self.session_logger:
-                try:
-                    self.session_logger.log("drift_load_failed", {"error": str(e)})
-                except Exception as e:
-                    logger.debug("swallowed: %s", e)
-        return {}
+        """Load drift state from disk.
+
+        Returns empty dict when the file doesn't exist (first run — no
+        drift is correct, not an error). Raises on corruption (JSON parse
+        failure, IO error) so the caller knows drift state was lost.
+        """
+        if not self.state_path.exists():
+            return {}
+        data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"drift state file is not a dict ({type(data).__name__}): "
+                f"{self.state_path}"
+            )
+        return data
 
     def _save(self) -> None:
-        try:
-            tmp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(self.drift, indent=2), encoding="utf-8")
-            os.replace(tmp, self.state_path)
-        except Exception as e:
-            if self.session_logger:
-                try:
-                    self.session_logger.log("drift_save_failed", {"error": str(e)})
-                except Exception as e:
-                    logger.debug("swallowed: %s", e)
+        """Persist drift state to disk. Raises on failure.
+
+        The caller (record_feedback) has a try/except that logs the error
+        — so a save failure is visible, not silent.
+        """
+        tmp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.drift, indent=2), encoding="utf-8")
+        os.replace(tmp, self.state_path)
 
     # ------------------------------------------------------------------
     # Public API
@@ -152,13 +166,12 @@ class EmbeddingDrift:
             entry["last_query_time"] = time.time()
             self.drift[key] = entry
             self._save()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+            # Log loudly — feedback was lost. The caller (chat_handler) also
+            # has a try/except that logs this. No nested "swallowed" logging.
             if self.session_logger:
-                try:
-                    self.session_logger.log("drift_record_failed",
-                                           {"error": str(e), "file": file_path})
-                except Exception as e:
-                    logger.debug("swallowed: %s", e)
+                self.session_logger.log("drift_record_failed",
+                                       {"error": str(e), "file": file_path})
 
     def apply_drift(self, file_path: str,
                     content_embedding: Any) -> np.ndarray:
@@ -167,8 +180,8 @@ class EmbeddingDrift:
         If no drift is recorded (or the note was reset), returns the content
         embedding unchanged.  Always returns a float32 ndarray.
         """
+        base = np.asarray(content_embedding, dtype=np.float32)
         try:
-            base = np.asarray(content_embedding, dtype=np.float32)
             key = str(Path(file_path).resolve())
             entry = self.drift.get(key)
             if not entry or entry.get("drift_vector") is None:
@@ -181,20 +194,20 @@ class EmbeddingDrift:
             if entry.get("feedback_count", 0) < MIN_FEEDBACK:
                 return base
             return base + d
-        except Exception:
-            return np.asarray(content_embedding, dtype=np.float32)
+        except (ValueError, KeyError, TypeError):
+            # Drift data is malformed — return the base embedding. This is
+            # a bonus layer, not a critical channel. Narrow catch so real
+            # bugs (AttributeError, etc.) propagate.
+            return base
 
     def reset(self, file_path: str) -> None:
         """Clear drift for a note.  Called when its content changes (condense,
         refine, edit) — the old drift was earned against content that no
         longer exists, so it must not mislead retrieval."""
-        try:
-            key = str(Path(file_path).resolve())
-            if key in self.drift:
-                del self.drift[key]
-                self._save()
-        except Exception as e:
-            logger.debug("swallowed: %s", e)
+        key = str(Path(file_path).resolve())
+        if key in self.drift:
+            del self.drift[key]
+            self._save()
 
     def status(self) -> dict[str, Any]:
         """Summary for /health or diagnostics."""

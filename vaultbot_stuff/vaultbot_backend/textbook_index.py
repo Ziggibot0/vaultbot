@@ -227,8 +227,9 @@ def _pdf_title(doc, pdf_path: str) -> str:
             if t and t not in ("Untitled", "PDF Document"):
                 doc.close()
                 return t
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug("pdf metadata title access failed: %s", e)
     doc.close()
     return _pdf_title_fallback(pdf_path)
 
@@ -274,7 +275,7 @@ def _build_pdf_index_regex(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
                 seen.add(e["heading"])
                 deduped.append(e)
         return title, deduped
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return _pdf_title_fallback(pdf_path), []
 
 
@@ -327,7 +328,7 @@ def _find_prior_index(skey: str) -> Path | None:
         try:
             if marker in toc.read_text(encoding="utf-8", errors="replace"):
                 return toc
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             continue
     return None
 

@@ -1,0 +1,89 @@
+# VaultBot CI — lint, type-check, and test on every PR + push to main.
+#
+# This is the single highest-leverage guard against "silent feature death":
+# the 2026-07-30 audit found three features that had been dead for weeks
+# because nothing ran automatically. CI catches the next one before it ships.
+#
+# The offline pytest suite is the hard gate. The live golden-gate (needs
+# Ollama + a built index) runs in a separate workflow (golden-gate.yml)
+# because it needs a service container.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: ruff + pyright + pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the declared floor (pyproject.toml target-version = py311).
+        # 3.12 is the runtime version in the dev venv.
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install runtime + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Ruff check — hard gate (F-rules: real bugs only)
+        # Gate on F-rules only (undefined names, unused imports, etc.) —
+        # these are real bugs, not style.  The remaining ~250 B/UP/SIM/RUF
+        # violations are pre-existing style debt that needs an incremental
+        # cleanup pass; they're reported as warnings in the next step.
+        working-directory: vaultbot_stuff
+        run: ruff check --select F --fix --exit-non-zero-on-fix vaultbot_backend/
+
+      - name: Ruff check — soft gate (B, UP, SIM, RUF: style + correctness)
+        # Report bug-class + style violations.  Non-blocking so the team
+        # sees the debt but CI doesn't fail on pre-existing issues.
+        # Once the debt is paid down, flip this to a hard gate.
+        working-directory: vaultbot_stuff
+        run: ruff check --select B,UP,SIM,RUF vaultbot_backend/
+        continue-on-error: true
+
+      - name: Ruff check — full rule set (non-blocking baseline)
+        # Report ALL violations including style.  Non-blocking.
+        working-directory: vaultbot_stuff
+        run: ruff check vaultbot_backend/
+        continue-on-error: true
+
+      - name: Ruff format check
+        working-directory: vaultbot_stuff
+        run: ruff format --check vaultbot_backend/
+        continue-on-error: true
+
+      - name: Pyright (warning level, missing-imports enforced)
+        # Start lenient: the codebase has never been type-checked. Gate on
+        # warnings + missing imports only; ratchet up later. This catches
+        # the "renamed a module but forgot a caller" class without drowning
+        # the team in style noise on day one.
+        working-directory: vaultbot_stuff
+        run: pyright --level warning --reportmissingimports=true vaultbot_backend/
+        continue-on-error: true
+
+      - name: Pytest (offline suite)
+        working-directory: vaultbot_stuff/vaultbot_backend
+        env:
+          VAULTBOT_SKIP_LOCK: "1"
+          VAULTBOT_SKIP_WATCHER: "1"
+        run: pytest -q --tb=short

@@ -1,0 +1,6 @@
+# Development dependencies — NOT required to run VaultBot, required to develop it.
+# Versions match .pre-commit-config.yaml so local + CI + pre-commit all agree.
+# Install: pip install -r requirements-dev.txt
+ruff==0.16.0
+pyright>=1.1.350
+pytest>=8.0

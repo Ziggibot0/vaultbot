@@ -3,6 +3,7 @@ type: procedure
 status: experimental
 created: 2026-07-31
 description: "Verify Python file syntax before restarting backend."
+when_to_use: "before restarting the backend after editing Python files"
 allowed_tools: []
 spec_version: 2
 success_count: 0

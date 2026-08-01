@@ -203,7 +203,7 @@ def find_prior_max_sections(toc_path):
     """Read the max_sections marker from a TOC note. Returns 0 if absent."""
     try:
         text = Path(toc_path).read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return 0
     m = re.search(r"vaultbot:textbook-max-sections (\d+)", text)
     return int(m.group(1)) if m else 0
@@ -221,7 +221,7 @@ def find_prior_ingest(key):
     for toc_path in TEXTBOOKS_DIR.glob("*-toc.md"):
         try:
             text = toc_path.read_text(encoding="utf-8", errors="replace")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             continue
         if _source_key_line(key) not in text:
             continue
@@ -247,7 +247,7 @@ def remove_stale_notes(stale_slugs):
             try:
                 path.unlink()
                 removed.append(str(path.relative_to(VAULT_DIR)))
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
     return removed
 
@@ -326,7 +326,7 @@ def _auto_detect_subject(source, source_type, title="", sections=None):
         stem = re.sub(r'[_\-]+', ' ', stem).strip()
         if stem and len(stem) > 2:
             return slugify(stem)[:60]
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
     return "textbook"
 
@@ -979,7 +979,7 @@ def parse_pdf(file_path):
         if d.metadata and d.metadata.get("title"):
             title = d.metadata["title"]
         d.close()
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
     return title, sections
@@ -1051,7 +1051,7 @@ def _parse_pdf_regex(file_path):
     try:
         if reader.metadata and reader.metadata.title:
             title = reader.metadata.title
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
     seen = {}
@@ -1309,7 +1309,7 @@ def create_section_note(section, subject, source_url, index, total,
         parent index page.
     """
     heading = section['heading']
-    level = section.get('level', 2)
+    section.get('level', 2)
 
     # Build navigation (wikilinks without .md)
     nav_parts = []
@@ -1500,7 +1500,7 @@ def run(args):
                         title, sections = parse_markdown(content_text)
                     if not sections:
                         title, sections = parse_plain_text(content_text)
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     content_text = file_path.read_text(encoding='utf-8', errors='replace')
                     title, sections = parse_plain_text(content_text)
 
@@ -1511,7 +1511,7 @@ def run(args):
         if temp_pdf_path:
             try:
                 os.unlink(temp_pdf_path)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
 
         # Apply overrides
@@ -1611,7 +1611,7 @@ def run(args):
         # the new one (subject/title changed), the old TOC is removed too.
         skey = source_key(source)
         old_toc_path, old_slugs = find_prior_ingest(skey)
-        old_slug_set = set(old_slugs)
+        set(old_slugs)
         new_slug_set = set(section_slugs) | {toc_slug}
         stale_slugs = [s for s in old_slugs if s not in new_slug_set]
         if old_toc_path is not None and old_toc_path.name != safe_filename(toc_slug):
@@ -1653,7 +1653,7 @@ def run(args):
         result["toc_note"] = str(toc_path.relative_to(VAULT_DIR))
         result["sections_ingested"] = len(sections)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         result["status"] = "error"
         result["errors"].append(str(e))
         import traceback

@@ -12,8 +12,8 @@ class NoteCreator:
     """
     Creates vault notes and immediately maintains the vault so it stays clean.
 
-    - Research notes go to Knowledge/Research/
-    - Chat notes are merged by topic in Memory/Chat/
+    - Research notes go to vaultbot_stuff/Knowledge/Research/
+    - Chat notes are merged by topic in vaultbot_stuff/Memory/Chat/
     - After every write, orphan and near-duplicate generated notes are cleaned.
 
     Resilience: embedding/vector-search failures (e.g. Ollama returning 500)
@@ -64,7 +64,7 @@ class NoteCreator:
         for entity in entities:
             try:
                 results = self.indexer.search(entity, k=k)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_tool("find_related_notes_search_failed",
                                {"entity": entity}, error=str(e))
                 continue
@@ -117,7 +117,7 @@ class NoteCreator:
             else:
                 cleanup = self.maintenance.run_cleanup(self.graph)
             self._log_tool("maintenance_cleanup", cleanup)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("maintenance_cleanup", error=str(e))
 
     def create_note_from_research(self, topic: str, research_content: str,
@@ -172,7 +172,7 @@ class NoteCreator:
                 "cleanup_ms": round((t_clean - t_write) * 1000, 1),
                 "index_ms": round((time.monotonic() - t_clean) * 1000, 1),
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             # Indexing failure (e.g. Ollama 500) must NOT prevent the note
             # from being returned. The file is already on disk.
             self._log_tool("index_note", {"file_path": str(note_path)},
@@ -204,7 +204,7 @@ class NoteCreator:
         try:
             self.indexer._add_file_to_index(note_path)
             self._log_tool("index_note", {"file_path": str(note_path)})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("index_note", {"file_path": str(note_path)},
                            error=str(e))
 

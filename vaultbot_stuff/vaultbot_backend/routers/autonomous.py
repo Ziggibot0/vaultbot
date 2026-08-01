@@ -35,7 +35,7 @@ async def autonomous_gaps(svc: Annotated[Services, Depends(get_services)]):
             None, svc.knowledge_curriculum.propose_next_gaps, 20)
         return {"gaps": gaps, "count": len(gaps),
                 "curriculum_state": svc.knowledge_curriculum.state_summary()}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="autonomous_gaps")
         return {"error": str(e)}, 500
 
@@ -63,7 +63,7 @@ async def consolidation_gaps(svc: Annotated[Services, Depends(get_services)]):
             None, svc.pattern_extractor.get_consolidation_gaps)
         return {"gaps": gaps, "count": len(gaps),
                 "report": svc.pattern_extractor.consolidation_report()}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="consolidation_gaps")
         return {"error": str(e)}, 500
 
@@ -91,7 +91,7 @@ async def consolidation_extract(svc: Annotated[Services, Depends(get_services)])
             "over_reporting": patterns["over_reporting"]["count"],
             "self_model_drift": patterns["self_model_drift"],
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="consolidation_extract")
         return {"error": str(e)}, 500
 

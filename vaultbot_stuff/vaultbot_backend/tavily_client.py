@@ -97,7 +97,7 @@ class TavilyClient:
                        outputs={"result_count": len(results)},
                        duration_ms=(time.time() - t0) * 1000)
             return {"results": results, "unresponsive_engines": []}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log("search", {"query": query}, error=str(e),
                       duration_ms=(time.time() - t0) * 1000)
             return {"results": [],
@@ -132,5 +132,5 @@ class TavilyClient:
             text = (main.get_text(separator="\n", strip=True) if main
                     else soup.get_text(separator="\n", strip=True))
             return text[:20000]
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             return ""

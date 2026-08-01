@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from error_types import Diagnosis, ProblemCategory, Severity, make_diagnosis
+from error_types import AgentSilentError, Diagnosis, ProblemCategory, Severity, make_diagnosis
 
 # ─────────────────────────────────────────────────────────────────────────
 # Context keys understood by predicates
@@ -138,6 +138,39 @@ def _is_setup_incomplete(exc: BaseException, ctx: dict[str, Any]) -> bool:
     return "setup incomplete" in _exc_text(exc) or "venv" in _exc_text(exc)
 
 
+def _is_context_category(exc: BaseException, ctx: dict[str, Any]) -> bool:
+    """Check if the caller explicitly tagged the category via context.
+
+    Several subsystem-failure categories (retrieval, compaction, drift,
+    history, research, verification, maintenance) don't have distinctive
+    exception signatures — they're ordinary RuntimeError/IOError/etc.
+    Callers tag them by passing ``context={"category": "retrieval_broken"}``
+    so the classification is unambiguous. This predicate matches any
+    recognized category tag and the factory reads it from context.
+    """
+    tag = (ctx.get("category") or "").strip().lower()
+    return tag in (
+        "retrieval_broken",
+        "compaction_broken",
+        "drift_lost",
+        "history_lost",
+        "research_degraded",
+        "verification_broken",
+        "maintenance_broken",
+        "agent_silent",
+    )
+
+
+def _is_agent_silent(exc: BaseException, ctx: dict[str, Any]) -> bool:
+    """The agent loop ended a turn with no user-facing text.
+
+    Matched on type (``AgentSilentError``) so the classification is
+    unambiguous without string matching. This is the fail-loud path for
+    the "stops in its tracks" contract violation.
+    """
+    return isinstance(exc, AgentSilentError)
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Factories — build the user-facing message + remedy per category
 # ─────────────────────────────────────────────────────────────────────────
@@ -247,6 +280,128 @@ def _f_setup_incomplete(exc, ctx) -> Diagnosis:
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Subsystem-failure factories (context-tagged categories)
+# ─────────────────────────────────────────────────────────────────────────
+# These are for failures that don't have a distinctive exception signature
+# (e.g. retrieval broke, compaction failed). Callers tag the category via
+# context={"category": "retrieval_broken"} so the classification is
+# unambiguous. The factory reads the tag to pick the right Diagnosis.
+
+_SUBSYSTEM_MESSAGES: dict[str, tuple[ProblemCategory, str, str, str]] = {
+    # tag: (category, user_message, remedy_hint, action)
+    "retrieval_broken": (
+        ProblemCategory.RETRIEVAL_BROKEN,
+        "I couldn't search your vault for this question. "
+        "I'll answer from what I know, but it may not be grounded "
+        "in your notes.",
+        "Try restarting VaultBot — if the search index is corrupted, "
+        "a restart rebuilds it.",
+        "restart",
+    ),
+    "compaction_broken": (
+        ProblemCategory.COMPACTION_BROKEN,
+        "I couldn't compact our conversation history. The chat still "
+        "works, but it may slow down if our conversation gets very long.",
+        "Try restarting VaultBot.",
+        "restart",
+    ),
+    "drift_lost": (
+        ProblemCategory.DRIFT_LOST,
+        "I lost track of which notes you found helpful in the past. "
+        "Search results will use base relevance until you give new "
+        "feedback.",
+        "",
+        "",
+    ),
+    "history_lost": (
+        ProblemCategory.HISTORY_LOST,
+        "I couldn't load our conversation history. I'm starting fresh — "
+        "our previous chat is lost, but you can continue talking now.",
+        "Check disk space and file permissions on the VaultBot folder.",
+        "",
+    ),
+    "research_degraded": (
+        ProblemCategory.RESEARCH_DEGRADED,
+        "I researched this using a simpler method than usual. "
+        "The results are less detailed but still grounded in real sources.",
+        "",
+        "",
+    ),
+    "verification_broken": (
+        ProblemCategory.VERIFICATION_BROKEN,
+        "I couldn't verify the claims in this research note. "
+        "The note is marked as unverified — treat its claims with "
+        "appropriate caution.",
+        "",
+        "",
+    ),
+    "maintenance_broken": (
+        ProblemCategory.MAINTENANCE_BROKEN,
+        "I couldn't maintain some vault organization (links or "
+        "chat trail). Your notes are safe, but some connections "
+        "between notes may be missing.",
+        "",
+        "",
+    ),
+    "agent_silent": (
+        ProblemCategory.AGENT_SILENT,
+        "I finished working but didn't produce a response to you. "
+        "This is a bug — I should never go silent. Your message and "
+        "any work I did are saved.",
+        "Send your message again. If it keeps happening, use Copy "
+        "for support and report that the agent went silent.",
+        "",
+    ),
+}
+
+
+def _f_subsystem(exc, ctx) -> Diagnosis:
+    """Build a Diagnosis for a context-tagged subsystem failure."""
+    tag = (ctx.get("category") or "").strip().lower()
+    entry = _SUBSYSTEM_MESSAGES.get(tag)
+    if entry is None:
+        # Shouldn't happen (predicate guards this), but fall through to
+        # generic rather than crashing.
+        return _f_generic(exc, ctx)
+    category, user_message, remedy_hint, action = entry
+    return make_diagnosis(
+        category,
+        user_message=user_message,
+        remedy_hint=remedy_hint,
+        action=action,
+        raw_for_log=repr(exc),
+    )
+
+
+def _f_agent_silent(exc, ctx) -> Diagnosis:
+    """The agent loop ended a turn without a valid final answer.
+
+    Two cases raise AgentSilentError:
+    1. The model produced no text at all after a nudge (empty terminal turn).
+    2. The model did tool work without creating a plan, then produced a
+       text-only round. Without a plan the framework can't determine
+       whether the work is done, so it refuses to accept the text as a
+       final answer.
+    Both are contract violations — the turn is not done until the user
+    has a real answer.
+    """
+    return make_diagnosis(
+        ProblemCategory.AGENT_SILENT,
+        user_message=(
+            "I stopped working before giving you a proper answer. "
+            "This is a bug — I should never leave you without a response. "
+            "Your message and any work I did are saved."
+        ),
+        remedy_hint=(
+            "Send your message again. If it keeps happening, use Copy "
+            "for support and report that the agent stopped early."
+        ),
+        action="",
+        raw_for_log=repr(exc),
+    )
+
+
 def _f_generic(exc, ctx) -> Diagnosis:
     stage = ctx.get("stage", "")
     stage_part = f" while {stage}" if stage else ""
@@ -279,6 +434,14 @@ _REGISTRY: list[tuple[Predicate, Factory]] = [
     (_is_port_in_use,      _f_port_in_use),
     (_is_synced_folder,     _f_synced_folder),
     (_is_setup_incomplete, _f_setup_incomplete),
+    # Context-tagged subsystem failures: callers pass
+    # context={"category": "retrieval_broken"} etc. Match early so the
+    # tag takes priority over generic exception-type matching.
+    (_is_context_category,  _f_subsystem),
+    # Agent-silent: the loop ended with no user-facing text. Match before
+    # the generic fallback so the user sees the agent_silent card, not a
+    # generic "something went wrong".
+    (_is_agent_silent,       _f_agent_silent),
     # Model problems before ollama-down: a 404 model-not-found is a
     # ConnectionError-shaped HTTPError sometimes, and the model message
     # is more actionable than "Ollama is down" (which would be wrong).
@@ -315,7 +478,7 @@ def classify_error(
         for predicate, factory in _REGISTRY:
             if predicate(exc, ctx):
                 return factory(exc, ctx)
-    except Exception:  # noqa: BLE001 - a buggy predicate must never crash classify_error
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         # A buggy predicate must never crash classify_error; fall through
         # to generic so the UI still renders. The broken predicate will
         # show up in tests (which assert specific categories).

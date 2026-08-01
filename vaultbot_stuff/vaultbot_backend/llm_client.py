@@ -69,22 +69,19 @@ def _test_image_base64() -> str:
     """Build a tiny red PNG, as base64.
 
     Used by vision_capable() to probe whether a model can actually see
-    images. Uses PIL if available (reliable), else a hand-built PNG.
+    images. Requires PIL — raises if PIL is unavailable (no hand-built PNG
+    fallback).
     """
     import base64
-    try:
-        from io import BytesIO
+    from io import BytesIO
 
-        from PIL import Image, ImageDraw
-        img = Image.new("RGB", (32, 32), (255, 0, 0))
-        d = ImageDraw.Draw(img)
-        d.text((4, 10), "RED", fill=(255, 255, 255))
-        buf = BytesIO()
-        img.save(buf, format="PNG")
-        return base64.b64encode(buf.getvalue()).decode("ascii")
-    except Exception:
-        # Fallback: a minimal valid 1x1 red PNG (known-good bytes).
-        return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKkMIQAAAABJRU5ErkJggg=="
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (32, 32), (255, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.text((4, 10), "RED", fill=(255, 255, 255))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +129,34 @@ class LLMClient:
         pages and they need to pick a vision model.
         """
         raise NotImplementedError
+
+    def preload_model(self, model: str | None = None, keep_alive: str | None = None) -> bool:
+        """Force-load the model into backend memory so the next request
+        doesn't pay cold-load latency.
+
+        For local Ollama, this sends a 1-token generate request that triggers
+        the model load.  For cloud backends, this is a no-op — cloud models
+        are always "loaded" (the provider handles loading).  Returns True
+        if the model is ready, False on failure.  Never raises.
+        """
+        # Default: no-op (cloud backends don't need preloading).
+        return True
+
+    def is_model_loaded(self, model: str | None = None) -> bool:
+        """Check whether the model is currently resident in memory.
+
+        For cloud backends, always True (the provider handles loading).
+        For Ollama, checks /api/ps.
+        """
+        return True
+
+    def get_ollama_stats(self) -> dict:
+        """Return runtime stats for the GUI (loaded models, VRAM, etc.).
+
+        For cloud backends, returns a minimal stub (no local GPU to report).
+        For Ollama, queries /api/ps + /api/version.
+        """
+        return {"running": True, "version": None, "models": []}
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +207,8 @@ class OpenAICompatibleClient(LLMClient):
                 duration_ms=kw.get("duration_ms"),
                 error=kw.get("error"),
             )
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            print(f"[WARN] session_logger.log_tool_call failed: {e}")
 
     # -- LLMClient surface -------------------------------------------------
     def set_model(self, model: str) -> None:
@@ -191,8 +216,8 @@ class OpenAICompatibleClient(LLMClient):
         if self.session_logger is not None:
             try:
                 self.session_logger.log("model_changed", {"model": model})
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                print(f"[WARN] session_logger.log('model_changed') failed: {e}")
 
     def list_models(self) -> list[str]:
         """List model IDs from /v1/models. Returns [] on any failure."""
@@ -202,7 +227,7 @@ class OpenAICompatibleClient(LLMClient):
             r.raise_for_status()
             data = r.json().get("data", [])
             return [m.get("id", "") for m in data if m.get("id")]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("list_models", error=str(e))
             return []
 
@@ -278,7 +303,7 @@ class OpenAICompatibleClient(LLMClient):
             r = requests.get(f"{self.base_url}/v1/models",
                              headers=self._headers(), timeout=5)
             return r.status_code == 200
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
     def health_check(self) -> bool:
@@ -322,7 +347,7 @@ class OpenAICompatibleClient(LLMClient):
             content = (msg.get("content", "") or "").lower()
             reasoning = (msg.get("reasoning", "") or "").lower()
             return "red" in content or "red" in reasoning
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
     # -- chat --------------------------------------------------------------
@@ -351,7 +376,7 @@ class OpenAICompatibleClient(LLMClient):
                 stream=stream, timeout=self.timeout,
             )
             response.raise_for_status()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("chat", inputs={"model": self.llm_model, "stream": stream},
                       error=str(e), duration_ms=(time.time() - t0) * 1000)
             raise
@@ -440,7 +465,7 @@ class OpenAICompatibleClient(LLMClient):
                         yield {"response": "", "thinking": "", "tool_calls": assembled}
                         chunk_count += 1
                     break
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("chat", inputs={"model": self.llm_model, "stream": True},
                       error=str(e), duration_ms=(time.time() - t0) * 1000)
             raise
@@ -475,10 +500,11 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
       3. Default -> Ollama (free, zero-config, the original behavior).
 
     **Never raises.** A fresh clone with incomplete .env (e.g.
-    ``LLM_BACKEND=openai`` but no ``LLM_API_KEY``) silently falls back to
-    Ollama so the backend ALWAYS starts. The user sees a clear message in
-    the chat UI / Diagnose panel instead of a silent crash swallowed by
-    ``pythonw.exe`` (which has no console to print the traceback to).
+    ``LLM_BACKEND=openai`` but no ``LLM_API_KEY``) raises a clear
+    ``RuntimeError`` instead of silently falling back to Ollama. The
+    caller (main.py at startup) catches this and surfaces a Diagnosis
+    card so the user knows exactly why the backend didn't start —
+    rather than silently talking to the wrong model.
     """
     backend = (os.getenv("LLM_BACKEND") or "").strip().lower()
 
@@ -487,29 +513,16 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
         api_key = (os.getenv("LLM_API_KEY") or "").strip()
         model = (os.getenv("LLM_MODEL") or "").strip()
         if not api_key or not model:
-            # Graceful degradation: fall back to Ollama instead of crashing.
-            # The backend must always start — a RuntimeError here is silent
-            # (pythonw swallows stderr) and the user just sees "backend won't
-            # start" with no clue why. Log the fallback so it's discoverable
-            # via Diagnose, then use Ollama (which is already required for
-            # embeddings anyway).
-            import logging
-            logging.getLogger(__name__).warning(
-                "LLM_BACKEND=openai but %s is missing — falling back to Ollama. "
-                "Set %s in .env to use a cloud model.",
-                "LLM_API_KEY" if not api_key else "LLM_MODEL",
-                "LLM_API_KEY=sk-..." if not api_key else "LLM_MODEL=<model-id>",
+            # FAIL LOUD: do not silently fall back to Ollama. The user
+            # configured a cloud backend; giving them the local model
+            # without telling them is a silent quality degradation they
+            # can't detect. Raise so the caller can surface a Diagnosis.
+            missing = "LLM_API_KEY" if not api_key else "LLM_MODEL"
+            raise RuntimeError(
+                f"LLM_BACKEND=openai but {missing} is not set. "
+                f"Set {missing} in your .env file, or change "
+                f"LLM_BACKEND=ollama to use the local model."
             )
-            if session_logger is not None:
-                try:
-                    session_logger.log("llm_backend_fallback", {
-                        "reason": "missing_api_key" if not api_key else "missing_model",
-                        "configured_backend": "openai",
-                        "fallback": "ollama",
-                    })
-                except Exception:
-                    pass
-            return _make_ollama_client(session_logger)
         return OpenAICompatibleClient(
             base_url=base_url, api_key=api_key, llm_model=model,
             session_logger=session_logger,
@@ -615,3 +628,17 @@ def get_small_client(session_logger: Any = None) -> LLMClient | None:
         embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         session_logger=session_logger,
     )
+
+
+def get_small_client_or_big(session_logger: Any = None) -> LLMClient:
+    """Return the small model if configured, else the big model.
+
+    This is the convenience wrapper for call sites that WANT the small model
+    but must still work when it isn't configured. The small model handles
+    simple structured tasks (tagging, classification, extraction, summaries)
+    that don't need the big model's reasoning power — saving cloud tokens.
+    """
+    small = get_small_client(session_logger)
+    if small is not None:
+        return small
+    return get_llm_client(session_logger)

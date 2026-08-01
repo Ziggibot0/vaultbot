@@ -75,7 +75,7 @@ class ChatLoopCheckpointer:
         try:
             if self.session_logger is not None:
                 self.session_logger.log(event, data)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     @staticmethod
@@ -98,11 +98,11 @@ class ChatLoopCheckpointer:
                             time.sleep(0.05 * (attempt + 1))
                 if last:
                     raise last
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 try:
                     if os.path.exists(tmp):
                         os.remove(tmp)
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
                 raise
 
@@ -115,7 +115,7 @@ class ChatLoopCheckpointer:
             state["_ts"] = time.time()
             self._atomic_write(
                 self.state_path, json.dumps(state, ensure_ascii=False, default=str))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("chat_checkpoint_save_failed", {"error": str(e)})
             logger.warning("ChatLoopCheckpointer: save failed (non-fatal): %s", e)
 
@@ -133,7 +133,7 @@ class ChatLoopCheckpointer:
                 self._log("chat_checkpoint_stale", {"age_s": time.time() - ts})
                 return None
             return state
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("chat_checkpoint_load_failed", {"error": str(e)})
             return None
 
@@ -142,7 +142,7 @@ class ChatLoopCheckpointer:
         try:
             if self.state_path.exists():
                 self.state_path.unlink()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("chat_checkpoint_clear_failed", {"error": str(e)})
 
 
@@ -151,5 +151,5 @@ def snapshot_working_memory(wm: Any) -> dict[str, Any]:
     try:
         snap = wm.snapshot()
         return snap if isinstance(snap, dict) else {}
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {}

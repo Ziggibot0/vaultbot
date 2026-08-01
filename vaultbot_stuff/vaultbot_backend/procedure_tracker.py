@@ -174,7 +174,7 @@ class ProcedureTracker:
                 md = Path(root) / fname
                 try:
                     text = md.read_text(encoding="utf-8", errors="replace")
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     continue
                 if not text.startswith("---"):
                     continue
@@ -242,7 +242,7 @@ class ProcedureTracker:
     def _read_log(self) -> dict:
         try:
             return json.loads(self.log_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"entries": [], "summary": {}}
 
     def _write_log(self, data: dict):
@@ -261,7 +261,7 @@ class ProcedureTracker:
             ts = entry.get("timestamp", "")
             try:
                 entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
             if entry_dt < window_start:
                 continue
@@ -364,7 +364,7 @@ class ProcedureTracker:
             ts = entry.get("timestamp", "")
             try:
                 entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
             if entry_dt < window_start:
                 continue
@@ -404,7 +404,7 @@ class ProcedureTracker:
             ts = entry.get("timestamp", "")
             try:
                 entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
             if entry_dt < window_start:
                 continue
@@ -501,12 +501,12 @@ class ProcedureTracker:
                                     .strip('"').strip("'"))
                         try:
                             last_reviewed = datetime.fromisoformat(date_str)
-                        except Exception:
+                        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             pass
                     elif line.strip().startswith("review_interval_days:"):
                         try:
                             interval = int(line.split(":", 1)[1].strip())
-                        except Exception:
+                        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             pass
                 if last_reviewed is None:
                     continue
@@ -520,7 +520,7 @@ class ProcedureTracker:
                         "age_days": age_days,
                         "interval": interval,
                     })
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
         return stale
 
@@ -606,7 +606,7 @@ class ProcedureTracker:
                         result["flagged"].append(proc_name)
                     else:
                         result["unchanged"].append(proc_name)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
 
         return result
@@ -636,7 +636,7 @@ class ProcedureTracker:
 
         Returns True if the note was found and updated, False otherwise.
         """
-        vault = Path(vault_path)
+        Path(vault_path)
         today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         # Find the procedural note file by stem. The shared iterator walks
@@ -658,7 +658,7 @@ class ProcedureTracker:
                 self.reset_failures(procedure)
 
                 return True
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
 
         return False
@@ -746,7 +746,7 @@ def parse_procedures_from_results(results: list[dict[str, Any]]) -> list[str]:
         if not text:
             try:
                 text = Path(fp).read_text(encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
         if not text.startswith("---"):
             continue

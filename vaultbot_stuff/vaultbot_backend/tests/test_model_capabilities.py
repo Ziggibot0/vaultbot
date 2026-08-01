@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 
 class TestGetModelCapabilities:
     """get_model_capabilities on OllamaClient with mocked /api/show."""
@@ -84,12 +86,11 @@ class TestGetModelCapabilities:
         assert caps["vision"] is True
         assert caps["instruct"] is True
 
-    def test_error_returns_safe_defaults(self):
-        """On any error (Ollama down, 404), return safe defaults."""
+    def test_error_raises(self):
+        """On any error (Ollama down, 404), raise — no silent defaults."""
         client = self._make_client(show_error=ConnectionError("refused"))
-        caps = client.get_model_capabilities("some-model:latest")
-        assert caps["vision"] is False
-        assert caps["instruct"] is True  # safe default — not False
+        with pytest.raises(Exception):
+            client.get_model_capabilities("some-model:latest")
 
     def test_empty_model_returns_defaults(self):
         """Empty string model → safe defaults without calling Ollama."""

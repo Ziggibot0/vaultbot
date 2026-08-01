@@ -76,7 +76,7 @@ async def create_task(svc: Services, payload: dict) -> Any:
             None, lambda: svc.ollama_client.chat(
                 [{"role": "user", "content": decompose_prompt}],
                 temperature=0.3, stream=False))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="task_decompose")
         return {"error": f"decomposition failed: {e}"}, 500
 
@@ -84,7 +84,7 @@ async def create_task(svc: Services, payload: dict) -> Any:
     # Parse the JSON plan (tolerate code fences / preamble).
     try:
         plan_data = json.loads(extract_json(raw))
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": "could not parse plan", "raw": raw[:500]}, 500
 
     subtask_dicts = plan_data.get("subtasks", [])
@@ -118,7 +118,7 @@ async def create_task(svc: Services, payload: dict) -> Any:
     # Execute the plan (graph ops are idempotent; verifier gates each step).
     try:
         plan = await loop.run_in_executor(None, svc.plan_executor.execute, plan)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="task_execute")
         return {"error": f"execution failed: {e}", "plan_id": plan_id}, 500
     svc.plan_executor.save_plan(plan, str(plan_path))
@@ -148,7 +148,7 @@ def write_partial(path: Path, user_message: str, answer: str, thinking: str) -> 
             f"## Thinking so far\n{thinking[:2000]}\n"
         )
         path.write_text(content, encoding="utf-8")
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
@@ -181,7 +181,7 @@ async def get_task(svc: Services, plan_id: str) -> Any:
         plan = svc.plan_executor.load_plan(str(plan_path))
         return {"plan": svc.plan_executor.plan_to_json(plan),
                 "judgment": svc.plan_executor.judge(plan)}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
 
 
@@ -193,7 +193,7 @@ async def resume_task(svc: Services, plan_id: str) -> Any:
     loop = asyncio.get_event_loop()
     try:
         plan = await loop.run_in_executor(None, svc.plan_executor.resume, str(plan_path))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
     svc.plan_executor.save_plan(plan, str(plan_path))
     return {"plan": svc.plan_executor.plan_to_json(plan),

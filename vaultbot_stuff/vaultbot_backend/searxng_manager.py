@@ -1,3 +1,4 @@
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -5,6 +6,8 @@ from typing import Any
 import docker
 import requests
 from bs4 import BeautifulSoup
+
+_logger = logging.getLogger(__name__)
 
 # Path to the SearxNG settings file that enables JSON output. Mounting this
 # into the container ensures the JSON API survives container recreation.
@@ -44,7 +47,7 @@ class SearxngManager:
         t0 = time.time()
         if self.is_running():
             self._log_tool("start", {"action": "already_running"}, duration_ms=(time.time() - t0) * 1000)
-            print("Searxng container is already running.")
+            _logger.info("Searxng container is already running.")
             return
 
         # Remove any stopped container with the same name
@@ -58,12 +61,12 @@ class SearxngManager:
         try:
             self.client.images.get(self.docker_image)
         except docker.errors.ImageNotFound:
-            print(f"Pulling Docker image: {self.docker_image}")
+            _logger.info(f"Pulling Docker image: {self.docker_image}")
             self.client.images.pull(self.docker_image)
 
         # Run the container, mounting our settings file so JSON output is
         # enabled and survives container recreation.
-        print(f"Starting searxng container on port {self.port}...")
+        _logger.info(f"Starting searxng container on port {self.port}...")
         volumes = {}
         if _SEARXNG_SETTINGS_PATH.exists():
             volumes[str(_SEARXNG_SETTINGS_PATH)] = {
@@ -78,14 +81,14 @@ class SearxngManager:
                 volumes=volumes,
                 detach=True,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("start", {"action": "run_container"}, error=str(e), duration_ms=(time.time() - t0) * 1000)
             raise
         # Wait for the service to be ready
         for _ in range(30):  # 30 seconds timeout
             if self.is_running():
                 self._log_tool("start", {"action": "ready"}, duration_ms=(time.time() - t0) * 1000)
-                print("Searxng is ready.")
+                _logger.info("Searxng is ready.")
                 return
             time.sleep(1)
         err = "Searxng container did not become ready in time."
@@ -108,10 +111,10 @@ class SearxngManager:
                         ["grep", "-c", "outgoing", "/etc/searxng/settings.yml"])
                     has_tuning = (res.exit_code == 0
                                   and res.output.decode("utf-8", "ignore").strip() not in ("", "0"))
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     has_tuning = False
                 if not has_tuning:
-                    print("Searxng container has stale settings — recreating with tuned mount.")
+                    _logger.info("Searxng container has stale settings — recreating with tuned mount.")
                     try:
                         self.client.containers.get(self.container_name).remove(force=True)
                     except docker.errors.NotFound:
@@ -136,7 +139,7 @@ class SearxngManager:
             )
             if resp.status_code == 200:
                 return  # JSON already works.
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
         # JSON failed — inject the settings and restart.
         try:
@@ -162,7 +165,6 @@ class SearxngManager:
                                 mode="w", suffix=".yml", delete=False,
                                 encoding="utf-8") as tf:
                             tf.write(new_settings)
-                            tmp_path = tf.name
                         # Use the low-level API for put_archive.
                         import io
                         import tarfile
@@ -178,14 +180,18 @@ class SearxngManager:
                         time.sleep(3)
                         self._log_tool("ensure_json_enabled",
                                         {"action": "injected_and_restarted"})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_tool("ensure_json_enabled",
                                 {"error": str(e)})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("ensure_json_enabled", {"error": str(e)})
 
     def search(self, query: str, timeout: int = 10) -> dict:
-        """Perform a search using searxng and return the results as a dictionary."""
+        """Perform a search using searxng and return the results as a dictionary.
+
+        Uses the JSON API exclusively. If the JSON API fails, raises — no
+        HTML-scraping fallback. The caller will see that search is broken.
+        """
         self.ensure_running()
         t0 = time.time()
         try:
@@ -198,41 +204,11 @@ class SearxngManager:
             )
             response.raise_for_status()
             data = response.json()
-            if data:
-                self._log_tool("search", {"query": query, "format": "json"}, outputs={"result_count": len(data.get("results", []))}, duration_ms=(time.time() - t0) * 1000)
-                return data
+            self._log_tool("search", {"query": query, "format": "json"}, outputs={"result_count": len(data.get("results", []))}, duration_ms=(time.time() - t0) * 1000)
+            return data
         except Exception as e:
             self._log_tool("search", {"query": query, "format": "json"}, error=str(e), duration_ms=(time.time() - t0) * 1000)
-            print(f"JSON search failed ({e}), falling back to HTML parsing.")
-
-        # Fallback: parse the HTML results page
-        try:
-            response = requests.get(
-                f"http://localhost:{self.port}/search",
-                params={"q": query, "categories": "science,general"},
-                timeout=timeout,
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
-            results = []
-            for article in soup.select("article.result")[:10]:
-                # Link can be in the URL header or the title h3
-                a = article.select_one("a.url_header") or article.select_one("h3 a")
-                title_el = article.select_one("h3")
-                content_el = article.select_one("p.content")
-                if a:
-                    results.append({
-                        "url": a.get("href"),
-                        "title": title_el.get_text(strip=True) if title_el else "",
-                        "content": content_el.get_text(strip=True) if content_el else "",
-                    })
-            self._log_tool("search", {"query": query, "format": "html"}, outputs={"result_count": len(results)}, duration_ms=(time.time() - t0) * 1000)
-            return {"results": results}
-        except Exception as e:
-            self._log_tool("search", {"query": query, "format": "html"}, error=str(e), duration_ms=(time.time() - t0) * 1000)
-            print(f"Error during searxng HTML search: {e}")
-            return {}
+            raise
 
     def scrape(self, url: str, timeout: int = 8) -> str:
         """Scrape a webpage directly and return clean markdown-ish text.
@@ -293,8 +269,8 @@ class SearxngManager:
                 if e.response.status_code == 403:
                     continue  # try the next UA
                 break  # non-403 error, don't retry
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 last_err = str(e)
                 break
         self._log_tool("scrape", {"url": url}, error=last_err, duration_ms=(time.time() - t0) * 1000)
-        return ""
+        raise RuntimeError(f"Failed to scrape {url}: {last_err}")

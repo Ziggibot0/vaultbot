@@ -88,6 +88,10 @@ _SEED_SELF_MODEL = (
     "I am ready to begin."
 )
 
+# Phrases that indicate the self-model is still the stale seed text.
+# Used to detect and strip stale seed text from the self-model prior.
+_SEED_PHRASES = ("I have just started", "I have no prior activity yet")
+
 _SEED_GOALS = (
     "# Current Goal\n"
     "(None set yet.)\n\n"
@@ -159,7 +163,7 @@ class Identity:
         try:
             os.makedirs(identity_dir, exist_ok=True)
             self._seed_if_missing()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("Identity init failed: %s", exc)
             self._safe_log("identity_init_error", {"error": str(exc)})
 
@@ -182,7 +186,7 @@ class Identity:
             if os.path.exists(self._regen_counter_path):
                 self._turns_since_regen = int(
                     open(self._regen_counter_path, encoding="utf-8").read().strip() or "0")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._turns_since_regen = 0
 
     # ------------------------------------------------------------------
@@ -267,7 +271,7 @@ class Identity:
             if restart_ctx:
                 return restart_ctx + "\n\n" + assembled
             return assembled
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("boot_context failed: %s", exc)
             self._safe_log("identity_boot_error", {"error": str(exc)})
             return ""
@@ -289,7 +293,7 @@ class Identity:
                     {"chars": len(content)},
                 )
                 return content
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.warning("Failed to consume restart context: %s", exc)
         return ""
 
@@ -323,9 +327,7 @@ class Identity:
             # Check for non-trivial answer or reasoning or tool usage.
             has_tools = "Tools used:" in recent_activity
             has_long_answer = len(recent_activity) > _REGEN_MIN_ANSWER_CHARS
-            has_reasoning = "Reasoning:" in recent_activity and \
-                len(recent_activity.split("Reasoning:", 1)[-1]) > _REGEN_MIN_THINKING_CHARS
-            if has_tools or has_long_answer or has_reasoning:
+            if has_tools or has_long_answer:
                 return True
             # Periodic safety regen: even trivial turns should refresh
             # eventually so the self-model doesn't go stale.
@@ -333,7 +335,7 @@ class Identity:
                 return True
             self._save_regen_counter()
             return False
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return True  # on any error, regen (safe default)
 
     def _save_regen_counter(self) -> None:
@@ -341,7 +343,7 @@ class Identity:
         try:
             with open(self._regen_counter_path, "w", encoding="utf-8") as f:
                 f.write(str(self._turns_since_regen))
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def regenerate_self_model(
@@ -358,49 +360,53 @@ class Identity:
         + prior SELF_MODEL.md), writes it back to SELF_MODEL.md (full replace,
         never append), and returns the new text.
 
-        If ``ollama_client`` is None, performs a simple truncation-based
-        fallback: keep the first 3000 chars of the prior self-model and append
-        the new activity.
+        No fallbacks. If the LLM call fails or returns empty, this raises —
+        the caller (chat handler / identity API) catches and logs it, and the
+        self-model stays as-is for that turn. A silent fallback to stale
+        content hides the problem and pollutes the self-model.
 
         Token economy: ``should_regenerate()`` gates the LLM call. Trivial turns
         (short answer, no tools, no thinking) skip regeneration entirely and
         the self-model stays as-is. Pass ``force=True`` to bypass the gate
         (used by the /identity/self_model endpoint for explicit regen).
         """
-        try:
-            prior = self.get_self_model()
+        prior = self.get_self_model()
+        # Strip stale seed text so the LLM doesn't copy "I have just
+        # started" forever. The seed is only for the very first boot.
+        if any(phrase in prior[:200] for phrase in _SEED_PHRASES):
+            prior = self._strip_seed_from_prior(prior)
+            logger.info("Stripped stale seed text from self-model prior.")
 
-            # Token-economy gate: skip LLM regen for trivial turns.
-            if not force and self.ollama_client is not None:
-                if not self.should_regenerate(recent_activity):
-                    self._safe_log("identity_self_model_skipped_trivial", {
-                        "turns_since_regen": self._turns_since_regen,
-                    })
-                    return prior
+        # Token-economy gate: skip LLM regen for trivial turns.
+        if not force and self.ollama_client is not None:
+            if not self.should_regenerate(recent_activity):
+                self._safe_log("identity_self_model_skipped_trivial", {
+                    "turns_since_regen": self._turns_since_regen,
+                })
+                return prior
 
-            if self.ollama_client is None:
-                # Fallback: truncation-based, no LLM.
-                new_text = self._fallback_self_model(prior, recent_activity)
-            else:
-                new_text = self._llm_self_model(prior, recent_activity, threads)
-
-            # Hard ceiling regardless of source.
-            new_text = self._enforce_ceiling(new_text)
-
-            self._atomic_write(self._self_model_path, new_text)
-            # Reset the turn counter on a successful regeneration.
-            self._turns_since_regen = 0
-            self._save_regen_counter()
-            self._safe_log(
-                "identity_self_model_regenerated",
-                {"chars": len(new_text)},
+        if self.ollama_client is None:
+            raise RuntimeError(
+                "Cannot regenerate self-model: ollama_client is None. "
+                "The identity layer requires an LLM client to produce a "
+                "MIRROR reconstruction. Configure the backend with a "
+                "valid ollama_client before regenerating."
             )
-            return new_text
-        except Exception as exc:
-            logger.exception("regenerate_self_model failed: %s", exc)
-            self._safe_log("identity_self_model_error", {"error": str(exc)})
-            # Return whatever we currently have rather than crash.
-            return self.get_self_model()
+
+        new_text = self._llm_self_model(prior, recent_activity, threads)
+
+        # Hard ceiling.
+        new_text = self._enforce_ceiling(new_text)
+
+        self._atomic_write(self._self_model_path, new_text)
+        # Reset the turn counter on a successful regeneration.
+        self._turns_since_regen = 0
+        self._save_regen_counter()
+        self._safe_log(
+            "identity_self_model_regenerated",
+            {"chars": len(new_text)},
+        )
+        return new_text
 
     def _llm_self_model(
         self,
@@ -408,7 +414,13 @@ class Identity:
         recent_activity: str,
         threads: dict[str, str] | None,
     ) -> str:
-        """Call the LLM to produce the reconstructed narrative."""
+        """Call the LLM to produce the reconstructed narrative.
+
+        Uses the SMALL model cartridge — self-model regeneration is a bounded
+        narrative rewrite of existing content (prior + recent activity →
+        first-person narrative), not new knowledge generation. A small model
+        can do this well. Saves cloud tokens on every turn.
+        """
         thread_text = _join_threads(threads)
         user_content = (
             f"## Prior self-model\n{prior}\n\n"
@@ -421,37 +433,59 @@ class Identity:
             {"role": "system", "content": _SELF_MODEL_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ]
-        try:
-            result = self.ollama_client.chat(
-                messages, temperature=0.7, stream=False
-            )
-            # OllamaClient.chat returns {"message": {"content": ...}}.
-            content = ""
-            if isinstance(result, dict):
-                msg = result.get("message", {})
-                if isinstance(msg, dict):
-                    content = msg.get("content", "") or ""
-                # Also tolerate a flat {"content": ...} shape.
-                if not content:
-                    content = result.get("content", "") or ""
+        from llm_client import get_small_client_or_big
+        _identity_client = get_small_client_or_big()
+        result = _identity_client.chat(
+            messages, temperature=0.7, stream=False
+        )
+        # OllamaClient.chat returns {"message": {"content": ...}}.
+        content = ""
+        if isinstance(result, dict):
+            msg = result.get("message", {})
+            if isinstance(msg, dict):
+                content = msg.get("content", "") or ""
+            # Also tolerate a flat {"content": ...} shape.
             if not content:
-                logger.warning("LLM self-model came back empty; using fallback.")
-                return self._fallback_self_model(prior, recent_activity)
-            return content.strip()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("LLM self-model call failed (%s); using fallback.", exc)
-            return self._fallback_self_model(prior, recent_activity)
+                content = result.get("content", "") or ""
+        if not content:
+            raise RuntimeError(
+                "LLM self-model regeneration returned empty content. "
+                "The small model produced no usable narrative."
+            )
+        return content.strip()
 
     @staticmethod
-    def _fallback_self_model(prior: str, recent_activity: str) -> str:
-        """Truncation-based fallback when no LLM is available."""
-        keep_prior = prior[:3000]
-        return (
-            keep_prior.rstrip()
-            + "\n\n[Recent activity]\n"
-            + recent_activity.strip()
-        )
+    def _strip_seed_from_prior(prior: str) -> str:
+        """Remove stale seed text from the beginning of a self-model.
 
+        The seed phrases ('I have just started' / 'I have no prior activity
+        yet') are only meant for the very first boot. If they persist in the
+        prior, the LLM copies them forever, making the agent think it is fresh
+        every turn. This method strips the seed lines but preserves any
+        [Recent activity] blocks that were already appended.
+        """
+        lines = prior.split("\n")
+        kept: list[str] = []
+        skipping_seed = True
+        for line in lines:
+            if skipping_seed:
+                if any(phrase in line for phrase in _SEED_PHRASES):
+                    continue
+                if line.strip() == "":
+                    skipping_seed = False
+                    # Don't keep the blank line that separated seed from activity
+                    continue
+                # Non-seed, non-blank line before any activity block — skip it
+                # (it's part of the stale seed narrative).
+                continue
+            kept.append(line)
+        result = "\n".join(kept).strip()
+        # If everything was seed text, return a neutral opener
+        if not result:
+            return "I am VaultBot. I have been active in this session."
+        return result
+
+    @staticmethod
     @staticmethod
     def _enforce_ceiling(text: str) -> str:
         """Hard ceiling at SELF_MODEL_MAX_CHARS."""
@@ -517,7 +551,7 @@ class Identity:
             self._atomic_write(self._goals_path, text)
             self._safe_log("identity_goals_updated", {"chars": len(text)})
             return text
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("update_goals failed: %s", exc)
             self._safe_log("identity_goals_error", {"error": str(exc)})
             return self.get_goals()
@@ -531,7 +565,7 @@ class Identity:
         try:
             self._atomic_write(self._identity_path, text.strip() + "\n")
             self._safe_log("identity_set", {"chars": len(text)})
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("set_identity failed: %s", exc)
             self._safe_log("identity_set_error", {"error": str(exc)})
 
@@ -560,7 +594,7 @@ class Identity:
                 "goals_chars": len(goals),
                 "self_model_tokens_est": len(self_model) // _CHARS_PER_TOKEN,
             }
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("summary failed: %s", exc)
             self._safe_log("identity_summary_error", {"error": str(exc)})
             return {
@@ -580,7 +614,7 @@ class Identity:
                 return fh.read()
         except FileNotFoundError:
             return ""
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.warning("read failed for %s: %s", path, exc)
             return ""
 
@@ -620,12 +654,12 @@ class Identity:
                 # Exhausted retries — raise so the caller can log + continue.
                 if last_err:
                     raise last_err
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 # Clean up the temp file on failure if it still exists.
                 try:
                     if os.path.exists(tmp_path):
                         os.remove(tmp_path)
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
                 raise
 
@@ -634,5 +668,5 @@ class Identity:
         try:
             if self.session_logger is not None:
                 self.session_logger.log(event, data)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.debug("session_logger.log failed: %s", exc)

@@ -95,7 +95,7 @@ def is_locked(path: Path) -> bool:
             return False
         text = path.read_text(encoding="utf-8", errors="replace")
         return bool(_LOCKED_RE.search(text))
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
 
 
@@ -108,7 +108,7 @@ def is_writable(path: Path) -> bool:
     """
     try:
         p = Path(path)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
     # Rule 1: date-only stems are sacred (applies to create AND edit).
     if is_date_only_stem(p.stem):

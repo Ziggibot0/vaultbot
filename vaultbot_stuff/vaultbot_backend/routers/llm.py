@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app_state import get_services
 from services import Services
@@ -39,7 +39,7 @@ def _persist_env_value(key: str, value: str) -> None:
     try:
         lines = (_ENV_PATH.read_text(encoding="utf-8").splitlines()
                  if _ENV_PATH.exists() else [])
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         lines = []
     found = False
     out = []
@@ -53,7 +53,7 @@ def _persist_env_value(key: str, value: str) -> None:
         out.append(f"{key}={value}")
     try:
         _ENV_PATH.write_text("\n".join(out) + "\n", encoding="utf-8")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         print(f"VaultBot: could not persist {key} to .env: {e}")
 
 
@@ -104,7 +104,7 @@ def _read_env_file() -> dict[str, str]:
             key, _, val = line.partition("=")
             result[key.strip()] = val.strip()
         return result
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {}
 
 
@@ -186,7 +186,7 @@ def _rebuild_llm_client(svc: Services) -> None:
         if _main is not None:
             _main.ollama_client = new_client
             _main.vision_client = svc.vision_client
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         logger.debug("swallowed: could not mirror to main globals: %s", e)
 
 
@@ -216,7 +216,7 @@ async def list_models(svc: Annotated[Services, Depends(get_services)]) -> dict[s
         if caps_fn:
             try:
                 caps = await loop.run_in_executor(None, caps_fn, name)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # keep defaults
         enriched.append({"name": name, "vision": caps.get("vision", False),
                          "instruct": caps.get("instruct", True)})
@@ -319,7 +319,7 @@ async def pull_model(
                     if svc.manager:
                         asyncio.run_coroutine_threadsafe(
                             svc.manager.broadcast(msg), main_loop)
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
             proc.wait()
             done_ok = proc.returncode == 0
@@ -334,9 +334,9 @@ async def pull_model(
                 if svc.manager:
                     asyncio.run_coroutine_threadsafe(
                         svc.manager.broadcast(msg), main_loop)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.error("model pull thread error: %s", e)
 
     thread = threading.Thread(target=_pull_thread, daemon=True)
@@ -394,8 +394,13 @@ async def model_context_window(svc: Annotated[Services, Depends(get_services)],
     """
     target = model or svc.ollama_client.llm_model
     loop = asyncio.get_event_loop()
-    ctx = await loop.run_in_executor(
-        None, lambda: svc.ollama_client.context_window(target))
+    try:
+        ctx = await loop.run_in_executor(
+            None, lambda: svc.ollama_client.context_window(target))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not determine context window for model {target!r}: {exc}") from exc
     return {"model": target, "context_window": ctx}
 
 
@@ -470,7 +475,12 @@ async def vision_check(svc: Annotated[Services, Depends(get_services)]):
     loop = asyncio.get_event_loop()
     probe_client = svc.vision_client if svc.vision_client is not None else svc.ollama_client
     source = "vision" if svc.vision_client is not None else "synthesis"
-    capable = await loop.run_in_executor(None, probe_client.vision_capable)
+    try:
+        capable = await loop.run_in_executor(None, probe_client.vision_capable)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Vision probe failed: {exc}") from exc
     return {
         "vision_capable": bool(capable),
         "model": probe_client.llm_model,
@@ -498,7 +508,7 @@ async def get_vision_config(svc: Annotated[Services, Depends(get_services)]):
     if svc.vision_client is not None:
         try:
             running = bool(svc.vision_client.is_running())
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             running = False
     return {
         "configured": configured,

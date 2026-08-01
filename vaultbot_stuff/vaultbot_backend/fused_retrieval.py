@@ -25,8 +25,8 @@ mirrors the low-level path and leaves the community path as a drop-in extension.
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from typing import Any
 
 import numpy as np
@@ -134,10 +134,33 @@ class FusedRetriever:
                 return self._empty()
 
             # ---- channel (b): graph (wikilink neighbors) ----
-            graph_candidates = self._graph_channel(vector_hits, norm_scores, depth)
+            # Each enhancement channel is isolated: a failure in one channel
+            # is logged loudly but doesn't kill the others. This is "checking
+            # multiple sources is fine" — each channel is a separate source.
+            # The difference from the old code: failures are LOGGED at a
+            # visible level, not silently swallowed.
+            graph_candidates: dict[str, dict[str, Any]] = {}
+            try:
+                graph_candidates = self._graph_channel(vector_hits, norm_scores, depth)
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                self._log("graph.channel_failed",
+                          f"{type(e).__name__}: {e} — graph channel skipped")
+                if self.session_logger is not None:
+                    self.session_logger.log("retrieval_channel_failed", {
+                        "channel": "graph", "error": str(e),
+                    })
 
             # ---- channel (c): backlinks ----
-            backlink_candidates = self._backlink_channel(vector_hits, norm_scores)
+            backlink_candidates: dict[str, dict[str, Any]] = {}
+            try:
+                backlink_candidates = self._backlink_channel(vector_hits, norm_scores)
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                self._log("backlink.channel_failed",
+                          f"{type(e).__name__}: {e} — backlink channel skipped")
+                if self.session_logger is not None:
+                    self.session_logger.log("retrieval_channel_failed", {
+                        "channel": "backlink", "error": str(e),
+                    })
 
             # ---- (d) merge + dedup ----
             merged = self._merge(
@@ -148,21 +171,41 @@ class FusedRetriever:
             )
 
             # ---- (e) rerank ----
-            self._rerank(merged)
+            # Rerank is a post-processing boost; if it fails (e.g. graph
+            # access for hub detection), return unreranked results rather
+            # than losing everything. Log loudly so it's visible.
+            try:
+                self._rerank(merged)
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                self._log("rerank.failed",
+                          f"{type(e).__name__}: {e} — skipping rerank boosts")
+                if self.session_logger is not None:
+                    self.session_logger.log("retrieval_channel_failed", {
+                        "channel": "rerank", "error": str(e),
+                    })
 
             # ---- (f) filter by minimum score + truncate to top-k ----
             ranked = sorted(
                 merged.values(), key=lambda c: c["score"], reverse=True
             )
             # Drop results below the relevance threshold — they waste
-            # context budget with semantically distant noise.
-            filtered = [c for c in ranked if c["score"] >= self.MIN_SCORE_THRESHOLD]
-            # If filtering removed everything, keep the top result rather
-            # than returning empty (better one marginal hit than nothing).
-            if not filtered and ranked:
-                filtered = [ranked[0]]
-                self._log("retrieve.threshold_fallback",
-                          f"All {len(ranked)} results below threshold {self.MIN_SCORE_THRESHOLD} — keeping top result")
+            # context budget with semantically distant noise.  But only
+            # apply the threshold when we have ENOUGH candidates to be
+            # selective.  When the merged pool is ≤ k, the user explicitly
+            # asked for that many results and every candidate was already
+            # fetched by the vector search — filtering here would return
+            # fewer results than requested without any noise to filter.
+            # The threshold is for large pools (over-fetch), not small ones.
+            if len(ranked) > k:
+                filtered = [c for c in ranked if c["score"] >= self.MIN_SCORE_THRESHOLD]
+                # If filtering removed everything, keep the top result rather
+                # than returning empty (better one marginal hit than nothing).
+                if not filtered and ranked:
+                    filtered = [ranked[0]]
+                    self._log("retrieve.threshold_fallback",
+                              f"All {len(ranked)} results below threshold {self.MIN_SCORE_THRESHOLD} — keeping top result")
+            else:
+                filtered = ranked
             top_k = filtered[:k]
 
             results = [self._finalize(c, query) for c in top_k]
@@ -176,9 +219,17 @@ class FusedRetriever:
                 },
                 "count": len(results),
             }
-        except Exception as e:  # never crash the chat loop
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            # LOG LOUD: retrieval failure must be visible, not silent.
+            # The caller (handle_chat) also has an except block that
+            # notifies the user via notify_problem with retrieval_broken.
             self._log("retrieve.error", f"{type(e).__name__}: {e}")
-            return self._empty()
+            if self.session_logger is not None:
+                self.session_logger.log("retrieval_failed", {
+                    "error": f"{type(e).__name__}: {e}",
+                    "category": "retrieval_broken",
+                })
+            raise
 
     # ------------------------------------------------------------------
     # Channels
@@ -204,15 +255,11 @@ class FusedRetriever:
         similar to" (content).  The drift signal is LLM-free — derived from
         the agent's own behavior in handle_chat.
         """
-        try:
-            # Over-fetch so drift has room to promote a lower-ranked note.
-            fetch_k = k
-            if self.embedding_drift is not None:
-                fetch_k = k * self.DRIFT_OVERFETCH
-            raw = self.vault_indexer.search(query, k=fetch_k)
-        except Exception as e:
-            self._log("vector.error", f"{type(e).__name__}: {e}")
-            return [], {}
+        # Over-fetch so drift has room to promote a lower-ranked note.
+        fetch_k = k
+        if self.embedding_drift is not None:
+            fetch_k = k * self.DRIFT_OVERFETCH
+        raw = self.vault_indexer.search(query, k=fetch_k)
 
         if not raw:
             return [], {}
@@ -220,17 +267,12 @@ class FusedRetriever:
         # --- Drift re-ranking (LLM-free) ---
         # Reconstruct each candidate's content embedding from FAISS, apply
         # its drift vector, recompute L2 distance to the query embedding.
-        # If anything fails (no drift layer, empty index, reconstruct
-        # unavailable), we fall back to the raw distances — drift is a
-        # bonus, never a hard dependency.
+        # If drift is configured, it IS the ranking mechanism — raise on
+        # failure instead of falling back to raw distances.
         if self.embedding_drift is not None:
-            try:
-                drifted = self._drift_rerank(raw, query)
-                if drifted is not None:
-                    raw = drifted
-            except Exception as e:
-                self._log("vector.drift_rerank_failed",
-                          f"{type(e).__name__}: {e} — using raw distances")
+            drifted = self._drift_rerank(raw, query)
+            if drifted is not None:
+                raw = drifted
 
         dists = [h.get("score", 0.0) or 0.0 for h in raw]
         max_d = max(dists) if dists else 0.0
@@ -307,41 +349,39 @@ class FusedRetriever:
         norm_scores: dict[str, float],
         depth: int,
     ) -> dict[str, dict[str, Any]]:
-        """1-hop wikilink neighbors of vector hits. Score = GRAPH_BOOST × vector score."""
+        """1-hop wikilink neighbors of vector hits. Score = GRAPH_BOOST × vector score.
+
+        Raises on failure — the caller (retrieve) catches and logs loudly."""
         candidates: dict[str, dict[str, Any]] = {}
-        try:
-            graph = self.vault_graph
-            for hit in vector_hits:
-                fp = hit.get("file_path")
-                base = norm_scores.get(fp, 0.0)
-                if not base:
+        for hit in vector_hits:
+            fp = hit.get("file_path")
+            base = norm_scores.get(fp, 0.0)
+            if not base:
+                continue
+            name = self._name_from_hit(hit, fp)
+            neighbors = self._neighbors(name, direction="both")
+            # limited walk of `depth` hops
+            frontier = [(n, 0) for n in neighbors]
+            while frontier:
+                node, d = frontier.pop(0)
+                if d >= depth:
                     continue
-                name = self._name_from_hit(hit, fp)
-                neighbors = self._safe_neighbors(name, direction="both")
-                # limited walk of `depth` hops
-                frontier = [(n, 0) for n in neighbors]
-                while frontier:
-                    node, d = frontier.pop(0)
-                    if d >= depth:
-                        continue
-                    nfp = self._file_path_for_node(node)
-                    if not nfp or nfp == fp:
-                        continue
-                    score = self.GRAPH_BOOST * base * (0.85 ** d)
-                    existing = candidates.get(nfp)
-                    if existing is None or score > existing["score"]:
-                        candidates[nfp] = {
-                            "file_path": nfp,
-                            "name": node,
-                            "score": score,
-                            "channels": {"graph"},
-                        }
-                    if d + 1 < depth:
-                        frontier.extend(
-                            (n, d + 1) for n in self._safe_neighbors(node, "both")
-                        )
-        except Exception as e:
-            self._log("graph.error", f"{type(e).__name__}: {e}")
+                nfp = self._file_path_for_node(node)
+                if not nfp or nfp == fp:
+                    continue
+                score = self.GRAPH_BOOST * base * (0.85 ** d)
+                existing = candidates.get(nfp)
+                if existing is None or score > existing["score"]:
+                    candidates[nfp] = {
+                        "file_path": nfp,
+                        "name": node,
+                        "score": score,
+                        "channels": {"graph"},
+                    }
+                if d + 1 < depth:
+                    frontier.extend(
+                        (n, d + 1) for n in self._neighbors(node, "both")
+                    )
         return candidates
 
     def _backlink_channel(
@@ -349,34 +389,33 @@ class FusedRetriever:
         vector_hits: list[dict[str, Any]],
         norm_scores: dict[str, float],
     ) -> dict[str, dict[str, Any]]:
-        """Backlinks of vector hits. Score = BACKLINK_BOOST × vector score."""
+        """Backlinks of vector hits. Score = BACKLINK_BOOST × vector score.
+
+        Raises on failure — the caller (retrieve) catches and logs loudly."""
         candidates: dict[str, dict[str, Any]] = {}
-        try:
-            graph = self.vault_graph
-            backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
-            for hit in vector_hits:
-                fp = hit.get("file_path")
-                base = norm_scores.get(fp, 0.0)
-                if not base:
+        graph = self.vault_graph
+        backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
+        for hit in vector_hits:
+            fp = hit.get("file_path")
+            base = norm_scores.get(fp, 0.0)
+            if not base:
+                continue
+            name = self._name_from_hit(hit, fp)
+            # who links TO this note?
+            linked_from = backlinks.get(name, set())
+            for src in linked_from:
+                src_fp = self._file_path_for_node(src)
+                if not src_fp or src_fp == fp:
                     continue
-                name = self._name_from_hit(hit, fp)
-                # who links TO this note?
-                linked_from = backlinks.get(name, set())
-                for src in linked_from:
-                    src_fp = self._file_path_for_node(src)
-                    if not src_fp or src_fp == fp:
-                        continue
-                    score = self.BACKLINK_BOOST * base
-                    existing = candidates.get(src_fp)
-                    if existing is None or score > existing["score"]:
-                        candidates[src_fp] = {
-                            "file_path": src_fp,
-                            "name": src,
-                            "score": score,
-                            "channels": {"backlink"},
-                        }
-        except Exception as e:
-            self._log("backlink.error", f"{type(e).__name__}: {e}")
+                score = self.BACKLINK_BOOST * base
+                existing = candidates.get(src_fp)
+                if existing is None or score > existing["score"]:
+                    candidates[src_fp] = {
+                        "file_path": src_fp,
+                        "name": src,
+                        "score": score,
+                        "channels": {"backlink"},
+                    }
         return candidates
 
     # ------------------------------------------------------------------
@@ -430,12 +469,8 @@ class FusedRetriever:
           - high-degree hubs (many backlinks) → ×HUB_RERANK
         Mutates `merged` in place.
         """
-        try:
-            graph = self.vault_graph
-            backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
-        except Exception as e:
-            self._log("rerank.graph_unavailable", f"{type(e).__name__}: {e}")
-            backlinks = {}
+        graph = self.vault_graph
+        backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
 
         for fp, cand in merged.items():
             boost = 1.0
@@ -486,39 +521,42 @@ class FusedRetriever:
             return ""
         return name.strip().lower().replace("\\", "/")
 
-    def _safe_neighbors(self, name: str, direction: str = "both") -> list[str]:
-        """Call vault_graph.neighbors but never raise."""
-        try:
-            norm = self._normalize_name(name)
-            if not norm:
-                return []
-            return list(self.vault_graph.neighbors(norm, direction=direction) or [])
-        except Exception as e:
-            self._log("neighbors.error", f"{type(e).__name__}: {e}")
+    def _neighbors(self, name: str, direction: str = "both") -> list[str]:
+        """Call vault_graph.neighbors. Raises on failure — no silent empty return."""
+        norm = self._normalize_name(name)
+        if not norm:
             return []
+        return list(self.vault_graph.neighbors(norm, direction=direction) or [])
 
     def _file_path_for_node(self, name: str) -> str:
-        """Resolve a normalized graph node name to its file_path."""
-        try:
-            node = (self.vault_graph.nodes or {}).get(self._normalize_name(name))
-            if node and node.get("file_path"):
-                return node["file_path"]
-        except Exception as e:
-            self._log("resolve.error", f"{type(e).__name__}: {e}")
+        """Resolve a normalized graph node name to its file_path. Raises on failure."""
+        node = (self.vault_graph.nodes or {}).get(self._normalize_name(name))
+        if node and node.get("file_path"):
+            return node["file_path"]
         return ""
 
     def _content_for_node(self, name: str) -> str:
-        """Fetch the stored content for a graph node."""
+        """Fetch the stored content for a graph node.
+
+        Returns empty string if the node doesn't exist or the graph is
+        broken — this is content retrieval for snippets, not a channel.
+        """
         try:
             node = (self.vault_graph.nodes or {}).get(self._normalize_name(name))
             if node:
                 return node.get("content", "") or ""
-        except Exception as e:
-            self._log("content.error", f"{type(e).__name__}: {e}")
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            pass
         return ""
 
     def _name_from_hit(self, hit: dict[str, Any], fp: str) -> str:
-        """Get the normalized name from a vector hit, falling back to the graph."""
+        """Get the normalized name from a vector hit, or from the graph.
+
+        If the hit has no ``name`` field, try to find it in the graph by
+        file_path. If the graph is broken (nodes property raises), fall
+        back to the normalized file path — this is name resolution, not
+        a channel, so degrading to the filename is correct.
+        """
         name = hit.get("name")
         if name:
             return self._normalize_name(name)
@@ -526,8 +564,8 @@ class FusedRetriever:
             for n, node in (self.vault_graph.nodes or {}).items():
                 if node.get("file_path") == fp:
                     return n
-        except Exception as e:
-            _frlog.debug("graph name lookup failed: %s", e)
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            pass  # graph broken — fall back to filename
         return self._normalize_name(fp)
 
     @staticmethod
@@ -558,7 +596,7 @@ class FusedRetriever:
             prefix = "…" if start > 0 else ""
             suffix = "…" if end < len(content) else ""
             return prefix + snippet + suffix
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return content[:length]
 
     # ------------------------------------------------------------------
@@ -568,7 +606,7 @@ class FusedRetriever:
         try:
             if self.session_logger is not None:
                 self.session_logger.log("fused_retrieval", {"event": event, "detail": detail})
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             _frlog.debug("fused_retrieval log failed")
 
     @staticmethod
@@ -587,7 +625,7 @@ if __name__ == "__main__":
     try:
         from dotenv import load_dotenv
         load_dotenv()
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
     vault_path = os.getenv("VAULT_PATH", ".")
     try:
@@ -601,5 +639,5 @@ if __name__ == "__main__":
         print("count:", out["count"], "channels:", out["channels"])
         for r in out["results"][:5]:
             print(f"  {r['score']:.3f} [{','.join(r['channels'])}] {r['name']}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         print(f"smoke test skipped: {type(e).__name__}: {e}")

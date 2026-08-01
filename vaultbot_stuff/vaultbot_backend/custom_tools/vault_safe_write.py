@@ -117,7 +117,7 @@ def run(args: dict) -> dict:
     result["checks"]["file_exists"] = file_exists
 
     if file_exists:
-        with open(full_path, 'r', encoding='utf-8') as f:
+        with open(full_path, encoding='utf-8') as f:
             existing = f.read()
 
         # 6. Block LOCKED notes
@@ -178,7 +178,7 @@ def run(args: dict) -> dict:
             f.write(content)
         # Atomic rename (on same filesystem)
         os.replace(temp_path, str(full_path))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         # Clean up temp file on failure
         if os.path.exists(temp_path):
             os.unlink(temp_path)

@@ -19,7 +19,6 @@ def run(args: dict) -> dict:
     import os
     import re
     import sys
-    import json
     import subprocess
     import tempfile
     import requests
@@ -46,7 +45,7 @@ def run(args: dict) -> dict:
             match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", r.stdout.strip())
             if match:
                 upstream_owner, upstream_repo = match.group(1), match.group(2)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
     pr_number = args.get("pr_number")
@@ -61,7 +60,7 @@ def run(args: dict) -> dict:
         if resp.status_code != 200:
             return {"error": f"PR #{pr_number} not found: {resp.status_code}"}
         pr_data = resp.json()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": f"Failed to fetch PR: {e}"}
 
     pr_title = pr_data["title"]
@@ -78,7 +77,7 @@ def run(args: dict) -> dict:
         if resp.status_code != 200:
             return {"error": f"Could not fetch PR files: {resp.status_code}"}
         pr_files = resp.json()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": f"Failed to fetch PR files: {e}"}
 
     # 5. Run tests
@@ -133,7 +132,7 @@ def run(args: dict) -> dict:
                         "error": r.stderr.strip()[:300]
                     })
                     all_pass = False
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 syntax_results.append({"file": f["filename"], "status": "error", "error": str(e)})
                 all_pass = False
 
@@ -182,7 +181,7 @@ def run(args: dict) -> dict:
                 else:
                     js_results.append({"file": f["filename"], "status": "fail", "error": r.stderr.strip()[:300]})
                     all_pass = False
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 js_results.append({"file": f["filename"], "status": "error", "error": str(e)})
                 all_pass = False
 
@@ -262,7 +261,7 @@ def run(args: dict) -> dict:
                 continue
             # Skip lines that are regex pattern definitions (defining detection patterns, not using them)
             # These look like: (r"pattern", "description"),
-            if code.strip().startswith('(') and 'r"' in code or code.strip().startswith('(') and 'r"' in code:
+            if (code.strip().startswith('(') and 'r"' in code) or (code.strip().startswith('(') and 'r"' in code):
                 continue
             # Skip lines that are string assignments containing pattern descriptions
             if code.strip().startswith('"') or code.strip().startswith("'"):

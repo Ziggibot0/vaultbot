@@ -57,14 +57,14 @@ async def handle_research(
         try:
             asyncio.run_coroutine_threadsafe(
                 send_progress(svc, websocket, stage, detail), loop)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             session_logger.log("research_progress_cb_failed", {"error": str(e)})
 
     svc.research_engine.progress_callback = _progress_cb
     try:
         report = await run_with_heartbeat(
             svc, websocket, "research", svc.research_engine.research, user_message)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.research_engine.progress_callback = prev_cb
         session_logger.log_exception(e, context="research_engine.research")
         await notify_problem(svc, websocket, e,
@@ -85,7 +85,7 @@ async def handle_research(
     })
 
     if not report.get("source_count"):
-        from error_types import make_diagnosis, ProblemCategory, Severity  # noqa: PLC0415
+        from error_types import make_diagnosis, ProblemCategory, Severity
         _diag = make_diagnosis(
             ProblemCategory.GENERIC,
             user_message=(
@@ -122,23 +122,20 @@ async def handle_research(
             Path(note_path).write_text(md, encoding="utf-8")
         except Exception as e:
             session_logger.log("research_note_md_failed", {"error": str(e)})
-        # LLM-assisted note structuring (ONE call, optional): overwrite
-        # the extractive markdown with a structured note (frontmatter,
-        # H2 sections, wikilinks) if the LLM is available and passes the
-        # safety floor. Falls back to the extractive markdown.
-        try:
-            _titles = list(svc.vault_graph.nodes.keys())
-            _structured = svc.research_engine.synthesize_structured_note(
-                report, summary, ollama_client=svc.ollama_client,
-                vault_note_titles=_titles)
-            if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
-                Path(note_path).write_text(_structured, encoding="utf-8")
-                session_logger.log("research_note_structured",
-                                   {"note_path": note_path,
-                                    "chars": len(_structured)})
-        except Exception as _e:
-            session_logger.log("research_note_structure_failed",
-                               {"error": str(_e)})
+            raise
+        # LLM-assisted note structuring (ONE call): overwrite the extractive
+        # markdown with a structured note (frontmatter, H2 sections,
+        # wikilinks). Raises on failure — the extractive markdown is already
+        # saved, but the user needs to know structuring failed.
+        _titles = list(svc.vault_graph.nodes.keys())
+        _structured = svc.research_engine.synthesize_structured_note(
+            report, summary, ollama_client=svc.ollama_client,
+            vault_note_titles=_titles)
+        if _structured and len(_structured) >= svc.research_engine._STRUCTURED_MIN_CHARS:
+            Path(note_path).write_text(_structured, encoding="utf-8")
+            session_logger.log("research_note_structured",
+                               {"note_path": note_path,
+                                "chars": len(_structured)})
         session_logger.log("research_note_created", {"note_path": note_path, "topic": topic})
     except Exception as e:
         session_logger.log_exception(e, context="note_creator.create_note_from_research")

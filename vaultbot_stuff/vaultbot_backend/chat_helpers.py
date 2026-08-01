@@ -32,7 +32,7 @@ async def send_progress(svc: Services, websocket, stage: str,
             json.dumps({"type": "progress", "stage": stage,
                          "detail": detail or {}}),
             websocket, session_logger=svc.session_logger)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
@@ -102,8 +102,8 @@ async def notify_problem(
     A dead websocket, a missing manager, or a classification failure never
     raises — the problem is always logged to ``session_logger``.
     """
-    from error_types import Diagnosis as _Diagnosis  # noqa: PLC0415
-    from diagnostics import classify_error  # noqa: PLC0415
+    from error_types import Diagnosis as _Diagnosis
+    from diagnostics import classify_error
 
     try:
         if isinstance(exc_or_diagnosis, _Diagnosis):
@@ -147,7 +147,7 @@ async def notify_problem(
                 "user_message": diag.user_message,
                 "context": context or {},
             })
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         # This helper must never be the source of a cascade.
         pass
 
@@ -171,7 +171,7 @@ async def notify_info(svc: Services, websocket, message: str) -> None:
         slog = getattr(svc, "session_logger", None)
         if slog is not None:
             slog.log("info_notified", {"message": message})
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
@@ -189,8 +189,8 @@ def notify_problem_broadcast(
     ``manager.broadcast``. Use from background threads that don't own the
     event loop (e.g. the autonomous researcher's crash callback).
     """
-    from error_types import Diagnosis as _Diagnosis  # noqa: PLC0415
-    from diagnostics import classify_error  # noqa: PLC0415
+    from error_types import Diagnosis as _Diagnosis
+    from diagnostics import classify_error
 
     try:
         if isinstance(exc_or_diagnosis, _Diagnosis):
@@ -239,7 +239,7 @@ def notify_problem_broadcast(
                 "context": context or {},
                 "broadcast": True,
             })
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
@@ -253,7 +253,7 @@ async def heartbeat(svc: Services, websocket, label: str,
             json.dumps({"type": "heartbeat", "label": label,
                          "elapsed_ms": int(elapsed * 1000)}),
             websocket, session_logger=svc.session_logger)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
@@ -274,7 +274,7 @@ async def run_with_heartbeat(svc: Services, websocket, label: str,
             await asyncio.wait_for(asyncio.shield(task), timeout=interval)
         except TimeoutError:
             await heartbeat(svc, websocket, label, t0, interval)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Re-raise the real exception from the task.
             return task.result()
     result = task.result()
@@ -288,13 +288,12 @@ def truncate_tool_result(result: Any, max_chars: int = 10000) -> Any:
 
     Tool results (especially vault_research syntheses, code_read of large
     files, and vault_graph_analyzer dumps) can be 50K+ chars. Appended
-    verbatim to the conversation, a single result balloons the payload past
-    the compaction threshold, triggering mid-loop compaction that shreds the
-    *recent* user/assistant turns to 200-char fragments while leaving the
-    bloated result intact — the agent then loses the thread and redoes old
-    work. Capping each result to a generous but bounded size (default 10K
-    chars, ~2.5K tokens) keeps the agentic loop's context bounded without
-    losing the actionable summary the model needs.
+    verbatim to the conversation, a single result can push the payload
+    past the sliding window boundary, causing older messages to be dropped
+    — potentially losing the *recent* user/assistant turns while leaving
+    the bloated result intact. Capping each result to a generous but
+    bounded size (default 10K chars, ~2.5K tokens) keeps the agentic loop's
+    context bounded without losing the actionable summary the model needs.
 
     Truncation messages are informative — they report how many chars were
     dropped and from which key, so the model knows what it's missing and can
@@ -336,7 +335,7 @@ def truncate_tool_result(result: Any, max_chars: int = 10000) -> Any:
         # Non-dict: cap the serialized form.
         dropped = len(serialized) - max_chars
         return serialized[:max_chars] + f"\n[...truncated: {dropped} chars dropped — original size was {len(serialized)} chars...]"
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return str(result)[:max_chars]
 
 

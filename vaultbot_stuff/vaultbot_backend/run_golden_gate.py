@@ -36,7 +36,7 @@ if str(_BACKEND) not in sys.path:
 os.environ.setdefault("VAULTBOT_SKIP_LOCK", "1")
 os.environ.setdefault("VAULTBOT_SKIP_WATCHER", "1")
 
-from golden_eval import check_regression, load_golden_set, run_golden_eval  # noqa: E402
+from golden_eval import check_regression, load_golden_set, run_golden_eval
 
 
 def _build_retriever(vault_path: str):
@@ -52,24 +52,24 @@ def _build_retriever(vault_path: str):
         from fused_retrieval import FusedRetriever
         from vault_graph import VaultGraph
         from vault_indexer import VaultIndexer
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return None, f"import failed: {type(e).__name__}: {e}"
 
     try:
         indexer = VaultIndexer(vault_path=vault_path)
         indexer.load()  # load the persisted FAISS index from disk
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return None, f"indexer load failed: {type(e).__name__}: {e}"
 
     try:
         graph = VaultGraph(vault_path=vault_path)
         graph.refresh()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return None, f"graph build failed: {type(e).__name__}: {e}"
 
     try:
         drift = EmbeddingDrift(state_path=_BACKEND / "embedding_drift.json")
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         drift = None  # drift is optional; retrieval works without it
 
     retriever = FusedRetriever(
@@ -124,7 +124,7 @@ def main() -> int:
             Path(args.report).write_text(
                 json.dumps({"report": report, "verdict": verdict}, indent=2),
                 encoding="utf-8")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             print(f"  (could not write report: {e})")
 
     if verdict["passed"]:

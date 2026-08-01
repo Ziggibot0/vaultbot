@@ -25,7 +25,8 @@ import threading
 import time
 from datetime import UTC
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from note_creator import NoteCreator
 from research_engine import ResearchEngine
@@ -211,7 +212,7 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
             return False
 
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
 
 
@@ -293,34 +294,17 @@ class AutonomousResearcher:
     def _identify_gaps(self) -> list[dict[str, Any]]:
         """Identify knowledge gaps in the vault.
 
-        Uses the knowledge curriculum if available (Voyager-style
-        self-directed growth), otherwise falls back to the simple
-        dangling-link + thin-note scanner.
+        Uses the knowledge curriculum (Voyager-style self-directed growth).
+        Raises if the curriculum is unavailable or fails — no fallback to
+        the simple dangling-link scanner. The operator needs to know if
+        gap detection is broken, not silently get a different mechanism.
         """
-        if self.curriculum is not None:
-            try:
-                gaps = self.curriculum.propose_gaps(
-                    vault_path=str(self.vault_path),
-                    vault_graph=self.vault_graph,
-                )
-                # Filter out non-researchable gaps.
-                gaps = [g for g in gaps if _is_researchable_gap(g)]
-                return gaps
-            except Exception as e:
-                self._log("autonomous_curriculum_error", {"error": str(e)})
-
-        # Fallback: simple dangling-link scanner.
-        gaps: list[dict[str, Any]] = []
-        dangling = self.vault_graph.dangling_links(
-            min_references=self.min_dangling_references)
-        for entry in dangling:
-            gaps.append({
-                "topic": entry["name"],
-                "kind": "dangling_link",
-                "priority": entry.get("reference_count", 1) * 10,
-            })
-        # Sort by priority.
-        gaps.sort(key=lambda g: -g.get("priority", 0))
+        if self.curriculum is None:
+            raise ValueError(
+                "_identify_gaps: no knowledge curriculum configured")
+        gaps = self.curriculum.propose_next_gaps()
+        # Filter out non-researchable gaps.
+        gaps = [g for g in gaps if _is_researchable_gap(g)]
         return gaps
 
     def _research_to_note(self, gap: dict[str, Any]) -> str | None:
@@ -350,12 +334,12 @@ class AutonomousResearcher:
             if self.vault_indexer:
                 try:
                     self.vault_indexer.index_note(note_path)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log("autonomous_index_note_failed",
                         {"path": note_path, "error": str(e)})
 
             return note_path
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("autonomous_research_error", {
                 "topic": topic, "error": str(e),
             })
@@ -425,7 +409,7 @@ class AutonomousResearcher:
                         content = response.get("message", {}).get("content", "")
                         if not content or len(content) < 100:
                             content = None
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         self._log("autonomous_consolidation_error", {
                             "theme": cluster["theme"],
                             "error": str(e),
@@ -435,7 +419,7 @@ class AutonomousResearcher:
                     # Template synthesis (zero LLM, default path).
                     try:
                         content = pipeline.build_synthesis_template(cluster)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         self._log("autonomous_consolidation_error", {
                             "theme": cluster["theme"],
                             "error": str(e),
@@ -464,7 +448,7 @@ class AutonomousResearcher:
                 "notes_written": len(consolidated),
                 "consolidated": consolidated,
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("autonomous_consolidation_failed", {"error": str(e)})
             return {"ok": False, "error": str(e)}
 
@@ -569,8 +553,13 @@ class AutonomousResearcher:
                     self.checkpointer.save([
                         __import__("checkpointer").ResearchCheckpoint(**c) for c in cycle_checkpoints
                     ])
-                except Exception as e:
-                    self._log("checkpoint_save_failed", {"error": str(e)})
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                    # Checkpoint failure means no resume after restart.
+                    # Log loudly — the operator needs to know the researcher
+                    # can't recover from a crash.
+                    self._log("checkpoint_save_failed", {
+                        "error": str(e), "category": "compaction_broken",
+                    })
             note_path = self._research_to_note(gap)
             # Update the checkpoint with the result.
             ckpt["status"] = "done" if note_path else "failed"
@@ -595,7 +584,7 @@ class AutonomousResearcher:
                     str(self.vault_path))
                 if promo_result["promoted"] or promo_result["flagged"]:
                     self._log("autonomous_procedure_promotion", promo_result)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("autonomous_promotion_cycle_failed",
                           {"error": str(e)})
         self.last_run = {
@@ -613,7 +602,7 @@ class AutonomousResearcher:
         if self.checkpointer is not None:
             try:
                 self.checkpointer.clear()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("checkpoint_clear_failed", {"error": str(e)})
 
     async def _run(self):
@@ -633,7 +622,7 @@ class AutonomousResearcher:
                 await self._cycle()
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("autonomous_researcher_error", {"error": str(e)})
                 # Avoid a tight error loop.
                 await asyncio.sleep(self.interval_seconds)
@@ -650,7 +639,7 @@ class AutonomousResearcher:
             asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(self._run())
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("autonomous_thread_crashed", {"error": str(e)})
                 # Notify the user via the on_crash callback (wired in main.py
                 # to broadcast a type:"problem" WS event). Without this the
@@ -658,7 +647,7 @@ class AutonomousResearcher:
                 if self.on_crash is not None:
                     try:
                         self.on_crash(str(e))
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         pass  # the callback must never crash the thread
             finally:
                 loop.close()
@@ -675,7 +664,7 @@ class AutonomousResearcher:
                 # Nudge any sleeping coroutine.
                 for task in asyncio.all_tasks(loop=self._loop):
                     task.cancel()
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # best-effort cleanup during shutdown
 
     def status(self) -> dict[str, Any]:

@@ -8,7 +8,6 @@ See [[Procedure-Subprocess-Architecture]] and
 [[Deterministic-Scaffolding-for-Small-Models]].
 """
 from procedure_compiler import (
-    Step,
     _extract_annotations,
     _parse_frontmatter,
     _parse_steps,

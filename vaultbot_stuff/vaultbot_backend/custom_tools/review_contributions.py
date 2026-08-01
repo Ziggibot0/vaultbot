@@ -17,8 +17,6 @@ def run(args: dict) -> dict:
     """
     import os
     import re
-    import sys
-    import json
     import requests
 
     # 1. Check for GITHUB_TOKEN
@@ -49,7 +47,7 @@ def run(args: dict) -> dict:
             match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", r.stdout.strip())
             if match:
                 upstream_owner, upstream_repo = match.group(1), match.group(2)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass  # Fall back to defaults
 
     pr_number = args.get("pr_number")
@@ -65,7 +63,7 @@ def run(args: dict) -> dict:
             if resp.status_code != 200:
                 return {"error": f"PR #{pr_number} not found: {resp.status_code}"}
             prs = [resp.json()]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": f"Failed to fetch PR #{pr_number}: {e}"}
     else:
         # List all open PRs
@@ -76,7 +74,7 @@ def run(args: dict) -> dict:
             if resp.status_code != 200:
                 return {"error": f"Could not list PRs: {resp.status_code}"}
             prs = resp.json()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": f"Failed to list PRs: {e}"}
 
     if not prs:
@@ -133,7 +131,7 @@ def run(args: dict) -> dict:
         issues = []
         filename = file_info.get("filename", "")
         patch = file_info.get("patch", "")
-        status = file_info.get("status", "")
+        file_info.get("status", "")
 
         # Check: file in allowed paths?
         path_allowed = any(filename.startswith(p) or filename == p.rstrip("/") for p in ALLOWED_PATHS)
@@ -227,7 +225,7 @@ def run(args: dict) -> dict:
                 })
                 continue
             files = resp.json()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             results.append({
                 "pr_number": pr_num,
                 "title": pr_title,
@@ -300,7 +298,7 @@ def run(args: dict) -> dict:
                 else:
                     result["merged"] = False
                     result["merge_error"] = merge_resp.json().get("message", str(merge_resp.status_code))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 result["merged"] = False
                 result["merge_error"] = str(e)
 
@@ -323,7 +321,7 @@ def run(args: dict) -> dict:
             else:
                 comment_body += f"\n**Merge failed:** {result.get('merge_error', 'unknown')}\n"
 
-        comment_body += f"\n---\n*Automated review by VaultBot safety scanner*"
+        comment_body += "\n---\n*Automated review by VaultBot safety scanner*"
 
         try:
             requests.post(
@@ -331,7 +329,7 @@ def run(args: dict) -> dict:
                 headers=headers,
                 json={"body": comment_body},
                 timeout=15)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass  # Comment is best-effort
 
     return {

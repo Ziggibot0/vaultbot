@@ -83,10 +83,10 @@ TOUCH_THRESHOLD = 3
 CONDENSE_FLOOR_CHARS = 1500
 
 # --- Token-economy condense mode ---
-# auto       = LLM if available, extractive fallback if not (default)
-# llm        = always LLM (fails if no LLM)
+# llm        = always LLM (raises if no LLM client or LLM fails)
 # extractive = never call LLM, always TF-IDF sentence selection
-_CONDENSE_MODE = os.getenv("VAULTBOT_CONDENSE_MODE", "auto").lower()
+# There is no "auto" mode — it silently degraded LLM→extractive on failure.
+_CONDENSE_MODE = os.getenv("VAULTBOT_CONDENSE_MODE", "llm").lower()
 
 # Scaffolding sentence patterns to drop during extractive condense.
 _SCAFFOLDING_PATTERNS = re.compile(
@@ -153,7 +153,7 @@ class LazyCondenser:
                 return
             self.touch_counts[key] = self.touch_counts.get(key, 0) + 1
             self._dirty = True
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("note_touched_failed", e, {"path": note_path})
 
     def flush_touch_counts(self) -> None:
@@ -162,7 +162,7 @@ class LazyCondenser:
             if self._dirty:
                 self._save_touch_counts()
                 self._dirty = False
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("flush_touch_counts_failed", e)
 
     def needs_condense(self, note_path: str) -> bool:
@@ -190,7 +190,9 @@ class LazyCondenser:
             # Strip frontmatter + nav footer to measure body length.
             body = self._strip_scaffolding(text)
             return len(body) >= CONDENSE_MIN_CHARS
-        except Exception:
+        except (FileNotFoundError, PermissionError, OSError):
+            # File access failure — the note doesn't exist or can't be read.
+            # Return False (don't condense) rather than crashing the chat loop.
             return False
 
     def condense_note(self, note_path: str) -> dict:
@@ -261,7 +263,7 @@ class LazyCondenser:
                 "reduction_pct": round(
                     (1 - out["new_chars"] / max(out["orig_chars"], 1)) * 100, 1),
             })
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             out["error"] = str(e)
             self._log_error("condense_note_failed", e, {"path": note_path})
         return out
@@ -300,24 +302,21 @@ class LazyCondenser:
     def _condense_body(self, body: str, note_title: str) -> str:
         """Route to the configured condense method.
 
-        ``auto`` (default): LLM if available, else extractive fallback.
-        ``llm``: always LLM (returns "" if no LLM).
+        ``llm`` (default): always LLM (raises if no LLM client or LLM fails).
         ``extractive``: always TF-IDF sentence selection (zero LLM).
         """
         mode = _CONDENSE_MODE
         if mode == "extractive":
             return self._extractive_condense(body)
         if mode == "llm":
+            if self.ollama_client is None:
+                raise ValueError(
+                    "_condense_body: VAULTBOT_CONDENSE_MODE=llm but "
+                    "ollama_client is None")
             return self._llm_condense(body, note_title)
-        # auto: prefer LLM, fall back to extractive.
-        if self.ollama_client is not None:
-            try:
-                result = self._llm_condense(body, note_title)
-                if result and len(result) >= CONDENSE_FLOOR_CHARS:
-                    return result
-            except Exception as e:
-                self._log_error("llm_condense_failed_fallback", e)
-        return self._extractive_condense(body)
+        raise ValueError(
+            f"_condense_body: unknown VAULTBOT_CONDENSE_MODE={mode!r} "
+            f"(use 'llm' or 'extractive')")
 
     # ------------------------------------------------------------------ #
     # Extractive condense (zero LLM)
@@ -431,11 +430,22 @@ class LazyCondenser:
             f"Original note body ({len(body)} chars):\n\n{body_input}\n"
         )
         messages = [{"role": "user", "content": prompt}]
-        resp = self.ollama_client.chat(messages, temperature=0.2, stream=False)
+        # Use the SMALL model — note condensing is a summarization task that
+        # doesn't need the big model's reasoning power. The instructions are
+        # precise (preserve wikilinks, drop scaffolding) and a small model
+        # can follow them. Saves cloud tokens on every condense.
+        from llm_client import get_small_client_or_big
+        _condense_client = get_small_client_or_big()
+        resp = _condense_client.chat(messages, temperature=0.2, stream=False)
+        # LLMClient.chat() returns {"response": str, "thinking": str,
+        # "tool_calls": list} -- NOT {"message": {"content": ...}} which is
+        # the raw Ollama /api/chat shape.  The old code read ["message"]
+        # ["content"] which KeyError'd on every call -> text="" -> the
+        # entire lazy-condense feature was silently dead.
         try:
-            text = resp["message"]["content"]
-        except Exception:
-            text = str(resp) if isinstance(resp, str) else ""
+            text = resp.get("response", "") if isinstance(resp, dict) else str(resp)
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            text = str(resp) if resp else ""
         # Strip a leading "Here is..." preamble if the model ignored the rule.
         text = self._strip_preamble(text)
         return text.strip()
@@ -518,7 +528,7 @@ class LazyCondenser:
             p = Path(note_path).resolve()
             rel = p.relative_to(self.vault_path)
             return str(rel).replace("\\", "/")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # If not under vault root, use the absolute path as-is.
             return str(note_path).replace("\\", "/")
 
@@ -526,7 +536,7 @@ class LazyCondenser:
         try:
             if self.state_path.exists():
                 return json.loads(self.state_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
         return {}
 
@@ -537,7 +547,7 @@ class LazyCondenser:
             tmp.write_text(json.dumps(self.touch_counts, indent=2),
                            encoding="utf-8")
             os.replace(tmp, self.state_path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("save_touch_counts_failed", e)
 
     # ------------------------------------------------------------------ #
@@ -556,16 +566,16 @@ class LazyCondenser:
                 if os.path.exists(tmp):
                     try:
                         os.unlink(tmp)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         pass
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
     def _log_event(self, event: str, data: dict) -> None:
         try:
             if self.session_logger is not None and hasattr(self.session_logger, "log"):
                 self.session_logger.log(event, data)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def _log_error(self, event: str, err: Exception,
@@ -574,5 +584,5 @@ class LazyCondenser:
             if self.session_logger is not None and hasattr(self.session_logger, "log"):
                 self.session_logger.log(event, {"error": str(err),
                                                 **(extra or {})})
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass

@@ -13,17 +13,17 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app_state import get_services, get_startup_reindex_failed
-from diagnostics import classify_error
 from services import Services
 from session_logger import SessionLogger
 from chat_handler import handle_chat
 from research_handler import handle_research
 from conversation_state import load_history, clear_history, clear_trail_tracker
+from diagnostics import classify_error
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -42,9 +42,9 @@ async def websocket_endpoint(websocket: WebSocket,
     """The chat/research dispatch loop.
 
     Per-connection conversation history lives on the websocket; the
-    compactor trims it when it grows too long. The receive loop spawns
-    fire-and-forget tasks for each chat/research turn so stop/new messages
-    stay responsive.
+    sliding window bounds it when it grows too long. The receive loop
+    spawns fire-and-forget tasks for each chat/research turn so stop/new
+    messages stay responsive.
 
     AUTO-RESUME: If RESTART_CONTEXT.md exists (written by backend_restart
     before triggering a restart), the agent proactively sends a message to
@@ -63,6 +63,37 @@ async def websocket_endpoint(websocket: WebSocket,
         "title": session_logger.title,
     }), websocket, session_logger=session_logger)
 
+    # ── Model preload on connect ────────────────────────────────────
+    # When the user opens a new chat tab (or reconnects after the model was
+    # evicted from Ollama's memory), fire a background preload so the model
+    # is loaded BEFORE the user's first message arrives.  This eliminates
+    # the "first chat of a new session takes 5 minutes" cold-load latency.
+    # The preload runs in a thread (Ollama load is blocking) and is a no-op
+    # if the model is already resident (is_model_loaded short-circuits) or
+    # if the backend is cloud (OpenAICompatibleClient.preload_model is a
+    # no-op).  Skip if disabled via VAULTBOT_PRELOAD_ON_CONNECT=0.
+    if os.environ.get("VAULTBOT_PRELOAD_ON_CONNECT", "1") != "0":
+        def _preload_on_connect():
+            import time as _time
+            _max_wait = int(os.environ.get("VAULTBOT_PRELOAD_MAX_WAIT_S", "300"))
+            _elapsed = 0
+            while _elapsed < _max_wait:
+                try:
+                    if svc.ollama_client.is_model_loaded():
+                        return
+                    if svc.ollama_client.preload_model():
+                        session_logger.log("model_preloaded_on_connect", {
+                            "model": svc.ollama_client.llm_model})
+                        return
+                except Exception as e:  # noqa: BLE001
+                    session_logger.log("model_preload_on_connect_retry", {
+                        "error": str(e), "elapsed_s": _elapsed})
+                _time.sleep(10)
+                _elapsed += 10
+            session_logger.log("model_preload_on_connect_timeout", {
+                "model": svc.ollama_client.llm_model, "waited_s": _elapsed})
+        asyncio.get_event_loop().run_in_executor(None, _preload_on_connect)
+
     # ── Startup reindex failure check ────────────────────────────────
     # If the background reindex crashed on startup (before any WS was
     # connected), the flag is set. Surface it now so the user knows their
@@ -75,8 +106,7 @@ async def websocket_endpoint(websocket: WebSocket,
     try:
         _reindex_err = get_startup_reindex_failed()  # reads + clears (one-shot)
         if _reindex_err:
-            from chat_helpers import notify_problem  # noqa: PLC0415
-            from diagnostics import classify_error  # noqa: PLC0415
+            from chat_helpers import notify_problem
             _diag = classify_error(
                 RuntimeError(_reindex_err),
                 {"stage": "indexing the vault on startup"})
@@ -86,28 +116,51 @@ async def websocket_endpoint(websocket: WebSocket,
                 "Some notes might not appear in search until you restart.")
             _diag.remedy_hint = "Click Restart to re-index your vault."
             await notify_problem(svc, websocket, _diag)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass  # never block the WS connect on a notification failure
     # Per-connection conversation history. This is THE fix for the "amnesia"
     # bug: without it, every message started a fresh 2-message conversation
     # (system + this message) with zero memory of prior turns.
     #
-    # RESTORE-ON-RECONNECT: load the persisted history from disk so a backend
-    # restart (the operator asked VaultBot to restart itself, a crash, a code reload)
-    # brings the agent back into the SAME session — the live thread is
-    # restored, not just the slow identity files. the operator: "change your restart
-    # backend tool to bring you back into the same session and start you
-    # back up." This is that change.
-    restored = load_history()
-    websocket.conversation_history = restored
+    # RESTORE-ON-RESTART ONLY: the persisted history is loaded ONLY when the
+    # backend was restarted mid-session (RESTART_CONTEXT.md exists). A normal
+    # new session (new tab, reconnect after closing) starts FRESH — the model
+    # gets a clean context with no stale conversation noise. This is critical
+    # for small models: 40 messages of restored history from a prior session
+    # drowns the current turn's signal in noise, causing the model to lose
+    # the thread and repeat old answers. The operator: "when i start a new
+    # session it shouldn't carry over the context of the past 40
+    # conversations, it should start a fresh session so the model can focus."
+    _is_restart_resume = _RESTART_CONTEXT_PATH.exists()
+    if _is_restart_resume:
+        try:
+            restored = load_history()
+            websocket.conversation_history = restored
+        except ValueError as _hist_err:
+            # History file is corrupt. load_history already backed it up.
+            # Start fresh + notify the user so they know their conversation
+            # was lost, rather than silently amnesia-ing.
+            websocket.conversation_history = []
+            _hist_diag = classify_error(
+                _hist_err, {"category": "history_lost", "stage": "reconnecting"})
+            await notify_problem(svc, websocket, _hist_diag)
+            session_logger.log("conversation_history_corrupt", {
+                "error": str(_hist_err),
+            })
+    else:
+        # Normal new session — start fresh. Clear any persisted history
+        # so a restart after this point doesn't restore a stale session.
+        websocket.conversation_history = []
+        clear_history()
     # Fresh working memory per websocket connection (the Copilot/Claude Code
     # TodoList pattern). Cleared on /new and on reconnect.
     from working_memory import TaskList
     websocket.working_memory = TaskList()
-    if restored:
+    _restored = websocket.conversation_history
+    if _restored:
         session_logger.log("conversation_history_restored", {
-            "turns": len(restored),
-            "history_chars": sum(len(str(m.get("content", ""))) for m in restored),
+            "turns": len(_restored),
+            "history_chars": sum(len(str(m.get("content", ""))) for m in _restored),
         })
 
     # ---- AUTO-RESUME ---------------------------------------------------
@@ -144,7 +197,7 @@ async def websocket_endpoint(websocket: WebSocket,
                     session_logger)
             except asyncio.CancelledError:
                 session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log_exception(e, context="auto_resume")
                 # Surface auto-resume failures as a typed problem so the
                 # UI shows a remedy card, not a raw "Server error: …".
@@ -155,7 +208,7 @@ async def websocket_endpoint(websocket: WebSocket,
             finally:
                 try:
                     svc.autonomous_researcher.resume_after_chat()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     logger.debug("swallowed: %s", e)
 
         websocket._current_task = asyncio.create_task(_auto_resume())
@@ -279,7 +332,7 @@ async def websocket_endpoint(websocket: WebSocket,
                                 await svc.manager.send_personal_message(
                                     json.dumps({"type": "problem", "diagnosis": p}),
                                     websocket, session_logger=session_logger)
-                    except Exception as diag_err:
+                    except Exception as diag_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log_exception(
                             diag_err, context="/diagnose command")
                         await svc.manager.send_personal_message(
@@ -354,7 +407,7 @@ async def websocket_endpoint(websocket: WebSocket,
                             await svc.manager.send_personal_message(
                                 json.dumps({"type": "stopped", "content": "Interrupted"}),
                                 websocket)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log_exception(e, context=f"handle_{msg_type}")
                         # Translate the raw exception into a typed, user-
                         # facing Diagnosis. The frontend renders a remedy
@@ -370,14 +423,14 @@ async def websocket_endpoint(websocket: WebSocket,
                         # Chat-priority: always release the researcher pause.
                         try:
                             svc.autonomous_researcher.resume_after_chat()
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             logger.debug("swallowed: %s", e)
                 return asyncio.create_task(_run())
 
             websocket._current_task = _spawn_handler()
     except WebSocketDisconnect:
         session_logger.log("websocket_disconnect", {"reason": "client_disconnected"})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         session_logger.log_exception(e, context="websocket_endpoint")
     finally:
         svc.manager.disconnect(websocket)

@@ -35,6 +35,24 @@ class ClaimVerifier:
         self.max_source_chars = max_source_chars
         self._ensure_log()
 
+    def _log_error(self, event: str, exc: Exception, context=None):
+        """Log an error event to the verification log. Never raises."""
+        try:
+            import time as _t
+            entry = {
+                "event": event,
+                "error": f"{type(exc).__name__}: {exc}",
+                "context": str(context) if context else "",
+                "timestamp": _t.time(),
+            }
+            data = self._load_log()
+            logs = data.get("verification_logs", [])
+            logs.append(entry)
+            data["verification_logs"] = logs[-200:]  # cap at 200 entries
+            self._save_log(data)
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            pass  # logging must never crash verification
+
     def _ensure_log(self):
         if not os.path.exists(self.log_path):
             with open(self.log_path, "w", encoding="utf-8") as f:
@@ -44,14 +62,14 @@ class ClaimVerifier:
         try:
             with open(self.log_path, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"verification_logs": []}
 
     def _save_log(self, data):
         try:
             with open(self.log_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def _parse_sources_section(self, note_content):
@@ -81,14 +99,20 @@ class ClaimVerifier:
         return None
 
     def _load_source_text(self, source_info):
+        """Load source text from the archive. Returns None if not available.
+
+        Logs failures loudly instead of silently swallowing — if the web
+        source store is broken, the operator needs to know claims can't
+        be verified, not discover it from empty results.
+        """
         if source_info.get("archived_filename"):
             try:
                 from web_source_store import read_source_text
                 text = read_source_text(source_info["archived_filename"])
                 if text and len(text) > 50:
                     return text
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                self._log_error("source_load_archived_failed", e, source_info)
         if source_info.get("url"):
             try:
                 from web_source_store import find_source, read_source_text
@@ -97,16 +121,22 @@ class ClaimVerifier:
                     text = read_source_text(entry["file"])
                     if text and len(text) > 50:
                         return text
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                self._log_error("source_load_url_failed", e, source_info)
         return None
 
     def _llm_available(self):
+        """Check if the LLM client is running. Returns False if unavailable.
+
+        Logs the error instead of silently swallowing — if the LLM health
+        check itself is broken, that's visible.
+        """
         if not self.llm_client:
             return False
         try:
             return self.llm_client.is_running()
-        except Exception:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            self._log_error("llm_health_check_failed", e)
             return False
 
     def _llm_extract_claims(self, synthesis_text):
@@ -116,7 +146,11 @@ class ClaimVerifier:
                   "Return a JSON array of objects with 'claim' and 'source' fields.\n\n"
                   "Text:\n" + synthesis_text[:6000] + "\n\nReturn ONLY the JSON array.")
         try:
-            response = self.llm_client.chat([{"role": "user", "content": prompt}], temperature=0.1, stream=False)
+            # Use the SMALL model — claim extraction is a simple structured
+            # task (return JSON array) that doesn't need big-model reasoning.
+            from llm_client import get_small_client_or_big
+            _verify_client = get_small_client_or_big()
+            response = _verify_client.chat([{"role": "user", "content": prompt}], temperature=0.1, stream=False)
             raw = ""
             if isinstance(response, dict):
                 raw = response.get("message", {}).get("content", "") or response.get("response", "")
@@ -127,9 +161,9 @@ class ClaimVerifier:
             claims_data = json.loads(raw)
             if isinstance(claims_data, list):
                 return [{"claim": c.get("claim", ""), "source": c.get("source")} for c in claims_data if c.get("claim")]
-        except Exception:
-            pass
-        return []
+        except Exception as e:
+            self._log_error("llm_extract_claims_failed", e)
+            raise
 
     def _deterministic_extract_claims(self, synthesis_text):
         claims = []
@@ -150,11 +184,11 @@ class ClaimVerifier:
 
         mode = _CLAIM_VERIFY_MODE
         if mode == "llm":
-            if self._llm_available():
-                claims = self._llm_extract_claims(synthesis_text)
-                if claims:
-                    return claims
-            return self._deterministic_extract_claims(synthesis_text)
+            if not self._llm_available():
+                raise ValueError(
+                    "extract_claims: VAULTBOT_CLAIM_VERIFY_MODE=llm but "
+                    "LLM client is unavailable")
+            return self._llm_extract_claims(synthesis_text)
 
         if mode == "hybrid":
             # Deterministic first; only escalate to LLM if it found too few
@@ -177,7 +211,12 @@ class ClaimVerifier:
                   'Return JSON: {"verdict": "...", "reasoning": "..."}\n\n'
                   "Source text:\n" + source_excerpt + "\n\nClaim:\n" + claim + "\n\nReturn ONLY the JSON.")
         try:
-            response = self.llm_client.chat([{"role": "user", "content": prompt}], temperature=0.1, stream=False)
+            # Use the SMALL model — entailment checking is a simple
+            # classification (supported/unsupported/contradicted) that
+            # doesn't need big-model reasoning.
+            from llm_client import get_small_client_or_big
+            _verify_client = get_small_client_or_big()
+            response = _verify_client.chat([{"role": "user", "content": prompt}], temperature=0.1, stream=False)
             raw = ""
             if isinstance(response, dict):
                 raw = response.get("message", {}).get("content", "") or response.get("response", "")
@@ -191,7 +230,8 @@ class ClaimVerifier:
                 verdict = self.UNSUPPORTED
             return {"verdict": verdict, "reasoning": result.get("reasoning", "")}
         except Exception as e:
-            return {"verdict": self.ERROR, "reasoning": f"LLM error: {e}"}
+            self._log_error("llm_check_entailment_failed", e)
+            raise
 
     def _deterministic_check_entailment(self, claim, source_text):
         def normalize(text):
@@ -226,11 +266,11 @@ class ClaimVerifier:
     def check_entailment(self, claim, source_text):
         mode = _CLAIM_VERIFY_MODE
         if mode == "llm":
-            if self._llm_available():
-                result = self._llm_check_entailment(claim, source_text)
-                if result["verdict"] != self.ERROR:
-                    return result
-            return self._deterministic_check_entailment(claim, source_text)
+            if not self._llm_available():
+                raise ValueError(
+                    "check_entailment: VAULTBOT_CLAIM_VERIFY_MODE=llm but "
+                    "LLM client is unavailable")
+            return self._llm_check_entailment(claim, source_text)
 
         if mode == "hybrid":
             # Deterministic first; escalate to LLM only for borderline ratios.
@@ -240,9 +280,10 @@ class ClaimVerifier:
             if ratio_match:
                 ratio = int(ratio_match.group(1)) / 100.0
                 if _BORDERLINE_LOW < ratio < _BORDERLINE_HIGH and self._llm_available():
-                    llm_result = self._llm_check_entailment(claim, source_text)
-                    if llm_result["verdict"] != self.ERROR:
-                        return llm_result
+                    # LLM escalation for borderline cases — if it fails,
+                    # raise so the operator knows. The deterministic result
+                    # is available but the LLM path is broken.
+                    return self._llm_check_entailment(claim, source_text)
             return det_result
 
         # det (default): deterministic only.
@@ -252,7 +293,7 @@ class ClaimVerifier:
         try:
             with open(note_path, encoding="utf-8") as f:
                 note_content = f.read()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": f"Could not read note: {e}"}
         sources_index = self._parse_sources_section(note_content)
         claims = self.extract_claims(note_content)
@@ -323,7 +364,7 @@ class ClaimVerifier:
                 new_content = f"---\n{verification_yaml}\n---\n" + content
             with open(note_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def _log_verification(self, report):
@@ -365,7 +406,7 @@ class ClaimVerifier:
             total = log.get("total_claims", 0)
             if total == 0:
                 continue
-            verified = log.get("verified", 0)
+            log.get("verified", 0)
             unsupported = log.get("unsupported", 0)
             contradicted = log.get("contradicted", 0)
             unsourced = log.get("unsourced", 0)

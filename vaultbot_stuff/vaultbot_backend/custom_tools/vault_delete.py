@@ -50,7 +50,7 @@ def _is_empty_past_journal(stem: str, full_path: str) -> bool:
         with open(full_path, encoding='utf-8') as f:
             content = f.read().strip()
         return len(content) == 0
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
 
 def _is_locked(content: str) -> bool:
