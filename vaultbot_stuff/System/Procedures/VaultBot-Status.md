@@ -9,21 +9,48 @@ applies_to:
   - status
   - diagnostics
 allowed_tools:
-  - vaultbot_status
+  - vault_graph_analyzer
+  - vault_list
 ---
 
 # VaultBot-Status
 
 ## When to Run This
 
-Run this when the user asks about VaultBot's status, health, what it's been doing, or what it can do.
+Run when the user asks about status, health, hardware, which models are loaded, or what VaultBot is running on. This reports everything that can be determined OFFLINE: machine specs (OS/CPU/RAM/GPU), Ollama models loaded, and vault graph/index stats. (For the live autonomous-researcher cycle count use the `vaultbot_status` chat tool — that needs the running backend; this procedure is the offline snapshot.)
 
 ## Steps
 
-### Step 1: Get status
+### Step 1: Gather machine spec + graph stats
 
 1. ```python
-result = vaultbot_status() if hasattr(vaultbot_status, '__call__') else vaultbot_status.run({})
+import json
+
+from custom_tools.machine_spec import run as _spec
+spec = _spec({})
+
+graph = vault_graph_analyzer()
+analysis = graph.get("analysis", {}) if isinstance(graph, dict) else {}
+
+ollama = spec.get("ollama", {})
+models = ollama.get("models", []) if isinstance(ollama, dict) else []
+
+result = json.dumps({
+    "machine": {
+        "os": spec.get("os", {}),
+        "ram_gb": spec.get("ram", {}).get("total_gb"),
+        "gpu": spec.get("gpu", {}),
+    },
+    "ollama_running": ollama.get("running") if isinstance(ollama, dict) else None,
+    "models_loaded": models,
+    "vault": {
+        "notes": analysis.get("num_nodes"),
+        "islands": analysis.get("num_islands"),
+        "connectivity": analysis.get("connectivity_ratio"),
+    },
+})
 ```
 
-2. [llm: Report the status to the user in a clear, concise summary. Include: backend health, autonomous researcher state, index size, graph node count, and current model. Be natural — don't just dump JSON.]
+### Step 2: Report the status
+
+2. [llm: Report VaultBot's status from the prior step output in a clear, concise summary: machine (OS, RAM, GPU), whether Ollama is running and which models are loaded (call out the big/small/vision cartridges if identifiable), and vault size (notes, connectivity). Be natural — don't dump JSON. If the user likely wanted live research-cycle state, note they can ask "what have you been doing" which uses the live status tool.]

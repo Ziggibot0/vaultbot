@@ -163,7 +163,7 @@ def run(args: dict) -> dict:
     expected_folders = ["vaultbot_stuff/Knowledge", "vaultbot_stuff/Memory", "vaultbot_stuff/System", "User"]
     found_folders = [f for f in expected_folders if (vault_dir / f).exists()]
     note_count = sum(1 for f in vault_dir.rglob("*.md")
-                     if "vaultbot_backend" not in str(f) and "vaultbot_venv" not in str(f) and "vaultbot_stuff/vaultbot_backend" not in str(f))
+                     if "vaultbot_backend" not in str(f) and ".venv" not in str(f) and "vaultbot_venv" not in str(f) and "vaultbot_stuff/vaultbot_backend" not in str(f))
     results["checks"]["vault"] = {
         "exists": len(found_folders) >= 2,
         "found_folders": found_folders,

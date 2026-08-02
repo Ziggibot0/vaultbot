@@ -143,7 +143,9 @@ if (Test-Path $script:stateFile) {
 }
 
 # ── 4. Create the Python virtual environment ────────────────────────────────
-$venvPath = Join-Path $vaultPath "vaultbot_venv"
+# `.venv` is hidden in the Obsidian file explorer (dots are filtered),
+# keeping the vault clean for end users.
+$venvPath = Join-Path $vaultPath ".venv"
 if (Test-StepDone "venv_created") {
     Write-Warn2 "Virtual environment already created -- skipping."
 } elseif (Test-Path (Join-Path $venvPath "Scripts\python.exe")) {
@@ -152,7 +154,7 @@ if (Test-StepDone "venv_created") {
 } else {
     Write-Step "Creating Python environment (a few seconds)..."
     Push-Location $vaultPath
-    try { & python -m venv vaultbot_venv } finally { Pop-Location }
+    try { & python -m venv .venv } finally { Pop-Location }
     Write-OK "Virtual environment created"
     Set-StepDone "venv_created"
 }

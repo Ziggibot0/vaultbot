@@ -1,15 +1,20 @@
 ---
-type: procedure
-status: experimental
+type: spec
+status: completed
 created: 2026-07-31
-description: "Remove silent masking fallbacks from backend Python files. Each code step reads the target file, makes specific replacements, syntax-checks, backs up the original, writes the fix, and tests the import. If import fails, restores the backup."
-when: "When fixing the 6 critical masking fallbacks identified in the framework audit"
-allowed_tools: [vault_search, code_read]
+description: "HISTORICAL one-time migration spec (already applied): it removed the silent masking fallbacks from backend Python files. NOT an active procedure — its Step headers don't parse as an executable procedure and re-running it would assert-fail because the fallbacks are already gone. Kept as a record of the fail-loud refactor."
+when: "reference only — do not execute; the fail-loud refactor already shipped"
 ---
 
-# Fix Masking Fallbacks
+# Fix Masking Fallbacks (completed spec)
 
-Remove the silent `return []` and `pass` patterns that mask failures in the backend. Each step safely edits a Python file with backup + syntax check + import test.
+This is a **completed one-time migration**, preserved as history. It is no
+longer an executable procedure: the silent `return []` / `pass` fallbacks it
+targeted have already been removed (see the fail-loud refactor audit) and its
+`## Step N` structure doesn't parse into executable steps. Do not run it.
+
+What it did: each step safely edited a Python file with backup + syntax check
++ import test, restoring the backup on failure.
 
 ## Step 1: Fix knowledge_curriculum.py — remove silent [] returns
 

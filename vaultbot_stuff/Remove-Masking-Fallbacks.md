@@ -1,9 +1,13 @@
----\ntype: procedure
-status: verified
+---
+\ntype: procedure
+status: flagged
 created: 2026-07-31
 description: "Remove all masking fallbacks from the framework. 10 fixes that replace silent except-return-empty patterns with loud failures."
 when: "When the framework has silent try-except-return-empty patterns that mask failures"
 allowed_tools: [code_read]
+success_count: 1
+failure_count: 4
+success_rate: 0.2
 ---
 
 # Remove-Masking-Fallbacks

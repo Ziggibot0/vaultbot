@@ -33,6 +33,7 @@ allowed_tools:
   - vault_search
   - code_read
   - llm_generate
+  - run_procedure
 ---
 
 # Dream Pass
@@ -673,12 +674,34 @@ result = json.dumps({
 [validate: islands_after <= islands_before]
 [validate: connectivity_after >= connectivity_before]
 
+### Step 6: Evaluate — Score the Procedure Library
+
+Per the operator's directive, the framework self-scores its procedures each dream cycle. Call [[Procedure-Eval]] to classify every procedure as healthy/degraded/broken and surface which need review, cartridge demotion, or retirement. Deterministic counters — the small model only formats.
+
+6. ```python
+import json
+
+eval_result = run_procedure("Procedure-Eval")
+summary = {}
+try:
+    summary = json.loads(eval_result.get("final_output", "{}"))
+except Exception:
+    summary = {"raw": eval_result.get("final_output", "")[:1000]}
+
+result = json.dumps({
+    "step": "procedure_eval",
+    "overall_passed": eval_result.get("overall_passed"),
+    "eval_summary": summary.get("summary", summary),
+    "problem_procedures": summary.get("problem_procedures", []),
+})
+```
+
 ## Requirements
 
 - **Hub notes** must exist: Testing-and-Verification-History, VaultBot-Build-Log, the operator-Design-Decisions, Cross-Session-Patterns-from-75-Chat-Logs, the operator-Communication-Preferences
 - **Quality modules** must be importable: pattern_extractor, calibration, rag_eval, claim_verifier (Step 3 only)
 - **LLM service** must be running for Step 3 (consolidation). Steps 0-2, 4-5 are fully deterministic and work without an LLM.
-- **Allowed tools**: vault_graph_analyzer, vault_list, vault_append, vault_delete, vault_lint, vault_search, code_read, llm_generate
+- **Allowed tools**: vault_graph_analyzer, vault_list, vault_append, vault_delete, vault_lint, vault_search, code_read, llm_generate, run_procedure
 
 ## Output Format
 
@@ -692,6 +715,7 @@ Each step outputs JSON. The final output is all steps concatenated:
 | 3: Consolidate | `{"status": "consolidated"|"no_new_notes"|"llm_unavailable", "notes_written": [...], "notes_skipped": [...], "lint_issues": [...]}` | Semantic notes created |
 | 4: Prune | `{"junk_deleted": [...]}` | Files removed |
 | 5: Validate | `{"islands_before": N, "islands_after": N, "connectivity_before": 0.X, "connectivity_after": 0.X, "orphans_resolved": N}` | Graph health delta |
+| 6: Procedure-Eval | `{"step": "procedure_eval", "eval_summary": {...}, "problem_procedures": [...]}` | Procedure health, degraded/broken list |
 
 ## Dreaming Frequency
 

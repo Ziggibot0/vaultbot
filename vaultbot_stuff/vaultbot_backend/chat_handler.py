@@ -53,8 +53,6 @@ from chat_helpers import (
 from conversation_state import save_history
 from error_types import AgentSilentError
 from fastapi import WebSocket
-from output_validator import corrective_message, validate_tool_call
-from plan_gate import EXPLORE_TOOLS, is_multi_step, lifts_gate, plan_mode_directive
 from procedure_surface import build_procedure_surface, status_allows_execution
 from procedure_tracker import interpret_validation_result, parse_procedures_from_results
 from services import Services
@@ -66,6 +64,15 @@ from weaving import (
     weave_textbook_notes,
 )
 from working_memory import TaskList
+# Per-step consolidation: the small-model cartridge writes a gist of each
+# completed step, replacing the raw tool/thinking noise in the conversation
+# with a compact summary (the plan-as-loop architecture, 2026-08-02).
+from step_summarizer import summarize_step
+# Framework-driven planning: a dedicated planning call BEFORE the agentic
+# loop (the BabyAGI/LangGraph pattern). The framework makes the plan, not
+# the model — a 30B local model can't be trusted to call plan_task
+# voluntarily. This replaces all gate/nudge enforcement machinery.
+from framework_planner import framework_plan
 
 
 
@@ -91,14 +98,12 @@ def _apply_sliding_window(
     See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]].
     """
     if window_size <= 0:
-        # Default 100 (was 20). The model has a 1M-token context window;
-        # a 20-message window was dropping tool results from multi-round
-        # agentic loops, causing the model to re-search the same things.
-        # 100 messages ~ 50 tool rounds, which covers any reasonable task
-        # without losing context. The compactor (disabled) was the old
-        # bound; the sliding window is now just a safety net for pathological
-        # conversation growth, not a tight bound.
-        window_size = int(os.getenv("VAULTBOT_SLIDING_WINDOW", "100"))
+        # Default 40 (was 100, originally 20). 100 messages ~ 31k tokens of
+        # tool chatter — that bloats every turn's prompt and slows TTFT on a
+        # local 30B model. 40 messages ~ 20 tool rounds covers multi-round
+        # agentic loops; older context lives in chat notes on disk and is
+        # retrievable via vault_search. Override with VAULTBOT_SLIDING_WINDOW.
+        window_size = int(os.getenv("VAULTBOT_SLIDING_WINDOW", "40"))
     if len(conversation) <= window_size + 2:
         return conversation
 
@@ -220,6 +225,18 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     if not hasattr(websocket, "working_memory") or websocket.working_memory is None:
         websocket.working_memory = TaskList()
     wm = websocket.working_memory
+    # A new user message is a NEW turn. Clear any prior plan so the framework
+    # always plans fresh for this request. Without this reset, an unfinished
+    # plan from the previous turn leaks into the new one and the loop starts
+    # in ACT/SYNTHESIZE phase instead of planning for the new message.
+    if wm.has_plan():
+        session_logger.log("wm_plan_cleared_for_new_turn", {
+            "previous_goal": wm.goal[:100],
+            "completed_steps": sum(1 for t in wm.tasks if t.status == "completed"),
+            "total_steps": len(wm.tasks),
+            "all_done": wm.all_done(),
+        })
+        wm.clear()
 
     # Chat-loop checkpoint/resume (multi-day sturdiness): if a prior turn was
     # interrupted mid-loop (crash/restart) and left a fresh checkpoint, resume
@@ -579,42 +596,54 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # rounds; appended after each tool result below.
         _turn_tool_history: list = list(_resumed_tool_history)
 
-        # DETERMINISTIC LOOP DETECTOR (Copilot/Claude "verify each step" pattern):
-        # track consecutive read-only rounds. If the model only explores
-        _READ_ONLY_TOOLS = frozenset(EXPLORE_TOOLS) | {"vault_list", "code_read"}
-        _tool_rounds_executed = 0
-        _synthesize_requested = False  # set when all_done() fires → next empty is NOT a nudge case
-        _empty_nudge_used = False  # ONE nudge per turn for empty turns, then fail-loud
-        _protocol_nudge_used = False  # ONE nudge for missing <done>, then accept
         # No round cap, no hard char cap — the operator asked for all artificial
         # limits removed. The model has a 1M-token context window; let it work
         # as long as it needs. The compactor is disabled too.
-        #
-        # BUT: a soft read-loop detector is kept because the model can get stuck
-        # re-reading the same files without making plan progress. This is NOT a
-        # hard break — it injects a nudge telling the model to either update its
-        # task status or synthesize what it has. It never kills the loop.
-        _MAX_TOOL_ROUNDS_NO_PLAN = int(os.getenv("VAULTBOT_MAX_TOOL_ROUNDS_NO_PLAN", "5"))
-        _FORCE_PLAN_ON_MULTI = os.getenv("VAULTBOT_FORCE_PLAN_ON_MULTI", "on").lower() != "off"
+        _tool_rounds_executed = 0
+        # Minimal turns-kept: the ONLY framework-level guard left is the
+        # double-silent failsafe. If the model emits NOTHING (no text, no
+        # thinking, no tool call) on a turn AND gives no useful response on
+        # the immediate retry, the loop fails loud with "Model returned
+        # nothing — please retry." No other nudges, counters, or text
+        # heuristics — the model drives; the vault holds the reasoning.
+        _double_silent_once = False  # False → first silent turn; True → one retry already happened
 
-        # Read-loop detector state: tracks consecutive rounds where the model
-        # only used read-only tools (code_read, vault_search, vault_list) without
-        # completing any plan tasks. After N such rounds, inject a nudge.
-        _READ_LOOP_STREAK = 0
-        _READ_LOOP_NUDGE_SENT = False
-        _MAX_READ_ONLY_STREAK = 999999  # DISABLED by Remove-All-Stops procedure
-        # Track which files have been code_read this turn (for dedup awareness).
-        _files_read_this_turn: dict[str, int] = {}  # {file_path: times_read}
+        # --- Plan-as-loop state (the consolidation architecture) --------- #
+        # The plan is the loop's spine. Planning is MANDATORY round 0: exec
+        # tools are blocked until plan_task is called (read-only tools are
+        # allowed so the model can look before it plans). Once a plan
+        # exists, each time the model marks a step completed we:
+        #   1. collect the raw tool calls + results + thinking accumulated
+        #      during that step,
+        #   2. ask the small model cartridge for a compact gist
+        #      (accomplished + lessons + key facts the next step needs),
+        #   3. REPLACE that span in the conversation with the summary, and
+        #   4. record the summary in working_memory so render_for_prompt
+        #      surfaces it to later rounds.
+        # The model's working context then sees the shapes, not the details
+        # — same principle as memory consolidation. Raw traces are still in
+        # the session JSONL; only the model's view is consolidated.
 
-        _is_multi = bool(is_multi_step(user_message) and not _resumed_tool_history)
-
-        # PLAN-MODE GATE (Copilot/Claude Code Explore→Plan→Implement): if this
-        # turn looks multi-step and no plan exists yet, the model is restricted to
-        # read-only/explore tools until it calls plan_task. Deterministic (no LLM)
-        # via plan_gate.is_multi_step. The gate lifts the moment plan_task fires.
-        _gate_active = bool(_is_multi and not wm.has_plan())
-        if _gate_active:
-            session_logger.log("plan_gate_active", {"user_message_head": user_message[:80]})
+        # Tracks which phase of the framework-driven plan the model is in.
+        #   plan       = no plan yet; only plan_task is accepted
+        #   act        = plan exists and not all_done; work tools allowed.
+        #   synthesize = plan all_done; only prose final answer is accepted.
+        _phase = "plan"
+        # Raw material for the step currently being worked (since the last
+        # update_task that set a step in_progress, or since the plan was
+        # set). Reset after consolidation. The tool calls/results are the
+        # EXACT objects we sent to / got from execute_agent_tool (pre-
+        # truncation for the log), so the summarizer sees the real shape.
+        _step_raw_calls: list[dict] = []
+        _step_raw_results: list[dict] = []
+        _step_raw_thinking: str = ""
+        # The task id currently in_progress (set when update_task marks a
+        # step in_progress, cleared when it's marked completed). Drives
+        # which step the accumulated raw material belongs to.
+        _step_in_progress_id: str = ""
+        # The id of the step that was just completed+consolidated, so the
+        # final-synthesis branch can detect "last step just finished."
+        _last_completed_step_id: str = ""
 
         # Partial-answer crash protection: write the streamed-so-far answer to a
         # temp file so a crash mid-stream doesn't lose it. On normal completion
@@ -636,6 +665,57 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         write_partial(partial_path, user_message, "", "")  # create the file immediately
 
         try:
+         # --- Framework-driven planning (BabyAGI/LangGraph pattern) ------ #
+         # Before the agentic loop, the framework makes a dedicated planning
+         # call and writes the plan into working memory. The model never has
+         # to CHOOSE to plan — the plan is already in place when the loop
+         # starts. This replaces all gate/nudge enforcement. A 30B local
+         # model can't be trusted to call plan_task voluntarily; a framework-
+         # driven call is reliable. Uses the small cartridge when configured
+         # (cheap local model, bounded output), else the big model.
+         # If the planning call fails, fall back to a 1-step plan so the
+         # loop always has *some* plan (the all_done() guard needs it).
+         if not wm.has_plan():
+            try:
+                from llm_client import get_small_client_or_big
+                _plan_client = get_small_client_or_big(session_logger)
+            except Exception as e:  # noqa: BLE001 — degraded continuation
+                session_logger.log("framework_plan_client_failed", {
+                    "error": str(e)})
+                _plan_client = svc.ollama_client
+            session_logger.log("framework_plan_start", {
+                "user_message_len": len(user_message)})
+            _plan_result = await loop.run_in_executor(
+                None,
+                lambda: framework_plan(
+                    _plan_client, user_message, session_logger),
+            )
+            if _plan_result is not None:
+                _plan_goal, _plan_steps = _plan_result
+                wm.set_plan(goal=_plan_goal, items=_plan_steps)
+                session_logger.log("framework_plan_set", {
+                    "goal": _plan_goal[:100], "steps": len(_plan_steps)})
+                await svc.manager.send_personal_message(json.dumps({
+                    "type": "plan_set",
+                    "goal": _plan_goal[:200],
+                    "steps": _plan_steps,
+                }), websocket, session_logger=session_logger)
+            else:
+                # Fallback: 1-step plan so the loop has a spine. The model
+                # will mark it done when it answers. This is a degraded
+                # continuation (logged loud), not a silent fallback to a
+                # different mechanism — the plan IS the mechanism.
+                _fb_goal = user_message[:200] if user_message.strip() else "respond to the user"
+                wm.set_plan(goal=_fb_goal, items=["respond to the user"])
+                session_logger.log("framework_plan_fallback", {
+                    "goal": _fb_goal[:100]})
+                await svc.manager.send_personal_message(json.dumps({
+                    "type": "plan_set",
+                    "goal": _fb_goal,
+                    "steps": ["respond to the user"],
+                    "fallback": True,
+                }), websocket, session_logger=session_logger)
+
          round_idx = 0
          # No round cap — the model works until it's done. the operator explicitly
          # asked for all caps removed. The model has a 1M-token context window.
@@ -644,6 +724,21 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 "round": round_idx, "t_ms": loop.time() * 1000,
                 "conv_msgs": len(conversation),
             })
+            # --- Phase state machine transition ---------------------------
+            # Determine the phase from working memory BEFORE the model speaks.
+            # The framework drives the phase; the model must follow.
+            if not wm.has_plan():
+                _phase = "plan"
+            elif wm.has_plan() and not wm.all_done():
+                _phase = "act"
+            else:
+                _phase = "synthesize"
+            session_logger.log("phase_state", {
+                "round": round_idx, "phase": _phase,
+                "tasks": len(wm.tasks),
+                "completed": sum(1 for t in wm.tasks if t.status == "completed"),
+            })
+
             # Refresh the working-memory block in the system prompt every round
             # so the model always sees the current task list (with the latest
             # completed/in_progress marks). The system prompt is conversation[0];
@@ -651,32 +746,37 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             # This is the Copilot/Claude Code pattern: the task list is re-injected
             # every turn so the model can't lose it to compaction.
             try:
-                _wm_block = wm.render_for_prompt()
-                if _wm_block:
-                    conversation[0] = {"role": "system", "content": system_prompt + "\n\n" + _wm_block}
+                _phase_hint = ""
+                if _phase == "plan":
+                    _phase_hint = (
+                        "\n\n[FRAMEWORK PHASE: PLAN]\n"
+                        "You have no plan yet. Call plan_task with a goal and steps. "
+                        "No other tools. No prose answer."
+                    )
+                elif _phase == "act":
+                    _phase_hint = (
+                        "\n\n[FRAMEWORK PHASE: ACT]\n"
+                        "A plan exists. Mark the next step in_progress with update_task, "
+                        "do the work with the tools you need, then mark it completed. "
+                        "You may revise the plan at any time by calling plan_task."
+                    )
                 else:
-                    conversation[0] = {"role": "system", "content": system_prompt}
+                    _phase_hint = (
+                        "\n\n[FRAMEWORK PHASE: SYNTHESIZE]\n"
+                        "All steps are complete. Write the final answer as prose. "
+                        "No tool calls."
+                    )
+                _wm_block = wm.render_for_prompt()
+                _base = system_prompt + _phase_hint
+                if _wm_block:
+                    conversation[0] = {"role": "system", "content": _base + "\n\n" + _wm_block}
+                else:
+                    conversation[0] = {"role": "system", "content": _base}
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log("wm_render_failed", {"error": str(e)})
                 # Still set the system prompt without the wm block so the
                 # model gets *something* instead of a stale [0].
                 conversation[0] = {"role": "system", "content": system_prompt}
-
-            # Plan-mode gate: while active (multi-step, no plan yet), overlay the
-            # plan-mode directive onto the working system message [0] so the model
-            # explores + plans before executing. This edits only conversation[0]
-            # (rebuilt every round), never appends to the shared history — so the
-            # directive never duplicates and vanishes once the gate lifts.
-            if _gate_active and not wm.has_plan():
-                try:
-                    conversation[0] = {
-                        "role": "system",
-                        "content": conversation[0].get("content", "")
-                                   + "\n\n" + plan_mode_directive(),
-                    }
-                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    session_logger.log("plan_mode_overlay_failed",
-                        {"error": str(e)})
 
             # --- Per-step RAG retrieval (the user's design) --- #
             # For each step of the plan, RAG shows a new curated recollection
@@ -736,6 +836,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             round_text = ""
             round_thinking = ""
             round_tool_calls = []
+            round_finish_reason: str | None = None
             chunk_count = 0
             session_logger.log("llm_stream_start", {
                 "round": round_idx, "conv_msgs": len(conversation),
@@ -801,6 +902,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                             gen.close()
                             raise
                     if chunk.get("done") and not chunk.get("response") and not chunk.get("tool_calls"):
+                        if chunk.get("finish_reason"):
+                            round_finish_reason = chunk["finish_reason"]
                         break
                     # Check for eval_stats terminal chunk (Ollama's done chunk
                     # stats forwarded from ollama_client).  Send to the plugin
@@ -878,119 +981,83 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             conversation.append(assistant_msg)
 
             # ───────────────────────────────────────────────────────────────
-            # TURN PROTOCOL: <done> marker
+            # TURN PROTOCOL: phase-aware final-answer handling.
             # ───────────────────────────────────────────────────────────────
-            # The system prompt tells the model: "To finish, end your text
-            # with <done>. To continue, call a tool." This is the ONLY
-            # deterministic signal the framework uses to decide if the
-            # turn is over. No heuristics, no plan checks, no text-content
-            # inspection — just a structured marker the model emits.
-            #
-            # This works for any model size: a 14b can follow "end with
-            # <done>" because it's a single token pattern, not a judgment
-            # call about whether the work "looks done".
-            #
-            # The protocol has exactly three outcomes when there are no
-            # tool calls:
-            #   1. Text contains <done> → strip marker, accept as answer.
-            #   2. Text is empty → nudge once, then fail loud.
-            #   3. Text without <done> → protocol violation. Nudge once.
-            #      If the model still omits <done>, accept the text — the
-            #      user sees the fragment and can re-ask. We do NOT try to
-            #      guess whether the text is "intent to continue" vs "a
-            #      real answer" — that's a heuristic and there will always
-            #      be an edge case.
             if not round_tool_calls:
-                _has_done = "<done>" in round_text
-                if _has_done:
-                    # Strip the marker (and any trailing whitespace around it)
-                    # so the user never sees <done> in the chat UI.
-                    final_answer = round_text.replace("<done>", "").strip()
-                    if _synthesize_requested:
-                        await svc.manager.send_personal_message(json.dumps({
-                            "type": "status",
-                            "content": "Synthesizing final answer.",
-                        }), websocket, session_logger=session_logger)
-                    session_logger.log("turn_done_marker", {
-                        "round": round_idx,
-                        "answer_length": len(final_answer),
-                        "tool_rounds": _tool_rounds_executed,
-                    })
-                    break
-
-                if not round_text.strip():
-                    # Empty turn — nudge once, then fail loud.
-                    if not _empty_nudge_used:
-                        _empty_nudge_used = True
-                        session_logger.log("empty_answer_nudge", {
-                            "round": round_idx,
-                            "thinking_length": len(round_thinking),
-                            "has_plan": wm.has_plan(),
-                            "plan_all_done": wm.all_done() if wm.has_plan() else None,
-                        })
+                # Double-silent failsafe (must hold in every phase).
+                if not round_text.strip() and not round_thinking.strip():
+                    if not _double_silent_once:
+                        _double_silent_once = True
+                        session_logger.log("silent_turn_retry", {
+                            "round": round_idx, "phase": _phase})
                         conversation.append({
-                            "role": "system",
-                            "content": (
-                                "You stopped without responding to the user "
-                                "and without the <done> marker. You MUST write "
-                                "a direct response now. End it with <done> on "
-                                "its own line when you're finished. If you "
-                                "want to continue working, call a tool."),
+                            "role": "user",
+                            "content": "(no response received — please reply)",
                         })
                         round_idx += 1
                         continue
-
-                    # Second empty turn = fail loud.
+                    # Second silent turn → fail loud (never a blank screen).
                     session_logger.log("agent_silent_fail_loud", {
                         "round": round_idx,
-                        "thinking_length": len(round_thinking),
                         "tool_rounds": _tool_rounds_executed,
-                        "nudge_used": _empty_nudge_used,
+                        "phase": _phase,
                     })
                     raise AgentSilentError(
-                        "Agent ended turn with no user-facing text after a "
-                        "nudge. This is a contract violation — the turn is "
-                        "not done until the user has a response.")
+                        "Model returned nothing on two consecutive turns. "
+                        "Please retry.")
 
-                # Text without <done> — protocol violation. Nudge once,
-                # then accept (we don't guess whether it's a fragment or
-                # a real answer; the user can re-ask if it's incomplete).
-                if not _protocol_nudge_used:
-                    _protocol_nudge_used = True
-                    session_logger.log("no_done_marker_nudge", {
-                        "round": round_idx,
-                        "text_length": len(round_text),
-                        "thinking_length": len(round_thinking),
-                        "tool_rounds_executed": _tool_rounds_executed,
+                # Phase-specific prose handling.
+                if _phase == "plan":
+                    # The model should have called plan_task. If it answered in
+                    # prose instead, push it back to planning.
+                    session_logger.log("phase_plan_prose_rejected", {
+                        "round": round_idx, "text_len": len(round_text),
                     })
                     conversation.append({
-                        "role": "system",
+                        "role": "user",
                         "content": (
-                            "Your response did not end with the <done> marker "
-                            "and did not include a tool call. The turn protocol "
-                            "requires one or the other: call a tool to continue "
-                            "working, or end your text with <done> to finish. "
-                            "If you were about to call a tool, call it now. "
-                            "If you're done answering, write your complete "
-                            "answer and end with <done>."),
+                            "[FRAMEWORK REJECTION] You are in PLAN phase. "
+                            "Call plan_task with a goal and steps. No prose answer yet."
+                        ),
                     })
                     round_idx += 1
                     continue
 
-                # Already nudged — accept the text as-is. We refuse to
-                # guess whether it's a fragment or a complete answer.
-                session_logger.log("no_done_marker_accepted", {
-                    "round": round_idx,
-                    "text_length": len(round_text),
-                    "tool_rounds_executed": _tool_rounds_executed,
-                    "reason": "nudged once, model still omitted <done>",
-                })
-                if _synthesize_requested:
-                    await svc.manager.send_personal_message(json.dumps({
-                        "type": "status",
-                        "content": "Synthesizing final answer.",
-                    }), websocket, session_logger=session_logger)
+                if _phase == "act":
+                    # Prose during ACT is NEVER the final answer. The model must
+                    # explicitly mark every step completed with update_task.
+                    # Only then does the phase transition to SYNTHESIZE. This
+                    # removes the old "end whenever the model ends with prose"
+                    # loophole.
+                    _pending = sum(1 for t in wm.tasks if t.status != "completed")
+                    session_logger.log("phase_act_prose_rejected", {
+                        "round": round_idx,
+                        "pending_steps": _pending,
+                        "phase": _phase,
+                        "text_len": len(round_text),
+                    })
+                    conversation.append({
+                        "role": "user",
+                        "content": (
+                            f"[FRAMEWORK REJECTION] You are in ACT phase with "
+                            f"{_pending} unfinished step(s). You must mark the "
+                            "active step in_progress, do its work, then mark it "
+                            "completed with update_task. Prose final answers are "
+                            "only allowed in SYNTHESIZE phase."
+                        ),
+                    })
+                    round_idx += 1
+                    continue
+
+                # SYNTHESIZE phase: prose is the final answer.
                 final_answer = round_text
+                session_logger.log("turn_done", {
+                    "round": round_idx,
+                    "answer_length": len(final_answer),
+                    "tool_rounds": _tool_rounds_executed,
+                    "finish_reason": round_finish_reason or "stop",
+                    "phase": _phase,
+                })
                 break
 
             _round_tool_names = []
@@ -998,19 +1065,51 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 _fn = _tc.get("function", {})
                 _round_tool_names.append(_fn.get("name", ""))
             _tool_rounds_executed += 1
+            # Reset the double-silent retry flag: the model called a tool, so
+            # it's actively working. Any silent turn after this gets a fresh
+            # single retry before failing loud.
+            _double_silent_once = False
 
-            # FRAMEWORK-DRIVEN PLAN (the Copilot/Claude enforcement the model can't
-            # skip): on a multi-step task, if the model has used several tool
-            # rounds WITHOUT writing a plan, the framework forces plan mode ON —
-            # it doesn't wait for the model to volunteer. This is the gap the operator's
-            # session fell into: the gate never fired on a signal-less multi-step
-            # message, so no plan meant no all_done() stop and a 20-round spin.
-            if (_FORCE_PLAN_ON_MULTI and _is_multi and not wm.has_plan()
-                    and not _gate_active
-                    and _tool_rounds_executed >= _MAX_TOOL_ROUNDS_NO_PLAN):
-                _gate_active = True
-                session_logger.log("plan_gate_forced", {
-                    "round": round_idx, "reason": "no_plan_after_tool_rounds"})
+            # --- Phase-aware tool-call validation ---------------------------
+            _first_tool = _round_tool_names[0] if _round_tool_names else ""
+
+            if _phase == "synthesize":
+                # Reject all tool calls in SYNTHESIZE phase.
+                session_logger.log("phase_synthesize_tool_rejected", {
+                    "round": round_idx, "tools": _round_tool_names,
+                })
+                conversation.append({
+                    "role": "user",
+                    "content": (
+                        "[FRAMEWORK REJECTION] You are in SYNTHESIZE phase. "
+                        "All steps are complete. Write the final answer as prose. "
+                        "No tool calls."
+                    ),
+                })
+                round_idx += 1
+                continue
+
+            if _phase == "plan":
+                # Only plan_task is allowed in PLAN phase.
+                if _first_tool != "plan_task":
+                    session_logger.log("phase_plan_tool_rejected", {
+                        "round": round_idx, "tools": _round_tool_names,
+                    })
+                    conversation.append({
+                        "role": "user",
+                        "content": (
+                            "[FRAMEWORK REJECTION] You are in PLAN phase. "
+                            "Call plan_task with a goal and steps. No other tools."
+                        ),
+                    })
+                    round_idx += 1
+                    continue
+
+            # Accumulate the raw thinking for the step currently in progress
+            # so the summarizer has the agent's reasoning, not just the tool
+            # calls. Cleared when the step is consolidated.
+            if _step_in_progress_id and round_thinking.strip():
+                _step_raw_thinking += "\n" + round_thinking
 
             # Accumulate non-final round text into final_answer so the partial
             # file captures all streamed text across rounds, not just the last.
@@ -1029,54 +1128,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 except json.JSONDecodeError:
                     tool_args = {}
                 tool_call_id = tc.get("id", tool_name)
-
-                # Output validation (deterministic scaffolding): check the model's
-                # tool args against the declared JSON schema BEFORE executing.
-                # Small models emit malformed calls (missing required, wrong types,
-                # hallucinated arg names); executing them crashes the tool or does
-                # the wrong thing silently. A malformed call is rejected with a
-                # precise corrective message so the model fixes + retries, and the
-                # broken call NEVER runs. Skipped for the JSON-decode fallback {}
-                # (already empty) — validation only fires on a parsed dict.
-                if isinstance(tool_args, dict) and tool_args:
-                    _problems = validate_tool_call(tool_name, tool_args, all_tools)
-                    if _problems:
-                        session_logger.log("tool_call_invalid", {
-                            "tool": tool_name, "problems": _problems,
-                            "round": round_idx})
-                        conversation.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call_id,
-                            "tool_name": tool_name,  # for _sanitize_tool_history
-                            "content": json.dumps(
-                                corrective_message(tool_name, _problems), default=str),
-                        })
-                        continue  # do NOT execute a malformed call
-
-                # Plan-mode gate enforcement: while the gate is active, only
-                # read-only/explore tools + plan_task may run. Execution tools are
-                # blocked with a corrective message so the model redirects to
-                # planning instead of mutating. plan_task LIFTS the gate.
-                if _gate_active:
-                    if lifts_gate(tool_name):
-                        _gate_active = False
-                        session_logger.log("plan_gate_lifted", {"via": tool_name})
-                    elif tool_name not in EXPLORE_TOOLS:
-                        session_logger.log("plan_gate_blocked", {
-                            "tool": tool_name, "round": round_idx})
-                        conversation.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call_id,
-                            "tool_name": tool_name,  # for _sanitize_tool_history
-                            "content": json.dumps({
-                                "error": f"plan-mode: '{tool_name}' changes state and "
-                                         "cannot run before a plan exists.",
-                                "plan_mode": True,
-                                "action_required": "call plan_task with a goal + "
-                                                   "steps first, then re-run this tool.",
-                            }, default=str),
-                        })
-                        continue  # skip execution; next tool call
 
                 await svc.manager.send_personal_message(json.dumps({
                     "type": "tool_call", "tool": tool_name, "args": tool_args
@@ -1143,39 +1194,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     "summary": tool_result_summary(tool_name, tool_result),
                 }), websocket, session_logger=session_logger)
 
-                # code_read dedup tracking: if the model reads the same file
-                # again this turn, append a notice to the tool result so the
-                # model knows it's re-reading and should use different line
-                # ranges or move on. This directly addresses the read-loop
-                # pattern where the model re-read main.py 6 times because the
-                # sliding window dropped earlier reads from context.
-                if tool_name == "code_read" and isinstance(tool_result, dict) \
-                        and not tool_result.get("error"):
-                    _fp = tool_result.get("file_path", "")
-                    if _fp:
-                        _files_read_this_turn[_fp] = \
-                            _files_read_this_turn.get(_fp, 0) + 1
-                        if _files_read_this_turn[_fp] > 1:
-                            _count = _files_read_this_turn[_fp]
-                            session_logger.log("code_read_duplicate", {
-                                "file_path": _fp,
-                                "times_read": _count,
-                                "round": round_idx,
-                            })
-                            # Append the dedup notice to the result content.
-                            _dedup_notice = (
-                                f"\n[NOTICE: You have already read this file "
-                                f"{_count} times this turn. The content above "
-                                f"is the same file. If you need a different "
-                                f"section, use start_line/end_line. If you "
-                                f"have enough information, call update_task to "
-                                f"mark your task completed, then synthesize "
-                                f"your findings.]"
-                            )
-                            tool_result = dict(tool_result)
-                            if isinstance(tool_result.get("content"), str):
-                                tool_result["content"] += _dedup_notice
-
                 # Cap the tool result before appending. Uncapped results
                 # (vault_research syntheses, code_read of large files, graph
                 # dumps) can be 50K+ chars; appended verbatim they balloon the
@@ -1200,44 +1218,147 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     "result_summary": (tool_result_summary(tool_name, tool_result) or "")[:200],
                 })
 
-            # --- Read-loop detector (soft nudge, not a hard break) ---
-            # Track consecutive rounds where the model ONLY used read-only
-            # tools without completing any plan tasks. After N such rounds,
-            # inject a nudge telling the model to either update its task
-            # status or synthesize what it has. This breaks the "re-read the
-            # same file" cycle without killing the loop.
-            _round_was_read_only = bool(_round_tool_names) and all(
-                t in _READ_ONLY_TOOLS for t in _round_tool_names)
-            if _round_was_read_only:
-                _READ_LOOP_STREAK += 1
-            else:
-                _READ_LOOP_STREAK = 0  # reset on any non-read-only round
-
-            if (False and _READ_LOOP_STREAK >= _MAX_READ_ONLY_STREAK
-                    and not _READ_LOOP_NUDGE_SENT):
-                _READ_LOOP_NUDGE_SENT = True
-                _snap = wm.snapshot() if wm.has_plan() else {}
-                _completed = _snap.get("completed", 0)
-                _total = _snap.get("total", 0)
-                session_logger.log("read_loop_nudge", {
-                    "round": round_idx,
-                    "read_only_streak": _READ_LOOP_STREAK,
-                    "tasks_completed": _completed,
-                    "tasks_total": _total,
-                })
-                conversation.append({
-                    "role": "system",
-                    "content": (
-                        f"You have spent {_READ_LOOP_STREAK} consecutive "
-                        f"rounds only reading files without making plan "
-                        f"progress ({_completed}/{_total} tasks completed). "
-                        f"You have enough information — STOP reading and "
-                        f"either: (1) call update_task to mark tasks "
-                        f"completed based on what you've learned, then "
-                        f"synthesize your findings, or (2) if you need "
-                        f"different information, call a non-read-only tool. "
-                        f"Do NOT re-read files you've already read this turn."),
-                })
+                # --- Per-step raw-material accumulation (consolidation) --- #
+                # Track the tool calls + results for the step currently in
+                # progress, so the summarizer has the real material when the
+                # step is marked completed. plan_task / update_task are the
+                # planning tools — they're NOT work to summarize, so they
+                # don't count toward the step's raw material. When the model
+                # marks a step in_progress we start a fresh buffer; when it
+                # marks it completed we consolidate.
+                if tool_name == "update_task":
+                    _upd_status = (tool_args.get("status") or "").strip()
+                    _upd_id = (tool_args.get("task_id") or "").strip()
+                    if _upd_status == "in_progress" and _upd_id:
+                        # Model started a new step → reset the raw buffer.
+                        _step_in_progress_id = _upd_id
+                        _step_raw_calls = []
+                        _step_raw_results = []
+                        _step_raw_thinking = ""
+                        # Tell the plugin a new step is starting.
+                        _step_title = ""
+                        for _t in wm.tasks:
+                            if _t.id == _upd_id:
+                                _step_title = _t.content
+                                break
+                        await svc.manager.send_personal_message(json.dumps({
+                            "type": "step_start",
+                            "step_id": _upd_id,
+                            "title": _step_title[:120],
+                        }), websocket, session_logger=session_logger)
+                    elif _upd_status == "completed" and _upd_id:
+                        # Model finished a step → consolidate. Collect the
+                        # raw material accumulated since the step started
+                        # (including THIS update_task's own call/result so
+                        # the summarizer sees the completion signal).
+                        _step_raw_calls.append(tc)
+                        _step_raw_results.append(tool_result)
+                        _step_content = ""
+                        for _t in wm.tasks:
+                            if _t.id == _upd_id:
+                                _step_content = _t.content
+                                break
+                        # Resolve the small model cartridge (cheap local
+                        # model when configured, else the big model). Same
+                        # path the procedure cartridge system uses.
+                        try:
+                            from llm_client import get_small_client_or_big
+                            _sum_client = get_small_client_or_big(session_logger)
+                        except Exception as e:  # noqa: BLE001 — degraded continuation
+                            session_logger.log("step_summary_client_failed", {
+                                "error": str(e)})
+                            _sum_client = svc.ollama_client
+                        _summary = await loop.run_in_executor(
+                            None,
+                            lambda: summarize_step(
+                                _sum_client,
+                                wm.goal,
+                                _step_content,
+                                _step_raw_calls,
+                                _step_raw_results,
+                                _step_raw_thinking,
+                                session_logger,
+                            ),
+                        )
+                        wm.record_step_summary(_upd_id, _summary)
+                        _last_completed_step_id = _upd_id
+                        session_logger.log("step_summary_built", {
+                            "step_id": _upd_id,
+                            "summary_chars": len(_summary),
+                            "raw_calls": len(_step_raw_calls),
+                        })
+                        # Send the summary to the plugin so the step block
+                        # shows the gist and auto-collapses.
+                        await svc.manager.send_personal_message(json.dumps({
+                            "type": "step_summary",
+                            "step_id": _upd_id,
+                            "title": _step_content[:120],
+                            "summary": _summary,
+                        }), websocket, session_logger=session_logger)
+                        # CONSOLIDATE: replace the raw tool/thinking noise
+                        # for this step in the conversation with the summary.
+                        # The model's next round sees the gist, not the
+                        # chatter. The raw trace is preserved in the session
+                        # JSONL (session_logger logged every tool_call/result).
+                        _drop_count = 0
+                        # Drop assistant tool-call messages + their tool-role
+                        # result messages that were added during this step.
+                        # We walk from the end backwards while the messages
+                        # belong to this step's accumulated calls. The plan
+                        # step boundary is the assistant message that carried
+                        # the update_task(in_progress) call — anything after
+                        # it is this step's noise.
+                        # Simpler + robust: drop the last N assistant+tool
+                        # pairs where N = len(_step_raw_calls) (the calls we
+                        # accumulated for this step, minus the final
+                        # update_task(completed) which we also drop). We then
+                        # append ONE system message with the summary.
+                        _to_drop = 2 * len(_step_raw_calls)
+                        if _to_drop and len(conversation) > _to_drop + 2:
+                            conversation = conversation[:-_to_drop]
+                            _drop_count = _to_drop
+                        conversation.append({
+                            "role": "system",
+                            "content": (
+                                f"[Step {_upd_id} consolidated] "
+                                f"What was accomplished: {_summary}"
+                            ),
+                        })
+                        # Reset the step buffer for the next step.
+                        _step_in_progress_id = ""
+                        _step_raw_calls = []
+                        _step_raw_results = []
+                        _step_raw_thinking = ""
+                        session_logger.log("step_consolidated", {
+                            "step_id": _upd_id,
+                            "messages_dropped": _drop_count,
+                        })
+                        # If this was the LAST pending step, the plan is now
+                        # all_done → the next time the model stops, the
+                        # all_done() guard won't fire and the loop accepts
+                        # the text. But we want a deliberate final synthesis
+                        # round, so inject a request for it now.
+                        if wm.all_done():
+                            session_logger.log("plan_all_done", {
+                                "steps": len(wm.tasks)})
+                            conversation.append({
+                                "role": "user",
+                                "content": (
+                                    "All steps are complete. Write your final "
+                                    "answer to the user now. The user saw only "
+                                    "the step headers and summaries, not the "
+                                    "details — so write a complete, self-"
+                                    "contained answer as if they saw nothing "
+                                    "before this. Synthesize what was "
+                                    "accomplished across all steps."
+                                ),
+                            })
+                        continue  # don't double-append this update_task below
+                elif _step_in_progress_id:
+                    # A work tool (not planning) during an active step →
+                    # accumulate for the summarizer.
+                    _step_raw_calls.append(tc)
+                    _step_raw_results.append(tool_result)
 
             # --- Sliding window (mid-loop): re-apply after tool results ---
             # Each tool round adds 2+ messages (assistant + tool result).
@@ -1253,35 +1374,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     "round": round_idx,
                     "messages_before": _pre_mid_len,
                     "messages_after": len(conversation),
-                })
-
-            # Deterministic stop signal (the Copilot/Claude Code pattern): if
-            # the model has an active plan and EVERY task is marked completed,
-            # inject a final system instruction telling the model to synthesize
-            # its answer now and NOT emit more tool calls. This is the guard
-            # against the "re-search the same thing forever" loop — the model
-            # can't override a fully-checked list. The next round will produce
-            # a no-tool-call message and the natural stop fires.
-            #
-            # IMPORTANT: Only fire when no WORK tools were called this round.
-            # If the model called vault_search, code_read, etc. in the same
-            # round it marked all tasks done, it is still actively working and
-            # may need to add new tasks based on the results. Plan-management
-            # tools (plan_task, update_task, add_task) don't count as work.
-            _PLAN_MGMT_TOOLS = {"plan_task", "update_task", "add_task"}
-            _called_work_tools = [t for t in _round_tool_names if t not in _PLAN_MGMT_TOOLS]
-            if wm.has_plan() and wm.all_done() and not _called_work_tools:
-                session_logger.log("working_memory_all_done", {
-                    "round": round_idx,
-                    "tasks": wm.snapshot().get("total", 0),
-                })
-                _synthesize_requested = True
-                conversation.append({
-                    "role": "system",
-                    "content": (
-                        "All tasks in your working memory are completed. "
-                        "Synthesize your final answer for the user now. "
-                        "Do NOT call any more tools — produce the answer."),
                 })
 
             # Loop back: the LLM now sees the tool results and will produce
@@ -2141,6 +2233,9 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             llm_client=_proc_llm_client,
             vault_path=str(vault_root),
             procedure_tracker=svc.procedure_tracker,
+            # Pass the model's tool arguments (minus procedure_name) down
+            # so code steps can read them via the injected `args` dict.
+            procedure_args={k: v for k, v in args.items() if k != "procedure_name"},
         )
 
         # --- Procedure-level drift feedback (Phase 3) ---

@@ -403,7 +403,7 @@ class PatternExtractor:
             for root, dirs, files in os.walk(self.vault_path):
                 # Skip ignored dirs
                 if any(ignored in root for ignored in
-                       ['vaultbot_venv', '.git', '.obsidian', 'vaultbot_index',
+                       ['.venv', 'vaultbot_venv', '.git', '.obsidian', 'vaultbot_index',
                         'partials', 'sessions', 'trash']):
                     continue
                 for fname in files:

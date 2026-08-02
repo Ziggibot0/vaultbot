@@ -62,6 +62,10 @@ def main() -> int:
     parser.add_argument("--call-stack", default="[]",
                         help="JSON list of procedure names already in flight "
                              "(for cycle detection).")
+    parser.add_argument("--procedure-args", default="{}",
+                        help="JSON dict of call-time arguments forwarded to the "
+                             "child procedure's code steps via the injected "
+                             "`args` variable.")
     parser.add_argument("--max-depth", type=int, default=MAX_PROC_DEPTH,
                         help="Maximum recursion depth (default %(default)s).")
     args = parser.parse_args()
@@ -70,6 +74,13 @@ def main() -> int:
         call_stack = json.loads(args.call_stack)
     except json.JSONDecodeError:
         call_stack = []
+
+    try:
+        procedure_args = json.loads(args.procedure_args)
+        if not isinstance(procedure_args, dict):
+            procedure_args = {}
+    except json.JSONDecodeError:
+        procedure_args = {}
 
     # --- Cycle detection: refuse to re-enter a procedure already running ---
     if args.procedure_name in call_stack:
@@ -127,6 +138,7 @@ def main() -> int:
             llm_client=llm_client,
             vault_path=args.vault_path,
             call_stack=call_stack + [args.procedure_name],
+            procedure_args=procedure_args,
         ))
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         print(json.dumps({

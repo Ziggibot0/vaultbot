@@ -37,7 +37,8 @@ from graph_ops import GraphOpRegistry
 from identity import Identity
 from knowledge_curriculum import KnowledgeCurriculum
 from lazy_condenser import LazyCondenser
-from llm_client import LLMClient, get_llm_client, get_vision_client
+from llm_client import LLMClient, build_role_client
+from providers import ProviderRegistry
 from note_creator import NoteCreator
 
 # Import our modules
@@ -226,7 +227,6 @@ async def lifespan(app: FastAPI):
         # Skip if disabled via VAULTBOT_PRELOAD_ON_STARTUP=0.
         if os.environ.get("VAULTBOT_PRELOAD_ON_STARTUP", "1") != "0":
             def _preload_models():
-                import llm_client as _llm_mod
                 _preloaded = []
 
                 def _preload_with_retry(client, label):
@@ -254,10 +254,9 @@ async def lifespan(app: FastAPI):
                 _preloaded.append(ollama_client.llm_model)
                 # Small model (tiny dance partner for procedures).
                 try:
-                    _small = _llm_mod.get_small_client(default_session_logger)
-                    if _small is not None:
-                        _preload_with_retry(_small, "small")
-                        _preloaded.append(_small.llm_model)
+                    if small_client is not None:
+                        _preload_with_retry(small_client, "small")
+                        _preloaded.append(small_client.llm_model)
                 except Exception as e:  # noqa: BLE001
                     startup_logger.log("model_preload_startup_failed", {"model": "small", "error": str(e)})
                 startup_logger.log("models_preloaded", {"models": _preloaded})
@@ -349,45 +348,46 @@ app.add_middleware(
 # Default global session logger for startup/shutdown and background tasks.
 default_session_logger = SessionLogger()
 
-# Initialize the synthesis LLM client. This is the ONLY step that spends
-# tokens, so it's the one swappable surface: local Ollama (free, private,
-# heavy) OR any OpenAI-compatible API (OpenAI, OpenRouter->Anthropic, Gemini,
-# vLLM, LM Studio, ...) via a key the user brings. A weak-laptop user sets
-# LLM_BACKEND=openai + LLM_API_KEY + LLM_MODEL in .env and runs zero local
-# compute; the research loop stays token-free either way. See llm_client.py.
-# Embeddings are a SEPARATE concern and stay on OllamaClient (nomic-embed-text,
-# ~270MB, light enough for a weak laptop) inside vault_indexer.
+# ── Provider + Model Registry (the interchangeable "pot") — the ONLY path ──
+# The three cartridges (big/small/vision) all resolve through the provider
+# registry. There are no .env cartridge factories. On first run with no
+# providers.json, migrate_from_env() synthesizes providers from the legacy
+# .env cartridge vars ONE LAST TIME so the user's previous config carries
+# over; from then on the pot is the single source of truth and the .env vars
+# are dead. build_role_client(role) builds the live client for whichever
+# model the role points at, on whichever provider serves it — local Ollama,
+# OpenRouter, OpenAI — all interchangeable. If the big role is unassigned we
+# fail loud (no silent wrong-model fallback).
+registry = ProviderRegistry.migrate_from_env()
+
+ollama_client: LLMClient | None = None
+vision_client: LLMClient | None = None
+small_client: LLMClient | None = None
 try:
-    ollama_client = get_llm_client(session_logger=default_session_logger)
-except RuntimeError as _llm_cfg_err:
-    # The user configured LLM_BACKEND=openai but is missing the API key
-    # or model. get_llm_client now raises instead of silently falling back
-    # to Ollama. Surface a Diagnosis so the user knows exactly what's
-    # wrong, then fall back to Ollama so the backend still starts (the
-    # user can fix their .env and restart). This is NOT silent — the
-    # Diagnosis is logged + printed so it's visible in every channel.
+    ollama_client = build_role_client("big", registry, default_session_logger)
+    vision_client = build_role_client("vision", registry, default_session_logger)
+    small_client = build_role_client("small", registry, default_session_logger)
+except Exception as _reg_err:  # noqa: BLE001 — surface, then fall through to fail-loud path
+    print(f"[WARN] provider registry client build failed: {_reg_err}")
+
+if ollama_client is None:
+    # Fail loud: no big model assigned. The user MUST configure one in
+    # Settings -> AI Models & Providers. We still keep the backend process
+    # alive so the settings UI is reachable, but chat will surface the error.
     from diagnostics import classify_error
-    _llm_diag = classify_error(_llm_cfg_err, {"stage": "startup"})
-    default_session_logger.log("llm_backend_config_error", {
-        "error": str(_llm_cfg_err),
+    _llm_diag = classify_error(
+        RuntimeError("No model assigned to the 'big' cartridge in "
+                     "providers.json. Settings -> AI Models & Providers."),
+        {"stage": "startup"})
+    default_session_logger.log("llm_no_big_model", {
         "category": _llm_diag.category.value,
         "user_message": _llm_diag.user_message,
     })
     print(f"[CONFIG ERROR] {_llm_diag.user_message}")
-    print(f"[CONFIG ERROR] Raw: {_llm_cfg_err}")
-    # Still fall back to Ollama so the backend starts, but the user has
-    # been loudly notified. This is a notified fallback, not a silent one.
-    from llm_client import _make_ollama_client
-    ollama_client = _make_ollama_client(session_logger=default_session_logger)
-# OPTIONAL dedicated vision model for reading textbook pages. This is a
-# SEPARATE concern from the synthesis client: a user can keep a fast/cheap
-# text-only chat model and delegate page-reading (textbook_read_page) to a
-# vision-capable model on its own backend. None when no VISION_MODEL is set,
-# in which case the page reader falls back to the synthesis client's own
-# vision_capable() probe (so a vision-capable chat model still works). See
-# llm_client.get_vision_client for the resolution rules.
-vision_client: LLMClient | None = get_vision_client(
-    session_logger=default_session_logger)
+    # Minimal sentinel so downstream attribute access doesn't AttributeError
+    # before the user configures a model. is_running() -> False.
+    from llm_client import LLMClient as _LC
+    ollama_client = _LC()  # type: ignore[abstract]
 # VaultBot's own search engine: a keyless, rate-limit-resistant
 # multi-engine aggregator (DuckDuckGo Lite + Marginalia + arXiv) PLUS an
 # opt-in SearXNG (self-hosted Docker) backend for mainstream-web coverage.
@@ -704,6 +704,8 @@ from app_state import set_services  # Phase 3: DI surface for routers
 svc = Services(
     ollama_client=ollama_client,
     vision_client=vision_client,
+    small_client=small_client,
+    registry=registry,
     vault_indexer=vault_indexer,
     vault_graph=vault_graph,
     note_creator=note_creator,

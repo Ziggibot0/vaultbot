@@ -15,9 +15,10 @@ Inventory every available tool (built-in + meta + custom-authored) and assess wh
 ## Steps
 
 1. ```python
-   # Call the capability_audit tool's run() function
-   from custom_tools.capability_audit import run as _audit
-   result = _audit({"task": args.get("task", "")})
+   # capability_audit is a SelfImprover method — instantiate it standalone.
+   from self_improver import SelfImprover
+   _si = SelfImprover(session_logger=None)
+   result = _si.capability_audit(task=args.get("task", ""))
    print(result)
    ```
 

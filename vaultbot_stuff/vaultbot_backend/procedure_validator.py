@@ -406,7 +406,7 @@ def dry_run_procedure(
         "\n"
         "vault_path = os.environ.get('VAULT_PATH', '.')\n"
         "prior_results = json.loads(os.environ.get('PRIOR_RESULTS', '[]'))\n"
-        '_IGNORED_DIRS = {".git", ".obsidian", "vaultbot_venv", '
+        '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", '
         '"vaultbot_index", "sessions", "partials", "__pycache__"}\n'
         "\n"
         "# Mock tools\n"

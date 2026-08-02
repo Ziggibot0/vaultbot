@@ -10,7 +10,8 @@ WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")
 # without this the graph was ingesting plugin READMEs, venv files, partial
 # crash-recovery notes, etc. as graph nodes.
 _IGNORED_DIRS = {
-    "vaultbot_venv",
+    ".venv",
+    "vaultbot_venv",  # legacy name; superseded by .venv
     "vaultbot_index",
     "sessions",
     "partials",

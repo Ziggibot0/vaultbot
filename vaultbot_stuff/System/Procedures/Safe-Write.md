@@ -17,7 +17,9 @@ Edit backend Python source code safely. The tool syntax-checks, writes as UTF-8,
 1. [llm: Read the file you want to edit using code_read to understand its current state.]
 
 2. ```python
-   result = safe_write(
+   from self_improver import SelfImprover
+   _si = SelfImprover(session_logger=None)
+   result = _si.safe_write(
        file_path=args["file_path"],
        content=args["content"],
        dry_run=args.get("dry_run", False)

@@ -5,13 +5,16 @@
 .env
 .env.local
 .env.*.local
+providers.json
+providers.json.tmp
 
 # ─────────────────────────────────────────────────────────────────────
 # Python virtual environment
-# Users create their own: python -m venv vaultbot_venv  (or .venv)
+# setup.ps1/setup.sh create .venv (hidden in Obsidian). vaultbot_venv/
+# kept as a legacy pattern in case an old install left one behind.
 # ─────────────────────────────────────────────────────────────────────
-vaultbot_venv/
 .venv/
+vaultbot_venv/
 venv/
 env/
 

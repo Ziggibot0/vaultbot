@@ -4,80 +4,59 @@ status: active
 model_cartridge: small
 created: 2026-08-01
 description: "Search Ollama's model library, check available tags, list installed models, and pull new models. Uses the ollama_model_search tool."
-when_to_use: "When you need to find, evaluate, or pull Ollama models — e.g. looking for a vision model, a small local model, or checking what's installed."
-allowed_tools: [ollama_model_search]
+when_to_use: "when you need to find, evaluate, compare, or pull Ollama models — looking for a vision model, a small local model, or checking what's installed before a model swap"
+applies_to:
+  - models
+  - ollama
+  - cartridge
+allowed_tools: []
 ---
 
 # Ollama Model Search
 
-Search, evaluate, and pull models from Ollama's library using the `ollama_model_search` tool. This procedure covers the full workflow: find a model → check available sizes/tags → pull the right one → verify it's installed.
+Dispatch to the `ollama_model_search` custom tool. The `action` argument
+selects the operation; `query`/`tag`/`category` refine it:
 
-## Step 1: Search the Library
+| action | required args | what it does |
+|---|---|---|
+| `search` | `query` | scrape ollama.com/search for matching model cards |
+| `tags` | `query` (model name) | list pullable tags/sizes for a model |
+| `installed` | — | run `ollama list` (installed models + sizes) |
+| `pull` | `query` (model), optional `tag` | `ollama pull <model>:<tag>` |
 
-Find models matching a query. Use `action=search` with a keyword.
+If no `action` arg is given, default to `installed` (cheapest — shows
+what's already local before any network call).
 
-```
-Call ollama_model_search with:
-  action: "search"
-  query: "<your search term, e.g. 'vision' or 'embedding' or 'reasoning'>"
-  category: "<optional: vision, tools, embedding, reasoning>"
-```
+## Steps
 
-The tool scrapes `https://ollama.com/search` and returns model cards with name, description, pull count, and update date. Review the results to identify candidate models.
+### Step 1: Dispatch the requested ollama_model_search action
 
-## Step 2: Check Available Tags
+1. ```python
+from custom_tools.ollama_model_search import run as _oms
 
-Once you've identified a model, check what sizes/variants are available before pulling. Use `action=tags` with the model name.
+action = args.get("action", "installed")
+payload = {"action": action}
+if args.get("query"):
+    payload["query"] = args["query"]
+if args.get("tag"):
+    payload["tag"] = args["tag"]
+if args.get("category"):
+    payload["category"] = args["category"]
 
-```
-Call ollama_model_search with:
-  action: "tags"
-  query: "<model name, e.g. 'llama3.2' or 'qwen2.5'>"
-```
-
-This returns all pullable tags (e.g. `1.5b`, `3b`, `7b`, `fp16`, `q4_K_M`) with sizes. Pick the tag that fits your hardware constraints.
-
-## Step 3: Check What's Already Installed
-
-Before pulling, verify you don't already have the model. Use `action=installed`.
-
-```
-Call ollama_model_search with:
-  action: "installed"
+result = _oms(payload)
+print(result)
 ```
 
-This runs `ollama list` locally and returns all installed models with their size and modification date. If the model is already there, skip to Step 5.
+### Step 2: Interpret the results
 
-## Step 4: Pull the Model
-
-Pull the chosen model with a specific tag (or `latest` if no tag specified).
-
-```
-Call ollama_model_search with:
-  action: "pull"
-  query: "<model name>"
-  tag: "<specific tag, e.g. '3b' or '1.5b-q4_K_M'>"
-```
-
-This runs `ollama pull <model>:<tag>` and returns the cleaned output (ANSI escape sequences stripped). Pull time depends on model size and network speed.
-
-## Step 5: Verify Installation
-
-Confirm the model landed correctly.
-
-```
-Call ollama_model_search with:
-  action: "installed"
-```
-
-Check that the newly pulled model appears in the list with the expected size.
+2. [llm: Interpret the ollama_model_search output for the user based on the action. For `search`: list candidate models with pull counts and one-line fit-for-purpose notes. For `tags`: list available sizes/tags and recommend one for the user's hardware (respect the 30B memory budget — ~32GB total, a 30B Q4_K_M already uses ~26GB). For `installed`: report what's installed and flag near-duplicates. For `pull`: confirm success and report the pulled model's size. Keep it concise and actionable.]
 
 ## Decision Notes
 
-- **Small models for procedures:** When pulling a model to serve as a `model_cartridge: small` backend, prefer quantized variants (`q4_K_M`, `q5_K_M`) in the 0.5B–3B parameter range. These run fast on CPU and save cloud tokens.
-- **Vision models:** If the task involves image/PDF reading, filter search with `category: vision`.
-- **Embedding models:** For retrieval-augmented generation, filter with `category: embedding`.
-- **Disk space:** Check available disk before pulling large models (7B+ models can be 4–8 GB each).
+- **Small models for procedures:** For a `model_cartridge: small` backend, prefer quantized variants (`q4_K_M`, `q5_K_M`) in the 0.5B–3B range.
+- **Vision models:** filter search with `category: vision`.
+- **Embedding models:** filter with `category: embedding`.
+- **Disk space:** check free space before pulling 7B+ models (4–8 GB each).
 
 ## Related
 

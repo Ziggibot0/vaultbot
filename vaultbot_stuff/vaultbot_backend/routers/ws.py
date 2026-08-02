@@ -369,12 +369,6 @@ async def websocket_endpoint(websocket: WebSocket,
                 session_logger.log("empty_message", {"payload": payload})
                 continue
 
-            # Optional per-message model override
-            requested_model = payload.get("model")
-            if requested_model and requested_model != svc.ollama_client.llm_model:
-                svc.ollama_client.set_model(requested_model)
-                session_logger.log("model_override", {"model": requested_model})
-
             # Interrupt-on-send: cancel any in-flight turn.
             task = getattr(websocket, "_current_task", None)
             if task and not task.done():

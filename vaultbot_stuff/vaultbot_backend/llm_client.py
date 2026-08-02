@@ -64,6 +64,8 @@ from typing import Any
 
 import requests
 
+from providers import normalize_base_url
+
 
 def _test_image_base64() -> str:
     """Build a tiny red PNG, as base64.
@@ -473,172 +475,170 @@ class OpenAICompatibleClient(LLMClient):
             self._log("chat", inputs={"model": self.llm_model, "stream": True},
                       outputs={"chunks": chunk_count, "tool_calls": len(tc_acc)},
                       duration_ms=(time.time() - t0) * 1000)
-        # Terminal done marker (matches Ollama's contract).
+        # Terminal done sentinel (signals end of stream to the chat handler).
         yield {"done": True}
 
 
 # ---------------------------------------------------------------------------
-# Factory
+# Provider/Model Registry factory — the interchangeable "pot" (the ONLY path)
 # ---------------------------------------------------------------------------
-def _make_ollama_client(session_logger: Any = None) -> LLMClient:
-    """Build the default Ollama-backed client. Never raises."""
+# There are no .env cartridge factories here anymore. The three roles
+# (big/small/vision) and every helper that used to call get_llm_client /
+# get_vision_client / get_small_client now resolve through the ProviderRegistry
+# pot. build_role_client() constructs the live client for whichever model a
+# role points at, on whichever provider serves it — local Ollama, OpenRouter,
+# OpenAI — all interchangeable.
+def _client_for_model_entry(entry: Any, provider: Any,
+                            session_logger: Any = None) -> LLMClient:
+    """Instantiate the right LLMClient for one registry ModelEntry.
+
+    ``entry`` is a ``providers.ModelEntry``; ``provider`` is its ``Provider``.
+    Dispatches on provider.type:
+      - "ollama" -> OllamaClient (local daemon or Ollama-cloud host)
+      - "openai" -> OpenAICompatibleClient (OpenAI / OpenRouter / Gemini proxy /
+        vLLM / LM Studio — any /v1/chat/completions endpoint)
+    Both base_urls are already normalized (no /v1) by the registry on add, so
+    path joining is unambiguous. The ollama embed_model stays a separate
+    concern (always local, nomic-embed-text).
+    """
+    if provider.type == "openai":
+        return OpenAICompatibleClient(
+            base_url=provider.base_url, api_key=provider.api_key,
+            llm_model=entry.model, session_logger=session_logger,
+        )
+    # Default: Ollama (local daemon or Ollama-cloud — same /api/* surface).
     from ollama_client import OllamaClient
     return OllamaClient(
-        base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-        llm_model=os.getenv("OLLAMA_LLM_MODEL", ""),
+        base_url=provider.base_url or os.getenv("OLLAMA_HOST",
+                                                  "http://localhost:11434"),
+        llm_model=entry.model,
         embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         session_logger=session_logger,
     )
+
+
+def build_role_client(role: str, registry: Any,
+                      session_logger: Any = None) -> LLMClient | None:
+    """Build (or reuse) the live client for whichever model a role points at.
+
+    This is the single interchange point for the whole backend: every role —
+    big/small/vision — resolves through the pot. Returns None if the role has
+    no assigned model, or the model/provider is missing from the pot. Memoized
+    per assigned model id; invalidated by the router on any pot mutation.
+
+    Back-compat name: main.py's startup path used to call get_llm_client /
+    get_vision_client / get_small_client with different semantics (small was
+    forced local). Now they're all just build_role_client("<role>").
+    """
+    mid = registry.get_role(role)
+    if not mid:
+        _ROLE_CLIENT_CACHE.pop(role, None)
+        return None
+    cached = _ROLE_CLIENT_CACHE.get(role)
+    if cached is not None and getattr(cached, "_registry_model_id", None) == mid:
+        return cached
+    entry = registry.get_model(mid)
+    if entry is None:
+        return None
+    provider = registry.get_provider(entry.provider)
+    if provider is None:
+        return None
+    client = _client_for_model_entry(entry, provider, session_logger)
+    try:
+        client._registry_model_id = mid  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 — tagging is best-effort
+        pass
+    _ROLE_CLIENT_CACHE[role] = client
+    return client
+
+
+# Process-wide cache so repeated build_role_client calls for the same model id
+# reuse one client (and its HTTP session / keep-alive state) instead of
+# rebuilding per call. Invalidated by the router after any providers.json
+# mutation (add/remove provider/model or role change).
+_ROLE_CLIENT_CACHE: dict[str, LLMClient] = {}
+
+
+def clear_role_client_cache() -> None:
+    """Invalidate the role-client cache. Called by the llm router after any
+    providers.json mutation so the next build_role_client rebuilds from the
+    new pot."""
+    _ROLE_CLIENT_CACHE.clear()
+
+
+# ---------------------------------------------------------------------------
+# Cartridge accessors used across the backend helpers.
+# These replace the old get_llm_client / get_vision_client / get_small_client /
+# get_small_client_or_big factories. Each resolves through the registry pot.
+# They import the registry lazily to avoid an import cycle with Services.
+# ---------------------------------------------------------------------------
+def _default_registry() -> Any:
+    """Return the live ProviderRegistry singleton.
+
+    Prefers Services.registry (the canonical instance, kept hot by the llm
+    router); falls back to migrate_from_env() if Services isn't wired yet
+    (early startup) so helper modules work even before DI is ready.
+    """
+    try:
+        from app_state import get_services
+        reg = getattr(get_services(), "registry", None)
+        if reg is not None:
+            return reg
+    except Exception:  # noqa: BLE001 — Services may not be set yet
+        pass
+    from providers import ProviderRegistry
+    return ProviderRegistry.migrate_from_env()
+
+
+def get_cartridge(role: str, session_logger: Any = None) -> LLMClient | None:
+    """The client for a cartridge role, from the pot. None if unassigned.
+
+    All three cartridges are interchangeable: `get_cartridge("small")` CAN
+    return a cloud model if the user mapped small -> an OpenAI model, and
+    `get_cartridge("big")` can be a local Ollama model. The pot decides.
+    """
+    return build_role_client(role, _default_registry(), session_logger)
 
 
 def get_llm_client(session_logger: Any = None) -> LLMClient:
-    """Build the synthesis LLM client from .env.
+    """The big cartridge client (the main chat/reasoning model), from the pot.
 
-    Priority:
-      1. LLM_BACKEND explicitly set -> honor it ("ollama" | "openai").
-      2. Legacy: OLLAMA_LLM_MODEL set + no LLM_BACKEND -> Ollama (back-compat).
-      3. Default -> Ollama (free, zero-config, the original behavior).
-
-    **Never raises.** A fresh clone with incomplete .env (e.g.
-    ``LLM_BACKEND=openai`` but no ``LLM_API_KEY``) raises a clear
-    ``RuntimeError`` instead of silently falling back to Ollama. The
-    caller (main.py at startup) catches this and surfaces a Diagnosis
-    card so the user knows exactly why the backend didn't start —
-    rather than silently talking to the wrong model.
+    REPLACES the old .env factory. Now reads the big role from the registry.
+    Raises RuntimeError if the big role is unassigned — fail loud, never
+    silently talk to a wrong model, per Sean's no-silent-fallback rule.
     """
-    backend = (os.getenv("LLM_BACKEND") or "").strip().lower()
-
-    if backend == "openai":
-        base_url = (os.getenv("LLM_BASE_URL") or "https://api.openai.com").strip()
-        api_key = (os.getenv("LLM_API_KEY") or "").strip()
-        model = (os.getenv("LLM_MODEL") or "").strip()
-        if not api_key or not model:
-            # FAIL LOUD: do not silently fall back to Ollama. The user
-            # configured a cloud backend; giving them the local model
-            # without telling them is a silent quality degradation they
-            # can't detect. Raise so the caller can surface a Diagnosis.
-            missing = "LLM_API_KEY" if not api_key else "LLM_MODEL"
-            raise RuntimeError(
-                f"LLM_BACKEND=openai but {missing} is not set. "
-                f"Set {missing} in your .env file, or change "
-                f"LLM_BACKEND=ollama to use the local model."
-            )
-        return OpenAICompatibleClient(
-            base_url=base_url, api_key=api_key, llm_model=model,
-            session_logger=session_logger,
-        )
-
-    # Default / "ollama" / legacy: use the existing OllamaClient, which
-    # already implements the LLMClient surface (chat, list_models, set_model,
-    # is_running). Imported lazily so an OpenAI-only install never loads the
-    # Ollama requests surface unnecessarily.
-    return _make_ollama_client(session_logger)
+    client = build_role_client("big", _default_registry(), session_logger)
+    if client is None:
+        raise RuntimeError(
+            "No model assigned to the 'big' cartridge. Open VaultBot Settings "
+            "-> AI Models & Providers, add a model, and assign it to Big. "
+            "(providers.json has no big role mapping.)")
+    return client
 
 
 def get_vision_client(session_logger: Any = None) -> LLMClient | None:
-    """Build the OPTIONAL vision LLM client from .env.
+    """The vision cartridge client (textbook-page reader), from the pot.
 
-    The vision client is a SEPARATE concern from the synthesis (chat) client:
-    it is used ONLY to read rendered textbook pages (textbook_read_page) when
-    the chat model is text-only. A user keeps their fast/cheap chat model and
-    delegates page-reading to a vision-capable model on its own backend.
-
-    Settings (all optional; if any required piece is missing, returns None
-    and the caller falls back to the synthesis client or the text layer):
-      VISION_BACKEND  : "ollama" | "openai"  (defaults to the synthesis backend)
-      VISION_BASE_URL  : OpenAI-compatible endpoint (openai path)
-      VISION_API_KEY   : bearer token (openai path)
-      VISION_MODEL     : model id (openai path) OR Ollama model name
-      VISION_OLLAMA_HOST: Ollama host if the vision model lives on a different
-                         Ollama daemon than the chat model (ollama path)
-
-    Resolution rules:
-      - If VISION_MODEL is unset -> return None (no dedicated vision model;
-        callers fall back to the synthesis client's own vision_capable()).
-      - If VISION_BACKEND == "openai" -> OpenAICompatibleClient using
-        VISION_BASE_URL / VISION_API_KEY / VISION_MODEL. Missing api_key or
-        base_url -> None (not a hard error; just no vision).
-      - If VISION_BACKEND == "ollama" (or unset with VISION_MODEL set) ->
-        OllamaClient pointed at VISION_OLLAMA_HOST (or the same OLLAMA_HOST as
-        chat) with VISION_MODEL as the model.
+    None if no vision role is assigned (callers fall back to the big model).
     """
-    model = (os.getenv("VISION_MODEL") or "").strip()
-    if not model:
-        return None
-
-    backend = (os.getenv("VISION_BACKEND") or "").strip().lower()
-    # If the vision backend isn't explicitly set, mirror the synthesis backend
-    # so a user who only sets VISION_MODEL gets sensible behavior.
-    if not backend:
-        backend = (os.getenv("LLM_BACKEND") or "").strip().lower()
-
-    if backend == "openai":
-        base_url = (os.getenv("VISION_BASE_URL") or os.getenv("LLM_BASE_URL")
-                    or "https://api.openai.com").strip()
-        api_key = (os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY")
-                   or "").strip()
-        if not api_key:
-            return None
-        return OpenAICompatibleClient(
-            base_url=base_url, api_key=api_key, llm_model=model,
-            session_logger=session_logger,
-        )
-
-    # Ollama path (default).
-    from ollama_client import OllamaClient
-    host = (os.getenv("VISION_OLLAMA_HOST") or os.getenv("OLLAMA_HOST")
-            or "http://localhost:11434")
-    return OllamaClient(
-        base_url=host,
-        llm_model=model,
-        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-        session_logger=session_logger,
-    )
+    return build_role_client("vision", _default_registry(), session_logger)
 
 
 def get_small_client(session_logger: Any = None) -> LLMClient | None:
-    """Build the OPTIONAL small (local-only) LLM client from .env.
+    """The small cartridge client (cheap helper model), from the pot.
 
-    The small model is the "tiny dance partner" — a very small local Ollama
-    model (e.g. qwen3.5:0.8b) that procedures can delegate to for cheap
-    classification, tagging, routing, and other low-complexity LLM work.
-    It runs on any laptop, costs zero cloud tokens, and lets the cloud
-    model do less over time as more procedures use the small cartridge.
-
-    The small model is ALWAYS local (Ollama). There is no cloud path —
-    the whole point is to save cloud tokens by running locally. If
-    SMALL_MODEL is unset, returns None and callers fall back to the big
-    client (the synthesis client).
-
-    Settings:
-      SMALL_MODEL       : Ollama model name (required; local-only)
-      SMALL_OLLAMA_HOST  : Ollama host if the small model lives on a
-                          different daemon (defaults to OLLAMA_HOST)
+    None if no small role is assigned (callers fall back to the big model).
     """
-    model = (os.getenv("SMALL_MODEL") or "").strip()
-    if not model:
-        return None
-
-    from ollama_client import OllamaClient
-    host = (os.getenv("SMALL_OLLAMA_HOST") or os.getenv("OLLAMA_HOST")
-            or "http://localhost:11434")
-    return OllamaClient(
-        base_url=host,
-        llm_model=model,
-        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-        session_logger=session_logger,
-    )
+    return build_role_client("small", _default_registry(), session_logger)
 
 
 def get_small_client_or_big(session_logger: Any = None) -> LLMClient:
-    """Return the small model if configured, else the big model.
+    """The small cartridge if assigned, else the big cartridge.
 
-    This is the convenience wrapper for call sites that WANT the small model
-    but must still work when it isn't configured. The small model handles
-    simple structured tasks (tagging, classification, extraction, summaries)
-    that don't need the big model's reasoning power — saving cloud tokens.
+    Convenience for the ~10 helper call sites that WANT the cheap model but
+    must still work when small is unconfigured. Resolves both through the pot.
     """
-    small = get_small_client(session_logger)
+    small = build_role_client("small", _default_registry(), session_logger)
     if small is not None:
         return small
     return get_llm_client(session_logger)

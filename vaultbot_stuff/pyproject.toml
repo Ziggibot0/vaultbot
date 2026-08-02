@@ -6,8 +6,8 @@
 # Run: `ruff check vaultbot_backend/` (lint) / `ruff format vaultbot_backend/` (format)
 
 [tool.ruff]
-# Exclude the custom-named venv (ruff's default exclude covers .venv but NOT
-# vaultbot_venv) plus the standard build/test artifact dirs.
+# Ruff's default exclude covers .venv/venv automatically. We add vaultbot_venv
+# for any legacy installs, plus the standard build/test artifact dirs.
 exclude = [
     ".bzr",
     ".direnv",
@@ -35,6 +35,7 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
+    "vaultbot_venv",
     "vaultbot_index",
     "sessions",
     "partials",
@@ -46,8 +47,9 @@ exclude = [
 line-length = 88
 indent-width = 4
 
-# Match the runtime Python (the venv is 3.12, but the codebase targets 3.11+
-# features like `str | None` — py311 is the floor).
+# Match the runtime Python floor (setup.ps1/setup.sh create a venv from
+# whatever system python is available; the codebase targets 3.11+ features
+# like `str | None` — py311 is the floor).
 target-version = "py311"
 
 [tool.ruff.lint]

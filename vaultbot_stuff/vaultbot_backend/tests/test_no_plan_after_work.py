@@ -1,13 +1,14 @@
-"""Tests for the <done> turn-protocol.
+"""Tests for the finish_reason turn-protocol with auto-continuation.
 
-The system prompt tells the model: "To finish, end your text with <done>.
-To continue, call a tool." The framework uses this structured marker as the
-ONLY deterministic signal for whether the turn is over. No heuristics, no
-plan checks, no text-content inspection — just a marker.
+The framework uses Ollama's /v1/chat/completions endpoint, which gives us
+finish_reason ("stop", "tool_calls", "length") — the structural signal for
+turn termination. When the model stops with text (no tool call) after
+doing work, the framework auto-nudges it to continue (up to
+_MAX_CONTINUE_NUDGES times). The nudge counter resets on every tool call,
+so the model can work for days without the user typing "continue".
 
-This works for any model size: a 14b can follow "end with <done>" because
-it's a single token pattern, not a judgment call about whether the work
-"looks done".
+No <done> marker, no text-content heuristics, no plan-gate enforcement.
+The model speaks freely and the framework reads the structured signal.
 
 This is a source-level test (AST scan) because the decision logic is
 embedded in the large async handle_chat function which requires the full
@@ -54,94 +55,169 @@ def _raise_matches_agent_silent(node: ast.Raise) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Contract: <done> marker in the system prompt
+# Contract: finish_reason-based turn protocol
 # ---------------------------------------------------------------------------
 
-class TestDoneMarkerProtocol:
-    """The <done> marker must be documented in the system prompt and
-    enforced in the chat handler."""
+class TestFinishReasonProtocol:
+    """The finish_reason signal from /v1/chat/completions must be used as
+    the primary turn-termination signal, with the continuation-intent
+    engine as a secondary check."""
 
-    def test_done_marker_in_system_prompt(self):
-        """Both build_system_prompt functions must tell the model to use
-        the <done> marker to signal the end of a turn."""
+    def test_turn_protocol_in_system_prompt(self):
+        """Both build_system_prompt functions must document the turn
+        protocol (tool call to continue, text to finish)."""
         source = _AGENT_TOOLS.read_text(encoding="utf-8")
-        # The protocol instruction must appear in both prompts
         assert source.count("TURN PROTOCOL") >= 2, (
-            "The <done> turn protocol must be documented in BOTH "
+            "The turn protocol must be documented in BOTH "
             "build_system_prompt functions."
         )
-        assert "<done>" in source, (
-            "The system prompt must mention the <done> marker."
+        # The <done> marker must NOT be in the system prompt anymore.
+        assert "<done>" not in source, (
+            "The <done> marker must be removed from the system prompt — "
+            "finish_reason is the sole structural signal now."
         )
 
-    def test_done_marker_checked_in_chat_handler(self):
-        """The chat handler must check for <done> in the model's text to
-        decide if the turn is over."""
+    def test_finish_reason_recorded_in_chat_handler(self):
+        """The chat handler must still record finish_reason (for logging),
+        even though the nudges that consumed it were removed."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        assert '"<done>" in round_text' in source or \
-               "'<done>' in round_text" in source, (
-            "The chat handler must check for '<done>' in round_text."
+        assert "finish_reason" in source, (
+            "The chat handler must read finish_reason from the /v1 endpoint."
+        )
+        assert "turn_done" in source, (
+            "The chat handler must log 'turn_done' when accepting an answer."
         )
 
-    def test_done_marker_stripped_from_answer(self):
-        """When <done> is present, it must be stripped from the final answer
-        so the user never sees it."""
+    def test_auto_continuation_removed(self):
+        """The auto-continue nudge must be GONE — the framework no longer
+        nudges the model to keep working after it stops with text. A turn
+        with any text is the final answer (model-driven, identical for
+        local 30B and cloud)."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        assert ".replace(\"<done>\", \"\")" in source or \
-               ".replace('<done>', '')" in source, (
-            "The <done> marker must be stripped from final_answer before "
-            "delivery to the user."
+        assert "auto_continue_nudge" not in source, (
+            "The auto-continue nudge must be removed."
+        )
+        assert "_continue_nudges" not in source, (
+            "The continue-nudge counter must be removed."
+        )
+        assert "_MAX_CONTINUE_NUDGES" not in source, (
+            "The _MAX_CONTINUE_NUDGES bound must be removed."
         )
 
-    def test_no_done_marker_nudge_exists(self):
-        """When the model produces text without <done> and no tool call,
-        the framework must nudge once."""
+    def test_continue_nudge_counter_removed(self):
+        """No continue-nudge counter should exist anywhere — the reset on
+        tool-call is gone with the counter itself."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        assert "no_done_marker_nudge" in source, (
-            "The chat handler must log 'no_done_marker_nudge' when the model "
-            "produces text without <done> and without a tool call."
-        )
-        assert "_protocol_nudge_used" in source, (
-            "The chat handler must track the protocol nudge state via "
-            "_protocol_nudge_used."
+        assert "_continue_nudges = 0" not in source, (
+            "The continue-nudge reset must be removed."
         )
 
-    def test_no_done_marker_accepts_after_nudge(self):
-        """After one nudge, if the model still omits <done>, the text must
-        be accepted — the framework does not loop forever."""
+    def test_truncation_nudge_removed(self):
+        """The finish_reason='length' truncation nudge must be GONE — a
+        30B local model that stops should not be re-prompted by a char/
+        length heuristic."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        assert "no_done_marker_accepted" in source, (
-            "After one nudge, the chat handler must accept the text and log "
-            "'no_done_marker_accepted'."
+        assert "truncation_nudge" not in source, (
+            "The truncation nudge must be removed."
+        )
+        assert 'finish_reason == "length"' not in source, (
+            "No finish_reason='length' special-casing should remain."
         )
 
     def test_empty_turn_still_fails_loud(self):
-        """Empty turns (no text, no tool call) must still fail loud after
-        one nudge — the <done> protocol doesn't change this."""
+        """The double-silent failsafe must remain: two consecutive turns
+        with no text AND no thinking fail loud (never a blank screen)."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
+        assert "_double_silent_once" in source, (
+            "The double-silent retry flag must be present."
+        )
         assert "agent_silent_fail_loud" in source, (
-            "Empty turns must still fail loud after a nudge."
+            "Two silent turns must still fail loud."
+        )
+        assert "silent_turn_retry" in source, (
+            "A single silent turn gets ONE retry, then fails loud."
         )
 
-    def test_no_plan_heuristics_remain(self):
-        """The old plan-gated heuristics (Case 2, Case 2b) must be GONE.
-        The <done> protocol replaces them entirely."""
+    def test_no_plan_gate_in_chat_loop(self):
+        """ALL plan-gate enforcement heuristics must be GONE. The framework
+        now drives planning via a dedicated call BEFORE the loop (the
+        BabyAGI/LangGraph pattern) — no gates, no blocking, no nudges."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        # These were the old heuristic-based checks — they must not exist.
-        assert "premature_stop_nudge" not in source, (
-            "premature_stop_nudge was removed — the <done> protocol replaces it."
+        # OLD heuristics that must stay gone:
+        assert "_gate_active" not in source, (
+            "The old plan-gate state variable must be removed."
         )
-        assert "agent_no_plan_after_work_fail_loud" not in source, (
-            "agent_no_plan_after_work_fail_loud was removed — the <done> "
-            "protocol replaces it."
+        assert "_FORCE_PLAN_ON_MULTI" not in source, (
+            "The old force-plan-on-multi heuristic must be removed."
         )
-        assert "_text_nudge_used" not in source, (
-            "_text_nudge_used was removed — replaced by _protocol_nudge_used."
+        assert "plan_gate_forced" not in source, (
+            "The old plan_gate_forced log must be removed."
+        )
+        assert "from plan_gate import" not in source, (
+            "The plan_gate import must be removed from chat_handler."
+        )
+        # The gate-based enforcement (removed 2026-08-02 in favor of framework
+        # planning) must also stay gone:
+        assert "_EXEC_TOOLS" not in source, (
+            "The _EXEC_TOOLS gate set must be removed — framework planning replaces it."
+        )
+        assert "plan_gate_blocked" not in source, (
+            "The plan_gate_blocked log must be removed."
+        )
+        assert "no_plan_text_gate" not in source, (
+            "The no_plan_text_gate must be removed."
+        )
+
+    def test_no_read_loop_detector(self):
+        """The read-loop detector must be GONE — it was a heuristic that
+        nudged the model to stop reading."""
+        source = _CHAT_HANDLER.read_text(encoding="utf-8")
+        assert "_READ_LOOP_STREAK" not in source, (
+            "The read-loop streak tracker must be removed."
+        )
+        assert "read_loop_nudge" not in source, (
+            "The read_loop_nudge log must be removed."
+        )
+
+    def test_no_code_read_dedup_nudge(self):
+        """The code_read dedup nudge must be GONE — it appended 'you
+        already read this file' notices to tool results."""
+        source = _CHAT_HANDLER.read_text(encoding="utf-8")
+        assert "code_read_duplicate" not in source, (
+            "The code_read_duplicate log must be removed."
+        )
+        assert "_dedup_notice" not in source, (
+            "The dedup notice must be removed."
+        )
+
+    def test_no_synthesize_forced(self):
+        """The forced-synthesize nudge (all_done → 'synthesize now') must
+        be GONE — the model decides when to synthesize."""
+        source = _CHAT_HANDLER.read_text(encoding="utf-8")
+        assert "_synthesize_requested" not in source, (
+            "The _synthesize_requested state must be removed."
+        )
+        assert "working_memory_all_done" not in source, (
+            "The working_memory_all_done forced-synthesize log must be removed."
+        )
+
+    def test_no_remaining_nudges(self):
+        """No other nudge mechanism should survive: no truncation nudge and
+        no old empty-answer nudge remain after the simplification."""
+        source = _CHAT_HANDLER.read_text(encoding="utf-8")
+        assert "truncation_nudge" not in source, (
+            "The truncation nudge must be removed."
+        )
+        assert "empty_answer_nudge" not in source, (
+            "The empty_answer_nudge must be removed."
+        )
+        assert "_empty_nudge_used" not in source, (
+            "The _empty_nudge_used flag must be removed."
         )
 
     def test_agent_silent_error_still_used(self):
-        """AgentSilentError must still be raised for empty turns after a
-        nudge — the <done> protocol preserves this fail-loud path."""
+        """AgentSilentError must still be raised for the double-silent
+        failsafe — the one contract preserved from the old protocol."""
         tree = _load_ast(_CHAT_HANDLER)
         raises = _find_raise_nodes(tree)
         agent_silent_raises = [r for r in raises if _raise_matches_agent_silent(r)]

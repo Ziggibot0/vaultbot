@@ -12,7 +12,8 @@ for i, line in enumerate(lines):
         data = obj.get('data',{})
         if evt in ('prompt_built', 'chat_begin', 'round_loop_top', 'agent_round', 
                     'tool_call_requested', 'tool_call_result', 'chat_end',
-                    'no_done_marker_nudge', 'no_done_marker_accepted', 'turn_done_marker'):
+                    'intent_to_continue_nudge', 'turn_done_finish_reason', 'truncation_nudge',
+                    'llm_stream_done', 'empty_answer_nudge', 'agent_silent_fail_loud'):
             print(f"  [{i}] {evt}: {json.dumps(data)[:200]}")
     except:
         pass

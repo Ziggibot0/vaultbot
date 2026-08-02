@@ -143,7 +143,7 @@ def existing_note_titles(svc: Services) -> dict:
 def is_ignored_index_path(p: Path) -> bool:
     """True for vault subpaths the indexer/graph ignore (venv, index, etc.)."""
     parts = str(p).replace("\\", "/").lower()
-    ignored = ("vaultbot_venv/", "vaultbot_stuff/vaultbot_backend/vaultbot_index/",
+    ignored = (".venv/", "vaultbot_venv/", "vaultbot_stuff/vaultbot_backend/vaultbot_index/",
                "vaultbot_stuff/vaultbot_backend/partials/", ".git/")
     return any(seg in parts for seg in ignored)
 

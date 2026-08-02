@@ -113,9 +113,9 @@ def run(args: dict) -> dict:
 
                 # Find venv python
                 vault_root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-                venv_python = os.path.join(vault_root_path, "vaultbot_venv", "Scripts", "python.exe")
+                venv_python = os.path.join(vault_root_path, ".venv", "Scripts", "python.exe")
                 if not os.path.exists(venv_python):
-                    venv_python = os.path.join(vault_root_path, "vaultbot_venv", "bin", "python")
+                    venv_python = os.path.join(vault_root_path, ".venv", "bin", "python")
                 if not os.path.exists(venv_python):
                     venv_python = sys.executable
 

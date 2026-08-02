@@ -12,7 +12,7 @@ for i in range(602, len(lines)):
         data = obj.get('data',{})
         if evt in ('agent_round', 'tool_call_requested', 'tool_call_result', 
                     'tool_call_invalid', 'chat_end', 'no_done_marker_nudge',
-                    'no_done_marker_accepted', 'turn_done_marker', 
+                    'intent_to_continue_nudge', 'turn_done_finish_reason', 'truncation_nudge', 
                     'agent_silent_fail_loud', 'empty_answer_nudge',
                     'round_loop_top'):
             print(f"  [{i}] {evt}: {json.dumps(data)[:250]}")

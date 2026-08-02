@@ -1,7 +1,6 @@
-INFO:     Started server process [21324]
+INFO:     Started server process [22572]
 INFO:     Waiting for application startup.
-Checkpointer: recovering 1 interrupted research task(s): ['Remove-All-Stops']
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:52346 - "WebSocket /ws" [accepted]
+INFO:     127.0.0.1:55328 - "WebSocket /ws" [accepted]
 INFO:     connection open

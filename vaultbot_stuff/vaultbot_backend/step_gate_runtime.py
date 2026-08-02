@@ -239,7 +239,7 @@ def _validate_step(output: str, validation: str | None) -> tuple[bool, str | Non
 # ── Tool registry for code steps ─────────────────────────────────────────
 
 _IGNORED_DIRS = {
-    ".git", ".obsidian", "vaultbot_venv", "vaultbot_index",
+    ".git", ".obsidian", ".venv", "vaultbot_venv", "vaultbot_index",
     "sessions", "partials", "__pycache__",
 }
 
@@ -252,6 +252,30 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     can call directly.
     """
     snippets: list[str] = []
+
+    # --- Universal context variables (always injected) ---
+    # ``args``: the call-time tool arguments the model passed to
+    #   execute_procedure (minus procedure_name). Historically many
+    #   procedure notes referenced ``args.get(...)`` but the subprocess
+    #   never defined it, so those steps crashed with NameError. Inject
+    #   it unconditionally (empty dict when no args were supplied).
+    # ``output``: alias for the previous step's output (== prior_results[-1]
+    #   or "" when empty). Several procedures (Extract-Claims, Judge-Plan,
+    #   Summarize-Conversation, Refine-Concept-Card, ...) reference a bare
+    #   ``output`` after an [llm:] step to post-process the model's text.
+    snippets.append(
+        'args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
+        'if not isinstance(args, dict):\n'
+        '    args = {}\n'
+        'namespace["args"] = args\n'
+        'output = prior_results[-1] if prior_results else ""\n'
+        'if not isinstance(output, str):\n'
+        '    try:\n'
+        '        output = json.dumps(output, default=str)\n'
+        '    except Exception:\n'
+        '        output = str(output)\n'
+        'namespace["output"] = output\n'
+    )
 
     if "llm_generate" in allowed_tools:
         snippets.append(
@@ -398,23 +422,25 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    from subprocess_utils import run as _sp_run\n'
             '    import json as _json\n'
             '    _backend_dir = Path(os.environ.get("PYTHONPATH", ".").split(os.pathsep)[0])\n'
-            '    _venv_py = _backend_dir.parent.parent / "vaultbot_venv" / "Scripts" / "python.exe"\n'
+            '    _venv_py = _backend_dir.parent.parent / ".venv" / "Scripts" / "python.exe"\n'
             '    if not _venv_py.exists():\n'
             '        _venv_py = Path(sys.executable)\n'
             '    _proc_self = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
             '    _call_stack = _json.loads(os.environ.get("PROCEDURE_CALL_STACK", "[]"))\n'
             '    if _proc_self and _proc_self not in _call_stack:\n'
             '        _call_stack = _call_stack + [_proc_self]\n'
-            '    def run_procedure(procedure_name):\n'
-            '        """Run another procedure by note stem. Returns a dict\n'
-            '        with {procedure, overall_passed, steps_executed,\n'
-            '        final_output, child_procedures, step_details}.\n'
-            '        Raises RuntimeError on cycle or depth exceeded so\n'
-            '        the parent step fails loudly."""\n'
+            '    def run_procedure(procedure_name, args=None):\n'
+            '        """Run another procedure by note stem. Optionally pass a dict\n'
+            '        of call-time arguments that the child reads via the injected\n'
+            '        ``args`` variable. Returns a dict with {procedure,\n'
+            '        overall_passed, steps_executed, final_output, child_procedures,\n'
+            '        step_details}. Raises RuntimeError on cycle or depth exceeded\n'
+            '        so the parent step fails loudly."""\n'
             '        cmd = [str(_venv_py), str(_backend_dir / "run_procedure.py"),\n'
             '               "--procedure-name", str(procedure_name),\n'
             '               "--vault-path", os.environ.get("VAULT_PATH", "."),\n'
-            '               "--call-stack", _json.dumps(_call_stack)]\n'
+            '               "--call-stack", _json.dumps(_call_stack),\n'
+            '               "--procedure-args", _json.dumps(args or {}, default=str)]\n'
             '        r = _sp_run(cmd, capture_output=True, text=True, timeout=120)\n'
             '        if not r.stdout.strip():\n'
             '            raise RuntimeError("run_procedure produced no output; "\n'
@@ -461,6 +487,7 @@ def _run_code_step(
     procedure_name: str = "",
     call_stack: list[str] | None = None,
     model_cartridge: str = "big",
+    procedure_args: dict | None = None,
 ) -> tuple[bool, str, str | None, str | None]:
     """Execute a code step in a subprocess.
 
@@ -484,7 +511,7 @@ def _run_code_step(
         'vault_path = os.environ.get("VAULT_PATH", ".")\n'
         'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "[]"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
-        '_IGNORED_DIRS = {".git", ".obsidian", "vaultbot_venv", "vaultbot_index", "sessions", "partials", "__pycache__"}\n'
+        '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials", "__pycache__"}\n'
         '\n'
         'namespace = {\n'
         '    "__builtins__": __builtins__,\n'
@@ -521,7 +548,7 @@ def _run_code_step(
 
     # Find the venv python
     backend_dir = Path(__file__).parent.resolve()
-    venv_python = str(backend_dir.parent.parent / "vaultbot_venv" / "Scripts" / "python.exe")
+    venv_python = str(backend_dir.parent.parent / ".venv" / "Scripts" / "python.exe")
     if not Path(venv_python).exists():
         venv_python = sys.executable
 
@@ -535,6 +562,7 @@ def _run_code_step(
         "PROCEDURE_SELF_NAME": procedure_name,
         "PROCEDURE_CALL_STACK": json.dumps(call_stack or []),
         "PROCEDURE_MODEL_CARTRIDGE": model_cartridge,
+        "PROCEDURE_ARGS": json.dumps(procedure_args or {}, default=str),
     }
 
     try:
@@ -829,6 +857,7 @@ async def execute_procedure(
     progress_callback: Callable | None = None,
     procedure_tracker: Any = None,
     call_stack: list[str] | None = None,
+    procedure_args: dict | None = None,
 ) -> ExecutionResult:
     """Execute a compiled procedure one step at a time with gating.
 
@@ -853,6 +882,9 @@ async def execute_procedure(
             detection when this procedure is invoked recursively via
             ``run_procedure``).  This procedure's name is appended before
             recursing.  See [[Procedure-Subprocess-Architecture]].
+        procedure_args: Optional dict of call-time arguments forwarded to
+            every code step via the injected ``args`` variable (env var
+            ``PROCEDURE_ARGS``). Defaults to ``{}``.
     """
     call_stack = list(call_stack or [])
     if not procedure.steps:
@@ -933,6 +965,7 @@ async def execute_procedure(
                 procedure_name=procedure.name,
                 call_stack=call_stack,
                 model_cartridge=getattr(procedure, "model_cartridge", "big"),
+                procedure_args=procedure_args,
             )
             if success:
                 # Capture any child procedures the step spawned (the

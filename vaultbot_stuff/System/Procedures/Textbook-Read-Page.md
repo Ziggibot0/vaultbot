@@ -15,8 +15,17 @@ Read one page of an ingested textbook PDF and get its content as text. The page 
 ## Steps
 
 1. ```python
-   # Call the textbook_read_page tool's run() function
+   # Call the textbook_read_page tool's run() function. It needs an
+   # (optional) vision-capable llm_client for the precise image path;
+   # without one it falls back to the PDF text layer (with a caveat).
    from custom_tools.textbook_read_page import run as _read_page
-   result = _read_page({"pdf": args.get("pdf", ""), "page": args.get("page", 1)})
+   _vision = None
+   try:
+       from llm_client import get_vision_client as _gv
+       _vision = _gv()
+   except Exception:
+       _vision = None
+   result = _read_page({"pdf": args.get("pdf", ""), "page": args.get("page", 1)},
+                       llm_client=_vision)
    print(result)
    ```

@@ -121,7 +121,7 @@ def run(args: dict) -> dict:
 
     SENSITIVE_FILES = [
         ".env", "data.json", "mcp.json", "workspace.json",
-        "sessions/", "identity/", "vaultbot_index/", "trash/",
+        ".venv/", "sessions/", "identity/", "vaultbot_index/", "trash/",
         "checkpoints/", "vaultbot_venv/", "Memory/", "Knowledge/",
         "learningMaterial/", "User/",
     ]

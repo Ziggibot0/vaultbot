@@ -36,6 +36,7 @@ import shutil
 import subprocess
 from subprocess_utils import run as _subprocess_run
 import sys
+import tempfile
 import time
 import traceback
 from pathlib import Path
@@ -654,7 +655,7 @@ class SelfImprover:
         """Run `python -c 'import main'` in a subprocess against the given
         backend dir. Returns (ok, error_message). A clean import means the
         whole import graph resolves with the proposed edit in place."""
-        venv_python = str(BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+        venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
         # Use a check script that imports main but exits before the server
@@ -741,7 +742,7 @@ class SelfImprover:
             return True, None
 
         venv_python = str(
-            BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+            BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
 
@@ -912,7 +913,7 @@ class SelfImprover:
         """
         import urllib.request
         venv_python = str(
-            BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+            BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
         # Bind a high, almost-certainly-free port. We can't reuse 8000
@@ -1004,10 +1005,10 @@ class SelfImprover:
         """
         # Prefer the venv interpreter (matches _verify_import_in_subprocess),
         # but pytest + faiss live in the SYSTEM Python in this environment,
-        # not in vaultbot_venv. Probe both: use the first interpreter that
+        # not in .venv. Probe both: use the first interpreter that
         # can import pytest. If neither can, soft-skip.
         venv_python = str(
-            BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+            BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         candidates = [venv_python, sys.executable]
         chosen = None
         for cand in candidates:
@@ -1155,24 +1156,62 @@ class SelfImprover:
     # --- code_run --------------------------------------------------------
 
     def code_run(self, code: str, timeout: int = 15) -> dict[str, Any]:
-        """Execute Python code in a subprocess and return stdout/stderr/exit."""
-        venv_python = str(BACKEND_ROOT / "vaultbot_venv" / "Scripts" / "python.exe")
+        """Execute Python code in a subprocess and return stdout/stderr/exit.
+
+        CRASH FIX (agent_silent): previously used capture_output=True, which
+        buffers the child's ENTIRE stdout/stderr in backend RAM. A verbose run
+        (e.g. printing a large file) grew backend memory unboundedly and the
+        single backend process was OOM-killed -> agent_silent. Now the child
+        writes to temp files with a HARD BYTE CAP; the backend reads back only
+        the tail. Backend memory stays flat no matter how much the child prints.
+        """
+        venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
+
+        CAP = 65536  # hard cap per stream (64KB) — child output beyond this is dropped on disk
+        out_path = err_path = None
         try:
-            proc = _subprocess_run(
-                [venv_python, "-c", code],
-                capture_output=True, text=True, timeout=timeout,
-                cwd=str(BACKEND_ROOT),
-                env={**os.environ, "PYTHONPATH": str(BACKEND_DIR)},
-            )
-            return {"stdout": proc.stdout[-4000:], "stderr": proc.stderr[-2000:],
-                    "exit_code": proc.returncode}
+            with tempfile.NamedTemporaryFile(mode="w+b", delete=False, prefix="cr_out_") as out_f, \
+                 tempfile.NamedTemporaryFile(mode="w+b", delete=False, prefix="cr_err_") as err_f:
+                out_path, err_path = out_f.name, err_f.name
+                proc = _subprocess_run(
+                    [venv_python, "-c", code],
+                    stdout=out_f, stderr=err_f, timeout=timeout,
+                    cwd=str(BACKEND_ROOT),
+                    env={**os.environ, "PYTHONPATH": str(BACKEND_DIR)},
+                )
+
+            def _tail(path, n):
+                with open(path, "rb") as f:
+                    f.seek(0, 2)
+                    size = f.tell()
+                    f.seek(max(0, size - n))
+                    return f.read().decode("utf-8", errors="replace")
+
+            stdout_tail = _tail(out_path, 4000)
+            stderr_tail = _tail(err_path, 2000)
+            truncated = False
+            try:
+                truncated = (os.path.getsize(out_path) > 4000) or (os.path.getsize(err_path) > 2000)
+            except OSError:
+                pass
+            result = {"stdout": stdout_tail, "stderr": stderr_tail,
+                      "exit_code": proc.returncode}
+            if truncated:
+                result["output_truncated"] = True
+            return result
         except subprocess.TimeoutExpired:
             return {"error": "timeout", "timeout": timeout}
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception as e:  # noqa: BLE001
             return {"error": str(e)}
-
+        finally:
+            for tmp in (out_path, err_path):
+                if tmp:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
     # --- tool_create -----------------------------------------------------
 
     def tool_create(self, tool_name: str, description: str,

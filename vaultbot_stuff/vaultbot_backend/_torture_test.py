@@ -50,8 +50,7 @@ async def torture_test():
                     print(f"  TOOL_RESULT: {msg.get('summary','')}")
                 elif mtype == "answer_done":
                     content = msg.get("content", "")
-                    has_done = "<done>" in content
-                    print(f"\n\n  ANSWER_DONE ({len(content)} chars, <done>={'YES' if has_done else 'NO'}):")
+                    print(f"\n\n  ANSWER_DONE ({len(content)} chars):")
                     print(f"  {content[:500]}")
                     break
                 elif mtype == "problem":
@@ -95,7 +94,6 @@ async def torture_test():
 
         if has_answer:
             answer = next(e.get("content","") for e in events if e.get("type") == "answer_done")
-            print(f"  <done> in answer: {'<done>' in answer}")
             print(f"  Answer length: {len(answer)}")
 
 asyncio.run(torture_test())

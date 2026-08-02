@@ -37,7 +37,7 @@ from typing import Any
 # files, Obsidian config, session logs, etc. Kept inline (not imported from
 # vault_indexer) so this module stays dependency-free.
 _TRACKER_IGNORED_DIRS = {
-    "vaultbot_venv", "vaultbot_index", "sessions", "partials",
+    ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials",
     ".git", ".obsidian", "trash",
 }
 

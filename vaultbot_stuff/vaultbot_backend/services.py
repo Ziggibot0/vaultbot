@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ollama_client import OllamaClient
     from llm_client import LLMClient
+    from providers import ProviderRegistry
     from vault_indexer import VaultIndexer
     from vault_graph import VaultGraph
     from note_creator import NoteCreator
@@ -58,9 +59,10 @@ class Services:
     reading main.py's module-level globals as free variables.  Routers
     receive it via ``Depends(get_services)`` (see app_state.py).
 
-    The ``ollama_client`` and ``vision_client`` fields are mutable: the
-    ``/llm/config`` route can swap the synthesis client at runtime, and
-    every ``Depends(get_services)`` consumer sees the new client immediately
+    The ``ollama_client``, ``vision_client``, and ``small_client`` fields are
+    mutable: the ``/llm/config`` / ``/llm/vision_config`` / ``/llm/small_config``
+    routes can swap the corresponding client at runtime, and every
+    ``Depends(get_services)`` consumer sees the new client immediately
     (the dataclass instance is shared, not re-created per request).
     """
     # LLM + embeddings
@@ -102,6 +104,14 @@ class Services:
     # Chat-loop checkpoint/resume (multi-day sturdiness). Optional so older
     # wiring and tests that build Services without it still work.
     chat_checkpointer: object | None = None
+    # Small (tiny local dance partner) client — None when SMALL_MODEL unset.
+    # Optional with a default so it doesn't break the dataclass field
+    # ordering (non-default fields must precede default ones).
+    small_client: LLMClient | None = None
+    # Provider + Model Registry — the single "pot" of LLM connections/models.
+    # Roles (big/small/vision) draw from this one pot. Optional with a default
+    # so tests that build Services without it still construct.
+    registry: object | None = None
     # ConnectionManager is defined in main.py (kept there for now); typed
     # loosely to avoid importing main here (would create a cycle).
     manager: object = None

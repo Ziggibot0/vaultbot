@@ -17,7 +17,8 @@ from watchdog.observers import Observer
 _logger = logging.getLogger(__name__)
 
 IGNORED_DIRS = {
-    "vaultbot_venv",
+    ".venv",
+    "vaultbot_venv",  # legacy name; superseded by .venv (Obsidian-hidden)
     "vaultbot_index",
     "sessions",
     "partials",

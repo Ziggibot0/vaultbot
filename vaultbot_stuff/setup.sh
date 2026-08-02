@@ -132,7 +132,9 @@ if [ -f "$STATE_FILE" ]; then
 fi
 
 # ── 4. Create the Python virtual environment ────────────────────────────────
-VENV_PYTHON="$VAULT_PATH/vaultbot_venv/bin/python"
+# `.venv` is hidden in the Obsidian file explorer (dots are filtered),
+# keeping the vault clean for end users.
+VENV_PYTHON="$VAULT_PATH/.venv/bin/python"
 if step_done "venv_created"; then
     echo "  [!]  Virtual environment already created -- skipping."
 elif [ -f "$VENV_PYTHON" ]; then
@@ -141,7 +143,7 @@ elif [ -f "$VENV_PYTHON" ]; then
 else
     echo ">>> Creating Python environment (a few seconds)..."
     cd "$VAULT_PATH"
-    python3 -m venv vaultbot_venv
+    python3 -m venv .venv
     cd - >/dev/null
     echo "  [OK] Virtual environment created"
     mark_step_done "venv_created"

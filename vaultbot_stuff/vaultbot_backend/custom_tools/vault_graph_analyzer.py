@@ -9,7 +9,7 @@ import re
 from collections import defaultdict, deque
 
 # Directories that contain .md files but are NOT vault knowledge content
-EXCLUDE_DIRS = {'vaultbot_venv', '__pycache__', 'node_modules', '.git', '.obsidian', 'partials', 'trash'}
+EXCLUDE_DIRS = {'.venv', 'vaultbot_venv', '__pycache__', 'node_modules', '.git', '.obsidian', 'partials', 'trash'}
 
 def find_md_files(vault_path, exclude_patterns=None):
     if exclude_patterns is None:

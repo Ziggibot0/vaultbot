@@ -67,6 +67,13 @@ class TaskList:
     """
     tasks: list[Task] = field(default_factory=list)
     goal: str = ""            # the high-level goal this task list serves
+    # Per-step consolidated summaries (the memory-consolidation layer).
+    # Keyed by task id. When a step is marked completed, the chat loop asks
+    # the small model to write a gist of what happened during that step,
+    # stores it here, and replaces the raw tool noise in the conversation
+    # with this summary. render_for_prompt() shows it next to the step so
+    # the model sees the shapes, not the details, as it works later steps.
+    step_summaries: dict[str, str] = field(default_factory=dict)
     # RLock (reentrant), NOT Lock: set_plan / update_task / add_task hold the
     # lock and then call self.snapshot(), which acquires it AGAIN. A plain
     # threading.Lock is non-reentrant, so that nested acquire deadlocks the
@@ -165,6 +172,7 @@ class TaskList:
         with self.lock:
             self.tasks = []
             self.goal = ""
+            self.step_summaries = {}
 
     # ------------------------------------------------------------------ #
     # Readers (called by the harness, not the model)
@@ -185,6 +193,7 @@ class TaskList:
                      "status": t.status, "notes": t.notes}
                     for t in self.tasks
                 ],
+                "step_summaries": dict(self.step_summaries),
                 "total": len(self.tasks),
                 "completed": sum(1 for t in self.tasks if t.status == "completed"),
                 "pending": sum(1 for t in self.tasks if t.status == "pending"),
@@ -215,7 +224,33 @@ class TaskList:
             done = sum(1 for t in self.tasks if t.status == "completed")
             total = len(self.tasks)
             lines.append(f"Progress: {done}/{total} done")
+            # Append the consolidated summaries for completed steps so the
+            # model carries the gist forward without re-reading raw tool
+            # output. This is the "zoom out to bigger shapes" surface: each
+            # summary is what was accomplished + lessons + key facts the
+            # next step needs (see step_summarizer.py).
+            for t in self.tasks:
+                if t.status != "completed":
+                    continue
+                sm = self.step_summaries.get(t.id, "")
+                if sm:
+                    lines.append(f"  ↳ Step {t.id} summary: {sm}")
             return "\n".join(lines)
+
+    def record_step_summary(self, task_id: str, summary: str) -> None:
+        """Store the consolidated summary for a completed step.
+
+        Called by the chat loop after the small model produces a gist of the
+        step's tool/thinking noise. ``render_for_prompt`` surfaces it next to
+        the step so later rounds see the shape, not the raw trace.
+        """
+        with self.lock:
+            self.step_summaries[task_id] = summary[:800]
+
+    def summary_for_step(self, task_id: str) -> str:
+        """Return the stored summary for a step, or '' if none."""
+        with self.lock:
+            return self.step_summaries.get(task_id, "")
 
     def has_plan(self) -> bool:
         """True if there's at least one task in the list."""
@@ -237,6 +272,12 @@ class TaskList:
         with self.lock:
             self.goal = (snap.get("goal") or "")[:500]
             self.tasks = []
+            self.step_summaries = {}
+            _sums = snap.get("step_summaries") or {}
+            if isinstance(_sums, dict):
+                for _k, _v in _sums.items():
+                    if isinstance(_k, str) and isinstance(_v, str):
+                        self.step_summaries[_k] = _v[:800]
             for t in snap.get("tasks", []):
                 # Skip malformed entries (non-dict, missing fields) so a
                 # corrupt snapshot can't crash the restore.

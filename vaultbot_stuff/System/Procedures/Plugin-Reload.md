@@ -15,7 +15,8 @@ Reload the Obsidian plugin (disable + re-enable) without killing the backend. Se
 ## Steps
 
 1. ```python
-   result = plugin_reload()
+   from custom_tools.plugin_reload import run as _reload
+   result = _reload({})
    print(result)
    ```
 

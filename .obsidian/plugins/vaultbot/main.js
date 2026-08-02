@@ -13,7 +13,6 @@ class VaultBotPlugin extends Plugin {
 			backendUrl: 'http://127.0.0.1:8000',
 			autoStartBackend: true,
 			autoStartMcpServer: true,
-			selectedModel: '',
 			researchBackend: 'freesearch',
 			tavilyApiKey: ''
 		};
@@ -154,9 +153,6 @@ class VaultBotPlugin extends Plugin {
 	async loadSettings() {
 		const saved = await this.loadData() || {};
 		this.settings = Object.assign({}, this.settings, saved);
-		if (!this.settings.selectedModel) {
-			this.settings.selectedModel = '';
-		}
 		// Migrate any saved 'localhost' URL to 127.0.0.1 so the plugin talks
 		// to the backend over IPv4 (which is what uvicorn binds to). Without
 		// this, a saved 'http://localhost:8000' keeps causing intermittent
@@ -182,7 +178,7 @@ class VaultBotPlugin extends Plugin {
 		// cooking" — the backend writes session logs, conversation state, and
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
-		const required = ['vaultbot_stuff/vaultbot_backend/', 'vaultbot_venv/', 'vaultbot_stuff/vaultbot_backend/vaultbot_index/'];
+		const required = ['vaultbot_stuff/vaultbot_backend/', '.venv/', 'vaultbot_stuff/vaultbot_backend/vaultbot_index/'];
 		try {
 			const current = this.app.vault.getConfig('userIgnoreFilters') || [];
 			let changed = false;
@@ -325,37 +321,6 @@ class VaultBotPlugin extends Plugin {
 	// Read the synthesis-LLM backend config (Ollama local vs an OpenAI-compatible
 	// API key). Lets the settings panel show which backend is active and whether
 	// it's reachable, so a weak-laptop user can confirm their API key is wired up.
-	async fetchLLMConfig() {
-		try {
-			const response = await fetch(this.settings.backendUrl + '/llm/config');
-			if (!response.ok) return null;
-			return await response.json();
-		} catch (e) {
-			return null;
-		}
-	}
-
-	// Switch the synthesis LLM backend at runtime. backend = 'ollama' | 'openai'.
-	// For 'openai' the user supplies base_url + api_key + model. The backend
-	// persists these to .env and rebuilds the client immediately (no restart).
-	async pushLLMConfig({backend, baseUrl, apiKey, model}) {
-		try {
-			const body = {};
-			if (backend) body.backend = backend;
-			if (baseUrl) body.base_url = baseUrl;
-			if (apiKey) body.api_key = apiKey;
-			if (model) body.model = model;
-			const response = await fetch(this.settings.backendUrl + '/llm/config', {
-				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify(body)
-			});
-			return response.ok ? await response.json() : null;
-		} catch (e) {
-			return null;
-		}
-	}
-
 	// Probe whether the active chat model can see images. The GUI calls this
 	// before ingest (and can call it on first chat) so it can alert the user
 	// in plain language if their model is text-only and they need to pick a
@@ -371,42 +336,74 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
-	// Read the dedicated vision-model config (the model used to read textbook
-	// pages, separate from the chat model). Lets the settings panel show
-	// whether a vision model is configured and reachable, so a user with a
-	// text-only chat model can confirm their page-reading model is wired up.
-	async fetchVisionConfig() {
+	// ── Provider + Model Registry helpers (the interchangeable "pot") ─────
+	// One combined list of providers + models feeds all three role dropdowns
+	// (big/small/vision). Every model — local Ollama, OpenRouter, OpenAI — is
+	// in the same pot and can be mapped into any role with one call.
+	async fetchProviders() {
 		try {
-			const response = await fetch(this.settings.backendUrl + '/llm/vision_config');
-			if (!response.ok) return null;
-			return await response.json();
-		} catch (e) {
-			return null;
-		}
+			const r = await fetch(this.settings.backendUrl + '/llm/providers');
+			if (!r.ok) return null;
+			return await r.json();   // {providers, known, roles}
+		} catch (e) { return null; }
 	}
-
-	// Configure (or clear) the dedicated vision model at runtime. The vision
-	// model is a SEPARATE concern from the chat model: a user keeps their
-	// fast/cheap text-only chat model and delegates page-reading to a vision-
-	// capable model on its own backend. Sending an empty model clears the
-	// config so the page reader falls back to the chat model's own vision.
-	async pushVisionConfig({backend, baseUrl, apiKey, model, ollamaHost}) {
+	async addProviderCfg({id, type, baseUrl, apiKey, label}) {
 		try {
-			const body = {};
-			if (backend) body.backend = backend;
-			if (baseUrl !== undefined) body.base_url = baseUrl;
+			const body = {id, type, base_url: baseUrl};
 			if (apiKey !== undefined) body.api_key = apiKey;
-			if (model !== undefined) body.model = model;
-			if (ollamaHost !== undefined) body.ollama_host = ollamaHost;
-			const response = await fetch(this.settings.backendUrl + '/llm/vision_config', {
-				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify(body)
-			});
-			return response.ok ? await response.json() : null;
-		} catch (e) {
-			return null;
-		}
+			if (label !== undefined) body.label = label;
+			const r = await fetch(this.settings.backendUrl + '/llm/providers', {
+				method: 'POST', headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(body)});
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async removeProviderCfg(providerId) {
+		try {
+			const r = await fetch(this.settings.backendUrl + '/llm/providers/' + encodeURIComponent(providerId), {method: 'DELETE'});
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async fetchAllModels() {
+		// The whole pot, grouped by provider, with role assignments.
+		try {
+			const r = await fetch(this.settings.backendUrl + '/llm/models/all');
+			if (!r.ok) return null;
+			return await r.json();   // {models, roles:{big,small,vision}}
+		} catch (e) { return null; }
+	}
+	async addModelCfg({id, model, provider, vision, instruct, label}) {
+		try {
+			const body = {model, provider, vision: !!vision, instruct: instruct !== false};
+			if (id) body.id = id;
+			if (label !== undefined) body.label = label;
+			const r = await fetch(this.settings.backendUrl + '/llm/models', {
+				method: 'POST', headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify(body)});
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async removeModelCfg(modelId) {
+		try {
+			const r = await fetch(this.settings.backendUrl + '/llm/models/' + encodeURIComponent(modelId), {method: 'DELETE'});
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async setRoleCfg(role, modelId) {
+		// One interchange call: map any model in the pot into any role.
+		try {
+			const r = await fetch(this.settings.backendUrl + '/llm/role', {
+				method: 'POST', headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({role, model_id: modelId})});
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async fetchProviderLiveModels(providerId) {
+		try {
+			const r = await fetch(this.settings.backendUrl + '/llm/providers/' + encodeURIComponent(providerId) + '/live_models');
+			if (!r.ok) return {models: []};
+			return await r.json();
+		} catch (e) { return {models: []}; }
 	}
 
 	// Push research-backend settings (Tavily key + backend choice) to the
@@ -428,8 +425,9 @@ class VaultBotPlugin extends Plugin {
 
 	// ─────────────────────────────────────────────────────────────────────
 	// Cross-platform venv path helpers.
-	// Windows: vaultbot_venv/Scripts/{pythonw.exe,python.exe}
-	// macOS/Linux: vaultbot_venv/bin/python
+	// Windows: .venv/Scripts/{pythonw.exe,python.exe}
+	// macOS/Linux: .venv/bin/python
+	// `.venv` is hidden in Obsidian's file explorer (dots filtered).
 	// ─────────────────────────────────────────────────────────────────────
 	_venvBinDir() {
 		return process.platform === 'win32' ? 'Scripts' : 'bin';
@@ -438,9 +436,9 @@ class VaultBotPlugin extends Plugin {
 	_venvPythonExe(vaultRoot) {
 		const bin = this._venvBinDir();
 		const candidates = process.platform === 'win32'
-			? [path.join(vaultRoot, 'vaultbot_venv', bin, 'pythonw.exe'),
-			   path.join(vaultRoot, 'vaultbot_venv', bin, 'python.exe')]
-			: [path.join(vaultRoot, 'vaultbot_venv', bin, 'python')];
+			? [path.join(vaultRoot, '.venv', bin, 'pythonw.exe'),
+			   path.join(vaultRoot, '.venv', bin, 'python.exe')]
+			: [path.join(vaultRoot, '.venv', bin, 'python')];
 		const fs = require('fs');
 		return candidates.find(p => fs.existsSync(p)) || candidates[0];
 	}
@@ -1647,133 +1645,202 @@ class VaultBotSettingTab extends PluginSettingTab {
 					}
 				}));
 
-		const modelSetting = new Setting(containerEl)
-			.setName('Ollama model')
-			.setDesc('Which locally installed Ollama model VaultBot should use');
-		const modelDropdown = modelSetting.controlEl.createEl('select');
-		modelDropdown.style.minWidth = '180px';
-		modelDropdown.createEl('option', {text: 'Waiting for backend...', attr: {disabled: true}});
+		// ── AI Models & Providers (the interchangeable "pot") ────────────
+		// One places to add provider connections (one-time API key) and
+		// register models. Once a model is in the pot, ANY role (big / small /
+		// vision) can use it — picked from the header dropdowns or here. Local
+		// Ollama, OpenRouter, OpenAI, etc. all behave the same.
+		containerEl.createEl('h3', {text: 'AI Models & Providers'});
+		containerEl.createEl('div', {text:
+			'Add a provider once (paste its API key), then add its models. ' +
+			'Every model you add appears in the Big / Small / Vision pickers in ' +
+			'the sidebar — assign any model to any role, across providers.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:2px 0 10px 0;'}});
 
-		const populateModels = async () => {
-			const online = await this.plugin.waitForBackend();
-			if (!online) {
-				modelDropdown.empty();
-				modelDropdown.createEl('option', {text: 'Backend offline - start backend first', attr: {disabled: true}});
+		const provStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.75;font-size:0.85em;min-height:1.1em;margin-bottom:8px;'}});
+
+		// Provider list (each shows label + base_url + whether a key is set).
+		const provListEl = containerEl.createDiv({attr: {style: 'margin-bottom:8px;'}});
+
+		// Add-provider form: a provider preset (or custom) + model id + key.
+		const newProvRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;'}});
+		newProvRow.createEl('span', {text: 'Provider', attr: {style: 'min-width:64px;font-size:0.85em;'}});
+		const provPresetSel = newProvRow.createEl('select');
+		provPresetSel.style.minWidth = '150px';
+
+		const provUrlInput = newProvRow.createEl('input', {type: 'text', attr: {placeholder: 'base URL (auto-filled)', style: 'flex:1;min-width:170px;'}});
+		const provKeyInput = newProvRow.createEl('input', {type: 'password', attr: {placeholder: 'API key (blank for local Ollama)', style: 'flex:1;min-width:170px;'}});
+		const addProvBtn = newProvRow.createEl('button', {text: 'Add provider', cls: 'mod-cta'});
+
+		// Add-model form: pick one of the configured providers, name the model.
+		const newModelRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;'}});
+		newModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:64px;font-size:0.85em;'}});
+		const modelProvSel = newModelRow.createEl('select');
+		modelProvSel.style.minWidth = '150px';
+		// Live-model dropdown: populated from the provider's real /models list
+		// (fetched on provider change). Picks a model WITHOUT typing its id.
+		const liveModelSel = newModelRow.createEl('select');
+		liveModelSel.style.minWidth = '170px';
+		const modelIdInput = newModelRow.createEl('input', {type: 'text', attr: {placeholder: 'or type a model id', style: 'flex:1;min-width:120px;'}});
+		const visionChk = newModelRow.createEl('input', {type: 'checkbox'});
+		newModelRow.createEl('span', {text: 'vision', attr: {style: 'font-size:0.8em;opacity:0.7;'}});
+		const testModelBtn = newModelRow.createEl('button', {text: 'Test'});
+		const addModelBtn = newModelRow.createEl('button', {text: 'Add model', cls: 'mod-cta'});
+
+		// Fetch the provider's live model list into the dropdown (called on
+		// provider change + after adding a provider). Picks the first model.
+		const loadLiveModels = async () => {
+			const pid = modelProvSel.value;
+			liveModelSel.empty();
+			if (!pid) { liveModelSel.createEl('option', {text: '(add a provider first)', attr: {disabled: true}}); return; }
+			liveModelSel.createEl('option', {text: 'loading…', attr: {disabled: true}});
+			const res = await this.plugin.fetchProviderLiveModels(pid);
+			liveModelSel.empty();
+			const models = (res && Array.isArray(res.models)) ? res.models : [];
+			if (!models.length) {
+				liveModelSel.createEl('option', {text: res && res.detail ? `⚠ ${res.detail}` : '(none found — type manually)', attr: {disabled: true}});
 				return;
 			}
-			modelDropdown.empty();
-			modelDropdown.createEl('option', {text: 'Fetching models...', attr: {disabled: true}});
-			try {
-				const {models, current} = await this.plugin.fetchModels();
-				modelDropdown.empty();
-				if (!models.length) {
-					modelDropdown.createEl('option', {text: 'No models found', attr: {disabled: true}});
-					return;
-				}
-				const selected = this.plugin.settings.selectedModel || current || models[0].name || models[0];
-				models.forEach(m => {
-					const name = typeof m === 'string' ? m : m.name;
-					const label = (typeof m === 'object' && m.vision) ? '👁 ' + name : name;
-					const opt = modelDropdown.createEl('option', {text: label, attr: {value: name}});
-					if (name === selected) opt.selected = true;
-				});
-				this.plugin.settings.selectedModel = selected;
-				await this.plugin.setBackendModel(selected);
-				await this.plugin.saveSettings();
-			} catch (e) {
-				modelDropdown.empty();
-				modelDropdown.createEl('option', {text: 'Could not reach backend', attr: {disabled: true}});
-			}
-		};
-
-		populateModels();
-		modelDropdown.addEventListener('change', async () => {
-			this.plugin.settings.selectedModel = modelDropdown.value;
-			await this.plugin.saveSettings();
-			await this.plugin.setBackendModel(modelDropdown.value);
-		});
-
-		containerEl.createEl('h3', {text: 'LLM Backend'});
-
-		// The synthesis LLM is the only step that spends tokens, so it's the
-		// one swappable surface. 'Ollama' runs a local model (free, private,
-		// needs a beefy machine). 'API key' hits any OpenAI-compatible
-		// endpoint (OpenAI, OpenRouter->Anthropic, Gemini, etc.) so a weak
-		// laptop runs zero local compute. The research loop stays token-free
-		// either way.
-		const llmBackendSetting = new Setting(containerEl)
-			.setName('Synthesis LLM backend')
-			.setDesc('Where the final-answer LLM runs. The research + retrieval loop is always local + token-free.');
-		const llmBackendDropdown = llmBackendSetting.controlEl.createEl('select');
-		llmBackendDropdown.createEl('option', {text: 'Ollama (local, free)', attr: {value: 'ollama'}});
-		llmBackendDropdown.createEl('option', {text: 'API key (OpenAI-compatible)', attr: {value: 'openai'}});
-
-		// API-key backend fields (shown only when 'openai' is selected).
-		const apiFieldsEl = containerEl.createDiv();
-		apiFieldsEl.style.display = 'none';
-		apiFieldsEl.style.paddingLeft = '0';
-		apiFieldsEl.createEl('div', {text: 'Paste your API key + endpoint. Works with OpenAI, OpenRouter, Gemini proxies, vLLM, LM Studio, etc.', attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 8px 0;'}});
-
-		const baseUrlRow = apiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
-		baseUrlRow.createEl('span', {text: 'Base URL', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const baseUrlInput = baseUrlRow.createEl('input', {type: 'text', attr: {placeholder: 'https://api.openai.com', style: 'flex:1;min-width:220px;'}});
-		baseUrlInput.value = 'https://api.openai.com';
-
-		const apiKeyRow = apiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
-		apiKeyRow.createEl('span', {text: 'API key', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const apiKeyInput = apiKeyRow.createEl('input', {type: 'password', attr: {placeholder: 'sk-...', style: 'flex:1;min-width:220px;'}});
-
-		const llmModelRow = apiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
-		llmModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const llmModelInput = llmModelRow.createEl('input', {type: 'text', attr: {placeholder: 'gpt-4o-mini', style: 'flex:1;min-width:220px;'}});
-
-		const llmStatusEl = apiFieldsEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;'}});
-		const llmSaveBtn = apiFieldsEl.createEl('button', {text: 'Save & switch backend', cls: 'mod-cta'});
-		llmSaveBtn.style.marginTop = '4px';
-		llmSaveBtn.addEventListener('click', async () => {
-			llmStatusEl.setText('Switching backend...');
-			const res = await this.plugin.pushLLMConfig({
-				backend: 'openai',
-				baseUrl: baseUrlInput.value.trim(),
-				apiKey: apiKeyInput.value.trim(),
-				model: llmModelInput.value.trim()
+			models.forEach(m => {
+				const name = typeof m === 'string' ? m : m.name;
+				const costTag = (typeof m === 'object' && m.free === false) ? '💰 ' : (typeof m === 'object' && m.free) ? '🆓 ' : '';
+				const opt = liveModelSel.createEl('option', {text: costTag + (m.vision ? '👁 ' : '') + name, attr: {value: name}});
+				if (m.vision) opt.setAttribute('data-vision', '1');
+				if (typeof m === 'object' && m.free === false) opt.setAttribute('data-paid', '1');
 			});
-			if (res && res.status === 'ok') {
-				llmStatusEl.setText(`Connected to ${res.backend} (${res.model}). Running: ${res.running}`);
-				new Notice('LLM backend switched. Reloading model list...');
-				populateModels();
-			} else {
-				llmStatusEl.setText('Failed — check the key, base URL, and model id.');
-			}
-		});
-
-		// Load the current backend config and reflect it in the UI.
-		const refreshLLMConfig = async () => {
-			const cfg = await this.plugin.fetchLLMConfig();
-			if (!cfg) {
-				llmStatusEl.setText('Backend offline — start the backend first.');
-				return;
-			}
-			llmBackendDropdown.value = cfg.backend || 'ollama';
-			apiFieldsEl.style.display = (cfg.backend === 'openai') ? 'block' : 'none';
-			if (cfg.base_url) baseUrlInput.value = cfg.base_url;
-			if (cfg.model) llmModelInput.value = cfg.model;
-			llmStatusEl.setText(`Active: ${cfg.backend} | model: ${cfg.model || '(none)'} | running: ${cfg.running}`);
+			// Auto-check vision if the selected model is vision-capable.
+			const syncVision = () => {
+				const opt = liveModelSel.options[liveModelSel.selectedIndex];
+				visionChk.checked = !!(opt && opt.getAttribute('data-vision'));
+			};
+			liveModelSel.onchange = syncVision;
+			syncVision();
 		};
-		refreshLLMConfig();
-		llmBackendDropdown.addEventListener('change', async () => {
-			apiFieldsEl.style.display = (llmBackendDropdown.value === 'openai') ? 'block' : 'none';
-			if (llmBackendDropdown.value === 'ollama') {
-				// Switch back to Ollama immediately (no extra fields needed).
-				const res = await this.plugin.pushLLMConfig({backend: 'ollama'});
-				if (res && res.status === 'ok') {
-					llmStatusEl.setText(`Switched to Ollama. Running: ${res.running}`);
-					new Notice('Switched to local Ollama. Reloading models...');
-					populateModels();
-				}
+		modelProvSel.addEventListener('change', loadLiveModels);
+
+		// Test-model: does this model actually respond on the endpoint? Shows
+		// the model's own reply (e.g. the color it saw → proves vision works).
+		testModelBtn.addEventListener('click', async () => {
+			const providerId = modelProvSel.value;
+			const modelId = modelIdInput.value.trim() || liveModelSel.value;
+			if (!providerId || !modelId) { provStatusEl.setText('Pick a provider and a model first.'); return; }
+			provStatusEl.setText(`Testing ${modelId}...`);
+			const r = await fetch(this.plugin.settings.backendUrl + '/llm/test_model', {
+				method: 'POST', headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({provider_id: providerId, model: modelId, vision: visionChk.checked})});
+			const data = await r.json().catch(() => ({}));
+			if (data.ok) {
+				provStatusEl.setText(`✓ ${modelId} works${visionChk.checked ? ' (vision confirmed)' : ''}: "${(data.response || '').slice(0, 40)}"`);
+			} else {
+				provStatusEl.setText(`✗ ${modelId}: ${data.error || data.detail || 'no response'}`);
 			}
 		});
 
+		// The pot: one row per model with provider + role tags + remove button.
+		const potListEl = containerEl.createDiv({attr: {style: 'margin-bottom:8px;'}});
+
+		const refreshPotUI = async () => {
+			const prov = await this.plugin.fetchProviders();
+			const all = await this.plugin.fetchAllModels();
+			// Rebuild provider preset dropdown from the backend's known presets.
+			if (prov && prov.known) {
+				const curPreset = provPresetSel.value;
+				provPresetSel.empty();
+				Object.entries(prov.known).forEach(([id, info]) => {
+					provPresetSel.createEl('option', {text: info.label || id, attr: {value: id, 'data-url': info.base_url || ''}});
+				});
+				if (curPreset) provPresetSel.value = curPreset;
+				// Fill the URL field from the selected preset.
+				const fillUrl = () => {
+					const opt = provPresetSel.options[provPresetSel.selectedIndex];
+					if (opt && opt.getAttribute('data-url')) provUrlInput.value = opt.getAttribute('data-url');
+				};
+				fillUrl();
+				provPresetSel.onchange = fillUrl;
+			}
+			// Existing providers list.
+			provListEl.empty();
+			const providers = (prov && Array.isArray(prov.providers)) ? prov.providers : [];
+			if (!providers.length) {
+				provListEl.createEl('div', {text: 'No providers yet — add one above (local Ollama is preset with no key).', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
+			}
+			providers.forEach(p => {
+				const row = provListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin:2px 0;'}});
+				row.createEl('span', {text: `${p.label || p.id} — ${p.base_url}${p.has_key ? ' 🔑' : ''}`, attr: {style: 'flex:1;font-size:0.85em;'}});
+				const rm = row.createEl('button', {text: 'Remove'});
+				rm.addEventListener('click', async () => {
+					await this.plugin.removeProviderCfg(p.id);
+					new Notice(`Provider removed: ${p.label || p.id}`);
+					refreshPotUI();
+				});
+			});
+			// Model provider dropdown mirrors existing providers.
+			modelProvSel.empty();
+			providers.forEach(p => modelProvSel.createEl('option', {text: p.label || p.id, attr: {value: p.id}}));
+			loadLiveModels();
+			// The pot list.
+			potListEl.empty();
+			const models = (all && Array.isArray(all.models)) ? all.models : [];
+			if (!models.length) {
+				potListEl.createEl('div', {text: 'No models in the pot yet — add one above.', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
+			}
+			models.forEach(m => {
+				const row = potListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin:2px 0;'}});
+				const tags = [];
+				if (m.vision) tags.push('👁');
+				if (m.roles && m.roles.length) tags.push('[' + m.roles.join(',') + ']');
+				row.createEl('span', {text: `${tags.length ? tags.join(' ') + ' ' : ''}${m.model}`, attr: {style: 'flex:1;font-size:0.85em;'}, title: `${m.provider_label || m.provider}`});
+				row.createEl('span', {text: m.provider_label || m.provider, attr: {style: 'font-size:0.75em;opacity:0.6;'}});
+				const rm = row.createEl('button', {text: 'Remove'});
+				rm.addEventListener('click', async () => {
+					await this.plugin.removeModelCfg(m.id);
+					new Notice(`Removed ${m.model}`);
+					refreshPotUI();
+				});
+			});
+			provStatusEl.setText(providers.length
+				? `${providers.length} provider(s), ${models.length} model(s) in the pot.`
+				: 'Add a provider to begin.');
+		};
+
+		addProvBtn.addEventListener('click', async () => {
+			provStatusEl.setText('Testing endpoint...');
+			const opt = provPresetSel.options[provPresetSel.selectedIndex];
+			const id = opt ? opt.value : 'custom';
+			const url = provUrlInput.value.trim();
+			const res = await this.plugin.addProviderCfg({
+				id, type: (id.includes('ollama') ? 'ollama' : 'openai'),
+				baseUrl: url, apiKey: provKeyInput.value.trim(),
+				label: opt ? opt.text : id});
+			if (res && res.status === 'ok') {
+				provKeyInput.value = '';
+				const n = res.probe ? res.probe.count : 0;
+				new Notice(`Provider connected: ${opt ? opt.text : id} (${n} model${n === 1 ? '' : 's'} found)`);
+				provStatusEl.setText(`✓ connected — ${n} model(s) available.`);
+				refreshPotUI();
+			} else {
+				provStatusEl.setText(`✗ ${res && res.detail ? res.detail : 'endpoint test failed'} — not saved.`);
+			}
+		});
+
+		addModelBtn.addEventListener('click', async () => {
+			const providerId = modelProvSel.value;
+			const modelId = modelIdInput.value.trim() || liveModelSel.value;
+			if (!providerId) { provStatusEl.setText('Add a provider first.'); return; }
+			if (!modelId) { provStatusEl.setText('Pick or type a model id.'); return; }
+			provStatusEl.setText('Adding model...');
+			const res = await this.plugin.addModelCfg({
+				model: modelId, provider: providerId, vision: visionChk.checked});
+			if (res && res.status === 'ok') {
+				modelIdInput.value = '';
+				visionChk.checked = false;
+				new Notice(`Model added to the pot: ${modelId}`);
+				refreshPotUI();
+			} else {
+				provStatusEl.setText('Failed — pick a provider and a model.');
+			}
+		});
+		refreshPotUI();
 		// ── Configuration status panel ────────────────────────────────
 		// Shows the effective value + source for each user-facing config key,
 		// so the user can see which config source is "winning" (plugin panel
@@ -1866,145 +1933,6 @@ class VaultBotSettingTab extends PluginSettingTab {
 					this.plugin.settings.backendUrl = value;
 					await this.plugin.saveSettings();
 				}));
-
-		containerEl.createEl('h3', {text: 'Vision Model (textbook page reader)'});
-
-		// The vision model is a SEPARATE, OPTIONAL model used ONLY to read
-		// rendered textbook pages (textbook_read_page). It lets a user keep a
-		// fast/cheap text-only chat model and still get equations/figures read
-		// exactly as printed — the page-reading step uses this model instead of
-		// the chat model. Leave the model field empty to fall back to the chat
-		// model's own vision (a vision-capable chat model needs no separate
-		// config). Human-centered: a non-coder picks a vision model once and
-		// never thinks about it again; the ingest alert names THIS model.
-		const visionDescEl = containerEl.createEl('div', {text:
-			'Optional. A vision-capable model used only to read textbook PDF pages ' +
-			'(so equations and figures come through exactly as printed). Leave empty ' +
-			'to fall back to your chat model\u2019s own vision. Works with a different ' +
-			'Ollama host or a separate OpenAI-compatible endpoint than your chat model.',
-			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
-
-		const visionBackendSetting = new Setting(containerEl)
-			.setName('Vision model backend')
-			.setDesc('Where the page-reading model runs. Defaults to your chat backend.');
-		const visionBackendDropdown = visionBackendSetting.controlEl.createEl('select');
-		visionBackendDropdown.createEl('option', {text: 'Same as chat backend', attr: {value: ''}});
-		visionBackendDropdown.createEl('option', {text: 'Ollama (local, free)', attr: {value: 'ollama'}});
-		visionBackendDropdown.createEl('option', {text: 'API key (OpenAI-compatible)', attr: {value: 'openai'}});
-
-		// Vision API-key backend fields (shown only when 'openai' is selected).
-		const visionApiFieldsEl = containerEl.createDiv();
-		visionApiFieldsEl.style.display = 'none';
-		visionApiFieldsEl.style.paddingLeft = '0';
-		visionApiFieldsEl.createEl('div', {text: 'Use a separate endpoint/key than your chat model, or reuse the chat model\u2019s values by leaving blank.',
-			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 8px 0;'}});
-
-		const visionBaseUrlRow = visionApiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
-		visionBaseUrlRow.createEl('span', {text: 'Base URL', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const visionBaseUrlInput = visionBaseUrlRow.createEl('input', {type: 'text', attr: {placeholder: 'https://api.openai.com', style: 'flex:1;min-width:220px;'}});
-		visionBaseUrlInput.value = 'https://api.openai.com';
-
-		const visionApiKeyRow = visionApiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;'}});
-		visionApiKeyRow.createEl('span', {text: 'API key', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const visionApiKeyInput = visionApiKeyRow.createEl('input', {type: 'password', attr: {placeholder: 'sk-... (blank = reuse chat key)', style: 'flex:1;min-width:220px;'}});
-
-		const visionModelRow = visionApiFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
-		visionModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const visionModelInput = visionModelRow.createEl('input', {type: 'text', attr: {placeholder: 'gpt-4o-mini', style: 'flex:1;min-width:220px;'}});
-
-		// Ollama-host field (shown only when 'ollama' is selected).
-		const visionOllamaFieldsEl = containerEl.createDiv();
-		visionOllamaFieldsEl.style.display = 'none';
-		visionOllamaFieldsEl.style.paddingLeft = '0';
-		visionOllamaFieldsEl.createEl('div', {text: 'Only set this if your vision model lives on a different Ollama daemon than your chat model. Leave blank to use the same host.',
-			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 8px 0;'}});
-		const visionOllamaHostRow = visionOllamaFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
-		visionOllamaHostRow.createEl('span', {text: 'Ollama host', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const visionOllamaHostInput = visionOllamaHostRow.createEl('input', {type: 'text', attr: {placeholder: 'http://localhost:11434', style: 'flex:1;min-width:220px;'}});
-
-		// Model field shown for the 'same as chat' / 'ollama' paths (a bare
-		// model name). For 'openai' the model input lives in the API fields.
-		const visionOllamaModelRow = visionOllamaFieldsEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
-		visionOllamaModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:80px;font-size:0.85em;'}});
-		const visionOllamaModelInput = visionOllamaModelRow.createEl('input', {type: 'text', attr: {placeholder: 'llava / minicpm-v / qwen-vl', style: 'flex:1;min-width:220px;'}});
-
-		const visionStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin-bottom:6px;'}});
-
-		const visionSaveBtn = containerEl.createEl('button', {text: 'Save vision model', cls: 'mod-cta'});
-		visionSaveBtn.style.marginBottom = '6px';
-		visionSaveBtn.addEventListener('click', async () => {
-			visionStatusEl.setText('Saving vision model...');
-			const be = visionBackendDropdown.value;
-			// The model input depends on which backend is selected.
-			let modelVal = '';
-			if (be === 'openai') {
-				modelVal = visionModelInput.value.trim();
-			} else if (be === 'ollama') {
-				modelVal = visionOllamaModelInput.value.trim();
-			} else {
-				// 'same as chat' — use the Ollama model field as the model name
-				// (the backend mirrors the chat backend automatically).
-				modelVal = visionOllamaModelInput.value.trim();
-			}
-			const res = await this.plugin.pushVisionConfig({
-				backend: be || undefined,
-				baseUrl: be === 'openai' ? visionBaseUrlInput.value.trim() : undefined,
-				apiKey: be === 'openai' ? visionApiKeyInput.value.trim() : undefined,
-				model: modelVal,
-				ollamaHost: (be === 'ollama' || be === '') ? visionOllamaHostInput.value.trim() : undefined
-			});
-			if (res && res.status === 'ok') {
-				const msg = res.configured
-					? `Vision model set: ${res.model} (${res.backend}). Running: ${res.running}`
-					: 'Vision model cleared \u2014 page reading falls back to your chat model.';
-				visionStatusEl.setText(msg);
-				new Notice(res.configured ? 'Vision model saved.' : 'Vision model cleared.');
-				refreshVisionConfig();
-			} else {
-				visionStatusEl.setText('Failed \u2014 check the key, base URL, and model id.');
-			}
-		});
-
-		const visionClearBtn = containerEl.createEl('button', {text: 'Clear vision model'});
-		visionClearBtn.style.marginLeft = '8px';
-		visionClearBtn.addEventListener('click', async () => {
-			visionStatusEl.setText('Clearing vision model...');
-			const res = await this.plugin.pushVisionConfig({model: ''});
-			if (res && res.status === 'ok') {
-				visionStatusEl.setText('Vision model cleared \u2014 page reading falls back to your chat model.');
-				new Notice('Vision model cleared.');
-				refreshVisionConfig();
-			} else {
-				visionStatusEl.setText('Failed to clear \u2014 is the backend running?');
-			}
-		});
-
-		// Load the current vision config and reflect it in the UI.
-		const refreshVisionConfig = async () => {
-			const cfg = await this.plugin.fetchVisionConfig();
-			if (!cfg) {
-				visionStatusEl.setText('Backend offline \u2014 start the backend first.');
-				return;
-			}
-			visionBackendDropdown.value = cfg.backend || '';
-			visionApiFieldsEl.style.display = (cfg.backend === 'openai') ? 'block' : 'none';
-			visionOllamaFieldsEl.style.display = (cfg.backend === 'openai') ? 'none' : 'block';
-			if (cfg.base_url) visionBaseUrlInput.value = cfg.base_url;
-			if (cfg.model) {
-				if (cfg.backend === 'openai') visionModelInput.value = cfg.model;
-				else visionOllamaModelInput.value = cfg.model;
-			}
-			const state = cfg.configured
-				? `Active: ${cfg.backend} | model: ${cfg.model} | running: ${cfg.running}`
-				: 'Not configured \u2014 page reading uses your chat model\u2019s vision (if any).';
-			visionStatusEl.setText(state);
-		};
-		refreshVisionConfig();
-		visionBackendDropdown.addEventListener('change', async () => {
-			const be = visionBackendDropdown.value;
-			visionApiFieldsEl.style.display = (be === 'openai') ? 'block' : 'none';
-			visionOllamaFieldsEl.style.display = (be === 'openai') ? 'none' : 'block';
-		});
 
 		containerEl.createEl('h3', {text: 'Research Backend'});
 
@@ -2371,17 +2299,153 @@ class VaultBotSidebarView extends ItemView {
 		// Three-region layout: fixed header / scrolling chat / fixed input
 		// bar at the bottom. Only the chat panel scrolls.
 		const headerEl = this.contentEl.createEl('div', {cls: 'vaultbot-header'});
-		const titleEl = headerEl.createEl('div', {cls: 'vaultbot-header-title'});
+		// Left side of the header: leaf mark + title + subtitle. Wrapped in
+		// a flex column so the header row can put the model dropdowns in the
+		// upper-right corner without disturbing the title block.
+		const headerLeft = headerEl.createDiv({cls: 'vaultbot-header-left'});
+		const titleEl = headerLeft.createEl('div', {cls: 'vaultbot-header-title'});
 		titleEl.createEl('span', {cls: 'vaultbot-header-mark', text: '🌿'});
 		titleEl.createEl('span', {text: 'VaultBot'});
-		headerEl.createEl('div', {cls: 'vaultbot-header-sub', text: 'a garden for your thoughts'});
+		headerLeft.createEl('div', {cls: 'vaultbot-header-sub', text: 'a garden for your thoughts'});
+
+		// Right side of the header: three compact model dropdowns (big /
+		// small / vision) in the upper-right corner. Moved up from the
+		// footer so model selection is always visible and the chat input
+		// area stays uncluttered. Each dropdown is a tiny labeled select.
+		const headerModels = headerEl.createDiv({cls: 'vaultbot-header-models'});
+
+		// Populate a role <select> from the combined registry "pot". `models`
+		// is [{id, model, provider_label, provider_type, vision, instruct,
+		// roles}]. Options are keyed by registry model id (not bare model name),
+		// grouped by provider, so the user sees local Ollama + cloud models
+		// side-by-side and picks any of them into the role. `selectedId` is the
+		// id currently assigned to the role. `allowNone` prepends a "(none)".
+		const populateSelectPot = (sel, models, selectedId, {allowNone = true, visionOnly = false} = {}) => {
+			sel.empty();
+			let pool = models.filter(m => m.instruct);
+			if (visionOnly) pool = pool.filter(m => m.vision);
+			if (allowNone) {
+				const none = sel.createEl('option', {text: '(none)', attr: {value: ''}});
+				if (!selectedId) none.selected = true;
+			}
+			if (!pool.length) {
+				if (!allowNone) sel.createEl('option', {text: 'No models', attr: {disabled: true}});
+				return;
+			}
+			const byProvider = {};
+			pool.forEach(m => {
+				const key = m.provider_label || m.provider || '';
+				(byProvider[key] = byProvider[key] || []).push(m);
+			});
+			Object.keys(byProvider).forEach(provLabel => {
+				const og = sel.createEl('optgroup', {label: provLabel});
+				byProvider[provLabel].forEach(m => {
+					const tags = [];
+					if (m.vision) tags.push('👁');
+					if (m.free === false) tags.push('💰');
+					else if (m.free) tags.push('🆓');
+					if (Array.isArray(m.roles) && m.roles.length) tags.push('[' + m.roles.join(',') + ']');
+					const text = (tags.length ? tags.join(' ') + ' ' : '') + m.model;
+					const opt = og.createEl('option', {text, attr: {value: m.id}});
+					if (m.free === false) opt.setAttribute('data-paid', '1');
+					if (m.id === selectedId) opt.selected = true;
+				});
+			});
+		};
+
+		// --- Big model dropdown (the chat/reasoning model) ---------------
+		const bigWrap = headerModels.createDiv({cls: 'vaultbot-header-model'});
+		bigWrap.createEl('span', {cls: 'vaultbot-header-model-label', text: 'Big'});
+		const bigSelect = bigWrap.createEl('select', {cls: 'vaultbot-header-model-select vaultbot-model-select'});
+		bigSelect.createEl('option', {text: '...', attr: {disabled: true}});
+
+		// --- Small model dropdown (tiny local dance partner) --------------
+		const smallWrap = headerModels.createDiv({cls: 'vaultbot-header-model'});
+		smallWrap.createEl('span', {cls: 'vaultbot-header-model-label', text: 'Small'});
+		const smallSelect = smallWrap.createEl('select', {cls: 'vaultbot-header-model-select vaultbot-model-select'});
+		smallSelect.createEl('option', {text: '...', attr: {disabled: true}});
+
+		// --- Vision model dropdown (textbook page reader) ----------------
+		const visionWrap = headerModels.createDiv({cls: 'vaultbot-header-model'});
+		visionWrap.createEl('span', {cls: 'vaultbot-header-model-label', text: 'Vision'});
+		const visionSelect = visionWrap.createEl('select', {cls: 'vaultbot-header-model-select vaultbot-model-select'});
+		visionSelect.createEl('option', {text: '...', attr: {disabled: true}});
+
+		// Refresh all three dropdowns from the ONE combined pot. Called once on
+		// load and whenever the backend comes back online or a model is pulled.
+		// The pot holds every model across every provider (local Ollama + cloud),
+		// so all three role dropdowns draw from the same interchangeable list.
+		const refreshAllModelDropdowns = async () => {
+			const online = await this.plugin.onceBackendReady(5000, 500);
+			if (!online) {
+				[bigSelect, smallSelect, visionSelect].forEach(s => {
+					s.empty();
+					s.createEl('option', {text: 'offline', attr: {disabled: true}});
+				});
+				return;
+			}
+			try {
+				const all = await this.plugin.fetchAllModels();
+				if (all && Array.isArray(all.models)) {
+					const roles = all.roles || {};
+					populateSelectPot(bigSelect, all.models, roles.big || '', {allowNone: false});
+					populateSelectPot(smallSelect, all.models, roles.small || '', {allowNone: true});
+					populateSelectPot(visionSelect, all.models, roles.vision || '', {allowNone: true, visionOnly: false});
+					return;
+				}
+			} catch (e) {}
+			[bigSelect, smallSelect, visionSelect].forEach(s => {
+				s.empty();
+				s.createEl('option', {text: 'no pot — add models in Settings', attr: {disabled: true}});
+			});
+		};
+		refreshAllModelDropdowns();
+
+		// Big model change → map this pot model into the big role.
+		bigSelect.addEventListener('change', async () => {
+			// Cost guard: the big role spends tokens on every chat. Warn loudly
+			// before assigning a PAID cloud model so the user never burns money
+			// by accident (free models are tagged 🆓, paid 💰 in the dropdown).
+			const selOpt = bigSelect.options[bigSelect.selectedIndex];
+			const isPaid = selOpt && selOpt.getAttribute('data-paid') === '1';
+			if (isPaid && !confirm('This is a PAID model — the big role spends tokens on every chat and can cost real money. Use it as Big anyway?')) {
+				refreshAllModelDropdowns();  // revert the selection
+				return;
+			}
+			await this.plugin.setRoleCfg('big', bigSelect.value);
+			new Notice(`Big model set: ${bigSelect.value}${isPaid ? ' (PAID — watch usage)' : ''}`);
+			refreshAllModelDropdowns();
+			const selModel = bigSelect.options[bigSelect.selectedIndex]?.text || bigSelect.value;
+			const ctxWin = await this.plugin.fetchContextWindow(selModel);
+			if (tokenMeterEl) {
+				tokenMeterEl.setAttribute('title',
+					`${ctxWin.toLocaleString()} token context window`);
+				updateTokenMeter(0, ctxWin);
+			}
+		});
+		// Small model change → map this pot model into the small role.
+		smallSelect.addEventListener('change', async () => {
+			await this.plugin.setRoleCfg('small', smallSelect.value);
+			new Notice(smallSelect.value
+				? `Small model set: ${smallSelect.value}`
+				: 'Small model cleared — procedures fall back to the big model.');
+			refreshAllModelDropdowns();
+		});
+		// Vision model change → map this pot model into the vision role.
+		visionSelect.addEventListener('change', async () => {
+			await this.plugin.setRoleCfg('vision', visionSelect.value);
+			new Notice(visionSelect.value
+				? `Vision model set: ${visionSelect.value}`
+				: 'Vision model cleared — page reading falls back to your big model.');
+			refreshAllModelDropdowns();
+		});
 
 		// History disclosure: a small "Recent" toggle in the header that
 		// expands a list of past chat sessions (read from /sessions). This
 		// makes closed/reopened Obsidian feel less like data loss: the user
 		// can see their past conversations and pick up where they left off.
 		// Selecting an entry loads its messages read-only into the chat.
-		const historyToggle = headerEl.createEl('button', {
+		const historyToggle = headerLeft.createEl('button', {
 			cls: 'vaultbot-history-toggle', text: 'Recent'});
 		historyToggle.title = 'Show recent conversations';
 		const historyPanel = this.contentEl.createDiv({cls: 'vaultbot-history-panel'});
@@ -2607,102 +2671,15 @@ class VaultBotSidebarView extends ItemView {
 		connectionCheckInterval = window.setInterval(ensureConnection, 5000);
 		this.registerInterval(connectionCheckInterval);
 
-		// Footer: the model picker + input/buttons. This is the fixed
-		// bottom region of the view; only the chat panel above it scrolls.
+		// Footer: the input/buttons. This is the fixed bottom region of the
+		// view; only the chat panel above it scrolls. (The model picker
+		// dropdowns now live in the header's upper-right corner.)
 		const footerEl = this.contentEl.createDiv({cls: 'vaultbot-footer'});
 
-		// Model picker dropdown
-		const modelBar = footerEl.createDiv({cls: 'vaultbot-model-bar'});
-		modelBar.createEl('span', {text: 'Model:', cls: 'vaultbot-model-label'});
-		const modelSelect = modelBar.createEl('select', {cls: 'vaultbot-model-select'});
-		modelSelect.createEl('option', {text: 'Fetching models...', attr: {disabled: true}});
-		const refreshModels = async () => {
-			// Use the single-flight ready promise instead of an independent
-			// 250ms poll loop — that loop was the worst of the three console
-			// spammers during boot (two fetches every 250ms).
-			const online = await this.plugin.onceBackendReady(5000, 500);
-			if (!online) {
-				modelSelect.empty();
-				modelSelect.createEl('option', {text: 'Backend offline', attr: {disabled: true}});
-				return;
-			}
-			const {models, current} = await this.plugin.fetchModels();
-			modelSelect.empty();
-			if (!models.length) {
-				// No models installed: instead of a dead-end "No models found"
-				// disabled option, show a call-to-action that lets the user
-				// download a recommended model right here — no terminal, no
-				// `ollama pull` command. The option value is a sentinel the
-				// change handler checks.
-				modelSelect.createEl('option', {
-					text: 'No models yet — click to download ↓',
-					attr: {value: '__pull__'}});
-				return;
-			}
-			// Curate: group into Vision-capable / Text models / Embedding.
-			// Vision-capable models get a 👁 marker. Embedding models
-			// (instruct=false) are separated so the user doesn't accidentally
-			// pick an embed model for chat.
-			const selected = this.plugin.settings.selectedModel || current
-				|| models.find(m => m.instruct)?.name || models[0].name;
-			// Group 1: Vision-capable instruct models (if any exist)
-			const visionModels = models.filter(m => m.vision && m.instruct);
-			const textModels = models.filter(m => !m.vision && m.instruct);
-			const otherModels = models.filter(m => !m.instruct);
-			if (visionModels.length) {
-				const og = modelSelect.createEl('optgroup', {label: 'Vision-capable 👁'});
-				visionModels.forEach(m => {
-					const opt = og.createEl('option', {
-						text: (m.vision ? '👁 ' : '') + m.name,
-						attr: {value: m.name}});
-					if (m.name === selected) opt.selected = true;
-				});
-			}
-			if (textModels.length) {
-				const og = modelSelect.createEl('optgroup', {label: 'Text models'});
-				textModels.forEach(m => {
-					const opt = og.createEl('option', {
-						text: m.name, attr: {value: m.name}});
-					if (m.name === selected) opt.selected = true;
-				});
-			}
-			if (otherModels.length) {
-				const og = modelSelect.createEl('optgroup', {label: 'Embedding / other'});
-				otherModels.forEach(m => {
-					const opt = og.createEl('option', {
-						text: m.name, attr: {value: m.name}});
-					if (m.name === selected) opt.selected = true;
-				});
-			}
-			this.plugin.settings.selectedModel = selected;
-			await this.plugin.saveSettings();
-			await this.plugin.setBackendModel(selected);
-			// Refresh the meter ceiling for the newly equipped model.
-			const ctxWin = await this.plugin.fetchContextWindow(selected);
-			tokenMeterEl.setAttribute('title',
-				`${ctxWin.toLocaleString()} token context window — ${selected}`);
-			updateTokenMeter(0, ctxWin);
-		};
-		refreshModels();
-		modelSelect.addEventListener('change', async () => {
-			// Sentinel: the "No models yet" option was selected → show the
-			// download dialog instead of trying to set a non-existent model.
-			if (modelSelect.value === '__pull__') {
-				await this.plugin._showDownloadModelModal(() => refreshModels());
-				return;
-			}
-			this.plugin.settings.selectedModel = modelSelect.value;
-			await this.plugin.saveSettings();
-			await this.plugin.setBackendModel(modelSelect.value);
-			// Re-size the meter for the new model's context window.
-			const ctxWin = await this.plugin.fetchContextWindow(modelSelect.value);
-			tokenMeterEl.setAttribute('title',
-				`${ctxWin.toLocaleString()} token context window — ${modelSelect.value}`);
-			updateTokenMeter(0, ctxWin);
-		});
-		const refreshBtn = modelBar.createEl('span', {text: '↻', cls: 'vaultbot-model-refresh'});
-		refreshBtn.title = 'Refresh model list';
-		refreshBtn.addEventListener('click', () => refreshModels());
+		// refreshModels is now an alias for the header dropdown refresher so
+		// the existing call sites (ensureConnection's backend-online branch
+		// and the model_pull_done WebSocket handler) keep working.
+		const refreshModels = refreshAllModelDropdowns;
 
 		// --- Token-usage meter ------------------------------------------
 		// A horizontal bar that fills proportional to how many tokens the
@@ -2711,6 +2688,7 @@ class VaultBotSidebarView extends ItemView {
 		// emits each turn (pre-loop + post-answer). Color shifts moss→clay→
 		// bark as it fills so the user can see at a glance how close the
 		// context is to overflowing.
+		const modelBar = footerEl.createDiv({cls: 'vaultbot-model-bar'});
 		const tokenMeterWrap = modelBar.createDiv({cls: 'vaultbot-token-meter-wrap'});
 		tokenMeterWrap.setAttribute('aria-hidden', 'true');
 		const tokenMeterEl = tokenMeterWrap.createDiv({cls: 'vaultbot-token-meter'});
@@ -2953,6 +2931,48 @@ class VaultBotSidebarView extends ItemView {
 		let currentActivityEl = null;
 		let activityStartTs = 0;
 		let activityTimer = null;
+		// --- Plan-as-loop step containers ------------------------- //
+		// Each plan step gets its own collapsible block: a clickable header
+		// ('Step: <title>') with a spinner while running, and the step summary
+		// inside once the backend sends step_summary. The thinking/tool blocks
+		// that happen DURING the step are appended into the step container so
+		// they collapse with it. The user sees a tidy list of steps, not a
+		// stream of tool chatter; the final answer is the only expanded msg.
+		let currentStepBlock = null;      // current step's container div
+		let currentStepHeader = null;     // current step's header (clickable)
+		let currentStepBody = null;      // current step's body (thinking/tools)
+		let currentStepId = null;        // step id currently open
+		let stepBodyActive = false;      // when true, thinking/tools render into the step body
+		const startStep = (stepId, title) => {
+			closeStep();
+			if (!currentAssistantMessage) startAssistantMessage();
+			currentStepBlock = currentAssistantMessage.createDiv({cls: 'vaultbot-step'});
+			currentStepHeader = currentStepBlock.createDiv({cls: 'vaultbot-step-header'});
+			currentStepHeader.setText('Step: ' + (title || stepId));
+			currentStepBody = currentStepBlock.createDiv({cls: 'vaultbot-step-body'});
+			currentStepId = stepId;
+			currentStepHeader.onclick = () => {
+				if (!currentStepBody) return;
+				const open = currentStepBody.style.display !== 'none';
+				currentStepBody.style.display = open ? 'none' : 'block';
+				currentStepHeader.setText('Step: ' + (title || stepId));
+			};
+			stepBodyActive = true;
+			smartScrollToBottom();
+		};
+		const closeStep = () => {
+			if (currentStepBlock && currentStepBody) {
+				currentStepBody.style.display = 'none';
+				if (currentStepHeader) {
+					currentStepHeader.setText('Step: ' + currentStepHeader.getText().replace(/^Step:\s*/, ''));
+				}
+			}
+			currentStepBlock = null;
+			currentStepHeader = null;
+			currentStepBody = null;
+			currentStepId = null;
+			stepBodyActive = false;
+		};
 
 		const appendUserMessage = (text) => {
 			const div = chatContainer.createDiv({cls: 'vaultbot-message user'});
@@ -3329,7 +3349,41 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerText += raw;
 					scheduleSegmentRender();
 					smartScrollToBottom();
-				} else if (msg.type === 'tool_call') {
+				} else if (msg.type === 'plan_set') {
+					// The framework wrote a plan before the loop started.
+					// Show it as a compact checklist so the user sees what
+					// VaultBot is about to do.
+					if (!currentAssistantMessage) startAssistantMessage();
+					const planDiv = currentAssistantMessage.createDiv({cls: 'vaultbot-plan'});
+					const header = planDiv.createDiv({cls: 'vaultbot-plan-header'});
+					header.setText('Plan: ' + (msg.goal || ''));
+					const list = planDiv.createDiv({cls: 'vaultbot-plan-steps'});
+					const steps = msg.steps || [];
+					for (let i = 0; i < steps.length; i++) {
+						const item = list.createDiv({cls: 'vaultbot-plan-step'});
+						item.setText('  ' + (i+1) + '. ' + steps[i]);
+					}
+					if (msg.fallback) {
+						const fb = planDiv.createDiv({cls: 'vaultbot-plan-fallback'});
+						fb.setText('(simple plan — no complex steps needed)');
+					}
+					smartScrollToBottom();
+				} else if (msg.type === 'step_start') {
+				startStep(msg.step_id, msg.title || '');
+			} else if (msg.type === 'step_summary') {
+				if (currentStepBlock) {
+					if (currentStepHeader) {
+						currentStepHeader.setText('Step ' + (msg.step_id || '') + ': ' + (msg.title || ''));
+					}
+					if (currentStepBody) {
+						currentStepBody.empty();
+						const sumDiv = currentStepBody.createDiv({cls: 'vaultbot-step-summary'});
+						renderMarkdownInto(sumDiv, msg.summary || '');
+					}
+			}
+				closeStep();
+				smartScrollToBottom();
+			} else if (msg.type === 'tool_call') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					// The model moved past reasoning to act: auto-collapse the
 					// thinking block (it may have been left open if there was
@@ -3563,7 +3617,7 @@ class VaultBotSidebarView extends ItemView {
 				return;
 			}
 			appendUserMessage(message);
-			ws.send(JSON.stringify({type, message, model: this.plugin.settings.selectedModel}));
+			ws.send(JSON.stringify({type, message}));
 			input.value = '';
 			input.focus();
 			// A new turn is now in flight: show the inline Stop button.

@@ -15,7 +15,8 @@ Analyze the vault graph's cluster structure: identifies communities using label 
 ## Steps
 
 1. ```python
-   result = vault_cluster_analyzer()
+   from custom_tools.vault_cluster_analyzer import run as _cluster
+   result = _cluster({"vault_path": args.get("vault_path", "")})
    print(result)
    ```
 

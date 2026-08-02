@@ -15,9 +15,10 @@ Reflect on a topic and propose 1-3 new tool abilities you could create for yours
 ## Steps
 
 1. ```python
-   # Call the self_reflect tool's run() function
-   from custom_tools.self_reflect import run as _reflect
-   result = _reflect({"topic": args.get("topic", ""), "vault_context": args.get("vault_context", "")})
+   # self_reflect is a SelfImprover method — instantiate it standalone.
+   from self_improver import SelfImprover
+   _si = SelfImprover(session_logger=None)
+   result = _si.self_reflect(topic=args.get("topic", ""), vault_context=args.get("vault_context", ""))
    print(result)
    ```
 

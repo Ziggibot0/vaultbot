@@ -142,7 +142,7 @@ def run(args: dict) -> dict:
 
     # 5. Safety scan — never commit sensitive files
     ok, staged_preview, _ = run_git(["add", "-A", "--dry-run"], vault_root)
-    danger_patterns = ["'.env'", "'vaultbot_venv/", "sessions/", "vaultbot_index/",
+    danger_patterns = ["'.env'", "'.venv/", "'vaultbot_venv/", "sessions/", "vaultbot_index/",
                         "data.json'", "mcp.json'", "workspace.json"]
     for pat in danger_patterns:
         if pat in staged_preview:

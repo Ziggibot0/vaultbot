@@ -15,7 +15,9 @@ Execute Python code in a sandboxed subprocess. Returns stdout, stderr, and exit 
 ## Steps
 
 1. ```python
-   result = code_run(code=args.get("code", ""), timeout=args.get("timeout", 15))
+   from self_improver import SelfImprover
+   _si = SelfImprover(session_logger=None)
+   result = _si.code_run(code=args.get("code", ""), timeout=args.get("timeout", 15))
    print(result)
    ```
 

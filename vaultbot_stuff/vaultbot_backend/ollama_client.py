@@ -505,65 +505,76 @@ class OllamaClient(_BASE):
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.7, stream: bool = False) -> dict | Generator:
         """
-        Multi-turn chat completion via /api/chat, with optional tool-calling.
+        Multi-turn chat completion via Ollama's OpenAI-compatible /v1/chat/completions
+        endpoint, with optional tool-calling.
 
-        Supports the Ollama tool-calling protocol: when `tools` is provided,
-        the model may emit `tool_calls` in its response instead of (or alongside)
-        content. Each tool call has a name + arguments the caller must execute
-        and feed back as a `tool`-role message.
+        This is the same endpoint Hermes uses — it provides proper finish_reason
+        ("stop", "tool_calls", "length") and reliable tool-call parsing, which
+        the raw /api/chat endpoint lacks. The raw endpoint doesn't return
+        finish_reason at all (just done:true), and Ollama's tool-calling
+        protocol on /api/chat has known issues where models emit text
+        ("Let me check that...") instead of structured tool_calls.
+
+        The /v1 endpoint gives us:
+          - finish_reason: "stop" (model is done), "tool_calls" (model wants
+            to call a tool), "length" (truncated, needs continuation)
+          - delta.content / delta.reasoning / delta.tool_calls in streaming
+          - message.content / message.reasoning / message.tool_calls in
+            non-streaming
+
+        For local models, no max_tokens limit is set — the model thinks as
+        long as it needs (local inference is free). The chat handler's
+        heartbeat keeps the user informed during long thinking passes.
 
         If stream=True, returns a generator yielding chunks with keys:
           'response' (text chunk), 'thinking' (reasoning chunk),
-          'tool_calls' (list of tool call dicts, or []).
-        If stream=False, returns a dict with 'response', 'thinking', 'tool_calls'.
+          'tool_calls' (list of tool call dicts, or []),
+          'finish_reason' (only on the terminal chunk: "stop"|"tool_calls"|"length"),
+          'done' (True only on the terminal sentinel chunk).
+        If stream=False, returns a dict with 'response', 'thinking',
+        'tool_calls', 'finish_reason'.
         """
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.llm_model,
             "messages": messages,
             "stream": stream,
-            "options": {"temperature": temperature},
-            "keep_alive": self._keep_alive,
+            "temperature": temperature,
         }
-        # Pass num_ctx so Ollama allocates the full context window upfront.
-        # Without this, Ollama defaults to a small num_ctx (2048/4096) and
-        # when a large chat payload arrives it UNLOADS the model, resizes
-        # the context buffer, and RELOADS — the "spit out and reload" the
-        # user sees on every first message.  By sending the model's native
-        # context_length, the model is loaded once with the right size and
-        # never needs to resize.  We cap at the model's native window to
-        # avoid over-allocating VRAM.
+        # Pass num_ctx via options so Ollama allocates the full context window
+        # upfront. Without this, Ollama defaults to a small num_ctx
+        # (2048/4096) and when a large chat payload arrives it UNLOADS the
+        # model, resizes the context buffer, and RELOADS — the "spit out and
+        # reload" the user sees on every first message. By sending the
+        # model's native context_length, the model is loaded once with the
+        # right size and never needs to resize.
         try:
             _ctx = self.context_window(self.llm_model)
+            _cap = int(os.environ.get("VAULTBOT_NUM_CTX_CAP", "32768"))
+            if _cap > 0 and _ctx and _ctx > _cap:
+                _ctx = _cap  # cap KV buffer: native 128k ctx allocates a 128k-token KV even for short turns
             if _ctx and _ctx > 0:
-                payload["options"]["num_ctx"] = _ctx
+                payload["options"] = {"num_ctx": _ctx}
         except Exception:
             pass  # best-effort — if /api/show fails, Ollama uses its default
+        # keep_alive so the model stays resident between calls.
+        payload["keep_alive"] = self._keep_alive
         if tools:
             payload["tools"] = tools
+        # No max_tokens — local models are free. Let the model think and
+        # generate as long as it needs. The chat handler's heartbeat keeps
+        # the user informed during long passes.
 
         t0 = time.time()
         try:
-            # Streaming chat: a read timeout so a stalled model raises
-            # ReadTimeout instead of blocking the chat loop forever. The
-            # connect timeout is short (the server is local). The read
-            # timeout is generous and env-configurable: thinking models
-            # (qwen3.6) can spend several minutes reasoning before the
-            # first token flushes, and the chat loop already emits its own
-            # heartbeats so the user sees liveness during the silence. The
-            # default (600s) covers long thinking passes without killing a
-            # genuinely-alive slow stream. Override with
-            # VAULTBOT_OLLAMA_READ_TIMEOUT_SECONDS. The non-stream path uses
-            # timeout=60 (a non-streaming call that hasn't returned in 60s is
-            # truly stuck).
             if stream:
                 _read_timeout = float(os.environ.get(
                     "VAULTBOT_OLLAMA_READ_TIMEOUT_SECONDS", "600"))
                 response = self._session.post(
-                    f"{self.base_url}/api/chat", json=payload,
+                    f"{self.base_url}/v1/chat/completions", json=payload,
                     stream=True, timeout=(5, _read_timeout))
             else:
                 response = self._session.post(
-                    f"{self.base_url}/api/chat", json=payload,
+                    f"{self.base_url}/v1/chat/completions", json=payload,
                     stream=False, timeout=60)
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -574,63 +585,116 @@ class OllamaClient(_BASE):
         if stream:
             def chat_chunks():
                 chunk_count = 0
-                accumulated_tool_calls = []
-                eval_stats = None
+                # Per-index accumulator for fragmented tool-call arguments.
+                # OpenAI streaming sends tool-call arguments in fragments
+                # across multiple chunks (delta.tool_calls[].function.arguments
+                # is a string that grows chunk by chunk). We accumulate
+                # them and emit the complete tool_calls list on the terminal
+                # chunk, matching the Ollama raw API's one-shot shape.
+                tc_acc: dict[int, dict[str, str]] = {}
+                finish_reason: str | None = None
                 try:
-                    for line in response.iter_lines():
-                        if not line:
+                    for raw in response.iter_lines():
+                        if not raw:
                             continue
-                        data = json.loads(line)
-                        msg = data.get("message", {})
+                        line = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else raw
+                        if not line.startswith("data:"):
+                            continue
+                        body = line[len("data:"):].strip()
+                        if body == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(body)
+                        except json.JSONDecodeError:
+                            continue
+                        choice = (data.get("choices") or [{}])[0]
+                        delta = choice.get("delta", {}) or {}
+                        content = delta.get("content") or ""
+                        reasoning = delta.get("reasoning") or ""
+                        # Accumulate tool-call fragments.
+                        for tc in delta.get("tool_calls") or []:
+                            idx = tc.get("index", 0)
+                            slot = tc_acc.setdefault(idx, {"id": "", "name": "", "arguments_str": ""})
+                            if tc.get("id"):
+                                slot["id"] = tc["id"]
+                            fn = tc.get("function", {}) or {}
+                            if fn.get("name"):
+                                slot["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                slot["arguments_str"] += fn["arguments"]
                         chunk = {
-                            "response": msg.get("content", "") or "",
-                            "thinking": msg.get("thinking", "") or "",
-                            "tool_calls": msg.get("tool_calls", []) or [],
+                            "response": content,
+                            "thinking": reasoning,
+                            "tool_calls": [],  # emitted only at the end
                         }
-                        if chunk["tool_calls"]:
-                            accumulated_tool_calls.extend(chunk["tool_calls"])
-                        if data.get("done", False):
-                            # Capture Ollama's eval stats from the terminal
-                            # chunk so the chat handler can forward them to
-                            # the plugin GUI (tokens/s, load time, etc.).
-                            eval_stats = {
-                                "total_duration": data.get("total_duration", 0),
-                                "load_duration": data.get("load_duration", 0),
-                                "prompt_eval_count": data.get("prompt_eval_count", 0),
-                                "prompt_eval_duration": data.get("prompt_eval_duration", 0),
-                                "eval_count": data.get("eval_count", 0),
-                                "eval_duration": data.get("eval_duration", 0),
-                            }
-                        yield chunk
-                        chunk_count += 1
-                        if data.get("done", False):
+                        if content or reasoning:
+                            yield chunk
+                            chunk_count += 1
+                        fr = choice.get("finish_reason")
+                        if fr:
+                            finish_reason = fr
+                        if fr in ("tool_calls", "stop", "length"):
                             break
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_tool("chat", self._chat_log_summary(payload, stream),
                                     error=str(e), duration_ms=(time.time() - t0) * 1000)
                     raise
-                finally:
-                    self._log_tool("chat", self._chat_log_summary(payload, stream),
-                                    outputs={"chunks": chunk_count,
-                                             "tool_calls": len(accumulated_tool_calls)},
-                                    duration_ms=(time.time() - t0) * 1000)
-                # Emit a terminal stats chunk so the chat handler can forward
-                # eval stats to the plugin.  This fires AFTER the done chunk,
-                # so the handler sees it as a separate event.
-                if eval_stats:
-                    yield {"eval_stats": eval_stats}
+                # Emit accumulated tool calls as one chunk (Ollama-style
+                # one-shot), so the chat handler sees the same shape it
+                # always has.
+                if tc_acc:
+                    assembled = []
+                    for idx in sorted(tc_acc):
+                        slot = tc_acc[idx]
+                        assembled.append({
+                            "id": slot["id"] or f"call_{idx}",
+                            "function": {
+                                "name": slot["name"],
+                                "arguments": slot["arguments_str"] or "{}",
+                            },
+                        })
+                    yield {"response": "", "thinking": "", "tool_calls": assembled}
+                    chunk_count += 1
+                # Terminal chunk: signal done + carry finish_reason so the
+                # chat handler can distinguish "model finished naturally"
+                # (stop) from "model called tools" (tool_calls) from
+                # "model was truncated" (length).
+                self._log_tool("chat", self._chat_log_summary(payload, stream),
+                                outputs={"chunks": chunk_count,
+                                         "tool_calls": len(tc_acc),
+                                         "finish_reason": finish_reason},
+                                duration_ms=(time.time() - t0) * 1000)
+                yield {"done": True, "finish_reason": finish_reason or "stop"}
             return chat_chunks()
         else:
             data = response.json()
-            msg = data.get("message", {})
+            choice = (data.get("choices") or [{}])[0]
+            msg = choice.get("message", {}) or {}
+            tool_calls = msg.get("tool_calls") or []
+            # Normalize tool_calls to Ollama shape: each has
+            # {"id":..., "function":{"name":..., "arguments":...}}.
+            # OpenAI already uses this shape, but some entries may lack "id".
+            normalized_tc = []
+            for i, tc in enumerate(tool_calls):
+                fn = tc.get("function", {}) or {}
+                normalized_tc.append({
+                    "id": tc.get("id") or f"call_{i}",
+                    "function": {
+                        "name": fn.get("name", ""),
+                        "arguments": fn.get("arguments", "{}"),
+                    },
+                })
+            finish_reason = choice.get("finish_reason") or "stop"
             result = {
-                "response": msg.get("content", "") or "",
-                "thinking": msg.get("thinking", "") or "",
-                "tool_calls": msg.get("tool_calls", []) or [],
+                "response": msg.get("content") or "",
+                "thinking": msg.get("reasoning") or "",
+                "tool_calls": normalized_tc,
+                "finish_reason": finish_reason,
             }
             self._log_tool("chat", self._chat_log_summary(payload, stream),
                             outputs={"response_len": len(result["response"]),
                                      "thinking_len": len(result["thinking"]),
-                                     "tool_calls": len(result["tool_calls"])},
+                                     "tool_calls": len(result["tool_calls"]),
+                                     "finish_reason": finish_reason},
                             duration_ms=(time.time() - t0) * 1000)
             return result
