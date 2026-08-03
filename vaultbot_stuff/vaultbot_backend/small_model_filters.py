@@ -130,86 +130,73 @@ def _client_chat(client: Any, prompt: str, system: str = "",
 
 async def rerank_results(svc: Any, query: str, results: list[dict],
                           k: int = 5, session_logger: Any = None) -> list[dict]:
-    """Use the small model to rerank FUSED retrieval results by true relevance.
+    """Deterministic reranking using embedding cosine similarity.
 
-    Delegates to the ``Smart-Vault-Search`` procedure via
-    ``execute_procedure``. The procedure reads each result's preview and
-    judges relevance (high/medium/low) — not just keyword overlap.
+    Replaces the old small-model ``Smart-Vault-Search`` procedure call.
+    The procedure routed through ``execute_procedure`` (compile + 3 code
+    steps + 1 LLM call + JSON parse) to have a 0.8b model read 300-char
+    previews and say "high/medium/low" — a keyword-matching task dressed up
+    as relevance judgment.
+
+    The deterministic replacement reconstructs each candidate's stored
+    embedding from the FAISS index (zero Ollama calls — the vectors are
+    already in the index), computes cosine similarity with the query
+    embedding (one Ollama call, already made by the FUSED vector channel),
+    and sorts. This is pure numpy and reuses signals that were already
+    computed.
 
     Fail-safe: on any error, returns the original results truncated to k.
     """
     if not results or len(results) <= k:
         return results
 
-    # Circuit breaker: if rerank failed recently, skip it entirely.
-    # The Smart-Vault-Search procedure's llm_generate step was timing out
-    # (small model reasoning on relevance judgment) and failing every turn.
-    # Skipping after the first failure saves 60s/turn and the deterministic
-    # FUSED order is already a reasonable baseline.
-    if _breaker_tripped("rerank"):
-        return results[:k]
-
-    # Cap at 15 candidates so the small model isn't reading the whole vault.
     candidates = results[:15]
     try:
-        from chat_handler import execute_agent_tool
-        # Build the hits arg in the shape Smart-Vault-Search expects.
-        hits_arg = [
-            {"file_path": r.get("file_path", ""),
-             "name": r.get("name", ""),
-             "keyword_score": r.get("score", 0),
-             "preview": (r.get("snippet") or "")[:300]}
-            for r in candidates
-        ]
-        proc_result = await execute_agent_tool(
-            svc, "execute_procedure",
-            {"procedure_name": "Smart-Vault-Search",
-             "query": query, "hits": hits_arg},
-            session_logger, None, user_message=query)
-
-        if not isinstance(proc_result, dict) or not proc_result.get("overall_passed"):
-            if session_logger:
-                session_logger.log("small_model_rerank_skip", {
-                    "reason": "procedure_failed",
-                    "overall_passed": proc_result.get("overall_passed") if isinstance(proc_result, dict) else None,
-                })
-            # Trip the breaker: a procedure that fails (timeout, bad output)
-            # will keep failing every turn for the same reason. Skipping it
-            # after the first failure saves the full procedure latency on
-            # every subsequent turn.
-            _breaker_trip("rerank")
+        import numpy as _np
+        indexer = getattr(svc, "vault_indexer", None)
+        if indexer is None or indexer.index is None:
             return results[:k]
 
-        final = proc_result.get("final_output", "")
-        parsed = _parse_json_array(final)
-        if parsed is None:
-            if session_logger:
-                session_logger.log("small_model_rerank_skip", {
-                    "reason": "json_parse_failed",
-                })
-            # Same rationale: a small model that emits unparseable JSON once
-            # will keep doing it. Trip the breaker so we stop paying its
-            # latency every turn.
-            _breaker_trip("rerank")
+        # Get the query embedding (one Ollama call — the same one the FUSED
+        # vector channel already made, but we don't have a cache for it
+        # here. This is still cheaper than the old procedure path which
+        # made an LLM call PLUS went through the procedure execution
+        # machinery.)
+        try:
+            query_vec = indexer._get_embedding(query)
+        except Exception:
+            # If the embedding service is down, fall back to FUSED order.
             return results[:k]
 
-        # Map file_path → relevance rank (high=0, medium=1, low=2).
-        rel_order = {"high": 0, "medium": 1, "low": 2}
-        scored: list[tuple[int, float, dict]] = []
-        for item in parsed:
-            fp = item.get("file_path", "")
-            rel = item.get("relevance", "medium").lower()
-            rank = rel_order.get(rel, 1)
-            # Find the original result dict for this file_path.
-            orig = next((r for r in candidates if r.get("file_path") == fp), None)
-            if orig:
-                scored.append((rank, orig.get("score", 0.0), orig))
+        query_vec = _np.asarray(query_vec, dtype=_np.float32).reshape(1, -1)
+        # Manual L2 normalization (faiss.normalize_L2 is not available in
+        # numpy and faiss may not be imported here).
+        norm = _np.linalg.norm(query_vec)
+        if norm > 0:
+            query_vec = query_vec / norm
 
-        if not scored:
-            return results[:k]
+        scored: list[tuple[float, float, dict]] = []
+        for r in candidates:
+            fp = r.get("file_path", "")
+            if not fp:
+                # No file_path — can't reconstruct. Keep FUSED score.
+                scored.append((r.get("score", 0.0), r.get("score", 0.0), r))
+                continue
+            stored = indexer.reconstruct_embedding(fp)
+            if stored is None:
+                # Not in the index — fall back to FUSED score.
+                scored.append((r.get("score", 0.0), r.get("score", 0.0), r))
+                continue
+            # Cosine similarity = dot product of normalized vectors.
+            cos_sim = float(_np.dot(query_vec[0], stored))
+            # Blend: 70% embedding cosine, 30% FUSED score (which includes
+            # graph + backlink signals the embedding alone doesn't capture).
+            fused_score = r.get("score", 0.0)
+            blended = 0.7 * cos_sim + 0.3 * fused_score
+            scored.append((blended, fused_score, r))
 
-        # Sort by relevance rank first, then by original FUSED score (tie-break).
-        scored.sort(key=lambda t: (t[0], -t[1]))
+        # Sort by blended score descending.
+        scored.sort(key=lambda t: -t[0])
         reranked = [t[2] for t in scored[:k]]
 
         # Guard: always include the top FUSED result if it wasn't returned.
@@ -218,17 +205,15 @@ async def rerank_results(svc: Any, query: str, results: list[dict],
             reranked = reranked[:k]
 
         if session_logger:
-            session_logger.log("small_model_rerank", {
+            session_logger.log("deterministic_rerank", {
                 "candidates": len(candidates),
                 "kept": len(reranked),
                 "order_changed": [r.get("name", "") for r in reranked[:3]],
             })
-        _breaker_reset("rerank")
         return reranked
     except Exception as e:
         if session_logger:
-            session_logger.log("small_model_rerank_failed", {"error": str(e)})
-        _breaker_trip("rerank")
+            session_logger.log("deterministic_rerank_failed", {"error": str(e)})
         return results[:k]
 
 
@@ -326,11 +311,18 @@ _SECTION_RE = re.compile(r"^### \[\[([^\]]+)\]\]", re.MULTILINE)
 
 async def filter_context(svc: Any, query: str, context: str,
                           session_logger: Any = None) -> str:
-    """Use the small model to drop irrelevant context sections.
+    """Deterministically drop irrelevant context sections by keyword overlap.
 
-    Splits the context by ``### [[name]]`` headers (the L1 card format from
-    abstract_context.py), calls the ``Filter-Context-For-Query`` procedure to
-    pick which sections to keep, and reassembles.
+    Replaces the old small-model ``Filter-Context-For-Query`` procedure call.
+    The procedure routed through ``execute_procedure`` (compile + 3 code
+    steps + 1 LLM call + JSON parse) to have a 0.8b model read section titles
+    + 200-char previews and say "keep/drop" — a keyword-matching task.
+
+    The deterministic replacement splits the context by ``### [[name]]``
+    headers (same as before), computes keyword overlap between the query's
+    content words and each section's title + preview, and keeps sections
+    with any overlap. Always keeps the first (L2 MOC) and last (L0
+    drill-down) sections. Pure string matching — zero LLM calls.
 
     Fail-safe: on any error, returns the original context unchanged.
     """
@@ -341,40 +333,19 @@ async def filter_context(svc: Any, query: str, context: str,
     if len(sections) < 3:
         return context  # not enough sections to filter
 
-    # Circuit breaker: if context-filter failed recently, skip it.
-    if _breaker_tripped("filter"):
-        return context
-
     try:
-        from chat_handler import execute_agent_tool
-        sections_arg = [
-            {"id": i, "title": s["title"], "preview": s["body"][:200]}
-            for i, s in enumerate(sections)
-        ]
-        proc_result = await execute_agent_tool(
-            svc, "execute_procedure",
-            {"procedure_name": "Filter-Context-For-Query",
-             "query": query, "sections": sections_arg},
-            session_logger, None, user_message=query)
+        query_words = _content_words(query)
+        if not query_words:
+            return context  # no content words to match against
 
-        if not isinstance(proc_result, dict) or not proc_result.get("overall_passed"):
-            if session_logger:
-                session_logger.log("small_model_filter_skip", {
-                    "reason": "procedure_failed",
-                })
-            return context
-
-        keep_ids = _parse_json_array(proc_result.get("final_output", ""))
-        if keep_ids is None:
-            return context
-
-        # Keep_ids might be a list of ints or a list of {"id": int}.
         keep_set: set[int] = set()
-        for item in keep_ids:
-            if isinstance(item, int):
-                keep_set.add(item)
-            elif isinstance(item, dict) and "id" in item:
-                keep_set.add(int(item["id"]))
+        for i, s in enumerate(sections):
+            # Score by keyword overlap between query and section title + preview.
+            section_text = (s["title"] + " " + s["body"][:300]).lower()
+            section_words = _content_words(section_text)
+            # Keep if any content word from the query appears in the section.
+            if query_words & section_words:
+                keep_set.add(i)
 
         # Guard: always keep first (L2 MOC) and last (L0 drill-down) sections.
         keep_set.add(0)
@@ -384,22 +355,24 @@ async def filter_context(svc: Any, query: str, context: str,
         if len(keep_set) < 2:
             return context
 
+        # Guard: if we'd keep everything, don't bother reassembling.
+        if len(keep_set) == len(sections):
+            return context
+
         kept = [s for i, s in enumerate(sections) if i in keep_set]
         filtered = "\n\n".join(s["raw"] for s in kept)
 
         if session_logger:
-            session_logger.log("small_model_filter", {
+            session_logger.log("deterministic_filter", {
                 "total_sections": len(sections),
                 "kept_sections": len(kept),
                 "original_chars": len(context),
                 "filtered_chars": len(filtered),
             })
-        _breaker_reset("filter")
         return filtered
     except Exception as e:
         if session_logger:
-            session_logger.log("small_model_filter_failed", {"error": str(e)})
-        _breaker_trip("filter")
+            session_logger.log("deterministic_filter_failed", {"error": str(e)})
         return context
 
 

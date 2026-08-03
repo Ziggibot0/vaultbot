@@ -75,6 +75,8 @@ class OllamaClient(_BASE):
                     return True
             return False
         except Exception:
+            if self.session_logger:
+                self.session_logger.log("ollama_is_loaded_error", {"model": model})
             return False
 
     def preload_model(self, model: str | None = None, keep_alive: str | None = None) -> bool:
@@ -106,7 +108,7 @@ class OllamaClient(_BASE):
             _ctx = self.context_window(model)
             if _ctx and _ctx > 0:
                 _opts["num_ctx"] = _ctx
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort context detection
             pass
         t0 = time.time()
         try:
@@ -334,7 +336,7 @@ class OllamaClient(_BASE):
             _ctx = self.context_window(self.llm_model)
             if _ctx and _ctx > 0:
                 payload["options"]["num_ctx"] = _ctx
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort context window
             pass
         if system:
             payload["system"] = system
@@ -451,7 +453,7 @@ class OllamaClient(_BASE):
             resp = self._session.get(f"{self.base_url}/api/version", timeout=5)
             if resp.status_code == 200:
                 stats["version"] = resp.json().get("version", "")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort stats
             pass
         try:
             resp = self._session.get(f"{self.base_url}/api/ps", timeout=5)
@@ -465,7 +467,7 @@ class OllamaClient(_BASE):
                         "context_length": m.get("context_length", 0),
                         "expires_at": m.get("expires_at", ""),
                     })
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort stats
             pass
         return stats
 
@@ -636,7 +638,7 @@ class OllamaClient(_BASE):
                 _ctx = _cap  # cap KV buffer: native 128k ctx allocates a 128k-token KV even for short turns
             if _ctx and _ctx > 0:
                 _extra_opts["num_ctx"] = _ctx
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort context detection
             pass  # best-effort — if /api/show fails, Ollama uses its default
         if _extra_opts:
             payload["options"] = _extra_opts

@@ -241,7 +241,7 @@ async def lifespan(app: FastAPI):
                         try:
                             if client.preload_model():
                                 return True
-                        except Exception:
+                        except Exception:  # noqa: BLE001 — best-effort retry
                             pass
                         time.sleep(_interval)
                         _elapsed += _interval

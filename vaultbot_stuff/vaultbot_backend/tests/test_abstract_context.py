@@ -40,7 +40,10 @@ def test_falls_back_to_legacy_when_no_cards(tmp_path):
     )
 
     # VaultGraph scans .md files under vault_path at construction time.
+    # The build runs in a background daemon thread; join it so the
+    # precondition assertions see a fully-populated graph.
     vg = VaultGraph(vault_path=str(tmp_path))
+    vg._build_thread.join(timeout=10)
     assert "my-note" in vg.nodes, "precondition: graph must index the note"
 
     search_results = [
@@ -92,8 +95,8 @@ def test_l1_drill_down_includes_full_l0(tmp_path):
         "Retrieval reactivates the index which pointers back to the cortex. "
     )
     # ~3000 chars — comfortably over the old 2000 cut but under the
-    # production DRILL_CAP of 12000 (so the cap doesn't mask the test).
-    long_body = body_block * 16
+    # DRILL_CAP of 12000 used in abstract_context.
+    long_body = body_block * 46
     l0_path = tmp_path / "my-note.md"
     l0_path.write_text(
         f"# My Note\n\n{long_body}\n",
@@ -114,6 +117,7 @@ def test_l1_drill_down_includes_full_l0(tmp_path):
     )
 
     vg = VaultGraph(vault_path=str(tmp_path))
+    vg._build_thread.join(timeout=10)
     assert "my-note" in vg.nodes, "precondition: graph must index the L0"
     assert "my-note-l1" in vg.nodes, "precondition: graph must index the L1"
 
@@ -143,14 +147,17 @@ def test_l1_drill_down_includes_full_l0(tmp_path):
     # The L0 drill section must contain the full body, not a 2000-char
     # truncation. Repeated prose means any truncation < len(long_body).
     assert long_body in ctx, (
-        "L0 drill-down must include the FULL untruncated L0 body; "
-        f"got context len={len(ctx)}"
+        "L0 drill-down must include the full L0 body; "
+        "got a truncated version"
     )
-    # Belt-and-suspenders: the drill section must be far over the old
-    # 2000-char cut, proving no truncation at 2000.
-    drill_marker = "--- L0: DRILL-DOWN"
-    assert drill_marker in ctx, ctx
-    drill_section = ctx.split(drill_marker, 1)[1]
+    # The drill-down marker must be present in the context.
+    assert "--- L0: DRILL-DOWN" in ctx, (
+        "context must contain the L0 drill-down section marker"
+    )
+    # The drill-down section must be longer than 2000 chars (proving
+    # no legacy-style truncation).
+    drill_start = ctx.index("--- L0: DRILL-DOWN")
+    drill_section = ctx[drill_start:]
     assert len(drill_section) > 2000, (
-        f"drill section must exceed the old 2000-char cut; got {len(drill_section)}"
+        f"drill-down section must be >2000 chars; got {len(drill_section)}"
     )

@@ -201,6 +201,18 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
         if kind == "link_density":
             return False
 
+        # Failing/stale procedure gaps reference procedure NOTE NAMES (e.g.
+        # "Find-Redundant-Procedures"), not web-researchable concepts. The
+        # web has nothing useful on them — the failure log's error_details +
+        # the procedure file's own content are the real signal. These need
+        # code-level inspection, not a DuckDuckGo dig. Without this filter the
+        # researcher gets stuck in an infinite loop: the procedure tracker
+        # reports a failing procedure every cycle, the researcher web-searches
+        # the procedure name, writes a worthless research note, and the
+        # failure count is never reset — so the same gap comes back forever.
+        if kind in ("failing_procedure", "failing_step", "stale_procedure"):
+            return False
+
         # Reject topics that are too long (note titles, not concepts).
         words = re.split(r"[\s-]+", topic)
         if len(words) > _MAX_TOPIC_WORDS:
@@ -307,9 +319,44 @@ class AutonomousResearcher:
         gaps = [g for g in gaps if _is_researchable_gap(g)]
         return gaps
 
+    def _find_existing_research_note(self, topic: str) -> Path | None:
+        """Check if a research note for this topic already exists on disk.
+
+        Mirrors vault_maintenance._safe_filename so the check uses the exact
+        same filename the note creator would produce. Returns the Path if
+        the file exists, None otherwise.
+        """
+        safe_topic = re.sub(r"[^\w\s-]", "", topic).strip()
+        safe_topic = re.sub(r"[-\s]+", "-", safe_topic)[:80] or "note"
+        research_dir = (
+            self.vault_path / "vaultbot_stuff/Knowledge/Research")
+        candidate = research_dir / f"{safe_topic}.md"
+        if candidate.exists():
+            return candidate
+        return None
+
     def _research_to_note(self, gap: dict[str, Any]) -> str | None:
         """Research a single gap and write a note. Returns note path or None."""
         topic = gap["topic"]
+
+        # --- Already-researched guard (deterministic, zero LLM) -------------
+        # If a research note for this topic already exists on disk, skip the
+        # web research + LLM synthesis entirely. The note was already written
+        # — re-researching it just burns Ollama cycles producing a near-clone
+        # (the create_research_note similarity check would delete the old one
+        # and write the new one at 0.99 similarity, accomplishing nothing).
+        # This is the single most impactful guard against wasted small-model
+        # cycles: without it, any gap that persists across cycles (e.g. a
+        # dangling wikilink that hasn't been re-indexed yet) triggers a full
+        # 4-round web search + LLM synthesis every 10 minutes.
+        existing = self._find_existing_research_note(topic)
+        if existing is not None:
+            self._log("autonomous_skip_already_researched", {
+                "topic": topic,
+                "existing_path": str(existing),
+            })
+            return str(existing)
+
         try:
             result = self.engine.research(topic)
             if not result or not result.get("synthesis"):
@@ -507,8 +554,45 @@ class AutonomousResearcher:
             # they represent tasks where the system is actively failing.
             proc_gaps = self.procedure_tracker.get_research_gaps(
                 vault_path=str(self.vault_path))
-            if proc_gaps:
-                gaps = proc_gaps
+            # Partition into researchable gaps and rejected procedure gaps.
+            # Procedure-name gaps (failing_procedure, failing_step,
+            # stale_procedure) are NOT web-researchable — the procedure's
+            # name is an internal identifier, not a concept the web knows
+            # about. Reset their failure counts so they stop coming back
+            # every cycle (the infinite-loop bug). Procedural gaps
+            # ("how to <task>") ARE researchable and pass through.
+            researchable_proc = []
+            rejected_proc = []
+            for g in proc_gaps:
+                if _is_researchable_gap(g):
+                    researchable_proc.append(g)
+                else:
+                    rejected_proc.append(g)
+            # Reset failure counts for rejected procedure gaps so the tracker
+            # stops feeding them back every cycle. This is the deterministic
+            # fix that replaces the old 7-hour small-model loop.
+            for g in rejected_proc:
+                proc_name = g.get("procedure") or g.get("topic", "")
+                if proc_name:
+                    try:
+                        self.procedure_tracker.update_after_research(
+                            proc_name, vault_path=str(self.vault_path))
+                        self._log("autonomous_procedure_gap_reset", {
+                            "procedure": proc_name,
+                            "kind": g.get("kind"),
+                            "reason": "not web-researchable",
+                        })
+                    except Exception as e:  # noqa: BLE001 — best-effort
+                        self._log("autonomous_procedure_reset_failed", {
+                            "procedure": proc_name, "error": str(e),
+                        })
+            if rejected_proc:
+                self._log("autonomous_procedure_gaps_rejected", {
+                    "count": len(rejected_proc),
+                    "topics": [g.get("topic", "") for g in rejected_proc[:5]],
+                })
+            if researchable_proc:
+                gaps = researchable_proc
                 self._log("autonomous_procedure_gaps", {
                     "count": len(gaps),
                     "topics": [g.get("topic", "") for g in gaps[:5]],

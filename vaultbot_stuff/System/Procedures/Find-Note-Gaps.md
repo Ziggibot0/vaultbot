@@ -110,3 +110,79 @@ except Exception:
     parsed = []
 result = _json.dumps({"missing_notes": parsed, "total_gaps": len(parsed)})
 ```
+
+
+## Conditional Branches (Post-Detection Routing)
+
+> **Research backing:** [[Execution-Loop-Dominance-Pattern]] demonstrates
+> that routing detected gaps to specialized handlers produces better
+> outcomes than monolithic gap-filling. [[Information-feedback-loops-for-iterative-self-improvement]]
+> shows that feeding gap detection results into targeted creation
+> processes creates compounding knowledge growth. The
+> [[Procedure-Composition-Patterns]] approach: detect once, dispatch
+> conditionally.
+
+After Step 3 returns the gap report, the caller should dispatch each
+missing note to the appropriate creation procedure based on its type and
+priority. These are **conditional if-branches**, not sequential steps.
+
+### IF missing note has "procedure" in its name OR is referenced by a procedure
+
+→ Run `run_procedure("How-to-Create-a-Procedure")` to create the missing
+procedure, using the referencing note's context to determine what the
+procedure should do.
+
+**Rationale:** Missing procedures are functional gaps — they mean
+VaultBot is doing something manually that could be automated. Creating
+them directly closes the gap. Backed by [[Deterministic-Scaffolding-for-Small-Models]]
+which shows that proceduralizing workflows improves reliability and
+reduces token costs.
+
+### IF missing note is a concept (referenced by knowledge notes, not procedures)
+
+→ Call `vault_research(topic=<note_name>)` to research and create the
+note with web sources. Then run `run_procedure("Structure-Research-Note",
+   note_path=<new_note>)` to ensure it meets quality standards.
+
+**Rationale:** Missing concept notes are knowledge gaps. Researching them
+with web sources ensures they're grounded in evidence, not
+hallucination. [[Structure-Research-Note]] then ensures the note has
+proper wikilinks, frontmatter, and source citations. Backed by the
+[[Vault-Knowledge-Only-Directive]] and [[IDK-Fallback-Directive]].
+
+### IF missing note has priority "high" (referenced by 3+ notes)
+
+→ Auto-research immediately using `vault_research(topic=<note_name>)`.
+Do not wait for user confirmation — the high reference count means
+multiple notes are depending on this concept existing.
+
+**Rationale:** High-priority gaps create the most broken wikilinks and
+degrade retrieval quality the most. Auto-researching them is the
+highest-leverage action. The priority threshold of 3+ references comes
+from [[Information-feedback-loops-for-iterative-self-improvement]] which
+shows that concepts referenced by multiple notes are hub candidates that
+disproportionately improve graph connectivity when created.
+
+### IF missing note has priority "low" (referenced by 1 note)
+
+→ Log the gap but do not auto-create. Surface it in the next dream pass
+for batch evaluation. The referencing note can function without it for
+now.
+
+**Rationale:** Low-priority gaps have minimal impact on vault
+connectivity. Auto-creating them wastes tokens on notes that may never
+be retrieved. The [[Ephemeral-Argument-Architecture]] concept shows
+that not every link needs a target — some are aspirational references
+that gain value only when the concept becomes relevant.
+
+### IF the note itself is thin (exists but has < 100 words of content)
+
+→ Run `run_procedure("Condense-Note", note_path=<note_path>)` if the
+note has enough content to condense, OR call `vault_research` to expand
+it with sourced content if it's too thin to be useful.
+
+**Rationale:** Thin notes are worse than missing notes — they exist
+enough to be retrieved but don't contain enough content to be useful.
+[[RAG-evaluation-metrics]] shows that thin notes reduce retrieval
+precision because they match queries but don't satisfy information
+needs.

@@ -154,7 +154,7 @@ class NoteCreator:
                     text = ""
             if text:
                 return f"Chat: {text}"
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort title extraction
             pass
         return f"Chat: {user_message[:50]}"
 

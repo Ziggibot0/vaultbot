@@ -182,62 +182,32 @@ def _small_model_procedure_hint(
                 })
         return ""
     except Exception:
+        if session_logger:
+            session_logger.log("procedure_hint_error", {"error": "exception in _match_procedure"})
         return ""
 
 
 def _small_model_query(goal: str, step_content: str, session_logger: Any = None) -> str:
-    """Use the small model to turn a step description into a search query.
+    """Deterministically build a search query from the step description.
 
-    A small model can do "turn this task description into a 1-line search query"
-    — it's a bounded rewrite, not reasoning. The framework falls back to the
-    raw step text if the small model is unavailable or produces garbage, so a
-    hallucinated query just means a worse retrieval set, not data corruption.
-    The big model still reads whatever the retriever returns.
+    Replaces the old small-model call that turned a step description into a
+    search query. The small model was just rephrasing the step text — a
+    bounded rewrite that doesn't need LLM reasoning. The FUSED retriever
+    already does keyword extraction and topic focusing internally, so it
+    doesn't need a pre-rephrased query. The raw step text (prefixed with the
+    goal for context) is a better query because it preserves specific terms
+    the small model would often drop.
 
-    think=False: a 0.8b model reasoning on a one-line rewrite was the 60s/turn
-    bottleneck. These tasks don't need chain-of-thought.
+    Zero LLM calls. The old fallback path (when the small model was
+    unavailable) was literally this — ``(goal + " " + step_content).strip()``
+    — and it worked fine.
     """
-    from small_model_filters import _breaker_tripped, _breaker_trip, _breaker_reset
-    if _breaker_tripped("query"):
-        return (goal + " " + step_content).strip()
-    try:
-        from llm_client import get_small_client_or_big
-        client = get_small_client_or_big(session_logger)
-        prompt = (
-            "Turn the following task step into a concise search query "
-            "(one line, no quotes, no preamble). The query should capture "
-            "what the step needs to find.\n\n"
-            f"Goal: {goal[:200]}\n"
-            f"Step: {step_content[:200]}\n\n"
-            "Search query:")
-        resp = client.chat(
-            [{"role": "user", "content": prompt}],
-            temperature=0.2, stream=False, think=False, max_predict=128)
-        text = ""
-        if isinstance(resp, dict):
-            msg = resp.get("message", {})
-            if isinstance(msg, dict):
-                text = msg.get("content", "") or ""
-            if not text:
-                text = resp.get("response", "") or resp.get("content", "")
-        text = (text or "").strip()
-        # Guard: if the small model hallucinated something unrelated (no word
-        # overlap with the step), fall back to the raw step text.
-        if text:
-            _step_words = set(step_content.lower().split())
-            _query_words = set(text.lower().split())
-            if not (_step_words & _query_words):
-                if session_logger:
-                    session_logger.log("small_model_query_mismatch", {
-                        "step": step_content[:80],
-                        "query": text[:80],
-                    })
-                return (goal + " " + step_content).strip()
-        _breaker_reset("query")
-        return text or (goal + " " + step_content).strip()
-    except Exception:
-        _breaker_trip("query")
-        return (goal + " " + step_content).strip()
+    query = (goal + " " + step_content).strip()
+    if session_logger:
+        session_logger.log("deterministic_step_query", {
+            "query": query[:120],
+        })
+    return query
 
 
 def _small_model_digest(result: dict[str, Any], session_logger: Any = None) -> dict[str, Any]:
@@ -649,8 +619,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 results = dedup_results(all_results)
             else:
                 results = all_results
-            # Phase 1: small-model reranking.
-            if svc.small_client and len(results) > 5:
+            # Phase 1: deterministic reranking (embedding cosine similarity).
+            # No longer gated on svc.small_client — the reranker uses FAISS
+            # vector reconstruction, not an LLM call.
+            if len(results) > 5:
                 results = await rerank_results(
                     svc, user_message, results, k=5,
                     session_logger=session_logger)
@@ -730,10 +702,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         except Exception as e:  # noqa: BLE001
             session_logger.log("context_budget_failed", {"error": str(e)})
 
-        # Phase 4: small-model context filtering — drop irrelevant L1 card
+        # Phase 4: deterministic context filtering — drop irrelevant L1 card
         # sections so the big model sees only what's relevant to this query.
-        # Fail-safe: on any error, the full context passes through unchanged.
-        if svc.small_client and len(context) > 3000:
+        # No longer gated on svc.small_client — the filter uses keyword
+        # overlap, not an LLM call. Fail-safe: on any error, the full
+        # context passes through unchanged.
+        if len(context) > 3000:
             try:
                 context = await filter_context(
                     svc, user_message, context, session_logger)

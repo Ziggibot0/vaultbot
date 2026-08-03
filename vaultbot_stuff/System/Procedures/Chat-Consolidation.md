@@ -106,3 +106,80 @@ print(json.dumps(result, indent=2))
    - Action items: which highway notes need updating with new wikilinks
 
    Keep it under 500 words. This is a routing report, not a synthesis.]
+
+
+## Conditional Branches (Post-Classification Routing)
+
+> **Research backing:** The [[Execution-Loop-Dominance-Pattern]] shows that
+> routing decisions after classification produce better outcomes than
+> monolithic processing. [[Information-feedback-loops-for-iterative-self-improvement]]
+> demonstrates that feeding classification results into specialized
+> processors creates compounding quality gains. This is the
+> [[Procedure-Composition-Patterns]] approach: classify once, dispatch
+> conditionally.
+
+After Step 3 produces the classification report, the caller should
+dispatch each non-casual chat to a specialized procedure based on its
+category. These are **conditional if-branches**, not sequential steps.
+
+### IF category == "build-log"
+
+→ Run `run_procedure("Code-Pattern-Extract", note_path=<chat_file>)` to
+extract any code patterns, tool usage, or implementation decisions from
+the chat. Then suggest linking the chat to [[VaultBot-Build-Log]].
+
+**Rationale:** Build-log chats contain reusable code patterns that
+[[Code-Pattern-Extract]] can surface and link into the pattern highway
+system. Without this branch, code patterns stay buried in chat logs.
+
+### IF category == "design-decisions"
+
+→ Run `run_procedure("Extract-Entities", note_path=<chat_file>)` to
+extract key concepts and principles Sean articulated. Then suggest
+linking the chat to [[Sean-Design-Decisions]].
+
+**Rationale:** Design-decision chats contain architectural principles
+that should become standalone concept notes. [[Extract-Entities]]
+identifies the concepts; the caller writes or updates the highway note.
+
+### IF category == "testing-history"
+
+→ Run `run_procedure("Cross-Check-Claims", note_path=<chat_file>)` to
+verify any claims made during testing against vault knowledge. Then
+suggest linking the chat to [[Testing-and-Verification-History]].
+
+**Rationale:** Testing chats often contain assertions about VaultBot's
+capabilities. [[Cross-Check-Claims]] verifies these against existing
+vault notes, catching any claims that are outdated or contradicted by
+later findings. Backed by [[Claim-Verification-for-Vault-Notes]].
+
+### IF category == "research"
+
+→ Run `run_procedure("Structure-Research-Note", note_path=<chat_file>)`
+to ensure any research findings from the chat are properly structured as
+permanent notes with sources, wikilinks, and frontmatter.
+
+**Rationale:** Research chats may contain findings that were discussed
+but never written as permanent notes. [[Structure-Research-Note]]
+ensures they meet vault quality standards. Backed by Zettelkasten
+method research (see its `sources` frontmatter).
+
+### IF category == "new-pattern"
+
+→ Create a new highway note for the pattern (using
+`run_procedure("How-to-Create-a-Procedure")` if the pattern suggests a
+recurring workflow, or `vault_safe_write` for a concept highway). Then
+link the chat to the new highway.
+
+**Rationale:** New patterns indicate the highway system needs expansion.
+If the pattern is a workflow, it should become a procedure. If it's a
+knowledge pattern, it should become a concept highway note. This branch
+ensures the system grows to accommodate new categories rather than
+forcing everything into existing buckets.
+
+### IF category == "casual"
+
+→ No action needed. The chat doesn't contain reusable patterns. Skip it.
+
+**Rationale:** Not every chat contains knowledge worth preserving. This
+branch prevents noise from polluting the highway system.

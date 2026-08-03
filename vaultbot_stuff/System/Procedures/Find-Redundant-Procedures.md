@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: verified
+status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Find procedures that overlap or duplicate each other using deterministic string similarity. Reads all procedure descriptions and when_to_use fields, computes pairwise similarity using difflib + keyword overlap, and returns ranked overlapping pairs. No LLM needed — pure deterministic. Use when the procedure library feels redundant."
@@ -14,9 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-success_count: 15
-failure_count: 4
-success_rate: 0.79
+success_count: 0
+failure_count: 0
+success_rate: 0.0
+last_reviewed: 2026-08-03
 ---
 
 # Find-Redundant-Procedures
