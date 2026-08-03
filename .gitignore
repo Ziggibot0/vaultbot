@@ -68,11 +68,28 @@ vaultbot_stuff/vaultbot_backend/test_err.log
 vaultbot_stuff/vaultbot_backend/test_out.log
 vaultbot_stuff/vaultbot_backend/*.bak
 vaultbot_stuff/vaultbot_backend/*.bak.*
+vaultbot_stuff/vaultbot_backend/*.tmp
+vaultbot_stuff/vaultbot_backend/*.patched
+vaultbot_stuff/vaultbot_backend/*.pre_*
 vaultbot_stuff/vaultbot_backend/custom_tools/*.bak
 vaultbot_stuff/vaultbot_backend/_test_*.py
+vaultbot_stuff/vaultbot_backend/_diag*.py
+vaultbot_stuff/vaultbot_backend/_torture_test.py
 vaultbot_stuff/vaultbot_backend/trash/
 vaultbot_stuff/vaultbot_backend/partials/
 vaultbot_stuff/vaultbot_backend/*_log.json
+vaultbot_stuff/vaultbot_backend/golden_set.json
+vaultbot_stuff/vaultbot_backend/backend_out.log
+vaultbot_stuff/vaultbot_backend/backend_err.log
+
+# Nested accidental duplicate (from in-repo reorg runs)
+vaultbot_stuff/vaultbot_backend/vaultbot_stuff/
+
+# Root-level scratch / debug artifacts
+test_pull_output.txt
+proc_audit_temp.md
+Consolidated_Dangling_Link_Note.md
+Structure-Research-Note.md
 
 # ─────────────────────────────────────────────────────────────────────
 # The vault itself - the USER'S mind
