@@ -248,8 +248,7 @@
 }
 
 .vaultbot-thinking-header::before {
-	content: "Ã°Å¸ÂÆ’ ";
-	opacity: 0.7;
+	content: "\01F343";
 }
 
 .vaultbot-thinking-block {
@@ -1268,6 +1267,149 @@
     color: var(--text-normal);
     line-height: 1.5;
 }
+
+
+/* =========================================================================
+   VAULTBOT CSS UTILITY CLASSES
+   Semantic styling utilities that replace inline .style.property assignments.
+   These classes are scoped under .vaultbot-view-root to prevent leakage.
+   Design principle: one class = one visual property, composable and predictable.
+   ========================================================================= */
+
+/* --- Layout & Display Utilities --------------------------------------- */
+.vaultbot-display-none { display: none !important; }
+.vaultbot-display-flex  { display: flex !important; }
+.vaultbot-display-block { display: block !important; }
+.vaultbot-hidden { @extends .vaultbot-display-none; }
+
+/* --- Flex Container Utilities ----------------------------------------- */
+.vaultbot-flex-row     { flex-direction: row !important; }
+.vaultbot-flex-col     { flex-direction: column !important; }
+.vaultbot-justify-center { justify-content: center !important; }
+.vaultbot-justify-between { justify-content: space-between !important; }
+.vaultbot-align-items-center { align-items: center !important; }
+.vaultbot-gap-sm { gap: 8px !important; }
+.vaultbot-gap-md { gap: 12px !important; }
+.vaultbot-gap-lg { gap: 16px !important; }
+
+/* --- Spacing Utilities ------------------------------------------------ */
+.vaultbot-mt-xs { margin-top: 4px !important; }
+.vaultbot-mt-sm { margin-top: 8px !important; }
+.vaultbot-mt-md { margin-top: 12px !important; }
+.vaultbot-mt-lg { margin-top: 16px !important; }
+.vaultbot-mt-xl { margin-top: 20px !important; }
+.vaultbot-mb-xs { margin-bottom: 4px !important; }
+.vaultbot-mb-sm { margin-bottom: 8px !important; }
+.vaultbot-mb-md { margin-bottom: 12px !important; }
+.vaultbot-mb-lg { margin-bottom: 16px !important; }
+.vaultbot-mb-xl { margin-bottom: 20px !important; }
+.vaultbot-ml-xs { margin-left: 4px !important; }
+.vaultbot-ml-sm { margin-left: 8px !important; }
+.vaultbot-ml-md { margin-left: 12px !important; }
+.vaultbot-mr-xs { margin-right: 4px !important; }
+.vaultbot-mr-sm { margin-right: 8px !important; }
+.vaultbot-py-xs { padding-top: 4px !important; padding-bottom: 4px !important; }
+.vaultbot-py-sm { padding-top: 8px !important; padding-bottom: 8px !important; }
+.vaultbot-py-md { padding-top: 12px !important; padding-bottom: 12px !important; }
+.vaultbot-px-xs { padding-left: 4px !important; padding-right: 4px !important; }
+.vaultbot-px-sm { padding-left: 8px !important; padding-right: 8px !important; }
+.vaultbot-px-md { padding-left: 12px !important; padding-right: 12px !important; }
+
+/* --- Text & Typography Utilities -------------------------------------- */
+.vaultbot-text-sm { font-size: 0.85em !important; }
+.vaultbot-text-xs { font-size: 0.75em !important; }
+.vaultbot-text-lg { font-size: 1.1em !important; }
+.vaultbot-text-muted { color: var(--text-muted) !important; }
+.vaultbot-text-faint { color: var(--text-faint) !important; }
+.vaultbot-text-bold { font-weight: 600 !important; }
+.vaultbot-text-normal { font-weight: 400 !important; }
+.vaultbot-line-height-relaxed { line-height: 1.5 !important; }
+.vaultbot-line-height-tight { line-height: 1.2 !important; }
+.vaultbot-break-all { word-break: break-all !important; }
+.vaultbot-text-wrap { white-space: normal !important; }
+.vaultbot-text-nowrap { white-space: nowrap !important; }
+
+/* --- Background & Surface Utilities ----------------------------------- */
+.vaultbot-bg-elevated { background: var(--background-secondary) !important; }
+.vaultbot-bg-muted { background: var(--background-modifier-hover) !important; }
+.vaultbot-bg-accent { background: var(--interactive-accent) !important; color: white !important; }
+.vaultbot-border-subtle { border: 1px solid var(--background-modifier-border) !important; }
+.vaultbot-radius-sm { border-radius: 4px !important; }
+.vaultbot-radius-md { border-radius: 6px !important; }
+.vaultbot-radius-lg { border-radius: 8px !important; }
+
+/* --- Opacity & Visibility Utilities ----------------------------------- */
+.vaultbot-opacity-default { opacity: 1 !important; }
+.vaultbot-opacity-subtle { opacity: 0.85 !important; }
+.vaultbot-opacity-muted { opacity: 0.7 !important; }
+.vaultbot-opacity-faint { opacity: 0.5 !important; }
+
+/* --- Sizing Utilities ------------------------------------------------- */
+.vaultbot-min-width-auto { min-width: auto !important; }
+.vaultbot-max-width-full { max-width: 100% !important; }
+.vaultbot-overflow-auto { overflow: auto !important; }
+.vaultbot-overflow-x-scroll { overflow-x: auto !important; }
+.vaultbot-overflow-y-scroll { overflow-y: auto !important; }
+.vaultbot-max-h-sm { max-height: 100px !important; }
+.vaultbot-max-h-md { max-height: 150px !important; }
+.vaultbot-max-h-lg { max-height: 200px !important; }
+
+/* --- Cursor & Interaction Utilities ----------------------------------- */
+.vaultbot-cursor-pointer { cursor: pointer !important; }
+.vaultbot-cursor-default { cursor: default !important; }
+.vaultbot-user-select-all { user-select: all !important; }
+.vaultbot-user-select-text { user-select: text !important; }
+
+/* --- Divider & Border Utilities --------------------------------------- */
+.vaultbot-divider { margin: 16px 0 !important; border: none !important; border-top: 1px solid var(--background-modifier-border) !important; }
+.vaultbot-divider-vertical { height: 100% !important; width: 1px !important; background: var(--background-modifier-border) !important; margin: 0 8px !important; }
+
+/* --- Semantic Component Utilities ------------------------------------- */
+/* For buttons, cards, modals, and other UI patterns */
+.vaultbot-card { 
+    padding: 12px; 
+    border-radius: 6px; 
+    background: var(--background-secondary); 
+    margin: 8px 0;
+}
+.vaultbot-card-hover:hover { 
+    background: var(--background-modifier-hover) !important; 
+    cursor: pointer !important; 
+}
+.vaultbot-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    background: var(--interactive-accent);
+    color: white;
+    margin-left: 4px;
+}
+.vaultbot-progress-bar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+/* --- Animation & Transition Utilities --------------------------------- */
+.vaultbot-fade-in { animation: vaultbot-fade-in 0.3s ease-in; }
+.vaultbot-slide-up { animation: vaultbot-slide-up 0.3s ease-out; }
+
+@keyframes vaultbot-fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes vaultbot-slide-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Debug & Development Utilities ------------------------------------ */
+.vaultbot-debug-border { border: 2px solid red !important; }
+.vaultbot-debug-outline { outline: 2px dashed blue !important; }
+
 /* --- Framework-driven plan block ------------------------------------- */
 .vaultbot-plan {
     margin: 6px 0;
@@ -1293,4 +1435,254 @@
     color: var(--text-faint);
     font-style: italic;
     margin-top: 4px;
+}
+
+/* =========================================================================
+   Chat panel wrapper (holds chat container + floating scroll button)
+   ========================================================================= */
+.vaultbot-chat-panel-wrap {
+	flex: 1 1 auto;
+	min-height: 0;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+}
+
+/* The chat container moves inside the wrapper; keep its existing styles. */
+.vaultbot-chat-panel-wrap .vaultbot-chat-container {
+	flex: 1 1 auto;
+}
+
+/* ---- Scroll-to-bottom floating button ---- */
+.vaultbot-scroll-bottom-btn {
+	position: absolute;
+	bottom: 8px;
+	right: 12px;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	border: 1px solid var(--vb-stone);
+	background-color: var(--vb-bg-elev);
+	color: var(--vb-bark-soft);
+	font-size: 1.1em;
+	line-height: 1;
+	cursor: pointer;
+	box-shadow: 0 2px 6px var(--vb-shadow);
+	z-index: 50;
+	transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.vaultbot-scroll-bottom-btn:hover {
+	background-color: var(--vb-sand-deep);
+	color: var(--vb-bark);
+	transform: scale(1.1);
+}
+
+/* ---- Typing indicator (three pulsing dots) ---- */
+.vaultbot-typing-indicator {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 8px 16px;
+	align-self: flex-start;
+}
+.vaultbot-typing-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background-color: var(--vb-moss);
+	opacity: 0.6;
+	animation: vaultbot-typing-pulse 1.4s infinite ease-in-out;
+}
+.vaultbot-typing-dot:nth-child(2) {
+	animation-delay: 0.2s;
+}
+.vaultbot-typing-dot:nth-child(3) {
+	animation-delay: 0.4s;
+}
+@keyframes vaultbot-typing-pulse {
+	0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+	30% { opacity: 1; transform: scale(1.1); }
+}
+
+/* =========================================================================
+   Activity Console (the transparency layer)
+   A bottom drawer between chat and footer. Collapsed = one-line summary
+   bar. Expanded = scrollable list of collapsible activity cards.
+   ========================================================================= */
+.vaultbot-console-wrap {
+	flex: 0 0 auto;
+	border-top: 1px solid var(--vb-stone);
+}
+
+.vaultbot-console-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px;
+	font-size: 0.8em;
+	color: var(--vb-ink-muted);
+	cursor: pointer;
+	background-color: var(--vb-bg-elev);
+	transition: background-color 0.15s ease;
+}
+.vaultbot-console-bar:hover {
+	background-color: var(--vb-sand-deep);
+}
+.vaultbot-console-chevron {
+	flex: 0 0 auto;
+	font-size: 0.9em;
+	color: var(--vb-bark-soft);
+}
+.vaultbot-console-summary {
+	flex: 1 1 auto;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+}
+
+.vaultbot-console-body {
+	max-height: 220px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 4px 8px;
+	background-color: var(--vb-bg);
+	border-top: 1px solid var(--vb-sand-deep);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+/* ---- Activity cards (collapsible) ---- */
+.vaultbot-activity-card {
+	border-left: 3px solid var(--vb-stone);
+	border-radius: 0 6px 6px 0;
+	background-color: var(--vb-bg-elev);
+	overflow: hidden;
+	transition: background-color 0.1s ease;
+}
+.vaultbot-activity-card:hover {
+	background-color: var(--vb-sand-deep);
+}
+
+/* Category accent colors (left border) */
+.vaultbot-activity-cat-tool    { border-left-color: var(--vb-clay); }
+.vaultbot-activity-cat-thought  { border-left-color: var(--vb-stone-deep); }
+.vaultbot-activity-cat-step     { border-left-color: var(--vb-moss); }
+.vaultbot-activity-cat-progress { border-left-color: var(--vb-moss-soft); }
+.vaultbot-activity-cat-streaming { border-left-color: var(--vb-clay-soft); }
+.vaultbot-activity-cat-error   { border-left-color: var(--vb-bark); }
+
+.vaultbot-activity-header {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	padding: 4px 8px;
+	cursor: pointer;
+	user-select: none;
+}
+.vaultbot-activity-chevron {
+	flex: 0 0 auto;
+	font-size: 0.75em;
+	color: var(--vb-ink-muted);
+	width: 12px;
+}
+.vaultbot-activity-icon {
+	flex: 0 0 auto;
+	font-size: 0.85em;
+}
+.vaultbot-activity-label {
+	flex: 1 1 auto;
+	font-size: 0.82em;
+	font-family: var(--font-monospace);
+	color: var(--vb-ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vaultbot-activity-duration {
+	flex: 0 0 auto;
+	font-size: 0.75em;
+	color: var(--vb-ink-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.vaultbot-activity-body {
+	padding: 4px 8px 6px 28px;
+	font-size: 0.8em;
+	color: var(--vb-ink-muted);
+	line-height: 1.45;
+}
+.vaultbot-activity-detail {
+	white-space: pre-wrap;
+	font-family: var(--font-monospace);
+	color: var(--vb-ink-muted);
+	margin-bottom: 4px;
+}
+.vaultbot-activity-result {
+	white-space: pre-wrap;
+	font-family: var(--font-monospace);
+	color: var(--vb-ink-muted);
+	background-color: var(--vb-sand);
+	border-radius: 4px;
+	padding: 4px 8px;
+	max-height: 150px;
+	overflow-y: auto;
+}
+
+/* =========================================================================
+   Hardware Resource Strip
+   A thin always-visible bar with CPU/RAM/GPU/NPU mini gauges.
+   ========================================================================= */
+.vaultbot-resource-strip {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 4px 12px;
+	font-size: 0.72em;
+	color: var(--vb-ink-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+	background-color: var(--vb-bg-elev);
+	border-top: 1px solid var(--vb-sand-deep);
+}
+
+.vaultbot-resource-meter {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+.vaultbot-resource-label {
+	font-weight: 600;
+	color: var(--vb-bark-soft);
+	font-size: 0.95em;
+}
+.vaultbot-resource-bar {
+	width: 50px;
+	height: 5px;
+	border-radius: 3px;
+	background-color: var(--vb-stone);
+	overflow: hidden;
+	flex-shrink: 0;
+}
+.vaultbot-resource-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 3px;
+	background-color: var(--vb-moss);
+	transition: width 0.5s ease, background-color 0.3s ease;
+}
+.vaultbot-resource-fill-warn {
+	background-color: var(--vb-clay);
+}
+.vaultbot-resource-fill-crit {
+	background-color: var(--vb-bark);
+}
+.vaultbot-resource-value {
+	font-size: 0.9em;
+	color: var(--vb-ink-muted);
+	white-space: nowrap;
 }

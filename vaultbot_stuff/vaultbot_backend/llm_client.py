@@ -109,7 +109,17 @@ class LLMClient:
              messages: list[dict[str, Any]],
              tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.7,
-             stream: bool = False) -> Any:
+             stream: bool = False,
+             think: bool | None = None,
+             max_predict: int | None = None) -> Any:
+        """Synthesize a chat response.
+
+        ``think=False`` disables reasoning for bounded tasks (query rewrite,
+        rerank, section filter). Ollama forwards it as ``"think": false``;
+        OpenAI-compatible clients map it to no-op (they have no reasoning
+        toggle) and use ``max_predict`` as ``max_tokens``. ``max_predict``
+        caps output tokens so a runaway small model can't ramble.
+        """
         raise NotImplementedError
 
     def is_running(self) -> bool:
@@ -357,13 +367,20 @@ class OpenAICompatibleClient(LLMClient):
              messages: list[dict[str, Any]],
              tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.7,
-             stream: bool = False) -> Any:
+             stream: bool = False,
+             think: bool | None = None,
+             max_predict: int | None = None) -> Any:
         payload: dict[str, Any] = {
             "model": self.llm_model,
             "messages": messages,
             "stream": stream,
             "temperature": temperature,
         }
+        # ``think`` has no OpenAI-compatible equivalent — ignored here.
+        # ``max_predict`` maps to ``max_tokens`` so bounded small-model tasks
+        # can cap output on cloud providers too.
+        if max_predict is not None:
+            payload["max_tokens"] = max_predict
         # Ollama and OpenAI share the tool schema shape
         # {"type":"function","function":{"name","description","parameters"}},
         # so we pass tools through unchanged.

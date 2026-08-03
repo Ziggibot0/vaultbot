@@ -120,6 +120,44 @@ class NoteCreator:
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("maintenance_cleanup", error=str(e))
 
+    def _generate_chat_title(self, user_message: str, assistant_response: str) -> str:
+        """Generate a 3-5 word title for a chat exchange using the small model.
+
+        Falls back to the old truncation pattern on any error. A title is
+        not factual content — even a bad title is harmless (it's just a
+        filename prefix for grouping). Hallucination risk is zero: the
+        title doesn't enter the vault's knowledge graph as a claim.
+        """
+        try:
+            from llm_client import get_small_client_or_big
+            client = get_small_client_or_big(self.session_logger)
+            prompt = (
+                "Write a short 3-5 word title summarizing this chat exchange. "
+                "Output ONLY the title, no quotes, no punctuation at the end.\n\n"
+                f"User: {user_message[:300]}\n\n"
+                f"Assistant: {assistant_response[:300]}\n\nTitle:")
+            resp = client.chat(
+                [{"role": "user", "content": prompt}],
+                temperature=0.2, stream=False)
+            text = ""
+            if isinstance(resp, dict):
+                msg = resp.get("message", {})
+                if isinstance(msg, dict):
+                    text = msg.get("content", "") or ""
+                if not text:
+                    text = resp.get("response", "") or resp.get("content", "")
+            text = (text or "").strip()
+            # Sanity: cap at 60 chars, strip newlines, prefix with "Chat: ".
+            if text:
+                text = text.split("\n")[0].strip()[:60]
+                if len(text) < 3:
+                    text = ""
+            if text:
+                return f"Chat: {text}"
+        except Exception:
+            pass
+        return f"Chat: {user_message[:50]}"
+
     def create_note_from_research(self, topic: str, research_content: str,
                                   summary: str | None = None) -> str:
         """Create a research note under Knowledge/Research/ and clean up afterwards.
@@ -183,7 +221,7 @@ class NoteCreator:
     def create_note_from_chat(self, user_message: str, assistant_response: str,
                               thinking: str | None = None) -> str:
         """Append chat exchanges to a running chat note and clean up afterwards."""
-        topic = f"Chat: {user_message[:50]}"
+        topic = self._generate_chat_title(user_message, assistant_response)
         entry = f"**User:** {user_message}\n\n**Assistant:** {assistant_response}"
         if thinking:
             entry += f"\n\n<details>\n<summary>Thinking process</summary>\n\n{thinking}\n\n</details>"

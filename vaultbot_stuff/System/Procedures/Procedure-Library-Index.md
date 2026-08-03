@@ -21,21 +21,16 @@ does over time.
 ## The Compounding Pattern (read this first)
 
 ```
-                ┌─────────────────────────────────────┐
+                ┌──────────────────────────────────┐
                 │  Pattern-Scan  (importable engine)  │
                 │  walks EVERY note once, computes    │
                 │  ~15 signals/note, writes JSON      │
-                └───────────────┬─────────────────────┘
-                                │ run_procedure("Pattern-Scan")
-                                │ then read pattern-scan-latest.json
-        ┌───────────┬───────────┼───────────┬───────────┬──────────┐
-        ▼           ▼           ▼           ▼           ▼          ▼
-   Find-Orphans  Find-Broken- Find-Stubs Find-Duplicates Find-Overdue- Find-Stale-
-                -Links                                   Tasks      Notes
-        └───────────┴───────────┴───────────┬───────────┴──────────┘
-                                ▼
-                        Vault-Cleanup (meta: reads the same ONE table,
-                        produces a prioritized to-do queue)
+                └──────────────┬─────────────────────┘
+                               │ imports
+                ┌──────────────┴─────────────────────┐
+                │  Find-Orphans  │  Find-Broken  │  Find-Stubs  │ ...
+                │  (filter: orphan) │ (filter: broken) │ (filter: thin) │
+                └──────────────────────────────────────┘
 ```
 
 A "simple checking procedure" is just **Pattern-Scan + one filter**. To
@@ -74,13 +69,14 @@ is captured once, reused everywhere, at zero LLM cost.
 
 These were audited onto the small cartridge — run them freely:
 
-- Session/status: [[VaultBot-Status]], [[System-Status]], [[Vault-List]], [[Vault-Gaps]]
-- Quality: [[Vault-Lint]], [[Verify-Syntax]], [[Check-Entailment]], [[Extract-Claims]], [[Refine-Concept-Card]]
-- Cartridge helpers (all `small`): [[Suggest-Tags]], [[Summarize-Conversation]], [[Condense-Note]], [[Extract-Entities]], [[Judge-Plan]], [[Regenerate-Self-Model]]
+- Session/status: [[VaultBot-Status]], [[Vault-List]], [[Vault-Gaps]]
+- Quality: [[Vault-Lint]], [[Verify-Syntax]], [[Note-Accuracy-Check]], [[Cross-Check-Claims]], [[Refine-Concept-Card]]
+- Cartridge helpers (all `small`): [[Note-Tags-From-Content]], [[Summarize-Conversation]], [[Condense-Note]], [[Extract-Entities]], [[Judge-Plan]], [[Regenerate-Self-Model]]
 - Safety/maintenance: [[Preflight-Safety-Check]], [[Safe-Write]], [[JS-Safe-Write]], [[Vault-Delete]], [[Git-Rollback]], [[Backend-Restart]], [[Plugin-Reload]]
 - Build/test: [[Code-Run]], [[Write-Python-Tool]], [[Torture-Test]], [[Fix-Indentation]]
 - Research/ingest: [[Textbook-Ingest]], [[Textbook-Read-Page]], [[Ollama-Model-Search]], [[Ollama-Pull-Models]]
 - Community: [[Review-Contributions]], [[Submit-Contribution]]
+- Core loop behavior: [[Agentic-Loop-Turn-Protocol]] — mandatory phase-state machine for every chat turn; referenced by the system prompt.
 - Self-improvement (big): [[Dream-Pass]] (now calls [[Procedure-Eval]]), [[Self-Reflect]], [[Capability-Audit]], [[Discover-Procedures]]
 
 ## Big-model-only procedures

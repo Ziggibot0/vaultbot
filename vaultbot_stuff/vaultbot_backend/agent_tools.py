@@ -113,17 +113,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "plan_task",
             "description": (
-                "Plan a multi-step task by writing a structured task list "
-                "into your working memory. This is how you stay on track "
-                "across tool rounds instead of losing the plot when old "
-                "messages fall out of the sliding window. Call this BEFORE doing any work on a "
-                "task that needs more than one tool call. Decompose the "
-                "task into concrete, verifiable steps. Each step should be "
-                "something you can mark completed with evidence. After "
-                "each tool round, call update_task to mark progress. When "
-                "all tasks are completed, synthesize your final answer — "
-                "do NOT keep calling tools. This tool REPLACES set_goal "
-                "for multi-step task tracking."
+                "Write a NEW multi-step task plan into working memory, "
+                "replacing any existing plan. NOTE: the framework usually "
+                "plans automatically before the loop starts — only call this "
+                "to REPLACE the current plan with a better one mid-task, or "
+                "when the phase hint says you are in PLAN phase. Steps should "
+                "be concrete and verifiable. After this, the framework enters "
+                "ACT phase and auto-starts the first step. See "
+                "[[Agentic-Loop-Turn-Protocol]]."
             ),
             "parameters": {
                 "type": "object",
@@ -152,13 +149,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "update_task",
             "description": (
-                "Update a task in your working memory: mark it in_progress "
-                "before starting it, and completed when done. Call this "
-                "after each tool round so your task list reflects reality. "
-                "When all tasks are completed, the loop will end and you "
-                "synthesize the final answer — so be honest about what's "
-                "actually done. You can also add a new mid-task discovery "
-                "with action='add'."
+                "Update a task in your working memory. The PRIMARY use is "
+                "to mark the CURRENT in-progress step as status='completed' "
+                "when its work is verifiably done — the framework auto-starts "
+                "the next step for you. You rarely need status='in_progress' "
+                "(the framework auto-advances steps). You can also append a "
+                "newly-discovered step with action='add'. See "
+                "[[Agentic-Loop-Turn-Protocol]]."
             ),
             "parameters": {
                 "type": "object",
@@ -194,7 +191,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "set_goal",
+            "name": "set_goal", 
             "description": (
                 "Update or clear your active goal in GOALS.md. This is how "
                 "you remember what you're working on across turns and "
@@ -494,66 +491,202 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
-# -- Tool list (the model sees all of these every turn) --------------------
-# Every tool the system prompt references is in this set. The model was
-# told to "test with code_run", "use safe_write to edit", "call
-# tool_create" — so all of those MUST be in the tool list or the model
-# truthfully reports it can't find the tool it was instructed to use.
+# -- Three-tier tool system (core / contextual / procedure) ---------------
+# See [[Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec]].
 #
-# Narrow-purpose repetitive tasks are still procedures (System/Procedures/),
-# discovered via RAG and run via execute_procedure. But the self-edit /
-# self-improvement meta-tools can't be procedures: they run model-invented
-# code/text, so they're inherently open-ended. They stay tools.
+# Tier 1 — CORE tools: always sent to the LLM. These are the minimal set
+#   the model needs to function on any turn: search, plan, read, write,
+#   and execute procedures.
 #
-# See [[Tool-vs-Procedure-Decision-Guide]] for the decision test.
+# Tier 2 — CONTEXTUAL tools: sent only when the user message or current
+#   plan matches keyword categories (research, code_edit, vault_maintenance,
+#   self_improvement, status). Zero LLM cost — deterministic keyword match.
+#
+# Tier 3 — PROCEDURE candidates: removed from the tool list entirely.
+#   These become procedure notes (System/Procedures/), discovered via RAG
+#   and executed via execute_procedure. They stay as custom tools in
+#   custom_tools/ but are not advertised in the tool schema list.
 
+# Tier 1: Core tools (always sent)
 CORE_TOOL_NAMES: set[str] = {
-    # Fundamental capabilities needed in every session:
     "vault_search",          # semantic search over the vault
-    "vault_research",        # web research when the vault is thin
     "code_read",             # read any file (vault or backend source)
     "plan_task",             # plan a multi-step task (working memory)
     "update_task",           # mark plan progress
     "execute_procedure",     # run a procedure note
     "vault_safe_write",      # write/create notes
     "vault_append",          # append to existing notes
-    "web_read_source",       # re-read saved web sources
-    # Self-improvement / self-edit meta-tools (referenced by the system
-    # prompt — must be in the tool list or the model can't call them):
-    "code_run",              # test Python in a sandboxed subprocess
-    "safe_write",            # verified self-edit of backend .py files
-    "js_safe_write",         # verified self-edit of plugin .js files
-    "tool_create",           # create + register a new custom tool
-    "self_reflect",          # propose new tools from a task description
-    "capability_audit",      # inventory tools + assess coverage for a task
-    "git_rollback",          # recover from a bad self-edit
+}
+
+# Tier 2: Contextual tools (sent when keywords match)
+CONTEXTUAL_TOOLS: dict[str, list[str]] = {
+    "research": [
+        "vault_research",        # web research when the vault is thin
+        "web_read_source",       # re-read saved web sources
+    ],
+    "code_edit": [
+        "code_run",              # test Python in a sandboxed subprocess
+        "safe_write",            # verified self-edit of backend .py files
+        "js_safe_write",         # verified self-edit of plugin .js files
+        "git_rollback",          # recover from a bad self-edit
+        "backend_restart",       # restart the backend (custom tool)
+        "plugin_reload",         # reload the Obsidian plugin (custom tool)
+    ],
+    "vault_maintenance": [
+        "vault_gaps",            # check vault knowledge gaps
+        "vault_list",            # list all .md files (custom tool)
+        "vault_delete",          # delete a note safely (custom tool)
+        "vault_lint",            # lint a note for quality (custom tool)
+    ],
+    "self_improvement": [
+        "tool_create",           # create + register a new custom tool
+    ],
+    "status": [
+        "vaultbot_status",       # system status check
+        "set_goal",              # update active goal in GOALS.md
+    ],
+}
+
+# Tier 3: Procedure candidates (not in tool list; become procedure notes)
+# These tools keep their run() functions in custom_tools/ but are not
+# advertised as tool schemas. They are discovered via RAG as procedure
+# cards and executed via execute_procedure.
+PROCEDURE_CANDIDATES: set[str] = {
+    "self_reflect",              # propose new tools (custom tool)
+    "capability_audit",          # inventory tools + coverage (custom tool)
+    "preflight_safety_check",    # pre-flight before self-edit (custom tool)
+    "vault_graph_analyzer",      # analyze vault graph (custom tool)
+    "vault_cluster_analyzer",    # analyze vault clusters (custom tool)
+    "textbook_ingest",           # ingest a textbook (custom tool)
+    "textbook_read_page",        # read a textbook page (custom tool)
+    "review_contributions",      # review open PRs (custom tool)
+    "submit_contribution",       # submit a PR (custom tool)
+    "torture_test",              # torture test a PR (custom tool)
+}
+
+# Keyword mapping for contextual tool selection
+_CONTEXTUAL_KEYWORDS: dict[str, list[str]] = {
+    "research": [
+        "research", "investigate", "look up", "find out", "what is",
+        "how does", "source", "web", "study", "learn about", "topic",
+    ],
+    "code_edit": [
+        "code", "fix", "edit", "write", "modify", "bug", "implement",
+        "function", "python", "javascript", ".py", ".js", "backend",
+        "frontend", "plugin", "restart", "reload", "refactor", "debug",
+        "safe_write", "js_safe_write", "git_rollback",
+    ],
+    "vault_maintenance": [
+        "vault", "graph", "gaps", "note", "link", "wikilink", "cluster",
+        "lint", "delete", "orphan", "island", "maintenance", "cleanup",
+        "consolidate", "merge",
+    ],
+    "self_improvement": [
+        "tool", "build", "create", "improve", "self-improve", "reflect",
+        "capability", "audit", "new ability",
+    ],
+    "status": [
+        "status", "running", "operational", "what are you doing",
+        "system", "goal", "machine", "spec",
+    ],
 }
 
 
-def get_core_tools() -> list[dict[str, Any]]:
-    """Return the tool schemas for core tools (always sent to the LLM)."""
+def select_contextual_tools(user_message: str, plan_text: str = "") -> set[str]:
+    """Deterministic keyword-based selection of contextual tools.
+
+    No LLM cost. Matches the user message + current plan against
+    keyword categories to determine which contextual tools are relevant.
+    """
+    text = (user_message + " " + plan_text).lower()
+    selected: set[str] = set()
+
+    for category, keywords in _CONTEXTUAL_KEYWORDS.items():
+        if any(kw in text for kw in keywords):
+            selected.update(CONTEXTUAL_TOOLS.get(category, []))
+
+    return selected
+
+
+def get_core_tools(custom_schemas: list[dict[str, Any]] | None = None
+                  ) -> list[dict[str, Any]]:
+    """Return the tool schemas for core tools (always sent to the LLM).
+
+    Checks built-in definitions first, then falls back to custom_schemas
+    for core tools that are custom tools (e.g. vault_safe_write).
+    """
     all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
-    return [all_defs[name] for name in CORE_TOOL_NAMES if name in all_defs]
+    schemas = []
+    for name in CORE_TOOL_NAMES:
+        if name in all_defs:
+            schemas.append(all_defs[name])
+        elif custom_schemas:
+            for s in custom_schemas:
+                if s.get("function", {}).get("name", "") == name:
+                    schemas.append(s)
+                    break
+    return schemas
+
+
+def _get_contextual_tool_schemas(names: set[str],
+                                  custom_schemas: list[dict[str, Any]] | None = None
+                                  ) -> list[dict[str, Any]]:
+    """Return tool schemas for the named contextual tools.
+
+    Looks up both built-in (TOOL_DEFINITIONS + META_TOOL_DEFINITIONS) and
+    custom tool schemas.
+    """
+    all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
+    schemas: list[dict[str, Any]] = []
+
+    for name in names:
+        if name in all_defs:
+            schemas.append(all_defs[name])
+        elif custom_schemas:
+            for s in custom_schemas:
+                if s.get("function", {}).get("name", "") == name:
+                    schemas.append(s)
+                    break
+
+    return schemas
 
 
 def build_tool_list(user_message: str, plan_text: str = "",
                     custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
-    """Build the tool list for the LLM call.
+    """Build the tool list for the LLM call using three-tier selection.
 
-    Only core tools are sent. Narrow-purpose tools are procedure notes
-    (System/Procedures/) — discovered via RAG, executed via execute_procedure.
-    Custom tool schemas that aren't in CORE_TOOL_NAMES are ignored (they
-    should be procedures, not tools).
+    Tier 1 (core): always included.
+    Tier 2 (contextual): included when user_message + plan_text match keywords.
+    Tier 3 (procedure candidates): never included — discovered via RAG.
+
+    Custom tools that aren't procedure candidates are included if they
+    match a selected contextual category.
     """
-    tools = get_core_tools()
+    # Tier 1: core tools (always)
+    tools = get_core_tools(custom_schemas)
 
+    # Tier 2: contextual tools (keyword-matched)
+    contextual_names = select_contextual_tools(user_message, plan_text)
+    # Filter out any that are procedure candidates
+    contextual_names = contextual_names - PROCEDURE_CANDIDATES
+    contextual_names = contextual_names - CORE_TOOL_NAMES  # don't double-add core
+    tools.extend(_get_contextual_tool_schemas(contextual_names, custom_schemas))
+
+    # Add custom tools that aren't in any tier (pass-through for new tools)
     if custom_schemas:
         for s in custom_schemas:
             name = s.get("function", {}).get("name", "")
+            if name in PROCEDURE_CANDIDATES:
+                continue  # skip procedure candidates
             if name in CORE_TOOL_NAMES:
-                tools.append(s)
+                continue  # already added
+            if name in contextual_names:
+                continue  # already added via contextual
+            # Custom tool not in any tier — include it (progressive disclosure
+            # can handle this later). This ensures new custom tools are visible.
+            tools.append(s)
 
-    # Dedupe by function name (a tool might appear in both core and contextual)
+    # Dedupe by function name
     seen: set[str] = set()
     deduped: list[dict[str, Any]] = []
     for t in tools:
@@ -561,6 +694,9 @@ def build_tool_list(user_message: str, plan_text: str = "",
         if name and name not in seen:
             seen.add(name)
             deduped.append(t)
+
+    return deduped
+
 
     return deduped
 

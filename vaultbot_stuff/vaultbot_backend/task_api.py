@@ -71,16 +71,29 @@ async def create_task(svc: Services, payload: dict) -> Any:
         "Each verifier is a Python expression over `result`. Make every subtask "
         "idempotent and independently verifiable. Be specific.\n\n"
         f"User goal: {goal}\n\nReturn ONLY valid JSON, no prose.")
+    # Use the SMALL model for decomposition — the output is rigid JSON with a
+    # fixed op vocabulary, so a small model can fill it given the schema in the
+    # prompt. The framework validates the result (rejects unknown ops, fills
+    # default verifier templates) so hallucinated ops/verifiers are caught. The
+    # big model's reasoning isn't needed for schema-grounded generation.
+    from llm_client import get_small_client_or_big
     try:
+        _decompose_client = get_small_client_or_big(svc.session_logger)
         plan_response = await loop.run_in_executor(
-            None, lambda: svc.ollama_client.chat(
+            None, lambda: _decompose_client.chat(
                 [{"role": "user", "content": decompose_prompt}],
                 temperature=0.3, stream=False))
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="task_decompose")
         return {"error": f"decomposition failed: {e}"}, 500
 
-    raw = plan_response.get("message", {}).get("content", "") if isinstance(plan_response, dict) else ""
+    raw = ""
+    if isinstance(plan_response, dict):
+        raw = (plan_response.get("message") or {}).get("content", "") \
+            if isinstance(plan_response.get("message"), dict) \
+            else plan_response.get("response", "") or plan_response.get("content", "")
+    else:
+        raw = str(plan_response)
     # Parse the JSON plan (tolerate code fences / preamble).
     try:
         plan_data = json.loads(extract_json(raw))
@@ -90,6 +103,28 @@ async def create_task(svc: Services, payload: dict) -> Any:
     subtask_dicts = plan_data.get("subtasks", [])
     if not subtask_dicts:
         return {"error": "plan has no subtasks", "raw": raw[:500]}, 500
+
+    # --- Framework guard: reject hallucinated ops the small model invented ---
+    # The small model may emit an op name that isn't in the graph-op vocabulary.
+    # Drop any subtask whose op isn't in the real op set so a hallucinated op
+    # never reaches execution. If ALL subtasks are filtered out, the plan is
+    # useless — return an error so the caller can retry with the big model.
+    valid_op_names = set(op_names)
+    filtered = [sd for sd in subtask_dicts if sd.get("op", "") in valid_op_names]
+    if not filtered:
+        svc.session_logger.log("task_decompose_all_ops_hallucinated", {
+            "raw_ops": [sd.get("op", "") for sd in subtask_dicts],
+            "valid_ops": list(valid_op_names),
+        })
+        return {"error": "decomposition produced no valid ops",
+                "raw_ops": [sd.get("op", "") for sd in subtask_dicts],
+                "valid_ops": list(valid_op_names)}, 500
+    if len(filtered) < len(subtask_dicts):
+        svc.session_logger.log("task_decompose_filtered_hallucinated_ops", {
+            "dropped": len(subtask_dicts) - len(filtered),
+            "kept": len(filtered),
+        })
+    subtask_dicts = filtered
 
     # Build the Plan object.
     import time as _time

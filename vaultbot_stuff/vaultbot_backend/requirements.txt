@@ -20,6 +20,8 @@ PyMuPDF>=1.24.0
 Pillow>=10.0.0
 html2text>=2024.0.0
 pypdf>=4.0.0
+# psutil: used by /system/stats for CPU/RAM/disk/net resource meters.
+psutil>=5.9.0
 
 # ── Testing ──────────────────────────────────────────────────────────
 pytest>=8.0

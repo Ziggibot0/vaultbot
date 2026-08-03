@@ -51,7 +51,34 @@ class VaultGraph:
         # during iteration" on the read paths.  RLock so refresh can call
         # internal helpers that also acquire the lock.
         self._lock = threading.RLock()
-        self._build_graph()
+        # Deferred-build state: the FIRST full graph scan is heavy (~19s on a
+        # large vault) and used to run synchronously here at import time,
+        # which is exactly why every backend spawn left the plugin hammering a
+        # dead port for 19s (ERR_CONNECTION_REFUSED). We now kick the build
+        # off in a background daemon thread so __init__ returns instantly and
+        # the server can accept connections right away. Readers see a partially-
+        # populated graph that fills in live (len(nodes) grows); they never
+        # block. _build_started guards against double-starts; _build_done lets
+        # refresh() know the cold path is finished so later calls go through
+        # the cheap incremental path.
+        self._build_started = False
+        self._build_done = False
+        self._build_thread = threading.Thread(
+            target=self._deferred_build, name="vault_graph_build", daemon=True)
+        self._build_started = True
+        self._build_thread.start()
+
+    def _deferred_build(self):
+        """Background thread: run the first full _build_graph() off the startup
+        path, then flip _build_done so refresh() switches to incremental."""
+        try:
+            self._build_graph()
+        except Exception as e:  # noqa: BLE001 — best-effort; log + surface
+            self._log_tool("deferred_build_failed", {"vault_path": str(self.vault_path)},
+                           error=str(e))
+        finally:
+            with self._lock:
+                self._build_done = True
 
     def _log_tool(self, method: str, inputs: dict[str, Any] | None = None,
                   outputs: Any = None, error: str | None = None):
@@ -171,30 +198,62 @@ class VaultGraph:
         self._mtimes.pop(name, None)
 
     def _build_graph(self):
-        """Scan the vault once and build node/edge/backlink maps."""
+        """Scan the vault once and build node/edge/backlink maps.
+
+        Builds into LOCAL maps first, then swaps them in under a short lock.
+        This lets the deferred background build run for ~19s of disk I/O
+        WITHOUT holding self._lock the whole time: readers that iterate
+        self.nodes/.items() either see the old (empty/previous) snapshot or
+        the completed new one — never a torn half-built graph and never the
+        "dictionary changed size during iteration" crash the RLock guards
+        against. The swap itself is O(1)-ish (reference assignment) so the
+        lock is only held for microseconds.
+        """
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: dict[str, set[str]] = {}
+        backlinks: dict[str, set[str]] = {}
+        mtimes: dict[str, float] = {}
         md_files = self._collect_md_files()
-        max_mtime = 0.0
-        for path in md_files:
+
+        def _add(path: Path) -> str:
             name = self._normalize_name(path.stem)
-            if name in self.nodes:
-                continue
-            self._add_or_update_node(path)
-            max_mtime = max(max_mtime, self._mtimes.get(name, 0.0))
+            content = self._read_note(path)
+            nodes[name] = {
+                "file_path": str(path),
+                "name": path.stem,
+                "content": content,
+                "links": set(),
+            }
+            edges.setdefault(name, set())
+            backlinks.setdefault(name, set())
+            try:
+                mtimes[name] = path.stat().st_mtime
+            except OSError:
+                mtimes[name] = 0.0
+            return name
 
-        for name, node in self.nodes.items():
-            targets = self._extract_wikilinks(node["content"])
-            for target in targets:
-                # Only add edges to notes that exist in the vault
-                if target in self.nodes:
-                    self.edges[name].add(target)
-                    self.backlinks[target].add(name)
-                    self.nodes[name]["links"].add(target)
+        names = [_add(p) for p in md_files]
 
-        self._last_refresh_mtime = max_mtime
+        for name in names:
+            for target in self._extract_wikilinks(nodes[name]["content"]):
+                if target in nodes:
+                    edges[name].add(target)
+                    backlinks[target].add(name)
+                    nodes[name]["links"].add(target)
+
+        max_mtime = max(mtimes.values(), default=0.0)
+        # Atomic-ish swap under a brief lock: readers snapshotting .items()
+        # before this point see the old maps; after, they see the new ones.
+        with self._lock:
+            self.nodes = nodes
+            self.edges = edges
+            self.backlinks = backlinks
+            self._mtimes = mtimes
+            self._last_refresh_mtime = max_mtime
         self._log_tool("build_graph", {
             "vault_path": str(self.vault_path),
-            "note_count": len(self.nodes),
-            "edge_count": sum(len(v) for v in self.edges.values()),
+            "note_count": len(nodes),
+            "edge_count": sum(len(v) for v in edges.values()),
         })
 
     def _detect_changes(self) -> tuple[list[Path], list[str]]:
@@ -261,8 +320,18 @@ class VaultGraph:
         if incremental tracking has no state yet.
         """
         with self._lock:
+            if not self._build_done:
+                # The deferred background build is still running. Do NOT do a
+                # synchronous full rebuild here (that would re-serialize the
+                # exact 19s hang we just moved off startup) and do NOT run the
+                # incremental path against a partially-populated graph. Just
+                # return — readers see whatever nodes the background thread has
+                # added so far. This is a degraded-but-never-blocking state.
+                return
             if not self.nodes and self._last_refresh_mtime == 0.0:
-                # First-ever build: do the full scan once.
+                # First-ever build finished with no nodes (empty vault or every
+                # file failed to read). Treat it as done so we don't retry the
+                # full scan on every call.
                 self._build_graph()
                 return
             self.refresh_if_changed()

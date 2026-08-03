@@ -302,11 +302,16 @@ class OllamaClient(_BASE):
             "has_tools": bool(payload.get("tools")),
         }
 
-    def generate(self, prompt: str, system: str | None = None, temperature: float = 0.7, max_tokens: int | None = None, stream: bool = False) -> dict | Generator:
+    def generate(self, prompt: str, system: str | None = None, temperature: float = 0.7, max_tokens: int | None = None, stream: bool = False, think: bool | None = None) -> dict | Generator:
         """
         Generate text from the LLM.
         If stream=True, returns a generator that yields chunks.
         Each chunk is a dict with keys: 'response' (the text chunk) and optionally 'thinking' (the reasoning chunk).
+
+        ``think=False`` disables chain-of-thought reasoning for this call —
+        use it for bounded small-model tasks (query rewrite, rerank,
+        section filter) where reasoning burns 60s for a one-line answer
+        and the result is parsed by a guard, not shown to the user.
         """
         payload = {
             "model": self.llm_model,
@@ -317,6 +322,12 @@ class OllamaClient(_BASE):
             },
             "keep_alive": self._keep_alive,
         }
+        # Disable reasoning for bounded tasks. qwen3/lfm2.5-style models
+        # stream a `thinking` field that can dominate latency on a 0.8b
+        # model asked to rewrite a search query. think=False makes it
+        # answer directly in content.
+        if think is False:
+            payload["think"] = False
         # Pass num_ctx so Ollama allocates the full context window upfront
         # (same rationale as chat() — see comment there).
         try:
@@ -502,8 +513,67 @@ class OllamaClient(_BASE):
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
+    def _chat_native_no_think(self, payload: dict[str, Any], t0: float) -> dict[str, Any]:
+        """Fast path for bounded small-model calls (think=False, no tools).
+
+        Ollama's OpenAI-compatible /v1/chat/completions endpoint IGNORES the
+        ``think`` field — only the NATIVE /api/chat endpoint honors it. So a
+        0.8b reasoning model asked to rewrite a search query keeps reasoning
+        for 20s and times out, even with ``think=False`` on /v1. This method
+        routes the call through /api/chat where ``think: false`` actually
+        disables reasoning, so the same one-line rewrite returns in
+        well under a second.
+
+        /api/chat lacks finish_reason + reliable tool-call parsing, but
+        bounded pre-filter calls (query rewrite, rerank judge, section
+        filter) don't use tools and want a single non-stream response, so
+        the raw endpoint is fine here. The main chat loop (which needs tools
+        + finish_reason) still uses /v1 via chat().
+
+        Returns the same dict shape as chat() non-stream: {response,
+        thinking, tool_calls, finish_reason}.
+        """
+        _timeout = float(os.environ.get(
+            "VAULTBOT_SMALL_TIMEOUT_SECONDS", "20"))
+        # /api/chat takes think + options at the top level (not under
+        # options like /v1). payload already has think=False set by chat().
+        # Strip /v1-only keys that /api/chat doesn't understand.
+        native = {
+            "model": payload["model"],
+            "messages": payload["messages"],
+            "stream": False,
+            "think": False,
+            "options": dict(payload.get("options") or {}),
+            "keep_alive": payload.get("keep_alive", self._keep_alive),
+        }
+        try:
+            r = self._session.post(f"{self.base_url}/api/chat",
+                                   json=native, timeout=_timeout)
+            r.raise_for_status()
+        except Exception as e:  # noqa: BLE001 — best-effort, raises to caller — see CONTRIBUTING.md no-silent-fallbacks
+            self._log_tool("chat", self._chat_log_summary(native, False),
+                           error=str(e), duration_ms=(time.time() - t0) * 1000)
+            raise
+        data = r.json()
+        msg = data.get("message", {}) or {}
+        result = {
+            "response": msg.get("content") or "",
+            "thinking": msg.get("thinking") or "",
+            "tool_calls": [],
+            "finish_reason": "stop" if data.get("done") else "length",
+        }
+        self._log_tool("chat", self._chat_log_summary(native, False),
+                       outputs={"response_len": len(result["response"]),
+                                "thinking_len": len(result["thinking"]),
+                                "tool_calls": 0,
+                                "finish_reason": result["finish_reason"],
+                                "endpoint": "/api/chat", "think": False},
+                       duration_ms=(time.time() - t0) * 1000)
+        return result
+
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
-             temperature: float = 0.7, stream: bool = False) -> dict | Generator:
+             temperature: float = 0.7, stream: bool = False,
+             think: bool | None = None, max_predict: int | None = None) -> dict | Generator:
         """
         Multi-turn chat completion via Ollama's OpenAI-compatible /v1/chat/completions
         endpoint, with optional tool-calling.
@@ -540,6 +610,18 @@ class OllamaClient(_BASE):
             "stream": stream,
             "temperature": temperature,
         }
+        # Disable reasoning for bounded small-model tasks (query rewrite,
+        # rerank, section filter). These don't need chain-of-thought — a
+        # 0.8b model reasoning on a one-line rewrite was the 60s-per-turn
+        # bottleneck. think=False makes the model answer directly in
+        # content, cutting a 60s timeout to sub-second.
+        if think is False:
+            payload["think"] = False
+        # Cap output tokens for bounded tasks so a runaway small model can't
+        # spend the whole budget rambling. Applied alongside num_ctx below.
+        _extra_opts: dict[str, Any] = {}
+        if max_predict is not None:
+            _extra_opts["num_predict"] = max_predict
         # Pass num_ctx via options so Ollama allocates the full context window
         # upfront. Without this, Ollama defaults to a small num_ctx
         # (2048/4096) and when a large chat payload arrives it UNLOADS the
@@ -553,9 +635,11 @@ class OllamaClient(_BASE):
             if _cap > 0 and _ctx and _ctx > _cap:
                 _ctx = _cap  # cap KV buffer: native 128k ctx allocates a 128k-token KV even for short turns
             if _ctx and _ctx > 0:
-                payload["options"] = {"num_ctx": _ctx}
+                _extra_opts["num_ctx"] = _ctx
         except Exception:
             pass  # best-effort — if /api/show fails, Ollama uses its default
+        if _extra_opts:
+            payload["options"] = _extra_opts
         # keep_alive so the model stays resident between calls.
         payload["keep_alive"] = self._keep_alive
         if tools:
@@ -565,6 +649,21 @@ class OllamaClient(_BASE):
         # the user informed during long passes.
 
         t0 = time.time()
+        # ── think=False fast path ────────────────────────────────────────
+        # Ollama's OpenAI-compatible /v1/chat/completions endpoint IGNORES
+        # the ``think`` field — only the NATIVE /api/chat endpoint honors it.
+        # (The vision probe already uses /api/chat for exactly this reason.)
+        # So bounded small-model calls (query rewrite, rerank, filter) must
+        # go through /api/chat when think=False, otherwise the 0.8b reasoning
+        # model keeps reasoning for 20s and times out — the `think=False` we
+        # added on /v1 was a no-op.
+        #
+        # /api/chat lacks finish_reason + reliable tool-call parsing, but
+        # bounded pre-filter calls don't use tools and want a single
+        # non-stream response, so the raw endpoint is fine here. The main
+        # chat loop (which needs tools + finish_reason) still uses /v1.
+        if think is False and not stream and not tools:
+            return self._chat_native_no_think(payload, t0)
         try:
             if stream:
                 _read_timeout = float(os.environ.get(
@@ -573,9 +672,18 @@ class OllamaClient(_BASE):
                     f"{self.base_url}/v1/chat/completions", json=payload,
                     stream=True, timeout=(5, _read_timeout))
             else:
+                # Bounded small-model tasks (think=False) should answer in
+                # well under a second; cap the timeout so a stuck 0.8b model
+                # can't block the whole turn for 60s. Default 20s covers a
+                # cold load; lower via VAULTBOT_SMALL_TIMEOUT_SECONDS.
+                _chat_timeout = 20.0 if think is False else 60.0
+                if think is False:
+                    _chat_timeout = float(os.environ.get(
+                        "VAULTBOT_SMALL_TIMEOUT_SECONDS",
+                        str(_chat_timeout)))
                 response = self._session.post(
                     f"{self.base_url}/v1/chat/completions", json=payload,
-                    stream=False, timeout=60)
+                    stream=False, timeout=_chat_timeout)
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("chat", self._chat_log_summary(payload, stream),

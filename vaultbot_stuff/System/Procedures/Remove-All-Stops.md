@@ -121,3 +121,9 @@ failure_count: 0
    all_pass = all(c.startswith("PASS") for c in checks)
    print(f"\nOVERALL: {'ALL CHECKS PASSED' if all_pass else 'SOME CHECKS FAILED'}")
    ```
+
+## Related Notes
+
+- [[Fix-Indentation]] — follow-up procedure to fix indentation errors after Remove-All-Stops edits
+- [[Backend-Restart]] — typically needed after running Remove-All-Stops to apply changes
+- [[VaultBot-Build-Log]] — build history tracking this modification

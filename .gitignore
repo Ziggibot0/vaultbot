@@ -90,6 +90,15 @@ test_pull_output.txt
 proc_audit_temp.md
 Consolidated_Dangling_Link_Note.md
 Structure-Research-Note.md
+proc_audit.txt
+
+# Debug / runtime scratch files (not source code)
+vaultbot_stuff/vaultbot_backend/_spawn_diag.log
+vaultbot_stuff/vaultbot_backend/_spawn_diag_err.log
+vaultbot_stuff/vaultbot_backend/_dream_pass_themes.json
+
+# Personal communication preferences (operator-specific, not shippable)
+Communication-Preferences.md
 
 # ─────────────────────────────────────────────────────────────────────
 # The vault itself - the USER'S mind
