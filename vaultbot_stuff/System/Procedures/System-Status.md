@@ -4,7 +4,7 @@ status: active
 model_cartridge: small
 created: 2026-08-03
 description: "Report the current system status: backend running, tools available, autonomous researcher state, and any known issues. Uses the small model to format the report."
-when_to_use: when Sean asks 'how are you doing' or 'what's your status' or you need a quick health check
+when_to_use: when the user asks 'how are you doing' or 'what's your status' or you need a quick health check
 falsifiable_if: the reported status contradicts the actual backend/tool state
 applies_to:
   - health-check
@@ -22,7 +22,7 @@ tags:
 
 ## When to Run This
 
-Run this when Sean asks for a status check or when you need to verify the system is healthy. This procedure gathers key signals and formats them into a concise report.
+Run this when the user asks for a status check or when you need to verify the system is healthy. This procedure gathers key signals and formats them into a concise report.
 
 ## What This Procedure Checks
 
