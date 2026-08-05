@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-03
 description: "Verify claims in a research note by composing existing procedures: calls Cross-Check-Claims for web source verification, then cross-references claims against existing vault notes for internal consistency. Conditional branches based on whether the note has web sources, vault links, or unsupported claims. This is a thin orchestrator — it delegates to Cross-Check-Claims rather than reimplementing claim extraction."
-when_to_use: "after vault_research writes a note, before accepting it as final; when you need to verify that a note's claims are backed by sources and consistent with existing vault knowledge"
-falsifiable_if: "a note passes this verification but is later found to contain a hallucinated or unsupported claim, or the procedure flags a supported claim as unsupported"
+when_to_use: after vault_research writes a note, before accepting it as final; when you need to verify that a note's claims are backed by sources and consistent with existing vault knowledge
+falsifiable_if: a note passes this verification but is later found to contain a hallucinated or unsupported claim, or the procedure flags a supported claim as unsupported
 applies_to:
   - claim-verification
   - research-quality
@@ -22,6 +22,10 @@ research_backing:
   - "[[Automated-claim-verification-and-fact-checking-of-LLM-outputs-against-source-doc]] — 15 sources on hallucination detection, faithfulness metrics, and post-generation verification for RAG systems"
   - "[[how-to-evaluate-credibility-of-sources-for-academic-research]] — lateral reading and credibility evaluation methods"
   - "[[Calibrating-automated-quality-assessment-gates-without-ground-truth-labels-metho]] — rubric design and calibration convert LLM-as-judge into reliable quality signals"
+summary: Verify-Claims
+tags:
+  - procedure
+  - procedures
 ---
 
 # Verify-Claims

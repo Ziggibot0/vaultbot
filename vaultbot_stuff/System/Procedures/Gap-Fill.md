@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-03
 description: "Triage dangling wikilinks into actionable categories: 'research needed' (concept has no note and should be created), 'typo/alias' (note exists under a slightly different title), 'chat log' (link points at a chat that wasn't saved), or 'ignore' (intentional reference to a concept that doesn't need its own note). Returns a prioritized work queue for the autonomous researcher or the big model. Small cartridge — pure classification over a bounded set of categories."
-when_to_use: "when the vault has dangling wikilinks that need triage, before running autonomous research, or when asked 'what gaps should we fill?'"
-falsifiable_if: "it classifies a link as 'typo' when the target note genuinely doesn't exist, or marks 'research needed' for a link that already resolves to an existing note"
+when_to_use: when the vault has dangling wikilinks that need triage, before running autonomous research, or when asked 'what gaps should we fill?'
+falsifiable_if: it classifies a link as 'typo' when the target note genuinely doesn't exist, or marks 'research needed' for a link that already resolves to an existing note
 applies_to:
   - gap-detection
   - vault-maintenance
@@ -15,6 +15,10 @@ allowed_tools:
   - run_procedure
   - vault_list
   - llm_generate
+summary: Gap-Fill
+tags:
+  - procedure
+  - procedures
 ---
 
 # Gap-Fill

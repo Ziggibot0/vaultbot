@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find notes that should be merged because they're fragments of the same topic — each one is too thin alone but together they'd make a complete note. Scans for short notes (< 200 words) that share significant content overlap, and the small model determines which should be merged. Use when cleaning up fragmented knowledge."
-when_to_use: "when the vault has fragmented notes that should be merged, when short notes overlap significantly, when cleaning up after a period of rapid note-taking, or when asked 'which notes should be combined'"
-falsifiable_if: "the procedure suggests merging notes that shouldn't be merged, or misses merge candidates"
+description: Find notes that should be merged because they're fragments of the same topic — each one is too thin alone but together they'd make a complete note. Scans for short notes (< 200 words) that share significant content overlap, and the small model determines which should be merged. Use when cleaning up fragmented knowledge.
+when_to_use: when the vault has fragmented notes that should be merged, when short notes overlap significantly, when cleaning up after a period of rapid note-taking, or when asked 'which notes should be combined'
+falsifiable_if: the procedure suggests merging notes that shouldn't be merged, or misses merge candidates
 applies_to:
   - vault-maintenance
   - note-merging
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: SUMMARY
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Merge-Candidates

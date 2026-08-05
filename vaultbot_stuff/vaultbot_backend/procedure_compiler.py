@@ -50,10 +50,13 @@ See:
 """
 from __future__ import annotations
 
+import logging
 import re
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 # ── Data structures ───────────────────────────────────────────────────────
@@ -397,6 +400,20 @@ def compile_from_text(note_name: str, text: str) -> Procedure | None:
         return None
 
     steps = _parse_steps(body)
+
+    # Loud warning: the procedure has content but compiled 0 steps. This
+    # is almost always a format mismatch (### Step N: headers instead of
+    # 1. numbered lists). Log it so the issue is visible without guessing.
+    if not steps and body.strip():
+        _h3_steps = len(re.findall(r'^###\s+Step', body, re.MULTILINE))
+        _num_steps = len(re.findall(r'^\d+\.\s+', body, re.MULTILINE))
+        logger.warning(
+            "compile_zero_steps: procedure '%s' has body content but "
+            "parsed 0 steps. Found %d ### Step headers and %d numbered "
+            "list items. The compiler only recognizes numbered list "
+            "steps (1. ...) inside a ## Steps section.",
+            note_name, _h3_steps, _num_steps,
+        )
 
     # Parse allowed_tools (may be a list or absent)
     allowed = fm.get('allowed_tools', [])

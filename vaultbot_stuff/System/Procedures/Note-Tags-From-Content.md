@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Suggest tags for a note based on its content. Reads the note, extracts topics and themes, and the small model suggests 3-5 tags that match what the note is about. Checks existing tags in the vault for consistency. Use when tagging a new note or improving an untagged note's discoverability."
-when_to_use: "when tagging a new note, when a note has no tags, when improving note discoverability, or when asked 'what tags should this note have'"
-falsifiable_if: "the suggested tags don't match the note's content, or are too generic to be useful"
+description: Suggest tags for a note based on its content. Reads the note, extracts topics and themes, and the small model suggests 3-5 tags that match what the note is about. Checks existing tags in the vault for consistency. Use when tagging a new note or improving an untagged note's discoverability.
+when_to_use: when tagging a new note, when a note has no tags, when improving note discoverability, or when asked 'what tags should this note have'
+falsifiable_if: the suggested tags don't match the note's content, or are too generic to be useful
 applies_to:
   - tagging
   - note-improvement
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Note-Tags-From-Content
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Tags-From-Content

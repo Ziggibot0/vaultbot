@@ -3,9 +3,15 @@ type: procedure
 status: verified
 model_cartridge: small
 created: 2026-07-31
-description: "Submit uncommitted changes as a GitHub pull request for community review. Forks the repo if needed, pushes, and creates a cross-fork PR."
-when: "When submitting code changes for community review"
-allowed_tools: [code_read, vault_search]
+description: Submit uncommitted changes as a GitHub pull request for community review. Forks the repo if needed, pushes, and creates a cross-fork PR.
+when: When submitting code changes for community review
+allowed_tools:
+  - code_read
+  - vault_search
+summary: The note instructs users to submit uncommitted changes via a GitHub pull request, specifying two conditional paths based on upstream write access.
+tags:
+  - procedure
+  - procedures
 ---
 
 # Submit-Contribution

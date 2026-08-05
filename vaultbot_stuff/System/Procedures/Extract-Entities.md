@@ -3,15 +3,19 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-07-31
-description: "Extract entities (proper nouns, named concepts) and 3-5 key facts from text. Returns JSON with entities and key_facts arrays. Uses the small model — entity extraction is simple structured parsing."
-when_to_use: "when you need to pull named entities and key facts out of raw text to link into the knowledge graph"
-falsifiable_if: "extracted entities are not proper nouns or named concepts, or key facts are invented"
+description: Extract entities (proper nouns, named concepts) and 3-5 key facts from text. Returns JSON with entities and key_facts arrays. Uses the small model — entity extraction is simple structured parsing.
+when_to_use: when you need to pull named entities and key facts out of raw text to link into the knowledge graph
+falsifiable_if: extracted entities are not proper nouns or named concepts, or key facts are invented
 applies_to:
   - knowledge-extraction
   - graph-building
   - note-enrichment
 allowed_tools:
   - llm_generate
+summary: Extract-Entities
+tags:
+  - procedure
+  - procedures
 ---
 
 # Extract-Entities

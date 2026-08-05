@@ -41,7 +41,7 @@ import json
 import os
 import re
 import subprocess
-from subprocess_utils import run as _subprocess_run
+from subprocess_utils import run as _subprocess_run, scrubbed_env
 import sys
 import textwrap
 
@@ -464,8 +464,10 @@ def dry_run_procedure(
             "str(result) if 'result' in dir() else ''}))\n"
         )
 
+        # Scrubbed env: dry-run procedure code is still LLM-authored and must
+        # not see API keys/tokens/passwords from the parent process.
         env = {
-            **os.environ,
+            **scrubbed_env(),
             "VAULT_PATH": vault_path,
             "PRIOR_RESULTS": json.dumps(prior_results, default=str),
         }

@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Find dead code in the backend: functions and classes that are defined but never called or imported anywhere. Scans all .py files for def/class definitions, then checks if each is referenced anywhere else. Returns a list of unreferenced symbols with their locations. Use before refactoring or when cleaning up."
-when_to_use: "when cleaning up the backend, before a refactor, when looking for code to remove, or when asked 'what code is unused'"
-falsifiable_if: "a flagged function is actually called (via dynamic dispatch, string eval, etc.), or a truly dead function is missed"
+when_to_use: when cleaning up the backend, before a refactor, when looking for code to remove, or when asked 'what code is unused'
+falsifiable_if: a flagged function is actually called (via dynamic dispatch, string eval, etc.), or a truly dead function is missed
 applies_to:
   - self-modification
   - dead-code
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Find-Dead-Code
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Dead-Code

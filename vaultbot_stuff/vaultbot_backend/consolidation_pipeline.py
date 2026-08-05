@@ -425,7 +425,21 @@ class ConsolidationPipeline:
             f"---"
         )
 
-        return f"{frontmatter}\n\n{synthesized_content}"
+        full_note = f"{frontmatter}\n\n{synthesized_content}"
+
+        # Pass through inject_schema to fill any missing universal fields
+        try:
+            from note_schema import inject_schema
+            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "-", theme)[:60]
+            full_note = inject_schema(
+                full_note,
+                f"vaultbot_stuff/Memory/Build-Log/Semantic-{safe_name}.md",
+                force_type="semantic",
+            )
+        except ImportError:
+            pass
+
+        return full_note
 
     def store_note(self, note_content: str, theme: str) -> str:
         """Write the semantic note to the vault. Returns the file path."""

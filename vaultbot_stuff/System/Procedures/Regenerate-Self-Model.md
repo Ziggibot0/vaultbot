@@ -3,15 +3,19 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-07-31
-description: "Regenerate VaultBot's self-model narrative from prior state and recent activity. Produces a first-person narrative bounded to ~3000 tokens. Uses the small model — it's a bounded rewrite of existing content, not new knowledge generation."
-when_to_use: "at the end of each chat turn to regenerate the self-model (MIRROR loop)"
-falsifiable_if: "the self-model loses continuity with the prior version, or fabricates activity that didn't happen"
+description: Regenerate VaultBot's self-model narrative from prior state and recent activity. Produces a first-person narrative bounded to ~3000 tokens. Uses the small model — it's a bounded rewrite of existing content, not new knowledge generation.
+when_to_use: at the end of each chat turn to regenerate the self-model (MIRROR loop)
+falsifiable_if: the self-model loses continuity with the prior version, or fabricates activity that didn't happen
 applies_to:
   - identity
   - self-model
   - memory-consolidation
 allowed_tools:
   - llm_generate
+summary: Regenerate-Self-Model
+tags:
+  - procedure
+  - procedures
 ---
 
 # Regenerate-Self-Model

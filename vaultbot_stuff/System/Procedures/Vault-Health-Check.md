@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-01
 description: "Fast vault health snapshot. Runs Pattern-Scan plus the graph analyzer, then formats a concise health report: connectivity, orphan islands, sparse zones, cluster breakdown, and the top bridge suggestions. Small cartridge — the LLM only formats structured graph data into prose, no reasoning over raw notes."
-when_to_use: "at session start, or whenever asked 'how's the vault?', 'vault status?', or for a graph/connectivity overview"
-falsifiable_if: "the report's connectivity or orphan counts disagree with vault_graph_analyzer or Pattern-Scan output"
+when_to_use: at session start, or whenever asked 'how's the vault?', 'vault status?', or for a graph/connectivity overview
+falsifiable_if: the report's connectivity or orphan counts disagree with vault_graph_analyzer or Pattern-Scan output
 applies_to:
   - vault-maintenance
   - health
@@ -14,6 +14,10 @@ allowed_tools:
   - run_procedure
   - vault_graph_analyzer
   - vault_list
+summary: Vault-Health-Check
+tags:
+  - procedure
+  - procedures
 ---
 
 # Vault-Health-Check

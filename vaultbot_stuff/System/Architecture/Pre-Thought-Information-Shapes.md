@@ -1,7 +1,13 @@
 ---
 created: 2025-07-25
-summary: "How to store information in the vault so that connections between notes encode reasoning — the graph does the thinking before the LLM is called."
-tags: [architecture, knowledge-graph, pre-thought, framework]
+summary: How to store information in the vault so that connections between notes encode reasoning — the graph does the thinking before the LLM is called.
+tags:
+  - architecture
+  - knowledge-graph
+  - pre-thought
+  - framework
+type: architecture
+status: raw
 ---
 
 # Pre-Thought: Information Shapes That Think

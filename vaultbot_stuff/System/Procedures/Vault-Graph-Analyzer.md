@@ -3,9 +3,14 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-07-31
-description: "Analyze the vault graph's connectedness and find islands."
-when_to_use: "When checking vault structure for disconnected note clusters."
-allowed_tools: [vault_graph_analyzer]
+description: Analyze the vault graph's connectedness and find islands.
+when_to_use: When checking vault structure for disconnected note clusters.
+allowed_tools:
+  - vault_graph_analyzer
+summary: Vault-Graph-Analyzer
+tags:
+  - procedure
+  - procedures
 ---
 
 # Vault-Graph-Analyzer

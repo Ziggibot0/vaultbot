@@ -2,8 +2,13 @@
 type: exemplar
 exemplar: chat-response
 created: 2026-07-26
-summary: "Annotated example of a good chat response to the operator — bottom-line-up-front, concise, cited, accomplishment-focused."
-tags: [exemplar, chat-response, communication, how-to]
+summary: Annotated example of a good chat response to the operator — bottom-line-up-front, concise, cited, accomplishment-focused.
+tags:
+  - exemplar
+  - chat-response
+  - communication
+  - how-to
+status: raw
 ---
 
 <!-- EXEMPLAR ANNOTATION: CHAT RESPONSE

@@ -5,7 +5,7 @@ import sys
 import tempfile
 from typing import Any
 
-from subprocess_utils import run as _subprocess_run
+from subprocess_utils import run as _subprocess_run, scrubbed_env
 
 """Subagent context isolation — run verbose tools in a separate process so
 the orchestrator's conversation never balloons.
@@ -245,7 +245,9 @@ def _run_subprocess(wrapper_code: str,
         script_path = f.name
 
     try:
-        env = os.environ.copy()
+        # Scrubbed env: the subagent wrapper runs LLM-authored research code
+        # and must not inherit API keys/tokens/passwords from the parent.
+        env = scrubbed_env()
         if "VAULT_PATH" not in env:
             env["VAULT_PATH"] = os.path.dirname(_backend_dir())
         backend = _backend_dir()

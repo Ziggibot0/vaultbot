@@ -235,10 +235,32 @@ def test_branch_to_missing_step_falls_through():
 
 
 def test_empty_procedure_returns_pass():
+    """An empty procedure body (no content) compiles 0 steps and passes.
+
+    This is the legitimate case — a procedure note with type: procedure
+    but no steps yet. It's not a failure, just empty.
+    """
     proc = _make_procedure("")
     result = _run(proc)
     assert result.overall_passed
     assert result.steps == []
+
+
+def test_content_but_zero_steps_fails_loud():
+    """A procedure with body content that parses 0 steps fails LOUD.
+
+    This is the format-mismatch case (### Step N: headers instead of
+    numbered lists). The diagnosis must explain WHY so the caller can
+    fix it. This is the fix for the 60-round loop where execute_procedure
+    returned 0 steps with no explanation.
+    """
+    proc = _make_procedure(
+        "## Steps\n\n### Step 1: Do something\n\nSome text.\n")
+    result = _run(proc)
+    assert not result.overall_passed
+    assert result.failed_step == 0
+    assert "0 STEPS" in result.final_output or "0 steps" in result.final_output.lower()
+    assert "numbered list" in result.final_output.lower()
 
 
 def test_code_step_executes(tmp_path):

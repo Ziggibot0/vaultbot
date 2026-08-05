@@ -3,9 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-01
-description: "Importable pattern-recognition engine. Walks EVERY .md note in the vault and computes ~15 deterministic per-note signals (length, links in/out, orphan/thin/hub status, frontmatter presence, todo/stub markers, duplicate-title groups, daily-note files, staleness) plus vault-wide aggregates. Writes the full per-note table to vaultbot_stuff/Memory/Build-Log/pattern-scan-latest.json and returns a compact summary. Pure code, zero LLM cost — the big model never reasons about raw notes, it reads the filtered output of a domain scanner that calls this."
-when_to_use: "when any procedure needs to recognize patterns across LOTS of notes at once — do NOT scan the vault inline; call run_procedure(\"Pattern-Scan\") then read pattern-scan-latest.json and filter for your domain. Domain scanners (Find-Orphans, Find-Thin-Notes, Find-Stubs, Find-Duplicates, Find-Broken-Links, Find-Unlinked-Mentions, Find-Overdue-Tasks, Find-Stale-Notes) already do this for you."
-falsifiable_if: "pattern-scan-latest.json is missing, empty, or its per-note signals contradict what vault_lint / vault_graph_analyzer report for the same notes"
+description: Importable pattern-recognition engine. Walks EVERY .md note in the vault and computes ~15 deterministic per-note signals (length, links in/out, orphan/thin/hub status, frontmatter presence, todo/stub markers, duplicate-title groups, daily-note files, staleness) plus vault-wide aggregates. Writes the full per-note table to vaultbot_stuff/Memory/Build-Log/pattern-scan-latest.json and returns a compact summary. Pure code, zero LLM cost — the big model never reasons about raw notes, it reads the filtered output of a domain scanner that calls this.
+when_to_use: when any procedure needs to recognize patterns across LOTS of notes at once — do NOT scan the vault inline; call run_procedure(\"Pattern-Scan\") then read pattern-scan-latest.json and filter for your domain. Domain scanners (Find-Orphans, Find-Thin-Notes, Find-Stubs, Find-Duplicates, Find-Broken-Links, Find-Unlinked-Mentions, Find-Overdue-Tasks, Find-Stale-Notes) already do this for you.
+falsifiable_if: pattern-scan-latest.json is missing, empty, or its per-note signals contradict what vault_lint / vault_graph_analyzer report for the same notes
 applies_to:
   - pattern-recognition
   - vault-maintenance
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - vault_graph_analyzer
+summary: Pattern-Scan
+tags:
+  - procedure
+  - procedures
 ---
 
 # Pattern-Scan

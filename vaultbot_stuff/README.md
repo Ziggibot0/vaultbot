@@ -1,3 +1,12 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: VaultBot
+tags:
+  - claim
+---
+
 # VaultBot
 
 > A self-improving AI research agent that lives inside your Obsidian vault.

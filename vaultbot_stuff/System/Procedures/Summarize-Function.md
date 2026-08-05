@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Read a Python function and produce a concise summary of what it does, its inputs, outputs, and side effects. Given a file path and function name, extracts the function body and has the small model summarize it. Use when you need to understand a function before editing it, or when documenting code."
-when_to_use: "when you need to understand what a specific function does before editing it, when documenting a function, or when you encounter unfamiliar code"
-falsifiable_if: "the summary contradicts what the function actually does, or fabricates behavior not in the code"
+description: Read a Python function and produce a concise summary of what it does, its inputs, outputs, and side effects. Given a file path and function name, extracts the function body and has the small model summarize it. Use when you need to understand a function before editing it, or when documenting code.
+when_to_use: when you need to understand what a specific function does before editing it, when documenting a function, or when you encounter unfamiliar code
+falsifiable_if: the summary contradicts what the function actually does, or fabricates behavior not in the code
 applies_to:
   - code-comprehension
   - documentation
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Summarize-Function
+tags:
+  - procedure
+  - procedures
 ---
 
 # Summarize-Function

@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-04
 description: "Evaluate FUSED retrieval quality: run test queries against vault_search, compute recall@k and precision@k, detect regressions, and dispatch conditional fixes. 5 steps with conditional post-evaluation branches. Backed by RAG evaluation metrics research. Idempotent — safe to re-run with same test set."
-when_to_use: "when checking if vault_search returns the right notes, after significant vault changes, when the operator reports missing notes, when testing retrieval parameter changes, or during periodic quality audits"
-falsifiable_if: "retrieval is rated as high-quality by this procedure but the operator consistently reports missing notes that should have been retrieved"
+when_to_use: when checking if vault_search returns the right notes, after significant vault changes, when the operator reports missing notes, when testing retrieval parameter changes, or during periodic quality audits
+falsifiable_if: retrieval is rated as high-quality by this procedure but the operator consistently reports missing notes that should have been retrieved
 applies_to:
   - retrieval
   - evaluation
@@ -25,6 +25,10 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
+summary: Evaluate-Retrieval
+tags:
+  - procedure
+  - procedures
 ---
 
 # Evaluate-Retrieval

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Diff the working tree against the last commit and summarize what's uncommitted. Runs git diff deterministically, then the small model summarizes the meaningful changes (not whitespace). Use before a commit to verify what will be committed, or to check what's been changed since the last commit."
-when_to_use: "before committing, when checking what's changed since last commit, when verifying uncommitted edits are correct, or when asked 'what have I changed'"
-falsifiable_if: "the summary reports changes that aren't in the diff, or misses meaningful uncommitted changes"
+description: Diff the working tree against the last commit and summarize what's uncommitted. Runs git diff deterministically, then the small model summarizes the meaningful changes (not whitespace). Use before a commit to verify what will be committed, or to check what's been changed since the last commit.
+when_to_use: before committing, when checking what's changed since last commit, when verifying uncommitted edits are correct, or when asked 'what have I changed'
+falsifiable_if: the summary reports changes that aren't in the diff, or misses meaningful uncommitted changes
 applies_to:
   - git
   - diffing
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Git-Working-Diff
+tags:
+  - procedure
+  - procedures
 ---
 
 # Git-Working-Diff

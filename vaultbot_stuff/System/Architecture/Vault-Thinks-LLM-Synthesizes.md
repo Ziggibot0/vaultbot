@@ -1,7 +1,12 @@
 ---
 created: 2025-07-25
-summary: "The vault thinks for the LLM. The LLM only reads, calls tools, and synthesizes. No maintenance machinery."
-tags: [architecture, design-principle, core]
+summary: The vault thinks for the LLM. The LLM only reads, calls tools, and synthesizes. No maintenance machinery.
+tags:
+  - architecture
+  - design-principle
+  - core
+type: architecture
+status: raw
 ---
 
 # Vault-Thinks-LLM-Synthesizes

@@ -16,7 +16,7 @@ from plan_gate import (
 
 
 # ---------------------------------------------------------------------------
-# is_multi_step — the routing heuristic
+# is_multi_step — now a no-op (the gate is round-counter-based, not heuristic)
 # ---------------------------------------------------------------------------
 def test_simple_question_not_gated():
     assert is_multi_step("what is the vault longevity architecture?") is False
@@ -30,29 +30,31 @@ def test_empty_message_not_gated():
     assert is_multi_step("") is False
 
 
-def test_multistep_research_task_gated():
-    assert is_multi_step("research this topic and write a note about it") is True
+def test_multistep_research_task_not_heuristic_gated():
+    # is_multi_step is now a no-op (always False). The plan gate is enforced
+    # by the round counter in chat_handler, not by signal-word matching.
+    assert is_multi_step("research this topic and write a note about it") is False
 
 
-def test_mutation_task_gated():
-    assert is_multi_step("ingest the new physics textbook") is True
+def test_mutation_task_not_heuristic_gated():
+    assert is_multi_step("ingest the new physics textbook") is False
 
 
-def test_build_tool_task_gated():
-    assert is_multi_step("create a tool that lists all MOCs") is True
+def test_build_tool_task_not_heuristic_gated():
+    assert is_multi_step("create a tool that lists all MOCs") is False
 
 
-def test_refactor_task_gated():
-    assert is_multi_step("refactor the retrieval module and add a feature") is True
+def test_refactor_task_not_heuristic_gated():
+    assert is_multi_step("refactor the retrieval module and add a feature") is False
 
 
-def test_plan_gate_env_off(monkeypatch):
-    monkeypatch.setenv("VAULTBOT_PLAN_GATE", "off")
+def test_plan_gate_env_off():
+    # is_multi_step always returns False regardless of env — the env knob
+    # is no longer used (the gate is round-counter-based in chat_handler).
     assert is_multi_step("research this and write a note") is False
 
 
 def test_short_question_with_signal_word_not_gated():
-    # "what's the plan?" contains "plan" but is a short question, not a task.
     assert is_multi_step("what is the plan?") is False
 
 

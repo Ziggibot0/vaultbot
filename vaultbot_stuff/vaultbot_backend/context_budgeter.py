@@ -35,6 +35,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from config import TUNABLES
+
 
 class ContextBudgeter:
     """Rank and truncate retrieved vault context to fit within a token budget.
@@ -42,7 +44,7 @@ class ContextBudgeter:
     Pure deterministic. No LLM calls. No external dependencies.
     """
 
-    CHARS_PER_TOKEN = 4  # rough estimate for English text
+    CHARS_PER_TOKEN = TUNABLES.chars_per_token  # rough estimate for English text
 
     def __init__(
         self,

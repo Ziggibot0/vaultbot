@@ -14,8 +14,15 @@ scope:
   - communication
   - reporting-format
   - sean-preferences
-falsifiable_if: "a future session occurs where the operator explicitly requests detailed, wall-of-text reports or stops rejecting verbose outputs"
-tags: [semantic, pattern, consolidation, sean-preferences, communication, brevity]
+falsifiable_if: a future session occurs where the operator explicitly requests detailed, wall-of-text reports or stops rejecting verbose outputs
+tags:
+  - semantic
+  - pattern
+  - consolidation
+  - sean-preferences
+  - communication
+  - brevity
+summary: Over-Reporting-Brevity-Rule
 ---
 
 # Over-Reporting-Brevity-Rule

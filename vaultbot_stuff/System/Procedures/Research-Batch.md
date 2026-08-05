@@ -3,9 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-03
-description: "Batch-triage multiple research topics at once. Given a list of topics or a note with multiple gaps, the small model classifies each topic by type (factual, conceptual, procedural, controversial) and priority, then fills a research plan template for each. The big model only does the actual research synthesis — all triage and planning is small-cartridge. Eliminates the big model's overhead of reading topics, deciding what kind of research each needs, and structuring plans."
-when_to_use: "when multiple topics need research, when the vault has 3+ dangling wikilinks that all need research, when Sean gives a list of things to look up, or when a Research-Roadmap phase has multiple remaining topics"
-falsifiable_if: "it misclassifies a topic type (e.g. marks a controversial topic as factual) or produces a plan template that doesn't match the topic's research needs"
+description: Batch-triage multiple research topics at once. Given a list of topics or a note with multiple gaps, the small model classifies each topic by type (factual, conceptual, procedural, controversial) and priority, then fills a research plan template for each. The big model only does the actual research synthesis — all triage and planning is small-cartridge. Eliminates the big model's overhead of reading topics, deciding what kind of research each needs, and structuring plans.
+when_to_use: when multiple topics need research, when the vault has 3+ dangling wikilinks that all need research, when Sean gives a list of things to look up, or when a Research-Roadmap phase has multiple remaining topics
+falsifiable_if: it misclassifies a topic type (e.g. marks a controversial topic as factual) or produces a plan template that doesn't match the topic's research needs
 applies_to:
   - research
   - batch-processing
@@ -15,6 +15,10 @@ allowed_tools:
   - run_procedure
   - vault_list
   - llm_generate
+summary: Research-Batch
+tags:
+  - procedure
+  - procedures
 ---
 
 # Research-Batch

@@ -1,7 +1,14 @@
 ---
 created: 2026-07-26
-summary: "Honest assessment of the research evidence for typed edges in personal knowledge management — what the sources actually say, what's weak, and what to do about it."
-tags: [architecture, assessment, typed-edges, knowledge-graph, research-quality]
+summary: Honest assessment of the research evidence for typed edges in personal knowledge management — what the sources actually say, what's weak, and what to do about it.
+tags:
+  - architecture
+  - assessment
+  - typed-edges
+  - knowledge-graph
+  - research-quality
+type: architecture
+status: raw
 ---
 
 # Typed Edges Research Assessment

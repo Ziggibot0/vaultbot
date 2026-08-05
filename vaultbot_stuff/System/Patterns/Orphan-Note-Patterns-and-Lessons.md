@@ -1,7 +1,13 @@
 ---
 created: 2026-07-27
-summary: "Patterns found in 55 orphan notes and lessons learned from bridging them into the vault graph."
-tags: [vault-maintenance, orphans, lessons-learned, graph-health]
+summary: Patterns found in 55 orphan notes and lessons learned from bridging them into the vault graph.
+tags:
+  - vault-maintenance
+  - orphans
+  - lessons-learned
+  - graph-health
+type: pattern
+status: raw
 ---
 
 # Orphan Note Patterns and Lessons Learned

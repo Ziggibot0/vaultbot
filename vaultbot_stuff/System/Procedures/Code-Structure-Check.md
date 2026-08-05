@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Check if a backend file follows the project's code conventions: proper imports, no bare excepts, no hardcoded paths, functions have type hints, modules have __init__.py. Scans a file and returns convention violations. Use when auditing code quality before a commit or after an edit."
-when_to_use: "when auditing code quality, before a commit, after editing a file, when checking if code follows conventions, or when asked 'does this code follow the rules'"
-falsifiable_if: "the procedure reports violations that aren't real, or misses actual violations"
+when_to_use: when auditing code quality, before a commit, after editing a file, when checking if code follows conventions, or when asked 'does this code follow the rules'
+falsifiable_if: the procedure reports violations that aren't real, or misses actual violations
 applies_to:
   - code-quality
   - convention-checking
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Code-Structure-Check
+tags:
+  - procedure
+  - procedures
 ---
 
 # Code-Structure-Check

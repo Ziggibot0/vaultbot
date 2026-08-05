@@ -3,7 +3,11 @@ type: spec
 status: completed
 created: 2026-07-31
 description: "HISTORICAL one-time migration spec (already applied): it removed the silent masking fallbacks from backend Python files. NOT an active procedure — its Step headers don't parse as an executable procedure and re-running it would assert-fail because the fallbacks are already gone. Kept as a record of the fail-loud refactor."
-when: "reference only — do not execute; the fail-loud refactor already shipped"
+when: reference only — do not execute; the fail-loud refactor already shipped
+summary: Fix Masking Fallbacks (completed spec)
+tags:
+  - spec
+  - procedures
 ---
 
 # Fix Masking Fallbacks (completed spec)

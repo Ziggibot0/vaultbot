@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Check if the vaultbot has the tools it needs for a task. Given a task description, lists all available tools (injected + custom), and the small model assesses whether the toolset covers the task. Returns missing capabilities and suggests which to create. Use when the vaultbot hits a wall or before starting a complex task."
-when_to_use: "when the vaultbot lacks a capability, before starting a complex task, when hitting a wall, when assessing what tools are needed, or when asked 'can I do this'"
-falsifiable_if: "the assessment says tools are sufficient when they aren't, or says tools are missing when they exist"
+description: Check if the vaultbot has the tools it needs for a task. Given a task description, lists all available tools (injected + custom), and the small model assesses whether the toolset covers the task. Returns missing capabilities and suggests which to create. Use when the vaultbot hits a wall or before starting a complex task.
+when_to_use: when the vaultbot lacks a capability, before starting a complex task, when hitting a wall, when assessing what tools are needed, or when asked 'can I do this'
+falsifiable_if: the assessment says tools are sufficient when they aren't, or says tools are missing when they exist
 applies_to:
   - self-improvement
   - capability-audit
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Check-Tool-Coverage
+tags:
+  - procedure
+  - procedures
 ---
 
 # Check-Tool-Coverage

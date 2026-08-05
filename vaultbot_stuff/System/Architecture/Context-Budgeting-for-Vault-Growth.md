@@ -1,14 +1,24 @@
 ---
 created: 2026-07-26
-summary: "How to manage the LLM context window as the vault grows past hundreds of notes — ranking, truncating, and compacting retrieved subgraphs to stay within budget."
-tags: [architecture, context-window, retrieval, scaling, hermeneutics]
+updated: 2026-08-03
+summary: How to manage the LLM context window as the vault grows past hundreds of notes — ranking, truncating, and compacting retrieved subgraphs to stay within budget.
+tags:
+  - architecture
+  - context-window
+  - retrieval
+  - scaling
+  - hermeneutics
+type: architecture
+status: verified
 ---
 
 # Context Budgeting for Vault Growth
 
 ## The Problem
 
-Right now, VaultBot retrieves a subgraph of ~20-30 notes per query. At 154 notes, this fits comfortably in the context window. But the vault will grow — 500, 1000, 5000 notes. As it does, two things happen:
+Right now, VaultBot retrieves a subgraph of ~20-30 notes per query. At the time this note was originally written (2026-07-26), the vault had 154 notes and this fit comfortably in the context window. As of 2026-08-03, the vault has grown to **1,285 notes** — an 8x increase in 8 days. The vault is now well past the scale this note originally described, and the budgeting strategies below are no longer hypothetical — they are urgently needed.
+
+As the vault grows, two things happen:
 
 1. **Retrieved subgraphs get larger** — more notes match each query, more connections exist
 2. **Context quality degrades** — even with a large context window, models suffer from "lost in the middle" effects where information in the middle of long contexts gets ignored [sources: LLM Context Window Management and Long-Context Strategies 2026]
@@ -27,9 +37,9 @@ Anthropic's context engineering work identifies three approaches for long-runnin
 
 ### Context Window Realities
 
-- Advertised context limits rarely match effective performance — a 128K window doesn't mean 128K of *useful* attention [sources: LLM Context Window Management and Long-Context Strategies 2026]
-- Cost scales geometrically with context length [sources: LLM Context Window Management and Long-Context Strategies 2026]
-- The industry is shifting from "bigger windows" to "better context management" — compression, caching, and memory-augmented systems [sources: LLM Context Window Management and Long-Context Strategies 2026]
+- Advertised context limits rarely match effective performance — a 128K window doesn't mean 128K of *useful* attention
+- Models lose information in the middle of long contexts (the "lost in the middle" problem)
+- Smaller models are more susceptible to this — they have less capacity to extract signal from noise
 
 ### FILCO: Context Filtering
 
@@ -59,12 +69,19 @@ Define a token budget for the retrieved subgraph (e.g., 8K tokens for a 32K cont
 
 ### The Small Model Angle
 
-This is especially critical for a 30B local model (see [[Small-Model-Path-to-AGI]]). Smaller models have:
+This is especially critical for a 30B local model. Smaller models have:
 - Smaller context windows (typically 4K-8K vs 128K+ for frontier models)
 - Weaker long-context attention (more susceptible to "lost in the middle")
 - Less ability to extract signal from noise
 
-Context budgeting isn't optional for a 30B model — it's survival. The framework must curate context aggressively so the model sees only the highest-signal notes.
+Context budgeting isn't optional for local inference — it's the difference between a working system and a broken one. See [[Cloud-Model-Obsolescence-Architecture]] for the full architecture of making the big model optional.
+
+## Current Status (as of 2026-08-03)
+
+- **Vault size**: 1,285 notes (up from 154 when this note was written — 8x growth in 8 days)
+- **context_budgeter.py**: NOT YET BUILT. The module described below is still a design specification, not implemented code.
+- **Retrieval**: The system currently retrieves subgraphs and includes them in context without explicit budgeting or truncation. The [[Filter-Context-For-Query]] procedure provides a single filter step but not a full multi-stage ranking pipeline.
+- **Urgency**: HIGH. At 1,285 notes, retrieved subgraphs are already large enough that context quality degradation is a real risk, especially for smaller models.
 
 ## What Needs to Be Built
 
@@ -78,8 +95,9 @@ Context budgeting isn't optional for a 30B model — it's survival. The framewor
 
 ## Related
 - [[Vault-Longevity-Architecture]] — the scaling problem this solves
-- [[Small-Model-Path-to-AGI]] — why this is critical for 30B models
+- [[Cloud-Model-Obsolescence-Architecture]] — the architecture for making the big model optional (small model context budgeting is critical to this)
 - [[RAG-Evaluation-for-FUSED-Retrieval]] — measuring whether budgeting hurts retrieval quality
 - [[Pre-Thought-Information-Shapes]] — typed edges help ranking
 - [[Deterministic-Scaffolding-for-Small-Models]] — the framework does the heavy lifting
 - [[Self-Assessment-Using-the-Knowledge-Triad]] — the gap this fills
+- [[Filter-Context-For-Query]] — the existing single-step filter procedure (needs to be expanded into a full pipeline)

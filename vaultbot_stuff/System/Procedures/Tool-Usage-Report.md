@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find what the vaultbot does repeatedly in chat that could be turned into a procedure. Scans recent chat logs for recurring tool-call sequences (same tools in the same order, 3+ times) and returns the patterns with a suggested procedure name for each. Use when the vaultbot is doing the same thing manually over and over."
-when_to_use: "when the vaultbot keeps doing the same multi-step workflow manually, when looking for what to proceduralize next, or when asked 'what should I automate'"
-falsifiable_if: "the patterns don't actually recur 3+ times, or the suggested procedure names don't match what the pattern does"
+description: Find what the vaultbot does repeatedly in chat that could be turned into a procedure. Scans recent chat logs for recurring tool-call sequences (same tools in the same order, 3+ times) and returns the patterns with a suggested procedure name for each. Use when the vaultbot is doing the same thing manually over and over.
+when_to_use: when the vaultbot keeps doing the same multi-step workflow manually, when looking for what to proceduralize next, or when asked 'what should I automate'
+falsifiable_if: the patterns don't actually recur 3+ times, or the suggested procedure names don't match what the pattern does
 applies_to:
   - self-improvement
   - procedure-discovery
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Tool-Usage-Report
+tags:
+  - procedure
+  - procedures
 ---
 
 # Tool-Usage-Report

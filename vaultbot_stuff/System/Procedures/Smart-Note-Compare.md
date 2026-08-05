@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find notes that cover a specific topic but are written from different angles or for different audiences. Given a topic, finds all notes about it and the small model classifies each by perspective (overview, how-to, reference, analysis, record). Can also diff two specific notes about the same concept to highlight what each covers that the other doesn't. Replaces the former Note-Content-Diff procedure."
-when_to_use: "when understanding the different perspectives in the vault, before consolidating notes on the same topic, when classifying notes by their role, when asked 'what kinds of notes do I have about X', or when comparing two notes covering the same concept"
-falsifiable_if: "the perspective classifications are wrong, notes are misclassified, or the diff misses real content differences"
+description: Find notes that cover a specific topic but are written from different angles or for different audiences. Given a topic, finds all notes about it and the small model classifies each by perspective (overview, how-to, reference, analysis, record). Can also diff two specific notes about the same concept to highlight what each covers that the other doesn't. Replaces the former Note-Content-Diff procedure.
+when_to_use: when understanding the different perspectives in the vault, before consolidating notes on the same topic, when classifying notes by their role, when asked 'what kinds of notes do I have about X', or when comparing two notes covering the same concept
+falsifiable_if: the perspective classifications are wrong, notes are misclassified, or the diff misses real content differences
 applies_to:
   - vault-organization
   - note-classification
@@ -15,6 +15,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Smart-Note-Compare
+tags:
+  - procedure
+  - procedures
 ---
 
 # Smart-Note-Compare

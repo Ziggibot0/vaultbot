@@ -24,6 +24,7 @@ from chat_handler import handle_chat
 from research_handler import handle_research
 from conversation_state import load_history, clear_history, clear_trail_tracker
 from diagnostics import classify_error
+from working_memory import TaskList
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -136,6 +137,14 @@ async def websocket_endpoint(websocket: WebSocket,
         try:
             restored = load_history()
             websocket.conversation_history = restored
+            # Rebuild the conversation index from the restored history so
+            # the bot can recall what was said before the restart.
+            try:
+                _conv_idx = getattr(svc, "conversation_index", None)
+                if _conv_idx is not None:
+                    _conv_idx.rebuild_from_history(restored)
+            except Exception:  # noqa: BLE001
+                pass
         except ValueError as _hist_err:
             # History file is corrupt. load_history already backed it up.
             # Start fresh + notify the user so they know their conversation
@@ -154,8 +163,21 @@ async def websocket_endpoint(websocket: WebSocket,
         clear_history()
     # Fresh working memory per websocket connection (the Copilot/Claude Code
     # TodoList pattern). Cleared on /new and on reconnect.
+    # On restart-resume, load the persisted plan from disk so the agent
+    # wakes up with its plan intact (not just its conversation history).
     from working_memory import TaskList
-    websocket.working_memory = TaskList()
+    if _is_restart_resume:
+        _saved_wm = TaskList.load_from_disk()
+        if _saved_wm is not None and _saved_wm.has_plan():
+            websocket.working_memory = _saved_wm
+            session_logger.log("working_memory_restored", {
+                "goal": _saved_wm.goal[:100],
+                "tasks": len(_saved_wm.tasks),
+            })
+        else:
+            websocket.working_memory = TaskList()
+    else:
+        websocket.working_memory = TaskList()
     _restored = websocket.conversation_history
     if _restored:
         session_logger.log("conversation_history_restored", {
@@ -252,10 +274,23 @@ async def websocket_endpoint(websocket: WebSocket,
                 # Clear the working-memory task list too so /new wipes the plan.
                 if hasattr(websocket, "working_memory"):
                     websocket.working_memory.clear()
+                    # Also wipe the persisted working-memory state.
+                    try:
+                        from working_memory import TaskList as _TL
+                        _TL.clear_disk()
+                    except Exception:  # noqa: BLE001
+                        pass
                 # Wipe the persisted copy too so a restart after /new doesn't
                 # resurrect the cleared thread.
                 clear_history()
                 clear_trail_tracker()
+                # Clear the conversation index so recall starts fresh.
+                try:
+                    _conv_idx = getattr(svc, "conversation_index", None)
+                    if _conv_idx is not None:
+                        _conv_idx.clear()
+                except Exception:  # noqa: BLE001
+                    pass
                 old_session_id = session_logger.session_id
                 session_logger = SessionLogger()
                 session_logger.log("session_reset", {
@@ -374,6 +409,14 @@ async def websocket_endpoint(websocket: WebSocket,
             if task and not task.done():
                 task.cancel()
                 session_logger.log("chat_interrupted", {"reason": "new_message"})
+
+            # Interrupt the QA idle worker — it should stop after the
+            # current note so the user's message gets full hardware.
+            try:
+                from qa_worker import get_qa_interrupt
+                get_qa_interrupt().trigger()
+            except Exception:  # noqa: BLE001
+                pass
 
             # Auto-generate session title from the first user message if
             # the title is still the default "New Session".

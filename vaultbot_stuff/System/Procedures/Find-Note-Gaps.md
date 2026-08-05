@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find vault notes that a concept or procedure depends on but that don't exist yet. Given a note path, reads its wikilinks and depends_on frontmatter, checks which targets are missing, and returns the list of missing notes with a one-sentence description of what each should contain. Use when checking if a note's dependencies are met before relying on it."
-when_to_use: "when a note references notes that might not exist, before relying on a note's dependencies, when checking if a concept's supporting notes are present, or when asked 'what's missing from this note's dependencies'"
-falsifiable_if: "the procedure reports a note as missing when it exists, or misses a missing dependency"
+description: Find vault notes that a concept or procedure depends on but that don't exist yet. Given a note path, reads its wikilinks and depends_on frontmatter, checks which targets are missing, and returns the list of missing notes with a one-sentence description of what each should contain. Use when checking if a note's dependencies are met before relying on it.
+when_to_use: when a note references notes that might not exist, before relying on a note's dependencies, when checking if a concept's supporting notes are present, or when asked 'what's missing from this note's dependencies'
+falsifiable_if: the procedure reports a note as missing when it exists, or misses a missing dependency
 applies_to:
   - gap-detection
   - vault-maintenance
@@ -15,6 +15,10 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
+summary: "# Find-Note-Gaps"
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Note-Gaps

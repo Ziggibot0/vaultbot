@@ -34,13 +34,15 @@ import os
 import re
 import shutil
 import subprocess
-from subprocess_utils import run as _subprocess_run
+from subprocess_utils import run as _subprocess_run, scrubbed_env, preexec_fn
 import sys
 import tempfile
 import time
 import traceback
 from pathlib import Path
 from typing import Any
+
+from config import TUNABLES
 
 BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"
@@ -1169,7 +1171,7 @@ class SelfImprover:
         if not Path(venv_python).exists():
             venv_python = sys.executable
 
-        CAP = 65536  # hard cap per stream (64KB) — child output beyond this is dropped on disk
+        CAP = TUNABLES.code_run_cap_bytes  # hard cap per stream (64KB) — child output beyond this is dropped on disk
         out_path = err_path = None
         try:
             with tempfile.NamedTemporaryFile(mode="w+b", delete=False, prefix="cr_out_") as out_f, \
@@ -1179,7 +1181,14 @@ class SelfImprover:
                     [venv_python, "-c", code],
                     stdout=out_f, stderr=err_f, timeout=timeout,
                     cwd=str(BACKEND_ROOT),
-                    env={**os.environ, "PYTHONPATH": str(BACKEND_DIR)},
+                    # Scrubbed env: LLM-authored code must not see API keys,
+                    # tokens, or passwords from the parent process. Only
+                    # PYTHONPATH (non-secret) is added back.
+                    env={**scrubbed_env(), "PYTHONPATH": str(BACKEND_DIR)},
+                    # Resource limits (POSIX): mem/CPU/fork caps. None on
+                    # Windows (subprocess rejects a non-None preexec_fn there),
+                    # so the timeout is the only limit there.
+                    preexec_fn=preexec_fn,
                 )
 
             def _tail(path, n):
@@ -1189,11 +1198,11 @@ class SelfImprover:
                     f.seek(max(0, size - n))
                     return f.read().decode("utf-8", errors="replace")
 
-            stdout_tail = _tail(out_path, 4000)
-            stderr_tail = _tail(err_path, 2000)
+            stdout_tail = _tail(out_path, TUNABLES.code_run_stdout_tail)
+            stderr_tail = _tail(err_path, TUNABLES.code_run_stderr_tail)
             truncated = False
             try:
-                truncated = (os.path.getsize(out_path) > 4000) or (os.path.getsize(err_path) > 2000)
+                truncated = (os.path.getsize(out_path) > TUNABLES.code_run_stdout_tail) or (os.path.getsize(err_path) > TUNABLES.code_run_stderr_tail)
             except OSError:
                 pass
             result = {"stdout": stdout_tail, "stderr": stderr_tail,

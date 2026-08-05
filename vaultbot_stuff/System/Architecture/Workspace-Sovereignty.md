@@ -1,7 +1,13 @@
 ---
-tags: [architecture, design-principle]
+tags:
+  - architecture
+  - design-principle
 type: architecture-note
+status: raw
+created: 2026-08-03
+summary: Workspace Sovereignty
 ---
+
 # Workspace Sovereignty
 
 ## Claim
@@ -56,7 +62,7 @@ needs to see any of these during normal use.
 - [[VaultBot Issues]] — the issues that motivated this principle
 - [[Autonomy-Directive]] — the AI operates without permission, but within
   the user's sovereign workspace
-- [[Vault-Knowledge-Only-Directive]] — the vault is the only knowledge
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — the vault is the only knowledge
   source; this principle ensures the vault remains *usable* as it grows
 
 ## Implementation

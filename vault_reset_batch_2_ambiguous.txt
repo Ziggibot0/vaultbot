@@ -1,0 +1,120 @@
+﻿vaultbot_stuff\Knowledge\Research\Program-aided-language-models-and-structured-reasoning-for-small-models-PAL-prog.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=597)
+  SNIPPET: --- type: research status: raw created: 2026-07-11 summary: Program-aided language models (PAL) delegate arithmetic and logical solution steps to Python interpreters, enabling smaller models to reason more accurately through code generation as scaffolding. tags: [research, program-aided-language-mod
+
+vaultbot_stuff\Knowledge\Research\Protocell-Theory-Origin-of-Life.md
+  REASON: Mixed signals: 2 operational keyword(s) and 9 generic topic keyword(s). (wc=2393)
+  SNIPPET: --- type: research status: complete created: 2026-07-29 summary: "Protocell theory: how the first cells formed from self-assembling lipid membranes and polymers in cycling hot spring pools. The hot spring hypothesis (Damer and Deamer), the water problem, wet-dry cycling, the progenote, proto-niche c
+
+vaultbot_stuff\Knowledge\Research\Python-exec-function-with-restricted-globals-namespace-how-to-safely-execute-unt.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=824)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "Python exec function with restricted globals namespace" tags: [research, python, exec, function, restricted, globals] source_count: 14 fact_count: 15 ---  # Python exec function with restricted globals namespace — how to safely execute untru
+
+vaultbot_stuff\Knowledge\Research\Python-watchdog-library-Windows-ReadDirectoryChangesW-reliability-missed-file-ev.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=785)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "Python watchdog library Windows ReadDirectoryChangesW reliability missed file..." tags: [research, python, watchdog, library, windows, readdirectorychangesw] source_count: 15 fact_count: 13 ---  # Python watchdog library Windows ReadDirector
+
+vaultbot_stuff\Knowledge\Research\Qwen3-06B-and-17B-model-capabilities-benchmarks-strengths-weaknesses-and-practic.md
+  REASON: Mixed signals: 2 operational keyword(s) and 1 generic topic keyword(s). (wc=436)
+  SNIPPET: --- type: research status: raw created: 2025-01-27 summary: Research note on Qwen3 0.6B/1.7B model capabilities and the question of whether "qwen3.5:0.8b" exists, based on available Qwen3-Omni source material. tags: [research, qwen3, tiny-llm, local-deployment, model-benchmarks] source_count: 1 fact
+
+vaultbot_stuff\Knowledge\Research\qwen3-small-models-06B-17B-4B-Ollama-benchmarks-strengths-weaknesses-2025-2026.md
+  REASON: Mixed signals: 2 operational keyword(s) and 1 generic topic keyword(s). (wc=578)
+  SNIPPET: --- type: research status: raw created: 2025-07-11 summary: Qwen3 small models (0.6B, 1.7B, 4B) on Ollama — available benchmarks, strengths, weaknesses, and practical guidance for 2025–2026 tags: [research, qwen3, small-llm, ollama, benchmarks] source_count: 2 fact_count: 8 ---  ## Qwen3 Small Model
+
+vaultbot_stuff\Knowledge\Research\RAG-adaptive-retrieval-when-should-a-RAG-system-retrieve-from-knowledge-base-vs-.md
+  REASON: Mixed signals: 1 operational keyword(s) and 1 generic topic keyword(s). (wc=820)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "RAG adaptive retrieval" tags: [research, rag, adaptive, retrieval, should, retrieve] source_count: 13 fact_count: 11 ---  # RAG adaptive retrieval: when should a RAG system retrieve from knowledge base vs answer directly vs abstain? Confiden
+
+vaultbot_stuff\Knowledge\Research\Remove-Masking-Fallbacks.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=516)
+  SNIPPET: # Remove-Masking-Fallbacks  ## Summary - 🚨 Severity: CRITICAL 💡 Vulnerability: Active and dummy API keys were embedded directly within the codebase as fallbacks for missing environment variables.  [sources: 🛡️ Sentinel: [CRITICAL] Fix hardcoded API key fallbacks] - Documentation: - Add a Sentinel en
+
+vaultbot_stuff\Knowledge\Research\Science-of-Vibration-and-Resonant-Frequency.md
+  REASON: Mixed signals: 1 operational keyword(s) and 7 generic topic keyword(s). (wc=2387)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "Science of vibration and resonating frequency: what vibration is, natural frequency, forced oscillation, resonance amplification, the Tacoma Narrows Bridge (negative damping, not simple resonance), standing waves, nodes and antinodes,
+
+vaultbot_stuff\Knowledge\Research\Self-repairing-and-self-healing-software-systems-biological-wound-healing-applie.md
+  REASON: Mixed signals: 1 operational keyword(s) and 2 generic topic keyword(s). (wc=493)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "Self-repairing and self-healing software systems" tags: [research, self, repairing, healing, software, biological] source_count: 7 fact_count: 14 ---  # Self-repairing and self-healing software systems: biological wound healing applied to co
+
+vaultbot_stuff\Knowledge\Research\semantic-knowledge-graph-structure-that-encodes-reasoning-in-edges-between-nodes.md
+  REASON: Mixed signals: 1 operational keyword(s) and 0 generic topic keyword(s). (wc=724)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "semantic knowledge graph structure that encodes reasoning in edges between no..." tags: [research, semantic, knowledge, graph, structure, encodes] source_count: 9 fact_count: 18 ---  # semantic knowledge graph structure that encodes reasonin
+
+vaultbot_stuff\Knowledge\Research\sitegithubcom-obsidian-plugin-vaulttrigger-modify-file-metadataCache-reprocess-e.md
+  REASON: Mixed signals: 1 operational keyword(s) and 1 generic topic keyword(s). (wc=699)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "site:github.com obsidian plugin vault.trigger modify file metadataCache repro..." tags: [research, obsidian, plugin, vault, trigger, modify] source_count: 12 fact_count: 14 ---  # site:github.com obsidian plugin vault.trigger modify file met
+
+vaultbot_stuff\Knowledge\Research\Slime-Molds-Intelligence-Without-Brain.md
+  REASON: Mixed signals: 2 operational keyword(s) and 10 generic topic keyword(s). (wc=1776)
+  SNIPPET: --- type: research status: complete created: 2026-07-29 summary: "Slime molds: Physarum polycephalum, how slime molds solve mazes and optimize networks without a brain, chemotaxis and chemical gradients, the Tokyo rail network experiment, how slime molds learn and remember through membrane softening
+
+vaultbot_stuff\Knowledge\Research\Small-model-scaffolding-techniques-that-make-dumb-models-perform-well-prompt-sca.md
+  REASON: Mixed signals: 2 operational keyword(s) and 0 generic topic keyword(s). (wc=923)
+  SNIPPET: --- type: research status: raw created: 2025-01-23 summary: Techniques for scaffolding small LLMs (under 30B parameters) to close performance gaps with larger models through structured prompting, output enforcement, and step-by-step guidance. tags: [research, small-llm, scaffolding, prompt-engineeri
+
+vaultbot_stuff\Knowledge\Research\Socrates.md
+  REASON: Mixed signals: 2 operational keyword(s) and 3 generic topic keyword(s). (wc=2214)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "Socrates: his life, the Socratic method (elenchus), epistemology (I know that I know nothing), ethics (virtue is knowledge, Socratic paradoxes), trial and death by hemlock, the Socratic problem (he wrote nothing), his influence on Pla
+
+vaultbot_stuff\Knowledge\Research\The-Fourth-Dimension-and-4D-Shapes.md
+  REASON: Mixed signals: 1 operational keyword(s) and 8 generic topic keyword(s). (wc=2756)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "The fourth dimension and 4D shapes: constructing dimensions step by step (point to hypercube), Flatland analogy, hypersphere, 4D rotations and mirror images, passing through walls, non-Euclidean geometry, curved space vs. field models
+
+vaultbot_stuff\Knowledge\Research\The-Great-Gatsby.md
+  REASON: Mixed signals: 2 operational keyword(s) and 2 generic topic keyword(s). (wc=2239)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "The Great Gatsby by F. Scott Fitzgerald: the American Dream and its corruption, symbolism (green light, TJ Eckleburg, Valley of Ashes, East/West Egg), class (old money vs new money), characters, the impossibility of recovering the pas
+
+vaultbot_stuff\Knowledge\Research\the-operator-Communication-Preferences.md
+  REASON: Mixed signals: 1 operational keyword(s) and 0 generic topic keyword(s). (wc=505)
+  SNIPPET: # the operator-Communication-Preferences  ## Summary - Store separate versioned records for: - operator communication preferences; - control-loop and next-action rules; - authority and approval boundaries; - protected/high-risk files and actions; - privacy boundaries; - project-specific policies; - 
+
+vaultbot_stuff\Knowledge\Research\Tiny-LLM-Use-Cases.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=449)
+  SNIPPET: # Tiny-LLM-Use-Cases  ## Summary - We evaluated 15 open-weight LLMs on pathology and radiology reports across six use cases, colorectal liver metastases, liver tumours, neurodegenerative diseases, soft-tissue tumours, melanomas, and sarcomas, at three institutes in the Netherlands, UK, and Czech Rep
+
+vaultbot_stuff\Knowledge\Research\Tragedy-of-the-Commons.md
+  REASON: Mixed signals: 2 operational keyword(s) and 4 generic topic keyword(s). (wc=2007)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "Tragedy of the commons: Hardin's 1968 pasture metaphor, the prisoner's dilemma structure, real-world examples (overfishing, Newfoundland cod collapse, bluefin tuna), the critique that Hardin described open-access not true commons, and
+
+vaultbot_stuff\Knowledge\Research\typed-edges-and-named-relationships-in-knowledge-graphs-for-personal-knowledge-m.md
+  REASON: Mixed signals: 1 operational keyword(s) and 2 generic topic keyword(s). (wc=944)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "typed edges and named relationships in knowledge graphs for personal knowledg..." tags: [research, typed, edges, named, relationships, knowledge] source_count: 13 fact_count: 21 ---  # typed edges and named relationships in knowledge graphs 
+
+vaultbot_stuff\Knowledge\Research\typed-wikilinks-and-semantic-relationships-in-personal-knowledge-management-how-.md
+  REASON: Mixed signals: 1 operational keyword(s) and 3 generic topic keyword(s). (wc=894)
+  SNIPPET: --- type: research status: raw created: 2026-07-29 title: "typed wikilinks and semantic relationships in personal knowledge management" tags: [research, typed, wikilinks, semantic, relationships, personal] source_count: 15 fact_count: 18 ---  # typed wikilinks and semantic relationships in personal 
+
+vaultbot_stuff\Knowledge\Research\Vault-Knowledge-Only-Directive.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=569)
+  SNIPPET: # Vault-Knowledge-Only-Directive  ## Summary - Replace hardcoded demo-only Mac Knowledge Vault metrics where possible `MacGOLDInventoryProvider` should be able to read real local SQLite data when available, while keeping deterministic fallback data for CI/Vercel where the database does not exist. ##
+
+vaultbot_stuff\Knowledge\Research\Vault-Longevity-Architecture.md
+  REASON: Note name looks relevant but content lacks clear VaultBot operational signals. (wc=451)
+  SNIPPET: # Vault-Longevity-Architecture  ## Summary - You are an expert in "Local-First" architecture, cryptography, and Design Systems.  [sources: Implement AuraJournal - Encrypted Local-First PWA] - Last commit to `main` was **2026-04-22** (`docs: HashiCorp free-tier vault research memo`).  [sources: Healt
+
+vaultbot_stuff\Knowledge\Research\Wave-Interference-and-Unity-of-Waves.md
+  REASON: Mixed signals: 1 operational keyword(s) and 12 generic topic keyword(s). (wc=2412)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "Wave interference and similarities between different wave types: the superposition principle, constructive and destructive interference, types of waves (sound, light, water, electromagnetic, quantum), wave properties (frequency, wavel
+
+vaultbot_stuff\Knowledge\Research\What-Is-A-Bit.md
+  REASON: Mixed signals: 3 operational keyword(s) and 9 generic topic keyword(s). (wc=2497)
+  SNIPPET: --- type: research status: complete created: 2026-07-29 summary: "What is a bit: the binary digit, from Leibniz's 1679 dyadic system through Boole's algebraic logic to Shannon's relay circuits, how bits encode all digital information (numbers, text, images, sound), logic gates, transistors, bytes, S
+
+vaultbot_stuff\Knowledge\Research\What-Is-Art.md
+  REASON: Mixed signals: 2 operational keyword(s) and 7 generic topic keyword(s). (wc=2056)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "What is art: six major theories of art (representational/mimesis, formalism/Clive Bell, expression/Tolstoy, institutional/Dickie & Danto, Dewey's art as experience, correspondence/Langer), the question of what makes something art, and
+
+vaultbot_stuff\Knowledge\Research\What-Is-Beauty.md
+  REASON: Mixed signals: 1 operational keyword(s) and 9 generic topic keyword(s). (wc=1989)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "What is beauty philosophically: Plato's Form of Beauty (Symposium ladder, Hippias Major), Kant's free vs. dependent beauty and the sublime, Hume's standard of taste, objective vs. subjective beauty, evolutionary aesthetics, and the qu
+
+vaultbot_stuff\Knowledge\Research\Why-Humans-Protect-the-Innocent-and-Cute.md
+  REASON: Mixed signals: 2 operational keyword(s) and 9 generic topic keyword(s). (wc=1846)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "Why humans protect the innocent and cute: Konrad Lorenz's baby schema (kindchenschema), the neuroscience of cuteness (orbitofrontal cortex activation in 140ms), cute aggression as dimorphous expression, neoteny in domesticated animals
+
+vaultbot_stuff\Knowledge\Research\Why-We-Have-Black-History-Month.md
+  REASON: Mixed signals: 1 operational keyword(s) and 4 generic topic keyword(s). (wc=1786)
+  SNIPPET: --- type: research status: complete created: 2026-07-28 summary: "Why we have Black History Month: Carter G. Woodson's life and mission, the Association for the Study of Negro Life and History (1915), Journal of Negro History (1916), Negro History Week (1926), expansion to Black History Month (1976)
+

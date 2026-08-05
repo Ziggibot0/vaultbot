@@ -1,8 +1,15 @@
 ---
 type: system-design
 title: Community Contribution System
-tags: [system, architecture, community, github, contributions]
+tags:
+  - system
+  - architecture
+  - community
+  - github
+  - contributions
 created: 2025-01-20
+status: raw
+summary: Community Contribution System
 ---
 
 # Community Contribution System

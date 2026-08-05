@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-03
-description: "Audit the VaultBot backend after external changes (e.g. GitHub Copilot edits). Runs git diff to get exact changes, greps for safety-critical patterns (sliding window, failsafe, checkpointing, MAX_ROUNDS, tool dispatch, per-step RAG), lists new/removed files, and feeds all results to the small model for a final risk assessment + report. Zero big-model cost. Use when Sean says 'audit the changes' or 'what did Copilot change' or after any external code modification."
-when_to_use: "after external code changes (Copilot, manual edits, PRs), when asked to audit the backend, when checking system health after modifications"
-falsifiable_if: "the procedure reports changes that don't exist, or misses actual changes (git diff is ground truth)"
+description: Audit the VaultBot backend after external changes (e.g. GitHub Copilot edits). Runs git diff to get exact changes, greps for safety-critical patterns (sliding window, failsafe, checkpointing, MAX_ROUNDS, tool dispatch, per-step RAG), lists new/removed files, and feeds all results to the small model for a final risk assessment + report. Zero big-model cost. Use when Sean says 'audit the changes' or 'what did Copilot change' or after any external code modification.
+when_to_use: after external code changes (Copilot, manual edits, PRs), when asked to audit the backend, when checking system health after modifications
+falsifiable_if: the procedure reports changes that don't exist, or misses actual changes (git diff is ground truth)
 applies_to:
   - code-audit
   - system-health
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Post-Copilot-Audit
+tags:
+  - procedure
+  - procedures
 ---
 
 # Post-Copilot-Audit

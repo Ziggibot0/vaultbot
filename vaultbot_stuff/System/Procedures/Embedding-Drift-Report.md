@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-03
 description: "Detect when the vault's embedding index has drifted from the actual file state — files added/modified/deleted since last indexing, stale embeddings, or index size mismatch. Fully deterministic: compares the embedding index metadata against the actual vault file listing. No LLM reasoning needed — the small model only formats the report."
-when_to_use: "when retrieval quality seems degraded, when the vault has had many changes without a reindex, when asked 'is the index stale?', or as part of a Dream-Pass health check"
-falsifiable_if: "the report claims files are missing from the index when they're present, or claims the index is current when files have been modified since last embedding"
+when_to_use: when retrieval quality seems degraded, when the vault has had many changes without a reindex, when asked 'is the index stale?', or as part of a Dream-Pass health check
+falsifiable_if: the report claims files are missing from the index when they're present, or claims the index is current when files have been modified since last embedding
 applies_to:
   - embedding-index
   - retrieval-quality
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - code_read
+summary: Embedding-Drift-Report
+tags:
+  - procedure
+  - procedures
 ---
 
 # Embedding-Drift-Report

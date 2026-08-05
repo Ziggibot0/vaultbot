@@ -2,8 +2,13 @@
 type: audit
 status: complete
 created: 2026-08-02
-title: "Procedure Redundancy Audit"
-tags: [procedures, audit, redundancy, cleanup]
+title: Procedure Redundancy Audit
+tags:
+  - procedures
+  - audit
+  - redundancy
+  - cleanup
+summary: Procedure Redundancy Audit
 ---
 
 # Procedure Redundancy Audit

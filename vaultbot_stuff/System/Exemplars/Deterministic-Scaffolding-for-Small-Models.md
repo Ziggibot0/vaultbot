@@ -2,8 +2,14 @@
 type: exemplar
 exemplar: architecture-note
 created: 2025-07-25
-summary: "How to structure an architecture note — design reasoning, trade-offs, research-backed arguments, and what to build next."
-tags: [architecture, exemplar, scaffolding, small-models, deterministic]
+summary: How to structure an architecture note — design reasoning, trade-offs, research-backed arguments, and what to build next.
+tags:
+  - architecture
+  - exemplar
+  - scaffolding
+  - small-models
+  - deterministic
+status: raw
 ---
 
 <!-- EXEMPLAR ANNOTATION: ARCHITECTURE NOTE
@@ -159,7 +165,7 @@ The vault finds these things through [[Autonomy-Directive|autonomous research]] 
 - [[Small-Model-Path-to-AGI]] -- the original theory note (now updated with this framing)
 - [[Autonomy-Directive]] -- VaultBot operates autonomously, finding and storing scaffolding
 - [[IDK-Fallback-Directive]] -- the "fail safe" pattern in practice
-- [[Vault-Knowledge-Only-Directive]] -- the vault is the only knowledge source
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] -- the vault is the only knowledge source
 - [[Vault-Longevity-Architecture]] -- why the vault, not the model, is the mind
 
 ---

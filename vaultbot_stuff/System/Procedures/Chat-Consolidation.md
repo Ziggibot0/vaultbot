@@ -3,9 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-03
-description: "Extract recurring patterns from recent chat logs and classify them into pattern highways. Scans chat logs for recurring topics, tool-usage patterns, design decisions, and operator directives. The small model classifies each pattern and routes it to the appropriate highway note (Build-Log, Design-Decisions, Testing-History) or flags it as a new pattern. Replaces the big model's inline pattern-spotting during dream passes."
-when_to_use: "during a dream pass, when asked to consolidate chat history, when chat logs are accumulating without being linked into pattern highways, or when asked 'what patterns are emerging from recent chats'"
-falsifiable_if: "it classifies a chat into the wrong highway, or misses a pattern that appears in 3+ chats, or links a chat to a highway it doesn't belong to"
+description: Extract recurring patterns from recent chat logs and classify them into pattern highways. Scans chat logs for recurring topics, tool-usage patterns, design decisions, and operator directives. The small model classifies each pattern and routes it to the appropriate highway note (Build-Log, Design-Decisions, Testing-History) or flags it as a new pattern. Replaces the big model's inline pattern-spotting during dream passes.
+when_to_use: during a dream pass, when asked to consolidate chat history, when chat logs are accumulating without being linked into pattern highways, or when asked 'what patterns are emerging from recent chats'
+falsifiable_if: it classifies a chat into the wrong highway, or misses a pattern that appears in 3+ chats, or links a chat to a highway it doesn't belong to
 applies_to:
   - chat-consolidation
   - pattern-extraction
@@ -16,6 +16,10 @@ allowed_tools:
   - vault_list
   - vault_search
   - code_read
+summary: Chat-Consolidation
+tags:
+  - procedure
+  - procedures
 ---
 
 # Chat-Consolidation

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Check if the vaultbot's self-model (identity notes) matches what it actually does. Reads the identity/self-model notes and compares their claims about capabilities, behavior, and architecture against the actual code. Returns mismatches where the self-model is wrong about itself. Use when the self-model feels stale or after capability changes."
-when_to_use: "when the self-model is stale, after adding or removing capabilities, when identity notes don't match reality, or when asked 'does the vaultbot know what it can do'"
-falsifiable_if: "the procedure reports a mismatch that isn't real, or misses a real self-model inaccuracy"
+description: Check if the vaultbot's self-model (identity notes) matches what it actually does. Reads the identity/self-model notes and compares their claims about capabilities, behavior, and architecture against the actual code. Returns mismatches where the self-model is wrong about itself. Use when the self-model feels stale or after capability changes.
+when_to_use: when the self-model is stale, after adding or removing capabilities, when identity notes don't match reality, or when asked 'does the vaultbot know what it can do'
+falsifiable_if: the procedure reports a mismatch that isn't real, or misses a real self-model inaccuracy
 applies_to:
   - self-modification
   - self-model
@@ -15,6 +15,10 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
+summary: Self-Model-Check
+tags:
+  - procedure
+  - procedures
 ---
 
 # Self-Model-Check

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find vault notes that reference code files, functions, or variables that no longer exist in the backend. Scans notes for .py file references, function names, and class names, then checks each against the actual code. Returns notes with stale references (file deleted, function renamed, class removed). Distinguishes between historical records and active references."
-when_to_use: "after a refactor that renamed or deleted files/functions, when notes reference code that might not exist anymore, or when cleaning up stale documentation"
-falsifiable_if: "a flagged stale reference actually exists in the code, or a real stale reference is missed"
+description: Find vault notes that reference code files, functions, or variables that no longer exist in the backend. Scans notes for .py file references, function names, and class names, then checks each against the actual code. Returns notes with stale references (file deleted, function renamed, class removed). Distinguishes between historical records and active references.
+when_to_use: after a refactor that renamed or deleted files/functions, when notes reference code that might not exist anymore, or when cleaning up stale documentation
+falsifiable_if: a flagged stale reference actually exists in the code, or a real stale reference is missed
 applies_to:
   - vault-code-sync
   - stale-references
@@ -15,6 +15,10 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
+summary: Stale-Code-Reference
+tags:
+  - procedure
+  - procedures
 ---
 
 # Stale-Code-Reference

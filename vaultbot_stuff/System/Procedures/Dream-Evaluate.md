@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Score the procedure library: classify every procedure as healthy/degraded/broken and surface which need review, cartridge demotion, or retirement. Calls Procedure-Eval."
-when_to_use: "As the final step of a Dream-Pass cycle, or standalone when the procedure library needs scoring."
-falsifiable_if: "it fails to classify any procedure or crashes on any step"
+when_to_use: As the final step of a Dream-Pass cycle, or standalone when the procedure library needs scoring.
+falsifiable_if: it fails to classify any procedure or crashes on any step
 applies_to:
   - procedures
   - evaluation
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - llm_generate
+summary: Dream-Evaluate
+tags:
+  - procedure
+  - procedures
 ---
 
 # Dream-Evaluate

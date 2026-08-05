@@ -3,9 +3,16 @@ type: procedure
 status: active
 model_cartridge: big
 created: 2026-07-31
-description: "Pull Ollama models by tag. Runs ollama pull for each model in the list."
-when_to_use: "When Sean wants to download/pull new models onto the local Ollama instance."
-allowed_tools: [code_run]
+description: Pull Ollama models by tag. Runs ollama pull for each model in the list.
+when_to_use: When Sean wants to download/pull new models onto the local Ollama instance.
+allowed_tools:
+  - code_run
+summary: "Analyze this note and produce:
+1. A one-sentence summary (max 120 chars) describing what the note SAYS, not just its title. Use a verb.
+2. 3-5 topic tags (single words, lowercase, no # prefix, no spac"
+tags:
+  - procedure
+  - procedures
 ---
 
 # Ollama-Pull-Models

@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import time
 from collections.abc import Generator
 from typing import Any
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 try:
     # The synthesis LLM abstraction (llm_client.py) treats OllamaClient as
@@ -74,7 +77,11 @@ class OllamaClient(_BASE):
                 if name == model or name.startswith(model + ":"):
                     return True
             return False
-        except Exception:
+        except Exception as e:  # noqa: BLE001 — best-effort probe, returns False — see CONTRIBUTING.md no-silent-fallbacks
+            # Always surface: log to the session logger if set, and to the
+            # module logger regardless, so an Ollama-down or a programming
+            # bug is never silently swallowed as "model not loaded".
+            logger.debug("is_model_loaded error for %r: %s", model, e)
             if self.session_logger:
                 self.session_logger.log("ollama_is_loaded_error", {"model": model})
             return False

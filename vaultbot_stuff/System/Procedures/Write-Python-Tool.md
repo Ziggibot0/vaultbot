@@ -3,9 +3,16 @@ type: procedure
 status: active
 model_cartridge: big
 created: 2026-07-31
-description: "Create a new custom tool and register it for immediate use."
-when_to_use: "When you realize you lack a capability and need to build a new tool for yourself."
-allowed_tools: [tool_create, code_run, code_read]
+description: Create a new custom tool and register it for immediate use.
+when_to_use: When you realize you lack a capability and need to build a new tool for yourself.
+allowed_tools:
+  - tool_create
+  - code_run
+  - code_read
+summary: Write-Python-Tool
+tags:
+  - procedure
+  - procedures
 ---
 
 # Write-Python-Tool

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find notes that are too thin — under 200 words, stubs, or placeholders with no real content. Imports the Pattern-Scan engine and filters for thin/stub notes, then the small model suggests what each thin note should be expanded with. Use when looking for notes that need expansion."
-when_to_use: "when looking for notes that need expansion, when finding stubs and placeholders, when cleaning up thin notes, or when asked 'which notes are incomplete'"
-falsifiable_if: "the procedure flags a note as thin when it's well-developed, or misses notes that are actually thin"
+description: Find notes that are too thin — under 200 words, stubs, or placeholders with no real content. Imports the Pattern-Scan engine and filters for thin/stub notes, then the small model suggests what each thin note should be expanded with. Use when looking for notes that need expansion.
+when_to_use: when looking for notes that need expansion, when finding stubs and placeholders, when cleaning up thin notes, or when asked 'which notes are incomplete'
+falsifiable_if: the procedure flags a note as thin when it's well-developed, or misses notes that are actually thin
 applies_to:
   - vault-maintenance
   - thin-notes
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - llm_generate
+summary: Find-Thin-Notes
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Thin-Notes

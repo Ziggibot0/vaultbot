@@ -3,8 +3,13 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-01
-description: "A step-by-step guide to creating a new, valid procedure note. Covers decision-making (tool vs proc), frontmatter structure, step types, and final validation."
-when_to_use: "whenever you need to create a new automated workflow or SOP for yourself"
+description: A step-by-step guide to creating a new, valid procedure note. Covers decision-making (tool vs proc), frontmatter structure, step types, and final validation.
+when_to_use: whenever you need to create a new automated workflow or SOP for yourself
+summary: "1. A procedure guide for deciding between tools and workflows to create a valid executable note structure.
+|step_01, step_02, step_03 |key_topics:tool,vault,draft"
+tags:
+  - procedure
+  - procedures
 ---
 
 # How to Create a Procedure

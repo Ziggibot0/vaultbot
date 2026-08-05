@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Trace a concept through the vault: find the note that defines it, all notes that link to it, all notes that mention it by name but don't link it, and identify the chain of notes that build on the concept. Returns a concept dependency graph. Use when you need to understand how a concept evolved or what depends on it."
-when_to_use: "when you need to understand the full footprint of a concept in the vault, before deleting or renaming a concept note, or when tracking how an idea propagated"
-falsifiable_if: "the trace misses notes that mention the concept, or includes notes that don't actually reference it"
+when_to_use: when you need to understand the full footprint of a concept in the vault, before deleting or renaming a concept note, or when tracking how an idea propagated
+falsifiable_if: the trace misses notes that mention the concept, or includes notes that don't actually reference it
 applies_to:
   - concept-tracing
   - dependency-mapping
@@ -15,6 +15,10 @@ allowed_tools:
   - vault_list
   - vault_search
   - llm_generate
+summary: Trace-Concept
+tags:
+  - procedure
+  - procedures
 ---
 
 # Trace-Concept

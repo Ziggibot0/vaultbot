@@ -3,18 +3,22 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Scan recent journal entries (date-only filenames) for new content. Extract themes and flag empty journals. Saves themes to a temp file for downstream dream sub-procedures."
-when_to_use: "As part of a Dream-Pass cycle, or independently to check what journals have new content."
+description: Scan recent journal entries (date-only filenames) for new content. Extract themes and flag empty journals. Saves themes to a temp file for downstream dream sub-procedures.
+when_to_use: As part of a Dream-Pass cycle, or independently to check what journals have new content.
 applies_to:
   - vault
   - journals
   - scanning
 allowed_tools:
   - code_read
-falsifiable_if: "it fails to find date-only journal files or crashes on malformed filenames"
+falsifiable_if: it fails to find date-only journal files or crashes on malformed filenames
 success_count: 0
 failure_count: 0
 success_rate: 0.0
+summary: Dream-Scan
+tags:
+  - procedure
+  - procedures
 ---
 
 # Dream-Scan

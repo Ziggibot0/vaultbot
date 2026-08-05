@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find pairs of vault notes that explicitly contradict each other — one says X is true, another says X is false. Scans notes for assertive statements, then the small model checks pairs for direct contradictions. Returns the contradicting pairs with the specific conflicting claims. Use when the vault has grown organically and may contain conflicting information."
-when_to_use: "when looking for direct contradictions between notes, when the vault has conflicting information, when reconciling knowledge, or when asked 'do any notes contradict each other'"
-falsifiable_if: "the procedure reports contradictions that aren't real, or misses real contradictions"
+description: Find pairs of vault notes that explicitly contradict each other — one says X is true, another says X is false. Scans notes for assertive statements, then the small model checks pairs for direct contradictions. Returns the contradicting pairs with the specific conflicting claims. Use when the vault has grown organically and may contain conflicting information.
+when_to_use: when looking for direct contradictions between notes, when the vault has conflicting information, when reconciling knowledge, or when asked 'do any notes contradict each other'
+falsifiable_if: the procedure reports contradictions that aren't real, or misses real contradictions
 applies_to:
   - contradiction-detection
   - vault-quality
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Find-Vault-Contradictions
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Vault-Contradictions

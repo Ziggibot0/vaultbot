@@ -3,9 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-01
-description: "Score and evaluate every procedure's health over time. Reads each procedure's frontmatter stats (success_count, failure_count, success_rate, last_reviewed, status) plus the raw step-gate failure log, classifies each as healthy/degraded/broken/untested, flags recurring failing steps, and recommends which procedures need review, demotion to small cartridge, or retirement. Called by Dream-Pass each cycle per the operator's directive that the framework self-scores procedures."
-when_to_use: "when asked how the procedures are performing, which procedures are failing or need improvement, or during a dream/consolidation pass to self-score the procedure library"
-falsifiable_if: "it reports a procedure as healthy that the failure log shows failing, or misses a procedure with a low success_rate"
+description: Score and evaluate every procedure's health over time. Reads each procedure's frontmatter stats (success_count, failure_count, success_rate, last_reviewed, status) plus the raw step-gate failure log, classifies each as healthy/degraded/broken/untested, flags recurring failing steps, and recommends which procedures need review, demotion to small cartridge, or retirement. Called by Dream-Pass each cycle per the operator's directive that the framework self-scores procedures.
+when_to_use: when asked how the procedures are performing, which procedures are failing or need improvement, or during a dream/consolidation pass to self-score the procedure library
+falsifiable_if: it reports a procedure as healthy that the failure log shows failing, or misses a procedure with a low success_rate
 applies_to:
   - procedures
   - self-improvement
@@ -13,6 +13,10 @@ applies_to:
   - meta-procedure
 allowed_tools:
   - vault_list
+summary: Procedure-Eval
+tags:
+  - procedure
+  - procedures
 ---
 
 # Procedure-Eval

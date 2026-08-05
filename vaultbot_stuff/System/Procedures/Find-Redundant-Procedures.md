@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find procedures that overlap or duplicate each other using deterministic string similarity. Reads all procedure descriptions and when_to_use fields, computes pairwise similarity using difflib + keyword overlap, and returns ranked overlapping pairs. No LLM needed — pure deterministic. Use when the procedure library feels redundant."
-when_to_use: "when the procedure library has overlapping procedures, when two procedures seem to do the same thing, when cleaning up the procedure library, or when asked 'which procedures are duplicates'"
-falsifiable_if: "the procedure flags pairs as overlapping when they're distinct, or misses real overlaps"
+description: Find procedures that overlap or duplicate each other using deterministic string similarity. Reads all procedure descriptions and when_to_use fields, computes pairwise similarity using difflib + keyword overlap, and returns ranked overlapping pairs. No LLM needed — pure deterministic. Use when the procedure library feels redundant.
+when_to_use: when the procedure library has overlapping procedures, when two procedures seem to do the same thing, when cleaning up the procedure library, or when asked 'which procedures are duplicates'
+falsifiable_if: the procedure flags pairs as overlapping when they're distinct, or misses real overlaps
 applies_to:
   - procedure-audit
   - deduplication
@@ -18,6 +18,10 @@ success_count: 0
 failure_count: 0
 success_rate: 0.0
 last_reviewed: 2026-08-03
+summary: Find-Redundant-Procedures
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Redundant-Procedures

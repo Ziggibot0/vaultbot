@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -283,7 +284,7 @@ async def run_with_heartbeat(svc: Services, websocket, label: str,
     return result
 
 
-def truncate_tool_result(result: Any, max_chars: int = 10000) -> Any:
+def truncate_tool_result(result: Any, max_chars: int = 0) -> Any:
     """Truncate a tool result so it never overwhelms the conversation.
 
     Tool results (especially vault_research syntheses, code_read of large
@@ -292,9 +293,10 @@ def truncate_tool_result(result: Any, max_chars: int = 10000) -> Any:
     past the sliding window boundary, causing older messages to be dropped
     — potentially losing the *recent* user/assistant turns while leaving
     the bloated result intact. Capping each result to a generous but
-    bounded size (default 10K chars, ~2.5K tokens) keeps the agentic loop's
-    context bounded without losing the actionable summary the model needs.
+    bounded size keeps the agentic loop's context bounded without losing
+    the actionable summary the model needs.
 
+    The cap is configurable via VAULTBOT_TOOL_RESULT_CAP (default 10000).
     Truncation messages are informative — they report how many chars were
     dropped and from which key, so the model knows what it's missing and can
     re-read with tighter parameters if needed.
@@ -303,6 +305,8 @@ def truncate_tool_result(result: Any, max_chars: int = 10000) -> Any:
     and truncates only string values that exceed a per-key cap, plus an
     overall serialized cap as a last resort.
     """
+    if max_chars <= 0:
+        max_chars = int(os.getenv("VAULTBOT_TOOL_RESULT_CAP", "10000"))
     try:
         serialized = json.dumps(result, default=str)
         if len(serialized) <= max_chars:

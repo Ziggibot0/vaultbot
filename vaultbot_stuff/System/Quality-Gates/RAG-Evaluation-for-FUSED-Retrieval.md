@@ -1,7 +1,14 @@
 ---
 created: 2026-07-26
-summary: "How to measure whether VaultBot's FUSED retrieval (vector + wikilink graph + backlinks) returns the right notes — and whether the synthesized answer actually uses them."
-tags: [architecture, evaluation, rag, retrieval, metrics]
+summary: How to measure whether VaultBot's FUSED retrieval (vector + wikilink graph + backlinks) returns the right notes — and whether the synthesized answer actually uses them.
+tags:
+  - architecture
+  - evaluation
+  - rag
+  - retrieval
+  - metrics
+type: semantic
+status: raw
 ---
 
 # RAG Evaluation for FUSED Retrieval

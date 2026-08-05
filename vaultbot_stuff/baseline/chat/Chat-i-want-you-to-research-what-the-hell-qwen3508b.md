@@ -1,3 +1,13 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: "Summary: Researchers use Qwen 3.5:0.8B to classify binary/multi-class tasks efficiently and detect specific intents like research questions versus code queries without needing large token buffers; it "
+tags:
+  - claim
+  - chat
+---
+
 # Chat: i want you to research what the hell qwen3.5:0.8b 
 
 **Next:** [[Chat-wait-the-shit-that-the-small-model-can-do-well-is]]

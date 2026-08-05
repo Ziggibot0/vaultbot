@@ -1,7 +1,14 @@
 ---
 created: 2026-07-26
-summary: "How to verify that synthesized claims in vault notes match their cited sources — the post-generation verification layer for VaultBot's research pipeline."
-tags: [architecture, verification, fact-checking, epistemology, rag]
+summary: How to verify that synthesized claims in vault notes match their cited sources — the post-generation verification layer for VaultBot's research pipeline.
+tags:
+  - architecture
+  - verification
+  - fact-checking
+  - epistemology
+  - rag
+type: semantic
+status: raw
 ---
 
 # Claim Verification for Vault Notes
@@ -66,5 +73,5 @@ A 30B model is more likely to hallucinate during synthesis than a frontier model
 - [[How-to-Evaluate-Source-Credibility]] — pre-synthesis source evaluation (this is post-synthesis)
 - [[Calibration-via-Operator-Feedback]] — using the operator's corrections to calibrate verification
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — where this fits in the evolution roadmap
-- [[Vault-Knowledge-Only-Directive]] — why provenance matters
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — why provenance matters
 - [[Self-Assessment-Using-the-Knowledge-Triad]] — the gap this fills

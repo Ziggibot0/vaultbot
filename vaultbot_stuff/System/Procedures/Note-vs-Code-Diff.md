@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Diff a single vault note against the actual code it describes. Given a note path, extract its claims about backend behavior, read the referenced .py file(s), and produce a line-by-line diff of what the note says vs what the code does. More precise than Find-Contradictions — use this when you already know which note to check."
-when_to_use: "when you want to check a SPECIFIC note against the code it references, after editing a note that describes backend behavior, or to verify a single note before trusting it"
-falsifiable_if: "the diff reports a mismatch that doesn't exist, or misses a real mismatch between the note and code"
+description: Diff a single vault note against the actual code it describes. Given a note path, extract its claims about backend behavior, read the referenced .py file(s), and produce a line-by-line diff of what the note says vs what the code does. More precise than Find-Contradictions — use this when you already know which note to check.
+when_to_use: when you want to check a SPECIFIC note against the code it references, after editing a note that describes backend behavior, or to verify a single note before trusting it
+falsifiable_if: the diff reports a mismatch that doesn't exist, or misses a real mismatch between the note and code
 applies_to:
   - vault-code-sync
   - documentation-accuracy
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Note-vs-Code-Diff
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-vs-Code-Diff

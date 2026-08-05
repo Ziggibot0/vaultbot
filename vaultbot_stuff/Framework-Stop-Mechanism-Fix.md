@@ -1,7 +1,13 @@
 ---
 type: pattern
-tags: [meta, framework, bugfix, chat_handler]
+tags:
+  - meta
+  - framework
+  - bugfix
+  - chat_handler
 created: 2026-07-31
+status: raw
+summary: "# Framework Stop Mechanism Fix"
 ---
 
 # Framework Stop Mechanism Fix

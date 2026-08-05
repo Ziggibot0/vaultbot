@@ -1,3 +1,13 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: Remove-Masking-Fallbacks
+tags:
+  - claim
+  - research
+---
+
 # Remove-Masking-Fallbacks
 
 ## Summary

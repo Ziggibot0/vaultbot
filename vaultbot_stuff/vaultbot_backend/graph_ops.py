@@ -420,6 +420,14 @@ class GraphOpRegistry:
 
             if not note_path.exists():
                 content = f"# {title}\n\n{new_section}"
+                # Inject universal schema frontmatter
+                try:
+                    from note_schema import inject_schema
+                    rel = str(note_path.relative_to(
+                        self.vault_graph.vault_path)).replace("\\", "/")
+                    content = inject_schema(content, rel)
+                except ImportError:
+                    pass
                 note_path.write_text(content, encoding="utf-8")
                 created = True
             else:

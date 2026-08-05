@@ -71,10 +71,11 @@ def _parse_model_tags(html: str) -> list:
 
 def _parse_installed() -> list:
     """Parse `ollama list` output."""
+    from subprocess_utils import scrubbed_env
     result = subprocess.run(
         ["ollama", "list"],
         capture_output=True, timeout=10,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+        env={**scrubbed_env(), "PYTHONIOENCODING": "utf-8"}
     )
     stdout = result.stdout.decode("utf-8", errors="replace")
     lines = stdout.strip().split("\n")
@@ -96,10 +97,11 @@ def _pull_model(model: str, tag: str = "") -> dict:
     # Actually format properly
     full_name = f"{model}:{tag}" if tag else model
     
+    from subprocess_utils import scrubbed_env
     result = subprocess.run(
         ["ollama", "pull", full_name],
         capture_output=True, timeout=600,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+        env={**scrubbed_env(), "PYTHONIOENCODING": "utf-8"}
     )
     
     # Clean ANSI escape codes and Braille progress chars from output

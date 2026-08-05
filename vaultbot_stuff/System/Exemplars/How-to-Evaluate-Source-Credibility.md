@@ -8,17 +8,21 @@ last_reviewed: 2026-07-26
 review_interval_days: 90
 success_count: 0
 failure_count: 0
-success_rate: 0.0
-falsifiable_if: "a research note citing sources selected by this procedure is rejected by the operator or fails fact-checking"
+success_rate: 0
+falsifiable_if: a research note citing sources selected by this procedure is rejected by the operator or fails fact-checking
 applies_to:
   - research
   - source-evaluation
 depends_on:
-  - "[[Structure-Research-Note]]"
+  - "[[vaultbot_stuff/Structure-Research-Note]]"
   - "[[No-Wikipedia-Directive]]"
 sources:
   - "https://ohiostate.pressbooks.pub/choosingsources/chapter/evaluating-websites/"
   - "https://www.onlinecolleges.net/for-students/online-academic-research/"
+summary: How to Evaluate Source Credibility
+tags:
+  - exemplar
+  - exemplars
 ---
 
 <!-- EXEMPLAR ANNOTATION: PROCEDURAL NOTE
@@ -88,9 +92,9 @@ A 2017 Stanford University study compared how university students, faculty, and 
 ## Related
 
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — the full plan this procedure is part of
-- [[Structure-Research-Note]] — the next step after source evaluation
+- [[vaultbot_stuff/Structure-Research-Note]] — the next step after source evaluation
 - [[No-Wikipedia-Directive]] — blocked sources
-- [[Vault-Knowledge-Only-Directive]] — vault is the only knowledge source
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — vault is the only knowledge source
 
 
 LOCKED

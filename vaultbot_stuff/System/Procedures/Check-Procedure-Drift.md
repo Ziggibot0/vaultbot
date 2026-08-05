@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Check if procedure descriptions still match what they actually do, and optionally fix them. In detect mode (default), reads each procedure's frontmatter description and steps, then the small model verifies accuracy. In optimize mode, also writes improved descriptions directly to the procedure notes' frontmatter. Absorbs the former Procedure-Description-Optimizer. Use when procedure descriptions feel stale or need updating."
-when_to_use: "when a procedure's description doesn't match what it does, when procedure descriptions are stale after edits, when auditing procedure quality, before relying on a procedure's description for discovery, or when you want to auto-fix stale descriptions"
-falsifiable_if: "the procedure reports a mismatch that doesn't exist, misses a real description-step mismatch, or writes a description that's worse than the original"
+description: Check if procedure descriptions still match what they actually do, and optionally fix them. In detect mode (default), reads each procedure's frontmatter description and steps, then the small model verifies accuracy. In optimize mode, also writes improved descriptions directly to the procedure notes' frontmatter. Absorbs the former Procedure-Description-Optimizer. Use when procedure descriptions feel stale or need updating.
+when_to_use: when a procedure's description doesn't match what it does, when procedure descriptions are stale after edits, when auditing procedure quality, before relying on a procedure's description for discovery, or when you want to auto-fix stale descriptions
+falsifiable_if: the procedure reports a mismatch that doesn't exist, misses a real description-step mismatch, or writes a description that's worse than the original
 applies_to:
   - procedure-quality
   - description-accuracy
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Check-Procedure-Drift
+tags:
+  - procedure
+  - procedures
 ---
 
 # Check-Procedure-Drift

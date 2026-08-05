@@ -43,11 +43,23 @@ in the system prompt.
 """
 from __future__ import annotations
 
+import json
+import logging
+import os
+import tempfile
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 MAX_TASKS = 20
+
+logger = logging.getLogger(__name__)
+
+# Default path for the working-memory disk snapshot.  Lives alongside
+# conversation_state.json so both are wiped together on /new.
+_DEFAULT_DISK_PATH = str(Path(__file__).with_name("working_memory_state.json"))
+_disk_lock = threading.Lock()
 
 
 @dataclass
@@ -294,3 +306,71 @@ class TaskList:
                     status=valid,
                     notes=(t.get("notes") or "")[:500],
                 ))
+
+    # ------------------------------------------------------------------ #
+    # Disk persistence (survives backend restarts)
+    # ------------------------------------------------------------------ #
+
+    def save_to_disk(self, path: str | None = None) -> None:
+        """Persist the working-memory state to disk (atomic, best-effort).
+
+        Called after each turn so the plan survives a backend restart.
+        Never raises — persistence is best-effort.
+        """
+        p = path or _DEFAULT_DISK_PATH
+        try:
+            snap = self.snapshot()
+            payload = json.dumps(snap, ensure_ascii=False, default=str)
+            with _disk_lock:
+                d = Path(p).parent
+                d.mkdir(parents=True, exist_ok=True)
+                fd, tmp = tempfile.mkstemp(dir=str(d), suffix=".tmp")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                        fh.write(payload)
+                    os.replace(tmp, p)
+                except Exception:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
+                    raise
+        except Exception as e:  # noqa: BLE001
+            logger.debug("working_memory save_to_disk failed: %s", e)
+
+    @classmethod
+    def load_from_disk(cls, path: str | None = None) -> "TaskList | None":
+        """Load a persisted working-memory state from disk.
+
+        Returns a TaskList with the restored plan, or None when the file
+        doesn't exist or is corrupt.  Never raises.
+        """
+        p = path or _DEFAULT_DISK_PATH
+        try:
+            if not os.path.exists(p):
+                return None
+            with open(p, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                return None
+            tl = cls()
+            tl.restore_snapshot(data)
+            # Only return if there's actually a plan — an empty restore
+            # is the same as no saved state.
+            if not tl.has_plan():
+                return None
+            return tl
+        except Exception as e:  # noqa: BLE001
+            logger.debug("working_memory load_from_disk failed: %s", e)
+            return None
+
+    @staticmethod
+    def clear_disk(path: str | None = None) -> None:
+        """Wipe the persisted working-memory state (called on /new).
+        Best-effort."""
+        p = path or _DEFAULT_DISK_PATH
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("working_memory clear_disk failed: %s", e)

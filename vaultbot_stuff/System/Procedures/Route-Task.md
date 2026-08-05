@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-03
-description: "Conditional intent router that classifies incoming user requests and dispatches to procedure chains with if-branches. Each branch is backed by vault research. Uses small model for classification, then calls run_procedure for each step in the chain. This is the master dispatcher — the first procedure to call when a new task arrives."
-when_to_use: "when a new user request arrives and you need to know which procedure chain to run, when you want procedures to handle most of the work automatically, when the big model should delegate to deterministic procedure chains"
-falsifiable_if: "the router classifies a task into the wrong branch, or a branch's procedure chain produces worse results than an unconstrained cloud model would"
+description: Conditional intent router that classifies incoming user requests and dispatches to procedure chains with if-branches. Each branch is backed by vault research. Uses small model for classification, then calls run_procedure for each step in the chain. This is the master dispatcher — the first procedure to call when a new task arrives.
+when_to_use: when a new user request arrives and you need to know which procedure chain to run, when you want procedures to handle most of the work automatically, when the big model should delegate to deterministic procedure chains
+falsifiable_if: the router classifies a task into the wrong branch, or a branch's procedure chain produces worse results than an unconstrained cloud model would
 applies_to:
   - task-routing
   - procedure-composition
@@ -23,6 +23,10 @@ research_backing:
   - "[[Information-feedback-loops-for-iterative-self-improvement-in-AI-systems-self-imp]] — backs the self-improvement branch: System 2 reflective loops improve outputs without retraining"
   - "[[Calibrating-automated-quality-assessment-gates-without-ground-truth-labels-metho]] — backs quality verification steps: rubric design and calibration convert LLM-as-judge into reliable quality signals"
   - "[[RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g]] — backs the research branch: retrieval precision, recall, and faithfulness metrics inform research quality"
+summary: Route-Task
+tags:
+  - procedure
+  - procedures
 ---
 
 # Route-Task

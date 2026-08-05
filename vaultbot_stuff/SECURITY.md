@@ -1,3 +1,12 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: Security Policy
+tags:
+  - claim
+---
+
 # Security Policy
 
 ## Reporting a vulnerability

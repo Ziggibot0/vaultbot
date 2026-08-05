@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Verify that a procedure's code steps actually work — the imports resolve, the tools are in allowed_tools, and the args the steps reference are documented. Reads a procedure note, extracts its code steps, and checks each for common runtime failure patterns. Use when auditing procedures or before trusting a new procedure."
-when_to_use: "when auditing procedures for runtime safety, before trusting a new procedure, when a procedure keeps failing, or when asked 'will this procedure actually work'"
-falsifiable_if: "the procedure reports issues that aren't real, or misses actual runtime problems"
+description: Verify that a procedure's code steps actually work — the imports resolve, the tools are in allowed_tools, and the args the steps reference are documented. Reads a procedure note, extracts its code steps, and checks each for common runtime failure patterns. Use when auditing procedures or before trusting a new procedure.
+when_to_use: when auditing procedures for runtime safety, before trusting a new procedure, when a procedure keeps failing, or when asked 'will this procedure actually work'
+falsifiable_if: the procedure reports issues that aren't real, or misses actual runtime problems
 applies_to:
   - procedure-quality
   - procedure-audit
@@ -15,6 +15,10 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
+summary: Verify-Procedure-Args
+tags:
+  - procedure
+  - procedures
 ---
 
 # Verify-Procedure-Args

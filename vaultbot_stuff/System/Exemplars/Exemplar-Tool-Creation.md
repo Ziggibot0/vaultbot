@@ -2,8 +2,13 @@
 type: exemplar
 exemplar: tool-creation
 created: 2026-07-26
-summary: "Annotated example of how to create a new tool — from capability audit through code, test, deploy, and verify. The model pattern-matches against this when asked to build a new tool."
-tags: [exemplar, tool-creation, how-to, deterministic]
+summary: Annotated example of how to create a new tool — from capability audit through code, test, deploy, and verify. The model pattern-matches against this when asked to build a new tool.
+tags:
+  - exemplar
+  - tool-creation
+  - how-to
+  - deterministic
+status: raw
 ---
 
 <!-- EXEMPLAR ANNOTATION: TOOL CREATION

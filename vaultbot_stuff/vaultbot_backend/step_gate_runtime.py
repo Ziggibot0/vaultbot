@@ -45,7 +45,7 @@ import json
 import os
 import re
 import subprocess
-from subprocess_utils import run as _subprocess_run
+from subprocess_utils import run as _subprocess_run, scrubbed_env, preexec_fn
 import sys
 import traceback
 from dataclasses import dataclass, field
@@ -558,9 +558,11 @@ def _run_code_step(
     if not Path(venv_python).exists():
         venv_python = sys.executable
 
-    # Prepare environment
+    # Prepare environment — scrubbed of secrets (API keys/tokens/passwords)
+    # so LLM-authored procedure code cannot read or exfiltrate them. Only the
+    # non-secret PROCEDURE_* overrides and PYTHONPATH/VAULT_PATH are added back.
     env = {
-        **os.environ,
+        **scrubbed_env(),
         "PYTHONPATH": str(backend_dir),
         "VAULT_PATH": vault_path,
         "PROCEDURE_ALLOWED_TOOLS": json.dumps(allowed_tools),
@@ -577,6 +579,8 @@ def _run_code_step(
             capture_output=True, text=True, timeout=timeout,
             cwd=str(Path(vault_path).resolve()),
             env=env,
+            # Resource limits (POSIX): mem/CPU/fork caps. None on Windows.
+            preexec_fn=preexec_fn,
         )
     except subprocess.TimeoutExpired:
         return False, "", f"subprocess timeout after {timeout}s", ""
@@ -894,11 +898,56 @@ async def execute_procedure(
     """
     call_stack = list(call_stack or [])
     if not procedure.steps:
+        # Distinguish two cases:
+        # 1. Empty body (no content after ## Steps) → legitimately 0 steps, pass.
+        # 2. Body has content but 0 parsed steps → format mismatch, FAIL.
+        #    The most common cause is ### Step N: headers instead of
+        #    numbered list steps (1. ...) which _parse_steps doesn't
+        #    recognize. Tell the caller EXACTLY what went wrong.
+        _body = (procedure.raw_text or "").strip()
+        # Strip frontmatter to check the actual body content.
+        if _body.startswith("---"):
+            _fm_end = _body.find("\n---", 3)
+            if _fm_end > 0:
+                _body = _body[_fm_end + 4:].strip()
+        # Strip the ## Steps header line itself — what matters is whether
+        # there's content UNDER it, not the header itself.
+        import re as _re
+        _steps_match = _re.search(r'^##\s+Steps\s*$', _body, _re.MULTILINE | _re.IGNORECASE)
+        if _steps_match:
+            _body = _body[_steps_match.end():].strip()
+        if not _body:
+            # Empty body — legitimately 0 steps.
+            return ExecutionResult(
+                procedure_name=procedure.name,
+                steps=[],
+                overall_passed=True,
+                final_output="",
+            )
+        # Body has content but 0 parsed steps — loud failure with diagnosis.
+        _diagnosis = (
+            "PROCEDURE COMPILED 0 STEPS. The procedure compiler "
+            "(procedure_compiler.py _parse_steps) only recognizes "
+            "numbered list steps inside a ## Steps section:\n"
+            "  1. instruction text\n"
+            "  2. ```python\n     code here\n     ```\n"
+            "It does NOT parse ### Step N: headers. If your procedure uses "
+            "### headers, rewrite them as numbered list items. Check the "
+            "procedure's ## Steps section format."
+        )
+        _body_snippet = (procedure.raw_text or "")[:200]
+        if session_logger:
+            session_logger.log("procedure_zero_steps", {
+                "procedure": procedure.name,
+                "diagnosis": _diagnosis,
+                "body_snippet": _body_snippet,
+            })
         return ExecutionResult(
             procedure_name=procedure.name,
             steps=[],
-            overall_passed=True,
-            final_output="",
+            overall_passed=False,
+            final_output=_diagnosis,
+            failed_step=0,
         )
 
     step_results: list[StepResult] = []

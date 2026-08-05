@@ -31,6 +31,8 @@ import re
 import time
 from typing import Any
 
+from config import TUNABLES
+
 # Caps shared with step_summarizer.py — keep the conversation bounded.
 _MAX_SUMMARY_CHARS = 600
 # Stop words for word-overlap guards (same set as _small_model_query).
@@ -89,7 +91,7 @@ def _breaker_reset(key: str) -> None:
 # query" and then time out — the single biggest contributor to the 3-minute
 # retrieve. With think=False + a 512-token cap the same call returns in
 # well under a second.
-_SMALL_TIMEOUT = float(os.environ.get("VAULTBOT_SMALL_TIMEOUT_SECONDS", "12"))
+_SMALL_TIMEOUT = float(os.environ.get("VAULTBOT_SMALL_TIMEOUT_SECONDS", str(TUNABLES.small_timeout_seconds)))
 
 
 def _client_chat(client: Any, prompt: str, system: str = "",
@@ -433,9 +435,12 @@ def compress_window(messages: list[dict],
             })
         _breaker_reset("compress")
         return summary
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — compression is best-effort; the caller must handle None, but the failure MUST be visible in the log
         if session_logger:
-            session_logger.log("small_model_compress_failed", {"error": str(e)})
+            session_logger.log("small_model_compress_failed", {
+                "error": str(e), "messages_in": len(messages)})
+        else:
+            print(f"[compress_window] failed ({len(messages)} msgs): {e}")
         _breaker_trip("compress")
         return None
 
@@ -443,6 +448,108 @@ def compress_window(messages: list[dict],
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def rewrite_query_with_history(
+    user_message: str,
+    conversation_history: list[dict],
+    session_logger: Any = None,
+) -> str:
+    """Rewrite a user query using conversation context for better retrieval.
+
+    When the user asks a follow-up that references prior conversation
+    ("what was that thing you found?", "tell me more about that"),
+    the raw query is ambiguous for RAG — it doesn't contain the actual
+    topic. This function uses the small model to produce a self-contained
+    query that incorporates context from the recent conversation.
+
+    Fail-safe: on any failure, returns the original user_message unchanged.
+    The original message is ALWAYS included in the expanded queries list,
+    so retrieval is never worse than baseline.
+
+    Returns a string suitable for FUSED retrieval (the rewritten query).
+    """
+    if not user_message.strip():
+        return user_message
+
+    # Build a compact recent-context string from the last few turns.
+    # Only user + assistant messages (not tool results) — the model needs
+    # the conversational gist, not the tool chatter.
+    recent: list[str] = []
+    for msg in (conversation_history or [])[-10:]:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role", "")
+        if role not in ("user", "assistant"):
+            continue
+        content = str(msg.get("content", "") or "")
+        if not content.strip():
+            continue
+        # Cap each turn to keep the prompt small.
+        recent.append(f"[{role}] {content[:400]}")
+    if not recent:
+        return user_message  # no history to contextualize with
+
+    context_str = "\n".join(recent[-6:])  # last ~3 exchanges
+
+    try:
+        from llm_client import get_small_client_or_big
+        client = get_small_client_or_big(session_logger)
+        if client is None:
+            return user_message
+
+        prompt = (
+            "You are a query rewriter for a retrieval system. Given the user's "
+            "new message and the recent conversation, produce a self-contained "
+            "search query that captures what the user is ACTUALLY looking for. "
+            "Resolve pronouns and references ('that', 'it', 'the thing you "
+            "mentioned') to the actual topic from the conversation. "
+            "Output ONLY the rewritten query, nothing else.\n\n"
+            f"Recent conversation:\n{context_str}\n\n"
+            f"User's new message: {user_message[:500]}\n\n"
+            "Rewritten search query:")
+        resp = client.chat(
+            [{"role": "user", "content": prompt}],
+            temperature=0.1, stream=False, think=False, max_predict=128)
+        text = ""
+        if isinstance(resp, dict):
+            msg = resp.get("message", {})
+            if isinstance(msg, dict):
+                text = msg.get("content", "") or ""
+            if not text:
+                text = resp.get("response", "") or resp.get("content", "")
+        text = (text or "").strip().split("\n")[0].strip()
+        # Sanity check: if the rewrite is empty or too long, fall back.
+        if text and 3 < len(text) <= 500:
+            # Overlap guard: if the rewrite shares ZERO content words with
+            # the original, it's a hallucination — the small model went
+            # off the rails and invented a completely different query.
+            # Fall back to the original to avoid sending RAG down the
+            # wrong path.  (See session 0e5239af — the rewriter turned
+            # "read GOALS.md after restart" into a fabricated story about
+            # "GOAL_SHELL.md" from a different user's file path.)
+            _orig_words = _content_words(user_message)
+            _rewrite_words = _content_words(text)
+            if _orig_words and _rewrite_words \
+                    and not (_orig_words & _rewrite_words):
+                if session_logger:
+                    session_logger.log("query_rewrite_rejected", {
+                        "original": user_message[:100],
+                        "rewritten": text[:200],
+                        "reason": "zero content-word overlap",
+                    })
+                return user_message
+            if session_logger:
+                session_logger.log("query_rewritten", {
+                    "original": user_message[:100],
+                    "rewritten": text[:200],
+                })
+            return text
+        return user_message
+    except Exception as e:  # noqa: BLE001
+        if session_logger:
+            session_logger.log("query_rewrite_failed", {"error": str(e)})
+        return user_message
+
 
 def _content_words(text: str) -> set[str]:
     """Extract content words (non-stop-words) for overlap guards."""

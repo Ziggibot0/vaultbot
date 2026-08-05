@@ -31,6 +31,8 @@ import threading
 import time
 from typing import Any
 
+from config import TUNABLES
+
 logger = logging.getLogger(__name__)
 
 # Serialize writes to the identity files. The chat loop and the autonomous
@@ -50,8 +52,8 @@ _write_lock = threading.Lock()
 # runaway model can never balloon the self-model across turns.
 SELF_MODEL_MAX_CHARS = 12000
 
-# Rough chars/token estimate for the status endpoint.
-_CHARS_PER_TOKEN = 4
+# Rough chars/token estimate for the status endpoint (consolidated in config).
+_CHARS_PER_TOKEN = TUNABLES.chars_per_token
 
 # --- Self-model regeneration throttle (token economy) ---
 # Regenerating the MIRROR self-model after every chat turn burns an LLM

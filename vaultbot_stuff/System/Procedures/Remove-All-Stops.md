@@ -2,13 +2,17 @@
 type: procedure
 status: experimental
 created: 2026-07-31
-description: "Remove all turn caps, read-only loop detectors, and force-synthesize nudges from chat_handler.py so VaultBot runs to completion without dying mid-task."
-when_to_use: "when VaultBot is dying mid-task due to turn caps or loop detectors cutting it off before completion"
+description: Remove all turn caps, read-only loop detectors, and force-synthesize nudges from chat_handler.py so VaultBot runs to completion without dying mid-task.
+when_to_use: when VaultBot is dying mid-task due to turn caps or loop detectors cutting it off before completion
 allowed_tools:
   - code_read
 spec_version: 2
 success_count: 0
 failure_count: 0
+summary: Remove-All-Stops
+tags:
+  - procedure
+  - procedures
 ---
 
 # Remove-All-Stops

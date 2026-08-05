@@ -14,8 +14,15 @@ scope:
   - tool-usage
   - workflow
   - automation
-falsifiable_if: "a future session occurs where the deterministic Write → Lint → Verify sequence is not the dominant execution pattern or the operator explicitly permits unverified writes"
-tags: [semantic, pattern, consolidation, workflow, tool-chaining, determinism]
+falsifiable_if: a future session occurs where the deterministic Write → Lint → Verify sequence is not the dominant execution pattern or the operator explicitly permits unverified writes
+tags:
+  - semantic
+  - pattern
+  - consolidation
+  - workflow
+  - tool-chaining
+  - determinism
+summary: Write-Lint-Verify-Workflow-Dominance
 ---
 
 # Write-Lint-Verify-Workflow-Dominance

@@ -3,15 +3,19 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-07-31
-description: "Refine a concept card from an extractive sketch to a tight 2-4 sentence semantic summary. Preserves wikilinks. Uses the small model — it's a simple summarization of existing content."
-when_to_use: "when a concept card (L1 abstraction) has been retrieved 3+ times and deserves a tighter semantic summary"
-falsifiable_if: "the refined card loses the core idea or drops wikilinks that were in the sketch"
+description: Refine a concept card from an extractive sketch to a tight 2-4 sentence semantic summary. Preserves wikilinks. Uses the small model — it's a simple summarization of existing content.
+when_to_use: when a concept card (L1 abstraction) has been retrieved 3+ times and deserves a tighter semantic summary
+falsifiable_if: the refined card loses the core idea or drops wikilinks that were in the sketch
 applies_to:
   - concept-cards
   - abstraction-hierarchy
   - note-quality
 allowed_tools:
   - llm_generate
+summary: Refine-Concept-Card
+tags:
+  - procedure
+  - procedures
 ---
 
 # Refine-Concept-Card

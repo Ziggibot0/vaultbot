@@ -3,7 +3,16 @@ created: 2026-07-26
 summary: "Ontology, epistemology, and hermeneutics form a triad that maps directly to VaultBot's three architectural layers: structure, validation, and interpretation. The connections between these fields ARE the chain of thought that makes the vault think."
 type: exemplar
 exemplar: synthesis-note
-tags: [architecture, exemplar, philosophy, ontology, epistemology, hermeneutics, chain-of-thought, knowledge-graph]
+tags:
+  - architecture
+  - exemplar
+  - philosophy
+  - ontology
+  - epistemology
+  - hermeneutics
+  - chain-of-thought
+  - knowledge-graph
+status: raw
 ---
 
 <!-- EXEMPLAR ANNOTATION: SYNTHESIS NOTE
@@ -28,7 +37,7 @@ the operator's intuition — "if information is shaped correctly, it should be a
 | Philosophy | Question | Vault Layer | Architecture Note |
 |---|---|---|---|
 | **Ontology** | What kinds of entities exist? | **Structure** — what types of notes exist and how they relate | [[Pre-Thought-Information-Shapes]] |
-| **Epistemology** | How is knowledge justified? | **Validation** — provenance, corroboration, scientific method | [[Vault-Knowledge-Only-Directive]] |
+| **Epistemology** | How is knowledge justified? | **Validation** — provenance, corroboration, scientific method | [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] |
 | **Hermeneutics** | How is meaning derived from text? | **Interpretation** — subgraph retrieval, context-dependent meaning | [[Vault-Thinks-LLM-Synthesizes]] |
 
 The triad isn't arbitrary. It's a **chain of thought**: you must define what exists (ontology) before you can validate it (epistemology), and you must validate it before you can interpret it (hermeneutics). Each layer depends on the one below it. The vault implements this chain mechanically — entity types flow into provenance rules, which flow into retrieval context.
@@ -75,7 +84,7 @@ Epistemology also identifies the *sources* of knowledge: perception, introspecti
 
 ### How This Maps to the Vault
 
-The [[Vault-Knowledge-Only-Directive]] is an epistemic policy: the vault is the only knowledge source, never training data. This is a form of *foundationalism* — all knowledge claims must trace back to vault content, which traces back to sourced web research. The foundation is not "self-evident truths" but "archived web sources with provenance."
+The [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] is an epistemic policy: the vault is the only knowledge source, never training data. This is a form of *foundationalism* — all knowledge claims must trace back to vault content, which traces back to sourced web research. The foundation is not "self-evident truths" but "archived web sources with provenance."
 
 [[How-to-Evaluate-Source-Credibility]] is the justification mechanism. It implements corroboration (multiple independent sources confirm a claim), authority (checking credentials and publisher reputation), currency (temporal relevance), and lateral reading (checking what other sources say about a source). This is applied epistemology — the procedure operationalizes the philosophical question "what makes a belief justified?"
 
@@ -152,7 +161,7 @@ The triad is fractal — it repeats at every scale:
 |---|---|---|---|
 | **Single note** | Entity type + frontmatter | Sources cited inline | Prose argument connecting claims |
 | **Note cluster** | Wikilink relationships | Cross-note corroboration | Subgraph context gives meaning |
-| **Whole vault** | Directives, procedures, research, chat, textbooks | [[Vault-Knowledge-Only-Directive]] + [[How-to-Evaluate-Source-Credibility]] | FUSED retrieval + [[Vault-Thinks-LLM-Synthesizes]] |
+| **Whole vault** | Directives, procedures, research, chat, textbooks | [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] + [[How-to-Evaluate-Source-Credibility]] | FUSED retrieval + [[Vault-Thinks-LLM-Synthesizes]] |
 | **Knowledge system** | The vault itself as an entity | the operator's scientific method directive | The LLM as interpreter/synthesizer |
 
 The [[Fractal-Entropy-Principle]] predicts this: resolve shapes to fractals, and the same pattern appears at every scale. The ontology-epistemology-hermeneutics triad is the fractal pattern of the vault's cognition.
@@ -191,7 +200,7 @@ Understanding the vault through this triad gives us:
   - Deterministic-Scaffolding proposed the sandwich pattern; this note connects it to epistemology (the Gettier problem solved mechanically).
 - extends::[[Fractal-Entropy-Principle]]
   - Fractal-Entropy says to resolve shapes to fractals; this note shows the ontology-epistemology-hermeneutics triad is fractal — it repeats at every scale of the vault.
-- validates::[[Vault-Knowledge-Only-Directive]]
+- validates::[[vaultbot_stuff/Vault-Knowledge-Only-Directive]]
   - The Vault-Knowledge-Only directive is an epistemic policy (foundationalism); this note provides the philosophical grounding for why it works.
 - validates::[[How-to-Evaluate-Source-Credibility]]
   - The source credibility procedure is an epistemological mechanism; this note connects it to JTB and the Gettier problem.
@@ -199,7 +208,7 @@ Understanding the vault through this triad gives us:
   - The Wikipedia ban is an epistemic boundary (rejecting a source of testimony); this note grounds it in epistemological source evaluation.
 - informs::[[Procedural-Bootstrap-and-Evolution-Plan]]
   - The bootstrap plan needs procedures for research, note-writing, and source evaluation; this note provides the philosophical framework those procedures operationalize.
-- informs::[[Structure-Research-Note]]
+- informs::[[vaultbot_stuff/Structure-Research-Note]]
   - The research note structure procedure defines how to write notes; this note explains WHY that structure works (ontological entity typing + epistemological provenance + hermeneutic self-contained argument).
 - informs::[[Vault-Longevity-Architecture]]
   - The longevity architecture describes how the vault persists across sessions; this note grounds that persistence in the triad — the ontology, epistemology, and hermeneutics survive because they're encoded in markdown, not model weights.

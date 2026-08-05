@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Suggest wikilinks to add to a note based on what it's about. Reads the note content, identifies concepts that have existing notes, and suggests [[wikilinks]] to add. More precise than a simple keyword scan because it reads context and only suggests links that make sense. Use after writing a note or during graph organization."
-when_to_use: "after writing a new note, when improving a note's connectivity, during graph organization, or when asked 'what should this note link to'"
-falsifiable_if: "the procedure suggests links that don't make sense, or misses obvious link opportunities"
+when_to_use: after writing a new note, when improving a note's connectivity, during graph organization, or when asked 'what should this note link to'
+falsifiable_if: the procedure suggests links that don't make sense, or misses obvious link opportunities
 applies_to:
   - graph-organization
   - wikilinks
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Smart-Suggest-Links
+tags:
+  - procedure
+  - procedures
 ---
 
 # Smart-Suggest-Links

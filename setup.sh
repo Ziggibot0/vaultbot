@@ -151,13 +151,21 @@ fi
 
 # ── 5. Install dependencies ─────────────────────────────────────────────────
 REQ_PATH="$VAULT_PATH/vaultbot_stuff/vaultbot_backend/requirements.txt"
+# Reproducible install: prefer the lockfile (exact pins) if present so a
+# fresh clone gets the same versions the project was tested with. Fall back
+# to requirements.txt (the >= bounds) if the lock is missing or stale.
+LOCK_PATH="$VAULT_PATH/vaultbot_stuff/vaultbot_backend/requirements.lock"
+INSTALL_REQ="$REQ_PATH"
+if [ -f "$LOCK_PATH" ]; then
+    INSTALL_REQ="$LOCK_PATH"
+fi
 if step_done "deps_installed"; then
     echo "  [!]  Dependencies already installed -- skipping."
 else
     echo ">>> Installing dependencies (5-15 min, one-time only)..."
     echo "  Grab a coffee. This is the longest step."
     "$VENV_PYTHON" -m pip install --upgrade pip --quiet
-    "$VENV_PYTHON" -m pip install -r "$REQ_PATH"
+    "$VENV_PYTHON" -m pip install -r "$INSTALL_REQ"
     echo "  [OK] Dependencies installed"
     mark_step_done "deps_installed"
 fi

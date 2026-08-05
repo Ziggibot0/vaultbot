@@ -162,6 +162,11 @@ if (Test-StepDone "venv_created") {
 # ── 5. Install dependencies ─────────────────────────────────────────────────
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
 $reqPath    = Join-Path $vaultPath "vaultbot_stuff\vaultbot_backend\requirements.txt"
+# Reproducible install: prefer the lockfile (exact pins) if present so a
+# fresh clone gets the same versions the project was tested with. Fall back
+# to requirements.txt (the >= bounds) if the lock is missing or stale.
+$lockPath   = Join-Path $vaultPath "vaultbot_stuff\vaultbot_backend\requirements.lock"
+$installReq = if (Test-Path $lockPath) { $lockPath } else { $reqPath }
 
 if (Test-StepDone "deps_installed") {
     Write-Warn2 "Dependencies already installed -- skipping."
@@ -169,7 +174,7 @@ if (Test-StepDone "deps_installed") {
     Write-Step "Installing dependencies (5-15 min, one-time only)..."
     Write-Host "  Grab a coffee. This is the longest step." -ForegroundColor DarkGray
     & $venvPython -m pip install --upgrade pip --quiet
-    & $venvPython -m pip install -r $reqPath
+    & $venvPython -m pip install -r $installReq
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Dependency installation failed. See errors above."
         Write-Host "  Re-run the same command — it picks up from here." -ForegroundColor Yellow

@@ -6,13 +6,19 @@ last_reviewed: 2026-07-28
 review_interval_days: 365
 evidence_count: 1
 evidence_sources:
-  - "the operator's direct correction, 2026-07-28"
+  - the operator's direct correction, 2026-07-28
 scope:
   - identity
   - self-model
   - purpose
-falsifiable_if: "a future session occurs where the operator explicitly states that VaultBot (the vault) should be made obsolete, not just the cloud LLM"
-tags: [semantic, identity, core, correction, vault-is-mind]
+falsifiable_if: a future session occurs where the operator explicitly states that VaultBot (the vault) should be made obsolete, not just the cloud LLM
+tags:
+  - semantic
+  - identity
+  - core
+  - correction
+  - vault-is-mind
+summary: VaultBot Is the Vault, Not the LLM
 ---
 
 # VaultBot Is the Vault, Not the LLM

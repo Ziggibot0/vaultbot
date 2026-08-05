@@ -2,7 +2,12 @@
 type: architecture-plan
 status: draft
 created: 2026-07-26
-tags: [architecture, implementation, plan, modules]
+tags:
+  - architecture
+  - implementation
+  - plan
+  - modules
+summary: "Implementation Plan: Architecture Modules"
 ---
 
 # Implementation Plan: Architecture Modules

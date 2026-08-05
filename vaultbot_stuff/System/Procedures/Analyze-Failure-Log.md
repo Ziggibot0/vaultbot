@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Read the procedure failure log and identify patterns — which procedures fail most, what types of failures are most common, and which procedures need fixing. Returns a summary of failure patterns with specific procedure names and failure reasons. Use when diagnosing why procedures fail or when improving procedure reliability."
-when_to_use: "when procedures are failing, when diagnosing failure patterns, when improving procedure reliability, or when asked 'why do procedures keep failing'"
-falsifiable_if: "the failure analysis is incorrect, or the patterns don't match the actual failure log"
+description: Read the procedure failure log and identify patterns — which procedures fail most, what types of failures are most common, and which procedures need fixing. Returns a summary of failure patterns with specific procedure names and failure reasons. Use when diagnosing why procedures fail or when improving procedure reliability.
+when_to_use: when procedures are failing, when diagnosing failure patterns, when improving procedure reliability, or when asked 'why do procedures keep failing'
+falsifiable_if: the failure analysis is incorrect, or the patterns don't match the actual failure log
 applies_to:
   - procedure-audit
   - failure-analysis
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Analyze-Failure-Log
+tags:
+  - procedure
+  - procedures
 ---
 
 # Analyze-Failure-Log

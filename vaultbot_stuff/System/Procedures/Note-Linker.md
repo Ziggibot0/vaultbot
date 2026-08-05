@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-01
 description: "Suggest wikilinks for the most recently modified note(s). After writing or editing a note, this finds existing vault notes whose titles relate to the new note's content (and vice versa: notes that mention it but don't link it), so the graph stays woven. Deterministic scan + small-model ranking; the LLM only picks which candidates are genuinely related."
-when_to_use: "right after writing or editing a note — to suggest wikilinks to add so the note connects to the existing graph instead of becoming an orphan"
-falsifiable_if: "suggested links are already present, or obviously-relevant existing notes are not suggested"
+when_to_use: right after writing or editing a note — to suggest wikilinks to add so the note connects to the existing graph instead of becoming an orphan
+falsifiable_if: suggested links are already present, or obviously-relevant existing notes are not suggested
 applies_to:
   - linking
   - graph-organization
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+summary: "## Summary|The note is a Python pattern scanner script designed to automatically identify recently modified notes and generate links between them, targeting the most recent modifications while resolvi"
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Linker

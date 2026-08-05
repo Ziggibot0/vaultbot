@@ -4,17 +4,21 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Remove junk files from the vault: pytest cache, .bak/.orig/.tmp files, empty .md files, and trash remnants. Takes graph analyzer output (with isolated_nodes) as optional input via args."
-when_to_use: "As part of a Dream-Pass cycle, or independently to clean up junk files."
+when_to_use: As part of a Dream-Pass cycle, or independently to clean up junk files.
 applies_to:
   - vault
   - maintenance
   - cleanup
 allowed_tools:
   - vault_delete
-falsifiable_if: "it deletes sacred journals, LOCKED notes, or non-junk files"
+falsifiable_if: it deletes sacred journals, LOCKED notes, or non-junk files
 success_count: 0
 failure_count: 0
 success_rate: 0.0
+summary: Dream-Prune
+tags:
+  - procedure
+  - procedures
 ---
 
 # Dream-Prune

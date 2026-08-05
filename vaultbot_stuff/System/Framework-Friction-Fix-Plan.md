@@ -6,7 +6,11 @@ completed: 2026-07-30
 updated: 2026-08-03
 record: true
 title: Framework Friction Fix Plan
-tags: [plan, framework, self-improvement]
+tags:
+  - plan
+  - framework
+  - self-improvement
+summary: Framework Friction Fix Plan
 ---
 
 # Framework Friction Fix Plan

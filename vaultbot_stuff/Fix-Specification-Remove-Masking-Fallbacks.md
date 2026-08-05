@@ -3,7 +3,13 @@ type: engineering-spec
 status: draft
 created: 2026-07-31
 title: "Fix Specification: Remove All Masking Fallbacks"
-tags: [engineering, code-quality, fail-loud, masking, fallbacks]
+tags:
+  - engineering
+  - code-quality
+  - fail-loud
+  - masking
+  - fallbacks
+summary: Removing masking fallbacks to enforce strict fail loudly behavior ensures that missing safety checks are rejected rather than bypassed by treating errors as passing conditions.
 ---
 
 # Fix Specification: Remove All Masking Fallbacks

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Generate questions a vault note should be able to answer but currently can't. Reads a note, has the small model generate questions about the topic, then checks if the note answers each. Returns unanswered questions as gap-filling prompts. Use when expanding a thin note or finding what's missing."
-when_to_use: "when expanding a thin note, when finding what a note is missing, when looking for research topics, or when asked 'what should this note cover but doesn't'"
-falsifiable_if: "the questions are trivial or already answered in the note, or the gap detection misses obvious missing content"
+description: Generate questions a vault note should be able to answer but currently can't. Reads a note, has the small model generate questions about the topic, then checks if the note answers each. Returns unanswered questions as gap-filling prompts. Use when expanding a thin note or finding what's missing.
+when_to_use: when expanding a thin note, when finding what a note is missing, when looking for research topics, or when asked 'what should this note cover but doesn't'
+falsifiable_if: the questions are trivial or already answered in the note, or the gap detection misses obvious missing content
 applies_to:
   - gap-detection
   - note-expansion
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Note-Question-Gen
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Question-Gen

@@ -42,66 +42,23 @@ EXPLORE_TOOLS = frozenset({
     "plan_task",  # the planning tool itself — always allowed
 })
 
-# Signals that a turn is likely multi-step / mutation-heavy. Each is a word
-# or phrase; a hit bumps the score. Tuned conservatively (favor false
-# negatives over false positives).
-_MULTistep_SIGNALS = (
-    # explicit multi-step intent
-    "step by step", "step-by-step", "plan", "roadmap", "phases", "phase ",
-    "multi-step", "multistep", "end to end", "end-to-end",
-    # mutation / build intent (these change the vault or code)
-    "ingest", "create a tool", "build a tool", "write a procedure",
-    "refactor", "restructure", "reorganize", "implement", "add a feature",
-    "fix the", "rewrite", "migrate", "overhaul", "self-edit", "edit your",
-    "update your", "improve yourself", "audit", "consolidate",
-    # research-then-synthesize intent (research → note → answer = multi-step)
-    "research and", "research this", "deep dive", "dig into", "investigate",
-    "write a note", "write notes", "fill the gap", "fill gaps",
-)
-
-# Short, obviously-single-turn openers that should NOT be gated even if they
-# contain a signal word (e.g. "what's the plan?" is a question, not a task).
-_QUESTION_OPENERS = (
-    "what is", "what's", "who is", "who's", "when did", "where is",
-    "why does", "why do", "how do i", "how does", "explain", "define",
-    "tell me about", "summarize", "is there", "are there", "do you know",
-)
+# Signal-word heuristics (_MULTistep_SIGNALS, _QUESTION_OPENERS) were REMOVED.
+# The plan gate is now triggered by a simple round counter in chat_handler
+# (VAULTBOT_FORCE_PLAN_ROUNDS), not by pattern-matching the user's message.
+# One rule beats twenty tuned heuristics — and the user explicitly rejected
+# heuristic stacks. is_multi_step() is kept as a no-op for backward compat
+# but always returns False (the round counter handles it).
 
 
 def is_multi_step(user_message: str) -> bool:
-    """Deterministic heuristic: is this turn likely multi-step?
+    """No-op: the plan gate is now triggered by a round counter in
+    chat_handler, not by signal-word matching on the user message.
 
-    Returns True when the message looks like a multi-step or mutation-heavy
-    task (the gate should force a plan first). Returns False for simple Q&A,
-    greetings, and single-fact lookups (the gate stays off, zero overhead).
-
-    The threshold + signals are tunable via env so it can be tightened or
-    loosened without a code change:
-      VAULTBOT_PLAN_GATE=off           -> disable the gate entirely
-      VAULTBOT_PLAN_GATE_MIN_HITS=N    -> require N signal hits (default 1)
+    Always returns False. Kept for backward compatibility with any caller
+    that imports it. The real enforcement is in chat_handler's
+    _rounds_without_plan counter + _plan_gate_active flag.
     """
-    if os.getenv("VAULTBOT_PLAN_GATE", "on").lower() == "off":
-        return False
-    msg = (user_message or "").strip().lower()
-    if not msg:
-        return False
-
-    # A plan already existing is handled by the caller (gate lifts). Here we
-    # only judge the raw message.
-
-    # Short question openers are almost always single-turn Q&A. If the whole
-    # message is a single short question, don't gate even on a signal hit.
-    is_short_question = (
-        len(msg) < 90 and msg.endswith("?")
-        and any(msg.startswith(op) for op in _QUESTION_OPENERS)
-    )
-
-    min_hits = int(os.getenv("VAULTBOT_PLAN_GATE_MIN_HITS", "1"))
-    hits = sum(1 for s in _MULTistep_SIGNALS if s in msg)
-
-    if is_short_question and hits < min_hits + 1:
-        return False
-    return hits >= min_hits
+    return False
 
 
 def plan_mode_directive() -> str:

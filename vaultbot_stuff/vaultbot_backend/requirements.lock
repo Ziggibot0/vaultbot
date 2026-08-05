@@ -1,0 +1,63 @@
+# ── Reproducible install lock ────────────────────────────────────────────────
+# Pinned exact versions for reproducible installs. Generated via
+# `pip freeze` against the working venv. requirements.txt is the
+# human-edited source of truth (the >= bounds); this file is the
+# reproducible install target that prevents the faiss/numpy ABI class
+# of breakage.
+#
+# Regenerate after changing requirements.txt:
+#   pip install -r requirements.txt
+#   pip freeze > requirements.lock
+#
+# Install for reproducible builds:
+#   pip install -r requirements.lock
+#
+# NOTE: dev tools (ruff, pyright, pytest) are pinned here too so the dev
+# environment is reproducible, but they are NOT required to run the
+# backend. requirements-dev.txt is the source for those; the versions
+# below mirror it so a fresh clone gets matching tooling.
+
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+beautifulsoup4==4.15.0
+certifi==2026.7.22
+charset-normalizer==3.4.9
+click==8.4.2
+colorama==0.4.6
+faiss-cpu==1.14.3
+fastapi==0.141.1
+h11==0.16.0
+html2text==2025.4.15
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+idna==3.18
+iniconfig==2.3.0
+lxml==6.1.1
+nodeenv==1.10.0
+numpy==2.5.1
+packaging==26.2
+pillow==12.3.0
+pluggy==1.6.0
+psutil==7.2.2
+pydantic_core==2.46.4
+pydantic==2.13.4
+Pygments==2.20.0
+pymupdf==1.28.0
+pypdf==6.14.2
+pyright==1.1.411
+pytest==9.1.1
+python-dotenv==1.0.0
+PyYAML==6.0.3
+requests==2.34.2
+ruff==0.16.1
+soupsieve==2.9.1
+starlette==1.3.1
+typing_extensions==4.16.0
+typing-inspection==0.4.2
+urllib3==2.7.0
+uvicorn==0.52.0
+watchdog==6.0.0
+watchfiles==1.2.0
+websockets==17.0

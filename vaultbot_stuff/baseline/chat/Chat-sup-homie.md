@@ -1,3 +1,13 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: "Chat: sup homie"
+tags:
+  - claim
+  - chat
+---
+
 # Chat: sup homie
 
 **Next:** [[Chat-i-want-you-to-research-what-the-hell-qwen3508b]]

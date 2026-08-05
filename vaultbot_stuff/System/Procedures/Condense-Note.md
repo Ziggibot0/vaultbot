@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-07-31
-description: "Condense a verbose note to a terse, dense version. Preserves all concepts, definitions, formulas, and wikilinks while dropping repetition, scaffolding, and verbose examples. Uses the small model — condensing is simple text reduction."
-when_to_use: "when a note has proven its value (retrieved 3+ times) but is verbose and needs de-fluffing"
-falsifiable_if: "the condensed note loses concepts, definitions, formulas, or wikilinks that were in the original, or invents new content"
+description: Condense a verbose note to a terse, dense version. Preserves all concepts, definitions, formulas, and wikilinks while dropping repetition, scaffolding, and verbose examples. Uses the small model — condensing is simple text reduction.
+when_to_use: when a note has proven its value (retrieved 3+ times) but is verbose and needs de-fluffing
+falsifiable_if: the condensed note loses concepts, definitions, formulas, or wikilinks that were in the original, or invents new content
 applies_to:
   - note-quality
   - de-fluff
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - vault_search
   - llm_generate
+summary: Condense-Note
+tags:
+  - procedure
+  - procedures
 ---
 
 # Condense-Note

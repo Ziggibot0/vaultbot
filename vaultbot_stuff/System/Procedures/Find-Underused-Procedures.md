@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find procedures that are never called by the vaultbot in chat. Scans chat history for execute_procedure calls, counts which procedures are used, and returns procedures with zero or very low usage. Use when auditing the procedure library for dead procedures."
-when_to_use: "when auditing the procedure library, when finding procedures that are never used, when cleaning up unused procedures, or when asked 'which procedures are never called'"
-falsifiable_if: "the procedure flags a procedure as unused when it is called, or misses unused procedures"
+description: Find procedures that are never called by the vaultbot in chat. Scans chat history for execute_procedure calls, counts which procedures are used, and returns procedures with zero or very low usage. Use when auditing the procedure library for dead procedures.
+when_to_use: when auditing the procedure library, when finding procedures that are never used, when cleaning up unused procedures, or when asked 'which procedures are never called'
+falsifiable_if: the procedure flags a procedure as unused when it is called, or misses unused procedures
 applies_to:
   - procedure-audit
   - procedure-library
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Find-Underused-Procedures
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Underused-Procedures

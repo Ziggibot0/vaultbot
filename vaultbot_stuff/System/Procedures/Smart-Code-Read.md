@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Read a code file and extract its structure: all function/class signatures with line numbers, imports, and a one-line summary of each function. Given a file path, returns a structured map of the file's contents. Use when you need to navigate a large file and don't want to read all of it."
-when_to_use: "when navigating a large code file, when you need to find a specific function in a file, when you need an overview of a file's structure before reading specific sections, or when looking for where to make an edit"
-falsifiable_if: "the structure map misses functions/classes, or the summaries contradict the code"
+when_to_use: when navigating a large code file, when you need to find a specific function in a file, when you need an overview of a file's structure before reading specific sections, or when looking for where to make an edit
+falsifiable_if: the structure map misses functions/classes, or the summaries contradict the code
 applies_to:
   - code-comprehension
   - code-navigation
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Smart-Code-Read
+tags:
+  - procedure
+  - procedures
 ---
 
 # Smart-Code-Read

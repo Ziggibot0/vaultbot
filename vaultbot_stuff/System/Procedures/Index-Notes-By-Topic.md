@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Scan a directory of vault notes and build a topic index: a mapping of topics to the notes that cover them. The small model classifies each note by topic. Use when building a directory index, when organizing notes by topic, or when creating a table of contents for a directory."
-when_to_use: "when building a directory index, when organizing notes by topic, when creating a table of contents, or when the vault needs a topic map"
-falsifiable_if: "the topic classifications are wrong, or notes are assigned to topics they don't cover"
+when_to_use: when building a directory index, when organizing notes by topic, when creating a table of contents, or when the vault needs a topic map
+falsifiable_if: the topic classifications are wrong, or notes are assigned to topics they don't cover
 applies_to:
   - vault-organization
   - topic-indexing
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Index-Notes-By-Topic
+tags:
+  - procedure
+  - procedures
 ---
 
 # Index-Notes-By-Topic

@@ -14,8 +14,15 @@ scope:
   - self-model
   - vault-hygiene
   - operator-trust
-falsifiable_if: "a future session occurs where the operator explicitly trusts ephemeral memory or stops demanding explicit progress persistence checks before proceeding"
-tags: [semantic, pattern, consolidation, sean-preferences, persistence, trust]
+falsifiable_if: a future session occurs where the operator explicitly trusts ephemeral memory or stops demanding explicit progress persistence checks before proceeding
+tags:
+  - semantic
+  - pattern
+  - consolidation
+  - sean-preferences
+  - persistence
+  - trust
+summary: Ephemeral-Memory-Distrust-and-Persistence-Enforcement
 ---
 
 # Ephemeral-Memory-Distrust-and-Persistence-Enforcement
@@ -33,10 +40,10 @@ This note was produced by deterministic pattern extraction across 121 chat logs 
 - "have you saved your progress and updated all your notes?" — the operator demands explicit verification that in-memory work has been persisted to disk before accepting completion
 - "what's next is you update yourself so you know where you stand and aren't j chillin with stale-ass info" — the operator proactively enforces self-model sync as a persistence requirement, not an optional step
 
-**Semantic rule:** Never proceed to phase 2 or claim task completion without first running `vault_append` or `safe_write` to persist progress. Explicitly report that state has been written to the vault before asking for operator confirmation. Persistence is mandatory, not optional. This connects to [[Vault-Knowledge-Only-Directive]]: since the vault is the sole source of truth, any un-persisted work is technically non-existent and must be treated as such.
+**Semantic rule:** Never proceed to phase 2 or claim task completion without first running `vault_append` or `safe_write` to persist progress. Explicitly report that state has been written to the vault before asking for operator confirmation. Persistence is mandatory, not optional. This connects to [[vaultbot_stuff/Vault-Knowledge-Only-Directive]]: since the vault is the sole source of truth, any un-persisted work is technically non-existent and must be treated as such.
 
 ## Related
-- [[Vault-Knowledge-Only-Directive]] -- explains why persistence is mandatory rather than optional, as the vault is the only valid state store
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] -- explains why persistence is mandatory rather than optional, as the vault is the only valid state store
 - [[Cross-Session-Patterns-from-75-Chat-Logs]] -- documents the broader operator trust framework that necessitates this persistence requirement
 - [[Semantic-Consolidation-Architecture]] -- provides the pipeline mechanism that extracted and formalized this distrust pattern into a retrieval-ready rule
 

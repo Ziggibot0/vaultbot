@@ -1,3 +1,17 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: "# Baseline directives
+
+| File | What it does |
+------|-------------|
+| `Autonomy-Directive.md` | Tells VaultBot to act on its own — store, organize, research, self-improve — without asking permission "
+tags:
+  - claim
+  - baseline
+---
+
 # Baseline directives
 
 These are **starter templates** for the directives that shape how VaultBot

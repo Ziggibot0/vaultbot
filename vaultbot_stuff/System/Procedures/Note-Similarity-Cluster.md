@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find notes that cover the same topic but use different words. Scans a directory for notes, has the small model classify each by topic, and groups notes that are about the same thing. Also produces a topic-level overview map showing what the vault covers and where knowledge is concentrated or thin. Replaces the former Vault-Topic-Map procedure."
-when_to_use: "when looking for duplicate or overlapping notes, before consolidating, when the vault feels bloated, when asked 'which notes cover the same thing', or when you need a topic-level map of vault coverage"
-falsifiable_if: "the procedure groups notes that are actually about different things, misses notes that are about the same thing, or the topic map misrepresents vault coverage"
+description: Find notes that cover the same topic but use different words. Scans a directory for notes, has the small model classify each by topic, and groups notes that are about the same thing. Also produces a topic-level overview map showing what the vault covers and where knowledge is concentrated or thin. Replaces the former Vault-Topic-Map procedure.
+when_to_use: when looking for duplicate or overlapping notes, before consolidating, when the vault feels bloated, when asked 'which notes cover the same thing', or when you need a topic-level map of vault coverage
+falsifiable_if: the procedure groups notes that are actually about different things, misses notes that are about the same thing, or the topic map misrepresents vault coverage
 applies_to:
   - duplicate-detection
   - topic-clustering
@@ -15,6 +15,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Note-Similarity-Cluster
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Similarity-Cluster

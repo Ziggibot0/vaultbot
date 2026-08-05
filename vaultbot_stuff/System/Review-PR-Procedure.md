@@ -1,9 +1,17 @@
 ---
 type: procedure
 title: Review PR Procedure
-tags: [procedure, github, review, safety, community]
-allowed_tools: [code_run]
+tags:
+  - procedure
+  - github
+  - review
+  - safety
+  - community
+allowed_tools:
+  - code_run
 created: 2025-01-20
+status: raw
+summary: Review PR Procedure
 ---
 
 # Review PR Procedure

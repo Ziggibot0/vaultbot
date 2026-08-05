@@ -3,9 +3,14 @@ type: procedure
 status: verified
 model_cartridge: small
 created: 2026-07-31
-description: "Pre-flight safety check before self-modifying operations. Verifies git clean state, critical files exist, identity files intact, disk space adequate, custom tools import cleanly, and vault directory is accessible."
-when: "Before any code_write or tool_create operation to verify the system is healthy enough to safely edit"
-allowed_tools: [code_read]
+description: Pre-flight safety check before self-modifying operations. Verifies git clean state, critical files exist, identity files intact, disk space adequate, custom tools import cleanly, and vault directory is accessible.
+when: Before any code_write or tool_create operation to verify the system is healthy enough to safely edit
+allowed_tools:
+  - code_read
+summary: Preflight-Safety-Check
+tags:
+  - procedure
+  - procedures
 ---
 
 # Preflight-Safety-Check

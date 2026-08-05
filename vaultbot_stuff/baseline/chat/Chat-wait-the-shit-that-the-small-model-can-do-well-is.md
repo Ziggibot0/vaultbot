@@ -1,3 +1,16 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: "Sean breaks down the mathematical advantage of small models on tool execution vs. chat turns in a session; tags: math, tools, chat_turns"
+tags:
+  - chatbot_response_tool_calls
+  - search_engine_integration
+  - tool_calls
+  - research
+  - synthesis
+---
+
 # Chat: wait the shit that the small model can do well is 
 
 **Next:** [[Chat-yes-please]]

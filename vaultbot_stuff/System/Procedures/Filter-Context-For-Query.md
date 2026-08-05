@@ -3,9 +3,9 @@ type: procedure
 status: verified
 model_cartridge: small
 created: 2026-08-02
-description: "Filter vault context sections by relevance to a query. Given a user query and a list of context sections (each with an id, title, and preview), the small model picks which sections to keep and which to drop. Returns a JSON array of section IDs to keep. Used by the chat pipeline to reduce what the big model sees."
-when_to_use: "when the vault context is large and needs filtering before the big model processes it"
-falsifiable_if: "the filter drops sections that are relevant to the query, or keeps sections that are irrelevant"
+description: Filter vault context sections by relevance to a query. Given a user query and a list of context sections (each with an id, title, and preview), the small model picks which sections to keep and which to drop. Returns a JSON array of section IDs to keep. Used by the chat pipeline to reduce what the big model sees.
+when_to_use: when the vault context is large and needs filtering before the big model processes it
+falsifiable_if: the filter drops sections that are relevant to the query, or keeps sections that are irrelevant
 applies_to:
   - context-filtering
   - rag
@@ -15,6 +15,10 @@ allowed_tools:
 success_count: 8
 failure_count: 0
 success_rate: 1.0
+summary: Filter-Context-For-Query
+tags:
+  - procedure
+  - procedures
 ---
 
 # Filter-Context-For-Query

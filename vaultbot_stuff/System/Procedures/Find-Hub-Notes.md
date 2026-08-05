@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Find notes that are referenced by many other notes but have no incoming links from hub or index notes — notes that should be more prominently linked. Identifies important notes that are discovered but not well-connected to the vault's hub structure. Use when strengthening the vault's organizational structure."
-when_to_use: "when strengthening vault organization, when important notes aren't connected to hubs, when improving discoverability of key notes, or during graph organization"
-falsifiable_if: "the procedure suggests notes that aren't actually important, or misses notes that should be hub-connected"
+description: Find notes that are referenced by many other notes but have no incoming links from hub or index notes — notes that should be more prominently linked. Identifies important notes that are discovered but not well-connected to the vault's hub structure. Use when strengthening the vault's organizational structure.
+when_to_use: when strengthening vault organization, when important notes aren't connected to hubs, when improving discoverability of key notes, or during graph organization
+falsifiable_if: the procedure suggests notes that aren't actually important, or misses notes that should be hub-connected
 applies_to:
   - graph-organization
   - hub-structure
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Find-Hub-Notes
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Hub-Notes

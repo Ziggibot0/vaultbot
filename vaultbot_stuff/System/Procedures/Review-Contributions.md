@@ -3,9 +3,15 @@ type: procedure
 status: verified
 model_cartridge: small
 created: 2026-07-31
-description: "List and review open pull requests on the VaultBot GitHub repo. Fetches diffs, runs safety scans, and returns structured reports."
-when: "When reviewing community contributions to the VaultBot repo"
-allowed_tools: [code_read, vault_search]
+description: List and review open pull requests on the VaultBot GitHub repo. Fetches diffs, runs safety scans, and returns structured reports.
+when: When reviewing community contributions to the VaultBot repo
+allowed_tools:
+  - code_read
+  - vault_search
+summary: "# Review-Contributions"
+tags:
+  - procedure
+  - procedures
 ---
 
 # Review-Contributions

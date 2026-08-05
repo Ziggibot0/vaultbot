@@ -3,13 +3,17 @@ type: procedure
 status: verified
 model_cartridge: small
 created: 2026-07-31
-description: "Check a note for broken wikilinks, missing frontmatter, argument quality, and other issues. Run after writing or editing a note to verify quality. Returns a detailed report."
-when_to_use: "after writing or editing a note, or when the user asks to check note quality"
+description: Check a note for broken wikilinks, missing frontmatter, argument quality, and other issues. Run after writing or editing a note to verify quality. Returns a detailed report.
+when_to_use: after writing or editing a note, or when the user asks to check note quality
 applies_to:
   - vault-maintenance
   - quality
 allowed_tools:
   - vault_lint
+summary: Vault-Lint
+tags:
+  - procedure
+  - procedures
 ---
 
 # Vault-Lint

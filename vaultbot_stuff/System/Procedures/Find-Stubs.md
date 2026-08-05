@@ -3,9 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-01
-description: "Find thin and stub notes — notes that exist but are nearly empty (< 500 chars) or contain stub markers (TODO/stub/placeholder/expand). Imports the Pattern-Scan engine and filters to is_thin or is_stub. Use to find notes worth expanding or merging."
-when_to_use: "when asked which notes are too short/thin/stubs/need expanding, or during vault cleanup and quality passes"
-falsifiable_if: "a reported thin note is actually substantial, or known stub notes are omitted"
+description: Find thin and stub notes — notes that exist but are nearly empty (< 500 chars) or contain stub markers (TODO/stub/placeholder/expand). Imports the Pattern-Scan engine and filters to is_thin or is_stub. Use to find notes worth expanding or merging.
+when_to_use: when asked which notes are too short/thin/stubs/need expanding, or during vault cleanup and quality passes
+falsifiable_if: a reported thin note is actually substantial, or known stub notes are omitted
 applies_to:
   - pattern-recognition
   - vault-maintenance
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+summary: Find-Stubs
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Stubs

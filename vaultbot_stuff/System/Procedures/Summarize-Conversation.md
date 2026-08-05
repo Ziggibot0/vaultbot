@@ -3,15 +3,19 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-07-31
-description: "Summarize a conversation transcript concisely, preserving the user's goal, key decisions, important facts, and open questions. Returns a brief summary (max 500 tokens). Uses the small model — summarization is simple condensation."
-when_to_use: "when the conversation history is getting too long and needs to be compacted"
-falsifiable_if: "the summary loses the user's original goal or key decisions, or includes fabricated content not in the transcript"
+description: Summarize a conversation transcript concisely, preserving the user's goal, key decisions, important facts, and open questions. Returns a brief summary (max 500 tokens). Uses the small model — summarization is simple condensation.
+when_to_use: when the conversation history is getting too long and needs to be compacted
+falsifiable_if: the summary loses the user's original goal or key decisions, or includes fabricated content not in the transcript
 applies_to:
   - compaction
   - conversation-management
   - context-compression
 allowed_tools:
   - llm_generate
+summary: Summarize-Conversation
+tags:
+  - procedure
+  - procedures
 ---
 
 # Summarize-Conversation

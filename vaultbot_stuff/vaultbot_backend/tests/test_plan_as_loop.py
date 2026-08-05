@@ -86,8 +86,9 @@ def test_model_drives_docstring_present():
     assert "The model drives" in src, (
         "docstring must state 'The model drives' to document the architecture"
     )
-    assert "No phases, no gates" in src, (
-        "docstring must state 'No phases, no gates' to document the architecture"
+    assert "one-rule plan gate" in src.lower() or "ONE rule" in src, (
+        "docstring must document the one-rule plan gate (replaces the old "
+        "'No phases, no gates' claim — we now have a single plan gate)"
     )
 
 

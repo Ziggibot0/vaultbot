@@ -1092,20 +1092,8 @@ class ResearchEngine:
         _topic = report.get("topic", "Research Note")
         _src_count = report.get("source_count", 0)
         _facts = report.get("synthesis_facts", 0)
-        # Build frontmatter
-        fm = [
-            "---",
-            "type: research",
-            "status: raw",
-            f"created: {date.today().isoformat()}",
-            f"summary: {summary or f'Deep research into {_topic}'}",
-            "tags: [research]",
-            f"source_count: {_src_count}",
-            f"fact_count: {_facts}",
-            "---",
-            "",
-        ]
-        lines = fm + [f"# {_topic}", ""]
+        # Build the body content — frontmatter is injected by note_schema
+        lines = [f"# {_topic}", ""]
         if summary:
             lines += ["## Summary", summary, ""]
         lines += [
@@ -1115,9 +1103,6 @@ class ResearchEngine:
             "## Sources",
         ]
         for s in report["sources"]:
-            # Link to the local archived copy if one exists (provenance to the
-            # saved snapshot, not just the live URL which may rot). Falls back
-            # to the live URL if the source wasn't archived.
             try:
                 from web_source_store import find_source
                 archived = find_source(s["url"])
@@ -1135,7 +1120,31 @@ class ResearchEngine:
                   f"<!-- research: {report['source_count']} sources, "
                   f"{report['synthesis_facts']} facts, "
                   f"{len(report.get('rounds', []))} rounds -->"]
-        return "\n".join(lines)
+        body = "\n".join(lines)
+
+        # Inject universal schema frontmatter
+        try:
+            from note_schema import inject_schema
+            return inject_schema(
+                body,
+                f"vaultbot_stuff/Knowledge/Research/{_topic}.md",
+                force_type="research",
+            )
+        except ImportError:
+            # Fallback: manual frontmatter if note_schema unavailable
+            fm = [
+                "---",
+                "type: research",
+                "status: raw",
+                f"created: {date.today().isoformat()}",
+                f"summary: {summary or f'Deep research into {_topic}'}",
+                "tags: [research]",
+                f"source_count: {_src_count}",
+                f"fact_count: {_facts}",
+                "---",
+                "",
+            ]
+            return "\n".join(fm) + body
 
     # --- LLM-assisted note structuring ------------------------------------
     # The extractive synthesis above is a flat bullet dump of corroborated
@@ -1275,7 +1284,10 @@ class ResearchEngine:
             "tags) and restructure it into a proper Obsidian research note. "
             "You MUST:\n"
             "1. Start with YAML frontmatter (--- ... ---) with keys: type, "
-            "status, created, summary, tags, sources, depends_on.\n"
+            "status, created, summary, tags. For claim-like notes also use: "
+            "supports, contradicts, derived_from, confidence, "
+            "falsifiable_if (all optional — only when the note makes a "
+            "verifiable claim).\n"
             "2. Use ## H2 section headings to organize the content into a "
             "narrative (NOT flat bullet points). Each section should build "
             "an argument, not just list facts.\n"
@@ -1286,7 +1298,10 @@ class ResearchEngine:
             "invent note titles that aren't in that list.\n"
             "5. Keep ALL the factual content from the synthesis — don't "
             "drop facts, just restructure them into readable prose.\n"
-            "6. End with a ## Sources section listing each source as a "
+            "6. ONE IDEA PER NOTE: If the research covers multiple distinct "
+            "claims, mention them but keep this note focused on the main "
+            "claim. The vault can split notes later.\n"
+            "7. End with a ## Sources section listing each source as a "
             "markdown link.\n"
             "Do NOT add a top-level # heading (the caller adds it). Start "
             "directly with the YAML frontmatter."
@@ -1348,5 +1363,16 @@ class ResearchEngine:
         # calls -- pure string matching against actual vault note titles.
         if vault_note_titles:
             note_md = self._repair_wikilinks(note_md, vault_note_titles)
+
+        # Inject universal schema to fill any required fields the LLM forgot
+        try:
+            from note_schema import inject_schema
+            note_md = inject_schema(
+                note_md,
+                f"vaultbot_stuff/Knowledge/Research/{topic}.md",
+                force_type="research",
+            )
+        except ImportError:
+            pass
 
         return note_md

@@ -13,8 +13,14 @@ scope:
   - architecture
   - external-tools
   - portability
-falsifiable_if: "a future session occurs where the operator does not correct VaultBot for hardcoding local LLM connections (like direct Ollama calls) instead of using configured endpoints"
-tags: [semantic, pattern, architecture, constraints, sean-preferences]
+falsifiable_if: a future session occurs where the operator does not correct VaultBot for hardcoding local LLM connections (like direct Ollama calls) instead of using configured endpoints
+tags:
+  - semantic
+  - pattern
+  - architecture
+  - constraints
+  - sean-preferences
+summary: LLM Endpoint Abstraction Constraint
 ---
 
 # LLM Endpoint Abstraction Constraint

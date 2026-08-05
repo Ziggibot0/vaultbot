@@ -115,6 +115,10 @@ class Services:
     # ConnectionManager is defined in main.py (kept there for now); typed
     # loosely to avoid importing main here (would create a cycle).
     manager: object = None
+    # Conversation-aware retrieval: searchable index of recent conversation
+    # turns so the bot can "remember what it just said." Optional with a
+    # default so tests that build Services without it still construct.
+    conversation_index: object | None = None
 
     @property
     def vault_path(self) -> str:

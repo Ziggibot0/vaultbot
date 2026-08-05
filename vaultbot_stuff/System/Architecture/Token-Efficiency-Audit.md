@@ -3,10 +3,16 @@ type: system-design
 status: complete
 created: 2026-07-31
 title: Token Efficiency Audit
-tags: [architecture, token-efficiency, llm-cost, scaling, audit]
+tags:
+  - architecture
+  - token-efficiency
+  - llm-cost
+  - scaling
+  - audit
 depends_on:
   - "[[Context-Budgeting-for-Vault-Growth]]"
   - "[[Framework-Friction-Fix-Plan]]"
+summary: Token Efficiency Audit
 ---
 
 # Token Efficiency Audit

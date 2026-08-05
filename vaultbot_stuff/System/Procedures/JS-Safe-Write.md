@@ -3,9 +3,15 @@ type: procedure
 status: active
 model_cartridge: big
 created: 2026-07-31
-description: "Safely edit JavaScript files with node syntax validation before writing."
-when_to_use: "When you need to edit the Obsidian plugin main.js or any .js/.mjs/.cjs file."
-allowed_tools: [js_safe_write, code_read]
+description: Safely edit JavaScript files with node syntax validation before writing.
+when_to_use: When you need to edit the Obsidian plugin main.js or any .js/.mjs/.cjs file.
+allowed_tools:
+  - js_safe_write
+  - code_read
+summary: JS-Safe-Write
+tags:
+  - procedure
+  - procedures
 ---
 
 # JS-Safe-Write

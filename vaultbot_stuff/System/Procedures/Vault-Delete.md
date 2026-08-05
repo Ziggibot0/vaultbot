@@ -3,9 +3,15 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-07-31
-description: "Safely delete a note from the vault with backup."
-when_to_use: "When a note is garbage, duplicate, or needs to be removed. Backs up content before deleting."
-allowed_tools: [vault_delete, vault_search]
+description: Safely delete a note from the vault with backup.
+when_to_use: When a note is garbage, duplicate, or needs to be removed. Backs up content before deleting.
+allowed_tools:
+  - vault_delete
+  - vault_search
+summary: Vault-Delete
+tags:
+  - procedure
+  - procedures
 ---
 
 # Vault-Delete

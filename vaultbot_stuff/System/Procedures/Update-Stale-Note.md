@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Given a note that describes a system behavior, check if that behavior still matches the code and update the note if it doesn't. Reads the note, reads the referenced code, and the small model produces an updated version of the note's description section. Does NOT write to disk — returns the updated text for the big model to review and write."
-when_to_use: "when a note is outdated and needs updating, after a code change that affects documented behavior, when fixing a stale note, or when asked to 'update this note to match the code'"
-falsifiable_if: "the updated note still doesn't match the code, or the update introduces incorrect information"
+description: Given a note that describes a system behavior, check if that behavior still matches the code and update the note if it doesn't. Reads the note, reads the referenced code, and the small model produces an updated version of the note's description section. Does NOT write to disk — returns the updated text for the big model to review and write.
+when_to_use: when a note is outdated and needs updating, after a code change that affects documented behavior, when fixing a stale note, or when asked to 'update this note to match the code'
+falsifiable_if: the updated note still doesn't match the code, or the update introduces incorrect information
 applies_to:
   - vault-code-sync
   - note-updating
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Update-Stale-Note
+tags:
+  - procedure
+  - procedures
 ---
 
 # Update-Stale-Note

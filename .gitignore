@@ -75,12 +75,16 @@ vaultbot_stuff/vaultbot_backend/custom_tools/*.bak
 vaultbot_stuff/vaultbot_backend/_test_*.py
 vaultbot_stuff/vaultbot_backend/_diag*.py
 vaultbot_stuff/vaultbot_backend/_torture_test.py
+vaultbot_stuff/vaultbot_backend/_dream_pass_themes.json
+vaultbot_stuff/vaultbot_backend/_spawn_diag*.log
 vaultbot_stuff/vaultbot_backend/trash/
 vaultbot_stuff/vaultbot_backend/partials/
 vaultbot_stuff/vaultbot_backend/*_log.json
 vaultbot_stuff/vaultbot_backend/golden_set.json
 vaultbot_stuff/vaultbot_backend/backend_out.log
 vaultbot_stuff/vaultbot_backend/backend_err.log
+# Stray single-letter files from accidental `> e` redirects
+vaultbot_stuff/vaultbot_backend/e
 
 # Nested accidental duplicate (from in-repo reorg runs)
 vaultbot_stuff/vaultbot_backend/vaultbot_stuff/

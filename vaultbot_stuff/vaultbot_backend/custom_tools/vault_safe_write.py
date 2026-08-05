@@ -2,7 +2,7 @@
 Agent-authored tool: vault_safe_write
 """
 
-SCHEMA = {"name": "vault_safe_write", "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code.", "parameters": {"properties": {"content": {"description": "The full markdown content to write.", "type": "string"}, "dry_run": {"description": "If true, validate and report what would happen but do not write to disk.", "type": "boolean"}, "file_path": {"description": "Path to the note, relative to vault root (e.g. 'Knowledge/Research/My-Note.md' or 'User/VaultBot Issues.md').", "type": "string"}}, "required": ["file_path", "content"], "type": "object"}}
+SCHEMA = {"name": "vault_safe_write", "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root \u2014 those are gitignored hygiene zones.", "parameters": {"properties": {"content": {"description": "The full markdown content to write.", "type": "string"}, "dry_run": {"description": "If true, validate and report what would happen but do not write to disk.", "type": "boolean"}, "file_path": {"description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md', 'vaultbot_stuff/Memory/Chat/Chat-Topic.md', 'vaultbot_stuff/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER write to root-level Knowledge/, Memory/, or System/ \u2014 always use the vaultbot_stuff/ prefix.", "type": "string"}}, "required": ["file_path", "content"], "type": "object"}}
 
 """
 Agent-authored tool: vault_safe_write
@@ -145,6 +145,27 @@ def run(args: dict) -> dict:
             result["blocked_reason"] = f"Cannot create sacred journal file: {file_path_str}"
             return result
         result["checks"]["is_sacred_journal"] = False
+
+    # --- Schema injection (universal frontmatter) ---
+    # Auto-inject missing required fields.  Validate to catch invalid values.
+    try:
+        from note_schema import inject_schema, validate_schema
+        content = inject_schema(
+            content, file_path_str,
+            existing_content=existing if file_exists else None,
+        )
+        ok, errors, warnings = validate_schema(content)
+        result["checks"]["schema_valid"] = ok
+        result["checks"]["schema_warnings"] = warnings
+        if not ok:
+            result["blocked_reason"] = (
+                f"Schema validation failed: {'; '.join(errors)}"
+            )
+            return result
+    except ImportError:
+        # note_schema not available (e.g. running outside backend dir) —
+        # don't block the write, just note it.
+        result["checks"]["schema_injection_skipped"] = True
 
     # --- All checks passed ---
 

@@ -2,12 +2,16 @@
 type: procedure
 status: experimental
 created: 2026-07-31
-description: "Fix indentation errors in chat_handler.py after Remove-All-Stops procedure."
-when_to_use: "after running Remove-All-Stops if chat_handler.py has indentation errors from the edits"
+description: Fix indentation errors in chat_handler.py after Remove-All-Stops procedure.
+when_to_use: after running Remove-All-Stops if chat_handler.py has indentation errors from the edits
 allowed_tools: []
 spec_version: 2
 success_count: 0
 failure_count: 0
+summary: Steps
+tags:
+  - procedure
+  - procedures
 ---
 
 ## Steps

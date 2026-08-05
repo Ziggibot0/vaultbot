@@ -1,3 +1,13 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: Communication Preferences
+tags:
+  - claim
+  - baseline
+---
+
 # Communication Preferences
 
 > **This is a template.** Fill it in with how YOU like to be talked to.

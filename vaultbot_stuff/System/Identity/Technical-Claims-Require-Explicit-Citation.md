@@ -13,8 +13,14 @@ scope:
   - research-methodology
   - claim-verification
   - sourcing
-falsifiable_if: "a future session occurs where the operator accepts a technical claim about research depth or fact counts without requesting explicit source citations or excerpts"
-tags: [semantic, citation, research-hygiene, claim-verification, vaultbot-failures]
+falsifiable_if: a future session occurs where the operator accepts a technical claim about research depth or fact counts without requesting explicit source citations or excerpts
+tags:
+  - semantic
+  - citation
+  - research-hygiene
+  - claim-verification
+  - vaultbot-failures
+summary: Technical Claims Require Explicit Citation
 ---
 
 # Technical Claims Require Explicit Citation

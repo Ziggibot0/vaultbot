@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Verify a vault note's factual claims against the rest of the vault. Given a note path, extracts claims and searches the vault for supporting or contradicting evidence in other notes. Returns claims that are unsupported or contradicted by other vault notes. Use when validating a note before relying on it."
-when_to_use: "when validating a note's claims against vault knowledge, before relying on a note for a decision, or when asked 'is this note accurate'"
-falsifiable_if: "the procedure flags a claim as unsupported when other vault notes do support it, or misses contradictions"
+description: Verify a vault note's factual claims against the rest of the vault. Given a note path, extracts claims and searches the vault for supporting or contradicting evidence in other notes. Returns claims that are unsupported or contradicted by other vault notes. Use when validating a note before relying on it.
+when_to_use: when validating a note's claims against vault knowledge, before relying on a note for a decision, or when asked 'is this note accurate'
+falsifiable_if: the procedure flags a claim as unsupported when other vault notes do support it, or misses contradictions
 applies_to:
   - claim-verification
   - vault-accuracy
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_search
   - llm_generate
+summary: Note-Accuracy-Check
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Accuracy-Check
@@ -86,5 +90,5 @@ Return JSON: {"results": [{"claim": "...", "verdict": "supported|contradicted|un
 
 ## Related Procedures
 - [[Cross-Check-Claims]] — verifies claims against web sources (external verification)
-- [[Structure-Research-Note]] — parent procedure for note creation
+- [[vaultbot_stuff/Structure-Research-Note]] — parent procedure for note creation
 - [[Vault-Lint]] — structural quality checks (broken links, frontmatter)

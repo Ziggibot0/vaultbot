@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Check if a vault note's claims are consistent with the web sources it cites. Reads the note, extracts claims with source URLs, fetches each source, and verifies each claim against the source text. Returns claims that the source doesn't support. Use when fact-checking a research note against its sources."
-when_to_use: "when fact-checking a research note against its cited web sources, when verifying research quality, or when a note makes claims that need source verification"
-falsifiable_if: "the procedure flags a claim as unsupported when the source does support it, or misses unsupported claims"
+description: Check if a vault note's claims are consistent with the web sources it cites. Reads the note, extracts claims with source URLs, fetches each source, and verifies each claim against the source text. Returns claims that the source doesn't support. Use when fact-checking a research note against its sources.
+when_to_use: when fact-checking a research note against its cited web sources, when verifying research quality, or when a note makes claims that need source verification
+falsifiable_if: the procedure flags a claim as unsupported when the source does support it, or misses unsupported claims
 applies_to:
   - claim-verification
   - research-quality
@@ -15,6 +15,10 @@ allowed_tools:
   - web_read_source
   - code_read
   - llm_generate
+summary: Cross-Check-Claims
+tags:
+  - procedure
+  - procedures
 ---
 
 # Cross-Check-Claims

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Break a self-modification goal into a minimal ordered procedure step list. Given a goal like 'add a retry to the chat handler', reads the relevant code, identifies the exact functions to change, and returns a numbered list of surgical edits. Does NOT write code — just plans the edits so the big model can execute them one at a time."
-when_to_use: "before making a multi-file code change to the backend, when planning a self-modification, or when you need to know exactly which functions to touch before editing"
-falsifiable_if: "the plan misses a function that needs changing, or includes functions that don't need changing"
+description: Break a self-modification goal into a minimal ordered procedure step list. Given a goal like 'add a retry to the chat handler', reads the relevant code, identifies the exact functions to change, and returns a numbered list of surgical edits. Does NOT write code — just plans the edits so the big model can execute them one at a time.
+when_to_use: before making a multi-file code change to the backend, when planning a self-modification, or when you need to know exactly which functions to touch before editing
+falsifiable_if: the plan misses a function that needs changing, or includes functions that don't need changing
 applies_to:
   - self-modification
   - code-planning
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Proc-Step-Planner
+tags:
+  - procedure
+  - procedures
 ---
 
 # Proc-Step-Planner

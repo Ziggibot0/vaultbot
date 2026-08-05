@@ -385,6 +385,23 @@ class AutonomousResearcher:
                     self._log("autonomous_index_note_failed",
                         {"path": note_path, "error": str(e)})
 
+            # Add to QA queue so the next idle window checks this note's
+            # frontmatter quality. The researcher creates notes; QA heals
+            # them. This is the "switch back and forth" coordination: the
+            # researcher only runs when QA is done, and QA gets the
+            # researcher's output as new work.
+            try:
+                from qa_worker import load_qa_queue, save_qa_queue
+                rel = os.path.relpath(note_path, str(self.vault_path)).replace("\\", "/")
+                qa_queue = load_qa_queue()
+                # Insert at the FRONT of the queue — freshly researched notes
+                # are high-priority for QA (verify they have good frontmatter
+                # before they get used in retrieval).
+                qa_queue.insert(0, {"path": rel, "touch_count": 0})
+                save_qa_queue(qa_queue)
+            except Exception:  # noqa: BLE001 — best-effort
+                pass
+
             return note_path
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("autonomous_research_error", {
@@ -488,6 +505,18 @@ class AutonomousResearcher:
                         "theme": cluster["theme"],
                         "note_path": note_result["note_path"],
                     })
+                    # Add consolidation notes to QA queue too
+                    try:
+                        from qa_worker import load_qa_queue, save_qa_queue
+                        rel = os.path.relpath(
+                            note_result["note_path"],
+                            str(self.vault_path),
+                        ).replace("\\", "/")
+                        qa_queue = load_qa_queue()
+                        qa_queue.insert(0, {"path": rel, "touch_count": 0})
+                        save_qa_queue(qa_queue)
+                    except Exception:  # noqa: BLE001 — best-effort
+                        pass
 
             return {
                 "ok": True,
@@ -510,6 +539,23 @@ class AutonomousResearcher:
         if self._chat_active.is_set():
             self._log("autonomous_cycle_skipped_chat_active", {})
             return
+        # QA-priority: if the QA worker still has notes to heal, skip this
+        # cycle. Existing vault notes get healed BEFORE the researcher
+        # creates new ones. The QA worker runs during chat idle windows;
+        # the researcher only fires when the queue is drained. This prevents
+        # the two background processes from fighting over the GPU — QA
+        # heals what's there, then the researcher expands, then QA heals
+        # what the researcher made.
+        try:
+            from qa_worker import load_qa_queue
+            qa_queue = load_qa_queue()
+            if qa_queue:
+                self._log("autonomous_cycle_skipped_qa_pending", {
+                    "qa_queue_size": len(qa_queue),
+                })
+                return
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
         cycle_t0 = time.time()
         if hasattr(self, '_heartbeat'):
             self._heartbeat("cycle starting")

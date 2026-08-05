@@ -75,8 +75,8 @@ class ChatLoopCheckpointer:
         try:
             if self.session_logger is not None:
                 self.session_logger.log(event, data)
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass
+        except Exception as e:  # noqa: BLE001 — checkpoint logging is best-effort; print so the failure is visible, not silent
+            print(f"[ChatLoopCheckpointer] _log failed: {e}")
 
     @staticmethod
     def _atomic_write(path: Path, content: str) -> None:
@@ -98,12 +98,12 @@ class ChatLoopCheckpointer:
                             time.sleep(0.05 * (attempt + 1))
                 if last:
                     raise last
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            except Exception:  # noqa: BLE001 — temp cleanup is best-effort; print so the failure is visible
                 try:
                     if os.path.exists(tmp):
                         os.remove(tmp)
-                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    pass
+                except Exception as ce:  # noqa: BLE001 — temp cleanup is best-effort; print so the failure is visible
+                    print(f"[ChatLoopCheckpointer] temp cleanup failed: {ce}")
                 raise
 
     # ------------------------------------------------------------------
@@ -151,5 +151,6 @@ def snapshot_working_memory(wm: Any) -> dict[str, Any]:
     try:
         snap = wm.snapshot()
         return snap if isinstance(snap, dict) else {}
-    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception as e:  # noqa: BLE001 — checkpoint snapshot is best-effort; print so the failure is visible, not silent
+        print(f"[ChatLoopCheckpointer] snapshot_working_memory failed: {e}")
         return {}

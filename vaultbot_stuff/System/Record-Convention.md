@@ -2,7 +2,12 @@
 type: convention
 status: active
 created: 2026-08-03
-tags: [convention, documentation, records, history]
+tags:
+  - convention
+  - documentation
+  - records
+  - history
+summary: Record Convention
 ---
 
 # Record Convention

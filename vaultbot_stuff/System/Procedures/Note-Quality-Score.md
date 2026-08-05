@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Score a vault note's quality on 5 dimensions: completeness, accuracy, connectivity, freshness, and clarity. Given a note path, reads the note, checks its links, frontmatter, and content, and the small model scores each dimension 1-5 with reasoning. Use when prioritizing which notes to improve."
-when_to_use: "when prioritizing which notes to improve, when assessing vault quality, or when asked 'how good is this note'"
-falsifiable_if: "the scores contradict the note's actual quality, or the reasoning is fabricated"
+when_to_use: when prioritizing which notes to improve, when assessing vault quality, or when asked 'how good is this note'
+falsifiable_if: the scores contradict the note's actual quality, or the reasoning is fabricated
 applies_to:
   - vault-quality
   - note-assessment
@@ -15,6 +15,10 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
+summary: Note-Quality-Score
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Quality-Score

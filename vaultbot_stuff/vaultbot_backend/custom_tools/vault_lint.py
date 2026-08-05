@@ -130,6 +130,21 @@ def run(args: dict) -> dict:
     quality_issues = _check_argument_quality(content)
     issues.extend(quality_issues)
 
+    # Universal schema validation
+    try:
+        import sys, os
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if backend_dir not in sys.path:
+            sys.path.insert(0, backend_dir)
+        from note_schema import validate_schema
+        schema_ok, schema_errors, schema_warnings = validate_schema(content)
+        for err in schema_errors:
+            issues.append({"type": "schema_error", "message": err})
+        for warn in schema_warnings:
+            issues.append({"type": "schema_warning", "message": warn})
+    except ImportError:
+        pass  # note_schema unavailable — skip schema checks
+
     # Extract tags (avoid matching hex colors like #FF0000)
     tags = list(set(re.findall(r'(?<!\w)#([a-zA-Z][a-zA-Z0-9_-]*)', content)))
 

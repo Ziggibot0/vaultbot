@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Run the graph analyzer again and compare before/after metrics. Verifies the graph is healthier after the dream pass. Takes the 'before' metrics from Dream-Analyze as input."
-when_to_use: "As part of a Dream-Pass cycle, or standalone after graph maintenance work."
-falsifiable_if: "islands_after > islands_before or connectivity_after < connectivity_before"
+description: Run the graph analyzer again and compare before/after metrics. Verifies the graph is healthier after the dream pass. Takes the 'before' metrics from Dream-Analyze as input.
+when_to_use: As part of a Dream-Pass cycle, or standalone after graph maintenance work.
+falsifiable_if: islands_after > islands_before or connectivity_after < connectivity_before
 applies_to:
   - vault
   - graph-health
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - vault_graph_analyzer
   - run_procedure
+summary: Dream-Validate
+tags:
+  - procedure
+  - procedures
 ---
 
 # Dream-Validate

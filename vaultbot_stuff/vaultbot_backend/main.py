@@ -214,6 +214,54 @@ async def lifespan(app: FastAPI):
                 app_state.set_startup_reindex_failed(str(e))
         asyncio.create_task(background_index())
 
+        # ── Schema self-heal ──────────────────────────────────────────
+        # On every boot, scan all vault .md files and auto-inject missing
+        # required frontmatter fields (type, status, created, summary, tags).
+        # This heals notes written before the schema was introduced AND
+        # notes edited externally (e.g. via Obsidian) that lost frontmatter.
+        # Runs in the background so it never blocks the server from accepting
+        # connections.  Only writes files that actually changed.
+        async def background_schema_heal():
+            try:
+                from note_schema import heal_vault_schema
+                _vault_root = os.getenv("VAULT_PATH", ".")
+                def _heal():
+                    return heal_vault_schema(
+                        _vault_root,
+                        logger=lambda msg: startup_logger.log(
+                            "schema_heal", {"msg": msg}),
+                    )
+                result = await loop.run_in_executor(None, _heal)
+                startup_logger.log("schema_heal_complete", {
+                    "scanned": result["scanned"],
+                    "healed": result["healed"],
+                    "skipped": result["skipped"],
+                    "errors": result["errors"],
+                })
+            except Exception as e:  # noqa: BLE001 — best-effort
+                startup_logger.log_exception(e, context="schema_heal")
+        asyncio.create_task(background_schema_heal())
+
+        # ── Build initial QA queue ────────────────────────────────────
+        # On boot, build the priority-ordered QA queue (most-used notes
+        # first, from touch_counts.json) and persist it to qa_queue.json.
+        # The idle-time QA worker (triggered after each chat reply) pulls
+        # from this queue.  Rebuilding on boot ensures new notes are added
+        # and stale queue entries are pruned.
+        async def background_build_qa_queue():
+            try:
+                from qa_worker import build_qa_queue, save_qa_queue
+                _vault_root = os.getenv("VAULT_PATH", ".")
+                def _build():
+                    q = build_qa_queue(_vault_root)
+                    save_qa_queue(q)
+                    return len(q)
+                count = await loop.run_in_executor(None, _build)
+                startup_logger.log("qa_queue_built", {"notes": count})
+            except Exception as e:  # noqa: BLE001 — best-effort
+                startup_logger.log_exception(e, context="build_qa_queue")
+        asyncio.create_task(background_build_qa_queue())
+
         startup_logger.log("server_startup", {"stage": "end", "status": "ok",
                                    "vectors": vault_indexer.index.ntotal if vault_indexer.index else 0})
 
@@ -337,10 +385,17 @@ app = FastAPI(title="VaultBot API", lifespan=lifespan)
 
 # Allow the Obsidian Electron app (origin app://obsidian.md) and local browsers
 # to call the API without browser CORS preflight blocks.
+#
+# CORS note: allow_credentials is intentionally NOT set (defaults to False).
+# Starlette silently ignores credentials when allow_origins=["*"] — the
+# combination was a misconfiguration that read as "credentials protected" while
+# doing nothing. This backend is localhost-only and does not use cookies or
+# auth headers, so credentials are genuinely unnecessary. If a future change
+# tightens allow_origins to a real origin list, re-enable allow_credentials
+# there — not here.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -700,6 +755,23 @@ manager = ConnectionManager()
 # functions change to `svc.<name>` access.
 from services import Services
 from app_state import set_services  # Phase 3: DI surface for routers
+from conversation_index import ConversationIndex
+
+# Conversation-aware retrieval: a searchable index of recent conversation
+# turns.  Built from the persisted conversation_state.json on startup so
+# the bot wakes up after a restart already able to recall what was said.
+conversation_index = ConversationIndex(ollama_client=ollama_client)
+try:
+    from conversation_state import load_history
+    _prior_history = load_history()
+    if _prior_history:
+        conversation_index.rebuild_from_history(_prior_history)
+        default_session_logger.log("conversation_index_restored", {
+            "turns": conversation_index.size,
+        })
+except Exception as e:  # noqa: BLE001
+    default_session_logger.log("conversation_index_restore_failed",
+        {"error": str(e)})
 
 svc = Services(
     ollama_client=ollama_client,
@@ -724,6 +796,7 @@ svc = Services(
     embedding_drift=embedding_drift,
     lazy_condenser=lazy_condenser,
     context_budgeter=context_budgeter,
+    conversation_index=conversation_index,
     health_monitor=health_monitor,
     calibration_tracker=calibration_tracker,
     rag_evaluator=rag_evaluator,

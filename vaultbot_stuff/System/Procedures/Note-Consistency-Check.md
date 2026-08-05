@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-02
 description: "Check if a note is internally consistent — do its claims, frontmatter, and structure agree? Reads a note and checks: does the frontmatter type match the content, do the tags match the topic, do the depends_on links actually relate to the note, and does the body contradict itself? Use when a note feels off or before relying on it."
-when_to_use: "when a note feels inconsistent, when frontmatter doesn't match content, when tags seem wrong, or before relying on a note that might have internal contradictions"
-falsifiable_if: "the procedure reports an inconsistency that doesn't exist, or misses a real internal contradiction"
+when_to_use: when a note feels inconsistent, when frontmatter doesn't match content, when tags seem wrong, or before relying on a note that might have internal contradictions
+falsifiable_if: the procedure reports an inconsistency that doesn't exist, or misses a real internal contradiction
 applies_to:
   - vault-quality
   - consistency-checking
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Note-Consistency-Check
+tags:
+  - procedure
+  - procedures
 ---
 
 # Note-Consistency-Check

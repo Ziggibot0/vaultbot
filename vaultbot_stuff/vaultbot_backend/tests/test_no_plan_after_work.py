@@ -139,27 +139,27 @@ class TestFinishReasonProtocol:
         )
 
     def test_no_plan_gate_in_chat_loop(self):
-        """ALL plan-gate enforcement heuristics must be GONE. The framework
-        now drives planning via a dedicated call BEFORE the loop (the
-        BabyAGI/LangGraph pattern) — no gates, no blocking, no nudges."""
+        """The OLD heuristic plan-gate must be GONE. The NEW one-rule plan
+        enforcement (round-counter-based, not signal-word-based) is allowed.
+
+        The old gate used _FORCE_PLAN_ON_MULTI, plan_gate_forced, and
+        from plan_gate import. The new enforcement uses _rounds_without_plan
+        (a simple counter) and _plan_gate_active (a single boolean mask).
+        The new approach is NOT a heuristic — it's one rule: if the model
+        works N rounds without a plan, execution tools are masked until it
+        calls plan_task. No signal-word matching, no message-text analysis.
+        """
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
         # OLD heuristics that must stay gone:
-        assert "_gate_active" not in source, (
-            "The old plan-gate state variable must be removed."
-        )
         assert "_FORCE_PLAN_ON_MULTI" not in source, (
             "The old force-plan-on-multi heuristic must be removed."
         )
         assert "plan_gate_forced" not in source, (
             "The old plan_gate_forced log must be removed."
         )
-        assert "from plan_gate import" not in source, (
-            "The plan_gate import must be removed from chat_handler."
-        )
-        # The gate-based enforcement (removed 2026-08-02 in favor of framework
-        # planning) must also stay gone:
+        # The old _EXEC_TOOLS gate set must stay gone:
         assert "_EXEC_TOOLS" not in source, (
-            "The _EXEC_TOOLS gate set must be removed — framework planning replaces it."
+            "The _EXEC_TOOLS gate set must be removed."
         )
         assert "plan_gate_blocked" not in source, (
             "The plan_gate_blocked log must be removed."

@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-01
 description: "Find open tasks/checkboxes (- [ ]) scattered across notes, oldest first. Imports the Pattern-Scan engine, filters to notes with todo_count > 0, and surfaces which notes carry the most unfinished tasks. Use when asked what's left to do or what tasks are lingering."
-when_to_use: "when asked what's left to do, what tasks/todos are outstanding, or to find lingering unfinished work across notes"
-falsifiable_if: "a note reported as having open tasks actually has none, or known checkbox-heavy notes are omitted"
+when_to_use: when asked what's left to do, what tasks/todos are outstanding, or to find lingering unfinished work across notes
+falsifiable_if: a note reported as having open tasks actually has none, or known checkbox-heavy notes are omitted
 applies_to:
   - pattern-recognition
   - tasks
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+summary: Find-Overdue-Tasks
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Overdue-Tasks

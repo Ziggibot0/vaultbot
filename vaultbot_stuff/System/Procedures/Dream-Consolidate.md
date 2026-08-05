@@ -3,8 +3,8 @@ type: procedure
 status: experimental
 model_cartridge: big
 created: 2026-08-02
-description: "Consolidate vault patterns and gaps into semantic knowledge notes. Reads journal themes from Dream-Scan, graph gaps from Dream-Analyze, and existing semantic notes for dedup. Uses LLM to synthesize new semantic notes. The most complex dream sub-procedure."
-when_to_use: "as part of Dream-Pass, or standalone when consolidating memories"
+description: Consolidate vault patterns and gaps into semantic knowledge notes. Reads journal themes from Dream-Scan, graph gaps from Dream-Analyze, and existing semantic notes for dedup. Uses LLM to synthesize new semantic notes. The most complex dream sub-procedure.
+when_to_use: as part of Dream-Pass, or standalone when consolidating memories
 applies_to:
   - vault
   - memory
@@ -16,6 +16,10 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
+summary: Dream-Consolidate
+tags:
+  - procedure
+  - procedures
 ---
 
 # Dream-Consolidate

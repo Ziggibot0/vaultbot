@@ -2,7 +2,7 @@
 Agent-authored tool: vault_append
 """
 
-SCHEMA = {"name": "vault_append", "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames).", "parameters": {"properties": {"content": {"description": "Content to append to the note", "type": "string"}, "file_path": {"description": "Path to the note, relative to vault root (e.g. 'Autonomy-Directive.md')", "type": "string"}}, "required": ["file_path", "content"], "type": "object"}}
+SCHEMA = {"name": "vault_append", "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ or the vault root (e.g. 'Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root.", "parameters": {"properties": {"content": {"description": "Content to append to the note", "type": "string"}, "file_path": {"description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Memory/Chat/Chat-Topic.md'). User-personal notes may be at the root (e.g. 'Autonomy-Directive.md') or in User/ (e.g. 'User/Research-Roadmap.md').", "type": "string"}}, "required": ["file_path", "content"], "type": "object"}}
 
 import re
 from pathlib import Path
@@ -52,6 +52,13 @@ def run(args: dict) -> dict:
         new_content = existing.rstrip() + "\n\n" + content + "\n"
     else:
         new_content = content + "\n"
+
+    # Inject schema on the merged content so the whole note stays valid.
+    try:
+        from note_schema import inject_schema
+        new_content = inject_schema(new_content, file_path)
+    except ImportError:
+        pass  # don't block append if note_schema unavailable
 
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_text(new_content, encoding="utf-8")

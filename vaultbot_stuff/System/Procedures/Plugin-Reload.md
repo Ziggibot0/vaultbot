@@ -3,9 +3,14 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-07-31
-description: "Reload the Obsidian plugin without killing the backend."
-when_to_use: "When you've edited the plugin's main.js and need to reload it."
-allowed_tools: [plugin_reload]
+description: Reload the Obsidian plugin without killing the backend.
+when_to_use: When you've edited the plugin's main.js and need to reload it.
+allowed_tools:
+  - plugin_reload
+summary: Plugin-Reload
+tags:
+  - procedure
+  - procedures
 ---
 
 # Plugin-Reload

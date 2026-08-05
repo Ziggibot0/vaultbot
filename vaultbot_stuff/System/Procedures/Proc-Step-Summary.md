@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Verify a self-modification edit didn't break imports. Given a file path that was just edited, attempts to import it in a subprocess and reports any import errors. Does NOT restart the backend — just checks if the file is syntactically and import-valid. Use after every Safe-Write edit to catch breakages immediately."
-when_to_use: "after editing a backend .py file, after running Safe-Write, before restarting the backend, or when verifying an edit didn't break anything"
-falsifiable_if: "the procedure reports a file is importable when it isn't, or reports an import error that doesn't exist"
+description: Verify a self-modification edit didn't break imports. Given a file path that was just edited, attempts to import it in a subprocess and reports any import errors. Does NOT restart the backend — just checks if the file is syntactically and import-valid. Use after every Safe-Write edit to catch breakages immediately.
+when_to_use: after editing a backend .py file, after running Safe-Write, before restarting the backend, or when verifying an edit didn't break anything
+falsifiable_if: the procedure reports a file is importable when it isn't, or reports an import error that doesn't exist
 applies_to:
   - self-modification
   - verification
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Proc-Step-Summary
+tags:
+  - procedure
+  - procedures
 ---
 
 # Proc-Step-Summary

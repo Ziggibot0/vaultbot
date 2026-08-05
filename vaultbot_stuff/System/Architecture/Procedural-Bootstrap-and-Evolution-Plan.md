@@ -2,7 +2,15 @@
 type: architecture-plan
 status: draft
 created: 2026-07-26
-tags: [architecture, self-improvement, procedures, bootstrap, evolution]
+tags:
+  - architecture
+  - self-improvement
+  - procedures
+  - bootstrap
+  - evolution
+summary: "# PROCEDURAL BOOTSTRAP AND EVOLUTION PLAN
+
+## SUMMARY"
 ---
 
 # Procedural Bootstrap and Evolution Plan
@@ -22,7 +30,7 @@ These are the chicken-and-egg at the center of the [[Small-Model-Path-to-AGI]] v
 
 ### The Key Insight: Procedures Are Found, Not Authored
 
-The internet already contains procedures for almost everything VaultBot needs to do. The [[Vault-Knowledge-Only-Directive]] says the vault is the only knowledge source. The research engine (see `research_engine.py`) is LLM-light: it scrapes, extracts, corroborates, and synthesizes deterministically. The LLM only sees the finished, sourced summary. This means:
+The internet already contains procedures for almost everything VaultBot needs to do. The [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] says the vault is the only knowledge source. The research engine (see `research_engine.py`) is LLM-light: it scrapes, extracts, corroborates, and synthesizes deterministically. The LLM only sees the finished, sourced summary. This means:
 
 - **No LLM invents procedures.** The research engine finds what someone else already wrote and stores it.
 - **The LLM's role in research is formatting and synthesis, not creation.** The content comes from the web.
@@ -36,7 +44,7 @@ The vault already has directives that ARE procedures, just written for LLM inter
 |---|---|---|
 | [[Autonomy-Directive]] | "Operate without permission" | Already deterministic: if-then rules for when to act vs report |
 | [[IDK-Fallback-Directive]] | "Say IDK when you don't know" | Already a decision tree: vault has it -> answer; empty + research works -> research; empty + research down -> IDK |
-| [[Vault-Knowledge-Only-Directive]] | "Vault is the only knowledge source" | Already deterministic: check vault, if empty say IDK |
+| [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] | "Vault is the only knowledge source" | Already deterministic: check vault, if empty say IDK |
 | [[No-Wikipedia-Directive]] | "Never use Wikipedia" | Already enforced at code level: `_BLOCKED_DOMAINS` in `duckduckgo_client.py` and `research_engine.py` |
 | [[the operator-Communication-Preferences]] | "Keep it short, lead with outcome" | Already deterministic: bullet points, bottom line up front |
 
@@ -472,7 +480,7 @@ This is the [[Fractal-Entropy-Principle]] in action: the system fights entropy (
 - [[Deterministic-Scaffolding-for-Small-Models]] -- the research backing
 - [[Vault-Longevity-Architecture]] -- why the vault is the mind
 - [[Autonomy-Directive]] -- operating without permission
-- [[Vault-Knowledge-Only-Directive]] -- vault is the only knowledge source
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] -- vault is the only knowledge source
 - [[IDK-Fallback-Directive]] -- what to do when you don't know
 - [[Fractal-Entropy-Principle]] -- expect entropy, fight it with energy input
 - [[Autonomous-Researcher-Quality-Gate]] -- lessons from the researcher producing garbage
@@ -777,7 +785,7 @@ Added the procedural notes rule to `build_system_prompt()` in `agent_tools.py`:
 
 | Note | Sources | Wikilinks | Lint |
 |---|---|---|---|
-| [[Structure-Research-Note]] | 5 (Zettelkasten guides) | 8, 0 broken | ✅ Pass |
+| [[vaultbot_stuff/Structure-Research-Note]] | 5 (Zettelkasten guides) | 8, 0 broken | ✅ Pass |
 | [[How-to-Evaluate-Source-Credibility]] | 2 (Ohio State, Stanford study) | 7, 0 broken | ✅ Pass |
 
 Both notes follow the procedural schema: frontmatter with `type: procedure`, `status: experimental`, `falsifiable_if`, `applies_to`, `depends_on`, `sources`. Body contains: when to use, steps, decision points, validation criteria, common failure modes, examples.

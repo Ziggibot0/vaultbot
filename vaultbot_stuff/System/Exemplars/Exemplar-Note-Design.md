@@ -1,7 +1,14 @@
 ---
 created: 2026-07-26
-summary: "How to structure permanent example notes in the vault that small models can retrieve and pattern-match against — few-shot prompting where the shots live in the vault, not the prompt."
-tags: [architecture, exemplars, few-shot, small-models, ontology]
+summary: How to structure permanent example notes in the vault that small models can retrieve and pattern-match against — few-shot prompting where the shots live in the vault, not the prompt.
+tags:
+  - architecture
+  - exemplars
+  - few-shot
+  - small-models
+  - ontology
+type: exemplar
+status: raw
 ---
 
 # Exemplar Note Design
@@ -21,7 +28,7 @@ The [[Procedural-Bootstrap-and-Evolution-Plan]] established that small models be
 ### The Vault Already Has Implicit Exemplars
 
 Several existing notes serve as de facto exemplars:
-- [[Structure-Research-Note]] — exemplar for research note structure
+- [[vaultbot_stuff/Structure-Research-Note]] — exemplar for research note structure
 - [[How-to-Evaluate-Source-Credibility]] — exemplar for source evaluation
 - [[Deterministic-Scaffolding-for-Small-Models]] — exemplar for architecture notes
 - [[Knowledge-Triad-Ontology-Epistemology-Hermeneutics]] — exemplar for synthesis notes
@@ -36,7 +43,7 @@ Each exemplar should demonstrate one *type* of output. Don't mix a research note
 
 | Exemplar Type | What it demonstrates | Status |
 |---|---|---|
-| Research note | Synthesis with sources, wikilinks, frontmatter | Exists ([[Structure-Research-Note]]) |
+| Research note | Synthesis with sources, wikilinks, frontmatter | Exists ([[vaultbot_stuff/Structure-Research-Note]]) |
 | Architecture note | Design reasoning, trade-offs, what-to-build | Exists ([[Deterministic-Scaffolding-for-Small-Models]]) |
 | Procedural note | Step-by-step procedure with schema | Exists ([[How-to-Evaluate-Source-Credibility]]) |
 | Tool creation | Code, test, deploy, lint | Needed |
@@ -79,5 +86,5 @@ This is the difference between a senior engineer (frontier model with weights th
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — procedures + exemplars = the scaffolding
 - [[Pre-Thought-Information-Shapes]] — exemplars are a type of pre-thought information shape
 - [[Deterministic-Scaffolding-for-Small-Models]] — exemplars are deterministic scaffolding
-- [[Structure-Research-Note]] — existing implicit exemplar
+- [[vaultbot_stuff/Structure-Research-Note]] — existing implicit exemplar
 - [[Self-Assessment-Using-the-Knowledge-Triad]] — the gap this fills

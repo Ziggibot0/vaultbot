@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Scan a vault note for step-by-step instructions, checklists, or workflows that are buried in prose, and extract them as candidate procedure specs. The small model identifies actionable sequences and drafts a procedure spec for each. Use when a note describes a how-to that could be proceduralized."
-when_to_use: "when a note describes a step-by-step process that could become a procedure, when mining notes for proceduralizable content, or when asked 'can this note be turned into a procedure'"
-falsifiable_if: "the extracted procedures are not actually in the note, or the steps are not actionable"
+description: Scan a vault note for step-by-step instructions, checklists, or workflows that are buried in prose, and extract them as candidate procedure specs. The small model identifies actionable sequences and drafts a procedure spec for each. Use when a note describes a how-to that could be proceduralized.
+when_to_use: when a note describes a step-by-step process that could become a procedure, when mining notes for proceduralizable content, or when asked 'can this note be turned into a procedure'
+falsifiable_if: the extracted procedures are not actually in the note, or the steps are not actionable
 applies_to:
   - procedure-discovery
   - self-improvement
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
+summary: Extract-Procedures-From-Note
+tags:
+  - procedure
+  - procedures
 ---
 
 # Extract-Procedures-From-Note

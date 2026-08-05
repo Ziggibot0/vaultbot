@@ -1,3 +1,16 @@
+---
+type: claim
+status: raw
+created: 2026-08-03
+summary: "# Contributing to VaultBot"
+tags:
+  - skelogg124@gmail.com
+  - vaultbot
+  - sessions.md
+  - knowledge.md
+  - pdf.md
+---
+
 # Contributing to VaultBot
 
 Thanks for your interest in improving VaultBot. This guide covers the

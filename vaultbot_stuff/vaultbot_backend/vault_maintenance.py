@@ -184,6 +184,15 @@ class VaultMaintenance:
 
         note_path.write_text(content, encoding="utf-8")
 
+        # Inject schema on chat notes (best-effort — never break chat loop)
+        try:
+            from note_schema import inject_schema
+            rel = str(note_path.relative_to(self.vault_path)).replace("\\", "/")
+            content = inject_schema(content, rel)
+            note_path.write_text(content, encoding="utf-8")
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+
         # Update the tracker so the next chat note links to this one
         self._write_last_chat_note(safe_topic)
         return note_path
@@ -238,6 +247,18 @@ class VaultMaintenance:
             content_lines.append("*No related notes found.*")
 
         content = "\n".join(content_lines)
+
+        # Inject universal schema frontmatter
+        try:
+            from note_schema import inject_schema
+            content = inject_schema(
+                content,
+                str(note_path.relative_to(self.vault_path)).replace("\\", "/"),
+                force_type="research",
+            )
+        except ImportError:
+            pass
+
         note_path.write_text(content, encoding="utf-8")
         self._log("research_create", {"file_path": str(note_path), "topic": topic})
         return note_path

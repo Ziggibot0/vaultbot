@@ -4,8 +4,8 @@ status: active
 model_cartridge: small
 created: 2026-08-01
 description: "Meta cleanup audit. Runs the Pattern-Scan engine ONCE, then reads its table to produce a single prioritized cleanup queue: orphans to link, broken links to fix, duplicates to merge, stubs to expand, load-bearing stale notes to refresh. One report, zero big-model reasoning over raw notes — all filtering is deterministic."
-when_to_use: "when asked to clean up the vault, do a vault hygiene/health sweep, or produce a single prioritized to-do list of maintenance work"
-falsifiable_if: "the cleanup queue recommends an action contradicted by the note's actual state (e.g. merge a non-duplicate)"
+when_to_use: when asked to clean up the vault, do a vault hygiene/health sweep, or produce a single prioritized to-do list of maintenance work
+falsifiable_if: the cleanup queue recommends an action contradicted by the note's actual state (e.g. merge a non-duplicate)
 applies_to:
   - pattern-recognition
   - vault-maintenance
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+summary: Vault-Cleanup
+tags:
+  - procedure
+  - procedures
 ---
 
 # Vault-Cleanup

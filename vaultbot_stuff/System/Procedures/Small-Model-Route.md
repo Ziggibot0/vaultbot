@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-02
-description: "Route a task intent to the best procedure for it. Given a description of what the vaultbot is about to do, searches the procedure library and uses the small model to pick the single best-matching procedure by comparing the task intent to each procedure's when_to_use. Returns the procedure name or 'none'. Use when the big model is about to do something and wants to know if a procedure already handles it."
-when_to_use: "when the big model is about to start a task and wants to know which procedure to call, when deciding which procedure fits a step, or when the procedure surface didn't surface an obvious match"
-falsifiable_if: "the router picks a procedure that doesn't apply to the task, or misses a procedure that obviously applies"
+description: Route a task intent to the best procedure for it. Given a description of what the vaultbot is about to do, searches the procedure library and uses the small model to pick the single best-matching procedure by comparing the task intent to each procedure's when_to_use. Returns the procedure name or 'none'. Use when the big model is about to do something and wants to know if a procedure already handles it.
+when_to_use: when the big model is about to start a task and wants to know which procedure to call, when deciding which procedure fits a step, or when the procedure surface didn't surface an obvious match
+falsifiable_if: the router picks a procedure that doesn't apply to the task, or misses a procedure that obviously applies
 applies_to:
   - procedure-routing
   - meta-procedure
@@ -14,6 +14,10 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
+summary: Small-Model-Route
+tags:
+  - procedure
+  - procedures
 ---
 
 # Small-Model-Route

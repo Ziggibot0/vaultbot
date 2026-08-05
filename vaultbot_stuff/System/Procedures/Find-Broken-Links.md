@@ -3,9 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-01
-description: "Find notes containing broken (dangling) wikilinks — links that point to a note that does not exist. Imports the Pattern-Scan engine and filters to notes where unresolved_out > 0, listing each broken target. Use before creating missing notes or cleaning dead links."
-when_to_use: "when asked to find broken/dead/dangling links, before gap-filling missing notes, or during vault lint"
-falsifiable_if: "a reported broken link actually resolves to a note, or a note with known dead links is omitted"
+description: Find notes containing broken (dangling) wikilinks — links that point to a note that does not exist. Imports the Pattern-Scan engine and filters to notes where unresolved_out > 0, listing each broken target. Use before creating missing notes or cleaning dead links.
+when_to_use: when asked to find broken/dead/dangling links, before gap-filling missing notes, or during vault lint
+falsifiable_if: a reported broken link actually resolves to a note, or a note with known dead links is omitted
 applies_to:
   - pattern-recognition
   - vault-maintenance
@@ -13,6 +13,10 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+summary: Find-Broken-Links
+tags:
+  - procedure
+  - procedures
 ---
 
 # Find-Broken-Links

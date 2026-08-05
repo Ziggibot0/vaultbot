@@ -3,9 +3,14 @@ type: procedure
 status: verified
 model_cartridge: small
 created: 2026-07-31
-description: "Inventory every available tool and assess whether you have a capability gap for a specific task. Run before attempting a task."
-when: "Before attempting a task to see where your capabilities end"
-allowed_tools: [vault_search]
+description: Inventory every available tool and assess whether you have a capability gap for a specific task. Run before attempting a task.
+when: Before attempting a task to see where your capabilities end
+allowed_tools:
+  - vault_search
+summary: The note instructs users to create a `capability_audit` function that uses Python's `SelfImprover` class to scan built-in tools with custom metadata, then assesses for task-specific capability gaps an
+tags:
+  - procedure
+  - procedures
 ---
 
 # Capability-Audit

@@ -19,8 +19,15 @@ scope:
   - tool-constraints
   - workflow-automation
   - vault-hygiene
-falsifiable_if: "a future session occurs where the operator accepts bespoke LLM scaffolding, ignores empty file cleanup, or allows unverified self-edits without explicit safety checks"
-tags: [semantic, constraint, vault-hygiene, deterministic, workflow, verification]
+falsifiable_if: a future session occurs where the operator accepts bespoke LLM scaffolding, ignores empty file cleanup, or allows unverified self-edits without explicit safety checks
+tags:
+  - semantic
+  - constraint
+  - vault-hygiene
+  - deterministic
+  - workflow
+  - verification
+summary: Deterministic-Constraints-and-Vault-Hygiene-Rules
 ---
 
 # Deterministic-Constraints-and-Vault-Hygiene-Rules
@@ -76,6 +83,6 @@ These constraints are non-negotiable operational baselines derived from direct o
 ## Related
 
 - [[Deterministic-Scaffolding-for-Small-Models]] — foundational design philosophy
-- [[Vault-Knowledge-Only-Directive]] — vault integrity baseline
+- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — vault integrity baseline
 - [[Calibration-via-Operator-Feedback]] — tracks the corrections feeding this rule
 - [[Semantic-Consolidation-Architecture]] — generation pipeline

@@ -1,8 +1,16 @@
 ---
 type: procedure
 title: Safe Commit Push Procedure
-tags: [procedure, git, safety, release]
-allowed_tools: [code_run]
+tags:
+  - procedure
+  - git
+  - safety
+  - release
+allowed_tools:
+  - code_run
+status: raw
+created: 2026-08-03
+summary: Safe Commit & Push Procedure
 ---
 
 # Safe Commit & Push Procedure

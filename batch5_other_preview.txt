@@ -1,0 +1,38 @@
+--- ﻿vaultbot_stuff\Memory\Chat\Chat-tell-me-how-your-procedures-work-how-do-you-make.md
+# Chat: tell me how your procedures work. how do you make   ## 2026-07-30 17:15 UTC  **User:** tell me how your procedures work. how do you make procedures? is there a procedure for making procedures? how can we leverage procedures to be a main substrate of action? procedures should be able to contain real python code in them: they're only stored as .md docs so that the LLM can see frontmatter and RAG can catch procedures. this way your tool list isn't bloated with shit you usually don't touch a
+
+--- vaultbot_stuff\No-Wikipedia-Directive.md
+# No Wikipedia Directive  Never cite Wikipedia as a source. Prefer primary sources, academic papers, and specialist forums. If the only available source is Wikipedia, say so and offer to find better sources.
+
+--- vaultbot_stuff\proc_audit_temp.md
+Agentic-Loop-Turn-Protocol [active]: ? Analyze-Failure-Log [experimental]: Read the procedure failure log and identify patterns — which procedures fail most, what types of failures are most commo Analyze-Function-Flow [experimental]: Analyze a backend function's call flow: what calls it, what it calls, and what the full execution path looks like. Given Backend-Restart [active]: Restart the VaultBot backend process and reconnect. Capability-Audit [verified]: Inventory every available tool and ass
+
+--- vaultbot_stuff\README.md
+# VaultBot  > A self-improving AI research agent that lives inside your Obsidian vault. > It thinks with your notes, researches the web, writes permanent > knowledge, and grows itself — all while spending minimal LLM calls.  VaultBot is not a chatbot. It's a **personal intelligence system** that treats your Obsidian vault as its mind. The LLM is swappable plumbing; the vault — your notes, your links, your shared history — is what it actually knows. It researches gaps, writes sourced notes, build
+
+--- vaultbot_stuff\Remove-Masking-Fallbacks.md
+  # Remove-Masking-Fallbacks  Remove all masking fallbacks from the framework. Each step is a self-contained Python code block that reads the target file, verifies the old string exists, replaces it with the new string, validates syntax with py_compile, and writes the result back. If any step fails, it fails loud — no silent degradation.  ## Steps  1. ```python    import py_compile, tempfile, os, shutil    f = "vaultbot_backend/fused_retrieval.py"    content = open(f, encoding="utf-8").read()   
+
+--- vaultbot_stuff\SECURITY.md
+# Security Policy  ## Reporting a vulnerability  If you find a security vulnerability in VaultBot, please **do not** open a public GitHub issue. Report it privately instead:  - Email: **skelogg124@gmail.com** - Subject line: `[VaultBot security] <short summary>`  Please include:  - A description of the issue and its impact. - Steps to reproduce (a minimal repro is ideal). - Any affected versions or commits.  ## What to expect  - Acknowledgement of your report within 7 days, usually sooner. - An 
+
+--- vaultbot_stuff\Structure-Research-Note.md
+
+
+--- vaultbot_stuff\System\Autonomy-Interruption-and-Goal-Staleness-Pattern.md
+  # Autonomy Interruption and Goal Staleness Pattern  ## How This Note Was Generated  This note was produced by deterministic pattern extraction across 249 chat logs in `vaultbot/chat/`. The extraction identified a cluster of negative-sentiment exchanges where the operator corrected VaultBot for stopping work prematurely, losing track of goals between sessions, or failing to record progress. The pattern emerged from keyword matching on terms like "stop," "autonomous," "stale," "goals," "where we
+
+--- vaultbot_stuff\System\Community-Contribution-System.md
+  # Community Contribution System  ## Goal  Allow any VaultBot instance (with user permission) to submit pull requests to the upstream VaultBot repo. Sean's VaultBot reviews each PR for safety and runs a torture test before merging to main. This way, other users' AI tokens pay for the thinking and contributions — not Sean's.  ## Architecture  ``` ┌──────────────────────────┐     ┌──────────────────────────┐ │  Contributor's VaultBot   │     │  Sean's VaultBot (reviewer)│ │  (any user, opt-in)   
+
+--- vaultbot_stuff\System\Framework-Friction-Fix-Plan.md
+  # Framework Friction Fix Plan  > **📋 RECORD** — This is a completed plan from 2026-07-30. It is preserved for project history. The fixes described here have been implemented. See current code for how the system actually works.  ## Root Cause Analysis  Three groups of issues share underlying root causes:  ### Group A: Code-First Safety Bias (FR-1, FR-6) **Root cause:** The safety framework was built code-first. safe_write validates Python, js_safe_write validates JS, but markdown — the primary 
+
+--- vaultbot_stuff\System\Procedure-Cartridge-Audit.md
+  # Procedure Cartridge Audit  ## Context  Following the [[Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge|tiny LLM use case mapping]], this audit classifies every procedure in `System/Procedures/` by what its LLM step actually does, then sets `model_cartridge` to `small` or `big` accordingly. The goal: cut cloud token usage by routing bounded-output tasks (reporting, formatting, classification) to the local qwen3.5:0.8b model.  ## Methodology  For each procedure, I read the full file
+
+--- vaultbot_stuff\System\Procedure-Expansion-Proposal.md
+  # Procedure Expansion Proposal  ## Context  Following the [[Procedure-Cartridge-Audit]] (which set 11/13 existing procedures to small cartridge), this proposal identifies NEW procedures that would automate recurring work I currently do inline with the big cloud model. Each new procedure that uses the `small` cartridge saves cloud tokens \u2014 the small model (qwen3.5:0.8b) runs locally for free.  ## Custom Tool Audit: Small-LLM Opportunities  I read all 16 custom tool source files. **Result: 
+
+--- vaultbot_stuff\System\Procedure-Redundancy-Audit.md
+  # Procedure Redundancy Audit  ## Method Read all 120 procedure frontmatters (name, description, when_to_use, applies_to, allowed_tools) and compared pairwise for functional overlap. The [[Find-Redundant-Procedures]] procedure failed because 120 procedures exceed the small model's context window — analysis was done by the big model directly.  ## Findings  ### HIGH Overlap — Merge Candidates  | # | Procedure A | Procedure B | Overlap | Recommendation | Reason | |---|---|---|---|---|---| | 1 | **
