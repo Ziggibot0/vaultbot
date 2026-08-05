@@ -93,4 +93,4 @@ jobs:
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
-        run: pytest -q --tb=short
+        run: pytest -v --tb=long --maxfail=5
