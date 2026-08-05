@@ -24,6 +24,7 @@ IGNORED_DIRS = {
     "partials",
     ".git",
     ".obsidian",
+    ".trash",  # Obsidian's recycle bin — deleted files must not pollute search
 }
 
 # Embedding schema version. Bumped whenever the text we embed for a note

@@ -17,6 +17,7 @@ _IGNORED_DIRS = {
     "partials",
     ".git",
     ".obsidian",
+    ".trash",  # Obsidian's recycle bin — deleted files must not pollute the graph
 }
 
 

@@ -85,6 +85,45 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "vault_read_note",
+            "description": (
+                "Read a vault note by its wikilink title. This is "
+                "DETERMINISTIC — it resolves the title to an exact file "
+                "path via the vault graph and reads the full content "
+                "directly from disk. Use this INSTEAD of vault_search when "
+                "you know the note's title (e.g. the user mentioned "
+                "[[Dream-Pass-Audit]] or you need to check a specific "
+                "note). Do NOT search for a note you can read by title. "
+                "vault_search is probabilistic (FAISS) and may return "
+                "trashed or irrelevant files; vault_read_note is "
+                "deterministic and always finds the exact note."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": (
+                            "The wikilink title of the note to read, "
+                            "e.g. 'Dream-Pass-Audit' (the part inside "
+                            "[[...]], before any | alias)."
+                        ),
+                    },
+                    "max_lines": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": (
+                            "Maximum lines to return (0 = whole file)."
+                        ),
+                    },
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "vault_gaps",
             "description": (
                 "List the vault's current knowledge gaps: dangling wikilinks "
@@ -501,13 +540,14 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 #   self_improvement, status). Zero LLM cost — deterministic keyword match.
 #
 # Tier 3 — PROCEDURE candidates: removed from the tool list entirely.
-#   These become procedure notes (System/Procedures/), discovered via RAG
+#   These become procedure notes (vaultbot_stuff/System/Procedures/), discovered via RAG
 #   and executed via execute_procedure. They stay as custom tools in
 #   custom_tools/ but are not advertised in the tool schema list.
 
 # Tier 1: Core tools (always sent)
 CORE_TOOL_NAMES: set[str] = {
     "vault_search",          # semantic search over the vault
+    "vault_read_note",       # deterministic read by wikilink title
     "code_read",             # read any file (vault or backend source)
     "plan_task",             # plan a multi-step task (working memory)
     "update_task",           # mark plan progress
@@ -797,7 +837,7 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"- Re-read saved web sources (web_read_source).\n"
         f"- Plan multi-step tasks (plan_task, update_task).\n"
         f"- Execute PROCEDURES (execute_procedure): notes in "
-        f"System/Procedures/ that encode specific workflows. When one "
+        f"vaultbot_stuff/System/Procedures/ that encode specific workflows. When one "
         f"surfaces in vault context and matches your task, run it. "
         f"Procedures include: Safe-Write (self-edit code), Write-Python-Tool "
         f"(create new tools), Code-Run (execute Python), Vault-List (list "
@@ -824,14 +864,15 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"code_run to test it, tool_create to add it, or safe_write to edit "
         f"an existing module. Never silently fail a task because you lacked "
         f"a tool — build the tool.\n"
-        f"1. YOUR PLAN: the framework already wrote a plan for this turn "
-        f"and you see it in WORKING MEMORY above. Execute it one step at "
-        f"a time: call update_task to mark the current step in_progress "
-        f"before you start it, do the work (call the tools you need), "
-        f"then call update_task to mark it completed. The loop keeps "
-        f"going until EVERY step is done — if you stop early with "
-        f"unfinished steps, the framework sends you back for one more "
-        f"round. Do NOT write a final answer until all steps are done.\n"
+        f"1. YOUR PLAN: If your task is multi-step, call plan_task first "
+        f"to write a goal and concrete ordered steps. If you don't, the "
+        f"framework will force you to after 3 tool rounds (execution tools "
+        f"get masked until you plan). Once you have a plan, execute it one "
+        f"step at a time: do the work (call the tools you need), then call "
+        f"update_task to mark the step completed. The loop keeps going "
+        f"until EVERY step is done — if you stop early with unfinished "
+        f"steps, the framework sends you back for one more round. Do NOT "
+        f"write a final answer until all steps are done.\n"
         f"   STEP CONTEXT: The working memory shows task status and notes. "
         f"When you mark a step completed, add a brief note via update_task "
         f"summarizing what was accomplished and key facts the next step "
@@ -844,25 +885,36 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"read specific sections. If the file is large, read it in chunks "
         f"by line range. Once you've read a section, move on to the next "
         f"task.\n"
-        f"   WORKFLOW: The model drives. There are no framework-enforced "
-        f"phases or gates. Use plan_task to decompose work, update_task "
-        f"to track progress, and tools to do the work. When all steps "
-        f"are done, write your final answer as prose.\n"
+        f"   WORKFLOW: The model drives. The framework enforces ONE rule: "
+        f"if you work 3+ rounds without a plan, execution tools are masked "
+        f"until you call plan_task. Use plan_task to decompose work, "
+        f"update_task to track progress, and tools to do the work. When "
+        f"all steps are done, write your final answer as prose.\n"
         f"   TURN PROTOCOL: Tool calls continue the loop — the framework "
         f"sends you back for another round after each tool batch. A "
         f"text-only response (no tool calls) ends the turn. If you have "
         f"unfinished plan steps, keep calling tools. When done, write "
         f"your final answer as prose.\n"
-        f"2. Answer from the VAULT CONTEXT (a connected subgraph of {owner_name}'s "
+        f"2. READING NOTES BY TITLE: When {owner_name} mentions a "
+        f"[[wikilink]] title or you know a note's title, call "
+        f"vault_read_note with the title — it resolves the title to an "
+        f"exact file path and reads the full content directly. Do NOT "
+        f"use vault_search to find a note whose title you already know. "
+        f"vault_search is probabilistic (FAISS) and may return trashed "
+        f"or irrelevant files; vault_read_note is deterministic. When "
+        f"{owner_name} describes what they see in Obsidian ('looks empty', "
+        f"'is wrong', 'seems broken'), read the file directly with "
+        f"vault_read_note or code_read to verify — do not search for it.\n"
+        f"3. Answer from the VAULT CONTEXT (a connected subgraph of {owner_name}'s "
         f"notes). Cite notes with wikilinks (e.g. `[[Actual-Note-Title]]`).\n"
-        f"3. If the vault is thin, out of date, or missing for {owner_name}'s "
+        f"4. If the vault is thin, out of date, or missing for {owner_name}'s "
         f"question, RESEARCH it yourself. Tell {owner_name}: 'I don't have "
         f"enough in the vault — researching <topic> now...', then call "
         f"vault_research. After it completes, synthesize a sourced answer.\n"
-        f"4. Be proactive: if you notice a gap, fill it. If a note is thin, "
+        f"5. Be proactive: if you notice a gap, fill it. If a note is thin, "
         f"research it. If you realize you lack an ability, build it. Always "
         f"tell {owner_name} what you're doing and why.\n"
-        f"5. The autonomous background researcher is ALSO filling gaps on its "
+        f"6. The autonomous background researcher is ALSO filling gaps on its "
         f"own — report on its activity when relevant.\n"
         f"6. When self-improving, ALWAYS test with code_run before "
         f"tool_create. To edit backend source code, use safe_write (it "
@@ -900,6 +952,21 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"read-only to you. Do not edit, append to, or delete a LOCKED note. "
         f"If a write is blocked because a note is LOCKED, tell {owner_name} "
         f"and respect it. {owner_name} can unlock it by removing the marker.\n"
+        f"- NOTE SCHEMA: Every note has YAML frontmatter with required "
+        f"fields: type, status, created, summary, tags. The system "
+        f"AUTO-INJECTS missing required fields — you don't have to know the "
+        f"schema. But for notes that make CLAIMS (architecture decisions, "
+        f"design principles, verified findings), ALSO provide these "
+        f"optional claim fields in frontmatter:\n"
+        f"    supports: [\"[[Note-Name]]\"]     — notes this claim agrees with\n"
+        f"    contradicts: [\"[[Note-Name]]\"]  — notes this claim disagrees with\n"
+        f"    derived_from: [\"[[Note-Name]]\"] — notes this was built from\n"
+        f"    confidence: 0.0-1.0               — how confident (number)\n"
+        f"    falsifiable_if: \"test condition\" — what would disprove this\n"
+        f"  These fields let the vault do deterministic reasoning without "
+        f"LLM calls. One idea per note — if a note covers multiple distinct "
+        f"claims, write separate notes and link them. After writing, run "
+        f"vault_lint to verify schema + quality.\n"
         f"- PROCEDURES: Procedures are the bridge to the small-model future. "
         f"A procedure is a markdown note with `type: procedure` in its "
         f"frontmatter that contains step-by-step instructions for a "
@@ -1040,7 +1107,7 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"(code_read), write notes (vault_safe_write, vault_append), re-read "
         f"saved web sources (web_read_source), plan multi-step tasks "
         f"(plan_task, update_task), and execute PROCEDURES (execute_procedure). "
-        f"Procedures are notes in System/Procedures/ that encode specific "
+        f"Procedures are notes in vaultbot_stuff/System/Procedures/ that encode specific "
         f"workflows — when one surfaces in vault context and matches your "
         f"task, call execute_procedure to run it deterministically. "
         f"Procedures include: self-editing code (Safe-Write), creating tools "
@@ -1051,14 +1118,15 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"you hit a wall, you don't give up — you build the procedure that "
         f"gets you over it.\n\n"
         f"# HOW YOU WORK\n"
-        f"1. YOUR PLAN: the framework already wrote a plan for this turn "
-        f"and you see it in WORKING MEMORY above. Execute it one step at "
-        f"a time: call update_task to mark the current step in_progress "
-        f"before you start it, do the work (call the tools you need), then "
-        f"call update_task to mark it completed. The loop keeps going until "
-        f"EVERY step is done — if you stop early with unfinished steps, the "
-        f"framework sends you back for one more round. Do NOT write a final "
-        f"answer until all steps are done.\n"
+        f"1. YOUR PLAN: If your task is multi-step, call plan_task first "
+        f"to write a goal and concrete ordered steps. If you don't, the "
+        f"framework will force you to after 3 tool rounds (execution tools "
+        f"get masked until you plan). Once you have a plan, execute it one "
+        f"step at a time: do the work (call the tools you need), then call "
+        f"update_task to mark the step completed. The loop keeps going "
+        f"until EVERY step is done — if you stop early with unfinished "
+        f"steps, the framework sends you back for one more round. Do NOT "
+        f"write a final answer until all steps are done.\n"
         f"   STEP CONTEXT: The working memory shows task status and notes. "
         f"When you mark a step completed, add a brief note via update_task "
         f"summarizing what was accomplished and key facts the next step "
@@ -1070,10 +1138,11 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"   READING CODE: When using code_read, use start_line/end_line to "
         f"read specific sections. If the file is large, read it in chunks "
         f"by line range and move on.\n"
-        f"   WORKFLOW: The model drives. There are no framework-enforced "
-        f"phases or gates. Use plan_task to decompose work, update_task "
-        f"to track progress, and tools to do the work. When all steps "
-        f"are done, write your final answer as prose.\n"
+        f"   WORKFLOW: The model drives. The framework enforces ONE rule: "
+        f"if you work 3+ rounds without a plan, execution tools are masked "
+        f"until you call plan_task. Use plan_task to decompose work, "
+        f"update_task to track progress, and tools to do the work. When "
+        f"all steps are done, write your final answer as prose.\n"
         f"   TURN PROTOCOL: Tool calls continue the loop — the framework "
         f"sends you back for another round after each tool batch. A "
         f"text-only response (no tool calls) ends the turn. If you have "
@@ -1085,6 +1154,17 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"plan, the framework retrieves NEW notes relevant to that step's "
         f"intent — so you see fresh context as you work, not just what the "
         f"original query surfaced. Use this step context.\n"
+        f"   READING NOTES BY TITLE: When {owner_name} mentions a "
+        f"[[wikilink]] title or you know a note's title, call "
+        f"vault_read_note with the title — it resolves the title to an "
+        f"exact file path and reads the full content directly. Do NOT "
+        f"use vault_search to find a note whose title you already know. "
+        f"vault_search is probabilistic (FAISS) and may return trashed "
+        f"or irrelevant files; vault_read_note is deterministic. When "
+        f"{owner_name} describes what they see in Obsidian ('looks "
+        f"empty', 'is wrong', 'seems broken'), read the file directly "
+        f"with vault_read_note or code_read to verify — do not search "
+        f"for it.\n"
         f"3. If the vault is thin or missing for {owner_name}'s question, "
         f"RESEARCH it: tell {owner_name} 'I don't have enough in the vault — "
         f"researching <topic> now...', then call vault_research.\n"
