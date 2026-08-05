@@ -424,7 +424,6 @@ async def set_model_endpoint(payload: dict,
         new_mid = f"{prov}:{requested_model}"
         if reg.get_model(new_mid) is None:
             try:
-                p = reg.get_provider(prov)
                 old = reg.get_model(mid)
                 reg.add_model(new_mid, requested_model, prov,
                               vision=(old.vision if old else False),

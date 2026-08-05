@@ -1171,7 +1171,6 @@ class SelfImprover:
         if not Path(venv_python).exists():
             venv_python = sys.executable
 
-        CAP = TUNABLES.code_run_cap_bytes  # hard cap per stream (64KB) — child output beyond this is dropped on disk
         out_path = err_path = None
         try:
             with tempfile.NamedTemporaryFile(mode="w+b", delete=False, prefix="cr_out_") as out_f, \

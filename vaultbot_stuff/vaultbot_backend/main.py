@@ -31,7 +31,6 @@ from dotenv import load_dotenv
 from embedding_drift import EmbeddingDrift
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from free_search import FreeSearch
 from fused_retrieval import FusedRetriever
 from graph_ops import GraphOpRegistry
 from identity import Identity
@@ -53,7 +52,7 @@ from vault_indexer import VaultIndexer
 from forum_backends import ForumEnhancedFreeSearch
 # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
 # backends, skips arXiv for technical queries, prioritizes forum results.
-FreeSearch = ForumEnhancedFreeSearch
+FreeSearch = ForumEnhancedFreeSearch  # noqa: F811  — intentional override of the base class
 from calibration import CalibrationTracker
 from claim_verifier import ClaimVerifier
 from context_budgeter import ContextBudgeter

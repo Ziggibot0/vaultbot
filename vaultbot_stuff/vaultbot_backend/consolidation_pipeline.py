@@ -430,7 +430,7 @@ class ConsolidationPipeline:
         # Pass through inject_schema to fill any missing universal fields
         try:
             from note_schema import inject_schema
-            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "-", theme)[:60]
+            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "-", cluster.get("theme", "unknown"))[:60]
             full_note = inject_schema(
                 full_note,
                 f"vaultbot_stuff/Memory/Build-Log/Semantic-{safe_name}.md",

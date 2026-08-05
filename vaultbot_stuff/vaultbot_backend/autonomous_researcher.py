@@ -20,6 +20,7 @@ Search backend: DuckDuckGo (free, no API key, no signup). Zero setup.
 """
 
 import asyncio
+import os
 import re
 import threading
 import time
