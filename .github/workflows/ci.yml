@@ -45,13 +45,20 @@ jobs:
           pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Debug — ruff version + path
+        working-directory: vaultbot_stuff
+        run: |
+          which ruff || echo "ruff NOT on PATH"
+          ruff --version || echo "ruff command failed"
+          ruff check --select F --statistics vaultbot_backend/ || true
+
       - name: "Ruff check — hard gate (F-rules: real bugs only)"
         # Gate on F-rules only (undefined names, unused imports, etc.) —
         # these are real bugs, not style.  The remaining ~250 B/UP/SIM/RUF
         # violations are pre-existing style debt that needs an incremental
         # cleanup pass; they're reported as warnings in the next step.
         working-directory: vaultbot_stuff
-        run: ruff check --select F --fix --exit-non-zero-on-fix vaultbot_backend/
+        run: ruff check --select F vaultbot_backend/
 
       - name: "Ruff check — soft gate (B, UP, SIM, RUF: style + correctness)"
         # Report bug-class + style violations.  Non-blocking so the team
