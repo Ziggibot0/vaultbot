@@ -2703,197 +2703,134 @@ class VaultBotSidebarView extends ItemView {
 		connectionCheckInterval = window.setInterval(ensureConnection, 5000);
 		this.registerInterval(connectionCheckInterval);
 
-		// ── Activity Console (the transparency layer) ──────────────────
-		// A bottom drawer between the chat and the footer that shows
-		// tool calls, progress events, thinking, and step summaries as
-		// collapsible cards. When closed, it's a one-line summary bar.
-		// When open, it shows the full execution trace. This replaces
-		// the inline activity lines that used to pollute the chat.
+		// ── Console Drawer (the transparency layer) ────────────────────
+		// A collapsible drawer between the chat and the footer. Collapsed
+		// it's a thin bar with a toggle handle. Expanded it pulls out a
+		// real terminal-style console that prints everything VaultBot is
+		// doing as plain text lines: status changes, tool calls, tool
+		// results, procedure steps, progress stages, thinking summaries,
+		// heartbeats, errors. Full transparency, zero clutter in the chat.
+
+		// --- Console state ---
+		let consoleOpen = false;
+		const consoleLines = [];          // array of {text, cls}
+		const MAX_CONSOLE_LINES = 500;    // cap to prevent unbounded DOM growth
+		let currentProcStepLine = null;   // last procedure_step "running" line element
+
+		// --- Console DOM ---
 		const consoleWrap = this.contentEl.createDiv({cls: 'vaultbot-console-wrap'});
-		consoleWrap.style.display = 'none'; // hidden until first activity
 
-		// Console bar (always visible when console is shown): one-line
-		// summary + toggle chevron.
 		const consoleBar = consoleWrap.createDiv({cls: 'vaultbot-console-bar'});
-		const consoleChevron = consoleBar.createSpan({cls: 'vaultbot-console-chevron', text: '▴'});
+		const consoleHandle = consoleBar.createSpan({cls: 'vaultbot-console-handle'});
+		const consoleHandleIcon = consoleHandle.createSpan({cls: 'vaultbot-console-handle-icon', text: '▸'});
+		consoleHandle.createSpan({text: ' Console'});
 		const consoleSummary = consoleBar.createSpan({cls: 'vaultbot-console-summary', text: 'idle'});
-		consoleBar.addEventListener('click', () => {
-			const isOpen = consoleBody.style.display !== 'none';
-			consoleBody.style.display = isOpen ? 'none' : '';
-			consoleChevron.setText(isOpen ? '▴' : '▾');
-		});
+		const consoleClearBtn = consoleBar.createEl('button', {cls: 'vaultbot-console-clear', text: 'clear'});
+		consoleClearBtn.title = 'Clear the console log';
 
-		// Console body (collapsible): the scrollable card list.
 		const consoleBody = consoleWrap.createDiv({cls: 'vaultbot-console-body'});
 		consoleBody.style.display = 'none'; // collapsed by default
 
-		// Activity log state: array of {id, category, label, status, el}
-		const activityLog = [];
-		const MAX_CONSOLE_CARDS = 200; // cap to prevent unbounded DOM growth
-
-		// Add or update an activity card in the console. If event_id
-		// matches an existing card, update it in place; otherwise append.
-		const addActivity = (item) => {
-			// Ensure the console wrap is visible.
-			consoleWrap.style.display = '';
-
-			// Try to find an existing card with the same event_id.
-			let card = null;
-			if (item.event_id) {
-				for (const entry of activityLog) {
-					if (entry.event_id === item.event_id) {
-						card = entry;
-						break;
-					}
-				}
+		// Toggle open/closed
+		const toggleConsole = () => {
+			consoleOpen = !consoleOpen;
+			consoleBody.style.display = consoleOpen ? 'flex' : 'none';
+			consoleHandleIcon.setText(consoleOpen ? '▾' : '▸');
+			consoleWrap.toggleClass('vaultbot-console-open', consoleOpen);
+			if (consoleOpen) {
+				consoleBody.scrollTop = consoleBody.scrollHeight;
 			}
-
-			if (card) {
-				// Update existing card in place.
-				if (item.status) card.status = item.status;
-				if (item.label) card.label = item.label;
-				if (item.detail !== undefined) card.detail = item.detail;
-				if (item.result !== undefined) card.result = item.result;
-				if (item.elapsed_ms !== undefined) card.elapsed_ms = item.elapsed_ms;
-				renderActivityCard(card);
-			} else {
-				// Create a new card.
-				const cardEl = consoleBody.createDiv({cls: 'vaultbot-activity-card'});
-				card = {
-					event_id: item.event_id || ('act-' + Date.now() + '-' + Math.random().toString(36).slice(2,8)),
-					category: item.category || 'tool',
-					icon: item.icon || '🔧',
-					label: item.label || '',
-					status: item.status || 'running',
-					detail: item.detail,
-					result: item.result,
-					elapsed_ms: item.elapsed_ms || 0,
-					timestamp: item.timestamp || new Date().toISOString(),
-					el: cardEl,
-				};
-				renderActivityCard(card);
-				activityLog.push(card);
-				// Cap the log: remove oldest cards beyond the limit.
-				while (activityLog.length > MAX_CONSOLE_CARDS) {
-					const oldest = activityLog.shift();
-					if (oldest.el && oldest.el.parentNode) oldest.el.remove();
-				}
-			}
-
-			// Update the one-line summary.
-			const running = activityLog.filter(a => a.status === 'running');
-			if (running.length) {
-				const last = running[running.length - 1];
-				const elapsed = card.elapsed_ms ? ' [' + fmtMs2(card.elapsed_ms) + ']' : '';
-				consoleSummary.setText(last.label + '...' + elapsed);
-			} else {
-				const last = activityLog[activityLog.length - 1];
-				if (last) {
-					const statusIcon = last.status === 'failed' ? '✗' : '✓';
-					consoleSummary.setText(statusIcon + ' ' + last.label);
-				}
-			}
-
-			// Auto-scroll the console body to the bottom.
-			consoleBody.scrollTop = consoleBody.scrollHeight;
 		};
+		consoleHandle.addEventListener('click', toggleConsole);
+		consoleClearBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			consoleBody.empty();
+			consoleLines.length = 0;
+			currentProcStepLine = null;
+			consoleSummary.setText('idle');
+		});
 
-		// Render (or re-render) a single activity card from its state.
-		const renderActivityCard = (card) => {
-			const el = card.el;
-			// Build the card content as HTML string for reliable rendering.
-			const accentClass = 'vaultbot-activity-cat-' + (card.category || 'tool');
-			el.className = 'vaultbot-activity-card ' + accentClass;
-
-			let labelText = card.label || '';
-			if (card.status === 'running') labelText = '... ' + labelText;
-			else if (card.status === 'failed') labelText = '✗ ' + labelText;
-			else if (card.status === 'done') labelText = '✓ ' + labelText;
-
-			const durText = card.elapsed_ms ? fmtMs2(card.elapsed_ms) : '';
-			const iconChar = card.icon || '🔧';
-
-			// Build detail/result HTML for the body.
-			let bodyHTML = '';
-			let bodyOpen = false;
-			if (card.detail || card.result) {
-				bodyOpen = (card.status === 'failed') || (card.category === 'error');
+		// --- Console log function: append a text line ---
+		const logConsole = (text, cls) => {
+			const lineEl = consoleBody.createDiv({cls: 'vaultbot-console-line ' + (cls || '')});
+			lineEl.setText(text);
+			consoleLines.push({text, cls, el: lineEl});
+			// Cap: remove oldest lines beyond the limit.
+			while (consoleLines.length > MAX_CONSOLE_LINES) {
+				const oldest = consoleLines.shift();
+				if (oldest.el && oldest.el.parentNode) oldest.el.remove();
 			}
-			if (card.detail) {
-				let detailText;
-				if (typeof card.detail === 'object') {
-					const parts = [];
-					for (const k of Object.keys(card.detail)) {
-						let v = card.detail[k];
-						if (typeof v === 'string' && v.length > 80) v = v.slice(0, 77) + '...';
-						parts.push(k + '=' + v);
-					}
-					detailText = parts.join(' | ');
-				} else {
-					detailText = String(card.detail);
+			// Auto-scroll to bottom if the user is near the bottom.
+			if (consoleOpen) {
+				const isNearBottom = (consoleBody.scrollHeight - consoleBody.scrollTop - consoleBody.clientHeight) < 60;
+				if (isNearBottom) {
+					consoleBody.scrollTop = consoleBody.scrollHeight;
 				}
-				bodyHTML += '<div class="vaultbot-activity-detail">' + escapeHTML(detailText) + '</div>';
-			}
-			if (card.result) {
-				let resultText;
-				if (typeof card.result === 'object') {
-					resultText = JSON.stringify(card.result, null, 2);
-				} else {
-					resultText = String(card.result);
-				}
-				if (resultText.length > 2000) resultText = resultText.slice(0, 1997) + '...';
-				bodyHTML += '<div class="vaultbot-activity-result">' + escapeHTML(resultText) + '</div>';
-			}
-
-			const chevronChar = bodyOpen ? '▼' : '▶';
-			el.innerHTML =
-				'<div class="vaultbot-activity-header">' +
-				'<span class="vaultbot-activity-chevron">' + chevronChar + '</span>' +
-				'<span class="vaultbot-activity-icon">' + iconChar + '</span>' +
-				'<span class="vaultbot-activity-label">' + escapeHTML(labelText) + '</span>' +
-				'<span class="vaultbot-activity-duration">' + durText + '</span>' +
-				'</div>' +
-				'<div class="vaultbot-activity-body" style="display:' + (bodyOpen ? 'block' : 'none') + '">' +
-				bodyHTML +
-				'</div>';
-
-			// Wire up click-to-toggle on the header.
-			const headerEl = el.querySelector('.vaultbot-activity-header');
-			const bodyEl = el.querySelector('.vaultbot-activity-body');
-			const chevEl = el.querySelector('.vaultbot-activity-chevron');
-			if (headerEl && bodyEl && chevEl) {
-				headerEl.addEventListener('click', (e) => {
-					e.stopPropagation();
-					const isOpen = bodyEl.style.display !== 'none';
-					bodyEl.style.display = isOpen ? 'none' : 'block';
-					chevEl.textContent = isOpen ? '▶' : '▼';
-				});
 			}
 		};
 
-		// Escape HTML special characters to prevent injection.
+		// Update the one-line summary on the console bar.
+		const updateConsoleSummary = (text) => {
+			consoleSummary.setText(text);
+		};
+
+		// --- Activity API (kept for backward compat, routes to console) ---
+		// These wrap the old startActivity/updateActivity/endActivity
+		// interface but now just log text lines to the terminal console.
+		let currentActivityEventId = null;
+		let activityStartTs = 0;
+		const startActivity = (label, detail) => {
+			if (!currentAssistantMessage) startAssistantMessage();
+			setTyping(true);
+			if (currentActivityEventId) endActivity();
+			activityStartTs = Date.now();
+			currentActivityEventId = 'act-' + Date.now();
+			const detailStr = detail && typeof detail === 'object'
+				? Object.keys(detail).map(k => k + '=' + detail[k]).join(' ')
+				: (detail ? String(detail) : '');
+			logConsole('▶ ' + label + (detailStr ? '  {' + detailStr + '}' : ''), 'vaultbot-cl-tool');
+			updateConsoleSummary(label);
+		};
+		const updateActivity = (label, detail) => {
+			if (currentActivityEventId) {
+				const elapsed = Date.now() - activityStartTs;
+				const detailStr = detail && typeof detail === 'object'
+					? Object.keys(detail).map(k => k + '=' + detail[k]).join(' ')
+					: (detail ? String(detail) : '');
+				logConsole('  … ' + (label || '') + (detailStr ? '  {' + detailStr + '}' : '') + '  [' + fmtMs(elapsed) + ']', 'vaultbot-cl-progress');
+				updateConsoleSummary(label || '');
+			}
+		};
+		const endActivity = (summary) => {
+			if (currentActivityEventId) {
+				const elapsed = Date.now() - activityStartTs;
+				logConsole('✓ ' + (summary || 'done') + '  [' + fmtMs(elapsed) + ']', 'vaultbot-cl-done');
+				currentActivityEventId = null;
+			}
+		};
+
+		// Clear the console (called on /new session reset).
+		const clearConsole = () => {
+			consoleBody.empty();
+			consoleLines.length = 0;
+			currentProcStepLine = null;
+			consoleSummary.setText('idle');
+		};
+
+		// Helper: format milliseconds compactly.
+		// (fmtMs is defined later in the file; define a local one here
+		// so the console code works regardless of declaration order.)
+		// Actually, fmtMs is defined at line ~3510, before the WS handler
+		// that calls these functions, so it's in scope. We just reference it.
+
+		// Escape HTML special characters (used by the chat renderer, not
+		// the console — console uses setText which is safe by default).
 		const escapeHTML = (str) => {
 			return String(str)
 				.replace(/&/g, '&amp;')
 				.replace(/</g, '&lt;')
 				.replace(/>/g, '&gt;')
 				.replace(/"/g, '&quot;');
-		};
-
-		// Compact ms formatter for the console (reuses the same pattern
-		// as the chat's fmtMs but with a shorter name to avoid collision).
-		function fmtMs2(ms) {
-			const s = Math.floor(ms / 1000);
-			if (s < 60) return s + 's';
-			return Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0') + 's';
-		}
-
-		// Clear the console (called on /new session reset).
-		const clearConsole = () => {
-			activityLog.length = 0;
-			consoleBody.empty();
-			consoleSummary.setText('idle');
-			consoleWrap.style.display = 'none';
 		};
 
 		// ── Hardware Resource Strip ────────────────────────────────────
@@ -3240,54 +3177,6 @@ class VaultBotSidebarView extends ItemView {
 		let currentSegmentText = '';       // markdown accumulated for the segment
 		let currentSegmentRenderTimer = null;
 		let currentAnswerText = '';        // full plain text across all segments
-		// Live activity line: shows the current stage + elapsed time, updated
-		// in place by progress/heartbeat events so the user is never staring
-		// at a frozen "Calling X..." with no idea if it's still working.
-		let currentActivityEl = null;
-		let activityStartTs = 0;
-		let activityTimer = null;
-		// --- Plan-as-loop step containers ------------------------- //
-		// Each plan step gets its own collapsible block: a clickable header
-		// ('Step: <title>') with a spinner while running, and the step summary
-		// inside once the backend sends step_summary. The thinking/tool blocks
-		// that happen DURING the step are appended into the step container so
-		// they collapse with it. The user sees a tidy list of steps, not a
-		// stream of tool chatter; the final answer is the only expanded msg.
-		let currentStepBlock = null;      // current step's container div
-		let currentStepHeader = null;     // current step's header (clickable)
-		let currentStepBody = null;      // current step's body (thinking/tools)
-		let currentStepId = null;        // step id currently open
-		let stepBodyActive = false;      // when true, thinking/tools render into the step body
-		const startStep = (stepId, title) => {
-			closeStep();
-			if (!currentAssistantMessage) startAssistantMessage();
-			currentStepBlock = currentAssistantMessage.createDiv({cls: 'vaultbot-step'});
-			currentStepHeader = currentStepBlock.createDiv({cls: 'vaultbot-step-header'});
-			currentStepHeader.setText('Step: ' + (title || stepId));
-			currentStepBody = currentStepBlock.createDiv({cls: 'vaultbot-step-body'});
-			currentStepId = stepId;
-			currentStepHeader.onclick = () => {
-				if (!currentStepBody) return;
-				const open = currentStepBody.style.display !== 'none';
-				currentStepBody.style.display = open ? 'none' : 'block';
-				currentStepHeader.setText('Step: ' + (title || stepId));
-			};
-			stepBodyActive = true;
-			smartScrollToBottom();
-		};
-		const closeStep = () => {
-			if (currentStepBlock && currentStepBody) {
-				currentStepBody.style.display = 'none';
-				if (currentStepHeader) {
-					currentStepHeader.setText('Step: ' + currentStepHeader.getText().replace(/^Step:\s*/, ''));
-				}
-			}
-			currentStepBlock = null;
-			currentStepHeader = null;
-			currentStepBody = null;
-			currentStepId = null;
-			stepBodyActive = false;
-		};
 
 		const appendUserMessage = (text) => {
 			const div = chatContainer.createDiv({cls: 'vaultbot-message user'});
@@ -3515,60 +3404,17 @@ class VaultBotSidebarView extends ItemView {
 			}
 		};
 
-		// --- Live activity line (now routed to the Activity Console) ---
-		// A single mutable line that shows the current stage + a running
-		// elapsed-time counter, updated in place by progress/heartbeat
-		// events. Cleared when the activity completes or the answer is done.
+		// --- Live activity (routed to the console terminal) ---
+		// fmtMs is used by the console functions defined above.
 		const fmtMs = (ms) => {
 			const s = Math.floor(ms / 1000);
 			if (s < 60) return s + 's';
 			return Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0') + 's';
 		};
-		// Activity now goes to the console instead of an inline chat line.
-		// We keep the startActivity/updateActivity/endActivity API for
-		// backward compatibility, but they now call addActivity on the console.
-		let currentActivityEventId = null;
-		const startActivity = (label, detail) => {
-			if (!currentAssistantMessage) startAssistantMessage();
-			setTyping(true);
-			// End any previous activity that's still running before
-			// starting a new one, so no card gets stuck at "running".
-			if (currentActivityEventId) {
-				endActivity();
-			}
-			activityStartTs = Date.now();
-			currentActivityEventId = 'act-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
-			addActivity({
-				event_id: currentActivityEventId,
-				category: 'tool',
-				icon: '🔧',
-				label: label,
-				status: 'running',
-				detail: detail,
-			});
-		};
-		const updateActivity = (label, detail) => {
-			if (currentActivityEventId) {
-				addActivity({
-					event_id: currentActivityEventId,
-					label: label,
-					detail: detail,
-					elapsed_ms: Date.now() - activityStartTs,
-				});
-			}
-		};
-		const endActivity = (summary) => {
-			if (activityTimer) { window.clearInterval(activityTimer); activityTimer = null; }
-			if (currentActivityEventId) {
-				addActivity({
-					event_id: currentActivityEventId,
-					status: 'done',
-					label: summary,
-					elapsed_ms: Date.now() - activityStartTs,
-				});
-				currentActivityEventId = null;
-			}
-		};
+		// startActivity / updateActivity / endActivity are defined above
+		// in the console section. They now log text lines to the terminal
+		// console instead of creating activity cards.
+		// activityStartTs is also declared in the console section above.
 
 		let ws = null;
 		const connectWebSocket = () => {
@@ -3604,20 +3450,20 @@ class VaultBotSidebarView extends ItemView {
 
 				if (msg.type === 'status') {
 					statusEl.setText(msg.content);
+					logConsole('• ' + msg.content, 'vaultbot-cl-status');
+					updateConsoleSummary(msg.content);
 				} else if (msg.type === 'thinking') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					setTyping(true);
 					// Show the thinking block live while the model reasons.
 					setThinkingVisible(true);
 					currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + msg.content);
-					// Also log thinking to the console for transparency.
-					addActivity({
-						category: 'thought',
-						icon: '\uD83D\uDCAD',
-						label: 'thinking (' + msg.content.length + ' chars)',
-						status: 'done',
-						detail: msg.content.slice(0, 500),
-					});
+					// Log thinking progress to the console terminal.
+					const tLen = (currentThinkingBlock.getText() || '').length;
+					if (tLen % 50 < msg.content.length) {
+						logConsole('💭 thinking… (' + tLen + ' chars)', 'vaultbot-cl-think');
+						updateConsoleSummary('thinking…');
+					}
 					smartScrollToBottom();
 				} else if (msg.type === 'answer_chunk') {
 					if (!currentAssistantMessage) startAssistantMessage();
@@ -3692,24 +3538,11 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerText += raw;
 					// Hide typing indicator — the model is now talking, not thinking.
 					setTyping(false);
-					// Log streaming activity to the console so the user sees
-					// the model is emitting tokens (even if no tool calls fire).
-					if (!currentActivityEventId || activityLog.length === 0 ||
-						activityLog[activityLog.length - 1].status !== 'running' ||
-						activityLog[activityLog.length - 1].category !== 'streaming') {
-						currentActivityEventId = 'act-stream-' + Date.now();
-						addActivity({
-							event_id: currentActivityEventId,
-							category: 'streaming',
-							icon: '\u2702\uFE0F',
-							label: 'streaming answer',
-							status: 'running',
-						});
-					} else if (currentActivityEventId) {
-						addActivity({
-							event_id: currentActivityEventId,
-							label: 'streaming answer (' + currentAnswerText.length + ' chars)',
-						});
+					// Log streaming progress to the console (throttled).
+					const sLen = currentAnswerText.length;
+					if (sLen % 100 < raw.length) {
+						logConsole('✎ streaming answer (' + sLen + ' chars)', 'vaultbot-cl-stream');
+						updateConsoleSummary('streaming answer…');
 					}
 					scheduleSegmentRender();
 					smartScrollToBottom();
@@ -3731,22 +3564,34 @@ class VaultBotSidebarView extends ItemView {
 						const fb = planDiv.createDiv({cls: 'vaultbot-plan-fallback'});
 						fb.setText('(simple plan — no complex steps needed)');
 					}
+					// Log the plan to the console terminal.
+					logConsole('plan: ' + (msg.goal || ''), 'vaultbot-cl-plan');
+					for (let i = 0; i < steps.length; i++) {
+						logConsole('  ' + (i+1) + '. ' + steps[i], 'vaultbot-cl-plan');
+					}
+					if (msg.fallback) logConsole('  (simple plan)', 'vaultbot-cl-plan');
+					updateConsoleSummary('plan: ' + (msg.goal || ''));
 					smartScrollToBottom();
 				} else if (msg.type === 'step_start') {
-				startStep(msg.step_id, msg.title || '');
+				// Legacy step events — log to console only.
+				logConsole('▸ Step ' + (msg.step_id || '') + ': ' + (msg.title || ''), 'vaultbot-cl-step');
+				updateConsoleSummary('Step ' + (msg.step_id || '') + ': ' + (msg.title || ''));
 			} else if (msg.type === 'step_summary') {
-				if (currentStepBlock) {
-					if (currentStepHeader) {
-						currentStepHeader.setText('Step ' + (msg.step_id || '') + ': ' + (msg.title || ''));
-					}
-					if (currentStepBody) {
-						currentStepBody.empty();
-						const sumDiv = currentStepBody.createDiv({cls: 'vaultbot-step-summary'});
-						renderMarkdownInto(sumDiv, msg.summary || '');
-					}
-			}
-				closeStep();
-				smartScrollToBottom();
+				logConsole('  ' + (msg.summary || ''), 'vaultbot-cl-step');
+			} else if (msg.type === 'procedure_step') {
+				// Live procedure step progress from the step-gate runtime.
+				const stepStr = 'procedure ' + (msg.procedure || '?') +
+					' — step ' + msg.step + '/' + msg.total_steps +
+					' [' + (msg.step_type || 'text') + ']';
+				if (msg.phase === 'running') {
+					logConsole('▶ ' + stepStr + ': ' + (msg.instruction || ''), 'vaultbot-cl-proc');
+					updateConsoleSummary(stepStr + ' — running…');
+				} else {
+					const passFail = msg.status === 'failed' ? '✗ FAILED' : '✓ passed';
+					const preview = msg.output_preview ? ' → ' + msg.output_preview : '';
+					logConsole('  ' + stepStr + ' ' + passFail + preview, msg.status === 'failed' ? 'vaultbot-cl-error' : 'vaultbot-cl-done');
+					updateConsoleSummary(stepStr + ' — ' + passFail);
+				}
 			} else if (msg.type === 'tool_call') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					// The model moved past reasoning to act: auto-collapse the
@@ -3757,48 +3602,49 @@ class VaultBotSidebarView extends ItemView {
 					// AFTER the text that preceded it (true stream order).
 					closeCurrentSegment();
 					const toolName = msg.tool || 'tool';
-					const argsStr = msg.args ? JSON.stringify(msg.args) : '';
-					startActivity('Calling ' + toolName + (argsStr ? ': ' + argsStr : '...'), {});
+					const argsStr = msg.args ? JSON.stringify(msg.args).slice(0, 100) : '';
+					startActivity('calling ' + toolName + (argsStr ? '(' + argsStr + ')' : '…'), {});
 				} else if (msg.type === 'progress') {
 					// Granular stage events from the backend (research rounds,
 					// scraping, synthesis, gap fill, note writing, A-MEM).
-					startActivity(msg.stage, msg.detail || {});
+					const detailStr = msg.detail && typeof msg.detail === 'object'
+						? Object.keys(msg.detail).map(k => k + '=' + msg.detail[k]).join(' ')
+						: '';
+					logConsole('▸ ' + msg.stage + (detailStr ? '  {' + detailStr + '}' : ''), 'vaultbot-cl-progress');
+					updateConsoleSummary(msg.stage);
 				} else if (msg.type === 'heartbeat') {
 					// Periodic "still alive" pulse during long silent waits.
-					// Carries elapsed_ms + how long since the last output.
 					const label = msg.label || 'working';
-					const detail = {silent_ms: msg.silent_ms, chunks: msg.chunks};
-					if (!currentActivityEventId) {
-						startActivity(label, detail);
-					} else {
-						// Keep the existing activity but refresh elapsed + detail.
-						updateActivity(label, detail);
-					}
+					const elapsed = msg.elapsed_ms ? ' [' + fmtMs(msg.elapsed_ms) + ']' : '';
+					logConsole('  … ' + label + elapsed, 'vaultbot-cl-heartbeat');
+					updateConsoleSummary(label + elapsed);
 				} else if (msg.type === 'tool_result') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					closeCurrentSegment();
-					const summary = (msg.tool || 'tool') + ' - ' + (msg.summary || 'done');
+					const summary = (msg.tool || 'tool') + ' — ' + (msg.summary || 'done');
 					endActivity(summary);
-					// Tool result goes to the console, not the chat.
-					addActivity({
-						category: 'tool',
-						icon: '\ud83d\udd27',
-						label: summary,
-						status: 'done',
-						result: msg.result || msg.summary,
-					});
 				} else if (msg.type === 'context_usage') {
 					// Live token-usage meter update from the backend. Fires
 					// each turn (pre-loop + post-answer) carrying the model's
 					// context window + estimated used tokens.
 					if (typeof msg.context_window === 'number') {
 						updateTokenMeter(msg.used_tokens || 0, msg.context_window);
+						const usedK = (msg.used_tokens || 0) >= 1000 ? ((msg.used_tokens || 0) / 1000).toFixed(1) + 'k' : String(msg.used_tokens || 0);
+						const winK = msg.context_window >= 1000 ? (msg.context_window / 1000).toFixed(0) + 'k' : String(msg.context_window);
+						logConsole('  context: ' + usedK + ' / ' + winK + ' tokens (' + (msg.messages || 0) + ' msgs)', 'vaultbot-cl-stats');
 					}
 				} else if (msg.type === 'ollama_stats') {
 					// Per-round Ollama eval stats from the backend (tokens/s,
 					// load time, prompt processing speed). Updates the perf
 					// section of the stats bar.
 					updateStatsFromChat(msg);
+					const _statsParts = [];
+					if (msg.gen_tokens_per_s > 0) _statsParts.push(msg.gen_tokens_per_s + ' t/s');
+					if (msg.eval_count > 0) _statsParts.push(msg.eval_count + ' tok');
+					if (_statsParts.length) logConsole('  stats: ' + _statsParts.join(' · '), 'vaultbot-cl-stats');
+				} else if (msg.type === 'token_usage') {
+					// Per-turn token cost summary after the agentic loop.
+					logConsole('  tokens: ' + (msg.total_tokens || 0) + ' (' + (msg.prompt_tokens || 0) + ' prompt + ' + (msg.completion_tokens || 0) + ' completion) in ' + (msg.rounds || 0) + ' rounds', 'vaultbot-cl-stats');
 				} else if (msg.type === 'answer_done') {
 					endActivity();
 					setTyping(false);
@@ -3806,6 +3652,8 @@ class VaultBotSidebarView extends ItemView {
 					closeCurrentSegment();
 					statusEl.setText('Done');
 					setTurnActive(false);
+					logConsole('■ done — answer ready (' + (msg.content || currentAnswerText || '').length + ' chars)', 'vaultbot-cl-done');
+					updateConsoleSummary('done');
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
@@ -3820,6 +3668,7 @@ class VaultBotSidebarView extends ItemView {
 					// backend code should emit type:"problem" with a real
 					// diagnosis; this wraps raw strings in a generic one.
 					statusEl.setText('Problem');
+					logConsole('✗ ERROR: ' + (msg.content || 'unknown error'), 'vaultbot-cl-error');
 					renderProblem({
 						category: 'generic',
 						severity: 'broken',
@@ -3840,6 +3689,7 @@ class VaultBotSidebarView extends ItemView {
 					setTurnActive(false);
 					const d = msg.diagnosis || {};
 					statusEl.setText((d.user_message || 'Problem').split('.')[0] + '.');
+					logConsole('✗ PROBLEM: ' + (d.user_message || 'unknown'), 'vaultbot-cl-error');
 					renderProblem(d);
 					smartScrollToBottom();
 				} else if (msg.type === 'system_info') {
@@ -3858,6 +3708,7 @@ class VaultBotSidebarView extends ItemView {
 					// Flush whatever text was streamed so far so it stays visible.
 					closeCurrentSegment();
 					statusEl.setText('Stopped');
+					logConsole('■ stopped', 'vaultbot-cl-status');
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
@@ -3911,9 +3762,11 @@ class VaultBotSidebarView extends ItemView {
 				// dropdown so the new model appears, and clear the status.
 				if (msg.success) {
 					setStatus('online', `Model ${msg.model} ready.`);
+					logConsole('✓ model downloaded: ' + msg.model, 'vaultbot-cl-done');
 					refreshModels();
 				} else {
 					setStatus('error', `Could not download ${msg.model}. Check that Ollama is running and try again.`);
+					logConsole('✗ model download failed: ' + msg.model, 'vaultbot-cl-error');
 				}
 			} else if (msg.type === 'vault_changed') {
 					// The backend wrote files directly to disk, bypassing
@@ -3925,6 +3778,7 @@ class VaultBotSidebarView extends ItemView {
 					// the graph view to update in real-time.
 					const files = msg.files || [];
 					if (files.length === 0) return;
+					logConsole('✎ vault files changed: ' + files.length + ' file' + (files.length !== 1 ? 's' : ''), 'vaultbot-cl-done');
 					const app = this.app;
 					(async () => {
 						for (const filePath of files) {

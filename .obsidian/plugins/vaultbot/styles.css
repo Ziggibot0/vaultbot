@@ -1241,32 +1241,7 @@
     cursor: text;
 }
 
-/* --- Plan-as-loop step blocks ----------------------------------------- */
-.vaultbot-step {
-    margin: 6px 0;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    overflow: hidden;
-}
-.vaultbot-step-header {
-    padding: 6px 10px;
-    cursor: pointer;
-    background: var(--background-secondary);
-    color: var(--text-muted);
-    font-size: 0.9em;
-    user-select: none;
-    transition: background 0.15s;
-}
-.vaultbot-step-header:hover { background: var(--background-modifier-border); }
-.vaultbot-step-body {
-    padding: 8px 12px;
-    border-top: 1px solid var(--background-modifier-border);
-}
-.vaultbot-step-summary {
-    font-size: 0.92em;
-    color: var(--text-normal);
-    line-height: 1.5;
-}
+
 
 
 /* =========================================================================
@@ -1505,131 +1480,113 @@
 }
 
 /* =========================================================================
-   Activity Console (the transparency layer)
-   A bottom drawer between chat and footer. Collapsed = one-line summary
-   bar. Expanded = scrollable list of collapsible activity cards.
+   Console Drawer (the transparency layer)
+   A collapsible drawer between chat and footer. Collapsed = a thin bar
+   with a handle. Expanded = a real terminal-style console that prints
+   everything VaultBot is doing as plain text lines.
    ========================================================================= */
 .vaultbot-console-wrap {
 	flex: 0 0 auto;
 	border-top: 1px solid var(--vb-stone);
+	overflow: hidden;
 }
 
+/* The bar is always visible: handle + summary + clear button. */
 .vaultbot-console-bar {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 4px 12px;
+	padding: 3px 10px;
 	font-size: 0.8em;
 	color: var(--vb-ink-muted);
-	cursor: pointer;
 	background-color: var(--vb-bg-elev);
-	transition: background-color 0.15s ease;
+	border-bottom: 1px solid var(--vb-stone);
 }
-.vaultbot-console-bar:hover {
-	background-color: var(--vb-sand-deep);
-}
-.vaultbot-console-chevron {
-	flex: 0 0 auto;
-	font-size: 0.9em;
+.vaultbot-console-handle {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+	user-select: none;
 	color: var(--vb-bark-soft);
+	font-weight: 600;
+	font-size: 0.85em;
+	white-space: nowrap;
 }
+.vaultbot-console-handle:hover {
+	color: var(--vb-clay);
+}
+.vaultbot-console-handle-icon {
+	font-size: 0.9em;
+	display: inline-block;
+	transition: transform 0.15s ease;
+}
+.vaultbot-console-open .vaultbot-console-handle-icon {
+	transform: rotate(90deg);
+}
+
 .vaultbot-console-summary {
 	flex: 1 1 auto;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-family: var(--font-monospace);
-	font-size: 0.85em;
+	font-size: 0.82em;
+	color: var(--vb-ink-muted);
 }
 
-.vaultbot-console-body {
-	max-height: 220px;
-	overflow-y: auto;
-	overflow-x: hidden;
-	padding: 4px 8px;
-	background-color: var(--vb-bg);
-	border-top: 1px solid var(--vb-sand-deep);
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
+.vaultbot-console-clear {
+	flex: 0 0 auto;
+	background: none;
+	border: none;
+	color: var(--vb-ink-muted);
+	font-size: 0.75em;
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: 4px;
+	opacity: 0.6;
+	transition: opacity 0.15s, background-color 0.15s;
 }
-
-/* ---- Activity cards (collapsible) ---- */
-.vaultbot-activity-card {
-	border-left: 3px solid var(--vb-stone);
-	border-radius: 0 6px 6px 0;
-	background-color: var(--vb-bg-elev);
-	overflow: hidden;
-	transition: background-color 0.1s ease;
-}
-.vaultbot-activity-card:hover {
+.vaultbot-console-clear:hover {
+	opacity: 1;
 	background-color: var(--vb-sand-deep);
 }
 
-/* Category accent colors (left border) */
-.vaultbot-activity-cat-tool    { border-left-color: var(--vb-clay); }
-.vaultbot-activity-cat-thought  { border-left-color: var(--vb-stone-deep); }
-.vaultbot-activity-cat-step     { border-left-color: var(--vb-moss); }
-.vaultbot-activity-cat-progress { border-left-color: var(--vb-moss-soft); }
-.vaultbot-activity-cat-streaming { border-left-color: var(--vb-clay-soft); }
-.vaultbot-activity-cat-error   { border-left-color: var(--vb-bark); }
-
-.vaultbot-activity-header {
-	display: flex;
-	align-items: baseline;
-	gap: 6px;
-	padding: 4px 8px;
-	cursor: pointer;
-	user-select: none;
-}
-.vaultbot-activity-chevron {
-	flex: 0 0 auto;
-	font-size: 0.75em;
-	color: var(--vb-ink-muted);
-	width: 12px;
-}
-.vaultbot-activity-icon {
-	flex: 0 0 auto;
-	font-size: 0.85em;
-}
-.vaultbot-activity-label {
-	flex: 1 1 auto;
-	font-size: 0.82em;
-	font-family: var(--font-monospace);
-	color: var(--vb-ink);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.vaultbot-activity-duration {
-	flex: 0 0 auto;
-	font-size: 0.75em;
-	color: var(--vb-ink-muted);
-	font-variant-numeric: tabular-nums;
-}
-
-.vaultbot-activity-body {
-	padding: 4px 8px 6px 28px;
-	font-size: 0.8em;
-	color: var(--vb-ink-muted);
-	line-height: 1.45;
-}
-.vaultbot-activity-detail {
-	white-space: pre-wrap;
-	font-family: var(--font-monospace);
-	color: var(--vb-ink-muted);
-	margin-bottom: 4px;
-}
-.vaultbot-activity-result {
-	white-space: pre-wrap;
-	font-family: var(--font-monospace);
-	color: var(--vb-ink-muted);
-	background-color: var(--vb-sand);
-	border-radius: 4px;
-	padding: 4px 8px;
-	max-height: 150px;
+/* The terminal body: monospace text log. */
+.vaultbot-console-body {
+	max-height: 280px;
 	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 6px 10px;
+	background-color: var(--vb-bg);
+	font-family: var(--font-monospace);
+	font-size: 0.78em;
+	line-height: 1.5;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
 }
+
+/* ---- Console text lines (color-coded by category) ---- */
+.vaultbot-console-line {
+	white-space: pre-wrap;
+	word-break: break-all;
+	padding: 1px 0;
+	color: var(--vb-ink);
+}
+
+.vaultbot-cl-status    { color: var(--vb-bark-soft); }
+.vaultbot-cl-think     { color: var(--vb-stone-deep); font-style: italic; }
+.vaultbot-cl-stream    { color: var(--vb-clay-soft); }
+.vaultbot-cl-tool     { color: var(--vb-clay); }
+.vaultbot-cl-progress  { color: var(--vb-moss-soft); }
+.vaultbot-cl-heartbeat { color: var(--vb-ink-muted); opacity: 0.7; }
+.vaultbot-cl-step     { color: var(--vb-moss); }
+.vaultbot-cl-proc     { color: var(--vb-moss); font-weight: 600; }
+.vaultbot-cl-plan     { color: var(--vb-bark); }
+.vaultbot-cl-done     { color: var(--vb-moss); }
+.vaultbot-cl-error    { color: var(--vb-bark); font-weight: 600; }
+.vaultbot-cl-stats    { color: var(--vb-ink-muted); font-style: italic; }
 
 /* =========================================================================
    Hardware Resource Strip

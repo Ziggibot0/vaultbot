@@ -3382,12 +3382,43 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             "model": getattr(_proc_llm_client, "llm_model", "?"),
         })
 
+        # --- Live procedure progress → WebSocket --- #
+        # Wire the step_gate_runtime's progress_callback to push
+        # procedure_step events to the UI console so the user sees each
+        # step as it runs (step number, instruction, type, pass/fail).
+
+        async def _proc_progress_cb(step_number, total_steps, output,
+                                     instruction="", step_type="text",
+                                     status="running"):
+            if websocket is None:
+                return
+            _is_done = bool(output)  # empty output = pre-execution, non-empty = post
+            _payload: dict[str, Any] = {
+                "type": "procedure_step",
+                "procedure": proc_name,
+                "step": step_number,
+                "total_steps": total_steps,
+                "step_type": step_type,
+                "instruction": instruction,
+                "phase": "done" if _is_done else "running",
+                "status": status,
+            }
+            if _is_done:
+                _payload["output_preview"] = output[:200]
+            try:
+                await svc.manager.send_personal_message(
+                    json.dumps(_payload), websocket,
+                    session_logger=svc.session_logger)
+            except Exception:  # noqa: BLE001 — best-effort, must not crash the procedure
+                pass
+
         result = await _run_proc(
             procedure=proc,
             context="",
             llm_client=_proc_llm_client,
             vault_path=str(vault_root),
             procedure_tracker=svc.procedure_tracker,
+            progress_callback=_proc_progress_cb,
             # Pass the model's tool arguments (minus procedure_name) down
             # so code steps can read them via the injected `args` dict.
             procedure_args={k: v for k, v in args.items() if k != "procedure_name"},

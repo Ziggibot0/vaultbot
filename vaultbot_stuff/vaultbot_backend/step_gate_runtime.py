@@ -885,7 +885,10 @@ async def execute_procedure(
         vault_path: Path to the vault root (used for tool injection).
         session_logger: Optional session logger for structured logging.
         progress_callback: Optional async callback ``(step_number,
-            total_steps, output)`` for progress updates.
+            total_steps, output, instruction, step_type, status)`` for
+            progress updates. Called before each step (status="running",
+            output="") and after each step (status="passed"/"failed",
+            output=step result).
         procedure_tracker: Optional ProcedureTracker for step-level logging.
         call_stack: List of procedure names already in flight (for cycle
             detection when this procedure is invoked recursively via
@@ -976,7 +979,10 @@ async def execute_procedure(
         executed_steps.add(current_step_num)
 
         if progress_callback:
-            await progress_callback(step.number, len(procedure.steps), "")
+            await progress_callback(
+                step.number, len(procedure.steps), "",
+                step.instruction[:120], step.step_type, "running",
+            )
 
         # --- Condition gate: skip the step if its precondition fails ---
         # Fail-safe: an unparseable condition also skips (we never run a
@@ -1154,7 +1160,11 @@ async def execute_procedure(
             })
 
         if progress_callback:
-            await progress_callback(step.number, len(procedure.steps), sr.output)
+            await progress_callback(
+                step.number, len(procedure.steps), sr.output,
+                step.instruction[:120], step.step_type,
+                "passed" if sr.passed else "failed",
+            )
 
         # --- Branch jump: if the step has a branch_target and passed ---
         # Jump to the named step instead of the linear next step.  The
