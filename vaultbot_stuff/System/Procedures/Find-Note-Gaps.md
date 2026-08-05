@@ -15,7 +15,7 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
-summary: "# Find-Note-Gaps"
+summary: SUMMARY
 tags:
   - procedure
   - procedures

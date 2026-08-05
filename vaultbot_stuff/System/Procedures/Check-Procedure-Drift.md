@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Check-Procedure-Drift
+summary: "## Summary"
 tags:
   - procedure
   - procedures

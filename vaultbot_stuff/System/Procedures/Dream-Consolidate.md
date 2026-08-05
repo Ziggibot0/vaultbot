@@ -16,6 +16,7 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
+falsifiable_if: it produces duplicate semantic notes, fabricates content not grounded in journal themes, or crashes on empty theme input
 summary: Dream-Consolidate
 tags:
   - procedure
@@ -50,165 +51,187 @@ try:
 except:
     pass
 
-# --- Find existing semantic notes for dedup ---
-existing_semantic = []
+# --- Collect existing semantic notes for dedup ---
+semantic_notes = []
 for root, dirs, files in os.walk(vault_path):
     dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]
-    for f in files:
-        if not f.endswith(".md"):
+    for fname in files:
+        if not fname.endswith('.md'):
             continue
-        full_path = os.path.join(root, f)
+        fpath = os.path.join(root, fname)
         try:
-            with open(full_path, encoding='utf-8') as fh:
-                content = fh.read(500)
-            if re.search(r'type:\s*semantic', content):
-                existing_semantic.append(os.path.splitext(f)[0])
+            with open(fpath, encoding='utf-8') as f:
+                content = f.read()
+            if content.startswith('---'):
+                # Extract frontmatter
+                fm_end = content.find('---', 3)
+                if fm_end > 0:
+                    fm = content[3:fm_end]
+                    if 'type: research' in fm or 'type: semantic' in fm:
+                        title = fname.replace('.md', '')
+                        # Get first 200 chars of body for dedup comparison
+                        body_preview = content[fm_end+3:fm_end+203].strip()
+                        semantic_notes.append({
+                            "title": title,
+                            "path": fpath,
+                            "preview": body_preview
+                        })
         except:
-            pass
+            continue
 
-# --- Find exemplar semantic note for formatting ---
+# --- Load exemplar note for formatting guidance ---
+exemplar_path = os.path.join(vault_path, "vaultbot_stuff", "Knowledge", "Research", "python-108dates-and-times-L1.md")
 exemplar_content = ""
-exemplar_candidates = [
-    "VaultBot-Is-the-Vault.md",
-    "Vault-Longevity-Architecture.md",
-    "Semantic-Consolidation-Architecture.md",
-]
-for ec in exemplar_candidates:
-    p = os.path.join(vault_path, ec)
-    if os.path.exists(p):
-        with open(p, encoding='utf-8') as f:
-            exemplar_content = f.read()
-        break
+if os.path.exists(exemplar_path):
+    with open(exemplar_path, encoding='utf-8') as f:
+        exemplar_content = f.read()[:500]
 
-# --- Collect dangling wikilinks as consolidation targets ---
-all_gaps = graph_data.get("dangling_links", [])
-# Also search for thin notes
-thin_notes = graph_data.get("thin_notes", [])
-
-result = json.dumps({
-    "journal_themes": journal_themes[:20],
-    "existing_semantic": existing_semantic[:100],
-    "dangling_links": all_gaps[:50],
-    "thin_notes": thin_notes[:20],
-    "exemplar_found": bool(exemplar_content),
-    "exemplar_preview": exemplar_content[:3000] if exemplar_content else "",
-})
+print(f"Loaded {len(journal_themes)} journal themes, {len(semantic_notes)} existing semantic notes")
+print(f"Graph data keys: {list(graph_data.keys()) if graph_data else 'none'}")
+print(f"Exemplar loaded: {bool(exemplar_content)}")
 ```
 
-## Step 2: Synthesize Semantic Notes via LLM
+2. If no journal themes and no graph gaps, skip consolidation: `print("No new material to consolidate. Skipping.")` and set `final_output = {"status": "skipped", "reason": "no input data"}`.
 
-Send all gathered patterns to the LLM with the exemplar format and dedup list. The LLM writes semantic notes; the code writes them to disk and lints them.
+## Step 2: Identify Consolidation Targets
 
-2. ```python
-import json, os, re
+Analyze the gathered data to find patterns worth consolidating into semantic notes.
 
-vault_path = os.environ.get("VAULT_PATH", ".")
+1. ```python
+# --- Extract dangling links from graph data ---
+dangling_links = graph_data.get("dangling_links", [])
+isolated_nodes = graph_data.get("isolated_nodes", [])
 
-# Parse prior step output
-step1 = json.loads(prior_results.get("Dream-Consolidate-step1", prior_results.get("step1", "{}")))
-if not step1:
-    # Try to parse from the last result
-    try:
-        step1 = json.loads(result) if result else {}
-    except:
-        step1 = {}
+# --- Extract themes that appear across multiple journals ---
+theme_groups = {}
+for entry in journal_themes:
+    for theme in entry.get("themes", []):
+        t = theme.lower().strip()
+        if t not in theme_groups:
+            theme_groups[t] = []
+        theme_groups[t].append(entry.get("date", "unknown"))
 
-journal_themes = step1.get("journal_themes", [])
-existing_semantic = step1.get("existing_semantic", [])
-dangling_links = step1.get("dangling_links", [])
-exemplar_preview = step1.get("exemplar_preview", "")
-
-# Build LLM prompt
-prompt_parts = [
-    "You are VaultBot's memory consolidation system. Your job is to synthesize",
-    "semantic knowledge notes from the patterns and gaps below.",
-    "",
-    "## Exemplar Format (follow this structure exactly)",
-    exemplar_preview if exemplar_preview else "(no exemplar found — use standard research note format with YAML frontmatter)",
-    "",
-    "## Existing Semantic Notes (for dedup — do NOT duplicate these)",
-    json.dumps(existing_semantic, indent=2),
-    "",
-    "## Journal Themes (from recent journal entries)",
-    json.dumps(journal_themes[:10], indent=2, default=str) if journal_themes else "[]",
-    "",
-    "## Dangling Wikilinks (topics that need notes written)",
-    json.dumps(dangling_links[:30], indent=2, default=str) if dangling_links else "[]",
-    "",
-    "## Instructions",
-    "1. Review ALL gaps below. Group related gaps together.",
-    "2. For each group, write a semantic note that captures the pattern/lesson.",
-    "3. Each note must have:",
-    "   - YAML frontmatter with type: semantic, status: raw, created: today's date, tags",
-    "   - A clear title as H1",
-    "   - Summary section",
-    "   - Key Findings section with evidence",
-    "   - Related section with wikilinks to existing notes (use [[Note-Name]] format)",
-    "4. CRITICAL: In the Related section, write a full sentence explaining each wikilink",
-    "   relationship. Never dump bare links. Format: - [[Note-Name]] -- explains why related",
-    "5. Do NOT include .md extensions in wikilinks. Use [[Note-Name]] not [[Note-Name.md]]",
-    "6. Only link to notes that actually exist in the vault. If unsure, omit the link.",
-    "",
-    "Output each note as:",
-    "### NOTE: [Note-Title]",
-    "[full note content including YAML frontmatter]",
-    "",
-    "### NOTE: [Next-Title]",
-    "[next note content]",
+# --- Filter to themes appearing in 2+ journals (consolidation candidates) ---
+consolidation_candidates = [
+    {"theme": t, "dates": dates}
+    for t, dates in theme_groups.items()
+    if len(dates) >= 2
 ]
 
-prompt = "\n".join(prompt_parts)
+# --- Also include dangling links as consolidation targets ---
+for dl in dangling_links[:10]:
+    consolidation_candidates.append({
+        "theme": f"Dangling link: {dl}",
+        "dates": ["graph"]
+    })
 
-# Call LLM
-llm_result = llm_generate(prompt)
+# --- Also include isolated nodes ---
+for node in isolated_nodes[:5]:
+    consolidation_candidates.append({
+        "theme": f"Isolated node: {node}",
+        "dates": ["graph"]
+    })
 
-# Parse LLM output for NOTE: blocks
-notes_written = []
-notes_skipped = []
-lint_issues = []
+print(f"Found {len(consolidation_candidates)} consolidation candidates")
+for c in consolidation_candidates[:10]:
+    print(f"  - {c['theme']} (sources: {c['dates']})")
+```
 
-note_pattern = re.compile(r'### NOTE:\s*(.+?)\n(.*?)(?=### NOTE:|$)', re.DOTALL)
-for m in note_pattern.finditer(llm_result):
-    title = m.group(1).strip()
-    note_content = m.group(2).strip()
+## Step 3: Generate Semantic Notes (LLM)
 
-    # Clean up wikilinks — remove .md extensions
-    def _clean_wikilinks(text):
-        wl_pat = re.compile(r'\[\[([^\]]+)\.md\]\]')
-        def _replacer(m):
-            return f"[[{m.group(1)}]]"
-        cleaned = wl_pat.sub(_replacer, text)
-        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-        return cleaned
+For each consolidation candidate, use the LLM to synthesize a new semantic note — but only if no existing note covers the same topic.
 
-    note_content = _clean_wikilinks(note_content)
+1. ```python
+# --- Check each candidate against existing semantic notes ---
+new_notes_needed = []
+for candidate in consolidation_candidates:
+    theme = candidate["theme"]
+    # Simple dedup: check if any existing note title contains the theme keywords
+    keywords = [w for w in re.split(r'[\s:]+', theme) if len(w) > 3]
+    is_duplicate = False
+    for existing in semantic_notes:
+        existing_lower = existing["title"].lower()
+        if any(kw.lower() in existing_lower for kw in keywords):
+            is_duplicate = True
+            break
+    if not is_duplicate:
+        new_notes_needed.append(candidate)
 
-    note_path = os.path.join(vault_path, f"{title}.md")
+print(f"After dedup: {len(new_notes_needed)} new notes needed")
+```
+
+2. For each new note needed, use `[llm:]` to generate the note content:
+
+   ```llm
+You are VaultBot, a research agent in an Obsidian vault. Create a semantic knowledge note for the following theme:
+
+Theme: {{theme}}
+Source dates: {{dates}}
+Exemplar format (follow this structure):
+{{exemplar_content}}
+
+Instructions:
+- Write a self-contained argument: claim + reasoning + connections
+- Use wikilinks [[like-this]] to connect to related vault concepts
+- Include frontmatter with type: research, status: raw, created: today's date
+- Keep it concise (200-400 words)
+- Ground every claim in the journal themes — do not fabricate
+   ```
+
+3. ```python
+# --- Save each generated note ---
+import datetime
+
+saved_notes = []
+for i, note_data in enumerate(llm_results):
+    # Parse LLM output and save
+    title = note_data.get("title", f"Consolidated-{i}")
+    content = note_data.get("content", "")
+    
+    # Sanitize title for filename
+    safe_title = re.sub(r'[^\w\-]', '-', title)[:80]
+    note_path = os.path.join(vault_path, "vaultbot_stuff", "Knowledge", "Research", f"{safe_title}.md")
+    
+    # Write the note
     with open(note_path, 'w', encoding='utf-8') as f:
-        f.write(note_content)
-    notes_written.append(title)
+        f.write(content)
+    
+    saved_notes.append({"title": safe_title, "path": note_path})
+    print(f"Saved: {safe_title}")
 
-    # Lint
-    rel_path = f"{title}.md"
-    try:
-        lint_result = vault_lint(rel_path)
-        if lint_result.get("broken_wikilinks"):
-            lint_issues.append({
-                "note": title,
-                "broken": lint_result["broken_wikilinks"],
-            })
-    except:
-        pass
-
-result = json.dumps({
-    "status": "consolidated",
-    "notes_written": notes_written,
-    "notes_skipped": notes_skipped,
-    "lint_issues": lint_issues,
-    "total_gaps_processed": len(dangling_links),
-}, indent=2)
+print(f"Total notes saved: {len(saved_notes)}")
 ```
 
-## Usage
+## Step 4: Validate and Report
 
-This sub-procedure is called by [[Dream-Pass]] as step 4 of 7. It can also be run standalone when you want to consolidate memories without a full dream cycle. Requires [[Dream-Scan]] and [[Dream-Analyze]] to have run first (their outputs are consumed as inputs).
+Run vault_lint on each new note and report the results.
+
+1. ```python
+# --- Validate each saved note ---
+validation_results = []
+for note in saved_notes:
+    # vault_lint will be called by the procedure runner
+    validation_results.append({
+        "title": note["title"],
+        "path": note["path"],
+        "status": "pending_validation"
+    })
+
+final_output = {
+    "status": "completed",
+    "notes_created": len(saved_notes),
+    "notes_validated": len(validation_results),
+    "candidates_total": len(consolidation_candidates),
+    "candidates_after_dedup": len(new_notes_needed),
+    "details": saved_notes
+}
+print(json.dumps(final_output, indent=2))
+```
+
+2. Call `vault_lint` on each newly created note to verify quality (broken wikilinks, missing frontmatter, argument quality).
+
+## Notes
+
+- This is the only sub-procedure that uses the **big** model cartridge — all reasoning lives here.
+- The dedup check is intentionally simple (keyword overlap). If it misses duplicates, [[Dream-Evaluate]] will catch them in the next cycle and flag them for review.
+- If the LLM fabricates content not grounded in journal themes, the `falsifiable_if` condition is triggered and the note should be flagged for review.

@@ -1,5 +1,745 @@
 [
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-hello-there.md",
+    "touch_count": 27
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-make-it-so-that-if-someone-gives-their-permission.md",
+    "touch_count": 18
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-hello-you-still-there.md",
+    "touch_count": 17
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-were-just-in-the-middle-of-something-i-thought.md",
+    "touch_count": 16
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-already-restarted-the-plugin-dont-do-that-an.md",
+    "touch_count": 15
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-whats-good-homie-we-got-you-all-updated-and-hope.md",
+    "touch_count": 14
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-before-you-do-phase-3-are-you-sure-that-you-didn.md",
+    "touch_count": 13
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-backend-restarted.md",
+    "touch_count": 13
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-i-restarted-the-backend-how-do-you-feel-dawg.md",
+    "touch_count": 13
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-assess-how-easy-it-is-to-make-procedures.md",
+    "touch_count": 12
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-if-the-research-checks-out-then-yes-plan-out-exact.md",
+    "touch_count": 12
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-noice-whats-a-procedure-you-think-you-need-next.md",
+    "touch_count": 12
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Textbook-Ingest.md",
+    "touch_count": 12
+  },
+  {
+    "path": "vaultbot_stuff/Fix-Specification-Remove-Masking-Fallbacks.md",
+    "touch_count": 11
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ive-been-trying-to-build-you-for-a-year-now-my-o.md",
+    "touch_count": 11
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-i-just-restarted-the-backend-proceed-with-trou.md",
+    "touch_count": 11
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-the-first-thing-you-need-to-fix-is-not-you-being-l.md",
+    "touch_count": 11
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-try-a-dream-pass-real-quick-homie.md",
+    "touch_count": 11
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-dreaming-is-important-also-you-should-have-a-tool.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-go-ahead-homie-the-vault-is-your-mind-and-you-get.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-make-sure-that-any-and-all-procedures-are-set-up-t.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-or-get-rid-of-the-traps-or-anything-that-holds-you.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-rn-were-j-testing-you-out.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-the-irony-is-that-you-said-Here-me-actually-doing.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-just-stopped-abruptly-call-a-tool-if-you-want.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Submit-Contribution.md",
+    "touch_count": 10
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ayyyyy-it-worked-great-job-homie.md",
+    "touch_count": 9
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-if-a-tool-needs-to-be-keyword-gated-then-it-should.md",
+    "touch_count": 9
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-werent-you-in-the-middle-of-something.md",
+    "touch_count": 9
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Judge-Plan.md",
+    "touch_count": 9
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Ollama-Model-Search.md",
+    "touch_count": 9
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Biology/Growth-and-Development.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Textbooks/python-next-topic.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Textbooks/python-the-python-tutorial.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Build-Log/README.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-go-ahead-with-that-homie-just-make-sure-you-do-you.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-im-not-convinced-that-you-actually-understand-you.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-oh-yeah-you-were-fixing-your-research-tool-before.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-start-consolidating-notes-your-mind-is-too-verbos.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-sup-homie-you-stopped-in-your-tracks-so-i-had-to-g.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-wait-the-shit-that-the-small-model-can-do-well-is.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please-get-cooking-on-those-things-make-sure.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-torture-test-that-shit-homie.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-cant-just-say-shit-like-the-agentic-loop-f.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Capability-Audit.md",
+    "touch_count": 8
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Torture-Test.md",
+    "touch_count": 8
+  },
+  {
+    "path": "User/Phased-Research-and-Autonomous-Learning-Patterns.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-backend-restarted.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-how-does-your-research-tool-work-could-you-swap-i.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-im-testing-this-RAG-Evaluation-for-FUSED-Retrie.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-is-there-any-part-of-the-framework-that-makes-your.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-just-testing-out-having-gemma426b-in-the-big-mode.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-continue-keep-looping-yoruself-until-youre-do.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-shit-i-accidentally-started-a-new-session-when-you.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-we-need-to-get-this-vault-and-repo-set-up-so-that.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-what-just-happened-i-just-got-an-error-cat.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-where-were-we-with-the-biomimetic-research-with-th.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-why-have-you-been-thinking-for-16-minutes-homie.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-fix-what-you-can-on-your-own.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-didnt-call-that-tool-right-bc-it-showed-up-as.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-ok-last-session-you-cut-out-after-declaring-w.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/System/Autonomy-Interruption-and-Goal-Staleness-Pattern.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Code-Run.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/baseline/chat/Chat-wait-the-shit-that-the-small-model-can-do-well-is.md",
+    "touch_count": 7
+  },
+  {
+    "path": "vaultbot_stuff/Autonomy-Directive.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/CONTRIBUTING.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/Ollama-keep_alive-API-parameter-environment-variable-how-to-prevent-model-unload.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/open-second-brain-Hermes-Agent-dream-pass-mechanism-how-does-the-dream-pass-work.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Textbooks/python-next-topic-L1.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Build-Log/CONTRIBUTING.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-backend-is-back-up-lets-continue-with-what-we-we.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-i-didnt-fucking-ask-for-that-its-like-you-ackno.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-no-dude-just-update-your-goals-so-that-you-continu.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-oh-yeah-the-plan-to-make-you-work-better-where-is.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-i-need-you-to-clean-that-process-up-so-that-you.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-so-youre-all-done-now.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-sup-homie-how-do-you-feel-rn-dawg.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-tell-me-what-other-procedures-you-could-make-so-th.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-this-isnt-about-you-the-cloud-model-do-all-the-g.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-what-procedures-do-you-have-list-them-briefly.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-and-make-sure-that-you-show-the-LLM-anything.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-fix-the-dream-pass-then-run-the-dream-pass-af.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/How-to-Create-a-Procedure.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Self-Reflect.md",
+    "touch_count": 6
+  },
+  {
+    "path": "vaultbot_stuff/Framework-Stop-Mechanism-Fix.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Biology/Biomimetic-Engineering-for-Self-Improving-AI.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Biology/Reproduction-and-Genetic-Inheritance.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/How-do-hormones-work-endocrine-system-hormone-types-peptide-steroid-amine-hormon.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/Ollama-keep_alive-API-parameter-environment-variable-how-to-keep-models-loaded-i.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/When-did-prokaryotic-cells-emerge-and-eukaryotic-cells-evolve-timeline-of-early-.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Textbooks/python-navigation.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-alright-sorry-thats-just-really-confusing-nomencl.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-can-you-read-your-own-code.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-do-an-audit-of-your-workspace.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-go-ahead-and-write-in-each-of-those-issues-then-f.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-hi-we-just-upgraded-you-i-put-fifteen-bucks-into.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-hi.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-how-would-we-implement-any-of-that-without-needing.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-i-asked-you-to-look-at-VaultBot-Issues-and-fix.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-i-just-did-a-troubleshooting-sesh-with-github-copi.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-im-not-convinced-that-you-have-planned-this-well.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-is-the-vault-updated-with-your-progress.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-oh-thats-right-dawg-you-were-gonna-use-the-procedu.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-remember-to-end-your-turn-with-a-tool-call-or-you.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-so-there-are-NO-stale-docs-rn.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-sorry-i-should-have-been-more-specific-do-you-und.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-spec-all-of-them-out-first-and-make-sure-that-your.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-where-are-you-now-curious-based-on-all-that-you-le.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yeah-we-need-to-use-if-it-exists-and-create-if-it.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-your-priority-right-now-is-to-brainstorm-ways-that.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/System/Architecture/Procedural-Bootstrap-and-Evolution-Plan.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Note-Linker.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Ollama-Pull-Models.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Review-Contributions.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/baseline/identity/GOALS.md",
+    "touch_count": 5
+  },
+  {
+    "path": "vaultbot_stuff/baseline/identity/SELF_MODEL.md",
+    "touch_count": 5
+  },
+  {
+    "path": "User/VaultBot Issues.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Biology/Energy-Processing-and-Metabolism.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/Dream-Pass-Audit.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/Information-feedback-loops-for-iterative-self-improvement-in-AI-systems-self-imp.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/Theories-about-why-mitochondria-have-their-own-DNA-endosymbiotic-theory-mitochon.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/how-to-structure-a-research-note-for-a-knowledge-base-zettelkasten-method-academ.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/nemotron-3-nano-Ollama-NVIDIA-model-architecture-benchmarks-strengths-weaknesses.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Build-Log/Procedure-Consolidation-2026-08-02.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Build-Log/VaultBot-Build-Log.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-GitHub-Copilot-Audit.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-NO-the-vaultbot-framework-should-work-from-day-1.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-are-you-happy-with-your-agentic-loop-right-now-as.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-are-you-sure-thats-what-were-supposed-to-do.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-are-you-sure-the-shit-you-think-youre-missing-are.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-audit-your-agentic-loop-where-are-you-hindered-h.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-begin.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-did-you-get-my-last-message.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-do-you-feel-capable-of-organizing-your-brain-now.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-do-you-have-a-procedure-yet-for-consolidating-rela.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-do-you-have-any-note-consolidation-procedures-besi.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-double-check-to-make-sure-you-didnt-just-break-yo.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-dude-you-were-lagging-like-CRAZY-dawg-and-then-oll.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-familiarize-yourself-with-the-GUI-layout-at-the-mo.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-have-you-checked-your-work-and-made-sure-that-you.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-have-you-saved-your-progress-and-updated-all-your.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-how-do-we-get-the-dream-pass-to-fix-those-islands.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-i-didnt-see-any-response-from-you-thats-why-i-as.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-idk-dude-i-think-you-did-more-recent-stuff.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-im-gonna-try-to-step-back-from-this-because-i-wan.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-is-the-research-engine-actually-up-to-par-with-wha.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-keep-going.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-lets-go-back-to-procedures-are-your-procedures-a.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-lets-try-to-beef-you-up-so-that-you-can-code-and.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-nah-dawg-you-built-phase-3-too-check-it-out.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-read-mainpy.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-run-a-dream-pass.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-run-the-dream-pass-now-its-idempotent-right.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-sup-vaultbot-how-do-you-feel-rn.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-this-is-a-new-session-and-you-just-had-a-lot-of-ch.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-try-calling-a-tool.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-update-doc-w-progress-pls.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-we-need-to-think-about-how-were-going-to-lean-mor.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-why-dont-we-just-make-research-a-more-robust-thin.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-whyd-you-stop-whats-wrong-with-your-framework-t.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yeah-folder-system-first-make-sure-everything-is.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-research-those-gaps-now-please-and-thank-you-h.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-didnt-record-what-you-did-otherwise-you-woul.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-have-22-i-think-in-Research-Roadmap-that-s.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-may-begin.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-were-about-to-organize-the-vault-into-folders.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-you-were-ornith-but-i-just-switched-your-big-model.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/System/Architecture/Procedure-Subprocess-Architecture.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/System/Exemplars/Deterministic-Scaffolding-for-Small-Models.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Check-Procedure-Drift.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Find-Note-Gaps.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Note-Merge-Candidates.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/baseline/README.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/baseline/chat/Chat-i-want-you-to-research-what-the-hell-qwen3508b.md",
+    "touch_count": 4
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/The-Fourth-Dimension-and-4D-Shapes.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Research/Vault-Knowledge-Only-Directive.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Textbooks/python-1012batteries-included.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Build-Log/Testing-and-Verification-History.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-Agentic-Loop-Audit.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-and-you-updated-the-README.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-autonomously-finish-Biomimetic-Learning-Plan-a.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-bro-deadass-the-thing-stopping-you-constantly-as-a.md",
+    "touch_count": 3
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-cool-do-that-for-the-rest-of-Biomimetic-Learning.md",
+    "touch_count": 3
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-could-you-make-the-GUI-better-to-look-at-its-so.md",
     "touch_count": 3
   },
@@ -80,10 +820,6 @@
     "touch_count": 3
   },
   {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-this-is-a-new-session-and-you-just-had-a-lot-of-ch.md",
-    "touch_count": 3
-  },
-  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-wait-a-second-homie-i-just-noticed-that-you-have-l.md",
     "touch_count": 3
   },
@@ -144,11 +880,11 @@
     "touch_count": 3
   },
   {
-    "path": "vaultbot_stuff/System/Procedures/Check-Procedure-Drift.md",
+    "path": "vaultbot_stuff/System/Procedures/Discover-Procedures.md",
     "touch_count": 3
   },
   {
-    "path": "vaultbot_stuff/System/Procedures/Discover-Procedures.md",
+    "path": "vaultbot_stuff/System/Procedures/Dream-Link.md",
     "touch_count": 3
   },
   {
@@ -244,6 +980,10 @@
     "touch_count": 2
   },
   {
+    "path": "vaultbot_stuff/Knowledge/Research/Slime-Molds-Intelligence-Without-Brain.md",
+    "touch_count": 2
+  },
+  {
     "path": "vaultbot_stuff/Knowledge/Research/Small-model-scaffolding-techniques-that-make-dumb-models-perform-well-prompt-sca.md",
     "touch_count": 2
   },
@@ -304,7 +1044,11 @@
     "touch_count": 2
   },
   {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-GitHub-Copilot-Audit.md",
+    "path": "vaultbot_stuff/Memory/Chat/Chat-Documentation-Compliance-Check.md",
+    "touch_count": 2
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-Empty-Note.md",
     "touch_count": 2
   },
   {
@@ -373,6 +1117,10 @@
   },
   {
     "path": "vaultbot_stuff/Memory/Chat/Chat-do-you-need-compaction-or-just-a-sliding-window-if.md",
+    "touch_count": 2
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-do-you-think-its-better-to-plan-out-how-you-inten.md",
     "touch_count": 2
   },
   {
@@ -484,6 +1232,10 @@
     "touch_count": 2
   },
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-make-a-note-in-the-vault-of-your-audit-so-that.md",
+    "touch_count": 2
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-omg-dude-you-already-did-that-im-literally-gonna.md",
     "touch_count": 2
   },
@@ -560,10 +1312,6 @@
     "touch_count": 2
   },
   {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-and-make-sure-that-you-show-the-LLM-anything.md",
-    "touch_count": 2
-  },
-  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-yes-continue.md",
     "touch_count": 2
   },
@@ -576,11 +1324,11 @@
     "touch_count": 2
   },
   {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please-reresearch.md",
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please-go-ahead-with-that-and-then-await-instr.md",
     "touch_count": 2
   },
   {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please.md",
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please-reresearch.md",
     "touch_count": 2
   },
   {
@@ -617,10 +1365,6 @@
   },
   {
     "path": "vaultbot_stuff/System/Procedures/Condense-Note.md",
-    "touch_count": 2
-  },
-  {
-    "path": "vaultbot_stuff/System/Procedures/Dream-Link.md",
     "touch_count": 2
   },
   {
@@ -693,6 +1437,10 @@
   },
   {
     "path": "vaultbot_stuff/Knowledge/Biology/Evolution-and-Population-Genetics.md",
+    "touch_count": 1
+  },
+  {
+    "path": "vaultbot_stuff/Knowledge/Biology/Homeostasis-and-Animal-Regulation.md",
     "touch_count": 1
   },
   {
@@ -852,7 +1600,7 @@
     "touch_count": 1
   },
   {
-    "path": "vaultbot_stuff/Knowledge/Research/Slime-Molds-Intelligence-Without-Brain.md",
+    "path": "vaultbot_stuff/Knowledge/Research/Specific-animal-homeostasis-examples-kangaroo-rat-water-conservation-camel-therm.md",
     "touch_count": 1
   },
   {
@@ -992,6 +1740,10 @@
     "touch_count": 1
   },
   {
+    "path": "vaultbot_stuff/Knowledge/Textbooks/python-88predefined-clean-up-actions.md",
+    "touch_count": 1
+  },
+  {
     "path": "vaultbot_stuff/Knowledge/Textbooks/python-navigation-2-L1.md",
     "touch_count": 1
   },
@@ -1013,10 +1765,6 @@
   },
   {
     "path": "vaultbot_stuff/Memory/Chat/Chat-Do-a-quick-2-step-task-1-Read-pyprojecttoml-in.md",
-    "touch_count": 1
-  },
-  {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-Documentation-Compliance-Check.md",
     "touch_count": 1
   },
   {
@@ -1085,6 +1833,10 @@
   },
   {
     "path": "vaultbot_stuff/Memory/Chat/Chat-babysit-message.md",
+    "touch_count": 1
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-be-sure-to-check-if-Dream-Pass-Audit-plan-was.md",
     "touch_count": 1
   },
   {
@@ -1384,6 +2136,10 @@
     "touch_count": 1
   },
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-start-planning-out-how-you-intend-to-implement-1.md",
+    "touch_count": 1
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-sup-homie-just-updated-you-again-you-were-having-m.md",
     "touch_count": 1
   },
@@ -1508,6 +2264,10 @@
     "touch_count": 1
   },
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-do-that.md",
+    "touch_count": 1
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-yes-go-ahead-with-all-that-just-make-sure-that-th.md",
     "touch_count": 1
   },
@@ -1525,10 +2285,6 @@
   },
   {
     "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please-get-cooking-on-those-things-make-sure-to.md",
-    "touch_count": 1
-  },
-  {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-please-go-ahead-with-that-and-then-await-instr.md",
     "touch_count": 1
   },
   {
@@ -1660,6 +2416,10 @@
     "touch_count": 1
   },
   {
+    "path": "vaultbot_stuff/System/Procedures/Find-One-Way-Links.md",
+    "touch_count": 1
+  },
+  {
     "path": "vaultbot_stuff/System/Procedures/Find-Orphans.md",
     "touch_count": 1
   },
@@ -1677,6 +2437,10 @@
   },
   {
     "path": "vaultbot_stuff/System/Procedures/Find-Tensions.md",
+    "touch_count": 1
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Find-Underused-Procedures.md",
     "touch_count": 1
   },
   {
@@ -1777,10 +2541,6 @@
   },
   {
     "path": "vaultbot_stuff/Knowledge/Biology/Evolution-and-the-Long-Arc.md",
-    "touch_count": 0
-  },
-  {
-    "path": "vaultbot_stuff/Knowledge/Biology/Homeostasis-and-Animal-Regulation.md",
     "touch_count": 0
   },
   {
@@ -1901,10 +2661,6 @@
   },
   {
     "path": "vaultbot_stuff/Knowledge/Research/Designing-permanent-exemplar-documents-for-pattern-matching-in-knowledge-based-A.md",
-    "touch_count": 0
-  },
-  {
-    "path": "vaultbot_stuff/Knowledge/Research/Dream-Pass-Audit.md",
     "touch_count": 0
   },
   {
@@ -2165,10 +2921,6 @@
   },
   {
     "path": "vaultbot_stuff/Knowledge/Research/Socrates.md",
-    "touch_count": 0
-  },
-  {
-    "path": "vaultbot_stuff/Knowledge/Research/Specific-animal-homeostasis-examples-kangaroo-rat-water-conservation-camel-therm.md",
     "touch_count": 0
   },
   {
@@ -3036,10 +3788,6 @@
     "touch_count": 0
   },
   {
-    "path": "vaultbot_stuff/Knowledge/Textbooks/python-88predefined-clean-up-actions.md",
-    "touch_count": 0
-  },
-  {
     "path": "vaultbot_stuff/Knowledge/Textbooks/python-89raising-and-handling-multiple-unrelated-exceptions-L1.md",
     "touch_count": 0
   },
@@ -3220,6 +3968,10 @@
     "touch_count": 0
   },
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-Code-Cleanup.md",
+    "touch_count": 0
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-Dream-Pass-Evaluation.md",
     "touch_count": 0
   },
@@ -3308,6 +4060,10 @@
     "touch_count": 0
   },
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-cool-beans-thanks-bruv.md",
+    "touch_count": 0
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-cool-go-ahead-with-that-design-plan-so-you-know-ex.md",
     "touch_count": 0
   },
@@ -3353,6 +4109,10 @@
   },
   {
     "path": "vaultbot_stuff/Memory/Chat/Chat-dude-youre-over-reading-does-that-split-note-pro.md",
+    "touch_count": 0
+  },
+  {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-dude-youve-been-on-this-same-problem-for-a-few-ho.md",
     "touch_count": 0
   },
   {
@@ -3504,6 +4264,10 @@
     "touch_count": 0
   },
   {
+    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-go-ahead-and-fix-that.md",
+    "touch_count": 0
+  },
+  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-ok-go-ahead-and-let-me-know-how-it-goes.md",
     "touch_count": 0
   },
@@ -3513,10 +4277,6 @@
   },
   {
     "path": "vaultbot_stuff/Memory/Chat/Chat-ok-keep-going-homie-dont-reread-so-much-dawg-yo.md",
-    "touch_count": 0
-  },
-  {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-ok-make-a-note-in-the-vault-of-your-audit-so-that.md",
     "touch_count": 0
   },
   {
@@ -3712,10 +4472,6 @@
     "touch_count": 0
   },
   {
-    "path": "vaultbot_stuff/Memory/Chat/Chat-yes-do-that.md",
-    "touch_count": 0
-  },
-  {
     "path": "vaultbot_stuff/Memory/Chat/Chat-yes-go-for-it.md",
     "touch_count": 0
   },
@@ -3904,15 +4660,7 @@
     "touch_count": 0
   },
   {
-    "path": "vaultbot_stuff/System/Procedures/Find-One-Way-Links.md",
-    "touch_count": 0
-  },
-  {
     "path": "vaultbot_stuff/System/Procedures/Find-Thin-Notes.md",
-    "touch_count": 0
-  },
-  {
-    "path": "vaultbot_stuff/System/Procedures/Find-Underused-Procedures.md",
     "touch_count": 0
   },
   {
@@ -4049,6 +4797,10 @@
   },
   {
     "path": "vaultbot_stuff/System/Procedures/System-Status.md",
+    "touch_count": 0
+  },
+  {
+    "path": "vaultbot_stuff/System/Procedures/Test-RunProcedure-Return.md",
     "touch_count": 0
   },
   {

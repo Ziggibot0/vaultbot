@@ -8,7 +8,9 @@ when: When reviewing community contributions to the VaultBot repo
 allowed_tools:
   - code_read
   - vault_search
-summary: "# Review-Contributions"
+summary: "List and review open pull requests on the VaultBot GitHub repo by fetching diffs, running safety scans for secrets/dangerous patterns, and returning structured reports.
+
+# Review-Contributions | vault"
 tags:
   - procedure
   - procedures
