@@ -5,8 +5,6 @@ This is the intent-based discovery fix: a procedure should be retrieved
 when the query matches *when to use it*, not when it lexically overlaps
 the procedure's implementation (code blocks, tool names, step prose).
 """
-import numpy as np
-import pytest
 
 from vault_indexer import VaultIndexer
 
@@ -137,7 +135,6 @@ def test_procedure_with_only_when(tmp_path, monkeypatch):
 def test_add_file_uses_surface_for_procedure(tmp_path, monkeypatch):
     """End-to-end: _add_file_to_index embeds the surface, not the body,
     but still caches the full content as the preview."""
-    import faiss
     idx = _make_indexer(tmp_path, monkeypatch)
     proc = tmp_path / "Verify-Syntax.md"
     proc.write_text(PROCEDURE_NOTE, encoding="utf-8")

@@ -18,7 +18,6 @@ tests are real unit tests.
 """
 from __future__ import annotations
 
-import ast
 import json
 from pathlib import Path
 

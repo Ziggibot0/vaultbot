@@ -8,7 +8,6 @@ import urllib.request
 import urllib.parse
 import re
 import subprocess
-import os
 
 def _fetch_url(url: str, timeout: int = 20) -> str:
     """Fetch a URL and return HTML text."""

@@ -36,7 +36,7 @@ import logging
 import re
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -276,7 +276,6 @@ class ConversationIndex:
                 norm = np.linalg.norm(q_vec)
                 if norm > 0:
                     q_vec = q_vec / norm
-                import faiss
                 k_eff = min(k * 2, faiss_index.ntotal)  # over-fetch for keyword merge
                 distances, indices = faiss_index.search(q_vec, k_eff)
                 # Build a turn_id → turn lookup

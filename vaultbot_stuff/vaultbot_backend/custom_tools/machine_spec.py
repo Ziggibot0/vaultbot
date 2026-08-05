@@ -6,7 +6,6 @@ SCHEMA = {"name": "machine_spec", "description": "Report machine specs relevant 
 
 import os
 import re
-import socket
 import subprocess
 import sys
 from pathlib import Path

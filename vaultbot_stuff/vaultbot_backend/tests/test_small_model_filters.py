@@ -20,9 +20,7 @@ if "faiss" not in sys.modules:
     _faiss_stub.write_index = lambda *a, **k: None
     sys.modules["faiss"] = _faiss_stub
 
-import json
 
-import pytest
 
 from small_model_filters import (
     compress_window, dedup_results, expand_query, filter_context,

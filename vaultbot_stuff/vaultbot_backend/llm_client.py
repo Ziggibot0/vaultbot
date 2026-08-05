@@ -64,7 +64,6 @@ from typing import Any
 
 import requests
 
-from providers import normalize_base_url
 
 
 def _test_image_base64() -> str:

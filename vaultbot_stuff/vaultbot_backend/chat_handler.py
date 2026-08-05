@@ -50,7 +50,7 @@ from config import TUNABLES
 from procedure_surface import build_procedure_surface, status_allows_execution
 from procedure_tracker import interpret_validation_result, parse_procedures_from_results
 from services import Services
-from conversation_index import ConversationIndex, build_conversation_context
+from conversation_index import build_conversation_context
 from small_model_filters import (
     compress_window, dedup_results, expand_query, filter_context,
     rerank_results, rewrite_query_with_history,
@@ -766,7 +766,7 @@ def _digest_code_read(result: dict[str, Any]) -> dict[str, Any]:
             defs.append(m.group(1))
 
     digest_lines = [
-        f"[DIGESTED code_read — full body omitted to protect your reasoning budget]",
+        "[DIGESTED code_read — full body omitted to protect your reasoning budget]",
         f"file: {file_path}",
         f"size: {total} total lines; you read lines {start}–{end} ({len(lines)} lines).",
     ]
@@ -2123,11 +2123,11 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                     tool_result = {
                                         "go_find_out": True,
                                         "message": (
-                                            f"Web research completed "
-                                            f"automatically. See the system "
-                                            f"message for results. Use them "
-                                            f"to answer now — do NOT search "
-                                            f"again."),
+                                            "Web research completed "
+                                            "automatically. See the system "
+                                            "message for results. Use them "
+                                            "to answer now — do NOT search "
+                                            "again."),
                                         "research": _research_result,
                                     }
                                 except Exception as e:  # noqa: BLE001

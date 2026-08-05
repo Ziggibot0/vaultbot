@@ -38,7 +38,6 @@ See:
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 from subprocess_utils import run as _subprocess_run, scrubbed_env

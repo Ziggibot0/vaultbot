@@ -586,7 +586,6 @@ def _gpu_stats() -> dict[str, Any] | None:
     # any vendor-specific library. It's the same data Task Manager uses.
     try:
         import subprocess as _sp
-        import json as _json2
         # GPU utilization: sum all active engine utilizations.
         # Each engine reports its own percentage; the total GPU usage is
         # the max across all engines (not the sum — one engine at 50% +

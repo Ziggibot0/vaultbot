@@ -34,7 +34,6 @@ import json
 import os
 import re
 import threading
-from datetime import date
 from pathlib import Path
 from typing import Any
 

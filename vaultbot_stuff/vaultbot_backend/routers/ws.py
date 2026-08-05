@@ -165,7 +165,6 @@ async def websocket_endpoint(websocket: WebSocket,
     # TodoList pattern). Cleared on /new and on reconnect.
     # On restart-resume, load the persisted plan from disk so the agent
     # wakes up with its plan intact (not just its conversation history).
-    from working_memory import TaskList
     if _is_restart_resume:
         _saved_wm = TaskList.load_from_disk()
         if _saved_wm is not None and _saved_wm.has_plan():

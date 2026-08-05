@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ollama_client import OllamaClient
     from llm_client import LLMClient
-    from providers import ProviderRegistry
     from vault_indexer import VaultIndexer
     from vault_graph import VaultGraph
     from note_creator import NoteCreator
