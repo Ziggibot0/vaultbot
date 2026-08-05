@@ -45,13 +45,6 @@ jobs:
           pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Debug — ruff version + path
-        working-directory: vaultbot_stuff
-        run: |
-          which ruff || echo "ruff NOT on PATH"
-          ruff --version || echo "ruff command failed"
-          ruff check --select F --statistics vaultbot_backend/ || true
-
       - name: "Ruff check — hard gate (F-rules: real bugs only)"
         # Gate on F-rules only (undefined names, unused imports, etc.) —
         # these are real bugs, not style.  The remaining ~250 B/UP/SIM/RUF
@@ -93,19 +86,4 @@ jobs:
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
-        run: |
-          echo "=== Python version ==="
-          python --version
-          echo "=== pytest version ==="
-          pytest --version
-          echo "=== pytest config ==="
-          cat pytest.ini 2>/dev/null || echo "no pytest.ini"
-          echo "=== Running pytest ==="
-          pytest -v --tb=long --maxfail=5 2>&1 | tee /tmp/pytest_output.txt
-          echo "=== pytest exit code: $? ==="
-        continue-on-error: true
-
-      - name: Show pytest output (in case it scrolled past)
-        if: always()
-        working-directory: vaultbot_stuff/vaultbot_backend
-        run: cat /tmp/pytest_output.txt 2>/dev/null || echo "no output file"
+        run: pytest -q --tb=short
