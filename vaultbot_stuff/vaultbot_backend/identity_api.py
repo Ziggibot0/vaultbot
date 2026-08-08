@@ -1,6 +1,6 @@
 """Identity API handlers extracted from main.py.
 
-These are the /identity route handlers (GET /identity, POST /identity/goals,
+These are the /identity route handlers (GET /identity,
 POST /identity/self_model). They operate on the ``identity`` singleton held
 in the ``Services`` registry; the @app decorators stay in main.py as thin
 shims that forward to these extracted functions.
@@ -17,29 +17,14 @@ from services import Services
 
 
 async def get_identity(svc: Services):
-    """Return the agent's current identity state (IDENTITY + SELF_MODEL +
-    GOALS) so the UI can show who the agent is and what it's working on."""
+    """Return the agent's current identity state (IDENTITY + SELF_MODEL)
+    so the UI can show who the agent is and what it's working on."""
     identity = svc.identity
     return {
         "identity": identity.get_identity(),
         "self_model": identity.get_self_model(),
-        "goals": identity.get_goals(),
         "summary": identity.summary(),
     }
-
-
-async def set_goals(svc: Services, payload: dict):
-    """Update the agent's active goal (full-replace GOALS.md)."""
-    identity = svc.identity
-    goal = payload.get("goal", "")
-    steps = payload.get("steps", [])
-    completed = payload.get("completed_step")
-    next_step = payload.get("next_step")
-    context = payload.get("context")
-    if not goal:
-        return {"error": "missing goal"}, 400
-    text = identity.update_goals(goal, steps, completed, next_step, context)
-    return {"goals": text, "summary": identity.summary()}
 
 
 async def regenerate_self_model(svc: Services, payload: dict):

@@ -7,7 +7,9 @@ description: Read one page of an ingested textbook PDF and get its content as te
 when: When reading a specific page from an ingested textbook
 allowed_tools:
   - vault_search
-summary: Textbook-Read-Page
+summary: TEXTBOOK_READ_PAGE_TOOL_VISION_EXACT_TEXT_SIMULATION
+
+| textbook_read_page,tool_vision_extract,exact_math_logic |
 tags:
   - procedure
   - procedures

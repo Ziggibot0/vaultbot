@@ -11,7 +11,7 @@ applies_to:
 allowed_tools:
   - vault_graph_analyzer
   - vault_list
-summary: VaultBot-Status
+summary: Summary
 tags:
   - procedure
   - procedures

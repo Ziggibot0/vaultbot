@@ -1,22 +1,20 @@
 """
-identity.py — VaultBot three-file identity layer.
+identity.py — VaultBot two-file identity layer.
 
-Manages three files in ``vaultbot_backend/identity/`` that make VaultBot feel
+Manages two files in ``vaultbot_backend/identity/`` that make VaultBot feel
 like the *same agent* across days, regardless of which LLM is in the slot:
 
 - ``IDENTITY.md``  — stable self-concept (human-seeded, rarely changes,
                       always loaded verbatim).
 - ``SELF_MODEL.md`` — MIRROR-style reconstructive narrative, agent-regenerated
                       each turn, ≤3000 tokens, always loaded as "previous state".
-- ``GOALS.md``     — active goal/plan (agent-editable, bounded, always loaded).
 
 Design lineage:
     * MIRROR  — bounded reconstructive state regenerated each turn yields
                 +5-20% across 7 models (the "Cognitive Controller" pattern).
     * Letta   — pinned persona blocks injected on every boot.
-    * Generative Agents — plan persistence (the GOALS.md file).
 
-The vault *is* the mind; the model is swappable plumbing. These three files are
+The vault *is* the mind; the model is swappable plumbing. These two files are
 boot-injected each session so the agent "wakes up coherent."
 
 Pure stdlib + optional ``ollama_client``. No new dependencies.
@@ -70,7 +68,6 @@ _REGEN_FORCE_KEYWORDS = ("goal", "plan", "task", "improve", "fix", "build", "lea
 # Filenames inside identity_dir.
 _IDENTITY_FILENAME = "IDENTITY.md"
 _SELF_MODEL_FILENAME = "SELF_MODEL.md"
-_GOALS_FILENAME = "GOALS.md"
 _RESTART_CONTEXT_FILENAME = "RESTART_CONTEXT.md"
 
 # ---------------------------------------------------------------------------
@@ -93,13 +90,6 @@ _SEED_SELF_MODEL = (
 # Phrases that indicate the self-model is still the stale seed text.
 # Used to detect and strip stale seed text from the self-model prior.
 _SEED_PHRASES = ("I have just started", "I have no prior activity yet")
-
-_SEED_GOALS = (
-    "# Current Goal\n"
-    "(None set yet.)\n\n"
-    "## Steps\n"
-    "- [ ] Awaiting first task."
-)
 
 # ---------------------------------------------------------------------------
 # The MIRROR reconstruction prompt
@@ -140,7 +130,7 @@ def _join_threads(threads: dict[str, str] | None) -> str:
 
 
 class Identity:
-    """Three-file identity layer for VaultBot.
+    """Two-file identity layer for VaultBot.
 
     The identity dir is created on init and seeded with defaults if absent.
     Every method is wrapped so that a failure can never crash the chat loop —
@@ -159,7 +149,6 @@ class Identity:
 
         self._identity_path = os.path.join(identity_dir, _IDENTITY_FILENAME)
         self._self_model_path = os.path.join(identity_dir, _SELF_MODEL_FILENAME)
-        self._goals_path = os.path.join(identity_dir, _GOALS_FILENAME)
         self._restart_context_path = os.path.join(identity_dir, _RESTART_CONTEXT_FILENAME)
 
         try:
@@ -170,10 +159,10 @@ class Identity:
             self._safe_log("identity_init_error", {"error": str(exc)})
 
         # ---- boot_context cache ------------------------------------------
-        # boot_context() re-reads 3 small files on every chat turn to inject
+        # boot_context() re-reads 2 small files on every chat turn to inject
         # them verbatim into the system prompt. They change rarely, so cache
-        # the assembled string keyed on the max mtime of the three files. A
-        # stat() per turn is far cheaper than three read_text() calls.
+        # the assembled string keyed on the max mtime of the two files. A
+        # stat() per turn is far cheaper than two read_text() calls.
         self._boot_cache: str | None = None
         self._boot_cache_mtime: float = 0.0
 
@@ -200,7 +189,6 @@ class Identity:
         for path, content in (
             (self._identity_path, _SEED_IDENTITY),
             (self._self_model_path, _SEED_SELF_MODEL),
-            (self._goals_path, _SEED_GOALS),
         ):
             if not os.path.exists(path):
                 self._atomic_write(path, content)
@@ -211,14 +199,14 @@ class Identity:
     # ------------------------------------------------------------------
 
     def boot_context(self) -> str:
-        """Read all three files and return a single string for injection into
+        """Read both files and return a single string for injection into
         the system prompt, verbatim. Order: RESTART_CONTEXT (if present) +
-        IDENTITY + SELF_MODEL + GOALS.
+        IDENTITY + SELF_MODEL.
 
         This is the "boot injection" — delivered before the first turn, never
         summarized. Cached on the files' mtimes so consecutive turns in a
         session skip the disk reads; the cache is invalidated automatically
-        whenever any of the three files is edited.
+        whenever either of the two files is edited.
 
         If RESTART_CONTEXT.md exists (written by the backend_restart tool
         before triggering a restart), it is prepended to the boot context and
@@ -234,9 +222,9 @@ class Identity:
             # boot_context() calls in the same session won't include it.
             restart_ctx = self._consume_restart_context()
 
-            # Cache check: stat the three files and compare to the cached
+            # Cache check: stat the two files and compare to the cached
             # mtime. If none changed, reuse the assembled string.
-            paths = (self._identity_path, self._self_model_path, self._goals_path)
+            paths = (self._identity_path, self._self_model_path)
             current_mtime = 0.0
             for p in paths:
                 try:
@@ -257,14 +245,11 @@ class Identity:
 
             identity = self.get_identity()
             self_model = self.get_self_model()
-            goals = self.get_goals()
             parts: list[str] = []
             if identity:
                 parts.append("# IDENTITY\n" + identity)
             if self_model:
                 parts.append("# SELF MODEL\n" + self_model)
-            if goals:
-                parts.append("# GOALS\n" + goals)
             assembled = "\n\n".join(parts)
             self._boot_cache = assembled
             if current_mtime != float("inf"):
@@ -488,75 +473,11 @@ class Identity:
         return result
 
     @staticmethod
-    @staticmethod
     def _enforce_ceiling(text: str) -> str:
         """Hard ceiling at SELF_MODEL_MAX_CHARS."""
         if len(text) <= SELF_MODEL_MAX_CHARS:
             return text
         return text[:SELF_MODEL_MAX_CHARS].rstrip()
-
-    # ------------------------------------------------------------------
-    # Goals
-    # ------------------------------------------------------------------
-
-    def update_goals(
-        self,
-        goal: str,
-        steps: list[str] | None = None,
-        completed_step: str | None = None,
-        next_step: str | None = None,
-        context: str | None = None,
-    ) -> str:
-        """Full-replace GOALS.md with the current goal + decomposition +
-        last-completed + next-step + optional context snapshot. Returns the new text.
-
-        The context parameter captures a brief state snapshot (files modified,
-        progress, blockers) that survives session clears. Written as a
-        'Current State' section in GOALS.md.
-        """
-        try:
-            lines: list[str] = []
-            lines.append("# Current Goal")
-            lines.append(goal.strip() if goal else "(None set.)")
-            lines.append("")
-
-            lines.append("## Steps")
-            if steps:
-                for step in steps:
-                    step = step.strip()
-                    if not step:
-                        continue
-                    if step.startswith("- ["):
-                        lines.append(step)
-                    else:
-                        lines.append(f"- [ ] {step}")
-            else:
-                lines.append("- [ ] (no steps decomposed yet)")
-            lines.append("")
-
-            if completed_step:
-                lines.append("## Last Completed")
-                lines.append(completed_step.strip())
-                lines.append("")
-
-            if next_step:
-                lines.append("## Next Step")
-                lines.append(next_step.strip())
-                lines.append("")
-
-            if context and context.strip():
-                lines.append("## Current State")
-                lines.append(context.strip()[:500])
-                lines.append("")
-
-            text = "\n".join(lines).rstrip() + "\n"
-            self._atomic_write(self._goals_path, text)
-            self._safe_log("identity_goals_updated", {"chars": len(text)})
-            return text
-        except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            logger.exception("update_goals failed: %s", exc)
-            self._safe_log("identity_goals_error", {"error": str(exc)})
-            return self.get_goals()
 
     # ------------------------------------------------------------------
     # Identity mutators / readers
@@ -577,9 +498,6 @@ class Identity:
     def get_self_model(self) -> str:
         return self._read(self._self_model_path)
 
-    def get_goals(self) -> str:
-        return self._read(self._goals_path)
-
     # ------------------------------------------------------------------
     # Status summary
     # ------------------------------------------------------------------
@@ -589,11 +507,9 @@ class Identity:
         try:
             identity = self.get_identity()
             self_model = self.get_self_model()
-            goals = self.get_goals()
             return {
                 "identity_chars": len(identity),
                 "self_model_chars": len(self_model),
-                "goals_chars": len(goals),
                 "self_model_tokens_est": len(self_model) // _CHARS_PER_TOKEN,
             }
         except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -602,7 +518,6 @@ class Identity:
             return {
                 "identity_chars": 0,
                 "self_model_chars": 0,
-                "goals_chars": 0,
                 "self_model_tokens_est": 0,
             }
 

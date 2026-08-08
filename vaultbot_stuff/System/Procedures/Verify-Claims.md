@@ -17,6 +17,8 @@ allowed_tools:
   - code_read
   - vault_search
   - llm_generate
+provides:
+  - Cross-Check-Claims
 research_backing:
   - "[[Claim-Verification-for-Vault-Notes]] — describes the 3-stage pipeline (extract → retrieve → verify) backed by Claimify and survey papers on automated fact-checking"
   - "[[Automated-claim-verification-and-fact-checking-of-LLM-outputs-against-source-doc]] — 15 sources on hallucination detection, faithfulness metrics, and post-generation verification for RAG systems"

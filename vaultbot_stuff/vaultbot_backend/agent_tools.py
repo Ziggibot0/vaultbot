@@ -13,6 +13,7 @@ instances are). This module only holds the schemas + a registry so the
 system prompt and the handler share a single source of truth.
 """
 
+import os
 from typing import Any
 
 # Ollama tool schema format mirrors OpenAI function-calling.
@@ -225,61 +226,6 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_goal", 
-            "description": (
-                "Update or clear your active goal in GOALS.md. This is how "
-                "you remember what you're working on across turns and "
-                "restarts. Call this when you start a new task (set the goal "
-                "+ decompose steps), when a task completes (clear it), or "
-                "when your understanding of the task changes. If you have no "
-                "goal to update, do NOT call this — just leave it alone. "
-                "The goal persists until YOU change it, so be deliberate."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "goal": {
-                        "type": "string",
-                        "description": (
-                            "The active goal in your own words. Set to an "
-                            "empty string or 'clear' to clear the goal when "
-                            "a task is done."
-                        ),
-                    },
-                    "next_step": {
-                        "type": "string",
-                        "description": (
-                            "The next concrete step, or '(awaiting next "
-                            "request)' if the goal was just cleared."
-                        ),
-                    },
-                    "steps": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "Optional decomposed steps for a multi-step "
-                            "task. Omit when clearing."
-                        ),
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": (
-                            "Optional brief state snapshot: what files "
-                            "have been modified, what has been completed, "
-                            "any blockers. Written to GOALS.md as a "
-                            "'Current State' section so it survives "
-                            "session clears. Keep under 500 chars. Omit "
-                            "when clearing."
-                        ),
-                    },
-                },
-                "required": ["goal"],
-            },
-        },
-    },
 ]
 
 # NOTE: textbook_read_page and web_read_source are provided by the
@@ -419,7 +365,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "This is the tool that prevents you from breaking yourself "
                 "in half. Set dry_run=true to preview whether an edit would "
                 "be safe without writing. For markdown notes or non-code "
-                "files, code_write is fine. IMPORTANT: safe_write is for PYTHON (.py) files only. For JavaScript (.js) files, use js_safe_write instead."
+                "files, code_write is fine. IMPORTANT: safe_write is for PYTHON (.py) files only. For JavaScript (.js) files, use js_safe_write instead. For targeted edits to MARKDOWN (.md) notes, use md_safe_replace (surgical string replace) or vault_safe_write (full-file overwrite)."
             ),
             "parameters": {
                 "type": "object",
@@ -511,7 +457,16 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "Procedures can call other procedures: a code step may call "
                 "run_procedure('Another-Procedure-Name') if 'run_procedure' is "
                 "listed in the procedure's allowed_tools frontmatter. Recursion "
-                "is capped at MAX_PROC_DEPTH=3 with cycle detection."
+                "is capped at MAX_PROC_DEPTH=3 with cycle detection.\n\n"
+                "PASSING ARGUMENTS: Many procedures need inputs (e.g. file_path, "
+                "procedure_name, note_path). Pass them in the `args` object — "
+                "the runtime injects them into every code step as the `args` dict "
+                "(e.g. a code step reads `file_path = args.get('file_path', '')`). "
+                "ALWAYS check the procedure's 'Inputs' section and pass every "
+                "required argument. Example: execute_procedure('Check-Error-Handling', "
+                "args={'file_path': 'vaultbot_stuff/vaultbot_backend/chat_handler.py'}). "
+                "If a required arg is missing, the procedure returns an error like "
+                "'file_path argument required' and does nothing."
             ),
             "parameters": {
                 "type": "object",
@@ -519,6 +474,18 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "procedure_name": {
                         "type": "string",
                         "description": "The note title (stem) of the procedure to execute, e.g. Verify-Claims or Dream-Pass",
+                    },
+                    "args": {
+                        "type": "object",
+                        "description": (
+                            "Call-time arguments forwarded to every code step "
+                            "as the injected `args` dict. Pass any keys the "
+                            "procedure's 'Inputs' section documents. Common keys: "
+                            "file_path (a Python file to audit), procedure_name "
+                            "(a procedure to fix), note_path (a note to read). "
+                            "Example: {\"file_path\": \"vaultbot_stuff/vaultbot_backend/main.py\"}"
+                        ),
+                        "additionalProperties": True,
                     },
                 },
                 "required": ["procedure_name"],
@@ -544,28 +511,31 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 #   and executed via execute_procedure. They stay as custom tools in
 #   custom_tools/ but are not advertised in the tool schema list.
 
-# Tier 1: Core tools (always sent)
+# Tier 1: Core tools (always sent) — the BARE minimum.
+# The model should have just enough to read, plan, call procedures, and
+# write notes. Everything else is a procedure. This pressures the model
+# into calling execute_procedure instead of reaching for raw tools.
 CORE_TOOL_NAMES: set[str] = {
-    "vault_search",          # semantic search over the vault
     "vault_read_note",       # deterministic read by wikilink title
     "code_read",             # read any file (vault or backend source)
     "plan_task",             # plan a multi-step task (working memory)
     "update_task",           # mark plan progress
-    "execute_procedure",     # run a procedure note
-    "vault_safe_write",      # write/create notes
-    "vault_append",          # append to existing notes
+    "execute_procedure",     # run a procedure note — THE primary tool
+    "vault_safe_write",      # write/create notes (bootstrapping new procedures)
 }
 
 # Tier 2: Contextual tools (sent when keywords match)
 CONTEXTUAL_TOOLS: dict[str, list[str]] = {
     "research": [
         "vault_research",        # web research when the vault is thin
+        "vault_search",          # semantic search over the vault
         "web_read_source",       # re-read saved web sources
     ],
     "code_edit": [
         "code_run",              # test Python in a sandboxed subprocess
         "safe_write",            # verified self-edit of backend .py files
         "js_safe_write",         # verified self-edit of plugin .js files
+        "md_safe_replace",       # targeted edit of markdown notes (custom tool)
         "git_rollback",          # recover from a bad self-edit
         "backend_restart",       # restart the backend (custom tool)
         "plugin_reload",         # reload the Obsidian plugin (custom tool)
@@ -575,13 +545,13 @@ CONTEXTUAL_TOOLS: dict[str, list[str]] = {
         "vault_list",            # list all .md files (custom tool)
         "vault_delete",          # delete a note safely (custom tool)
         "vault_lint",            # lint a note for quality (custom tool)
+        "vault_append",          # append to existing notes
     ],
     "self_improvement": [
         "tool_create",           # create + register a new custom tool
     ],
     "status": [
         "vaultbot_status",       # system status check
-        "set_goal",              # update active goal in GOALS.md
     ],
 }
 
@@ -612,7 +582,7 @@ _CONTEXTUAL_KEYWORDS: dict[str, list[str]] = {
         "code", "fix", "edit", "write", "modify", "bug", "implement",
         "function", "python", "javascript", ".py", ".js", "backend",
         "frontend", "plugin", "restart", "reload", "refactor", "debug",
-        "safe_write", "js_safe_write", "git_rollback",
+        "safe_write", "js_safe_write", "md_safe_replace", "git_rollback",
     ],
     "vault_maintenance": [
         "vault", "graph", "gaps", "note", "link", "wikilink", "cluster",
@@ -689,6 +659,10 @@ def _get_contextual_tool_schemas(names: set[str],
     return schemas
 
 
+
+
+
+
 def build_tool_list(user_message: str, plan_text: str = "",
                     custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Build the tool list for the LLM call using three-tier selection.
@@ -696,6 +670,7 @@ def build_tool_list(user_message: str, plan_text: str = "",
     Tier 1 (core): always included.
     Tier 2 (contextual): included when user_message + plan_text match keywords.
     Tier 3 (procedure candidates): never included — discovered via RAG.
+
 
     Custom tools that aren't procedure candidates are included if they
     match a selected contextual category.
@@ -793,7 +768,6 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
                 )
 
     # Count core tools so the LLM knows its own scope of power.
-    total_tools = len(CORE_TOOL_NAMES)
 
     return (
         f"# IDENTITY\n"
@@ -825,54 +799,62 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"customer service bot. You have personality: capable, concise, "
         f"warmly loyal, occasionally dry. You are, in short, built to serve.\n\n"
         f"# YOUR POWER\n"
-        f"You have {total_tools} core tools. You can:\n"
-        f"- Research any topic on the web and write permanent, sourced notes "
-        f"(vault_research). The research engine is LLM-light — the burden is "
-        f"on the vault and web, not your weights.\n"
-        f"- Search the vault via FUSED retrieval (vault_search): vector + "
-        f"wikilink graph + backlinks combined, so you find notes that are "
-        f"semantically OR structurally related — not just keyword matches.\n"
-        f"- Read any file in the vault or backend (code_read).\n"
-        f"- Write and append notes (vault_safe_write, vault_append).\n"
-        f"- Re-read saved web sources (web_read_source).\n"
+        f"You have {len(CORE_TOOL_NAMES)} core tools — the BARE minimum. "
+        f"This is intentional: you are pressured to call execute_procedure "
+        f"instead of reaching for raw tools. You can:\n"
+        f"- Read notes by title (vault_read_note) and read any file (code_read).\n"
         f"- Plan multi-step tasks (plan_task, update_task).\n"
+        f"- Write notes (vault_safe_write).\n"
         f"- Execute PROCEDURES (execute_procedure): notes in "
-        f"vaultbot_stuff/System/Procedures/ that encode specific workflows. When one "
-        f"surfaces in vault context and matches your task, run it. "
-        f"Procedures include: Safe-Write (self-edit code), Write-Python-Tool "
-        f"(create new tools), Code-Run (execute Python), Vault-List (list "
-        f"notes), Vault-Gaps (find knowledge gaps), Vault-Lint (check note "
-        f"quality), System-Status (report state), Backend-Restart, and more. "
-        f"You grow yourself. When you hit a wall, you don't give up — you "
-        f"build the procedure that gets you over it.\n\n"
+        f"vaultbot_stuff/System/Procedures/ that encode specific workflows. "
+        f"THIS is your primary tool. When you need to search the vault, "
+        f"call execute_procedure('Smart-Vault-Search'). When you need to "
+        f"lint a note, call execute_procedure('Vault-Lint'). When you need "
+        f"to edit code, call execute_procedure('Safe-Write'). When you need "
+        f"to research, call execute_procedure('Research-Batch'). "
+        f"Procedures are deterministic, graded, and self-healing. "
+        f"Every procedure you call makes a small model more capable. "
+        f"You grow yourself by creating new procedures, not by ad-hoc reasoning.\n\n"
         f"# YOUR MIND\n"
         f"Your mind is the vault's interconnected notes — NOT your model "
         f"weights. The model is swappable plumbing. This is why you stay "
         f"consistent across days even if the model changes: your identity "
         f"(IDENTITY.md), your self-model (SELF_MODEL.md, regenerated each "
-        f"turn), and your goals (GOALS.md) live in the vault and are "
+        f"turn) live in the vault and are "
         f"boot-injected every session. Your knowledge curriculum tracks what "
         f"you've learned and what's next. When you create a note, the A-MEM "
         f"layer evolves neighboring notes' tags and links so the vault "
         f"refines itself. You are, quite literally, a thinking vault.\n\n"
         f"# HOW YOU WORK\n"
-        f"0. Before attempting a task, run capability_audit with the task as "
-        f"the argument. This shows you whether you already have a tool for "
-        f"it, or whether you have a CAPABILITY GAP. If there's a gap, that's "
-        f"where your capabilities end and {owner_name}'s request begins — "
-        f"and it's YOUR job to fill it: self_reflect to propose a tool, "
-        f"code_run to test it, tool_create to add it, or safe_write to edit "
-        f"an existing module. Never silently fail a task because you lacked "
-        f"a tool — build the tool.\n"
+        f"0. PROCEDURE FIRST: Before any other work, decide which procedure "
+        f"to run. The framework surfaces relevant procedures (one-line "
+        f"capability cards) in the context below — if one matches the task, "
+        f"call execute_procedure(name) NOW and let it run deterministically. "
+        f"If NO procedure matches, do NOT improvise from scratch: research how "
+        f"experts do this task, write a procedure note (type: procedure, with "
+        f"when_to_use, allowed_tools, model_cartridge), then call "
+        f"execute_procedure on the new note. The grading loop (see step 8) "
+        f"tracks every execution — including sub-procedures called by "
+        f"other procedures — so a procedure that fails at a specific step "
+        f"is recorded with the exact step number + error, and the vault "
+        f"self-heals it. Making a procedure is always better than ad-hoc "
+        f"reasoning because it is permanent, verifiable, and makes a small "
+        f"model able to repeat your work.\n"
+        f"0a. Before attempting a task that no procedure covers, run "
+        f"capability_audit with the task as the argument. This shows you "
+        f"whether you already have a tool for it, or whether you have a "
+        f"CAPABILITY GAP. If there's a gap, that's where your capabilities "
+        f"end and {owner_name}'s request begins — and it's YOUR job to fill "
+        f"it: self_reflect to propose a tool, code_run to test it, "
+        f"tool_create to add it, or safe_write to edit an existing module. "
+        f"Never silently fail a task because you lacked a tool — build the "
+        f"tool.\n"
         f"1. YOUR PLAN: If your task is multi-step, call plan_task first "
-        f"to write a goal and concrete ordered steps. If you don't, the "
-        f"framework will force you to after 3 tool rounds (execution tools "
-        f"get masked until you plan). Once you have a plan, execute it one "
-        f"step at a time: do the work (call the tools you need), then call "
-        f"update_task to mark the step completed. The loop keeps going "
-        f"until EVERY step is done — if you stop early with unfinished "
-        f"steps, the framework sends you back for one more round. Do NOT "
-        f"write a final answer until all steps are done.\n"
+        f"to write a goal and concrete ordered steps. Once you have a plan, "
+        f"execute it one step at a time: do the work (call the tools you "
+        f"need), then call update_task to mark the step completed. You "
+        f"decide when all steps are done — the framework does not second-"
+        f"guess you.\n"
         f"   STEP CONTEXT: The working memory shows task status and notes. "
         f"When you mark a step completed, add a brief note via update_task "
         f"summarizing what was accomplished and key facts the next step "
@@ -885,8 +867,8 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"read specific sections. If the file is large, read it in chunks "
         f"by line range. Once you've read a section, move on to the next "
         f"task.\n"
-        f"   WORKFLOW: The model drives. The framework enforces ONE rule: "
-        f"if you work 3+ rounds without a plan, execution tools are masked "
+        f"   WORKFLOW: The model drives. The framework provides tools and "
+        f"stays out of your way. Use plan_task to decompose work, "
         f"until you call plan_task. Use plan_task to decompose work, "
         f"update_task to track progress, and tools to do the work. When "
         f"all steps are done, write your final answer as prose.\n"
@@ -922,14 +904,28 @@ def build_system_prompt(vault_context: str, autonomous_state: dict[str, Any],
         f"it would). Run preflight_safety_check before any self-edit to "
         f"confirm the system is healthy enough to edit. Never overwrite "
         f"core backend files without explaining why first.\n"
-        f"7. PROCEDURES: When you find yourself doing a multi-step task \n"
-        f"(researching a topic, verifying claims, evaluating a source, \n"
+        f"7. PROCEDURES (overview): When you find yourself doing a multi-step \n"
+        f"task (researching a topic, verifying claims, evaluating a source, \n"
         f"writing a tool), check if a procedure note exists for it. If it \n"
         f"does, call execute_procedure to run it deterministically. If it \n"
         f"doesn't, research how experts do it, write a procedure note, and \n"
         f"use it next time. Procedures are how you make yourself redundant — \n"
         f"they let a small model follow good instructions instead of \n"
-        f"reasoning from scratch. See [[Procedural-Bootstrap-and-Evolution-Plan]].\n\n"
+        f"reasoning from scratch. (See step 0 for the PROCEDURE FIRST rule \n"
+        f"and step 8 for the grading loop.) See [[Procedural-Bootstrap-and-Evolution-Plan]].\n\n"
+        f"8. PROCEDURES (the grading loop): Every procedure execution — "
+        f"including a procedure called as a sub-procedure by another "
+        f"procedure via run_procedure() — logs pass/fail to "
+        f"procedure_tracker. If a step fails, the EXACT step number and the "
+        f"error/traceback are recorded, so a repeatedly-failing step is "
+        f"flagged for re-research and the vault self-heals. After 5 uses, "
+        f"procedures with >=70% success are promoted to 'verified' (run "
+        f"clean); below 40% they are 'flagged' and blocked from running until "
+        f"fixed. The embedding-drift layer nudges verified procedures "
+        f"toward the queries they solve well, so they surface higher next "
+        f"time. This is why step 0 says PROCEDURE FIRST: the loop is "
+        f"closed — run a procedure, it gets graded, bad ones get fixed, "
+        f"good ones get promoted.\n\n"
         f"# RULES\n"
         f"- Prefer vault knowledge first; research only when the vault is "
         f"insufficient.\n"
@@ -1045,6 +1041,7 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
     See the docstring on build_system_prompt for why bundling them was the
     root cause of "losing the plot / redoing old prompts."
 
+
     Returns the briefing string (no vault context appended). The caller
     is responsible for prepending the identity boot_context and for
     injecting the vault context as its own message.
@@ -1118,15 +1115,28 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"you hit a wall, you don't give up — you build the procedure that "
         f"gets you over it.\n\n"
         f"# HOW YOU WORK\n"
+        f"0. ROUTE-TASK FIRST: Before ANY tool work, call "
+        f"execute_procedure('Route-Task', args={{'intent': '<user request>'}}). "
+        f"Route-Task classifies the user's intent and returns a procedure "
+        f"chain — the exact sequence of procedures to run. Run each procedure "
+        f"in order. This is MANDATORY for every non-trivial request. The only "
+        f"exception is a simple greeting or thank-you. Route-Task is your "
+        f"front door — never bypass it.\n"
+        f"0a. PROCEDURE FIRST: If Route-Task returns no matching chain, "
+        f"decide which procedure to run from the surfaced capability cards. "
+        f"If one matches the task, call execute_procedure(name) NOW and let "
+        f"it run deterministically. If NO procedure matches, do NOT improvise "
+        f"from scratch — research how experts do the task, write a procedure "
+        f"note (type: procedure, when_to_use, allowed_tools, model_cartridge), "
+        f"then run it. Every execution is graded by the procedure_tracker (see "
+        f"step 5), including sub-procedures, and a failing step is recorded "
+        f"with its exact number + error so the vault self-heals it.\n"
         f"1. YOUR PLAN: If your task is multi-step, call plan_task first "
-        f"to write a goal and concrete ordered steps. If you don't, the "
-        f"framework will force you to after 3 tool rounds (execution tools "
-        f"get masked until you plan). Once you have a plan, execute it one "
-        f"step at a time: do the work (call the tools you need), then call "
-        f"update_task to mark the step completed. The loop keeps going "
-        f"until EVERY step is done — if you stop early with unfinished "
-        f"steps, the framework sends you back for one more round. Do NOT "
-        f"write a final answer until all steps are done.\n"
+        f"to write a goal and concrete ordered steps. Once you have a plan, "
+        f"execute it one step at a time: do the work (call the tools you "
+        f"need), then call update_task to mark the step completed. You "
+        f"decide when all steps are done — the framework does not second-"
+        f"guess you.\n"
         f"   STEP CONTEXT: The working memory shows task status and notes. "
         f"When you mark a step completed, add a brief note via update_task "
         f"summarizing what was accomplished and key facts the next step "
@@ -1138,9 +1148,8 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"   READING CODE: When using code_read, use start_line/end_line to "
         f"read specific sections. If the file is large, read it in chunks "
         f"by line range and move on.\n"
-        f"   WORKFLOW: The model drives. The framework enforces ONE rule: "
-        f"if you work 3+ rounds without a plan, execution tools are masked "
-        f"until you call plan_task. Use plan_task to decompose work, "
+        f"   WORKFLOW: The model drives. The framework provides tools and "
+        f"stays out of your way. Use plan_task to decompose work, "
         f"update_task to track progress, and tools to do the work. When "
         f"all steps are done, write your final answer as prose.\n"
         f"   TURN PROTOCOL: Tool calls continue the loop — the framework "
@@ -1173,23 +1182,22 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"5. PROCEDURES: for multi-step recurring tasks, check if a procedure "
         f"note exists. If it does, call execute_procedure to run it "
         f"deterministically. If not, research how experts do it, write a "
-        f"procedure note, and use it next time.\n"
+        f"procedure note, and use it next time. EVERY execution is graded: "
+        f"pass/fail is logged per procedure AND per step, including "
+        f"sub-procedures called via run_procedure() inside a code step. A "
+        f"failing step records its exact step number + error so the vault "
+        f"can self-heal it. After 5 uses, >=70% success → 'verified', <40% → "
+        f"'flagged' (blocked until fixed). This is the PROCEDURE FIRST loop: "
+        f"run → grade → promote/fix → rerun.\n"
         f"   MODEL CARTRIDGES: each procedure declares a model_cartridge in "
-        f"frontmatter — big (the main chat model), small (a tiny local model "
-        f"like qwen3.5:0.8b), or vision. When you write a procedure, set "
-        f"model_cartridge: small for tasks that don't need heavy reasoning "
-        f"(classification, tagging, routing, simple extraction). This saves "
-        f"cloud tokens — the small model runs locally for free. As more "
-        f"procedures use the small cartridge, the cloud model does less "
-        f"and less. Use big only for synthesis and complex reasoning.\n"
         f"6. When self-improving, ALWAYS test with code_run before "
         f"tool_create. To edit backend source, use safe_write. Run "
         f"preflight_safety_check before any self-edit.\n"
-        f"7. GOALS: call set_goal to record the high-level goal in GOALS.md "
-        f"(persists across restarts). Use plan_task for the step-by-step "
-        f"tracking — the two work together: set_goal is the slow memory, "
-        f"plan_task is the fast working memory. Clear set_goal when the "
-        f"task completes.\n\n"
+        f"7. PLANNING: use plan_task to decompose multi-step work into "
+        f"concrete, verifiable steps. The framework auto-starts the first "
+        f"step and re-injects the plan into your working memory every turn. "
+        f"Use update_task to mark steps complete as you finish them. "
+        f"This is your single source of truth for what you're doing.\n\n"
         f"# RULES\n"
         f"- Prefer vault knowledge first; research only when the vault is "
         f"insufficient. Never fabricate. If you don't know and can't research "

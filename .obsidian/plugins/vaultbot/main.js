@@ -391,12 +391,21 @@ class VaultBotPlugin extends Plugin {
 	}
 	async setRoleCfg(role, modelId) {
 		// One interchange call: map any model in the pot into any role.
+		// Returns {ok:true,roles} on success, {ok:false,detail} on failure so
+		// callers can tell a real persist apart from a silent no-op. Swallowing
+		// errors here made the dropdown look like it "flipped back": a failed
+		// POST + optimistic re-render showed the still-old role as if the
+		// selection had never stuck.
 		try {
 			const r = await fetch(this.settings.backendUrl + '/llm/role', {
 				method: 'POST', headers: {'Content-Type': 'application/json'},
 				body: JSON.stringify({role, model_id: modelId})});
-			return await r.json();
-		} catch (e) { return null; }
+			const j = await r.json().catch(() => null);
+			if (!r.ok || !j || j.status !== 'ok') {
+				return {ok: false, detail: (j && j.detail) || ('HTTP ' + r.status)};
+			}
+			return {ok: true, roles: j.roles || {}, model_id: modelId};
+		} catch (e) { return {ok: false, detail: String(e)}; }
 	}
 	async fetchProviderLiveModels(providerId) {
 		try {
@@ -2412,10 +2421,19 @@ class VaultBotSidebarView extends ItemView {
 				refreshAllModelDropdowns();  // revert the selection
 				return;
 			}
-			await this.plugin.setRoleCfg('big', bigSelect.value);
-			new Notice(`Big model set: ${bigSelect.value}${isPaid ? ' (PAID — watch usage)' : ''}`);
+			const chosen = bigSelect.value;
+			const res = await this.plugin.setRoleCfg('big', chosen);
+			if (!res || !res.ok || res.model_id !== chosen) {
+				// Persist failed: do NOT re-render from the backend (that would
+				// snap the dropdown back to the OLD role and look like a revert).
+				// Keep the user's visible choice and surface the real error.
+				new Notice('Big model NOT saved: ' + ((res && res.detail) || 'no response') + ' — selection kept, try again or check the backend.');
+				bigSelect.value = chosen;
+				return;
+			}
+			new Notice(`Big model set: ${chosen}${isPaid ? ' (PAID — watch usage)' : ''}`);
 			refreshAllModelDropdowns();
-			const selModel = bigSelect.options[bigSelect.selectedIndex]?.text || bigSelect.value;
+			const selModel = bigSelect.options[bigSelect.selectedIndex]?.text || chosen;
 			const ctxWin = await this.plugin.fetchContextWindow(selModel);
 			if (tokenMeterEl) {
 				tokenMeterEl.setAttribute('title',
@@ -2425,17 +2443,29 @@ class VaultBotSidebarView extends ItemView {
 		});
 		// Small model change → map this pot model into the small role.
 		smallSelect.addEventListener('change', async () => {
-			await this.plugin.setRoleCfg('small', smallSelect.value);
-			new Notice(smallSelect.value
-				? `Small model set: ${smallSelect.value}`
+			const chosen = smallSelect.value;
+			const res = await this.plugin.setRoleCfg('small', chosen);
+			if (!res || !res.ok) {
+				new Notice('Small model NOT saved: ' + ((res && res.detail) || 'no response') + ' — selection kept.');
+				smallSelect.value = chosen;
+				return;
+			}
+			new Notice(chosen
+				? `Small model set: ${chosen}`
 				: 'Small model cleared — procedures fall back to the big model.');
 			refreshAllModelDropdowns();
 		});
 		// Vision model change → map this pot model into the vision role.
 		visionSelect.addEventListener('change', async () => {
-			await this.plugin.setRoleCfg('vision', visionSelect.value);
-			new Notice(visionSelect.value
-				? `Vision model set: ${visionSelect.value}`
+			const chosen = visionSelect.value;
+			const res = await this.plugin.setRoleCfg('vision', chosen);
+			if (!res || !res.ok) {
+				new Notice('Vision model NOT saved: ' + ((res && res.detail) || 'no response') + ' — selection kept.');
+				visionSelect.value = chosen;
+				return;
+			}
+			new Notice(chosen
+				? `Vision model set: ${chosen}`
 				: 'Vision model cleared — page reading falls back to your big model.');
 			refreshAllModelDropdowns();
 		});
@@ -2725,6 +2755,8 @@ class VaultBotSidebarView extends ItemView {
 		const consoleHandleIcon = consoleHandle.createSpan({cls: 'vaultbot-console-handle-icon', text: '▸'});
 		consoleHandle.createSpan({text: ' Console'});
 		const consoleSummary = consoleBar.createSpan({cls: 'vaultbot-console-summary', text: 'idle'});
+		const consoleCopyBtn = consoleBar.createEl('button', {cls: 'vaultbot-console-copy', text: 'copy'});
+		consoleCopyBtn.title = 'Copy the console log to the clipboard (for reporting issues)';
 		const consoleClearBtn = consoleBar.createEl('button', {cls: 'vaultbot-console-clear', text: 'clear'});
 		consoleClearBtn.title = 'Clear the console log';
 
@@ -2742,6 +2774,29 @@ class VaultBotSidebarView extends ItemView {
 			}
 		};
 		consoleHandle.addEventListener('click', toggleConsole);
+		consoleCopyBtn.addEventListener('click', async (e) => {
+			e.stopPropagation();
+			// Copy all console lines as plain text to the clipboard so the
+			// operator can paste the full session log when reporting an issue.
+			const text = consoleLines.map(l => l.text).join('\n');
+			try {
+				await navigator.clipboard.writeText(text);
+				consoleCopyBtn.setText('copied!');
+				setTimeout(() => consoleCopyBtn.setText('copy'), 1500);
+			} catch (err) {
+				// Fallback for browsers/contexts without clipboard API.
+				const ta = document.createElement('textarea');
+				ta.value = text;
+				ta.style.position = 'fixed';
+				ta.style.opacity = '0';
+				document.body.appendChild(ta);
+				ta.select();
+				try { document.execCommand('copy'); } catch (_) {}
+				document.body.removeChild(ta);
+				consoleCopyBtn.setText('copied!');
+				setTimeout(() => consoleCopyBtn.setText('copy'), 1500);
+			}
+		});
 		consoleClearBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			consoleBody.empty();
@@ -2804,7 +2859,21 @@ class VaultBotSidebarView extends ItemView {
 		const endActivity = (summary) => {
 			if (currentActivityEventId) {
 				const elapsed = Date.now() - activityStartTs;
-				logConsole('✓ ' + (summary || 'done') + '  [' + fmtMs(elapsed) + ']', 'vaultbot-cl-done');
+				// Error-aware: a tool_result whose summary starts with
+				// "error:" or contains a "blocked" marker is a FAILURE —
+				// show it in RED with ✗, not green ✓. Without this a
+				// tool crash or blocked procedure looks like success in
+				// the console.
+				const isErr = summary && (
+					summary.startsWith('error:') ||
+					summary.includes('blocked:') ||
+					summary.includes(' — error:')
+				);
+				if (isErr) {
+					logConsole('✗ ' + (summary || 'failed') + '  [' + fmtMs(elapsed) + ']', 'vaultbot-cl-error');
+				} else {
+					logConsole('✓ ' + (summary || 'done') + '  [' + fmtMs(elapsed) + ']', 'vaultbot-cl-done');
+				}
 				currentActivityEventId = null;
 			}
 		};
@@ -3448,7 +3517,131 @@ class VaultBotSidebarView extends ItemView {
 					return;
 				}
 
-				if (msg.type === 'status') {
+				// --- Questionnaire renderer (ask_user tool) -------------------------
+			// Renders interactive question cards in the chat when the backend
+			// sends a type:'user_questionnaire' WebSocket message.
+			// Defined BEFORE the if/else chain so it's in scope for the
+			// 'user_questionnaire' handler below.
+			// Capture backendUrl here — renderQuestionnaire is called as a
+			// plain function, so `this` is undefined in strict mode.
+			const _backendUrl = this.backendUrl;
+			const renderQuestionnaire = (msg) => {
+				// Close the current assistant message so the questionnaire
+				// card appears AFTER any text already streamed, and null it
+				// out so the post-submit reply creates a NEW assistant
+				// message below the card — not appended to the old one above.
+				closeCurrentSegment();
+				currentAssistantMessage = null;
+				currentThinkingBlock = null;
+				currentThinkingHeader = null;
+				currentAnswerBlock = null;
+				currentSegmentText = '';
+
+				const requestId = msg.request_id || '';
+				const title = msg.title || 'I need your input';
+				const context = msg.context || '';
+				const questions = msg.questions || [];
+
+				const card = chatContainer.createDiv({cls: 'vaultbot-message system questionnaire'});
+				const header = card.createDiv({cls: 'vaultbot-questionnaire-header'});
+				header.createSpan({cls: 'vaultbot-questionnaire-icon', text: '\u2753'});
+				header.createSpan({cls: 'vaultbot-questionnaire-title', text: title});
+
+				if (context) {
+					const ctx = card.createDiv({cls: 'vaultbot-questionnaire-context'});
+					ctx.setText(context);
+				}
+
+				const form = card.createDiv({cls: 'vaultbot-questionnaire-form'});
+
+				// Build answer storage
+				const answers = {};
+				const commentEls = {};
+
+				for (const q of questions) {
+					const qDiv = form.createDiv({cls: 'vaultbot-questionnaire-q'});
+					const qLabel = qDiv.createDiv({cls: 'vaultbot-questionnaire-q-label'});
+					qLabel.setText(q.question);
+
+					if (q.type === 'radio' && q.options && q.options.length > 0) {
+						const optsDiv = qDiv.createDiv({cls: 'vaultbot-questionnaire-opts'});
+						// Add "I don't know, use best practices" as first option
+						const allOpts = ['__best_practices__', ...q.options];
+						const labels = ['I don\'t know', ...q.options];
+						const defaultVal = q.default === 'best_practices' ? '__best_practices__' : (q.default || q.options[0]);
+
+						for (let i = 0; i < allOpts.length; i++) {
+							const optRow = optsDiv.createDiv({cls: 'vaultbot-questionnaire-opt'});
+							const radio = optRow.createEl('input', {
+								type: 'radio',
+								attr: {name: 'q_' + q.id, value: allOpts[i]}
+							});
+							if (allOpts[i] === defaultVal) radio.checked = true;
+							radio.addEventListener('change', () => {
+								answers[q.id] = allOpts[i];
+							});
+							optRow.createSpan({text: labels[i]});
+						}
+						// Set initial answer
+						answers[q.id] = defaultVal;
+					} else if (q.type === 'text') {
+						const textarea = qDiv.createEl('textarea', {
+							cls: 'vaultbot-questionnaire-textarea',
+							attr: {placeholder: 'Your thoughts...', rows: '3'}
+						});
+						if (q.default && q.default !== 'best_practices') {
+							textarea.value = q.default;
+						}
+						textarea.addEventListener('input', () => {
+							answers[q.id] = textarea.value;
+						});
+						answers[q.id] = textarea.value || '';
+					}
+				}
+
+				// Free-text comments field for nuance
+				const commentDiv = form.createDiv({cls: 'vaultbot-questionnaire-q'});
+				commentDiv.createDiv({cls: 'vaultbot-questionnaire-q-label', text: 'Additional comments or nuances'});
+				const commentArea = commentDiv.createEl('textarea', {
+					cls: 'vaultbot-questionnaire-textarea',
+					attr: {placeholder: 'Any constraints, conditions, or creative ideas...', rows: '3'}
+				});
+
+				// Submit button — sends answers via the same WebSocket channel
+				// as normal chat messages, so it works identically to typing
+				// a message and pressing Enter. No separate HTTP fetch.
+				const btnRow = form.createDiv({cls: 'vaultbot-questionnaire-actions'});
+				const submitBtn = btnRow.createEl('button', {text: 'Submit answers', cls: 'mod-cta'});
+				submitBtn.addEventListener('click', () => {
+					if (!ws || ws.readyState !== WebSocket.OPEN) {
+						submitBtn.setText('Not connected \u2014 try again');
+						setTimeout(() => {
+							submitBtn.removeAttribute('disabled');
+							submitBtn.setText('Submit answers');
+						}, 2000);
+						return;
+					}
+					submitBtn.setAttribute('disabled', 'disabled');
+					submitBtn.setText('Submitted \u2713');
+					// Disable all inputs so the user can't change answers
+					card.querySelectorAll('input, textarea, button').forEach(el => {
+						el.setAttribute('disabled', 'disabled');
+					});
+					// Send via WebSocket — same channel as normal chat messages.
+					// The backend's WS router handles type:'user_response' by
+					// unblocking the waiting ask_user tool.
+					ws.send(JSON.stringify({
+						type: 'user_response',
+						request_id: requestId,
+						answers: answers,
+						comments: commentArea.value || ''
+					}));
+				});
+
+				smartScrollToBottom();
+			};
+
+			if (msg.type === 'status') {
 					statusEl.setText(msg.content);
 					logConsole('• ' + msg.content, 'vaultbot-cl-status');
 					updateConsoleSummary(msg.content);
@@ -3700,6 +3893,14 @@ class VaultBotSidebarView extends ItemView {
 					renderMarkdownInto(div, msg.content || '').then(() => {
 						smartScrollToBottom();
 					});
+				} else if (msg.type === 'console_error') {
+					// Lightweight background-task failure (procedure tracking,
+					// drift feedback, step-RAG miss, post-condense relink, etc.)
+					// that doesn't break the turn but the user must see. Rendered
+					// as a single red console line — no card, no interruption.
+					// Per the operator's directive: any failure of any kind is
+					// immediately reported in the console.
+					logConsole('✗ ' + (msg.content || 'background task failed'), 'vaultbot-cl-error');
 				} else if (msg.type === 'stopped') {
 					// Backend confirmed an interrupt (stop button or new msg).
 					endActivity();
@@ -3768,6 +3969,12 @@ class VaultBotSidebarView extends ItemView {
 					setStatus('error', `Could not download ${msg.model}. Check that Ollama is running and try again.`);
 					logConsole('✗ model download failed: ' + msg.model, 'vaultbot-cl-error');
 				}
+		} else if (msg.type === 'user_questionnaire') {
+				// Interactive question card from the ask_user tool.
+				// Renders radio/text questions with an "I don't know, use
+				// best practices" option and a free-text comments field.
+				// The submit button POSTs answers to /user_response.
+				renderQuestionnaire(msg);
 			} else if (msg.type === 'vault_changed') {
 					// The backend wrote files directly to disk, bypassing
 					// Obsidian's vault API. Obsidian's file watcher may not
@@ -4140,5 +4347,7 @@ class VaultBotSidebarView extends ItemView {
 		input.focus();
 	}
 }
+
+
 
 module.exports = VaultBotPlugin;

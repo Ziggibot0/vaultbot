@@ -42,6 +42,7 @@ See:
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from subprocess_utils import run as _subprocess_run, scrubbed_env, preexec_fn
@@ -445,7 +446,15 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '               "--vault-path", os.environ.get("VAULT_PATH", "."),\n'
             '               "--call-stack", _json.dumps(_call_stack),\n'
             '               "--procedure-args", _json.dumps(args or {}, default=str)]\n'
-            '        r = _sp_run(cmd, capture_output=True, text=True, timeout=120)\n'
+            '        # Forward the tracker log path so the child subprocess\n'
+            '        # logs its own pass/fail + step results to the SAME log\n'
+            '        # file (sub-procedure grading). See PROCEDURE_FIRST.\n'
+            '        _child_env = dict(os.environ)\n'
+            '        _tracker_log = os.environ.get("PROCEDURE_TRACKER_LOG", "")\n'
+            '        if _tracker_log:\n'
+            '            _child_env["PROCEDURE_TRACKER_LOG"] = _tracker_log\n'
+            '        r = _sp_run(cmd, capture_output=True, text=True, timeout=120,\n'
+            '                    env=_child_env)\n'
             '        if not r.stdout.strip():\n'
             '            raise RuntimeError("run_procedure produced no output; "\n'
             '                               "stderr: " + r.stderr[:500])\n'
@@ -475,6 +484,102 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    def vault_delete(file_path):\n'
             '        return _vault_delete_run({"file_path": file_path})\n'
             '    namespace["vault_delete"] = vault_delete\n'
+        )
+
+    if "vault_safe_write" in allowed_tools:
+        snippets.append(
+            'if "vault_safe_write" in allowed:\n'
+            '    from custom_tools.vault_safe_write import run as _vault_safe_write_run\n'
+            '    def vault_safe_write(file_path, content):\n'
+            '        return _vault_safe_write_run({"file_path": file_path, "content": content})\n'
+            '    namespace["vault_safe_write"] = vault_safe_write\n'
+        )
+
+    if "vault_gaps" in allowed_tools:
+        snippets.append(
+            'if "vault_gaps" in allowed:\n'
+            '    from knowledge_curriculum import KnowledgeCurriculum\n'
+            '    from vault_graph import VaultGraph\n'
+            '    _graph = VaultGraph(vault_path)\n'
+            '    _curriculum = KnowledgeCurriculum(\n'
+            '        vault_graph=_graph,\n'
+            '        session_logger=None,\n'
+            '    )\n'
+            '    def vault_gaps():\n'
+            '        gaps = _curriculum.propose_next_gaps(n=20)\n'
+            '        return {"gaps": gaps, "count": len(gaps)}\n'
+            '    namespace["vault_gaps"] = vault_gaps\n'
+        )
+
+    if "machine_spec" in allowed_tools:
+        snippets.append(
+            'if "machine_spec" in allowed:\n'
+            '    import platform, psutil\n'
+            '    def machine_spec(args=None):\n'
+            '        try:\n'
+            '            cpu = psutil.cpu_count(logical=True)\n'
+            '            phys = psutil.cpu_count(logical=False)\n'
+            '            ram = psutil.virtual_memory()\n'
+            '            ram_gb = round(ram.total / (1024**3), 1)\n'
+            '            gpu_info = "unknown"\n'
+            '            try:\n'
+            '                import subprocess as _sp\n'
+            '                nvidia = _sp.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],\n'
+            '                                 capture_output=True, text=True, timeout=5)\n'
+            '                if nvidia.returncode == 0 and nvidia.stdout.strip():\n'
+            '                    gpu_info = nvidia.stdout.strip()\n'
+            '            except Exception:\n'
+            '                pass\n'
+            '            return {\n'
+            '                "cpu_cores": cpu,\n'
+            '                "cpu_physical": phys,\n'
+            '                "ram_gb": ram_gb,\n'
+            '                "gpu": gpu_info,\n'
+            '                "platform": platform.platform(),\n'
+            '            }\n'
+            '        except Exception as _e:\n'
+            '            return {"error": str(_e)}\n'
+            '    namespace["machine_spec"] = machine_spec\n'
+        )
+
+    if "ollama_model_search" in allowed_tools:
+        snippets.append(
+            'if "ollama_model_search" in allowed:\n'
+            '    import subprocess as _sp\n'
+            '    def ollama_model_search(args=None):\n'
+            '        action = (args or {}).get("action", "installed")\n'
+            '        try:\n'
+            '            r = _sp.run(["ollama", "list"], capture_output=True, text=True, timeout=10)\n'
+            '            if r.returncode == 0:\n'
+            '                lines = r.stdout.strip().split("\\n")[1:]  # skip header\n'
+            '                models = []\n'
+            '                for line in lines:\n'
+            '                    parts = line.split()\n'
+            '                    if parts:\n'
+            '                        models.append(parts[0])\n'
+            '                return {"action": action, "models": models, "count": len(models)}\n'
+            '            return {"error": r.stderr.strip()}\n'
+            '        except Exception as _e:\n'
+            '            return {"error": str(_e)}\n'
+            '    namespace["ollama_model_search"] = ollama_model_search\n'
+        )
+
+    if "vaultbot_status" in allowed_tools:
+        snippets.append(
+            'if "vaultbot_status" in allowed:\n'
+            '    def vaultbot_status(args=None):\n'
+            '        try:\n'
+            '            status = {"background_researcher": "unknown"}\n'
+            '            # Check for researcher lock file\n'
+            '            lock = Path(vault_path) / "vaultbot_stuff" / "Memory" / ".researcher_lock"\n'
+            '            if lock.exists():\n'
+            '                status["background_researcher"] = "running"\n'
+            '            else:\n'
+            '                status["background_researcher"] = "idle"\n'
+            '            return status\n'
+            '        except Exception as _e:\n'
+            '            return {"error": str(_e)}\n'
+            '    namespace["vaultbot_status"] = vaultbot_status\n'
         )
 
     return "\n".join(snippets)
@@ -515,11 +620,16 @@ def _run_code_step(
         'vault_path = os.environ.get("VAULT_PATH", ".")\n'
         'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "[]"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
+        'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
+        'procedure_name = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
         '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials", "__pycache__"}\n'
         '\n'
         'namespace = {\n'
         '    "__builtins__": __builtins__,\n'
         '    "prior_results": prior_results,\n'
+        '    "procedure_args": procedure_args,\n'
+        '    "args": procedure_args,\n'
+        '    "procedure_name": procedure_name,\n'
         '    "Path": Path,\n'
         '    "json": json,\n'
         '    "os": os,\n'
@@ -571,6 +681,16 @@ def _run_code_step(
         "PROCEDURE_MODEL_CARTRIDGE": model_cartridge,
         "PROCEDURE_ARGS": json.dumps(procedure_args or {}, default=str),
     }
+    # Forward the procedure-tracker log path so child procedures (run via
+    # the injected run_procedure tool → run_procedure.py) can instantiate
+    # their OWN ProcedureTracker pointed at the SAME log file. This is what
+    # makes sub-procedures log their own pass/fail + step results: without
+    # it, only the top-level procedure run from chat_handler logs, and a
+    # procedure called by another procedure is invisible to the grading
+    # loop. See PROCEDURE_FIRST design (2026-08-04).
+    _tracker_log = os.environ.get("PROCEDURE_TRACKER_LOG", "")
+    if _tracker_log:
+        env["PROCEDURE_TRACKER_LOG"] = _tracker_log
 
     try:
         proc = _subprocess_run(
@@ -586,16 +706,23 @@ def _run_code_step(
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False, "", f"subprocess error: {e}", traceback.format_exc()
 
-    # Parse output
+    # Parse output.  The wrapper always prints the envelope as the LAST
+    # line of stdout.  Step code may print debug output before it (e.g.
+    # ``print(result)`` in Authority-Check).  We take only the last line
+    # so debug prints don't corrupt the envelope parse.
     stdout = proc.stdout.strip()
     if not stdout:
         stderr = proc.stderr.strip()[:2000]
         return False, "", f"no stdout from subprocess. stderr: {stderr}", ""
 
+    # Take the last non-empty line as the envelope
+    lines = [l for l in stdout.split("\n") if l.strip()]
+    envelope_line = lines[-1] if lines else stdout
+
     try:
-        result = json.loads(stdout)
+        result = json.loads(envelope_line)
     except json.JSONDecodeError:
-        return False, stdout[:2000], f"invalid JSON from subprocess: {stdout[:200]}", ""
+        return False, stdout[:2000], f"invalid JSON from subprocess: {envelope_line[:200]}", ""
 
     if result.get("status") == "error":
         return False, "", result.get("error", "unknown error"), result.get("traceback", "")
@@ -665,6 +792,7 @@ def _run_llm_step(
             prompt=prompt,
             system=system,
             stream=False,
+            think=False,
         )
         output = result.get("response", "")
         if not output:
@@ -1095,7 +1223,7 @@ async def execute_procedure(
         else:  # text step (v1)
             messages = _build_active_frame(step, procedure, context, step_outputs)
             try:
-                result = llm_client.chat(messages, temperature=0.3, stream=False)
+                result = llm_client.chat(messages, temperature=0.3, stream=False, think=False)
                 output = result.get("response", "")
                 passed, val_error = _validate_step(output, step.validation)
                 sr = StepResult(
@@ -1142,9 +1270,24 @@ async def execute_procedure(
         # Step-level logging
         if procedure_tracker:
             try:
+                # Enrich the recorded error with the full debug info so the
+                # vault can self-heal: the exact error message AND a truncated
+                # traceback. Without this, log_step_result only stored a
+                # short validation_error and the tracker couldn't tell WHY a
+                # step failed — only that it did. See PROCEDURE_FIRST design.
+                _step_err = sr.error or sr.validation_error or ""
+                if sr.traceback:
+                    _tb = sr.traceback
+                    # Keep the last ~40 lines of the traceback (the part with
+                    # the actual failing line + exception), not the whole
+                    # subprocess wrapper preamble.
+                    _tb_lines = _tb.strip().splitlines()
+                    if len(_tb_lines) > 40:
+                        _tb = "\n".join(_tb_lines[-40:])
+                    _step_err = (_step_err + "\n" + _tb).strip() if _step_err else _tb
                 procedure_tracker.log_step_result(
                     procedure.name, step.number, sr.passed,
-                    sr.error or sr.validation_error or "",
+                    _step_err,
                 )
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
@@ -1212,12 +1355,32 @@ async def execute_procedure(
     # Procedure-level logging
     if procedure_tracker:
         try:
+            # Enrich the error_details with the EXACT failing step's error +
+            # traceback so the vault can self-heal. The old version only
+            # stored "failed at step N" with no debug info; now we include
+            # the step's error message and a truncated traceback. See
+            # PROCEDURE_FIRST design (2026-08-04).
+            _proc_error_details = ""
+            if failed_step:
+                _proc_error_details = f"failed at step {failed_step}"
+                _failed_sr = next(
+                    (r for r in step_results if r.step_number == failed_step),
+                    None)
+                if _failed_sr is not None:
+                    _sr_err = _failed_sr.error or _failed_sr.validation_error or ""
+                    if _sr_err:
+                        _proc_error_details += f": {_sr_err}"
+                    if _failed_sr.traceback:
+                        _tb = _failed_sr.traceback.strip().splitlines()
+                        if len(_tb) > 40:
+                            _tb = _tb[-40:]
+                        _proc_error_details += "\n" + "\n".join(_tb)
             procedure_tracker.log_result(
                 procedure=procedure.name,
                 task="procedure_execution",
                 validation_result="pass" if overall_passed else "fail",
                 validation_tool="step_gate",
-                error_details=f"failed at step {failed_step}" if failed_step else "",
+                error_details=_proc_error_details,
                 category="validation_error",
             )
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks

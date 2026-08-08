@@ -10,7 +10,7 @@ tags:
   - plan
   - framework
   - self-improvement
-summary: Framework Friction Fix Plan
+summary: "Framework Friction Fix Plan: 102 chars"
 ---
 
 # Framework Friction Fix Plan

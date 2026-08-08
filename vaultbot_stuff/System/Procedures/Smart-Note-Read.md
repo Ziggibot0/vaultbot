@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: Smart-Note-Read
+summary: SUMMARY|The note provides a Python script for parsing and extracting structured summaries from markdown notes, offering specific steps for reading and analyzing content efficiently. KEY TOPICS|python,
 tags:
   - procedure
   - procedures

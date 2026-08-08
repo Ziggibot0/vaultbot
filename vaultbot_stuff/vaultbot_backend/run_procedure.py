@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -131,6 +132,26 @@ def main() -> int:
         }))
         return 0
 
+    # --- Procedure tracker: log this child's pass/fail + step results --- #
+    # When invoked as a sub-procedure (via run_procedure() in a parent's
+    # code step), the parent forwards its tracker log path via the
+    # PROCEDURE_TRACKER_LOG env var. We instantiate a ProcedureTracker
+    # pointed at the SAME log file so the child's execution is graded too
+    # — including step-level results. Without this, sub-procedures are
+    # invisible to the grading loop. See PROCEDURE_FIRST design.
+    procedure_tracker = None
+    _tracker_log = os.environ.get("PROCEDURE_TRACKER_LOG", "")
+    if _tracker_log:
+        try:
+            from procedure_tracker import ProcedureTracker
+            procedure_tracker = ProcedureTracker(
+                log_path=_tracker_log, vault_path=args.vault_path)
+        except Exception as e:  # noqa: BLE001 — best-effort; grading is a bonus
+            # Don't let tracker init failure break the procedure run.
+            print(json.dumps({
+                "warning": f"procedure_tracker init failed: {e}",
+            }), file=sys.stderr)
+
     try:
         result = asyncio.run(execute_procedure(
             procedure=proc,
@@ -139,6 +160,7 @@ def main() -> int:
             vault_path=args.vault_path,
             call_stack=call_stack + [args.procedure_name],
             procedure_args=procedure_args,
+            procedure_tracker=procedure_tracker,
         ))
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         print(json.dumps({

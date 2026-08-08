@@ -63,7 +63,7 @@ else:
         result = json.dumps({"entries": entries[:50], "total_entries": len(entries)})
 ```
 
-### Step 2: Small model analyzes failure patterns
+### Step 2: Small model analyzes failure patterns (split into 3 focused calls)
 
 2. ```python
 import json as _json
@@ -83,7 +83,6 @@ else:
         error_types = Counter()
         for e in entries:
             error = e.get("error", e.get("reason", e.get("failed_step", "unknown")))
-            # Categorize error
             error_str = str(error).lower()
             if "import" in error_str or "module" in error_str:
                 error_types["import_error"] += 1
@@ -98,18 +97,45 @@ else:
             else:
                 error_types["other"] += 1
 
-        prompt = f"""Analyze these procedure failure patterns:
+        # --- Call A: Identify worst procedures (tiny input) ---
+        top5 = dict(proc_counts.most_common(5))
+        prompt_a = f"Given these procedure failure counts, return the top 3 worst procedure names as a JSON array of strings. Counts: {top5}. Return ONLY the JSON array."
+        worst_raw = llm_generate(prompt_a)
+        try:
+            start = worst_raw.find("[")
+            end = worst_raw.rfind("]")
+            worst_procedures = _json.loads(worst_raw[start:end+1]) if start != -1 else list(top5.keys())[:3]
+        except Exception:
+            worst_procedures = list(top5.keys())[:3]
 
-Failures by procedure: {dict(proc_counts.most_common(10))}
-Failure types: {dict(error_types)}
+        # --- Call B: Identify common causes (tiny input) ---
+        prompt_b = f"Given these error type counts, return the top 3 most common causes as a JSON array of strings. Counts: {dict(error_types)}. Return ONLY the JSON array."
+        causes_raw = llm_generate(prompt_b)
+        try:
+            start = causes_raw.find("[")
+            end = causes_raw.rfind("]")
+            common_causes = _json.loads(causes_raw[start:end+1]) if start != -1 else list(error_types.keys())[:3]
+        except Exception:
+            common_causes = list(error_types.keys())[:3]
 
-Sample entries:
-{json.dumps(entries[:10], indent=2)}
+        # --- Call C: Fix priorities for worst procedure only (focused input) ---
+        worst_proc = worst_procedures[0] if worst_procedures else "unknown"
+        worst_entries = [e for e in entries if e.get("procedure") == worst_proc][:5]
+        prompt_c = f"Given these failure entries for procedure '{worst_proc}', what is the main failure pattern and what should be fixed? Return JSON: {{\"procedure\": \"{worst_proc}\", \"fix\": \"what to fix\"}}. Entries: {_json.dumps(worst_entries)}. Return ONLY the JSON."
+        fix_raw = llm_generate(prompt_c)
+        try:
+            start = fix_raw.find("{")
+            end = fix_raw.rfind("}")
+            fix_priority = _json.loads(fix_raw[start:end+1]) if start != -1 else {"procedure": worst_proc, "fix": "unknown"}
+        except Exception:
+            fix_priority = {"procedure": worst_proc, "fix": "unknown"}
 
-Return JSON: {{"worst_procedures": ["procedures that fail most"], "common_causes": ["most frequent failure causes"], "fix_priorities": [{{"procedure": "...", "fix": "what to fix"}}]}}
-Return ONLY the JSON."""
-    analysis = llm_generate(prompt)
-    result = analysis
+        # --- Merge results in Python (no LLM needed) ---
+        result = _json.dumps({
+            "worst_procedures": worst_procedures,
+            "common_causes": common_causes,
+            "fix_priorities": [fix_priority]
+        })
 ```
 
 ### Step 3: Return the failure analysis

@@ -2,9 +2,11 @@
 type: claim
 status: raw
 created: 2026-08-03
-summary: Security Policy
+summary: "Security Policy: Report VaultBot vulnerabilities privately via email to skelogg124@gmail.com with details and impact; expect acknowledgement within 7 days for severity-based fix timelines; scope cover"
 tags:
-  - claim
+  - vulnerability-reporting
+  - github-policy
+  - security-disclosure
 ---
 
 # Security Policy

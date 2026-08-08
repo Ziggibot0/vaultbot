@@ -75,6 +75,22 @@ class FusedRetriever:
     # near the margin and never overrides content similarity.  See
     # [[Procedure-Subprocess-Architecture]] grading loop.
     VERIFIED_BOOST = 0.05
+    # Base procedure retrieval boost.  ANY note with ``type: procedure``
+    # (verified, experimental, or unknown status) gets this ADDITIVE score
+    # bump so procedures rank above equally-scoring non-procedure notes
+    # (chat memories, research notes) for the same query.  Procedures are
+    # authoritative tools the model should reach for; without this a chat
+    # memory literally titled "what were you doing earlier" beats a
+    # procedure whose description says the same thing, because the chat
+    # note's entire body is about that query while the procedure's
+    # description is a meta-statement.  ADDITIVE (not multiplicative)
+    # because normalized scores cluster in a tight range — a ×1.15 boost
+    # on a 0.05 score adds only 0.007, too small to break ties.  0.10
+    # additive is enough to lift a procedure past a similarly-relevant
+    # non-procedure note without promoting an irrelevant procedure above
+    # a strongly-relevant non-procedure (a 0.50 gap can't be closed by
+    # 0.10).  Verified procedures get this + 0.05 VERIFIED_BOOST on top.
+    PROCEDURE_BASE_BOOST = 0.20
     # Flagged-procedure penalty.  A procedure whose status is ``flagged``
     # (repeatedly failed validation, blocked from execution) has its score
     # multiplied by this factor so it sinks below usable notes — it should
@@ -483,19 +499,60 @@ class FusedRetriever:
             # Procedure status-aware boost (tri-state).  This is the second
             # half of the "scooch over time" grading loop: drift moves the
             # vector, status moves the rank.
-            #   verified    -> small additive bump (surface it)
-            #   experimental-> neutral (no boost, no penalty)
+            #   verified    -> base +0.20 + small additive bump (surface it)
+            #   experimental-> base +0.20 only (no extra boost, no penalty)
+            #   unknown     -> base +0.20 (treated like experimental)
             #   flagged     -> multiplicative penalty (push it down — it
             #                  failed validation repeatedly and is blocked
             #                  from execution, so it shouldn't crowd out
             #                  usable notes at the top of the surface)
+            # The base PROCEDURE_BASE_BOOST is ADDITIVE on the normalized
+            # score because normalized scores cluster in a tight range —
+            # a multiplicative boost is too small to break ties there.
+            # Procedures are the tools the model should reach for, not
+            # just memories.
+            #
+            # NAME RESOLUTION: procedure_status_index keys are file stems
+            # (e.g. "Find-Recent-Errors") but cand["name"] is the graph-
+            # normalized name (e.g. "find-recent-errors").  We build a
+            # case-insensitive lookup so the boost actually matches.
             if self.procedure_status_index is not None and name:
-                _pstatus = self.procedure_status_index.get(name, "")
-                if _pstatus == "verified":
-                    boost += self.VERIFIED_BOOST
-                elif _pstatus == "flagged":
-                    boost *= self.FLAGGED_PENALTY
+                _pstatus = self._procedure_status_lookup(name)
+                if _pstatus is not None:
+                    # It's a procedure (any status) — apply the base boost.
+                    boost_add = self.PROCEDURE_BASE_BOOST
+                    if _pstatus == "verified":
+                        boost_add += self.VERIFIED_BOOST
+                    cand["score"] = cand["score"] * boost + boost_add
+                    if _pstatus == "flagged":
+                        cand["score"] = cand["score"] * self.FLAGGED_PENALTY
+                    continue  # skip the generic multiplicative apply below
             cand["score"] = cand["score"] * boost
+
+    def _procedure_status_lookup(self, name: str) -> str | None:
+        """Look up a candidate's procedure status by normalized name.
+
+        ``procedure_status_index`` keys are file stems (e.g.
+        ``"Find-Recent-Errors"``) but the merged-pool candidate ``name``
+        is the graph-normalized name (e.g. ``"find-recent-errors"``).
+        We compare case-insensitively so the boost actually matches.
+
+        Returns the status string (``"verified"``/``"experimental"``/
+        ``""`` for unknown-status procedures) or ``None`` if the name
+        is not a procedure at all.
+        """
+        if not self.procedure_status_index:
+            return None
+        # Fast path: exact match (when keys happen to align).
+        s = self.procedure_status_index.get(name)
+        if s is not None:
+            return s
+        # Case-insensitive match: build a lower-key index once, cache it.
+        if not hasattr(self, "_proc_status_lower"):
+            self._proc_status_lower = {
+                k.lower(): v for k, v in self.procedure_status_index.items()
+            }
+        return self._proc_status_lower.get(name.lower())
 
     def _finalize(self, cand: dict[str, Any], query: str) -> dict[str, Any]:
         """Shape a merged candidate into the final result dict."""
@@ -569,8 +626,15 @@ class FusedRetriever:
         return self._normalize_name(fp)
 
     @staticmethod
-    def _snippet(content: str, query: str, length: int = 200) -> str:
-        """Extract a window around the first query-term match in content."""
+    def _snippet(content: str, query: str, length: int = 500) -> str:
+        """Extract a window around the first query-term match in content.
+
+        Default length is 500 chars (was 200) — the [[Why-Vault-Knowledge-Loses-to-Model-Weights]]
+        diagnostic identified 200-char snippets as Problem #4: "snippet
+        truncation shreds arguments into useless fragments." 500 chars
+        gives the model enough context to understand a claim + its
+        reasoning, not just a keyword match.
+        """
         if not content:
             return ""
         try:

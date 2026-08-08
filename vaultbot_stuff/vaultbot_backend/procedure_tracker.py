@@ -227,7 +227,12 @@ class ProcedureTracker:
                     value = value.strip().strip('"').strip("'")
                     if value:
                         fm[key] = value
-                        current_key = key
+                    # Always track the key even when the value is empty —
+                    # the following ``  - item`` lines belong to THIS key,
+                    # not whatever scalar came before.  Without this a bare
+                    # ``provides:`` (or any list-only key) silently attaches
+                    # its items to the previous scalar key.
+                    current_key = key
             index[md.stem] = {"path": str(md), "frontmatter": fm}
         return index
 

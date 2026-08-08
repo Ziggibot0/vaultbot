@@ -92,7 +92,7 @@ def run(args: dict) -> dict:
 
     # --- 3. Identity files ---
     identity_dir = backend_dir / "identity"
-    identity_files = ["IDENTITY.md", "SELF_MODEL.md", "GOALS.md"]
+    identity_files = ["IDENTITY.md", "SELF_MODEL.md"]
     identity_missing = [f for f in identity_files if not (identity_dir / f).exists()]
 
     results["checks"]["identity"] = {

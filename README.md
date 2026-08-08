@@ -244,7 +244,7 @@ thought-highway it reasons over, and the L0 drill-down gives it the full
 detail of the one note that matters most. No truncation, no context flood.
 
 The vault **is** the mind. The model is a cartridge you can swap without
-losing anything — your identity, self-model, and goals live in the vault
+losing anything — your identity and self-model live in the vault
 and are boot-injected every session.
 
 ---
@@ -282,7 +282,7 @@ Wikipedia") and it will store that as a directive note itself.
 │   │   ├── vault_indexer.py       #   FAISS index + chunked embeddings
 │   │   ├── vault_graph.py         #   wikilink graph + context builder
 │   │   ├── custom_tools/          #   agent-authored tools (grows itself)
-│   │   ├── identity/              #   IDENTITY.md, SELF_MODEL.md, GOALS.md
+│   │   ├── identity/              #   IDENTITY.md, SELF_MODEL.md
 │   │   └── ...
 │   ├── System/                    # Architecture docs, procedures, playbooks
 │   ├── .env.example                # Template for .env (API keys, model config)

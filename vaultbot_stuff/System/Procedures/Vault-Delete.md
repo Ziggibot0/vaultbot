@@ -8,7 +8,7 @@ when_to_use: When a note is garbage, duplicate, or needs to be removed. Backs up
 allowed_tools:
   - vault_delete
   - vault_search
-summary: Vault-Delete
+summary: 1. Safely delete note from Vault while backing up content before deleting sacred files with verified checks to prevent accidental loss or unauthorized access issues; 2|vault_delete|backups_safety_chec
 tags:
   - procedure
   - procedures

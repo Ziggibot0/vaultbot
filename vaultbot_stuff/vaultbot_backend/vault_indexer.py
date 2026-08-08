@@ -32,7 +32,7 @@ IGNORED_DIRS = {
 # instead of full content). On load, if the persisted version doesn't match,
 # the index is rebuilt from scratch so every vector reflects the current
 # embedding strategy. See _embedding_text_for_note.
-EMBEDDING_SCHEMA_VERSION = 2
+EMBEDDING_SCHEMA_VERSION = 4
 
 def _is_ignored_path(path: Path) -> bool:
     for part in path.parts:
@@ -465,9 +465,19 @@ class VaultIndexer:
         # / procedure_tracker.py (no YAML dep, no nested mappings).
         description = ""
         when = ""
+        provides: list[str] = []
+        current_key: str | None = None
         for line in fm_block.split("\n"):
             line = line.rstrip()
-            if not line or line.startswith("  "):
+            if not line:
+                continue
+            # List item: "  - value" — collect provides sub-procedure names.
+            if line.startswith("  - ") and current_key == "provides":
+                val = line[4:].strip().strip('"').strip("'")
+                if val:
+                    provides.append(val)
+                continue
+            if line.startswith("  "):
                 continue
             if ":" not in line:
                 continue
@@ -475,11 +485,16 @@ class VaultIndexer:
             key = key.strip()
             value = value.strip().strip('"').strip("'")
             if not value:
+                current_key = key
                 continue
+            current_key = key
             if key == "description":
                 description = value
             elif key in ("when_to_use", "when"):
                 when = value
+            elif key == "provides":
+                # Inline single value: ``provides: Dream-Scan``
+                provides.append(value)
         # No description → can't do intent-based retrieval; embed full
         # content as a degraded fallback (validator will have flagged it).
         if not description and not when:
@@ -489,7 +504,25 @@ class VaultIndexer:
         if description:
             surface += f"\n{description}"
         if when:
-            surface += f"\nUse when: {when}"
+            # Split when_to_use into individual use-cases so each one gets
+            # its own embedding line. Without this, the embedding model
+            # averages all use-cases into one vector, diluting each specific
+            # use-case. With individual lines, a query matching any single
+            # use-case gets high similarity instead of being averaged away.
+            # Pattern: "when X, when Y, when Z, or when W"
+            import re as _re
+            clauses = _re.split(r',\s*(?:or\s+)?when\s+', when)
+            for clause in clauses:
+                clause = clause.strip().rstrip(',').strip('"').strip("'")
+                if not clause:
+                    continue
+                surface += f"\nUse when: {clause}"
+        # Include sub-procedure names so an orchestrator is discoverable by
+        # the capabilities it composes — a query about "scan orphans" should
+        # surface Dream-Pass (which composes Dream-Scan), not just Dream-Scan.
+        # Only the names are added (not descriptions) to stay compact.
+        if provides:
+            surface += "\nComposes: " + ", ".join(provides)
         return surface
 
     def _add_file_to_index(self, file_path: Path):

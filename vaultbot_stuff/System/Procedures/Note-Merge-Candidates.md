@@ -14,7 +14,8 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: SUMMARY
+summary: "SUMMARY|find and merge short fragmented notes from vault logs to improve document structure.
+tags#merge-filters,breakpoints,dictionary-terms"
 tags:
   - procedure
   - procedures

@@ -7,7 +7,7 @@ description: Pre-flight safety check before self-modifying operations. Verifies 
 when: Before any code_write or tool_create operation to verify the system is healthy enough to safely edit
 allowed_tools:
   - code_read
-summary: Preflight-Safety-Check
+summary: "Summary: A security audit checklist for safe self-modifying code operations to validate git cleanliness, backend files exist, and vault accessibility. Tags|safe_preflight_safety_check_git_vault_backen"
 tags:
   - procedure
   - procedures

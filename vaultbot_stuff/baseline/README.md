@@ -2,7 +2,7 @@
 type: claim
 status: raw
 created: 2026-08-03
-summary: BASELINE DIRECTIVES
+summary: SUMMARY
 tags:
   - claim
   - baseline

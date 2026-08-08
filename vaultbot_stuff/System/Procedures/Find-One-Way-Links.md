@@ -14,7 +14,8 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Find-One-Way-Links
+summary: "Find-One-Way-Links: Identifies reciprocal wiki links where note A links to B but not back.
+|one-way-links,bidirectional-map,<ref>python,reagents,jvmlinux,multimodal</ref>,<keyword>biden,united-states,"
 tags:
   - procedure
   - procedures

@@ -1551,6 +1551,22 @@
 	opacity: 1;
 	background-color: var(--vb-sand-deep);
 }
+.vaultbot-console-copy {
+	flex: 0 0 auto;
+	background: none;
+	border: none;
+	color: var(--vb-ink-muted);
+	font-size: 0.75em;
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: 4px;
+	opacity: 0.6;
+	transition: opacity 0.15s, background-color 0.15s;
+}
+.vaultbot-console-copy:hover {
+	opacity: 1;
+	background-color: var(--vb-sand-deep);
+}
 
 /* The terminal body: monospace text log. */
 .vaultbot-console-body {
@@ -1642,4 +1658,142 @@
 	font-size: 0.9em;
 	color: var(--vb-ink-muted);
 	white-space: nowrap;
+}
+
+/* ---- Questionnaire cards (ask_user tool) ------------------------------- */
+/* Interactive question cards rendered in the chat when the backend needs
+   user input. Radio questions have an "I don't know, use best practices"
+   option. A free-text comments field captures creative input. */
+
+.vaultbot-message.questionnaire {
+	background: var(--vb-bg-elev);
+	border: 1px solid var(--vb-stone);
+	border-left: 4px solid var(--vb-clay);
+	border-radius: 8px;
+	padding: 16px;
+	margin: 8px 0;
+	max-width: 100%;
+}
+
+.vaultbot-questionnaire-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.vaultbot-questionnaire-icon {
+	font-size: 1.2em;
+}
+
+.vaultbot-questionnaire-title {
+	font-weight: 600;
+	font-size: 1.05em;
+	color: var(--vb-ink);
+}
+
+.vaultbot-questionnaire-context {
+	font-size: 0.9em;
+	color: var(--vb-ink-muted);
+	margin-bottom: 12px;
+	line-height: 1.5;
+	padding: 8px 12px;
+	background: var(--vb-sand);
+	border-radius: 6px;
+}
+
+.vaultbot-questionnaire-form {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.vaultbot-questionnaire-q {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.vaultbot-questionnaire-q-label {
+	font-weight: 500;
+	color: var(--vb-ink);
+	font-size: 0.95em;
+}
+
+.vaultbot-questionnaire-opts {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-left: 4px;
+}
+
+.vaultbot-questionnaire-opt {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.vaultbot-questionnaire-opt:hover {
+	background: var(--vb-sand);
+}
+
+.vaultbot-questionnaire-opt input[type="radio"] {
+	accent-color: var(--vb-clay);
+	cursor: pointer;
+}
+
+.vaultbot-questionnaire-opt span {
+	font-size: 0.9em;
+	color: var(--vb-ink);
+}
+
+.vaultbot-questionnaire-textarea {
+	width: 100%;
+	min-height: 60px;
+	padding: 8px 10px;
+	border: 1px solid var(--vb-stone);
+	border-radius: 6px;
+	background: var(--vb-bg);
+	color: var(--vb-ink);
+	font-size: 0.9em;
+	font-family: inherit;
+	resize: vertical;
+	box-sizing: border-box;
+}
+
+.vaultbot-questionnaire-textarea:focus {
+	outline: none;
+	border-color: var(--vb-clay);
+	box-shadow: 0 0 0 2px var(--vb-shadow);
+}
+
+.vaultbot-questionnaire-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.vaultbot-questionnaire-actions button {
+	padding: 8px 20px;
+	border: none;
+	border-radius: 6px;
+	background: var(--vb-clay);
+	color: white;
+	font-weight: 500;
+	font-size: 0.9em;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.vaultbot-questionnaire-actions button:hover {
+	background: var(--vb-clay-soft);
+}
+
+.vaultbot-questionnaire-actions button:disabled {
+	opacity: 0.6;
+	cursor: default;
 }

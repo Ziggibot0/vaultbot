@@ -15,7 +15,7 @@ allowed_tools:
   - code_read
   - vault_safe_write
 falsifiable_if: it splits a note that should stay together (one coherent argument), or fails to split a note with genuinely distinct claims
-summary: Split-Note
+summary: "## SUMMARY"
 tags:
   - procedure
   - procedures

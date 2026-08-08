@@ -7,7 +7,7 @@ description: Restore files from git HEAD to recover from a bad self-edit.
 when_to_use: When a self-edit broke something and you need to restore the original code.
 allowed_tools:
   - git_rollback
-summary: Git-Rollback
+summary: Git-rollback command restores files from git HEAD; requires self_improver module and session_logger for execution verification. | {self_improver}
 tags:
   - procedure
   - procedures

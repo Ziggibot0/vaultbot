@@ -82,8 +82,17 @@ class SelfImprover:
             if py.name.startswith("_") or py.name == "__init__.py":
                 continue
             mod_name = py.stem
+            # Import using the full package-qualified path (custom_tools.<stem>)
+            # so that `from custom_tools.ask_user import _pending_requests` in
+            # other modules (e.g. routers/system.py /user_response endpoint)
+            # resolves to the SAME module object in sys.modules.  Importing by
+            # bare stem ("ask_user") creates a separate sys.modules entry that
+            # diverges from the package-qualified import — a classic Python
+            # module-identity split that causes shared state (like
+            # _pending_requests) to be invisible across the two import paths.
+            full_name = f"custom_tools.{mod_name}"
             try:
-                mod = importlib.import_module(mod_name)
+                mod = importlib.import_module(full_name)
                 importlib.reload(mod)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log("custom_tool_import_failed",

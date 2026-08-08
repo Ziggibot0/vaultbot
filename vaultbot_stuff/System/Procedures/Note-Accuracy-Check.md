@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_search
   - llm_generate
-summary: Note-Accuracy-Check
+summary: SUMMARY
 tags:
   - procedure
   - procedures

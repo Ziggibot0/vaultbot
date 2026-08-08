@@ -54,11 +54,19 @@ class Tunables:
         "good morning", "good afternoon", "good evening",
     )
 
-    # ── Sliding window (chat_handler._apply_sliding_window) ───────────────
-    # Bounds the conversation history sent to the LLM per round.
-    sliding_window_default: int = 40  # max messages kept (was 100, orig 20)
+    # ── Preflight compression (chat_handler._compress_conversation) ───────
+    # Hermes-style ratio-based compression. Fires when estimated tokens
+    # exceed threshold_ratio × context_window. All values have env overrides
+    # at the call site; these are the defaults.
+    compression_threshold_ratio: float = 0.50  # fraction of context window
+    compression_tail_budget_ratio: float = 0.20  # fraction of threshold for tail
+    compression_protect_last_n: int = 6  # min tail messages kept verbatim
+    compression_prune_tool_chars: int = 200  # tool results > this get pruned
+    compression_min_dropped_to_summarize: int = 3  # min dropped msgs to summarize
+    compression_antithrash_count: int = 2  # block after N ineffective passes
+    compression_antithrash_min_reduction: float = 0.05  # min token reduction ratio
 
-    # ── Code run output caps (self_improver.code_run) ────────────────────
+    # ── Token estimation ─────────────────────────────────────────────────
     # Hard caps on the subprocess stdout/stderr read back into backend RAM,
     # so a verbose child cannot OOM the single backend process.
     code_run_cap_bytes: int = 65536      # per-stream write cap on disk (64KB)

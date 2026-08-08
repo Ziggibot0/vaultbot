@@ -123,60 +123,56 @@ async def websocket_endpoint(websocket: WebSocket,
     # bug: without it, every message started a fresh 2-message conversation
     # (system + this message) with zero memory of prior turns.
     #
-    # RESTORE-ON-RESTART ONLY: the persisted history is loaded ONLY when the
-    # backend was restarted mid-session (RESTART_CONTEXT.md exists). A normal
-    # new session (new tab, reconnect after closing) starts FRESH — the model
-    # gets a clean context with no stale conversation noise. This is critical
-    # for small models: 40 messages of restored history from a prior session
-    # drowns the current turn's signal in noise, causing the model to lose
-    # the thread and repeat old answers. The operator: "when i start a new
-    # session it shouldn't carry over the context of the past 40
-    # conversations, it should start a fresh session so the model can focus."
-    _is_restart_resume = _RESTART_CONTEXT_PATH.exists()
-    if _is_restart_resume:
-        try:
-            restored = load_history()
-            websocket.conversation_history = restored
-            # Rebuild the conversation index from the restored history so
-            # the bot can recall what was said before the restart.
+    # ALWAYS RESTORE on reconnect (Priority A, 2026-08-06): the persisted
+    # history is loaded on EVERY connection, not only when RESTART_CONTEXT.md
+    # exists. The old RESTART_CONTEXT.md gate meant a crash, uvicorn reload,
+    # plugin reload, or WS drop silently WIPED the persisted history via
+    # clear_history() — Sean's complaint "if the backend restarts, the
+    # vaultbot should get back its context from the current session." History
+    # only clears on explicit /new. This is the Hermes Agent shape: session
+    # persists across restarts, user controls when to reset.
+    _is_restart_resume = _RESTART_CONTEXT_PATH.exists()  # only used for auto-resume nudge
+    try:
+        restored = load_history()
+        websocket.conversation_history = restored
+        # Rebuild the conversation index from the restored history so
+        # the bot can recall what was said before the restart.
+        if restored:
             try:
                 _conv_idx = getattr(svc, "conversation_index", None)
                 if _conv_idx is not None:
                     _conv_idx.rebuild_from_history(restored)
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 — best-effort, index rebuild is optional
                 pass
-        except ValueError as _hist_err:
-            # History file is corrupt. load_history already backed it up.
-            # Start fresh + notify the user so they know their conversation
-            # was lost, rather than silently amnesia-ing.
-            websocket.conversation_history = []
-            _hist_diag = classify_error(
-                _hist_err, {"category": "history_lost", "stage": "reconnecting"})
-            await notify_problem(svc, websocket, _hist_diag)
-            session_logger.log("conversation_history_corrupt", {
-                "error": str(_hist_err),
-            })
-    else:
-        # Normal new session — start fresh. Clear any persisted history
-        # so a restart after this point doesn't restore a stale session.
+    except ValueError as _hist_err:
+        # History file is corrupt. load_history already backed it up.
+        # Start fresh + notify the user so they know their conversation
+        # was lost, rather than silently amnesia-ing.
         websocket.conversation_history = []
-        clear_history()
-    # Fresh working memory per websocket connection (the Copilot/Claude Code
-    # TodoList pattern). Cleared on /new and on reconnect.
-    # On restart-resume, load the persisted plan from disk so the agent
-    # wakes up with its plan intact (not just its conversation history).
-    if _is_restart_resume:
-        _saved_wm = TaskList.load_from_disk()
-        if _saved_wm is not None and _saved_wm.has_plan():
-            websocket.working_memory = _saved_wm
-            session_logger.log("working_memory_restored", {
-                "goal": _saved_wm.goal[:100],
-                "tasks": len(_saved_wm.tasks),
-            })
-        else:
-            websocket.working_memory = TaskList()
+        _hist_diag = classify_error(
+            _hist_err, {"category": "history_lost", "stage": "reconnecting"})
+        await notify_problem(svc, websocket, _hist_diag)
+        session_logger.log("conversation_history_corrupt", {
+            "error": str(_hist_err),
+        })
+    # Working memory (the Copilot/Claude Code TodoList pattern). Restored on
+    # EVERY reconnect if a persisted plan exists — same rationale as
+    # conversation history: a crash/reload shouldn't wipe the plan. Cleared
+    # only on explicit /new.
+    _saved_wm = TaskList.load_from_disk()
+    if _saved_wm is not None and _saved_wm.has_plan():
+        websocket.working_memory = _saved_wm
+        session_logger.log("working_memory_restored", {
+            "goal": _saved_wm.goal[:100],
+            "tasks": len(_saved_wm.tasks),
+        })
     else:
         websocket.working_memory = TaskList()
+    # Compression counters: track how many times compression has fired this
+    # session for the anti-thrash guard. Reset on /new.
+    websocket._compression_count = 0
+    websocket._last_compression_tokens_before = 0
+    websocket._last_compression_tokens_after = 0
     _restored = websocket.conversation_history
     if _restored:
         session_logger.log("conversation_history_restored", {
@@ -213,8 +209,9 @@ async def websocket_endpoint(websocket: WebSocket,
                     svc, websocket,
                     "You were just restarted mid-session. Your restart context "
                     "(recent chat history) has been injected into your system "
-                    "prompt. Read GOALS.md and continue where you left off. "
-                    "Don't ask the operator to re-explain anything. Just do it.",
+                    "prompt. Check your working memory (the plan_task task list) "
+                    "and continue where you left off. Don't ask the operator "
+                    "to re-explain anything. Just do it.",
                     session_logger)
             except asyncio.CancelledError:
                 session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
@@ -279,6 +276,10 @@ async def websocket_endpoint(websocket: WebSocket,
                         _TL.clear_disk()
                     except Exception:  # noqa: BLE001
                         pass
+                # Reset compression counters so anti-thrash starts fresh.
+                websocket._compression_count = 0
+                websocket._last_compression_tokens_before = 0
+                websocket._last_compression_tokens_after = 0
                 # Wipe the persisted copy too so a restart after /new doesn't
                 # resurrect the cleared thread.
                 clear_history()
@@ -386,6 +387,46 @@ async def websocket_endpoint(websocket: WebSocket,
                         ),
                     }), websocket, session_logger=session_logger)
                     continue
+
+            # Allow the frontend to submit questionnaire answers via the
+            # same WebSocket channel as normal chat messages. The ask_user
+            # tool blocks on a threading.Event; this unblocks it.
+            if msg_type == "user_response":
+                request_id = payload.get("request_id", "")
+                if not request_id:
+                    await svc.manager.send_personal_message(
+                        json.dumps({"type": "error",
+                                    "content": "Missing request_id in user_response"}),
+                        websocket)
+                    continue
+                try:
+                    from custom_tools.ask_user import _pending_requests
+                except ImportError:
+                    await svc.manager.send_personal_message(
+                        json.dumps({"type": "error",
+                                    "content": "ask_user tool not loaded"}),
+                        websocket)
+                    continue
+                entry = _pending_requests.get(request_id)
+                if entry is None:
+                    await svc.manager.send_personal_message(
+                        json.dumps({"type": "error",
+                                    "content": f"No pending request with id {request_id}"}),
+                        websocket)
+                    continue
+                event, response_holder = entry
+                answers = payload.get("answers", {})
+                comments = payload.get("comments", "")
+                response_holder.clear()
+                response_holder.update(answers)
+                if comments:
+                    response_holder["_comments"] = comments
+                event.set()
+                session_logger.log("user_response_received", {
+                    "request_id": request_id,
+                    "answer_count": len(answers),
+                })
+                continue
 
             # Allow the frontend to update the session title inline.
             if msg_type == "set_title":

@@ -31,6 +31,12 @@ _SECRET_KEY_RE = re.compile(
 # Provider key shapes: "sk-" (OpenAI), "tvly-" (Tavily), "sk-or-" (OpenRouter),
 # "xai-" (xAI), plus generic long alnum-with-dashes tokens (>=24 chars, high
 # entropy: letters+digits, optional dashes/underscores, no spaces).
+# UUIDs (8-4-4-4-12 hex, 36 chars) are explicitly EXCLUDED so session_id and
+# other UUID fields are NOT redacted — they're identifiers, not secrets.
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+    r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 _PROVIDER_KEY_RE = re.compile(
     r"(?:^(?:sk-|sk-or-|tvly-|xai-|sk-ant-)[A-Za-z0-9_\-]{8,}$"
     r"|^[A-Za-z0-9_\-]{24,}$)"
@@ -57,6 +63,10 @@ def _redact(obj: Any) -> Any:
         return [_redact(item) for item in obj]
     if isinstance(obj, str):
         if _PROVIDER_KEY_RE.search(obj):
+            # Exclude UUIDs — they're identifiers (session_id, file stems),
+            # not secrets. A bare 36-char hex+dash string is a UUID.
+            if _UUID_RE.match(obj):
+                return obj
             return "[REDACTED]"
         return obj
     return obj

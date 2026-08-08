@@ -5,7 +5,7 @@ tags:
 type: architecture-note
 status: raw
 created: 2026-08-03
-summary: Workspace Sovereignty
+summary: Sovereignty means visible user work and hidden AI infrastructure, prioritizing structure over specific file types for folder organization. |workspace sovereignty|vault architecture|content visibility|
 ---
 
 # Workspace Sovereignty

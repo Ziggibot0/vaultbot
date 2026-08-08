@@ -43,6 +43,7 @@ import subprocess
 from subprocess_utils import run as _subprocess_run, scrubbed_env
 import sys
 import textwrap
+from typing import Any
 
 from procedure_compiler import compile_from_text
 
@@ -148,7 +149,10 @@ def _parse_frontmatter(text: str) -> dict:
 
 # ── Public API ───────────────────────────────────────────────────────
 
-def validate_procedure_text(text: str) -> dict:
+def validate_procedure_text(
+    text: str,
+    run_procedure_index: dict[str, Any] | None = None,
+) -> dict:
     """Static validation of a procedure note's text.
 
     Returns a dict with:
@@ -161,6 +165,13 @@ def validate_procedure_text(text: str) -> dict:
     - ``step_numbers``: list[int] — number of each step
     - ``allowed_tools``: list[str] — from frontmatter
     - ``tool_calls_found``: list[str] — tools called in code
+
+    Args:
+        text: The full markdown text of the procedure note.
+        run_procedure_index: Optional stem -> {path, frontmatter} map from
+            ``procedure_tracker.get_procedure_index()``.  When provided, the
+            ``provides`` check verifies that every named sub-procedure
+            actually exists in the vault.
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -220,6 +231,41 @@ def validate_procedure_text(text: str) -> dict:
             "Frontmatter missing 'falsifiable_if' "
             "(condition that would prove this procedure wrong)"
         )
+
+    # --- 1c. provides field (optional composition declaration) ---
+    # When a procedure composes sub-procedures, a ``provides:`` list lets
+    # the surface renderer show the full capability set in one glance
+    # (one level deep) without the model reading each child.  We warn
+    # (not error) when provides is present but not a list, and warn when
+    # any named sub-procedure isn't in the index (the caller passes it).
+    checks_run.append("provides_shape")
+    provides = fm.get("provides")
+    if provides is not None:
+        if isinstance(provides, str):
+            # Inline single value — normalize for downstream consumers.
+            provides = [provides] if provides.strip() else []
+        if not isinstance(provides, list):
+            errors.append(
+                "Frontmatter 'provides' must be a YAML list "
+                "(e.g. 'provides:\\n  - Dream-Scan') "
+                f"or a single name, got {type(provides).__name__}"
+            )
+        elif provides and run_procedure_index is not None:
+            checks_run.append("provides_names_exist")
+            for name in provides:
+                name_s = str(name).strip().strip('"').strip("'")
+                if name_s and name_s not in run_procedure_index:
+                    warnings.append(
+                        f"provides references '{name_s}' but no "
+                        f"procedure with that stem exists in the vault"
+                    )
+        elif provides:
+            checks_run.append("provides_names_exist")
+            # No index provided — can't validate names, just note it.
+            warnings.append(
+                "provides list present but no procedure index supplied "
+                "— cannot verify that sub-procedure names exist"
+            )
 
     # --- 1b. Naming convention (procedures are tools, not tutorials) ---
     checks_run.append("naming_convention")

@@ -34,7 +34,7 @@ excludes these, but double-check before pushing:
 - `vaultbot_stuff/Memory/` and `vaultbot_stuff/Knowledge/` — the user's notes, chats, research
 - `vaultbot_stuff/vaultbot_backend/sessions/` — chat logs
 - `vaultbot_stuff/vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
-  SELF_MODEL.md, GOALS.md) — these are personal, regenerate per user
+  SELF_MODEL.md) — these are personal, regenerate per user
 - `vaultbot_stuff/learningMaterial/` — the user's PDFs
 
 The `baseline/` folder holds templates; the `vaultbot_backend/identity/`

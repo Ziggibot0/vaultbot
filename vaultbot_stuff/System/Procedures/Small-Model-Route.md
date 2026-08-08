@@ -43,7 +43,6 @@ for p in proc_dir.glob("*.md"):
         text = p.read_text(encoding="utf-8", errors="replace")
     except Exception:
         continue
-    # Extract frontmatter
     if not text.startswith("---"):
         continue
     end = text.find("---", 3)

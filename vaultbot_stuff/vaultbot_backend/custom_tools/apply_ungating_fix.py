@@ -43,7 +43,6 @@ def run(args: dict) -> dict:
     "vault_search",       # always needed for retrieval
     "plan_task",           # always needed for multi-step tasks
     "update_task",         # always needed for multi-step tasks
-    "set_goal",            # always needed for goal management
     "execute_procedure",   # always needed to invoke procedures
     "code_read",           # general capability -- reading files
 }'''
@@ -53,7 +52,7 @@ def run(args: dict) -> dict:
     # Keyword gating removed — tools that need gating are procedures, not
     # hidden behind keyword matching. See PROCEDURE_CANDIDATE_NAMES for tools
     # that are surfaced via RAG as procedure description cards instead.
-    "vault_search", "plan_task", "update_task", "set_goal",
+    "vault_search", "plan_task", "update_task",
     "execute_procedure", "code_read",
     # Formerly contextual (research):
     "vault_research", "web_read_source",

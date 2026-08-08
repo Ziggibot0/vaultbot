@@ -62,6 +62,21 @@ def _fm_get(frontmatter: dict[str, Any], key: str, default: str = "") -> str:
     return str(v).strip().strip('"').strip("'")
 
 
+def _fm_list(frontmatter: dict[str, Any], key: str) -> list[str]:
+    """Pull a list frontmatter value as a list of stripped strings.
+
+    Handles both YAML-list (``provides:`` + ``  - item``) and inline-string
+    (``provides: Foo``) shapes.  Returns ``[]`` when the key is absent.
+    """
+    v = frontmatter.get(key)
+    if v is None:
+        return []
+    if isinstance(v, (list, tuple)):
+        return [str(x).strip().strip('"').strip("'") for x in v if str(x).strip()]
+    s = str(v).strip().strip('"').strip("'")
+    return [s] if s else []
+
+
 def status_allows_execution(status: str) -> tuple[bool, str]:
     """The execution gate.
 
@@ -80,18 +95,35 @@ def status_allows_execution(status: str) -> tuple[bool, str]:
     return True, "verified"
 
 
-def procedure_surface_line(stem: str, frontmatter: dict[str, Any]) -> str:
+def procedure_surface_line(
+    stem: str,
+    frontmatter: dict[str, Any],
+    proc_index: dict[str, dict[str, Any]] | None = None,
+) -> str:
     """Render one compact procedure surface line.
 
     Example outputs:
       ``- Verify-Claims — check a note's claims against its sources [verified]``
       ``- Dream-Pass — consolidate episodic logs into semantic knowledge [⚠ experimental]``
       ``- Stale-Proc — ... [⛔ FLAGGED — do not use]``
+
+    When ``frontmatter`` contains a ``provides`` list (sub-procedures this
+    procedure composes) AND ``proc_index`` is provided, one level of
+    sub-procedures is resolved into compact parenthetical capability lines
+    so the model can see what the orchestrator *brings to the table* without
+    reading each child:
+
+      ``- Dream-Pass — biomimetic dream pass orchestrator (composes: Dream-Scan — scan for orphans, Dream-Analyze — analyze links, ...) [verified]``
+
+    Only one level is expanded inline (to avoid context bloat).  The full
+    recursive tree is available via :func:`build_procedure_tree` for the
+    validator and future tooling.
     """
     desc = _fm_get(frontmatter, "description")
     when = _fm_get(frontmatter, "when_to_use") or _fm_get(frontmatter, "when")
     status = _fm_get(frontmatter, "status").lower()
     cartridge = _fm_get(frontmatter, "model_cartridge").lower()
+    provides = _fm_list(frontmatter, "provides")
 
     if status in _BLOCKED:
         tag = "⛔ FLAGGED — do not use"
@@ -108,10 +140,102 @@ def procedure_surface_line(stem: str, frontmatter: dict[str, Any]) -> str:
     line = f"- {stem}"
     if desc:
         line += f" — {desc}"
+
+    # Resolve one level of sub-procedures so the model sees the full
+    # capability surface of an orchestrator in a single glance — it does
+    # NOT need to execute/read each child to know what the parent does.
+    if provides and proc_index:
+        child_summaries: list[str] = []
+        for child_name in provides:
+            child_name = child_name.strip()
+            if not child_name or child_name not in proc_index:
+                continue
+            child_fm = proc_index[child_name].get("frontmatter") or {}
+            child_desc = _fm_get(child_fm, "description")
+            child_status = _fm_get(child_fm, "status").lower()
+            # Skip flagged children — they can't run and would add noise.
+            if child_status in _BLOCKED:
+                continue
+            if child_desc:
+                child_summaries.append(f"{child_name} — {child_desc}")
+            else:
+                child_summaries.append(child_name)
+        if child_summaries:
+            line += f" (composes: {', '.join(child_summaries)})"
+
     if when:
         line += f" (use when: {when})"
     line += f" [{tag}]"
     return line
+
+
+def build_procedure_tree(
+    stem: str,
+    proc_index: dict[str, dict[str, Any]],
+    max_depth: int = 3,
+) -> dict[str, Any] | None:
+    """Recursively resolve the ``provides`` composition graph for a procedure.
+
+    Returns a nested dict::
+
+        {
+            "name": "Dream-Pass",
+            "description": "biomimetic dream pass orchestrator",
+            "status": "verified",
+            "provides": [
+                {"name": "Dream-Scan", "description": "...", "provides": [...]},
+                ...
+            ]
+        }
+
+    Walks to ``max_depth`` levels with cycle detection (a procedure already
+    in the current ancestor chain is not re-entered).  Returns ``None`` when
+    ``stem`` is not in ``proc_index``.
+
+    This is used by the validator (to check every named sub-procedure
+    actually exists) and by future tooling that needs the full capability
+    graph — the *surface* only expands one level inline to stay compact.
+    """
+    return _build_tree_inner(stem, proc_index, set(), max_depth)
+
+
+def _build_tree_inner(
+    stem: str,
+    proc_index: dict[str, dict[str, Any]],
+    ancestors: set[str],
+    depth_left: int,
+) -> dict[str, Any] | None:
+    if stem not in proc_index:
+        return None
+    if stem in ancestors:
+        # Cycle — don't recurse further, but still return the node so the
+        # caller can see the cycle in the graph.
+        return {"name": stem, "cycle": True, "provides": []}
+    fm = proc_index[stem].get("frontmatter") or {}
+    node: dict[str, Any] = {
+        "name": stem,
+        "description": _fm_get(fm, "description"),
+        "status": _fm_get(fm, "status"),
+    }
+    provides = _fm_list(fm, "provides")
+    if not provides or depth_left <= 0:
+        node["provides"] = []
+        return node
+    children: list[dict[str, Any]] = []
+    next_ancestors = ancestors | {stem}
+    for child_name in provides:
+        child_name = child_name.strip()
+        if not child_name:
+            continue
+        child = _build_tree_inner(child_name, proc_index, next_ancestors, depth_left - 1)
+        if child is not None:
+            children.append(child)
+        else:
+            # Named sub-procedure doesn't exist — mark as dangling so the
+            # validator / tooling can surface the broken link.
+            children.append({"name": child_name, "missing": True})
+    node["provides"] = children
+    return node
 
 
 def _frontmatter_from_text(text: str) -> dict[str, Any] | None:
@@ -129,16 +253,30 @@ def _frontmatter_from_text(text: str) -> dict[str, Any] | None:
     if "type: procedure" not in fm_block:
         return None
     fm: dict[str, Any] = {}
+    current_key: str | None = None
+    current_list: list | None = None
     for line in fm_block.split("\n"):
         line = line.rstrip()
-        if not line or line.startswith("  "):
+        if not line:
+            continue
+        # List item: "  - value"
+        if line.startswith("  - ") and current_key:
+            value = line[4:].strip().strip('"').strip("'")
+            if current_list is None:
+                current_list = []
+                fm[current_key] = current_list
+            current_list.append(value)
+            continue
+        if line.startswith("  "):
             continue
         if ":" in line:
+            current_list = None
             key, _, value = line.partition(":")
             key = key.strip()
             value = value.strip().strip('"').strip("'")
             if value:
                 fm[key] = value
+            current_key = key
     return fm
 
 
@@ -198,7 +336,7 @@ def build_procedure_surface(
         if fm is None:
             continue
         seen.add(stem)
-        lines.append(procedure_surface_line(stem, fm))
+        lines.append(procedure_surface_line(stem, fm, proc_index))
 
     if not lines:
         return ""

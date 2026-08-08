@@ -3,7 +3,7 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-03
-description: Batch-triage multiple research topics at once. Given a list of topics or a note with multiple gaps, the small model classifies each topic by type (factual, conceptual, procedural, controversial) and priority, then fills a research plan template for each. The big model only does the actual research synthesis — all triage and planning is small-cartridge. Eliminates the big model's overhead of reading topics, deciding what kind of research each needs, and structuring plans.
+description: Batch-triage multiple research topics at once. Given a list of topics or a note with multiple gaps, the small model classifies each topic by type (factual, conceptual, procedural, controversial) and priority, then fills a research plan template for each. The big model only does the actual research synthesis — all triage and planning is small-cartridge.
 when_to_use: when multiple topics need research, when the vault has 3+ dangling wikilinks that all need research, when Sean gives a list of things to look up, or when a Research-Roadmap phase has multiple remaining topics
 falsifiable_if: it misclassifies a topic type (e.g. marks a controversial topic as factual) or produces a plan template that doesn't match the topic's research needs
 applies_to:
@@ -25,25 +25,15 @@ tags:
 
 ## When to Run This
 
-Run when there are multiple topics to research — either from a list Sean
-provides, from dangling wikilinks that need filling, or from a Research-Roadmap
-phase with remaining topics. The small model triages and plans; the big model
-only synthesizes the actual research notes.
-
-This replaces the pattern where the big model reads each topic, reasons about
-what kind of research it needs, structures a plan, and THEN does the research.
-All of that triage and planning is classification + template-filling — perfect
-for the small cartridge.
+Run when there are multiple topics to research. The small model triages and plans; the big model only synthesizes the actual research notes.
 
 ## Steps
 
 ### Step 1: Gather the topic list
 
 1. ```python
-import json
+import json, re
 
-# Topics can come from: (a) explicit list in args, (b) dangling wikilinks
-# from Pattern-Scan, or (c) a Research-Roadmap note's unchecked items
 topics = args.get("topics", [])
 
 if not topics:
@@ -53,7 +43,6 @@ if not topics:
     try:
         with open(out_file, "r", encoding="utf-8") as f:
             scan = json.load(f)
-        # Extract unique dangling targets
         dangling = set()
         for note_path, note_data in scan.get("notes", {}).items():
             for link in note_data.get("unresolved_out", []):
@@ -63,7 +52,6 @@ if not topics:
         topics = []
         print(f"Could not load Pattern-Scan: {e}")
 
-# Also check for a roadmap note
 roadmap_path = args.get("roadmap_note")
 if roadmap_path and not topics:
     content = ""
@@ -72,11 +60,9 @@ if roadmap_path and not topics:
             content = f.read()
     except Exception:
         pass
-    # Extract unchecked items
-    import re
     topics = re.findall(r'- \[ \] (.+)', content)
 
-print(json.dumps({"topic_count": len(topics), "topics": topics[:20]}, indent=2))
+result = json.dumps({"topic_count": len(topics), "topics": topics[:20]}, indent=2)
 ```
 
 ### Step 2: Classify each topic and fill plan template (small model)
@@ -109,42 +95,47 @@ print(json.dumps({"topic_count": len(topics), "topics": topics[:20]}, indent=2))
 ### Step 3: Output the batch plan and route to research
 
 3. ```python
-# The LLM output from step 2 is the batch research plan
-# Save it for the big model to execute
+import json
+
+# Parse the LLM output from step 2
+plans_raw = prior_results[1] if len(prior_results) > 1 else "[]"
+if isinstance(plans_raw, str):
+    try:
+        start = plans_raw.find("[")
+        end = plans_raw.rfind("]")
+        plans = json.loads(plans_raw[start:end+1]) if start != -1 else []
+    except Exception:
+        plans = []
+else:
+    plans = plans_raw
+
 plan_file = str(Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log" / "research_batch_plan.json")
 with open(plan_file, "w", encoding="utf-8") as f:
     json.dump(plans, f, indent=2)
 
-# Summary
 high = [p for p in plans if p.get("priority") == "high"]
 medium = [p for p in plans if p.get("priority") == "medium"]
 low = [p for p in plans if p.get("priority") == "low"]
 
-print(f"Batch research plan: {len(plans)} topics")
-print(f"  High priority: {len(high)} — {', '.join(p['topic'] for p in high)}")
-print(f"  Medium priority: {len(medium)}")
-print(f"  Low priority: {len(low)}")
-print(f"\nPlan saved to: {plan_file}")
-print("Big model: read the plan file and execute research for each topic,")
-print("starting with high priority. Each topic produces a sourced vault note.")
+summary = {
+    "total_plans": len(plans),
+    "high_priority": len(high),
+    "medium_priority": len(medium),
+    "low_priority": len(low),
+    "plan_file": plan_file,
+    "high_topics": [p["topic"] for p in high],
+}
+result = json.dumps(summary, indent=2)
 ```
 
 ## Notes
 
-- The small model does ALL the triage work (classification, priority, search
-  query generation, plan template filling). The big model only reads the
-  final plan and does the actual web research + note synthesis.
-- This saves ~2000-4000 tokens of big-model reasoning per batch that was
-  previously spent on "what kind of research does this topic need?"
-- For controversial topics, the plan specifies 6+ sources — the big model
-  knows to gather multiple viewpoints without re-deciding.
-- The plan file is JSON, so the big model can parse it deterministically
-  and execute research topics in priority order.
-
+- The small model does ALL the triage work. The big model only reads the final plan and does the actual web research + note synthesis.
+- This saves ~2000-4000 tokens of big-model reasoning per batch.
 
 ## Related
 
-- [[Procedure-Expansion-Proposal]] — Research-Batch was proposed as Tier 2 because topic classification and plan template filling are extraction + format conversion, which the small model handles well
-- [[Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge]] — classification and boilerplate generation are proven small-model strengths, therefore the triage step doesn't need big-model reasoning
-- [[Research-Roadmap]] — the primary source of batch research topics; Research-Batch automates the triage that the big model previously did inline for each phase
-- [[Gap-Fill]] — Gap-Fill identifies which dangling links need research; Research-Batch then plans the actual research for those topics
+- [[Procedure-Expansion-Proposal]] — Research-Batch was proposed as Tier 2
+- [[Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge]]
+- [[Research-Roadmap]] — the primary source of batch research topics
+- [[Gap-Fill]] — identifies which dangling links need research

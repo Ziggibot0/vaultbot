@@ -42,7 +42,7 @@ class FakeLLMClient:
         self._responses = list(responses)
         self.calls = 0
 
-    def chat(self, messages, temperature=0.3, stream=False):
+    def chat(self, messages, temperature=0.3, stream=False, **kwargs):
         i = min(self.calls, len(self._responses) - 1)
         out = self._responses[i]
         self.calls += 1
@@ -249,13 +249,17 @@ def test_empty_procedure_returns_pass():
 def test_content_but_zero_steps_fails_loud():
     """A procedure with body content that parses 0 steps fails LOUD.
 
-    This is the format-mismatch case (### Step N: headers instead of
-    numbered lists). The diagnosis must explain WHY so the caller can
-    fix it. This is the fix for the 60-round loop where execute_procedure
-    returned 0 steps with no explanation.
+    This is the format-mismatch case (random prose with no numbered list
+    and no ### Step N: headers). The diagnosis must explain WHY so the
+    caller can fix it. This is the fix for the 60-round loop where
+    execute_procedure returned 0 steps with no explanation.
+
+    NOTE: ### Step N: headers now DO parse as steps (the compiler was
+    updated to recognize them). This test uses plain prose with no
+    step markers at all to trigger the 0-steps path.
     """
     proc = _make_procedure(
-        "## Steps\n\n### Step 1: Do something\n\nSome text.\n")
+        "## Steps\n\nJust some prose with no step markers at all.\n")
     result = _run(proc)
     assert not result.overall_passed
     assert result.failed_step == 0

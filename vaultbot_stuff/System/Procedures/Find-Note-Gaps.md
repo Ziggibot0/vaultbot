@@ -15,7 +15,8 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
-summary: SUMMARY
+summary: SUMMARY|dependents,notes_exist,wikilinks_extraction
+tags|dependence_checking,wikilink_mechanism,text_processing
 tags:
   - procedure
   - procedures

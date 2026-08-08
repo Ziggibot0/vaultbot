@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Find-Unverified-Procedures
+summary: "# Find-Unverified-Procedures"
 tags:
   - procedure
   - procedures
@@ -35,7 +35,7 @@ have a great track record and should be promoted.
 1. ```python
 import json, re
 
-proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "System" / "Procedures"
 procedures = []
 for p in proc_dir.glob("*.md"):
     try:
@@ -70,7 +70,7 @@ for p in proc_dir.glob("*.md"):
     procedures.append(info)
 
 # Read failure log if it exists
-failure_log_path = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / "procedure_failure_log.json"
+failure_log_path = Path(vault_path) / "vaultbot_backend" / "procedure_failure_log.json"
 failure_log = {}
 if failure_log_path.exists():
     try:

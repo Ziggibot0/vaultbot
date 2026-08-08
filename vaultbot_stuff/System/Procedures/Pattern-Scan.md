@@ -3,8 +3,9 @@ type: procedure
 status: active
 model_cartridge: small
 created: 2026-08-01
-description: Importable pattern-recognition engine. Walks EVERY .md note in the vault and computes ~15 deterministic per-note signals (length, links in/out, orphan/thin/hub status, frontmatter presence, todo/stub markers, duplicate-title groups, daily-note files, staleness) plus vault-wide aggregates. Writes the full per-note table to vaultbot_stuff/Memory/Build-Log/pattern-scan-latest.json and returns a compact summary. Pure code, zero LLM cost — the big model never reasons about raw notes, it reads the filtered output of a domain scanner that calls this.
-when_to_use: when any procedure needs to recognize patterns across LOTS of notes at once — do NOT scan the vault inline; call run_procedure(\"Pattern-Scan\") then read pattern-scan-latest.json and filter for your domain. Domain scanners (Find-Orphans, Find-Thin-Notes, Find-Stubs, Find-Duplicates, Find-Broken-Links, Find-Unlinked-Mentions, Find-Overdue-Tasks, Find-Stale-Notes) already do this for you.
+updated: 2026-08-04
+description: "THIN ORCHESTRATOR: runs Vault-Walk → computes shared maps (backlinks, broken links, orphans, hubs, duplicates) → applies all signal logic → writes pattern-scan-latest.json. Pure code, zero LLM cost. This is the refactored version — the monolith is decomposed into Vault-Walk (independent per-note signals) + granular signal probes + this thin orchestrator."
+when_to_use: when any procedure needs to recognize patterns across LOTS of notes at once — do NOT scan the vault inline; call run_procedure("Pattern-Scan") then read pattern-scan-latest.json and filter for your domain. Domain scanners (Find-Orphans, Find-Thin-Notes, Find-Stubs, Find-Duplicates, Find-Broken-Links, Find-Unlinked-Mentions, Find-Overdue-Tasks, Find-Stale-Notes) already do this for you.
 falsifiable_if: pattern-scan-latest.json is missing, empty, or its per-note signals contradict what vault_lint / vault_graph_analyzer report for the same notes
 applies_to:
   - pattern-recognition
@@ -14,7 +15,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - vault_graph_analyzer
-summary: Pattern-Scan
+summary: Pattern-Scan — thin orchestrator that runs Vault-Walk, computes vault-wide signals, and writes the full per-note table to pattern-scan-latest.json.
 tags:
   - procedure
   - procedures
@@ -42,6 +43,18 @@ structured table. Every domain checker is then a ~10-line filter over
 that table — so each new "find X pattern" capability costs almost no
 tokens to create and none to run. The procedure system compounds: one
 scan, many cheap checks.
+
+## Architecture (refactored)
+
+This is now a **thin orchestrator** — the 213-line monolith is decomposed into:
+
+| Layer | What it does | LLM cost |
+|---|---|---|
+| **Vault-Walk** (called as sub-procedure) | Reads every .md, returns raw per-note data (path, stem, text, chars, links_out, frontmatter, age_days) | Zero |
+| **This orchestrator** | Runs Vault-Walk → computes shared maps (backlinks, broken links, orphans, hubs, duplicates) → applies all signal logic → writes JSON | Zero |
+| **Signal probes** (standalone, reusable) | Each is a ~10-line filter over Vault-Walk output: Check-Thin, Check-Stub, Count-Todos, Check-Daily, Check-Procedure-Type, Check-Staleness | Zero |
+
+The signal probes exist as standalone procedures so domain scanners can call them independently without re-walking the vault. This orchestrator applies the same logic inline for efficiency.
 
 ## Output contract
 
@@ -79,87 +92,71 @@ Each note record has these signal fields:
 
 ## Steps
 
-### Step 1: Walk every note and compute per-note + vault-wide signals
+### Step 1: Run Vault-Walk to get raw per-note data
 
 1. ```python
-import os, re, json, datetime
+import json
+from pathlib import Path
 
+# Call Vault-Walk as a sub-procedure — this is the foundation layer
+# that reads every .md and returns raw per-note data
+walk_result = run_procedure("Vault-Walk")
+records = json.loads(walk_result)
+print(f"Vault-Walk returned {len(records)} notes")
+```
+
+### Step 2: Compute vault-wide signals (backlinks, broken links, orphans, hubs, duplicates)
+
+2. ```python
+import json, datetime, re
+from pathlib import Path
+
+# records is from Step 1
 vault = str(Path(vault_path).resolve())
 out_dir = Path(vault) / "vaultbot_stuff" / "Memory" / "Build-Log"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_file = out_dir / "pattern-scan-latest.json"
 
-WIKILINK_RE = re.compile(r'\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]')
-DAILY_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-FM_TYPE_RE = re.compile(r'^type:\s*(.+?)\s*$', re.MULTILINE)
-STUB_MARKERS = ("todo", "stub", "placeholder", "expand me", "tbd", "wip")
+# --- Constants (same as original) ---
 THIN_THRESHOLD = 500
 HUB_THRESHOLD = 8
 STALE_DAYS = 30
+STUB_MARKERS = ("todo", "stub", "placeholder", "expand me", "tbd", "wip")
+DAILY_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
-now = datetime.datetime.now().timestamp()
-paths = vault_list()  # absolute .md paths, ignored dirs already excluded
+# --- Build shared maps ---
+# stem → path (for backlink resolution)
+by_stem = {}
+for r in records:
+    by_stem[r["stem"].lower()] = r["path"]
 
-records = []
-stem_to_paths = {}
-for ap in paths:
-    try:
-        rel = os.path.relpath(ap, vault).replace("\\", "/")
-        text = Path(ap).read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        continue
-    stem = rel.split("/")[-1][:-3]
-    top_dir = rel.split("/")[0] if "/" in rel else "(root)"
-    has_fm = text.startswith("---")
-    fm_type = ""
-    if has_fm:
-        m = FM_TYPE_RE.search(text[:text.find("\n---", 3) if "\n---" in text[3:] else 2000])
-        fm_type = (m.group(1).strip() if m else "")
-    links_out = [l.strip() for l in WIKILINK_RE.findall(text)]
-    try:
-        age_days = (now - os.path.getmtime(ap)) / 86400.0
-    except Exception:
-        age_days = 0.0
-    body_lower = text.lower()
-    rec = {
-        "path": rel,
-        "stem": stem,
-        "dir": top_dir,
-        "chars": len(text),
-        "has_frontmatter": has_fm,
-        "type": fm_type,
-        "links_out": links_out,
-        "links_out_count": len(links_out),
-        "links_in_count": 0,
-        "is_orphan": False,
-        "is_thin": len(text) < THIN_THRESHOLD,
-        "is_stub": any(sm in body_lower for sm in STUB_MARKERS),
-        "is_hub": False,
-        "has_todo": "- [ ]" in text,
-        "todo_count": text.count("- [ ]"),
-        "is_daily": bool(DAILY_RE.match(stem)),
-        "is_procedure": fm_type.lower() == "procedure",
-        "broken_links": [],
-        "unresolved_out": 0,
-        "age_days": round(age_days, 1),
-        "is_stale": age_days > STALE_DAYS,
-    }
-    records.append(rec)
-    stem_to_paths.setdefault(stem.lower(), []).append(rel)
-
-# Second pass: backlinks + broken links + orphans + duplicates
-by_stem = {r["stem"].lower(): r["path"] for r in records}
 all_stems = set(by_stem.keys())
+
+# stem → list of paths (for duplicate detection)
+stem_to_paths = {}
+for r in records:
+    stem_lower = r["stem"].lower()
+    stem_to_paths.setdefault(stem_lower, []).append(r["path"])
+
+# --- Second pass: backlinks + broken links ---
+# Initialize vault-wide fields
+for r in records:
+    r["links_in_count"] = 0
+    r["broken_links"] = []
+    r["unresolved_out"] = 0
+    r["is_orphan"] = False
+    r["is_hub"] = False
+
 for r in records:
     resolved = 0
     for target in r["links_out"]:
         t = target.split("#")[0].strip().lower()
         if t in all_stems:
             resolved += 1
-            by_stem_rec = by_stem[t]
+            target_path = by_stem[t]
             # increment that record's backlinks
             for rr in records:
-                if rr["path"] == by_stem_rec:
+                if rr["path"] == target_path:
                     rr["links_in_count"] += 1
                     break
         elif t:
@@ -168,9 +165,42 @@ for r in records:
     r["is_orphan"] = (r["links_in_count"] == 0 and resolved == 0)
     r["is_hub"] = r["links_in_count"] >= HUB_THRESHOLD
 
-# Duplicate titles (same stem, >1 file)
+# --- Apply signal logic (same as original, now on records from Vault-Walk) ---
+# Vault-Walk gives us: path, stem, dir, chars, has_frontmatter, type, links_out, links_out_count, age_days
+# We need to add: is_thin, is_stub, has_todo, todo_count, is_daily, is_procedure, is_stale
+# Note: Vault-Walk does NOT include body text, so we need to re-read for stub/todo detection.
+# This is a tradeoff: we could have Vault-Walk include body_lower, but that bloats its output.
+# Instead, we re-read files here for the signals that need body text.
+
+for r in records:
+    # is_thin — from chars (already in Vault-Walk output)
+    r["is_thin"] = r["chars"] < THIN_THRESHOLD
+
+    # is_daily — from stem (already in Vault-Walk output)
+    r["is_daily"] = bool(DAILY_RE.match(r["stem"]))
+
+    # is_procedure — from type (already in Vault-Walk output)
+    r["is_procedure"] = r["type"].lower() == "procedure"
+
+    # is_stale — from age_days (already in Vault-Walk output)
+    r["is_stale"] = r["age_days"] > STALE_DAYS
+
+    # has_todo, todo_count, is_stub — need body text
+    try:
+        ap = Path(vault) / r["path"]
+        text = ap.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        text = ""
+
+    r["has_todo"] = "- [ ]" in text
+    r["todo_count"] = text.count("- [ ]")
+    body_lower = text.lower()
+    r["is_stub"] = any(sm in body_lower for sm in STUB_MARKERS)
+
+# --- Duplicates ---
 duplicates = {s: ps for s, ps in stem_to_paths.items() if len(ps) > 1}
 
+# --- Aggregates ---
 counts = {
     "total_notes": len(records),
     "orphans": sum(1 for r in records if r["is_orphan"]),
@@ -188,6 +218,7 @@ counts = {
     "stale": sum(1 for r in records if r["is_stale"]),
 }
 
+# --- Write output ---
 payload = {
     "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
     "vault": vault,
@@ -204,10 +235,10 @@ result = json.dumps({
 })
 ```
 
-### Step 2: Confirm the scan file exists and report the headline counts
+### Step 3: Confirm the scan file exists and report the headline counts
 
-2. [llm: Report the Pattern-Scan headline counts from the prior step output in one short paragraph: total notes, and the counts for orphans, thin, stubs, notes with open todos, notes with broken links, and stale notes. Do NOT list individual notes — this is the engine summary only; domain scanners report specifics. Always mention the out_file path where the full per-note table was written, and note that domain scanners (Find-Orphans, Find-Stubs, Find-Broken-Links, Find-Overdue-Tasks, etc.) read that file to answer specific questions.]
+3. [llm: Report the Pattern-Scan headline counts from the prior step output in one short paragraph: total notes, and the counts for orphans, thin, stubs, notes with open todos, notes with broken links, and stale notes. Do NOT list individual notes — this is the engine summary only; domain scanners report specifics. Always mention the out_file path where the full per-note table was written, and note that domain scanners (Find-Orphans, Find-Stubs, Find-Broken-Links, Find-Overdue-Tasks, etc.) read that file to answer specific questions.]
 
-### Step 3: Validate output
+### Step 4: Validate output
 
-3. [validate: contains "notes"]
+4. [validate: contains "notes"]

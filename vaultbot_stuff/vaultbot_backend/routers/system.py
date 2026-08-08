@@ -889,3 +889,82 @@ async def nssm_install_script():
             "5. Logs rotate at 10MB in: " + log_dir
         ),
     }
+
+
+# --- /broadcast_questionnaire: ask_user tool -> plugin bridge -----------
+
+@router.post("/broadcast_questionnaire")
+async def broadcast_questionnaire(
+    request: Request,
+    svc: Annotated[Services, Depends(get_services)],
+):
+    """Receive a questionnaire from the ask_user tool and broadcast it over
+    WebSocket to all connected plugin clients. The plugin renders interactive
+    question cards; the user's answers come back via POST /user_response.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "error", "message": "Invalid JSON"}
+
+    request_id = payload.get("request_id", "")
+    if not request_id:
+        return {"status": "error", "message": "Missing request_id"}
+
+    await svc.manager.broadcast(
+        json.dumps(payload),
+        session_logger=svc.session_logger,
+    )
+    return {"status": "ok", "request_id": request_id}
+
+
+# --- /user_response: plugin -> ask_user tool bridge ---------------------
+
+@router.post("/user_response")
+async def user_response_endpoint(request: Request):
+    """Receive the user's answers from the plugin and unblock the waiting
+    ask_user tool. The plugin sends the request_id + answers dict; this
+    endpoint finds the waiting thread and signals it.
+    """
+    import time as _time
+    _debug_log = Path(__file__).resolve().parent / "ask_user_debug.log"
+    def _dbg(msg):
+        with open(_debug_log, "a", encoding="utf-8") as _f:
+            _f.write(f"{_time.strftime('%H:%M:%S')} {msg}\n")
+    _dbg(f"POST /user_response received")
+    try:
+        payload = await request.json()
+    except Exception as e:
+        _dbg(f"invalid JSON: {e}")
+        return {"status": "error", "message": "Invalid JSON"}
+
+    request_id = payload.get("request_id", "")
+    _dbg(f"request_id={request_id}")
+    if not request_id:
+        _dbg(f"missing request_id in payload: {payload}")
+        return {"status": "error", "message": "Missing request_id"}
+
+    # Import the pending-requests registry from the ask_user tool.
+    try:
+        from custom_tools.ask_user import _pending_requests
+    except ImportError:
+        _dbg("ask_user tool not loaded - ImportError")
+        return {"status": "error", "message": "ask_user tool not loaded"}
+
+    _dbg(f"pending_keys={list(_pending_requests.keys())}")
+    entry = _pending_requests.get(request_id)
+    if entry is None:
+        _dbg(f"request_id {request_id} NOT in pending_requests")
+        return {"status": "error", "message": f"No pending request with id {request_id}"}
+
+    event, response_holder = entry
+    # Copy the user's answers into the response holder.
+    answers = payload.get("answers", {})
+    comments = payload.get("comments", "")
+    response_holder.clear()
+    response_holder.update(answers)
+    if comments:
+        response_holder["_comments"] = comments
+    event.set()
+
+    return {"status": "ok", "request_id": request_id}

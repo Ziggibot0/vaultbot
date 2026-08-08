@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Find-Underused-Procedures
+summary: "# Find-Underused-Procedures"
 tags:
   - procedure
   - procedures

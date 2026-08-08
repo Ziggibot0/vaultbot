@@ -77,7 +77,7 @@ _BAD_TOPIC_PATTERNS = re.compile(
 _INTERNAL_TOOL_NAMES = frozenset({
     # Builtin vault tools
     "vault_research", "vault_search", "vault_gaps", "vaultbot_status",
-    "plan_task", "update_task", "set_goal",
+    "plan_task", "update_task",
     # Meta / self-improve tools
     "code_read", "code_run", "code_write", "tool_create", "self_reflect",
     "git_rollback", "safe_write", "js_safe_write", "capability_audit",

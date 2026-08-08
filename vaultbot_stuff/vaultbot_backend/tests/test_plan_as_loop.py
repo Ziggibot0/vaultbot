@@ -85,10 +85,6 @@ def test_model_drives_docstring_present():
     assert "The model drives" in src, (
         "docstring must state 'The model drives' to document the architecture"
     )
-    assert "one-rule plan gate" in src.lower() or "ONE rule" in src, (
-        "docstring must document the one-rule plan gate (replaces the old "
-        "'No phases, no gates' claim — we now have a single plan gate)"
-    )
 
 
 def test_no_exec_tool_gate():
@@ -97,25 +93,25 @@ def test_no_exec_tool_gate():
     assert "_EXEC_TOOLS" not in src, "_EXEC_TOOLS gate must be removed"
 
 
-# ── 2. plan_continuation_nudge (the only framework intervention) ────────────
+# ── 2. plan_continuation_nudge REMOVED (model decides when done) ────────────
 
-def test_plan_continuation_nudge_present():
-    """When the model emits prose with unfinished tasks, a nudge is sent."""
+def test_plan_continuation_nudge_removed():
+    """The plan-continuation nudge is GONE — the model decides when it's done."""
     src = _src()
-    assert "plan_continuation_nudge" in src, (
-        "plan_continuation_nudge must be logged when the model emits prose "
-        "with unfinished tasks"
+    assert "plan_continuation_nudge" not in src, (
+        "plan_continuation_nudge must be REMOVED — the model decides when done"
     )
-    assert "wm.has_plan() and not wm.all_done()" in src, (
-        "nudge must check wm.has_plan() and not wm.all_done()"
+    assert "_plan_complete_nudge_used" not in src, (
+        "_plan_complete_nudge_used must be REMOVED"
     )
 
 
-def test_plan_continuation_nudge_bounded():
-    """The nudge does NOT have a give-up path — it always nudges if tasks remain."""
+def test_no_framework_intervention_on_unfinished_plan():
+    """The framework does NOT intervene when the model stops with unfinished tasks."""
     src = _src()
-    assert "_all_done_nudge_used" not in src, "one-nudge fallback must be removed"
-    assert "all_done_nudge" not in src, "all_done_nudge must be removed"
+    assert "wm.has_plan() and not wm.all_done()" not in src, (
+        "Framework must NOT check plan completion before accepting answer"
+    )
 
 
 # ── 3. System prompt documents the architecture ────────────────────────────

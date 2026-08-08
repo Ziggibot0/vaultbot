@@ -65,6 +65,25 @@ is captured once, reused everywhere, at zero LLM cost.
 | [[Note-Linker]] | small | After a write, suggests `[[links]]` for the most-recently-modified note. |
 | [[Procedure-Eval]] | small | Scores every procedure's health from frontmatter counters + failure log. Called by Dream-Pass. |
 
+## Troubleshooting & Self-Diagnosis Layer
+
+Read-only procedures that let VaultBot (and the operator) see what
+happened in any past session and what's wrong right now. All `small`
+cartridge, all single code-step — no LLM cost, no new tools.
+
+| Procedure | What it answers |
+|---|---|
+| [[Analyze-Session-Log]] | What happened in session X (by UUID, title, or "latest")? Full turns, tool calls, errors, tokens. |
+| [[Find-Recent-Errors]] | What went wrong across the last N sessions? Sweeps for exceptions/console errors/failed tools/procedure-step failures. |
+| [[Diagnose-System-Health]] | Is everything okay right now? Calls /health + /diagnose + /system/stats + /ollama/stats into one report. |
+| [[Verify-Procedure-Discoverability]] | Is a procedure actually surfacing in RAG when a user says something relevant? Runs its when_to_use phrasings as test queries through the FusedRetriever. |
+| [[Diagnose-Retrieval-Failure]] | Why isn't a note/procedure being found? Walks the pipeline stage-by-stage: FAISS → top-k → merged pool → rerank → boost, pinpoints where it falls out. |
+
+Compose: run [[Diagnose-System-Health]] for triage → [[Find-Recent-Errors]]
+to locate the failing session → [[Analyze-Session-Log]] to deep-dive it.
+If a procedure isn't being used when it should be: [[Verify-Procedure-Discoverability]]
+to test it → [[Diagnose-Retrieval-Failure]] to find the root cause.
+
 ## High-frequency core (existing, already good)
 
 These were audited onto the small cartridge — run them freely:
@@ -73,7 +92,8 @@ These were audited onto the small cartridge — run them freely:
 - Quality: [[Vault-Lint]], [[Verify-Syntax]], [[Note-Accuracy-Check]], [[Cross-Check-Claims]], [[Refine-Concept-Card]]
 - Cartridge helpers (all `small`): [[Note-Tags-From-Content]], [[Summarize-Conversation]], [[Condense-Note]], [[Extract-Entities]], [[Judge-Plan]], [[Regenerate-Self-Model]]
 - Safety/maintenance: [[Preflight-Safety-Check]], [[Safe-Write]], [[JS-Safe-Write]], [[Vault-Delete]], [[Git-Rollback]], [[Backend-Restart]], [[Plugin-Reload]]
-- Build/test: [[Code-Run]], [[Write-Python-Tool]], [[Torture-Test]], [[Fix-Indentation]]
+- Build/test: [[Code-Run]], [[Write-Python-Tool]], [[Torture-Test]], [[Fix-Indentation]], [[Run-Test-Suite]], [[Verify-Backend-Change]]
+- Architecture: [[Prompt-Architecture-Audit]], [[Analyze-Function-Flow]], [[Smart-Code-Read]], [[Code-Structure-Check]]
 - Research/ingest: [[Textbook-Ingest]], [[Textbook-Read-Page]], [[Ollama-Model-Search]], [[Ollama-Pull-Models]]
 - Community: [[Review-Contributions]], [[Submit-Contribution]]
 - Core loop behavior: [[Agentic-Loop-Turn-Protocol]] — mandatory phase-state machine for every chat turn; referenced by the system prompt.
@@ -97,6 +117,8 @@ Only these genuinely need the 30B model's reasoning — everything else is small
 3. Follow [[How-to-Create-a-Procedure]]. Put `model_cartridge: small` unless
    the LLM step genuinely needs multi-step reasoning.
 4. Give it `when_to_use` so the description-surface embedding can discover it.
+5. After editing backend code, verify and deploy with [[Verify-Backend-Change]]
+   (runs tests → restarts → checks health in one call).
 
 Every procedure added this way is another thing the 30B model no longer
 has to figure out — the procedure system compounding on itself.

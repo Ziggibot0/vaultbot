@@ -352,7 +352,7 @@ class OllamaClient(_BASE):
 
         t0 = time.time()
         try:
-            response = self._session.post(f"{self.base_url}/api/generate", json=payload, stream=stream)
+            response = self._session.post(f"{self.base_url}/api/generate", json=payload, stream=stream, timeout=300)
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("generate", {"payload": payload, "stream": stream}, error=str(e), duration_ms=(time.time() - t0) * 1000)

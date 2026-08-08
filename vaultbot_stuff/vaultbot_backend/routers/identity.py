@@ -1,4 +1,4 @@
-"""Identity endpoints: the three-file identity layer.
+"""Identity endpoints: the two-file identity layer.
 
 These were thin shims in main.py that deferred-imported identity_api.* and
 injected svc. The router calls the extracted functions directly.
@@ -11,24 +11,17 @@ from fastapi import APIRouter, Depends
 
 from app_state import get_services
 from services import Services
-from identity_api import get_identity, set_goals, regenerate_self_model
+from identity_api import get_identity, regenerate_self_model
 
 router = APIRouter()
 
 
 @router.get("/identity")
 async def get_identity_endpoint(svc: Annotated[Services, Depends(get_services)]):
-    """Return the agent's current identity state (IDENTITY + SELF_MODEL +
-    GOALS) so the UI can show who the agent is and what it's working on.
+    """Return the agent's current identity state (IDENTITY + SELF_MODEL)
+    so the UI can show who the agent is and what it's working on.
     """
     return await get_identity(svc)
-
-
-@router.post("/identity/goals")
-async def set_goals_endpoint(payload: dict,
-                              svc: Annotated[Services, Depends(get_services)]):
-    """Update the agent's active goal (full-replace GOALS.md)."""
-    return await set_goals(svc, payload)
 
 
 @router.post("/identity/self_model")

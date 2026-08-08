@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: "## Summary"
+summary: "SUMMARY|# Check-Procedure-Drift||detect,optimize,catch drift FIXES descriptions to match actual procedures. The note explains how to run a procedure discovery tool that compares step-by-step text agai"
 tags:
   - procedure
   - procedures

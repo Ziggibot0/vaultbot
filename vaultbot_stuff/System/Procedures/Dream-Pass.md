@@ -23,6 +23,14 @@ allowed_tools:
   - vault_search
   - code_read
   - llm_generate
+provides:
+  - Dream-Scan
+  - Dream-Analyze
+  - Dream-Link
+  - Dream-Consolidate
+  - Dream-Prune
+  - Dream-Validate
+  - Dream-Evaluate
 success_count: 108
 failure_count: 1
 success_rate: 0.99

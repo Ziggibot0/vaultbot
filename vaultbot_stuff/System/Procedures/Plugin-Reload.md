@@ -7,7 +7,7 @@ description: Reload the Obsidian plugin without killing the backend.
 when_to_use: When you've edited the plugin's main.js and need to reload it.
 allowed_tools:
   - plugin_reload
-summary: Plugin-Reload
+summary: The note describes a method to reload the Obsidian plugin without restarting servers, sending WebSocket messages via `custom_tools.plugin_reload` and observing that it toggles off and on automatically
 tags:
   - procedure
   - procedures

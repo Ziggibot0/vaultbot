@@ -6,7 +6,7 @@ THE PROBLEM THIS SOLVES
 on every new WebSocket connection (``routers/ws.py``). When the backend
 restarted (the operator asked VaultBot to restart itself, or a crash, or a code
 reload), the live conversation thread vanished. The agent woke up with
-only the slow identity files (IDENTITY/SELF_MODEL/GOALS, which may point at
+only the slow identity files (IDENTITY/SELF_MODEL, which may point at
 a goal from "a while ago") and zero recollection of the thread it was just
 working on. the operator's words: "you totally wiped yourself bro rookie mistake,
 change your restart backend tool to bring you back into the same session
@@ -56,12 +56,14 @@ logger = logging.getLogger(__name__)
 # so 40 turns ≈ 50-150 KB.
 MAX_TURNS = 40
 
-# Hard char cap for the disk copy. Even 40 messages can total 200K+ chars
-# if each is a large tool result. Cap the file at ~100K chars by truncating
-# the oldest messages' content when the total exceeds this. This is the
-# disk-level guarantee that a days-long session doesn't produce a
-# conversation_state.json that's too big to load on the next restart.
-MAX_DISK_CHARS = int(os.getenv("VAULTBOT_HISTORY_MAX_CHARS", "100000"))
+# Hard char cap for the disk copy. Even 40 messages can total several MB
+# if each is a large tool result (a full code_read or vault_read_note).
+# Default raised to 2MB (2026-08-06) so tool results survive persistence
+# instead of being chopped to 200-char stubs the model can't read.  A
+# days-long session can still hit this cap; when it does, the oldest
+# messages get their content field truncated to 200 chars (the truncation
+# is per-message-oldest-first, not a file-wide chop). Configurable via env.
+MAX_DISK_CHARS = int(os.getenv("VAULTBOT_HISTORY_MAX_CHARS", "2000000"))
 
 _DEFAULT_PATH = str(Path(__file__).with_name("conversation_state.json"))
 

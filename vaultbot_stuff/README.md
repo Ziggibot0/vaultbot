@@ -291,7 +291,7 @@ Wikipedia") and it will store that as a directive note itself.
 │   │   ├── vault_indexer.py       #   FAISS index + chunked embeddings
 │   │   ├── vault_graph.py         #   wikilink graph + context builder
 │   │   ├── custom_tools/          #   agent-authored tools (grows itself)
-│   │   ├── identity/              #   IDENTITY.md, SELF_MODEL.md, GOALS.md
+│   │   ├── identity/              #   IDENTITY.md, SELF_MODEL.md
 │   │   └── ...
 │   ├── System/                    # Architecture docs, procedures, playbooks
 │   ├── .env.example                # Template for .env (API keys, model config)

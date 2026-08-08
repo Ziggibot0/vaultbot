@@ -176,6 +176,53 @@ async def notify_info(svc: Services, websocket, message: str) -> None:
         pass
 
 
+async def notify_console_failure(
+    svc: Services,
+    websocket,
+    message: str,
+    *,
+    context: str = "",
+) -> None:
+    """Send a ``type:"console_error"`` WS event — a RED console line only.
+
+    This is the lightweight counterpart to ``notify_problem`` for failures
+    that don't break the turn but the user must NOT be blind to: a
+    background condense crash, a procedure-tracking log failure, a step-RAG
+    retrieval miss, a drift-feedback error. These don't warrant a full
+    problem card (the turn still succeeds), but per the operator's
+    directive ("any failure of any kind is immediately reported to the user
+    in the console") they appear as a red line in the chat console so the
+    user knows degradation happened.
+
+    The plugin renders ``type:"console_error"`` as a single red console
+    line (no card, no turn interruption). Rate-limited per message so a
+    failing background loop doesn't flood the console.
+
+    Args:
+        svc: the Services registry (for manager + session_logger).
+        websocket: the live WS connection (may be None — then logged only).
+        message: the human-readable failure description.
+        context: optional short tag (e.g. "lazy_condense") included in the
+            console line for traceability.
+    """
+    try:
+        dedup_key = message
+        if _should_dedup(dedup_key):
+            return
+        line = f"[{context}] {message}" if context else message
+        payload = json.dumps({"type": "console_error", "content": line})
+        if websocket is not None and svc.manager is not None:
+            await svc.manager.send_personal_message(
+                payload, websocket,
+                session_logger=getattr(svc, "session_logger", None))
+        slog = getattr(svc, "session_logger", None)
+        if slog is not None:
+            slog.log("console_failure_notified", {
+                "message": message, "context": context})
+    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        pass
+
+
 def notify_problem_broadcast(
     svc: Services,
     exc_or_diagnosis: Any,

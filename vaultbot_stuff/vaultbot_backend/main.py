@@ -567,8 +567,8 @@ autonomous_researcher = AutonomousResearcher(
 # by the chat LLM and external MCP clients.
 self_improver = SelfImprover(session_logger=default_session_logger)
 
-# Three-file identity layer (IDENTITY/SELF_MODEL/GOALS): makes the agent feel
-# like the same agent across days regardless of which model is in the slot.
+# Two-file identity layer (IDENTITY/SELF_MODEL): makes the agent feel like
+# the same agent across days regardless of which model is in the slot.
 identity = Identity(
     identity_dir=str(Path(__file__).with_name("identity")),
     ollama_client=ollama_client, session_logger=default_session_logger)
@@ -620,8 +620,9 @@ chat_checkpointer = ChatLoopCheckpointer(
 # Context management: a sliding window (not LLM-based compaction) bounds
 # the conversation sent to the LLM. The vault IS the memory — chat history
 # is persisted as notes (Memory/Chat/Chat-*.md) and the agent can walk the
-# wikilink trail back via vault_search. GOALS.md + working_memory.py keep
-# it on task. The old Compactor (LLM summarization of old messages) was
+# wikilink trail back via vault_search. working_memory.py keeps it on task
+# (the plan_task / update_task tool pair replaces the old GOALS.md file).
+# The old Compactor (LLM summarization of old messages) was
 # lossy, costly, and introduced its own failure modes (summarization
 # failure → silent degradation). The sliding window is deterministic,
 # non-lossy, and zero-cost. See chat_handler._apply_sliding_window.

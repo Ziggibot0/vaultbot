@@ -14,6 +14,7 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+  - vault_gaps
   - llm_generate
 summary: Gap-Fill
 tags:
@@ -44,48 +45,43 @@ category. No research, no synthesis, just routing.
 
 ## Steps
 
-### Step 1: Run Pattern-Scan to get dangling wikilinks
+### Step 1: Get dangling wikilinks from vault_gaps
 
 1. ```python
 import json
 
-run_procedure("Pattern-Scan")
-out_file = str(Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log" / "pattern-scan-output.json")
-with open(out_file, "r", encoding="utf-8") as f:
-    scan = json.load(f)
-
-# Extract notes with unresolved outgoing links
-notes_with_dangling = []
-for note in scan.get("notes", []):
-    unresolved = note.get("unresolved_out", [])
-    if unresolved:
-        notes_with_dangling.append({
-            "source": note.get("path"),
-            "dangling_targets": unresolved,
-            "title": note.get("title", note.get("path"))
-        })
-
-# Flatten into individual dangling links with context
+gaps_data = vault_gaps()
 dangling_links = []
-for n in notes_with_dangling:
-    for target in n["dangling_targets"]:
+for gap in gaps_data.get("gaps", []):
+    # vault_gaps returns gaps with kind="dangling_link" and a "topic" field
+    # (NOT "name"). Other gap kinds (thin_notes, etc.) have different shapes
+    # — we only want the dangling wikilinks.
+    if gap.get("kind") == "dangling_link" and gap.get("topic"):
         dangling_links.append({
-            "target": target,
-            "source_note": n["source"],
-            "source_title": n["title"]
+            "target": gap["topic"],
+            "source_notes": gap.get("referenced_by", []),
+            "reference_count": gap.get("reference_count", 0),
         })
 
-print(f"Found {len(dangling_links)} dangling wikilinks across {len(notes_with_dangling)} notes.")
+result = {"dangling_links": dangling_links, "count": len(dangling_links)}
 ```
 
 ### Step 2: Get the list of all existing note titles for typo/alias detection
 
 2. ```python
-all_notes = vault_list()
+import json
+from pathlib import Path
+
+# prior_results[0] is the JSON string from step 1
+step1 = json.loads(prior_results[0])
+dangling_links = step1["dangling_links"]
+
+# vault_list() returns {"count": N, "files": [...]} — extract the list
+all_notes_data = vault_list()
+all_notes = all_notes_data.get("files", []) if isinstance(all_notes_data, dict) else all_notes_data
 all_titles = [Path(n).stem for n in all_notes]
 
 # Build a lookup of lowercased, hyphen-normalized titles for fuzzy matching
-import unicodedata
 def normalize_title(t):
     t = t.lower().replace("-", " ").replace("_", " ").strip()
     return t
@@ -107,59 +103,64 @@ for dl in dangling_links:
         else:
             dl["fuzzy_matches"] = []
 
-print(f"Typo/alias candidates: {len(typo_candidates)}")
-print(f"Unresolved (need LLM classification): {len(dangling_links) - len(typo_candidates)}")
+result = {
+    "dangling_links": dangling_links,
+    "typo_candidates": len(typo_candidates),
+    "unresolved": len(dangling_links) - len(typo_candidates),
+}
 ```
 
 ### Step 3: Small model classifies each dangling link
 
-3. [llm: You are a triage classifier. For each dangling wikilink below, classify it into exactly one category:
+3. [llm: You are a triage classifier. The prior step output contains a list of dangling wikilinks (each with "target", "source_notes", "fuzzy_matches"). For each dangling wikilink, classify it into exactly one category:
 
 - **research_needed**: The link refers to a real concept, topic, or entity that should have its own note in the vault. It's not a typo and no existing note covers it.
-- **typo_alias**: The link is a misspelling or alternate name for an existing note (fuzzy matches provided).
+- **typo_alias**: The link is a misspelling or alternate name for an existing note (check fuzzy_matches).
 - **chat_log**: The link looks like it refers to a chat conversation (contains "chat-" or a date pattern).
-- **ignore**: The link is a passing reference to something that doesn't need its own note (e.g., a person mentioned once, a generic concept).
+- **ignore**: The link is a passing reference to something that doesn't need its own note.
 
-Output format: one line per link, `TARGET | CATEGORY | BRIEF_REASON`
-
-Dangling links to classify:
-{json.dumps(dangling_links, indent=2)}]
+Output format: one line per link, `TARGET | CATEGORY | BRIEF_REASON`]
 
 ### Step 4: Format the triage report
 
 4. ```python
-# Parse the LLM classification output
-import re
+import json, re
+
+# prior_results[1] is step 2's JSON (dangling_links with fuzzy matches)
+# prior_results[2] is step 3's raw LLM text output
+step2 = json.loads(prior_results[1])
+dangling_links = step2["dangling_links"]
+llm_output = prior_results[2]
 
 categories = {"research_needed": [], "typo_alias": [], "chat_log": [], "ignore": []}
 
 for line in llm_output.strip().split("\n"):
     parts = line.split(" | ")
     if len(parts) >= 3:
-        target, category, reason = parts[0].strip(), parts[1].strip().strip("*"), parts[2].strip()
+        target = parts[0].strip()
+        category = parts[1].strip().strip("*")
+        reason = parts[2].strip()
         if category in categories:
             entry = {"target": target, "reason": reason}
             # Enrich with source info
             for dl in dangling_links:
                 if dl["target"] == target:
-                    entry["source_note"] = dl["source_note"]
+                    entry["source_notes"] = dl.get("source_notes", [])
                     if dl.get("fuzzy_matches"):
                         entry["fuzzy_matches"] = dl["fuzzy_matches"]
                     break
             categories[category].append(entry)
 
-report = {
+result = {
     "summary": {
         "total_dangling": len(dangling_links),
         "research_needed": len(categories["research_needed"]),
         "typo_alias": len(categories["typo_alias"]),
         "chat_log": len(categories["chat_log"]),
-        "ignore": len(categories["ignore"])
+        "ignore": len(categories["ignore"]),
     },
-    "triage": categories
+    "triage": categories,
 }
-
-print(json.dumps(report, indent=2))
 ```
 
 ### Step 5: Output the prioritized work queue

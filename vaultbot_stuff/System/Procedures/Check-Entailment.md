@@ -12,7 +12,12 @@ applies_to:
   - research-quality
 allowed_tools:
   - llm_generate
-summary: Check-Entailment
+summary: "CHECK_ENTAILMENT_PROCESS: Verifies source support of claims in fact-checking workflows.
+
+| |
+| :--- |
+| # Check-Entailment
+| 1. Ask the small model for a verdict (supported, unsupported, or contradict"
 tags:
   - procedure
   - procedures

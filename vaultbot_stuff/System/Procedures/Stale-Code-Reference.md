@@ -15,7 +15,10 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
-summary: Stale-Code-Reference
+summary: "STALE-Code-Reference|refactoring, vault notes analysis, function names identification
+
+```json
+"summary": "Identifies and fixes stale Python code references found in refactored project notes by scanni"
 tags:
   - procedure
   - procedures

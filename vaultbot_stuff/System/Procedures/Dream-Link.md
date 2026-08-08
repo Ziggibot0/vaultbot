@@ -18,7 +18,7 @@ falsifiable_if: it adds broken wikilinks, links to non-existent notes, or crashe
 success_count: 0
 failure_count: 0
 success_rate: 0.0
-summary: Dream-Link
+summary: 1. This note describes how the Dream-Link tool identifies orphaned notes from graph analyzer output and adds wikilinks by finding semantically related vault stems, stopping after processing up to 50 n
 tags:
   - procedure
   - procedures
