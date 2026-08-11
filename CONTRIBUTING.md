@@ -6,9 +6,9 @@ private.
 
 ## Project founder & custodian
 
-**Sean Kellogg** (skelogg124@gmail.com) is the project founder and
-custodian, and the sole merge authority for this repository. He has final
-say on what ships and on project direction. He does **not** claim ownership
+The **ziggibot-uni** organization is the project founder and
+custodian, and the sole merge authority for this repository. The maintainer has final
+say on what ships and on project direction. The project does **not** claim ownership
 of your contributions — see the licensing section below.
 
 ## The golden rule
@@ -186,7 +186,7 @@ To keep this safe for everyone, every automated contribution **must**:
 The maintainer will reject — without merging — any contribution that
 contains personal data, vault contents, or anything that looks like a
 leaked secret. If you realize a report you filed contains private
-material, email skelogg124@gmail.com to have it taken down.
+material, open a private GitHub security advisory to have it taken down.
 
 ## Further reading
 
@@ -217,7 +217,7 @@ benefit other users, you can ask it to submit a pull request directly:
    - Open a pull request targeting `main`
    - Switch back to your `main` branch
 
-4. **Review.** Sean (the maintainer) reviews every PR manually. Nothing
+4. **Review.** The maintainer reviews every PR manually. Nothing
    auto-merges. If your change benefits the community, it ships.
 
 The tool will refuse to run without a `GITHUB_TOKEN` and will never include

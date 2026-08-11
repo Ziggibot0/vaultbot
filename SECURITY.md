@@ -5,7 +5,7 @@
 If you find a security vulnerability in VaultBot, please **do not** open a
 public GitHub issue. Report it privately instead:
 
-- Email: **skelogg124@gmail.com**
+- Open a **private security advisory** on GitHub (Security tab → Advisories → New advisory)
 - Subject line: `[VaultBot security] <short summary>`
 
 Please include:
