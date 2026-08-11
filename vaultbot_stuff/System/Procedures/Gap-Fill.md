@@ -16,6 +16,8 @@ allowed_tools:
   - vault_list
   - vault_gaps
   - llm_generate
+provides:
+  - Pattern-Scan
 summary: Gap-Fill
 tags:
   - procedure

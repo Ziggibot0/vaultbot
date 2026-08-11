@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: Check-Tool-Coverage
+summary: SUMMARY
 tags:
   - procedure
   - procedures

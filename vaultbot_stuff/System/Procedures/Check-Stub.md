@@ -10,7 +10,8 @@ applies_to:
   - vault-maintenance
   - pattern-recognition
   - probe
-allowed_tools: []
+allowed_tools:
+  - run_procedure
 summary: Check-Stub — granular probe that filters Vault-Walk output for notes with stub markers (TODO, stub, placeholder, expand, tbd, wip). Returns JSON list of stub note records.
 tags:
   - procedure

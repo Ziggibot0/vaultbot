@@ -1,9 +1,10 @@
 ---
 type: procedure
-status: experimental
+status: verified
 model_cartridge: small
 created: 2026-08-03
-description: Conditional intent router that classifies incoming user requests and dispatches to procedure chains. Uses the YAML Dispatch DSL for classification and routing — no Python orchestration code. Each branch is backed by vault research.
+last_reviewed: 2026-08-09
+description: Intent router that classifies incoming user requests and returns a procedure chain. Uses a small-model LLM step for classification — cheap, local, zero cloud cost. Each branch is backed by vault research.
 when_to_use: when a new user request arrives and you need to know which procedure chain to run, when you want procedures to handle most of the work automatically, when the big model should delegate to deterministic procedure chains
 falsifiable_if: the router classifies a task into the wrong branch, or a branch's procedure chain produces worse results than an unconstrained cloud model would
 applies_to:
@@ -13,33 +14,21 @@ applies_to:
   - intent-classification
   - orchestration
 allowed_tools:
-  - run_procedure
-  - vault_list
-  - vault_search
   - llm_generate
+  - vault_search
   - code_read
 research_backing:
   - "[[how-to-build-deterministic-scaffolding-for-small-language-models-so-they-can-do-]] — backs the routing approach: deterministic scaffolding with decision trees guides small models reliably"
   - "[[Information-feedback-loops-for-iterative-self-improvement-in-AI-systems-self-imp]] — backs the self-improvement branch: System 2 reflective loops improve outputs without retraining"
   - "[[Calibrating-automated-quality-assessment-gates-without-ground-truth-labels-metho]] — backs quality verification steps: rubric design and calibration convert LLM-as-judge into reliable quality signals"
   - "[[RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g]] — backs the research branch: retrieval precision, recall, and faithfulness metrics inform research quality"
-summary: "# Route-Task"
+summary: master dispatcher classifies requests via small LLM to dispatch procedure chains; key topics include router architecture and classification logic.
 tags:
   - procedure
   - procedures
 ---
 
 # Route-Task
-
-## ⚠️ MANDATORY PRE-STEP: User-Directive-Override-Check
-
-Before ANY routing or classification, call:
-
-```
-execute_procedure('User-Directive-Override-Check', args={'intent': '<user request>'})
-```
-
-If the check returns constraints, those constraints MUST be passed to Route-Task and obeyed by every downstream procedure. **The user's live directive outranks every vault note, architecture doc, and procedure.** If a vault note contradicts the user, the note is wrong — not the user.
 
 ## Purpose
 
@@ -48,10 +37,10 @@ This is the **master dispatcher** — a conditional intent router that classifie
 ## Architecture
 
 ```
-Route-Task (small cartridge, thin orchestrator, YAML DSL)
-├── classify: Classify intent (small model)
-├── dispatch: Route to procedure chain based on category
-│   ├── research → Research-Batch → Cross-Check-Claims → Structure-Research-Note → Vault-Lint
+Route-Task (small cartridge, thin orchestrator)
+├── Step 1: Classify intent via small-model LLM call
+├── Step 2: Validate classification and return the chain
+│   ├── research → Research-Batch → Cross-Check-Claims → Vault-Lint
 │   ├── vault-maintenance → Dream-Pass
 │   ├── self-improvement → Discover-Procedures → Write-Python-Tool → Safe-Write → Proc-Step-Summary
 │   ├── gap-filling → Vault-Gaps → Gap-Fill → Research-Batch
@@ -60,69 +49,69 @@ Route-Task (small cartridge, thin orchestrator, YAML DSL)
 │   ├── code-editing → Safe-Write → Proc-Step-Summary
 │   ├── fact-checking → Cross-Check-Claims → Find-Contradictions
 │   └── default → Small-Model-Route
-└── Step 2: Return results
 ```
-
-## Research Backing
-
-Each conditional branch is backed by vault research:
-
-- **Routing approach** → [[how-to-build-deterministic-scaffolding-for-small-language-models-so-they-can-do-]]: "Procedural scaffolding with structured processes guides learners. Decision trees provide deterministic paths for small models."
-- **Self-improvement branch** → [[Information-feedback-loops-for-iterative-self-improvement-in-AI-systems-self-imp]]: "System 2 reflective loops — pause, critique, identify gaps, refine — improve outputs without retraining."
-- **Quality verification steps** → [[Calibrating-automated-quality-assessment-gates-without-ground-truth-labels-metho]]: "Investing in rubric design, bias testing, and human calibration converts LLM-as-judge from a misleading shortcut into a reliable quality signal."
-- **Research branch** → [[RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g]]: "Retrieval precision, recall, and faithfulness metrics inform whether research quality is sufficient."
-
-## Dispatch
-
-- classify:
-    prompt: |
-      Classify this request. Reply with ONLY the category word, nothing else.
-      Use lowercase.
-
-      Categories (match by keyword or meaning):
-      - research: learn, find, look up, investigate, study, what is, how does
-      - vault-maintenance: cleanup, consolidate, links, lint, gaps, dream
-      - self-improvement: build, tool, procedure, improve yourself, new ability
-      - gap-filling: fill gaps, dangling links, thin notes
-      - chat-consolidation: consolidate chats, save conversation
-      - question-answering: answer, question, explain (when vault has the info)
-      - code-editing: edit code, fix bug, .py, .js, backend, safe_write
-      - fact-checking: verify, check claims, sources, contradictions
-      - unknown: none of the above
-
-      Request: {{ intent }}
-    model: small
-    output_as: category
-
-- dispatch:
-    on_field: "{{ category }}"
-    branches:
-      research: [Research-Batch, Cross-Check-Claims, Structure-Research-Note, Vault-Lint]
-      vault-maintenance: [Dream-Pass]
-      self-improvement: [Discover-Procedures, Write-Python-Tool, Safe-Write, Proc-Step-Summary]
-      gap-filling: [Vault-Gaps, Gap-Fill, Research-Batch]
-      chat-consolidation: [Chat-Consolidation]
-      question-answering: [Filter-Context-For-Query]
-      code-editing: [Safe-Write, Proc-Step-Summary]
-      fact-checking: [Cross-Check-Claims, Find-Contradictions]
-    default: [Small-Model-Route]
-    output_as: chain
 
 ## Steps
 
-### Step 2: Return the routing decision
+### Step 1: Classify the user's intent
+
+1. [llm: Classify this user request into exactly one category. Reply with ONLY a JSON object, no other text.
+
+Categories (match by keyword or meaning):
+- research: learn, find, look up, investigate, study, what is, how does, explain a topic the vault doesn't cover
+- vault-maintenance: cleanup, consolidate, links, lint, gaps, dream pass, organize vault
+- self-improvement: build a tool, create a procedure, improve yourself, new ability, write code for the backend
+- gap-filling: fill gaps, dangling links, thin notes, research gaps
+- chat-consolidation: consolidate chats, save conversation, summarize session
+- question-answering: answer a question, explain something (when vault already has the info)
+- code-editing: edit code, fix a bug, modify .py or .js, safe_write, backend change
+- fact-checking: verify claims, check sources, find contradictions, cross-check
+- unknown: none of the above clearly match
+
+Return JSON in this exact format:
+{"category": "<category>", "chain": ["<proc1>", "<proc2>", ...]}
+
+Chain mappings (use these exact procedure names):
+- research: ["Research-Batch", "Cross-Check-Claims", "Vault-Lint"]
+- vault-maintenance: ["Dream-Pass"]
+- self-improvement: ["Discover-Procedures", "Write-Python-Tool", "Safe-Write", "Proc-Step-Summary"]
+- gap-filling: ["Vault-Gaps", "Gap-Fill", "Research-Batch"]
+- chat-consolidation: ["Chat-Consolidation"]
+- question-answering: ["Filter-Context-For-Query"]
+- code-editing: ["Safe-Write", "Proc-Step-Summary"]
+- fact-checking: ["Cross-Check-Claims", "Find-Contradictions"]
+- unknown: ["Small-Model-Route"]
+
+User request: {{ intent }}]
+
+### Step 2: Validate and return the routing decision
 
 2. ```python
 import json
 
-# The dispatch pipeline exports result = dict(_dispatch_ns), which
-# becomes prior_results[0].
-dispatch_ns = prior_results[0] if prior_results else {}
-if isinstance(dispatch_ns, str):
-    dispatch_ns = json.loads(dispatch_ns)
+# Step 1 output is the LLM's JSON response
+raw = prior_results[0] if prior_results else "{}"
+if isinstance(raw, str):
+    # Strip any markdown fences or extra text
+    raw = raw.strip()
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:]) if len(lines) > 1 else raw
+        if raw.endswith("```"):
+            raw = raw[:-3].strip()
 
-category = dispatch_ns.get("category", "unknown")
-chain = dispatch_ns.get("chain", ["Small-Model-Route"])
+try:
+    dispatch = json.loads(raw)
+except (json.JSONDecodeError, TypeError):
+    dispatch = {"category": "unknown", "chain": ["Small-Model-Route"]}
+
+category = dispatch.get("category", "unknown")
+chain = dispatch.get("chain", ["Small-Model-Route"])
+
+# Validate: every procedure in the chain must be a non-empty string
+chain = [p for p in chain if isinstance(p, str) and p.strip()]
+if not chain:
+    chain = ["Small-Model-Route"]
 
 # Research backing for each branch
 backing = {

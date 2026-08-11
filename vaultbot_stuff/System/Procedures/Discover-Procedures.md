@@ -12,7 +12,7 @@ applies_to:
 allowed_tools:
   - vault_search
   - vault_list
-summary: SUMMARY
+summary: "# Discover-Procedures"
 tags:
   - procedure
   - procedures

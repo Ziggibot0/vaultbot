@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: SUMMARY
+summary: "Summary: The note provides a Python script to validate backend file conventions by checking for bare exceptions, hardcoded paths, missing type hints, and other common issues before they cause problems"
 tags:
   - procedure
   - procedures

@@ -12,7 +12,7 @@ applies_to:
   - memory-consolidation
 allowed_tools:
   - llm_generate
-summary: Regenerate-Self-Model
+summary: Summary
 tags:
   - procedure
   - procedures

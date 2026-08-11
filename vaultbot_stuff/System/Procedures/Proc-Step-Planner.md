@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: Proc-Step-Planner
+summary: "PROC-STEP-PLANER: Surgical backend code change checklist with [[Safe-Write]] model execution. Read file(s) to identify functions needing minimal edits and generate numbered list of changes via automat"
 tags:
   - procedure
   - procedures

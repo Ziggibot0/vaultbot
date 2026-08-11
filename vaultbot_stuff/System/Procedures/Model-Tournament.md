@@ -4,8 +4,8 @@ status: experimental
 model_cartridge: small
 created: 2026-08-06
 description: "JSON array of model names to test (e.g. ['qwen3:1.7b', 'qwen3.5:0.8b', 'gemma3:1b']). If empty, tests all installed models under 4GB."
-when_to_use: >
-falsifiable_if: >
+when_to_use: when you need to compare multiple small models on a specific task to find the best performer, when evaluating new models, or when asked 'which model is best for X'
+falsifiable_if: "A model with clearly worse output scores higher than a model with better output, or the tournament produces no results."
 inputs:
   - "name: task_name"
 datatype: string

@@ -14,6 +14,12 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
+provides:
+  - Check-Error-Handling
+  - Check-Resource-Leaks
+  - Check-Mutable-Defaults
+  - Check-Complexity
+  - Check-Dead-Code
 summary: Code-Audit-Senior-Review
 tags:
   - procedure

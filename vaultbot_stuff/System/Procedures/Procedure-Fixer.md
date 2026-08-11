@@ -19,6 +19,12 @@ allowed_tools:
   - llm_generate
   - execute_procedure
   - run_procedure
+provides:
+  - Analyze-Failure-Log
+  - Check-Tool-Coverage
+  - Procedure-Coverage-Check
+  - Check-Procedure-Drift
+  - Procedure-Eval
 summary: Procedure-Fixer
 tags:
   - procedure

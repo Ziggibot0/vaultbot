@@ -13,6 +13,8 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+provides:
+  - Pattern-Scan
 summary: "## Summary|The note is a Python pattern scanner script designed to automatically identify recently modified notes and generate links between them, targeting the most recent modifications while resolvi"
 tags:
   - procedure

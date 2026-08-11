@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: Find-Dead-Code
+summary: SUMMARY
 tags:
   - procedure
   - procedures

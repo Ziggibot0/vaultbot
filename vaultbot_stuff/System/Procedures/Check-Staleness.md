@@ -10,7 +10,8 @@ applies_to:
   - vault-maintenance
   - pattern-recognition
   - probe
-allowed_tools: []
+allowed_tools:
+  - run_procedure
 summary: Check-Staleness — granular probe that filters Vault-Walk output for notes older than 30 days. Returns JSON list of stale note records.
 tags:
   - procedure

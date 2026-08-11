@@ -15,7 +15,7 @@ allowed_tools:
   - code_read
   - vault_safe_write
 falsifiable_if: it splits a note that should stay together (one coherent argument), or fails to split a note with genuinely distinct claims
-summary: "## SUMMARY"
+summary: Summary|split_note_metadata_generator,note_schema_spliters,split_files_extraction,directories_filtering,python_backends_detection;1. The Note Generator Analyzes Metadata and Generates Split Notes with
 tags:
   - procedure
   - procedures

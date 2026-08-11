@@ -10,7 +10,8 @@ applies_to:
   - vault-maintenance
   - pattern-recognition
   - probe
-allowed_tools: []
+allowed_tools:
+  - run_procedure
 summary: Check-Procedure-Type — granular probe that filters Vault-Walk output for notes with frontmatter type: procedure. Returns JSON list of procedure note records.
 tags:
   - procedure

@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Tool-Usage-Report
+summary: "## Summary"
 tags:
   - procedure
   - procedures

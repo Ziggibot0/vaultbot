@@ -11,7 +11,7 @@ applies_to:
 allowed_tools:
   - vault_graph_analyzer
   - vault_list
-summary: Summary
+summary: "Summary: A Python script analyzes VaultBot status by extracting machine specs (OS/RAM/GPU), ollama loaded models list, and vault graph statistics to generate offline metadata for autonomous-researcher"
 tags:
   - procedure
   - procedures

@@ -14,7 +14,10 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: Note-Consistency-Check
+summary: "## SUMMARY|consistency_check_note_analysis_step_1_v3.2025
+
+## TAGS
+# frontmatter, body_text, syntax_validation, note_structure, consistency_check"
 tags:
   - procedure
   - procedures

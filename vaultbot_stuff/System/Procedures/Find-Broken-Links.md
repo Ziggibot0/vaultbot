@@ -13,6 +13,8 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+provides:
+  - Pattern-Scan
 summary: Find-Broken-Links
 tags:
   - procedure

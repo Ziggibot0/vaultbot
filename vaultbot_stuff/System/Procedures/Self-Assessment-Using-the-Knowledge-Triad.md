@@ -28,7 +28,7 @@ allowed_tools:
   - vault_lint
   - llm_generate
   - run_procedure
-summary: Self-Assessment-Using-the-Knowledge-Triad
+summary: "# Self-Assessment-Using-the-Knowledge-Triad"
 tags:
   - procedure
   - procedures

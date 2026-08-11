@@ -15,7 +15,7 @@ allowed_tools:
   - code_read
   - llm_generate
 falsifiable_if: a flagged tension is not actually a real disagreement (both notes agree), or a real tension is missed
-summary: Find-Tensions
+summary: "**One-Sentence Summary**: This tool detects vault contradictions by scanning system and note metadata to find pairs of documents that conflict over the same topic using status inconsistencies, semanti"
 tags:
   - procedure
   - procedures

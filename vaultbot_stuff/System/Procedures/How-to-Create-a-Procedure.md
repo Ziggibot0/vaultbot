@@ -37,10 +37,25 @@ Create the YAML frontmatter for the new note. It must include:
 *   `description:` (brief summary for RAG discovery)
 
 ## Step 4: Write the Steps
-Structure the body as numbered instructions. Mix **Code Steps** and **LLM Steps**:
-1.  **Code Steps:** Use ````python` blocks for deterministic work (file I/O, searching, parsing). These run in a sandbox at zero LLM cost.
-2.  **LLM Steps:** Write plain text instructions for judgment calls, decisions, or synthesis. The model will "read" these and act on them.
-3.  **Validation:** Use `[validate:]` annotations in code blocks if you need to ensure an output matches a pattern before continuing.
+Structure the body with `### Step N: short-summary` headers. EVERY step MUST have one — the header summary is the step's human-readable description, shown in progress and logs. Mix **Code Steps** and **LLM Steps**:
+
+```
+## Steps
+
+### Step 1: Search the vault for related notes
+
+```python
+results = vault_search(query=claim, k=5)
+```
+
+### Step 2: Classify each result
+
+[llm: Given the results, classify each as relevant or not relevant.]
+```
+
+1.  **Code Steps:** Put a ```` ```python ```` fence after the `### Step N:` header for deterministic work (file I/O, searching, parsing). These run in a sandbox at zero LLM cost.
+2.  **LLM Steps:** Put `[llm: instruction]` after the `### Step N:` header for judgment calls, decisions, or synthesis. The model will "read" these and act on them.
+3.  **Validation:** Use `[validate:]` annotations in the header instruction text if you need to ensure an output matches a pattern before continuing.
 
 ## Step 5: Final Validation & Save
 1.  Review the note for clarity and completeness.

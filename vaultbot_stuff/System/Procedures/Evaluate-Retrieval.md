@@ -25,6 +25,8 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
+provides:
+  - Smart-Vault-Search
 summary: Evaluate-Retrieval
 tags:
   - procedure

@@ -13,6 +13,8 @@ applies_to:
 allowed_tools:
   - run_procedure
   - vault_list
+provides:
+  - Pattern-Scan
 summary: Find-Orphans
 tags:
   - procedure
@@ -43,7 +45,7 @@ try:
 except Exception:
     out_file = None
 if not out_file or not Path(out_file).exists():
-    out_file = str(Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
+    out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot_stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
 
 data = json.loads(Path(out_file).read_text(encoding="utf-8"))
 records = data.get("notes", [])

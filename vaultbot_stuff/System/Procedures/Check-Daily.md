@@ -10,7 +10,8 @@ applies_to:
   - vault-maintenance
   - pattern-recognition
   - probe
-allowed_tools: []
+allowed_tools:
+  - run_procedure
 summary: Check-Daily — granular probe that filters Vault-Walk output for notes with YYYY-MM-DD filenames. Returns JSON list of daily note records.
 tags:
   - procedure

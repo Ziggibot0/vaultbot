@@ -68,7 +68,9 @@ Rules:
 - model_cartridge: big only for novel reasoning or complex synthesis
 - Code steps use ```python blocks and set `result = json.dumps(...)`
 - LLM steps use [llm: instruction] format
-- Steps are numbered (1. 2. 3.)
+- EVERY step MUST have a `### Step N: short-summary` header (e.g. `### Step 1: Search the vault`).
+  Put the ```python fence or [llm: ...] tag on the line(s) AFTER the header.
+  The header summary is the step's human-readable description. NEVER use bare `N.` without a header.
 - description must be specific enough that RAG surfaces it for the right intent
 - when_to_use must describe the situation, not the topic
 - Keep code steps deterministic and idempotent

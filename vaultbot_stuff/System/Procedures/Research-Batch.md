@@ -15,7 +15,7 @@ allowed_tools:
   - run_procedure
   - vault_list
   - llm_generate
-summary: Research-Batch
+summary: SUMMARY
 tags:
   - procedure
   - procedures

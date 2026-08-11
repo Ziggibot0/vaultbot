@@ -14,7 +14,7 @@ applies_to:
   - context-recovery
 allowed_tools:
   - code_run
-summary: "# ANALYZE-SESSION-LOG"
+summary: Analyze-Session-Log|read-only, tool calls + results, exceptions, console errors | jsonL log processing
 tags:
   - procedure
   - procedures
