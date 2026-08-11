@@ -12,7 +12,8 @@ Eight categories of checks, each addressing a specific friction point:
    (Friction: "How to" names sound like tutorials, not tools. Procedures
    are machine-executable protocols, not advice to read.)
 3. **Compile test** — procedure compiler parses steps correctly
-   (Friction: ``### Step N:`` headers without ``N. ```python`` steps)
+   (Friction: steps missing ``### Step N:`` headers — every step needs a
+   human-readable header so people who can't read code can reason about it)
 4. **Tool consistency** — all tool calls in code are in allowed_tools
    (Friction: code calls vault_delete but it's not in allowed_tools)
 5. **Anti-patterns** — run_tool(), direct endpoint usage
@@ -83,12 +84,17 @@ _SAFE_FUNCS = frozenset({
     "all", "any", "slice",
 })
 
-# Known tool names that the step-gate runtime can inject
+# Known tool names that the step-gate runtime can inject into code steps
+# (the authoritative list is step_gate_runtime._build_tool_preamble — this
+# frozenset MUST stay in sync with it). textbook_read_page and
+# textbook_ingest are custom_tools exposed to the LLM directly, NOT
+# injected into code-step subprocesses, so they are intentionally absent.
 _KNOWN_TOOLS = frozenset({
     "vault_search", "vault_list", "vault_append", "vault_delete",
     "vault_lint", "vault_graph_analyzer", "code_read",
     "llm_generate", "web_read_source", "run_procedure",
-    "textbook_read_page", "textbook_ingest",
+    "vault_safe_write", "vault_gaps", "machine_spec",
+    "ollama_model_search", "vaultbot_status",
 })
 
 # Idempotency indicator keywords
@@ -299,12 +305,13 @@ def validate_procedure_text(
 
     compiled_steps = len(proc.steps)
     step_types = [s.step_type for s in proc.steps]
-    step_numbers = [s.number for s in proc.steps]
+    step_numbers = [int(s.number) for s in proc.steps]
 
     if compiled_steps == 0:
         errors.append(
-            "Compiler found 0 steps — check that steps use "
-            "'N. ```python' or 'N. [llm:]' format"
+            "Compiler found 0 steps — every step needs a "
+            "'### Step N: short-summary' header followed by a "
+            "```python fence or [llm: ...] tag inside a ## Steps section"
         )
     else:
         checks_run.append("sequential_numbering")

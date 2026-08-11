@@ -27,6 +27,11 @@ def _ping_ollama(svc: Services) -> bool:
 
     Uses the client's own is_running() method so it works with ANY backend
     (Ollama, OpenAI-compatible, etc.) — not just local Ollama.
+
+    is_running() now has a 5s timeout so a busy Ollama (loading a model
+    during preload) can't hang this call indefinitely.  This is a SYNC
+    helper used by _run_diagnose_checks (also sync); the async /health
+    endpoint calls the executor directly to avoid blocking the loop.
     """
     try:
         return bool(svc.ollama_client.is_running())
@@ -469,9 +474,23 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
     """Liveness check. Returns uptime, heartbeat age, current task, and
     dependency status so a watchdog (or the Obsidian plugin) can detect hangs
     and restart if needed. Keep this <50ms.
+
+    The ollama ping runs in the executor with a 3s timeout so a busy
+    Ollama (loading a model during preload) never freezes the event loop.
     """
+    import asyncio as _asyncio
+    loop = _asyncio.get_event_loop()
+    try:
+        ollama_ok = await _asyncio.wait_for(
+            loop.run_in_executor(None, svc.ollama_client.is_running),
+            timeout=3.0,
+        )
+    except _asyncio.TimeoutError:
+        ollama_ok = False  # Ollama is busy — don't block the health check
+    except Exception:  # noqa: BLE001
+        ollama_ok = False
     extra = {
-        "ollama": _ping_ollama(svc),
+        "ollama": ollama_ok,
         "autonomous_enabled": svc.autonomous_researcher.enabled,
         "autonomous_running": bool(svc.autonomous_researcher._thread and
                                    svc.autonomous_researcher._thread.is_alive()),
@@ -479,7 +498,19 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
         "graph_nodes": len(svc.vault_graph.nodes),
         "identity_self_model_chars": len(svc.identity.get_self_model()),
     }
-    return svc.health_monitor.health(extra=extra)
+    result = svc.health_monitor.health(extra=extra)
+    # If the researcher thread is alive but the heartbeat is stale for
+    # more than 3x the cycle interval, the researcher is likely stuck
+    # in a long operation (web request, LLM call) or hung. Surface this
+    # so the operator knows the researcher isn't actually making progress.
+    if extra["autonomous_running"] and not result["ok"]:
+        interval = svc.autonomous_researcher.interval_seconds
+        if result.get("last_heartbeat_age_s", 0) > interval * 3:
+            result["researcher_stuck"] = True
+            result["researcher_stuck_reason"] = (
+                f"heartbeat stale for {result['last_heartbeat_age_s']}s "
+                f"(cycle interval: {interval}s)")
+    return result
 
 
 @router.get("/ollama/stats")
@@ -491,9 +522,21 @@ async def ollama_stats(svc: Annotated[Services, Depends(get_services)]) -> dict[
     compatible), returns a minimal stub since there's no local GPU to
     report.  Never raises — best-effort so a stats fetch failure never
     blocks the UI.
+
+    Runs in the executor with a 5s timeout — get_ollama_stats() does
+    blocking HTTP calls to Ollama (/api/ps, /api/version) and a busy
+    Ollama (loading a model during preload) would freeze the event loop.
     """
+    import asyncio as _asyncio
     try:
-        return svc.ollama_client.get_ollama_stats()
+        loop = _asyncio.get_event_loop()
+        return await _asyncio.wait_for(
+            loop.run_in_executor(None, svc.ollama_client.get_ollama_stats),
+            timeout=5.0,
+        )
+    except _asyncio.TimeoutError:
+        return {"running": False, "version": None, "models": [],
+                "error": "Ollama busy (timed out)"}
     except Exception as e:  # noqa: BLE001 — best-effort
         return {"running": False, "version": None, "models": [], "error": str(e)}
 

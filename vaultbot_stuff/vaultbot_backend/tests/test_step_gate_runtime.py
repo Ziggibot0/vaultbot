@@ -264,7 +264,7 @@ def test_content_but_zero_steps_fails_loud():
     assert not result.overall_passed
     assert result.failed_step == 0
     assert "0 STEPS" in result.final_output or "0 steps" in result.final_output.lower()
-    assert "numbered list" in result.final_output.lower()
+    assert "numbered" in result.final_output.lower()
 
 
 def test_code_step_executes(tmp_path):

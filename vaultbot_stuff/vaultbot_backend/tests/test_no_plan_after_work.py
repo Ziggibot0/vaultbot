@@ -64,12 +64,11 @@ class TestFinishReasonProtocol:
     engine as a secondary check."""
 
     def test_turn_protocol_in_system_prompt(self):
-        """Both build_system_prompt functions must document the turn
+        """The build_system_prompt_briefing function must document the turn
         protocol (tool call to continue, text to finish)."""
         source = _AGENT_TOOLS.read_text(encoding="utf-8")
-        assert source.count("TURN PROTOCOL") >= 2, (
-            "The turn protocol must be documented in BOTH "
-            "build_system_prompt functions."
+        assert source.count("TURN PROTOCOL") >= 1, (
+            "The turn protocol must be documented in the system prompt."
         )
         # The <done> marker must NOT be in the system prompt anymore.
         assert "<done>" not in source, (

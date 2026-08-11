@@ -236,10 +236,13 @@ class ModelEntry:
         return asdict(self)
 
 
-def _is_free_model(model_name: str, provider_type: str) -> bool:
+def _is_free_model(model_name: str, provider_type: str,
+                    base_url: str = "") -> bool:
     """Best-effort free-tier detection so the UI can flag paid models.
 
     - Ollama (local daemon): always free (runs on your own hardware).
+    - Local OpenAI-compatible servers (LM Studio, llama.cpp server, etc.):
+      always free — they serve models you run yourself on localhost.
     - OpenRouter: model ids ending in ":free" are free-tier.
     - Other OpenAI-compatible: assume paid unless we can tell otherwise.
     This is a HEURISTIC, not authoritative — OpenRouter's /v1/models does not
@@ -247,7 +250,21 @@ def _is_free_model(model_name: str, provider_type: str) -> bool:
     """
     if provider_type == "ollama":
         return True
+    if base_url and _is_local_base_url(base_url):
+        return True
     return model_name.lower().endswith(":free")
+
+
+def _is_local_base_url(url: str) -> bool:
+    """True if the URL points to this machine (localhost / 127.0.0.1 / 0.0.0.0).
+
+    Any OpenAI-compatible server running on localhost — LM Studio,
+    llama.cpp, vLLM dev mode — serves models you run on your own
+    hardware, so it's always free regardless of the provider type.
+    """
+    from urllib.parse import urlparse
+    host = (urlparse(url or "").hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1")
 
 
 class ProviderRegistry:
@@ -303,7 +320,8 @@ class ProviderRegistry:
                     # persisted on the next save() (the __init__ save-on-load).
                     prov = self._providers.get(entry.provider)
                     entry.free = _is_free_model(entry.model,
-                                                 prov.type if prov else "openai")
+                                                 prov.type if prov else "openai",
+                                                 prov.base_url if prov else "")
                     self._models[entry.id] = entry
                 for role, mid in (data.get("roles") or {}).items():
                     if role in ROLES and isinstance(mid, str):

@@ -132,8 +132,8 @@ class TestSystemPromptNoThreats:
 
     def test_permissive_tone_in_prompt(self):
         src = _source(_AGENT_TOOLS)
-        assert "stays out of your way" in src, (
-            "System prompt must tell model the framework stays out of its way")
+        assert "framework handles routing" in src, (
+            "System prompt must tell model the framework handles routing")
 
 
 class TestCodeReadWholeFile:

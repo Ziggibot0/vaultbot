@@ -73,7 +73,7 @@ class StepResult:
             message. None if the step succeeded.
         traceback: Full traceback if the step crashed. None on success.
     """
-    step_number: int
+    step_number: float
     step_type: str
     passed: bool
     output: str
@@ -99,7 +99,7 @@ class ExecutionResult:
     steps: list[StepResult]
     overall_passed: bool
     final_output: str
-    failed_step: int | None = None
+    failed_step: float | None = None
     child_procedures: list[dict] = field(default_factory=list)
         # Each entry: {"name": str, "overall_passed": bool,
         # "steps_executed": int}. Populated when a step invokes
@@ -268,7 +268,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
         'if not isinstance(args, dict):\n'
         '    args = {}\n'
         'namespace["args"] = args\n'
-        'output = prior_results[-1] if prior_results else ""\n'
+        'output = list(prior_results.values())[-1] if prior_results else ""\n'
         'if not isinstance(output, str):\n'
         '    try:\n'
         '        output = json.dumps(output, default=str)\n'
@@ -294,7 +294,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    # keep reasoning (synthesis needs it).\n'
             '    _think = False if _cartridge == "small" else None\n'
             '    def llm_generate(prompt, system="You are a procedure executor. Follow the instruction. Output only the result."):\n'
-            '        result = _client.generate(prompt=prompt, system=system, stream=False, think=_think)\n'
+            '        messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]\n'
+            '        result = _client.chat(messages=messages, stream=False, think=_think)\n'
             '        return result.get("response", "")\n'
             '    namespace["llm_generate"] = llm_generate\n'
         )
@@ -591,23 +592,26 @@ def _run_code_step(
     step: Step,
     allowed_tools: list[str],
     vault_path: str,
-    prior_results: list[Any],
+    prior_results: dict[float, str],
     timeout: int = 120,
     procedure_name: str = "",
     call_stack: list[str] | None = None,
     model_cartridge: str = "big",
     procedure_args: dict | None = None,
-) -> tuple[bool, str, str | None, str | None]:
+) -> tuple[bool, str, str | None, str | None, dict]:
     """Execute a code step in a subprocess.
 
-    Returns ``(success, output, error, traceback)``.
+    Returns ``(success, output, error, traceback, sub_prior)`` where
+    ``sub_prior`` is the subprocess's ``prior_results`` dict (may contain
+    step-added keys like "scan", "analyze", "telemetry" that the caller
+    merges back into the shared ``prior_results``).
 
     ``procedure_name`` and ``call_stack`` are passed to the subprocess
     so the injected ``run_procedure`` tool can detect cycles and enforce
     MAX_PROC_DEPTH when this step recurses into another procedure.
     """
     if step.code is None:
-        return False, "", "code step has no code", ""
+        return False, "", "code step has no code", "", {}
 
     tool_preamble = _build_tool_preamble(allowed_tools)
 
@@ -618,7 +622,7 @@ def _run_code_step(
         'from pathlib import Path\n'
         '\n'
         'vault_path = os.environ.get("VAULT_PATH", ".")\n'
-        'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "[]"))\n'
+        'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "{}"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
         'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
         'procedure_name = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
@@ -652,7 +656,12 @@ def _run_code_step(
         '        json.dumps(result)\n'
         '    except (TypeError, ValueError):\n'
         '        result = str(result)\n'
-        '    print(json.dumps({"status": "ok", "result": result}))\n'
+        '    # Return prior_results so the runtime can merge step-added keys\n'
+        '    # (e.g. "scan", "analyze", "telemetry") back into the shared dict.\n'
+        '    _pr = namespace.get("prior_results", {})\n'
+        '    if not isinstance(_pr, dict):\n'
+        '        _pr = {}\n'
+        '    print(json.dumps({"status": "ok", "result": result, "prior_results": _pr}))\n'
         'except Exception as e:  # noqa: BLE001 — best-effort, returns error to caller\n'
         '    print(json.dumps({\n'
         '        "status": "error",\n'
@@ -702,9 +711,9 @@ def _run_code_step(
             preexec_fn=preexec_fn,
         )
     except subprocess.TimeoutExpired:
-        return False, "", f"subprocess timeout after {timeout}s", ""
+        return False, "", f"subprocess timeout after {timeout}s", "", {}
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-        return False, "", f"subprocess error: {e}", traceback.format_exc()
+        return False, "", f"subprocess error: {e}", traceback.format_exc(), {}
 
     # Parse output.  The wrapper always prints the envelope as the LAST
     # line of stdout.  Step code may print debug output before it (e.g.
@@ -713,7 +722,7 @@ def _run_code_step(
     stdout = proc.stdout.strip()
     if not stdout:
         stderr = proc.stderr.strip()[:2000]
-        return False, "", f"no stdout from subprocess. stderr: {stderr}", ""
+        return False, "", f"no stdout from subprocess. stderr: {stderr}", "", {}
 
     # Take the last non-empty line as the envelope
     lines = [l for l in stdout.split("\n") if l.strip()]
@@ -722,23 +731,30 @@ def _run_code_step(
     try:
         result = json.loads(envelope_line)
     except json.JSONDecodeError:
-        return False, stdout[:2000], f"invalid JSON from subprocess: {envelope_line[:200]}", ""
+        return False, stdout[:2000], f"invalid JSON from subprocess: {envelope_line[:200]}", "", {}
 
     if result.get("status") == "error":
-        return False, "", result.get("error", "unknown error"), result.get("traceback", "")
+        return False, "", result.get("error", "unknown error"), result.get("traceback", ""), {}
 
     output = result.get("result", "")
     if not isinstance(output, str):
         output = json.dumps(output, default=str)
 
-    return True, output, None, None
+    # Merge subprocess prior_results back — step code may have added
+    # keys like "scan", "analyze", "telemetry" that must survive into
+    # the next step's PRIOR_RESULTS env var.
+    sub_prior = result.get("prior_results", {})
+    if not isinstance(sub_prior, dict):
+        sub_prior = {}
+
+    return True, output, None, None, sub_prior
 
 
 # ── LLM step execution ──────────────────────────────────────────────────
 
 def _run_llm_step(
     step: Step,
-    prior_results: list[tuple[int, str]],
+    prior_results: dict[float, str],
     llm_client: Any = None,
 ) -> tuple[bool, str, str | None]:
     """Execute an LLM step via the cartridge-selected client with minimal context.
@@ -763,7 +779,7 @@ def _run_llm_step(
     prior_context = ""
     if prior_results:
         prior_lines = []
-        for num, out in prior_results:
+        for num, out in prior_results.items():
             snippet = out[:2000] + ("..." if len(out) > 2000 else "")
             prior_lines.append(f"Step {num} output:\n{snippet}")
         prior_context = "\n\n".join(prior_lines)
@@ -788,9 +804,14 @@ def _run_llm_step(
         if client is None:
             from llm_client import get_llm_client
             client = get_llm_client()
-        result = client.generate(
-            prompt=prompt,
-            system=system,
+        # Use chat() — the unified LLM client contract (see llm_client.py).
+        # Both OllamaClient and OpenAICompatibleClient expose chat(), not generate().
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ]
+        result = client.chat(
+            messages=messages,
             stream=False,
             think=False,
         )
@@ -808,7 +829,7 @@ def _build_active_frame(
     step: Step,
     procedure: Procedure,
     context: str,
-    step_outputs: list[tuple[int, str]],
+    step_outputs: list[tuple[float, str]],
 ) -> list[dict[str, str]]:
     """Build the active frame for the LLM (v1 text steps).
 
@@ -923,8 +944,8 @@ def _count_thing(output: str, unit: str) -> int:
 
 def _evaluate_condition(
     condition: str,
-    prior_results: list[Any],
-    step_outputs: list[tuple[int, str]],
+    prior_results: dict[float, str],
+    step_outputs: list[tuple[float, str]],
 ) -> tuple[bool, str]:
     """Evaluate a free-text condition predicate deterministically.
 
@@ -1031,9 +1052,9 @@ async def execute_procedure(
         # Distinguish two cases:
         # 1. Empty body (no content after ## Steps) → legitimately 0 steps, pass.
         # 2. Body has content but 0 parsed steps → format mismatch, FAIL.
-        #    The most common cause is ### Step N: headers instead of
-        #    numbered list steps (1. ...) which _parse_steps doesn't
-        #    recognize. Tell the caller EXACTLY what went wrong.
+        #    The most common cause is plain prose with no step markers at
+        #    all (neither ### Step N: headers nor N. numbered lists).
+        #    Tell the caller EXACTLY what went wrong.
         _body = (procedure.raw_text or "").strip()
         # Strip frontmatter to check the actual body content.
         if _body.startswith("---"):
@@ -1057,13 +1078,21 @@ async def execute_procedure(
         # Body has content but 0 parsed steps — loud failure with diagnosis.
         _diagnosis = (
             "PROCEDURE COMPILED 0 STEPS. The procedure compiler "
-            "(procedure_compiler.py _parse_steps) only recognizes "
-            "numbered list steps inside a ## Steps section:\n"
-            "  1. instruction text\n"
-            "  2. ```python\n     code here\n     ```\n"
-            "It does NOT parse ### Step N: headers. If your procedure uses "
-            "### headers, rewrite them as numbered list items. Check the "
-            "procedure's ## Steps section format."
+            "(procedure_compiler.py _parse_steps) recognizes two formats "
+            "inside a ## Steps section:\n"
+            "  ### Step N: short summary\n"
+            "  ```python\n"
+            "  code here\n"
+            "  ```\n"
+            "\n"
+            "  or the legacy numbered format:\n"
+            "  1. ```python\n"
+            "     code here\n"
+            "     ```\n"
+            "\n"
+            "Both require either a numbered 'N.' line or a '### Step N:' "
+            "header followed by a ```python fence. Check the procedure's "
+            "## Steps section format."
         )
         _body_snippet = (procedure.raw_text or "")[:200]
         if session_logger:
@@ -1081,9 +1110,9 @@ async def execute_procedure(
         )
 
     step_results: list[StepResult] = []
-    step_outputs: list[tuple[int, str]] = []
+    step_outputs: list[tuple[float, str]] = []
     all_outputs: list[str] = []
-    prior_results: list[Any] = []
+    prior_results: dict[float, str] = {}
 
     # Build step lookup map
     step_map = {s.number: s for s in procedure.steps}
@@ -1147,7 +1176,7 @@ async def execute_procedure(
         if step.step_type == "code":
             # Use 300s timeout for steps that may call llm_generate (synthesis can be slow)
             _step_timeout = 300 if "llm_generate" in procedure.allowed_tools else 120
-            success, output, error, tb = _run_code_step(
+            success, output, error, tb, sub_prior = _run_code_step(
                 step, procedure.allowed_tools, vault_path, prior_results,
                 timeout=_step_timeout,
                 procedure_name=procedure.name,
@@ -1156,6 +1185,11 @@ async def execute_procedure(
                 procedure_args=procedure_args,
             )
             if success:
+                # Merge subprocess prior_results back — step code may have
+                # added keys like "scan", "analyze", "telemetry" that must
+                # survive into the next step's PRIOR_RESULTS env var.
+                if sub_prior:
+                    prior_results.update(sub_prior)
                 # Capture any child procedures the step spawned (the
                 # injected run_procedure tool returns a dict with a
                 # ``child_procedures`` field when it recurses).
@@ -1194,7 +1228,7 @@ async def execute_procedure(
                 break
 
         elif step.step_type == "llm":
-            success, output, error = _run_llm_step(step, step_outputs, llm_client)
+            success, output, error = _run_llm_step(step, prior_results, llm_client)
             if success:
                 sr = StepResult(
                     step_number=step.number,
@@ -1265,7 +1299,7 @@ async def execute_procedure(
         step_results.append(sr)
         step_outputs.append((step.number, sr.output))
         all_outputs.append(sr.output)
-        prior_results.append(sr.output)
+        prior_results[step.number] = sr.output
 
         # Step-level logging
         if procedure_tracker:

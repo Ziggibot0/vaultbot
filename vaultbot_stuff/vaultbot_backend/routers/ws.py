@@ -93,7 +93,17 @@ async def websocket_endpoint(websocket: WebSocket,
                 _elapsed += 10
             session_logger.log("model_preload_on_connect_timeout", {
                 "model": svc.ollama_client.llm_model, "waited_s": _elapsed})
-        asyncio.get_event_loop().run_in_executor(None, _preload_on_connect)
+        # Run in a DEDICATED thread (not the default ThreadPoolExecutor)
+        # so a long preload (up to 300s for a cold large model) can't
+        # starve the executor pool that endpoints rely on.  Each WS
+        # reconnect used to grab an executor thread for up to 300s;
+        # a few reconnects could exhaust the pool and freeze every
+        # run_in_executor-based endpoint (including /models and
+        # /llm/providers/.../live_models that the settings tab needs).
+        import threading as _threading
+        _preload_thread = _threading.Thread(
+            target=_preload_on_connect, name="ws-preload", daemon=True)
+        _preload_thread.start()
 
     # ── Startup reindex failure check ────────────────────────────────
     # If the background reindex crashed on startup (before any WS was

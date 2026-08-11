@@ -599,7 +599,7 @@ async def add_model(payload: dict,
     # money-spending role. Ollama local = always free; OpenRouter ":free" = free.
     prov = reg.get_provider(provider)
     from providers import _is_free_model
-    free = bool(payload.get("free", _is_free_model(model, prov.type if prov else "openai")))
+    free = bool(payload.get("free", _is_free_model(model, prov.type if prov else "openai", prov.base_url if prov else "")))
     try:
         entry = reg.add_model(mid, model, provider, vision=vision,
                               instruct=instruct, label=label, free=free)
@@ -683,13 +683,13 @@ async def provider_live_models(provider_id: str,
                     pass
             enriched.append({"name": n, "vision": caps.get("vision", False),
                              "instruct": caps.get("instruct", True),
-                             "free": _is_free_model(n, "ollama")})
+                             "free": _is_free_model(n, "ollama", prov.base_url)})
         return {"status": "ok", "ok": True, "models": enriched,
                 "provider": provider_id, "latency_ms": probe["latency_ms"]}
     from providers import _is_free_model
     return {"status": "ok", "ok": True,
             "models": [{"name": n, "vision": False, "instruct": True,
-                        "free": _is_free_model(n, "openai")}
+                        "free": _is_free_model(n, "openai", prov.base_url)}
                        for n in names],
             "provider": provider_id, "latency_ms": probe["latency_ms"]}
 

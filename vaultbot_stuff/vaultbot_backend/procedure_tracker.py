@@ -93,6 +93,13 @@ DEMOTION_SUCCESS_RATE = 0.4     # below 40% -> flag for re-research
 MAX_LOG_ENTRIES = 500          # keep the log bounded
 STEP_FAILURE_THRESHOLD = 3     # step failures before step-level re-research
 
+# --- Static (time-based) promotion thresholds ---
+# For procedures that never hit PROMOTION_THRESHOLD uses organically
+# (most of a large library), time-based trust provides an alternative
+# promotion path: procedures that don't break over time earn trust.
+PROMOTION_MIN_AGE_DAYS = 14       # experimental → active after 14 days
+ACTIVE_TO_VERIFIED_DAYS = 30      # active → verified after 30 more days
+
 
 # --- Frontmatter update helper ---
 
@@ -552,6 +559,59 @@ class ProcedureTracker:
             return "flagged"
         return None
 
+    def check_static_promotion(
+        self, proc_name: str, fm: str, md_path: Path
+    ) -> str | None:
+        """Time-based promotion for procedures that never hit usage thresholds.
+
+        Most procedures in a large library are niche and will never reach
+        PROMOTION_THRESHOLD uses organically. This provides an alternative
+        path: procedures that don't break over time earn trust.
+
+        - experimental + zero failures + age > PROMOTION_MIN_AGE_DAYS → active
+        - active + zero failures + age > ACTIVE_TO_VERIFIED_DAYS → verified
+
+        Returns "active", "verified", or None (no change).
+        """
+        now = datetime.now(UTC)
+        # Parse the created date from frontmatter.
+        created_str = ""
+        for line in fm.split("\n"):
+            if line.strip().startswith("created:"):
+                created_str = line.split(":", 1)[1].strip().strip('"').strip("'")
+                break
+        if not created_str:
+            return None
+        try:
+            created = datetime.fromisoformat(created_str)
+        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            return None
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=UTC)
+        age_days = (now - created).days
+
+        # Check the failure log for this procedure.
+        data = self._read_log()
+        stats = data.get("summary", {}).get(proc_name, {})
+        failures = stats.get("failures", 0)
+
+        # Only promote if zero failures — a single failure resets the clock.
+        if failures > 0:
+            return None
+
+        # Determine current status from frontmatter.
+        current_status = ""
+        for line in fm.split("\n"):
+            if line.strip().startswith("status:"):
+                current_status = line.split(":", 1)[1].strip().strip('"').strip("'")
+                break
+
+        if current_status == "experimental" and age_days >= PROMOTION_MIN_AGE_DAYS:
+            return "active"
+        if current_status == "active" and age_days >= ACTIVE_TO_VERIFIED_DAYS:
+            return "verified"
+        return None
+
     def run_promotion_cycle(self, vault_path: str = ".") -> dict[str, list[str]]:
         """Scan all procedural notes in the vault and update their frontmatter.
 
@@ -560,6 +620,11 @@ class ProcedureTracker:
           and write the current success stats into frontmatter.
         - If check_promotion() returns "flagged", update status to "flagged"
           and write the current failure stats into frontmatter.
+        - If check_promotion() returns None (not enough usage data), fall
+          back to check_static_promotion() for time-based trust.
+        - Cascading invalidation: when a procedure is flagged or demoted,
+          any verified parent that depends on it (via provides) is downgraded
+          to active.
         - Otherwise, leave the note unchanged (not enough data yet).
 
         This is called by the autonomous researcher after each cycle.
@@ -567,16 +632,44 @@ class ProcedureTracker:
         write frontmatter. No LLM judgment.
 
         Returns:
-            {"promoted": [...], "flagged": [...], "unchanged": [...]}
+            {"promoted": [...], "flagged": [...], "unchanged": [...],
+             "static_promoted": [...], "cascade_downgraded": [...]}
         """
-        result = {"promoted": [], "flagged": [], "unchanged": []}
+        result = {
+            "promoted": [], "flagged": [], "unchanged": [],
+            "static_promoted": [], "cascade_downgraded": [],
+        }
+        # Build the reverse dependency index once for cascading invalidation.
+        rev_deps = self._build_reverse_deps(vault_path)
         for md, fm, _text in self._iter_procedural_notes(vault_path):
             try:
                 proc_name = md.stem
                 promotion = self.check_promotion(proc_name)
 
                 if promotion is None:
-                    result["unchanged"].append(proc_name)
+                    # Usage-based check didn't have enough data — try static.
+                    static = self.check_static_promotion(proc_name, fm, md)
+                    if static is not None:
+                        if static == "active":
+                            if "status: active" not in fm:
+                                update_frontmatter(md, {
+                                    "status": "active",
+                                    "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
+                                })
+                                result["static_promoted"].append(proc_name)
+                            else:
+                                result["unchanged"].append(proc_name)
+                        elif static == "verified":
+                            if "status: verified" not in fm:
+                                update_frontmatter(md, {
+                                    "status": "verified",
+                                    "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
+                                })
+                                result["static_promoted"].append(proc_name)
+                            else:
+                                result["unchanged"].append(proc_name)
+                    else:
+                        result["unchanged"].append(proc_name)
                     continue
 
                 # Get current stats from the log
@@ -609,12 +702,82 @@ class ProcedureTracker:
                             "success_rate": round(rate, 2),
                         })
                         result["flagged"].append(proc_name)
+                        # Cascading invalidation: downgrade verified parents.
+                        self._cascade_downgrade(
+                            proc_name, rev_deps, vault_path, result)
                     else:
                         result["unchanged"].append(proc_name)
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
 
         return result
+
+    def _build_reverse_deps(
+        self, vault_path: str = "."
+    ) -> dict[str, list[str]]:
+        """Build a reverse dependency index: {child_stem: [parent_stem, ...]}.
+
+        Walks all procedural notes, reads their ``provides`` frontmatter,
+        and inverts the graph. Used by cascading invalidation to find which
+        verified parents depend on a newly-flagged child.
+        """
+        rev: dict[str, list[str]] = {}
+        for md, fm, _text in self._iter_procedural_notes(vault_path):
+            parent = md.stem
+            # Parse provides list from frontmatter string.
+            provides: list[str] = []
+            current_key: str | None = None
+            for line in fm.split("\n"):
+                line = line.rstrip()
+                if not line:
+                    continue
+                if line.startswith("  - ") and current_key == "provides":
+                    value = line[4:].strip().strip('"').strip("'")
+                    if value:
+                        provides.append(value)
+                    continue
+                if ":" in line:
+                    key = line.split(":", 1)[0].strip()
+                    current_key = key
+            for child in provides:
+                child = child.strip()
+                if child:
+                    rev.setdefault(child, []).append(parent)
+        return rev
+
+    def _cascade_downgrade(
+        self,
+        flagged_child: str,
+        rev_deps: dict[str, list[str]],
+        vault_path: str,
+        result: dict[str, list[str]],
+    ) -> None:
+        """Downgrade verified parents when a child is flagged.
+
+        When a procedure is flagged, any verified parent that declares it
+        in ``provides`` is downgraded to ``active`` — the orchestrator's
+        verification is only as strong as its weakest child.
+        """
+        parents = rev_deps.get(flagged_child, [])
+        if not parents:
+            return
+        for parent_name in parents:
+            # Find the parent's file.
+            for md, fm, _text in self._iter_procedural_notes(vault_path):
+                if md.stem != parent_name:
+                    continue
+                if "status: verified" not in fm:
+                    continue
+                try:
+                    update_frontmatter(md, {
+                        "status": "active",
+                        "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
+                    })
+                    result["cascade_downgraded"].append(
+                        f"{parent_name} (child {flagged_child} flagged)")
+                except Exception:  # noqa: BLE001 — best-effort
+                    pass
+                break
 
     def reset_failures(self, procedure: str):
         """Reset failure count for a procedure after re-research.

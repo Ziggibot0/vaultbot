@@ -91,7 +91,7 @@ def main() -> int:
             "cycle_detected": True,
             "call_stack": call_stack,
         }))
-        return 0  # zero exit code so the parent step sees the JSON error
+        return 1  # non-zero exit code; JSON error is on stdout for the parent
 
     # --- Depth guard: cap recursion to avoid runaway token spend ---
     if len(call_stack) >= args.max_depth:
@@ -101,11 +101,14 @@ def main() -> int:
             "depth_exceeded": True,
             "call_stack": call_stack,
         }))
-        return 0
+        return 1
 
     # --- Resolve the procedure note by stem ---
     proc_file = None
     vault = Path(args.vault_path)
+    # Ensure VAULT_PATH is in the environment so code step subprocesses
+    # (spawned by execute_procedure) can find the vault root.
+    os.environ["VAULT_PATH"] = str(vault)
     for candidate in vault.rglob("*.md"):
         if candidate.stem == args.procedure_name:
             proc_file = candidate
@@ -114,23 +117,31 @@ def main() -> int:
         print(json.dumps({
             "error": f"procedure not found: {args.procedure_name}",
         }))
-        return 0
+        return 1
 
     proc = compile_procedure(str(proc_file))
     if proc is None:
         print(json.dumps({
             "error": f"not a procedure note: {args.procedure_name}",
         }))
-        return 0
+        return 1
 
     # --- Execute via the async runtime ---
+    # Read the procedure's model_cartridge to select the right LLM client.
+    # Falls back to 'big' if the field is missing or empty.
     try:
-        llm_client = _resolve_llm_client()
+        from llm_client import get_cartridge
+        cartridge = getattr(proc, 'model_cartridge', None) or 'big'
+        llm_client = get_cartridge(cartridge)
+        if llm_client is None:
+            # Cartridge not assigned — fall back to big
+            from llm_client import get_llm_client
+            llm_client = get_llm_client()
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         print(json.dumps({
             "error": f"LLM client unavailable: {e}",
         }))
-        return 0
+        return 1
 
     # --- Procedure tracker: log this child's pass/fail + step results --- #
     # When invoked as a sub-procedure (via run_procedure() in a parent's
@@ -167,7 +178,7 @@ def main() -> int:
             "error": f"runtime error: {e}",
             "traceback": __import__("traceback").format_exc(),
         }))
-        return 0
+        return 1
 
     # --- Serialise the ExecutionResult for the parent subprocess ---
     out = {

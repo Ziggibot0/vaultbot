@@ -238,6 +238,32 @@ def _build_tree_inner(
     return node
 
 
+def build_reverse_dependency_index(
+    proc_index: dict[str, dict[str, Any]],
+) -> dict[str, list[str]]:
+    """Build a reverse dependency index from the ``provides`` graph.
+
+    Returns ``{child_stem: [parent_stem, ...]}`` — for each procedure,
+    which other procedures declare it in their ``provides`` list.
+
+    This is the inverse of the forward ``provides`` graph. It answers
+    "who depends on me?" — used by cascading invalidation (when a child
+    is flagged, downgrade verified parents) and by the surface line
+    (show "used by: ..." for a child procedure).
+
+    Pure function — no I/O, no side effects. The caller owns proc_index.
+    """
+    rev: dict[str, list[str]] = {}
+    for parent_stem, entry in proc_index.items():
+        fm = entry.get("frontmatter") or {}
+        provides = _fm_list(fm, "provides")
+        for child_name in provides:
+            child_name = child_name.strip()
+            if child_name:
+                rev.setdefault(child_name, []).append(parent_stem)
+    return rev
+
+
 def _frontmatter_from_text(text: str) -> dict[str, Any] | None:
     """Minimal frontmatter parse for a note body (type/description/status/when).
 

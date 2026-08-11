@@ -19,7 +19,7 @@ the most important information and drops the rest, deterministically.
 
 Integration point in main.py:
     After build_abstract_context() returns the context string,
-    BEFORE build_system_prompt() bakes it into the system prompt.
+    BEFORE build_system_prompt_briefing() bakes it into the system prompt.
 
     budgeted = context_budgeter.budget(context, websocket.conversation_history)
     context = budgeted["context"]
@@ -61,7 +61,7 @@ class ContextBudgeter:
             os.getenv("VAULTBOT_CONTEXT_LIMIT", "32768")
         )
         # The overhead must reserve space for the NON-context portion of the
-        # system prompt: identity files (~3K tokens) + build_system_prompt
+        # system prompt: identity files (~3K tokens) + build_system_prompt_briefing
         # boilerplate (~2K) + gaps summary (~1K) + 24 tool schemas (~5K) +
         # headroom. The old default of 4096 vastly undercounted this, letting
         # the vault context grow to ~94K chars (~23K tokens) so the system
@@ -134,6 +134,20 @@ class ContextBudgeter:
             - self.response_reserve
         )
         available = max(0, available)  # never negative
+
+        # Hard cap on vault context: even on a 128K+ model where the
+        # computed budget is 100K+ tokens, flooding the model with a
+        # massive retrieved-context block causes long prompt-processing
+        # times (the user's "2000 t/s but still slow" symptom). The hard
+        # token cap in chat_handler guarantees the TOTAL conversation
+        # stays under ~60K tokens; this vault-context cap ensures we
+        # don't build a huge context just to have the hard cap prune it
+        # aggressively. 30K tokens (~120K chars) is generous for the L1
+        # highway + L0 drill-down. Override via VAULTBOT_MAX_CONTEXT_TOKENS.
+        _max_context_tokens = int(os.getenv(
+            "VAULTBOT_MAX_CONTEXT_TOKENS", "30000"))
+        if _max_context_tokens > 0 and available > _max_context_tokens:
+            available = _max_context_tokens
 
         # If context fits, no action needed
         if context_tokens <= available:

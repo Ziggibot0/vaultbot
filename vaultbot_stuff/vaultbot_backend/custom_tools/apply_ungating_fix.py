@@ -14,18 +14,20 @@ def run(args: dict) -> dict:
     
     # Backend dir is the parent of custom_tools/
     backend_dir = Path(__file__).resolve().parent.parent
+    trash_backups = backend_dir / "trash" / "backups"
+    trash_backups.mkdir(parents=True, exist_ok=True)
     
     # --- Fix 1: Copy identity.py.tmp -> identity.py ---
     tmp_path = backend_dir / "identity.py.tmp"
     id_path = backend_dir / "identity.py"
     
     if tmp_path.exists():
-        # Back up current identity.py
-        backup = backend_dir / "identity.py.bak"
+        # Back up current identity.py to trash/backups/
+        backup = trash_backups / "identity.py.bak"
         shutil.copy2(id_path, backup)
         # Copy .tmp over
         shutil.copy2(tmp_path, id_path)
-        results.append("identity.py: copied .tmp fix over original (backup at identity.py.bak)")
+        results.append("identity.py: copied .tmp fix over original (backup in trash/backups/)")
     else:
         errors.append(f"identity.py.tmp not found at {tmp_path}")
     
@@ -188,14 +190,14 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}'''
         
         # Write the modified file if any changes were made
         if content != original:
-            # Back up original
-            backup = backend_dir / "agent_tools.py.bak"
+            # Back up original to trash/backups/
+            backup = trash_backups / "agent_tools.py.bak"
             with open(backup, "w", encoding="utf-8") as f:
                 f.write(original)
             # Write modified
             with open(tools_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            results.append("agent_tools.py: written (backup at agent_tools.py.bak)")
+            results.append("agent_tools.py: written (backup in trash/backups/)")
         else:
             errors.append("agent_tools.py: no changes made (content identical)")
             

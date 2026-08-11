@@ -561,6 +561,27 @@ class AutonomousResearcher:
         if hasattr(self, '_heartbeat'):
             self._heartbeat("cycle starting")
 
+        try:
+            await self._cycle_impl(cycle_t0)
+        except Exception as e:
+            # A crashed cycle must still heartbeat so the health monitor
+            # knows the researcher thread is alive (just errored), not hung.
+            self._log("autonomous_cycle_error", {"error": str(e)})
+            if hasattr(self, '_heartbeat'):
+                self._heartbeat(f"cycle error: {e}")
+            # Re-raise so the _run loop's exception handler fires the
+            # on_crash callback and logs the full traceback.
+            raise
+        finally:
+            # Heartbeat at cycle end so the health monitor always has a
+            # fresh timestamp — even if the cycle was skipped or errored.
+            if hasattr(self, '_heartbeat'):
+                self._heartbeat("cycle complete")
+
+    async def _cycle_impl(self, cycle_t0: float):
+        """Core cycle logic — separated so the outer _cycle can heartbeat
+        on error without duplicating the try/except in every branch."""
+
         # --- Consolidation check ---
         # Every Nth cycle, run the semantic consolidation pipeline
         # (hippocampal replay) instead of gap-filling. This mines chat
@@ -692,6 +713,11 @@ class AutonomousResearcher:
                         "error": str(e), "category": "compaction_broken",
                     })
             note_path = self._research_to_note(gap)
+            # Heartbeat after each gap is researched so the health monitor
+            # knows the researcher is making progress, not hung on a slow
+            # web request or LLM call.
+            if hasattr(self, '_heartbeat'):
+                self._heartbeat(f"researched: {gap.get('topic', 'unknown')[:60]}")
             # Update the checkpoint with the result.
             ckpt["status"] = "done" if note_path else "failed"
             ckpt["completed_at"] = now_iso()

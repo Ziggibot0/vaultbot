@@ -32,6 +32,38 @@ inline annotations::
        log.append({"verdict": result})
        ```
 
+**Spec v2.1** (PREFERRED — human-readable): ``### Step N:`` headers with
+a short summary, followed by a bare ```` ```python ```` fence or
+``[llm: ...]`` tag on the next lines. This is the format all NEW procedures
+should use — the header's summary becomes the step's ``instruction``,
+shown in progress callbacks and logs. Without it, steps have no
+human-readable description::
+
+    ## Steps
+
+    ### Step 1: Search the vault for related notes
+
+    ```python
+    results = vault_search(query=claim, k=5)
+    related_notes = [r["file_path"] for r in results]
+    ```
+
+    ### Step 2: Determine if the claim is supported
+
+    [llm: Given the results, determine if the claim is supported.]
+
+    ### Step 3: Log the verification result
+
+    ```python
+    log.append({"verdict": result})
+    ```
+
+The parser also handles the **mixed** format (``### Step N:`` header
+followed by a matching ``N. `` ```` ```python ```` block on the next
+line) — it merges the header's instruction with the numbered code block
+into a single step. This is the dominant format across ~117 existing
+procedures.
+
 v2 frontmatter adds ``description`` (one-line summary for retrieval
 efficiency) and ``allowed_tools`` (permission scope for subprocess
 execution).
@@ -92,14 +124,14 @@ class Step:
         branch_target: Step number to jump to, parsed from
             ``[branch: step N]``.  None if no branch annotation.
     """
-    number: int
+    number: float
     instruction: str
     step_type: str = "text"
     code: str | None = None
     llm_instruction: str | None = None
     validation: str | None = None
     condition: str | None = None
-    branch_target: int | None = None
+    branch_target: float | None = None
 
 
 @dataclass
@@ -142,7 +174,7 @@ class Procedure:
 # Inline annotations in square brackets (v1, still used in v2 text steps)
 _VALIDATE_RE = re.compile(r'\[validate:\s*(.+?)\]', re.IGNORECASE)
 _CONDITION_RE = re.compile(r'\[condition:\s*(.+?)\]', re.IGNORECASE)
-_BRANCH_RE = re.compile(r'\[branch:\s*step\s+(\d+)\]', re.IGNORECASE)
+_BRANCH_RE = re.compile(r'\[branch:\s*step\s+(\d+(?:\.\d+)?)\]', re.IGNORECASE)
 
 # "## Steps" section header
 _STEPS_HEADER_RE = re.compile(r'^##\s+Steps\s*$', re.MULTILINE | re.IGNORECASE)
@@ -219,7 +251,7 @@ def _extract_annotations(
     """
     validation: str | None = None
     condition: str | None = None
-    branch_target: int | None = None
+    branch_target: float | None = None
 
     m = _VALIDATE_RE.search(text)
     if m:
@@ -231,7 +263,7 @@ def _extract_annotations(
 
     m = _BRANCH_RE.search(text)
     if m:
-        branch_target = int(m.group(1))
+        branch_target = float(m.group(1))
 
     # Strip annotations from instruction
     clean = text
@@ -320,8 +352,8 @@ def _parse_steps(body: str) -> list[Step]:
         if seen_steps and re.match(r'^##\s+', line):
             break
 
-        # Check for numbered step start
-        step_match = re.match(r'^(\d+)\.\s+(.+)', line)
+        # Check for numbered step start (supports decimals: 1, 1.5, 2.5, etc.)
+        step_match = re.match(r'^(\d+(?:\.\d+)?)\.\s+(.+)', line)
 
         # Bare ```python fence on the line(s) after a "### Step N:" header
         # (or after the header's instruction text) -> code step. This is the
@@ -341,15 +373,43 @@ def _parse_steps(body: str) -> list[Step]:
             i += 1
             continue
 
+        # Bare [llm: ...] on the line(s) after a "### Step N:" header
+        # (or after the header's instruction text) -> llm step. This lets
+        # procedures have a human-readable summary in the header AND an
+        # LLM instruction below it:
+        #   ### Step 1: Classify the results
+        #   [llm: Classify each result as relevant or not.]
+        if (not step_match
+                and current_step is not None
+                and current_from_header
+                and not collecting_llm
+                and line.strip().startswith('[llm:')):
+            llm_match = _LLM_RE.match(line.strip())
+            if llm_match:
+                # Single-line [llm: ...]
+                current_step.step_type = 'llm'
+                current_step.llm_instruction = llm_match.group(1).strip()
+                seen_steps = True
+                i += 1
+                continue
+            else:
+                # Multi-line [llm: ... — collect until closing ]
+                collecting_llm = True
+                llm_lines = [line.strip()[5:]]  # skip "[llm:"
+                current_step.step_type = 'llm'
+                seen_steps = True
+                i += 1
+                continue
+
         # Also accept "### Step N:" headers as step starts (the format used
         # by ~107 procedures, e.g. Know-Thyself). The instruction is the
         # text after the colon; a bare ```python fence on following lines
         # makes it a code step.
         header_match = None
         if not step_match:
-            header_match = re.match(r'^#{2,4}\s+Step\s+(\d+)[:\.\)]?\s*(.*)$', line.strip(), re.IGNORECASE)
+            header_match = re.match(r'^#{2,4}\s+Step\s+(\d+(?:\.\d+)?)[:\.\)]?\s*(.*)$', line.strip(), re.IGNORECASE)
             if header_match:
-                num_h = int(header_match.group(1))
+                num_h = float(header_match.group(1))
                 rest_h = header_match.group(2).strip()
                 if current_step is not None:
                     steps.append(current_step)
@@ -386,10 +446,50 @@ def _parse_steps(body: str) -> list[Step]:
                 continue
 
         if step_match:
-            # Save previous step
+            num = float(step_match.group(1))
+            rest = step_match.group(2).strip()
+
+            # --- Merge: if the previous step was a header step with the
+            # SAME number, upgrade it to code/llm instead of creating a
+            # duplicate.  This handles the common pattern:
+            #   ### Step 0: Scan
+            #   0. ```python
+            # Without this, the compiler creates two steps with the same
+            # number (a text step from the header + a code step from the
+            # numbered block), and only the text step executes.
+            if (current_step is not None
+                    and current_from_header
+                    and current_step.number == num):
+                if rest.startswith('```python'):
+                    in_code_block = True
+                    code_lines = []
+                    after_fence = rest[len('```python'):].strip()
+                    if after_fence:
+                        code_lines.append(after_fence)
+                    current_step.step_type = 'code'
+                    current_step.instruction = current_step.instruction or ''
+                    seen_steps = True
+                    i += 1
+                    continue
+                elif rest.startswith('[llm:'):
+                    llm_match = _LLM_RE.match(rest)
+                    if llm_match:
+                        current_step.step_type = 'llm'
+                        current_step.llm_instruction = llm_match.group(1).strip()
+                        seen_steps = True
+                        i += 1
+                        continue
+                    else:
+                        collecting_llm = True
+                        llm_lines = [rest[5:]]
+                        current_step.step_type = 'llm'
+                        seen_steps = True
+                        i += 1
+                        continue
+                # else: fall through — treat as a new step
+
+            # Save previous step (if not merged above)
             if current_step is not None:
-                # Header steps already carried their code/llm content into
-                # the step; only append numbered steps the old way.
                 if current_from_header:
                     steps.append(current_step)
                     current_step = None
@@ -398,8 +498,6 @@ def _parse_steps(body: str) -> list[Step]:
                     steps.append(current_step)
                     current_step = None
 
-            num = int(step_match.group(1))
-            rest = step_match.group(2).strip()
             current_from_header = False
 
             # Check for code block: "1. ```python"
@@ -559,6 +657,10 @@ def _compile_call(entry: dict, step_num: int,
         code = (
             f'# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n'
             f'_args = json.loads({json.dumps(args_json)})\n'
+            f'# Resolve template variables in string args (e.g. {{{{ intent }}}})\n'
+            f'for _k, _v in _args.items():\n'
+            f'    if isinstance(_v, str):\n'
+            f'        _args[_k] = _resolve_template(_v, _dispatch_ns)\n'
             f'_max_retries = {retry}\n'
             f'_last_error = None\n'
             f'for _attempt in range(_max_retries):\n'
@@ -647,6 +749,10 @@ def _compile_run(entry: dict, step_num: int,
         f'# Dispatch: run procedure {procedure_name}\n'
         f'_proc_name = {json.dumps(procedure_name)}\n'
         f'_proc_args = json.loads({json.dumps(proc_args_json)})\n'
+        f'# Resolve template variables in string args (e.g. {{{{ intent }}}})\n'
+        f'for _k, _v in _proc_args.items():\n'
+        f'    if isinstance(_v, str):\n'
+        f'        _proc_args[_k] = _resolve_template(_v, _dispatch_ns)\n'
         f'try:\n'
         f'    _raw = run_procedure(_proc_name, args=_proc_args)\n'
         f'    if isinstance(_raw, dict) and _raw.get("error"):\n'
@@ -823,8 +929,17 @@ def _compile_condition(entry: dict, step_num: int,
         if (val_raw.startswith("'") and val_raw.endswith("'")) or \
            (val_raw.startswith('"') and val_raw.endswith('"')):
             val = json.dumps(val_raw[1:-1])
+        elif val_raw in ("True", "False", "None"):
+            val = val_raw  # Python literal
         else:
-            val = val_raw  # number, boolean, etc.
+            try:
+                float(val_raw)  # number?
+                val = val_raw
+            except ValueError:
+                # Not a number, not quoted, not a Python literal —
+                # treat as a bare string and quote it so generated code
+                # uses a proper Python string literal.
+                val = json.dumps(val_raw)
     else:
         # Fallback: simple {{ var }} (truthy check)
         m2 = _TEMPLATE_RE.search(if_expr)
@@ -1097,16 +1212,17 @@ def compile_from_text(note_name: str, text: str) -> Procedure | None:
         steps = dispatch_steps + steps
 
     # Loud warning: the procedure has content but compiled 0 steps. This
-    # is almost always a format mismatch (### Step N: headers instead of
-    # 1. numbered lists). Log it so the issue is visible without guessing.
+    # is almost always a format mismatch (e.g. plain prose with no step
+    # markers at all). Log it so the issue is visible without guessing.
     if not steps and body.strip():
         _h3_steps = len(re.findall(r'^###\s+Step', body, re.MULTILINE))
         _num_steps = len(re.findall(r'^\d+\.\s+', body, re.MULTILINE))
         logger.warning(
             "compile_zero_steps: procedure '%s' has body content but "
             "parsed 0 steps. Found %d ### Step headers and %d numbered "
-            "list items. The compiler only recognizes numbered list "
-            "steps (1. ...) inside a ## Steps section.",
+            "list items. The compiler recognizes '### Step N:' headers "
+            "and 'N.' numbered lists inside a ## Steps section — check "
+            "that steps use one of these formats.",
             note_name, _h3_steps, _num_steps,
         )
 

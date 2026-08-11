@@ -47,6 +47,7 @@ from config import TUNABLES
 BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"
 BACKEND_ROOT = BACKEND_DIR.parent.parent  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
+TRASH_DIR = BACKEND_DIR / "trash" / "backups"  # all .bak files go here, not alongside source
 
 
 class SelfImprover:
@@ -55,6 +56,7 @@ class SelfImprover:
     def __init__(self, session_logger=None):
         self.session_logger = session_logger
         CUSTOM_TOOLS_DIR.mkdir(exist_ok=True)
+        TRASH_DIR.mkdir(parents=True, exist_ok=True)
         # Ensure there's an __init__.py so custom_tools is a package.
         init = CUSTOM_TOOLS_DIR / "__init__.py"
         if not init.exists():
@@ -184,10 +186,19 @@ class SelfImprover:
         try:
             full.parent.mkdir(parents=True, exist_ok=True)
             # Back up the existing file before overwriting so we can rollback.
+            had_backup = False
             if full.exists():
-                bak = full.with_suffix(full.suffix + ".bak")
+                bak = self._backup_path(full)
+                bak.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(full, bak)
+                had_backup = True
             full.write_text(content, encoding="utf-8")
+            # Clean up backup on success — the write is verified.
+            if had_backup:
+                try:
+                    bak.unlink()
+                except Exception:  # noqa: BLE001 — non-critical cleanup
+                    pass
             self._log("code_write", {"file_path": str(full), "length": len(content)})
             return {"file_path": str(full), "bytes": len(content)}
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -363,7 +374,8 @@ class SelfImprover:
             full.parent.mkdir(parents=True, exist_ok=True)
             had_backup = False
             if full.exists():
-                bak = full.with_suffix(full.suffix + ".bak")
+                bak = self._backup_path(full)
+                bak.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(full, bak)
                 had_backup = True
             full.write_text(content, encoding="utf-8")
@@ -381,7 +393,7 @@ class SelfImprover:
                 # is not left with a broken file.
                 if had_backup:
                     try:
-                        shutil.copy2(full.with_suffix(full.suffix + ".bak"), full)
+                        shutil.copy2(bak, full)
                         checks["auto_rollback"] = "restored from .bak"
                     except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
@@ -392,6 +404,12 @@ class SelfImprover:
                         checks["auto_rollback"] = "deleted new file (no prior .bak)"
                     except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
+                # Clean up the backup after rollback (success or failure).
+                if had_backup:
+                    try:
+                        bak.unlink()
+                    except Exception:  # noqa: BLE001 — non-critical cleanup
+                        pass
                 self._log("safe_write_rejected", {
                     "file_path": str(full), "error": err, "checks": checks})
                 return {"status": "rejected", "checks": checks,
@@ -419,8 +437,7 @@ class SelfImprover:
                 # Auto-rollback from .bak (same path as import failure).
                 if had_backup:
                     try:
-                        shutil.copy2(
-                            full.with_suffix(full.suffix + ".bak"), full)
+                        shutil.copy2(bak, full)
                         checks["auto_rollback"] = "restored from .bak"
                     except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
@@ -431,6 +448,12 @@ class SelfImprover:
                             "deleted new file (no prior .bak)")
                     except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
+                # Clean up the backup after rollback.
+                if had_backup:
+                    try:
+                        bak.unlink()
+                    except Exception:  # noqa: BLE001 — non-critical cleanup
+                        pass
                 self._log("safe_write_pytest_rejected", {
                     "file_path": str(full),
                     "error": p_out[:500], "checks": checks})
@@ -446,6 +469,12 @@ class SelfImprover:
 
         self._log("safe_write", {"file_path": str(full), "length": len(content),
                                   "is_core": is_core, "checks": checks})
+        # Clean up backup on success.
+        if had_backup:
+            try:
+                bak.unlink()
+            except Exception:  # noqa: BLE001 — non-critical cleanup
+                pass
         return {"status": "written", "file_path": str(full),
                 "bytes": len(content), "checks": checks, "is_core": is_core}
 
@@ -579,7 +608,8 @@ class SelfImprover:
         try:
             full.parent.mkdir(parents=True, exist_ok=True)
             if full.exists():
-                bak = full.with_suffix(full.suffix + ".bak")
+                bak = self._backup_path(full)
+                bak.parent.mkdir(parents=True, exist_ok=True)
                 _shutil.copy2(full, bak)
                 had_backup = True
             full.write_text(content, encoding="utf-8")
@@ -598,11 +628,16 @@ class SelfImprover:
             checks["write_verified"] = f"FAIL: {e}"
             if had_backup:
                 try:
-                    _shutil.copy2(full.with_suffix(full.suffix + ".bak"),
-                                  full)
+                    _shutil.copy2(bak, full)
                     checks["auto_rollback"] = "restored from .bak"
                 except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     checks["auto_rollback"] = f"FAILED: {rb_err}"
+            # Clean up the backup after rollback.
+            if had_backup:
+                try:
+                    bak.unlink()
+                except Exception:  # noqa: BLE001 — non-critical cleanup
+                    pass
             self._log("js_safe_write_verify_failed", {
                 "file_path": str(full), "error": str(e), "checks": checks})
             return {"status": "rejected", "checks": checks,
@@ -612,7 +647,7 @@ class SelfImprover:
         # Clean up backup on success
         if had_backup:
             try:
-                full.with_suffix(full.suffix + ".bak").unlink()
+                bak.unlink()
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # non-critical
 
@@ -1356,3 +1391,20 @@ class SelfImprover:
         if not allow_create and not candidate.exists():
             return None
         return candidate
+
+    @staticmethod
+    def _backup_path(target: Path) -> Path:
+        """Return the backup path for a target file, routed to trash/backups/.
+
+        Uses the target's relative path from the vault root to create a unique
+        backup name, so two files with the same name in different directories
+        don't collide.  Example: vaultbot_stuff/vaultbot_backend/main.py
+        -> trash/backups/vaultbot_stuff/vaultbot_backend/main.py.bak
+        """
+        try:
+            rel = target.resolve().relative_to(BACKEND_ROOT.resolve())
+        except ValueError:
+            # Target is outside vault root — fall back to filename only.
+            rel = Path(target.name)
+        bak = TRASH_DIR / str(rel).replace("\\", "/").replace("/", "_").replace("..", "_")
+        return bak.with_suffix(bak.suffix + ".bak")

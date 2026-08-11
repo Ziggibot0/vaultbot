@@ -307,7 +307,14 @@ async def lifespan(app: FastAPI):
                 except Exception as e:  # noqa: BLE001
                     startup_logger.log("model_preload_startup_failed", {"model": "small", "error": str(e)})
                 startup_logger.log("models_preloaded", {"models": _preloaded})
-            loop.run_in_executor(None, _preload_models)
+            # Run in a DEDICATED thread (not the default ThreadPoolExecutor)
+            # so a long preload (up to 300s for a cold large model) can't
+            # starve the executor pool that endpoints like /models and
+            # /llm/providers/live_models rely on for run_in_executor calls.
+            import threading as _threading
+            _preload_thread = _threading.Thread(
+                target=_preload_models, name="startup-preload", daemon=True)
+            _preload_thread.start()
 
         # Start the autonomous researcher so it begins filling vault gaps
         # in the background. It waits a short grace period before its first
@@ -820,6 +827,14 @@ try:
         stem: entry.get("frontmatter", {}).get("status", "")
         for stem, entry in _proc_idx.items()
     }
+    # Cache the stem index on the tracker so the chat handler's
+    # deterministic procedure hint, the procedure surface's `provides`
+    # expansion, and the preflight chain cartridge detection all work on
+    # the FIRST turn after startup — not only after the first
+    # execute_procedure call (which may never happen without the hint).
+    # The lazy rebuild in chat_handler._run_procedure_direct stays as a
+    # safety net for procedures created/edited mid-session.
+    procedure_tracker._stem_index = _proc_idx
 except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     default_session_logger.log("procedure_status_index_failed", {"error": str(e)})
 

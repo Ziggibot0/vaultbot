@@ -752,6 +752,279 @@ def _compress_conversation(
     return compressed, True, _est_tokens, _after_tokens
 
 
+# ---------------------------------------------------------------------------
+# Proactive tool-result aging — keep the model focused on recent results
+# ---------------------------------------------------------------------------
+# The token cap (_enforce_token_cap) only fires when total tokens exceed
+# ~60K. Below that, old tool results accumulate full-size across rounds and
+# the model re-processes them every round — bloating the prompt and
+# distracting the model from the current task. This function runs EVERY
+# round (before the token cap check) and stubs tool results older than N
+# rounds back to a 1-line summary, regardless of total token count.
+#
+# Why age-based, not size-based: the model already processed those results
+# in prior rounds. It doesn't need the full payload again — just a reminder
+# of what it did. The findings ledger (in the system prompt) already tracks
+# round-level outcomes; this complements it by shrinking the heavy payloads
+# that sit in conversation history. Together they keep the model aware of
+# its progress without forcing it to re-read stale data.
+#
+# Never breaks tool_call/tool_result pairing: stubs CONTENT only, keeps the
+# message + tool_call_id intact. Never touches the most recent N rounds so
+# the model can still act on results it just received.
+
+def _age_old_tool_results(
+    conversation: list[dict[str, Any]],
+    session_logger: Any = None,
+    round_idx: int = 0,
+) -> list[dict[str, Any]]:
+    """Stub old tool results to a 1-line summary, independent of token cap.
+
+    Runs every round. Tool results older than ``tool_age_rounds_back``
+    rounds (counted by assistant-with-tool_calls messages) get their
+    ``content`` replaced with a compact stub. The most recent N rounds are
+    kept verbatim so the model can act on results it just received.
+
+    Returns a new list; the caller's list is not mutated.
+    """
+    _rounds_back = int(os.getenv(
+        "VAULTBOT_TOOL_AGE_ROUNDS_BACK",
+        str(TUNABLES.tool_age_rounds_back)))
+    if _rounds_back <= 0:
+        return conversation  # disabled
+
+    _min_chars = int(os.getenv(
+        "VAULTBOT_TOOL_AGE_MIN_CHARS",
+        str(TUNABLES.tool_age_min_chars)))
+    _protect_reads = os.getenv(
+        "VAULTBOT_TOOL_AGE_PROTECT_FILE_READS",
+        "1" if TUNABLES.tool_age_protect_read_tools else "0") == "1"
+
+    # Build the list of assistant-message indices that carry tool_calls.
+    # Each such message marks the start of a tool round. We count rounds
+    # from the END of the conversation so "rounds back" is relative to now.
+    tool_round_starts: list[int] = []
+    for i, m in enumerate(conversation):
+        if isinstance(m, dict) and m.get("role") == "assistant" \
+                and m.get("tool_calls"):
+            tool_round_starts.append(i)
+
+    if len(tool_round_starts) <= _rounds_back:
+        return conversation  # not enough rounds to age anything
+
+    # The cutoff index: tool results at or after this conversation index
+    # are within the protected recent window and stay verbatim. Tool
+    # results BEFORE it are old enough to stub.
+    _cutoff_idx = tool_round_starts[-_rounds_back]
+
+    # Work on a shallow copy so we don't mutate the caller's list.
+    conv = [dict(m) if isinstance(m, dict) else m for m in conversation]
+    _stubbed = 0
+    for i in range(2, _cutoff_idx):  # skip system prompt + vault context
+        m = conv[i]
+        if not (isinstance(m, dict) and m.get("role") == "tool"):
+            continue
+        _content = m.get("content", "")
+        if not (isinstance(_content, str) and len(_content) > _min_chars):
+            continue
+        _tool_name = m.get("tool_name", "tool")
+        if _protect_reads and _tool_name in ("code_read", "vault_read_note"):
+            continue
+        # Build a compact stub: tool name + first line of the result so the
+        # model knows what it called and the gist of what it got back.
+        _preview = _content[:120].replace("\n", " ").strip()
+        conv[i] = dict(m)
+        conv[i]["content"] = (
+            f"[Old tool output from {_tool_name} (rounds ago) — "
+            f"cleared to keep context focused on the current task. "
+            f"Preview: {_preview}… Re-call the tool if you need the "
+            f"raw data again.]")
+        _stubbed += 1
+
+    if _stubbed and session_logger:
+        session_logger.log("tool_results_aged", {
+            "round": round_idx,
+            "stubbed_count": _stubbed,
+            "rounds_back": _rounds_back,
+            "cutoff_idx": _cutoff_idx,
+        })
+    return conv
+
+
+# ---------------------------------------------------------------------------
+# Hard token cap — the GUARANTEED ceiling on what's sent to the big LLM
+# ---------------------------------------------------------------------------
+# Every other budgeting mechanism (context_budgeter, preflight compression,
+# truncate_tool_result) is advisory and piecemeal. This function is the
+# enforcement layer: right before the LLM call, it estimates the total
+# token count of the entire conversation and, if it exceeds the cap,
+# prunes from the oldest/heaviest content first — without ever breaking
+# tool_call/tool_result pairs.
+#
+# Pruning strategy (in order, stop when under cap):
+#   1. Stub old tool-result CONTENT (not the message, not the pairing).
+#      Tool results from 2+ rounds ago that are still large get their
+#      content replaced with a 1-line stub. The tool_call_id and message
+#      index stay intact — the provider sees a valid pair, just with
+#      shrunk payload. The model already processed those results.
+#   2. If still over, stub ALL remaining old tool results (even small
+#      ones) outside the protected tail.
+#   3. If still over, drop old non-system, non-tool messages from the
+#      middle of conversation_history (keeping head + tail).
+#
+# The cap is ~60K tokens by default (TUNABLES.max_send_tokens, overridable
+# via VAULTBOT_MAX_SEND_TOKENS). This is the fix for the user's "2000 t/s
+# but still slow" symptom: the model was getting 100K+ tokens of prompt
+# every round because nothing else bounded the total.
+
+def _estimate_conv_tokens(conversation: list[dict[str, Any]]) -> int:
+    """Rough token estimate for the whole conversation (~4 chars/token)."""
+    total_chars = 0
+    for m in conversation:
+        if not isinstance(m, dict):
+            continue
+        content = m.get("content", "") or ""
+        if not isinstance(content, str):
+            content = str(content)
+        total_chars += len(content)
+        # tool_calls also consume tokens
+        tcs = m.get("tool_calls")
+        if tcs:
+            total_chars += len(json.dumps(tcs, default=str))
+    return max(1, total_chars // TUNABLES.chars_per_token)
+
+
+def _enforce_token_cap(
+    conversation: list[dict[str, Any]],
+    session_logger: Any = None,
+    round_idx: int = 0,
+) -> list[dict[str, Any]]:
+    """Guarantee the conversation fits within the hard token cap.
+
+    Mutates a COPY of conversation in place (the caller's list is not
+    affected — we return the trimmed copy). Never removes messages or
+    breaks tool_call/tool_result pairing; only shrinks content of old
+    tool results and, as a last resort, drops old middle messages.
+
+    Returns the (possibly trimmed) conversation list.
+    """
+    _cap = int(os.getenv(
+        "VAULTBOT_MAX_SEND_TOKENS",
+        str(TUNABLES.max_send_tokens)))
+    if _cap <= 0:
+        return conversation  # disabled
+
+    _est = _estimate_conv_tokens(conversation)
+    if _est <= _cap:
+        return conversation  # already under — no action
+
+    # Work on a shallow copy so we don't mutate the caller's list.
+    conv = [dict(m) if isinstance(m, dict) else m for m in conversation]
+
+    _protect_last = int(os.getenv(
+        "VAULTBOT_CAP_PROTECT_LAST_N", "8"))
+    _stub_min_chars = int(os.getenv(
+        "VAULTBOT_CAP_STUB_MIN_CHARS", "2000"))
+
+    # ── Phase 1: Stub large old tool results (2+ rounds back) ──
+    # Read tools (code_read, vault_read_note) are EXEMPT — the user wants
+    # the model to read the whole file, and the read_result_cap already
+    # bounds the initial size. Stubbing a read result the model is still
+    # reasoning over forces a re-read, wasting a round-trip.
+    _protect_read_tools = os.getenv(
+        "VAULTBOT_CAP_PROTECT_FILE_READS",
+        "1") == "1"
+    _pruned = 0
+    _cutoff = max(2, len(conv) - _protect_last)
+    for i in range(2, _cutoff):  # skip system prompt + vault context (0,1)
+        m = conv[i]
+        if not (isinstance(m, dict)
+                and m.get("role") == "tool"
+                and isinstance(m.get("content"), str)
+                and len(m["content"]) > _stub_min_chars):
+            continue
+        if _protect_read_tools and m.get("tool_name") in (
+                "code_read", "vault_read_note"):
+            continue
+        conv[i] = dict(m)
+        conv[i]["content"] = (
+            "[Old tool output cleared to stay within token cap. "
+            "Re-call the tool if you need the raw data again.]")
+        _pruned += 1
+
+    _est = _estimate_conv_tokens(conv)
+    if _est <= _cap:
+        if _pruned and session_logger:
+            session_logger.log("token_cap_pruned", {
+                "round": round_idx, "pruned_count": _pruned,
+                "est_tokens_before": _est, "est_tokens_after": _est,
+                "phase": "large_old_tools", "cap": _cap,
+            })
+        return conv
+
+    # ── Phase 2: Stub ALL old tool results (even small ones) ──
+    # Read tools are still exempt here — see Phase 1 comment.
+    _pruned2 = 0
+    for i in range(2, _cutoff):
+        m = conv[i]
+        if not (isinstance(m, dict)
+                and m.get("role") == "tool"
+                and isinstance(m.get("content"), str)
+                and len(m["content"]) > 200):
+            continue
+        if _protect_read_tools and m.get("tool_name") in (
+                "code_read", "vault_read_note"):
+            continue
+        conv[i] = dict(m)
+        conv[i]["content"] = (
+            "[Old tool output cleared to stay within token cap.]")
+        _pruned2 += 1
+
+    _est = _estimate_conv_tokens(conv)
+    if _est <= _cap:
+        if session_logger:
+            session_logger.log("token_cap_pruned", {
+                "round": round_idx, "pruned_count": _pruned + _pruned2,
+                "est_tokens_after": _est, "phase": "all_old_tools", "cap": _cap,
+            })
+        return conv
+
+    # ── Phase 3: Drop old middle messages (keep head + tail) ──
+    # Head = system prompt + vault context (indices 0,1) + first 2 history msgs.
+    # Tail = last _protect_last messages.
+    # Middle = old user/assistant turns that aren't tool messages.
+    _dropped = 0
+    _head_keep = 4  # system + context + first 2 conversation msgs
+    _tail_start = max(_head_keep, len(conv) - _protect_last)
+    new_conv = conv[:_head_keep]
+    for i in range(_head_keep, _tail_start):
+        m = conv[i]
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant"):
+            # Skip assistant messages that have tool_calls (would orphan tool results)
+            if m.get("tool_calls"):
+                new_conv.append(m)
+            else:
+                _dropped += 1
+                continue
+        else:
+            new_conv.append(m)
+    new_conv.extend(conv[_tail_start:])
+
+    _est = _estimate_conv_tokens(new_conv)
+    if session_logger:
+        session_logger.log("token_cap_pruned", {
+            "round": round_idx,
+            "pruned_tools": _pruned + _pruned2,
+            "dropped_msgs": _dropped,
+            "est_tokens_after": _est,
+            "phase": "drop_middle",
+            "cap": _cap,
+            "conv_before": len(conversation),
+            "conv_after": len(new_conv),
+        })
+    return new_conv
+
+
 def _digest_code_read(result: dict[str, Any]) -> dict[str, Any]:
     """Compress a code_read tool result into a compact structural digest.
 
@@ -900,6 +1173,131 @@ def _sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str,
         new_msg.pop("tool_calls", None)
         sanitized.append(new_msg)
     return sanitized
+
+
+# ---------------------------------------------------------------------------
+# Framework-forced procedure execution (preflight routing)
+# ---------------------------------------------------------------------------
+# The framework runs Route-Task BEFORE the big model sees the conversation,
+# then auto-executes small-cartridge chain steps. The big model becomes a
+# step-worker that receives pre-computed results and only handles big-cartridge
+# procedures + final synthesis. This removes the "decide what to do" cognitive
+# load from the big model — a local LLM can follow a chain much more reliably
+# than it can read a 1000-word prompt and self-route.
+
+async def _run_procedure_direct(
+    svc: Services,
+    proc_name: str,
+    proc_args: dict[str, Any] | None = None,
+    session_logger: Any = None,
+    user_message: str = "",
+) -> dict[str, Any]:
+    """Run a procedure directly from the framework (not from a model tool call).
+
+    Used in the preflight to run Route-Task and auto-execute small-cartridge
+    chain steps before the big model ever sees the conversation. Returns a
+    dict with procedure, overall_passed, final_output, cartridge, etc.
+    On any error, returns {"error": ...} — the caller handles fallback.
+    """
+    from procedure_compiler import compile_procedure as _compile_proc
+    from step_gate_runtime import execute_procedure as _run_proc
+
+    backend_dir = Path(__file__).parent.resolve()
+    vault_root = backend_dir.parent.parent  # vaultbot_backend -> vaultbot_stuff -> vault root
+
+    # Resolve via stem index (O(1)) with rglob fallback.
+    proc_file = None
+    try:
+        idx = getattr(svc.procedure_tracker, "_stem_index", None)
+        if idx is None:
+            idx = svc.procedure_tracker.get_procedure_index(str(vault_root))
+            svc.procedure_tracker._stem_index = idx
+        entry = idx.get(proc_name)
+        if entry:
+            proc_file = Path(entry["path"])
+    except Exception:  # noqa: BLE001 — best-effort; rglob fallback below
+        pass
+
+    if not proc_file:
+        for candidate in vault_root.rglob("*.md"):
+            if candidate.stem == proc_name:
+                proc_file = candidate
+                break
+
+    if not proc_file:
+        return {"error": f"procedure not found: {proc_name}"}
+
+    # Status gate: flagged procedures are blocked.
+    try:
+        _idx = getattr(svc.procedure_tracker, "_stem_index", None) or {}
+        _entry = _idx.get(proc_name) or {}
+        _status = str((_entry.get("frontmatter") or {}).get("status", ""))
+        _allowed, _gate_reason = status_allows_execution(_status)
+        if not _allowed:
+            return {"error": f"procedure blocked: {proc_name}",
+                    "status": _status, "blocked": True}
+    except Exception:  # noqa: BLE001 — best-effort; gate failure must not block execution
+        pass
+
+    proc = _compile_proc(str(proc_file))
+    if not proc:
+        return {"error": f"not a procedure note: {proc_name}"}
+
+    # Cartridge selection.
+    _cartridge = getattr(proc, "model_cartridge", "big") or "big"
+    _proc_llm_client = svc.ollama_client
+    try:
+        if _cartridge == "small":
+            from llm_client import get_small_client
+            _small = get_small_client(session_logger)
+            if _small is not None:
+                _proc_llm_client = _small
+        elif _cartridge == "vision":
+            from llm_client import get_vision_client
+            _vision = get_vision_client(session_logger)
+            if _vision is not None:
+                _proc_llm_client = _vision
+    except Exception:  # noqa: BLE001 — best-effort; fall back to big cartridge
+        pass
+
+    # Forward tracker log path for sub-procedure grading.
+    try:
+        _tracker_log_path = str(svc.procedure_tracker.log_path)
+        if _tracker_log_path:
+            os.environ["PROCEDURE_TRACKER_LOG"] = _tracker_log_path
+    except Exception:  # noqa: BLE001 — best-effort; sub-procedure logging is a bonus
+        pass
+
+    result = await _run_proc(
+        procedure=proc,
+        context="",
+        llm_client=_proc_llm_client,
+        vault_path=str(vault_root),
+        procedure_tracker=svc.procedure_tracker,
+        progress_callback=None,
+        procedure_args=proc_args or {},
+    )
+
+    # Drift feedback: nudge the procedure embedding toward/away from the query.
+    if user_message:
+        try:
+            _loop = asyncio.get_event_loop()
+            q_emb = await _loop.run_in_executor(
+                None, svc.vault_indexer._get_embedding, user_message)
+            svc.embedding_drift.record_feedback(
+                str(proc_file), q_emb, helpful=result.overall_passed)
+        except Exception:  # noqa: BLE001 — best-effort; drift feedback is a bonus
+            pass
+
+    return {
+        "procedure": proc_name,
+        "overall_passed": result.overall_passed,
+        "failed_step": result.failed_step,
+        "steps_executed": len(result.steps),
+        "final_output": result.final_output,
+        "child_procedures": result.child_procedures,
+        "cartridge": _cartridge,
+    }
 
 
 async def handle_chat(svc: Services, websocket: WebSocket,
@@ -1223,7 +1621,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # small model once per session and cache. This saves ~4-6K tokens
         # re-billed to the cloud every round. The dynamic parts (wm block,
         # procedure surface, conversation recall) are added uncompressed below.
-        _stable_prompt = _compress_stable_prompt(
+        # Run in an executor — _compress_stable_prompt makes synchronous
+        # requests.post() calls to the small model, which would block the
+        # event loop and cause the "hangs after finding gaps done" bug.
+        _stable_prompt = await run_with_heartbeat(
+            svc, websocket, "compressing system prompt",
+            _compress_stable_prompt,
             identity_context, _briefing, session_logger)
         system_prompt = _stable_prompt
         # NOTE: the working-memory task list is injected by the in-loop
@@ -1279,6 +1682,93 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 f"procedure surface build failed: {e}",
                 context="procedure_surface")
 
+        # --- Framework-forced Route-Task (preflight routing) --------------
+        # The framework runs Route-Task BEFORE the big model sees the
+        # conversation. Route-Task (small cartridge, cheap) classifies the
+        # intent and returns a procedure chain. The framework then auto-
+        # executes small-cartridge chain steps, collecting their results.
+        # The big model receives the pre-computed chain results and only
+        # handles big-cartridge procedures + final synthesis. This removes
+        # the "decide what to do" cognitive load — a local LLM can follow
+        # a chain much more reliably than it can self-route from a long
+        # system prompt.
+        #
+        # Skipped for: greetings/trivial messages, resumed turns (the model
+        # is mid-task), and when the small model is unavailable.
+        _preflight_chain: list[str] = []
+        _preflight_results: list[dict[str, Any]] = []
+        _preflight_category = ""
+        _msg_lower_check = user_message.strip().lower()
+        _is_trivial = _msg_lower_check in {"hi", "hello", "hey", "yo", "sup",
+            "ok", "thanks", "thank you"} or len(_msg_lower_check) < 5
+        if not _is_trivial and not _resumed_tool_history:
+            try:
+                await send_progress(svc, websocket, "routing", {})
+                _route_result = await _run_procedure_direct(
+                    svc, "Route-Task",
+                    proc_args={"intent": user_message},
+                    session_logger=session_logger,
+                    user_message=user_message)
+                await send_progress(svc, websocket, "routing_done", {})
+                if not _route_result.get("error"):
+                    _route_output = _route_result.get("final_output", "")
+                    if _route_output:
+                        try:
+                            _parsed = json.loads(_route_output)
+                        except (json.JSONDecodeError, TypeError):
+                            _parsed = {}
+                        _preflight_category = _parsed.get("category", "")
+                        _preflight_chain = _parsed.get("procedure_chain", [])
+                        if isinstance(_preflight_chain, list) and _preflight_chain:
+                            session_logger.log("preflight_route", {
+                                "category": _preflight_category,
+                                "chain": _preflight_chain,
+                            })
+                            # Auto-execute small-cartridge chain steps.
+                            # Big-cartridge steps are left for the big model.
+                            for _chain_proc in _preflight_chain:
+                                # Check cartridge before running.
+                                _chain_cartridge = "big"
+                                try:
+                                    _idx = getattr(svc.procedure_tracker,
+                                        "_stem_index", None) or {}
+                                    _entry = _idx.get(_chain_proc) or {}
+                                    _fm = _entry.get("frontmatter") or {}
+                                    _chain_cartridge = str(
+                                        _fm.get("model_cartridge", "big")
+                                    ).strip().lower() or "big"
+                                except Exception:  # noqa: BLE001 — best-effort; default to big
+                                    pass
+                                if _chain_cartridge == "small":
+                                    await send_progress(
+                                        svc, websocket,
+                                        f"running {_chain_proc}", {})
+                                    _chain_result = await _run_procedure_direct(
+                                        svc, _chain_proc,
+                                        proc_args={"intent": user_message},
+                                        session_logger=session_logger,
+                                        user_message=user_message)
+                                    _preflight_results.append(_chain_result)
+                                    session_logger.log(
+                                        "preflight_chain_step", {
+                                        "procedure": _chain_proc,
+                                        "cartridge": _chain_cartridge,
+                                        "passed": _chain_result.get(
+                                            "overall_passed"),
+                                    })
+                                else:
+                                    # Big-cartridge: stop here, let the
+                                    # big model handle the rest.
+                                    _preflight_results.append({
+                                        "procedure": _chain_proc,
+                                        "cartridge": _chain_cartridge,
+                                        "pending": True,
+                                    })
+                                    break
+            except Exception as e:  # noqa: BLE001 — best-effort; fall through to big model
+                session_logger.log("preflight_route_failed", {"error": str(e)})
+                # Fall through — the big model handles everything.
+
         # If we're resuming an interrupted turn, tell the model what it already
         # did so it continues instead of re-running tools.
         if _resumed_tool_history:
@@ -1327,12 +1817,58 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         conversation.extend(getattr(websocket, "conversation_history", []))
         conversation.append({"role": "user", "content": user_message})
 
-        # Inject the suggested action as the FINAL system message, after the
-        # user message, so it is the last thing the model reads before acting.
-        # This gives the model an immediate starting point without burying the
-        # hint under the vault context and conversation history. The model
-        # still decides whether to follow it (it is labeled pre-classification).
-        if _suggested_action:
+        # --- Preflight chain results injection ----------------------------
+        # If the framework already ran Route-Task and auto-executed small-
+        # cartridge chain steps, inject the results as a system message
+        # AFTER the user message. The big model sees what was already done
+        # and what remains. This replaces the old "SUGGESTED ACTION" hint
+        # with concrete pre-computed results.
+        if _preflight_chain:
+            _pf_lines = [
+                f"# PREFLIGHT ROUTING (framework already ran Route-Task)",
+                f"Category: {_preflight_category}",
+                f"Full chain: {' → '.join(_preflight_chain)}",
+                f"",
+            ]
+            _pending_chain: list[str] = []
+            for _pr in _preflight_results:
+                _pn = _pr.get("procedure", "?")
+                if _pr.get("pending"):
+                    _pending_chain.append(_pn)
+                else:
+                    _pf_lines.append(
+                        f"✓ {_pn} — ALREADY EXECUTED (passed: "
+                        f"{_pr.get('overall_passed', '?')})")
+                    _fo = _pr.get("final_output", "")
+                    if _fo:
+                        _pf_lines.append(
+                            f"  Result: {str(_fo)[:500]}")
+            if _pending_chain:
+                _pf_lines.append("")
+                _pf_lines.append(
+                    f"# YOUR JOB: run the remaining chain steps: "
+                    f"{' → '.join(_pending_chain)}")
+                _pf_lines.append(
+                    "Call execute_procedure for each in order. Do NOT "
+                    "re-run the already-executed steps above. After the "
+                    "chain completes, synthesize a final answer for the "
+                    "user.")
+            else:
+                _pf_lines.append("")
+                _pf_lines.append(
+                    "# YOUR JOB: all chain steps are done. Synthesize a "
+                    "final answer for the user from the results above.")
+            _pf_block = "\n".join(_pf_lines)
+            conversation.append({"role": "system", "content": _pf_block})
+            session_logger.log("preflight_chain_injected", {
+                "category": _preflight_category,
+                "chain": _preflight_chain,
+                "executed": sum(1 for p in _preflight_results
+                                if not p.get("pending")),
+                "pending": len(_pending_chain),
+            })
+        elif _suggested_action:
+            # Fallback: no preflight chain, use the old deterministic hint.
             conversation.append({"role": "system", "content": _suggested_action})
             session_logger.log("suggested_action_injected", {
                 "position": "post_user",
@@ -1672,9 +2208,49 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             round_tool_calls = []
             round_finish_reason: str | None = None
             chunk_count = 0
+
+            # ── Proactive tool-result aging ─────────────────────────────
+            # Runs EVERY round, before the token cap. Stubs tool results
+            # older than N rounds back to a 1-line summary so they don't
+            # bloat the prompt and distract the model from the current
+            # task. Unlike the token cap (which only fires when total
+            # tokens exceed 60K), this is age-based and fires regardless
+            # of total size — the model already processed those results
+            # in prior rounds and doesn't need the full payload again.
+            # Never breaks tool_call/tool_result pairing (stubs content
+            # only); never touches the most recent N rounds.
+            _pre_age_msgs = len(conversation)
+            _pre_age_tokens = _estimate_conv_tokens(conversation)
+            conversation = _age_old_tool_results(
+                conversation, session_logger=session_logger,
+                round_idx=round_idx)
+            _post_age_tokens = _estimate_conv_tokens(conversation)
+
+            # ── Hard token cap: GUARANTEED ceiling on prompt size ──────
+            # This runs EVERY round, right before the LLM call. Unlike
+            # the context_budgeter (which only budgets vault context) and
+            # preflight compression (which only fires once per turn at
+            # 50% of context window), this is the enforcement layer that
+            # guarantees the TOTAL conversation never exceeds ~60K tokens
+            # — regardless of context window size, accumulated tool
+            # results, or raw code_read dumps. It prunes old tool-result
+            # content (never breaking pairs) and, as a last resort, drops
+            # old middle messages. This is the fix for the "2000 t/s but
+            # still slow" symptom: the model was chewing through 100K+
+            # tokens of prompt every round.
+            _pre_cap_msgs = len(conversation)
+            _pre_cap_tokens = _estimate_conv_tokens(conversation)
+            conversation = _enforce_token_cap(
+                conversation, session_logger=session_logger,
+                round_idx=round_idx)
+            _post_cap_tokens = _estimate_conv_tokens(conversation)
+
             session_logger.log("llm_stream_start", {
                 "round": round_idx, "conv_msgs": len(conversation),
                 "conv_chars": sum(len(str(m.get("content","") or "")) for m in conversation),
+                "est_tokens": _post_cap_tokens,
+                "age_applied": _pre_age_tokens > _post_age_tokens,
+                "cap_applied": _pre_cap_tokens > _post_cap_tokens,
                 "t_ms": loop.time() * 1000,
             })
             # Tool-history sanitization is a NARROW workaround for the
@@ -1804,6 +2380,35 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             # ───────────────────────────────────────────────────────────────
             if not round_tool_calls:
                 if round_text.strip():
+                    # ── Plan-continuation guard ──
+                    # The model produced text without tool calls. If there are
+                    # unfinished plan tasks, the model likely expressed intent
+                    # ("Let me collect all chat notes...") but forgot to
+                    # actually call the tool in this round. Instead of
+                    # accepting this as the final answer, nudge it to continue.
+                    # This is NOT the old convergence nudge or stale-plan
+                    # detector — it's a specific guard against intent-without-
+                    # action when work remains. The model isn't done; it just
+                    # didn't fire the tool call.
+                    if wm.has_plan() and not wm.all_done():
+                        _unfinished = [t for t in wm.tasks
+                                       if t.status != "completed"]
+                        session_logger.log("plan_continuation_nudge", {
+                            "round": round_idx,
+                            "unfinished_tasks": len(_unfinished),
+                            "text_preview": round_text[:200],
+                        })
+                        conversation.append({
+                            "role": "user",
+                            "content": (
+                                "You expressed intent to continue working but "
+                                "didn't call any tools this round. You have "
+                                f"{len(_unfinished)} unfinished task(s). "
+                                "Call the appropriate tools now to continue."),
+                        })
+                        round_idx += 1
+                        continue
+
                     final_answer += round_text
                     session_logger.log("turn_done", {
                         "round": round_idx,
@@ -2105,12 +2710,20 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 }), websocket, session_logger=session_logger)
 
                 # Cap the tool result before appending.
-                # Read tools (vault_read_note, code_read) return the ENTIRE
-                # file: no truncation at all — the raw result passes through
-                # untouched so the model sees the whole file in one read.
-                # Other tools stay bounded by truncate_tool_result.
+                # ALL tool results are bounded. code_read / vault_read_note
+                # get a very generous cap (read_result_cap, default 120K chars
+                # ≈ 30K tokens) so the model sees the WHOLE file in virtually
+                # all cases — only truly enormous files (500K+ chars) that
+                # would actually hurt the model are truncated. Other tool
+                # results get the standard cap (10K chars). The hard token
+                # cap (_enforce_token_cap) is the final guarantee, and it
+                # also exempts read tools from stubbing.
+                _READ_CAP = int(os.getenv(
+                    "VAULTBOT_READ_RESULT_CAP",
+                    str(TUNABLES.read_result_cap)))
                 if tool_name in ("code_read", "vault_read_note"):
-                    capped_result = tool_result
+                    capped_result = truncate_tool_result(
+                        tool_result, max_chars=_READ_CAP)
                 else:
                     capped_result = truncate_tool_result(tool_result)
                 # --- Pre-digest large tool results (thinking models only) -----
@@ -2455,6 +3068,40 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             "thinking_length": len(thinking_text),
             "tool_rounds": round_idx + 1,
         })
+
+        # --- Stress signal: log intent + work summary for Dream Pass ---
+        # Every turn emits a stress_signal event. Dream Pass reads these
+        # to find high-effort manual work and create procedures that
+        # handle it next time. No LLM call here — just raw signals.
+        # The small model in Dream Pass does the intent+work summarization.
+        try:
+            _stress_tools = list(dict.fromkeys(
+                e.get("tool", "?") for e in _turn_tool_history
+            ))
+            _stress_procedures = any(
+                "execute_procedure" in t for t in _stress_tools
+            )
+            _stress_manual = (
+                not _stress_procedures
+                and len(_stress_tools) > 0
+                and _turn_token_totals.get("total_tokens", 0) > 2000
+            )
+            session_logger.log("stress_signal", {
+                "user_message": (user_message or "")[:500],
+                "tools_used": _stress_tools,
+                "tool_count": len(_stress_tools),
+                "rounds": round_idx + 1,
+                "findings": _findings[:20],
+                "prompt_tokens": _turn_token_totals.get("prompt_tokens", 0),
+                "completion_tokens": _turn_token_totals.get("completion_tokens", 0),
+                "total_tokens": _turn_token_totals.get("total_tokens", 0),
+                "failed_writes": _turn_failed_write_count,
+                "answer_length": len(final_answer),
+                "had_procedure_calls": _stress_procedures,
+                "had_manual_work": _stress_manual,
+            })
+        except Exception as _e:  # noqa: BLE001 — best-effort
+            session_logger.log("stress_signal_failed", {"error": str(_e)})
 
         # --- Notify the Obsidian plugin that vault files may have changed ---
         try:
@@ -3064,7 +3711,7 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             return {"error": "missing procedure_name"}
 
         backend_dir = Path(__file__).parent.resolve()
-        vault_root = backend_dir.parent
+        vault_root = backend_dir.parent.parent  # vaultbot_backend -> vaultbot_stuff -> vault root
 
         # Resolve the procedure file via the tracker's stem index (O(1)
         # after first build) instead of rglob-walking the vault on every
@@ -3283,11 +3930,17 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         if len(result.steps) == 0:
             _return_dict["diagnosis"] = (
                 "PROCEDURE COMPILED 0 STEPS. The procedure compiler "
-                "(procedure_compiler.py) only parses numbered list steps "
-                "(1. ...) inside a ## Steps section. It does NOT see "
-                "### Step N: headers. If your procedure uses ### headers, "
-                "rewrite them as '1. ```python ... ```' numbered steps. "
-                "See procedure_compiler.py _parse_steps for the format."
+                "(procedure_compiler.py) parses steps inside a ## Steps "
+                "section. The PREFERRED format is:\n"
+                "  ### Step N: short summary\n"
+                "  ```python\n"
+                "  code here\n"
+                "  ```\n"
+                "\n"
+                "  The legacy 'N. ```python ... ```' format also works. "
+                "Both require either a '### Step N:' header or a numbered "
+                "'N.' line followed by a ```python fence. Check your "
+                "procedure's ## Steps section format."
             )
         return _return_dict
 

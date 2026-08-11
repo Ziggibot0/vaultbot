@@ -170,6 +170,13 @@ class OllamaClient(_BASE):
     def list_models(self) -> list[str]:
         return self.list_local_models()
 
+    # Per-instance cache: model name → context window size.  A model's
+    # context window never changes at runtime, but /api/show is a blocking
+    # HTTP call that takes 1-5s for cloud models.  Caching it saves 7-10
+    # round-trips per chat turn (called from chat(), generate(), preflight
+    # compression, and the token meter).
+    _ctx_win_cache: dict[str, int] = {}
+
     def context_window(self, model: str | None = None) -> int:
         """Return the model's native context-window size in tokens.
 
@@ -179,12 +186,17 @@ class OllamaClient(_BASE):
         Works for both local and cloud (``:cloud``) Ollama models — both
         return the same show metadata shape.
 
+        Results are cached per-instance — a model's context window never
+        changes at runtime, so we only hit /api/show once per model.
+
         Raises on any failure — the caller must know the context window is
         unknown rather than silently getting a wrong 32768.
         """
         model = model or self.llm_model
         if not model:
             raise ValueError("context_window: no model specified and no default model set")
+        if model in self._ctx_win_cache:
+            return self._ctx_win_cache[model]
         try:
             resp = self._session.post(
                 f"{self.base_url}/api/show",
@@ -195,7 +207,9 @@ class OllamaClient(_BASE):
             # The key is "<arch>.context_length" — find it generically.
             for key, val in info.items():
                 if key.endswith(".context_length") and isinstance(val, (int, float)):
-                    return int(val)
+                    result = int(val)
+                    self._ctx_win_cache[model] = result
+                    return result
             # Some older Ollama builds expose it under parameters as a
             # "num_ctx" string like "262144".
             params = data.get("parameters") or ""
@@ -204,7 +218,9 @@ class OllamaClient(_BASE):
                     if tok.startswith("num_ctx"):
                         # "num_ctx" or "num_ctx:262144"
                         if ":" in tok:
-                            return int(tok.split(":")[-1])
+                            result = int(tok.split(":")[-1])
+                            self._ctx_win_cache[model] = result
+                            return result
             raise RuntimeError(f"context_window: /api/show returned no context_length for model {model!r}")
         except Exception as e:
             self._log_tool("context_window", {"model": model}, error=str(e))
@@ -438,7 +454,7 @@ class OllamaClient(_BASE):
     def is_running(self) -> bool:
         """Check if the Ollama server is running."""
         try:
-            response = self._session.get(f"{self.base_url}/api/tags")
+            response = self._session.get(f"{self.base_url}/api/tags", timeout=5)
             return response.status_code == 200
         except:
             return False
