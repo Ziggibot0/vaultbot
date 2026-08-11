@@ -197,22 +197,41 @@ if (Test-StepDone "models_pulled") {
     Set-StepDone "models_pulled"
 }
 
-# ── 6b. Ask: local chat model or cloud API? ────────────────────────────────
+# ── 6b. Pull the small model (always local, always free) ──────────────────
+# The small model cartridge (qwen3.5:0.8b, ~1 GB) handles classification,
+# routing, compression, and procedure dispatch. It runs on ANY laptop and
+# costs zero cloud tokens. This is the ONLY model the installer pulls
+# automatically — the big chat model is the user's choice.
+if (Test-StepDone "small_model_pulled") {
+    Write-Warn2 "Small model already downloaded -- skipping."
+} else {
+    Write-Step "Downloading small model: qwen3.5:0.8b (~1 GB, one-time only)..."
+    & ollama pull qwen3.5:0.8b
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn2 "Small model pull failed. You can run 'ollama pull qwen3.5:0.8b' manually later."
+        Write-Host "  VaultBot will still start — procedures will fall back to the big model." -ForegroundColor Yellow
+    } else {
+        Write-OK "Small model ready: qwen3.5:0.8b"
+    }
+    Set-StepDone "small_model_pulled"
+}
+
+# ── 6c. Ask: local chat model or cloud API? ────────────────────────────────
 # The embedding model (above) is mandatory and always local. The CHAT
 # model is the user's choice: a local Ollama model (free, private, heavy)
 # or a cloud API key (zero local compute, recommended for laptops).
 #
-# We default to local (LLM_BACKEND=ollama) because it's zero-config: the
-# user already has Ollama installed for embeddings. If they choose cloud,
-# we write LLM_BACKEND=openai into .env and they add their key later.
+# NO DEFAULT — the user picks their own model. The small model (qwen3.5:0.8b)
+# was already pulled above and handles all the cheap work.
 $chatBackend = "ollama"  # default
 $chatModel   = ""
 if (-not (Test-StepDone "chat_backend_chosen")) {
     Write-Host ""
-    Write-Host "  VaultBot needs a chat model to talk to you." -ForegroundColor Cyan
+    Write-Host "  VaultBot needs a big chat model for reasoning and synthesis." -ForegroundColor Cyan
+    Write-Host "  (A small model for routing/classification was already downloaded.)" -ForegroundColor DarkGray
     Write-Host "  Two options:" -ForegroundColor White
     Write-Host "    1. Local (free, private, uses Ollama — already installed)" -ForegroundColor White
-    Write-Host "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM." -ForegroundColor DarkGray
+    Write-Host "       You pick any Ollama model. Needs disk/RAM for the model." -ForegroundColor DarkGray
     Write-Host "    2. Cloud API (zero local compute, recommended for laptops)" -ForegroundColor White
     Write-Host "       You provide an API key later (OpenAI, OpenRouter, etc.)." -ForegroundColor DarkGray
     Write-Host ""
@@ -223,18 +242,22 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
         Write-Host "  You'll need an API key from OpenAI, OpenRouter, or any" -ForegroundColor Yellow
         Write-Host "  OpenAI-compatible provider. Add it to .env after setup:" -ForegroundColor Yellow
         Write-Host "    LLM_API_KEY=sk-..." -ForegroundColor White
-        Write-Host "    LLM_MODEL=gpt-4o-mini" -ForegroundColor White
-        Write-Host "  (Or set LLM_BACKEND=ollama in .env to use local instead.)" -ForegroundColor DarkGray
+        Write-Host "    LLM_MODEL=<your model name>" -ForegroundColor White
+        Write-Host "  Free-tier OpenRouter models work great. See openrouter.ai/models" -ForegroundColor DarkGray
     } else {
         $chatBackend = "ollama"
         Write-Host ""
         Write-Host "  Which model? Popular choices:" -ForegroundColor Cyan
-        Write-Host "    qwen3:latest       (4-8B, good balance, ~4 GB)" -ForegroundColor White
-        Write-Host "    llama3.2:latest    (3B, lightweight, ~2 GB)" -ForegroundColor White
+        Write-Host "    qwen3:1.7b          (tiny, ~1.4 GB)" -ForegroundColor White
+        Write-Host "    llama3.2:latest     (3B, lightweight, ~2 GB)" -ForegroundColor White
+        Write-Host "    qwen3:latest        (4-8B, good balance, ~4 GB)" -ForegroundColor White
         Write-Host "    qwen3.6:latest      (larger, best quality, ~8 GB)" -ForegroundColor White
-        Write-Host "  Type a model name or press Enter for qwen3:latest" -ForegroundColor DarkGray
+        Write-Host "  Type a model name (required — no default):" -ForegroundColor DarkGray
         $chatModel = Read-Host "  Model name"
-        if ([string]::IsNullOrWhiteSpace($chatModel)) { $chatModel = "qwen3:latest" }
+        while ([string]::IsNullOrWhiteSpace($chatModel)) {
+            Write-Host "  Please enter a model name (e.g. qwen3:latest):" -ForegroundColor Yellow
+            $chatModel = Read-Host "  Model name"
+        }
     }
     Set-StepDone "chat_backend_chosen"
 } elseif (Test-StepDone "chat_model_pulled") {
@@ -264,6 +287,7 @@ if (Test-StepDone "env_written") {
     $content = Get-Content $envExample -Raw
     $content = $content -replace 'VAULTBOT_OWNER=.*', "VAULTBOT_OWNER=$ownerName"
     $content = $content -replace 'LLM_BACKEND=.*', "LLM_BACKEND=$chatBackend"
+    $content = $content -replace 'SMALL_MODEL=.*', "SMALL_MODEL=qwen3.5:0.8b"
     if ($chatBackend -eq "ollama" -and $chatModel) {
         $content = $content -replace 'OLLAMA_LLM_MODEL=.*', "OLLAMA_LLM_MODEL=$chatModel"
     }

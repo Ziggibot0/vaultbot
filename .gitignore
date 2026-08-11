@@ -39,6 +39,7 @@ __pycache__/
 # VaultBot runtime state (regenerated on first run)
 # These are YOUR vault's state - another user's VaultBot makes its own.
 # ─────────────────────────────────────────────────────────────────────
+_test_*.py
 vaultbot_stuff/vaultbot_backend/identity/
 vaultbot_stuff/vaultbot_backend/sessions/
 vaultbot_stuff/vaultbot_backend/checkpoints/
@@ -58,7 +59,9 @@ vaultbot_stuff/vaultbot_backend/rag_eval_log.json
 vaultbot_stuff/vaultbot_backend/backend.log
 vaultbot_stuff/vaultbot_backend/backend.err
 vaultbot_stuff/vaultbot_backend/backend_stdout.log
+vaultbot_stuff/vaultbot_backend/backend_stdout.txt
 vaultbot_stuff/vaultbot_backend/backend_stderr.log
+vaultbot_stuff/vaultbot_backend/backend_stderr.txt
 vaultbot_stuff/vaultbot_backend/backend_live.log
 vaultbot_stuff/vaultbot_backend/pythonw_stdout.log
 vaultbot_stuff/vaultbot_backend/pythonw_stderr.log
@@ -66,12 +69,11 @@ vaultbot_stuff/vaultbot_backend/boot.log
 vaultbot_stuff/vaultbot_backend/maintenance.log
 vaultbot_stuff/vaultbot_backend/test_err.log
 vaultbot_stuff/vaultbot_backend/test_out.log
-vaultbot_stuff/vaultbot_backend/*.bak
-vaultbot_stuff/vaultbot_backend/*.bak.*
+vaultbot_stuff/vaultbot_backend/**/*.bak
+vaultbot_stuff/vaultbot_backend/**/*.bak.*
 vaultbot_stuff/vaultbot_backend/*.tmp
 vaultbot_stuff/vaultbot_backend/*.patched
 vaultbot_stuff/vaultbot_backend/*.pre_*
-vaultbot_stuff/vaultbot_backend/custom_tools/*.bak
 vaultbot_stuff/vaultbot_backend/_test_*.py
 vaultbot_stuff/vaultbot_backend/_diag*.py
 vaultbot_stuff/vaultbot_backend/_torture_test.py
@@ -224,3 +226,10 @@ boot_*.log
 .obsidian/core-plugins.json
 # Backup files
 *.bak
+
+# ─────────────────────────────────────────────────────────────────────
+# Personal content (NOT part of VaultBot)
+# The user's personal notes, lyrics, projects, etc. live alongside the
+# repo but must never be committed as part of VaultBot.
+# ─────────────────────────────────────────────────────────────────────
+Lyrics/

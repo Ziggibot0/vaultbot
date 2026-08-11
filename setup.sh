@@ -183,18 +183,40 @@ else
     mark_step_done "models_pulled"
 fi
 
-# ── 6b. Ask: local chat model or cloud API? ────────────────────────────────
+# ── 6b. Pull the small model (always local, always free) ──────────────────
+# The small model cartridge (qwen3.5:0.8b, ~1 GB) handles classification,
+# routing, compression, and procedure dispatch. It runs on ANY laptop and
+# costs zero cloud tokens. This is the ONLY model the installer pulls
+# automatically — the big chat model is the user's choice.
+if step_done "small_model_pulled"; then
+    echo "  [!]  Small model already downloaded -- skipping."
+else
+    echo ">>> Downloading small model: qwen3.5:0.8b (~1 GB, one-time only)..."
+    if ollama pull qwen3.5:0.8b; then
+        echo "  [OK] Small model ready: qwen3.5:0.8b"
+    else
+        echo "  [!]  Small model pull failed. You can run 'ollama pull qwen3.5:0.8b' manually later."
+        echo "  VaultBot will still start — procedures will fall back to the big model."
+    fi
+    mark_step_done "small_model_pulled"
+fi
+
+# ── 6c. Ask: local chat model or cloud API? ────────────────────────────────
 # The embedding model (above) is mandatory and always local. The CHAT
 # model is the user's choice: a local Ollama model (free, private, heavy)
 # or a cloud API key (zero local compute, recommended for laptops).
+#
+# NO DEFAULT — the user picks their own model. The small model (qwen3.5:0.8b)
+# was already pulled above and handles all the cheap work.
 CHAT_BACKEND="ollama"  # default
 CHAT_MODEL=""
 if ! step_done "chat_backend_chosen"; then
     echo ""
-    echo "  VaultBot needs a chat model to talk to you."
+    echo "  VaultBot needs a big chat model for reasoning and synthesis."
+    echo "  (A small model for routing/classification was already downloaded.)"
     echo "  Two options:"
     echo "    1. Local (free, private, uses Ollama — already installed)"
-    echo "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM."
+    echo "       You pick any Ollama model. Needs disk/RAM for the model."
     echo "    2. Cloud API (zero local compute, recommended for laptops)"
     echo "       You provide an API key later (OpenAI, OpenRouter, etc.)."
     echo ""
@@ -205,18 +227,22 @@ if ! step_done "chat_backend_chosen"; then
         echo "  You'll need an API key from OpenAI, OpenRouter, or any"
         echo "  OpenAI-compatible provider. Add it to .env after setup:"
         echo "    LLM_API_KEY=sk-..."
-        echo "    LLM_MODEL=gpt-4o-mini"
-        echo "  (Or set LLM_BACKEND=ollama in .env to use local instead.)"
+        echo "    LLM_MODEL=<your model name>"
+        echo "  Free-tier OpenRouter models work great. See openrouter.ai/models"
     else
         CHAT_BACKEND="ollama"
         echo ""
         echo "  Which model? Popular choices:"
-        echo "    qwen3:latest       (4-8B, good balance, ~4 GB)"
-        echo "    llama3.2:latest    (3B, lightweight, ~2 GB)"
+        echo "    qwen3:1.7b          (tiny, ~1.4 GB)"
+        echo "    llama3.2:latest     (3B, lightweight, ~2 GB)"
+        echo "    qwen3:latest        (4-8B, good balance, ~4 GB)"
         echo "    qwen3.6:latest      (larger, best quality, ~8 GB)"
-        echo "  Type a model name or press Enter for qwen3:latest"
+        echo "  Type a model name (required — no default):"
         read -p "  Model name: " CHAT_MODEL
-        CHAT_MODEL="${CHAT_MODEL:-qwen3:latest}"
+        while [ -z "$CHAT_MODEL" ]; do
+            echo "  Please enter a model name (e.g. qwen3:latest):"
+            read -p "  Model name: " CHAT_MODEL
+        done
     fi
     mark_step_done "chat_backend_chosen"
 fi
@@ -243,6 +269,8 @@ elif [ -f "$ENV_EXAMPLE" ]; then
     sed "s/^VAULTBOT_OWNER=.*/VAULTBOT_OWNER=$OWNER_NAME/" "$ENV_EXAMPLE" > "$ENV_FILE"
     sed -i.bak "s/^LLM_BACKEND=.*/LLM_BACKEND=$CHAT_BACKEND/" "$ENV_FILE" 2>/dev/null || \
         sed "s/^LLM_BACKEND=.*/LLM_BACKEND=$CHAT_BACKEND/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+    sed -i.bak "s/^SMALL_MODEL=.*/SMALL_MODEL=qwen3.5:0.8b/" "$ENV_FILE" 2>/dev/null || \
+        sed "s/^SMALL_MODEL=.*/SMALL_MODEL=qwen3.5:0.8b/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
     if [ "$CHAT_BACKEND" = "ollama" ] && [ -n "$CHAT_MODEL" ]; then
         sed -i.bak "s/^OLLAMA_LLM_MODEL=.*/OLLAMA_LLM_MODEL=$CHAT_MODEL/" "$ENV_FILE" 2>/dev/null || \
             sed "s/^OLLAMA_LLM_MODEL=.*/OLLAMA_LLM_MODEL=$CHAT_MODEL/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
