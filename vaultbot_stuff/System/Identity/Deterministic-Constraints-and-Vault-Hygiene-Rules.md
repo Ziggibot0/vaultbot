@@ -27,7 +27,7 @@ tags:
   - deterministic
   - workflow
   - verification
-summary: Deterministic-Constraints-and-Vault-Hygiene-Rules
+summary: Deterministic Framework for Local Small Models | Determinism, Vault Hygiene, Protocol Compliance
 ---
 
 # Deterministic-Constraints-and-Vault-Hygiene-Rules

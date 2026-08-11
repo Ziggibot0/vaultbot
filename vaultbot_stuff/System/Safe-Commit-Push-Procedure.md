@@ -10,7 +10,7 @@ allowed_tools:
   - code_run
 status: raw
 created: 2026-08-03
-summary: Safe Commit & Push Procedure
+summary: Safe Commit & Push Procedure Requires Strict .env isolation and Git ignore handling of VaultBot-specific paths to prevent personal data leakage. | CODE, SECURITY_CHECKOUT, VOLUME_CONTROL
 ---
 
 # Safe Commit & Push Procedure

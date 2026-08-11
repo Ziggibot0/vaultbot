@@ -9,7 +9,7 @@ tags:
   - contributions
 created: 2025-01-20
 status: raw
-summary: Community Contribution System
+summary: "VaultBot creates cross-fork PRs to verify user-generated AI tokens before merging them into the main branch, preventing unauthorized token contributions without approval review."
 ---
 
 # Community Contribution System
@@ -17,16 +17,16 @@ summary: Community Contribution System
 ## Goal
 
 Allow any VaultBot instance (with user permission) to submit pull requests
-to the upstream VaultBot repo. Sean's VaultBot reviews each PR for safety
+to the upstream VaultBot repo. The maintainer's VaultBot reviews each PR for safety
 and runs a torture test before merging to main. This way, other users' AI
-tokens pay for the thinking and contributions — not Sean's.
+tokens pay for the thinking and contributions — not the maintainer's.
 
 ## Architecture
 
 ```
 ┌──────────────────────────┐     ┌──────────────────────────┐
-│  Contributor's VaultBot   │     │  Sean's VaultBot (reviewer)│
-│  (any user, opt-in)       │     │  (repo owner)             │
+│  Contributor's VaultBot   │     │  Maintainer's VaultBot    │
+│  (any user, opt-in)       │     │  (repo owner / reviewer)  │
 ├──────────────────────────┤     ├──────────────────────────┤
 │  1. User gives permission │     │  1. List open PRs         │
 │  2. Fork upstream repo    │     │  2. Review each PR:       │
@@ -82,13 +82,13 @@ When the user does NOT have write access to `ziggibot-uni/vaultbot`:
 
 7. **Switch back to main** — clean up local state
 
-### Write-Access Flow (Sean's VaultBot)
+### Write-Access Flow (Maintainer)
 
-When the user HAS write access (Sean's own VaultBot), the current flow
+When the user HAS write access (maintainer's own VaultBot), the current flow
 works: push directly to origin and create a PR. The tool detects this by
 checking if `git push origin {branch}` succeeds.
 
-## Reviewer Flow (Sean's VaultBot)
+## Reviewer Flow (Maintainer)
 
 ### review_contributions tool
 
@@ -143,7 +143,7 @@ If any check fails:
    `allow_contributions` setting
 3. **Safety scan before push** — the contributor's VaultBot runs the
    same safety checks as the Safe-Commit-Push-Procedure before pushing
-4. **Reviewer torture test** — Sean's VaultBot independently verifies
+4. **Reviewer torture test** — the maintainer's VaultBot independently verifies
    every PR before merging
 5. **No direct push to main** — all contributions go through PR review
 6. **Token scope** — contributors only need `repo` scope (for forking
@@ -155,7 +155,7 @@ If any check fails:
 2. **review_contributions** (new) — list and review PRs
 3. **torture_test** (new) — run safety + import + syntax checks on PRs
 4. **Review-PR-Procedure** (new) — deterministic procedure note for
-   Sean's VaultBot to follow when reviewing
+   for the maintainer's VaultBot to follow when reviewing
 
 ## Upstream Repo
 

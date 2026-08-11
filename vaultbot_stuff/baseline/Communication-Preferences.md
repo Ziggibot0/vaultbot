@@ -2,7 +2,7 @@
 type: claim
 status: raw
 created: 2026-08-03
-summary: Communication Preferences
+summary: "Communication Preferences: Template filler for adapting to user style; preferences involve length, tone formality, and structure; no specific topics or sources listed. SUMMARY"
 tags:
   - claim
   - baseline

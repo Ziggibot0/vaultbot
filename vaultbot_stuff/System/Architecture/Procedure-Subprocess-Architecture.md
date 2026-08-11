@@ -113,33 +113,60 @@ Key additions from v1:
 
 ### Steps Section
 
+**PREFERRED format (v2.1) — human-readable `### Step N:` headers.**
+Every step MUST have a `### Step N: short-summary` header. The summary
+becomes the step's `instruction` field, shown in progress callbacks and
+logs. Procedures are read by normal people who can't read code — the
+header is how they reason about what each step does:
+
+```markdown
+## Steps
+
+### Step 1: Search the vault for related notes
+
+```python
+results = vault_search(query=claim, k=5)
+related_notes = [r["file_path"] for r in results]
+```
+
+### Step 2: Read the cited source
+
+```python
+source_text = web_read_source(url=cited_url)
+```
+
+### Step 3: Determine if the source entails the claim
+
+[llm: Given the source text from step 2 and the claim, determine whether the source entails the claim. Output "SUPPORTED" or "UNSUPPORTED" with a one-sentence explanation.]
+
+### Step 4: Log the verification result
+
+```python
+verification_log.append({
+    "claim": claim,
+    "source": cited_url,
+    "verdict": llm_output,
+    "step": 3
+})
+```
+
+### Step 5: Summarize the verification results
+
+[llm: Summarize the verification results. How many claims were supported? How many unsupported? What patterns do you see?]
+```
+
+**Legacy format (v2) — bare numbered steps.** Still accepted by the
+compiler but produces steps with empty instructions (no human-readable
+description). Don't use this for new procedures:
+
 ```markdown
 ## Steps
 
 1. ```python
-   # Search the vault for related notes
    results = vault_search(query=claim, k=5)
-   related_notes = [r["file_path"] for r in results]
    ```
 
-2. ```python
-   # Read the cited source
-   source_text = web_read_source(url=cited_url)
-   ```
-
-3. [llm: Given the source text from step 2 and the claim, determine whether the source entails the claim. Output "SUPPORTED" or "UNSUPPORTED" with a one-sentence explanation.]
-
-4. ```python
-   # Log the verification result
-   verification_log.append({
-       "claim": claim,
-       "source": cited_url,
-       "verdict": llm_output,
-       "step": 3
-   })
-   ```
-
-5. [llm: Summarize the verification results. How many claims were supported? How many unsupported? What patterns do you see?]
+2. [llm: Given the results, determine if the claim is supported.]
 ```
 
 ### How Retrieval Works
