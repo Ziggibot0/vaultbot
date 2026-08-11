@@ -1629,7 +1629,12 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// the settings tab — a non-tech user should never need to change it.
 		// The config status panel below shows effective values instead.
 
-		new Setting(containerEl)
+		const startupSection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		startupSection.createEl('h3', {text: 'Startup'});
+		startupSection.createEl('div', {cls: 'vaultbot-settings-blurb', text:
+			'Control what VaultBot launches automatically when Obsidian opens.'});
+
+		new Setting(startupSection)
 			.setName('Auto-start backend')
 			.setDesc('Start the VaultBot Python backend automatically when Obsidian opens')
 			.addToggle(toggle => toggle
@@ -1639,7 +1644,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		new Setting(containerEl)
+		new Setting(startupSection)
 			.setName('Auto-start MCP server')
 			.setDesc('Start the VaultBot MCP server (vault_research tool) when Obsidian opens, so MCP clients like Copilot Chat get a research tool grounded in this vault')
 			.addToggle(toggle => toggle
@@ -1655,46 +1660,84 @@ class VaultBotSettingTab extends PluginSettingTab {
 				}));
 
 		// ── AI Models & Providers (the interchangeable "pot") ────────────
-		// One places to add provider connections (one-time API key) and
+		// One place to add provider connections (one-time API key) and
 		// register models. Once a model is in the pot, ANY role (big / small /
 		// vision) can use it — picked from the header dropdowns or here. Local
 		// Ollama, OpenRouter, OpenAI, etc. all behave the same.
-		containerEl.createEl('h3', {text: 'AI Models & Providers'});
-		containerEl.createEl('div', {text:
+		const modelsSection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		modelsSection.createEl('h3', {text: 'AI Models & Providers'});
+		modelsSection.createEl('div', {cls: 'vaultbot-settings-blurb', text:
 			'Add a provider once (paste its API key), then add its models. ' +
 			'Every model you add appears in the Big / Small / Vision pickers in ' +
-			'the sidebar — assign any model to any role, across providers.',
-			attr: {style: 'opacity:0.7;font-size:0.85em;margin:2px 0 10px 0;'}});
+			'the sidebar — assign any model to any role, across providers.'});
 
-		const provStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.75;font-size:0.85em;min-height:1.1em;margin-bottom:8px;'}});
+		const provStatusEl = modelsSection.createEl('div', {cls: 'vaultbot-pot-status'});
 
-		// Provider list (each shows label + base_url + whether a key is set).
-		const provListEl = containerEl.createDiv({attr: {style: 'margin-bottom:8px;'}});
+		// ── Connected providers ──────────────────────────────────────
+		// Each provider is a card showing its label, endpoint URL, key
+		// status, model count, and a Remove button. New providers are added
+		// via the "Add provider" disclosure below.
+		const providersHeader = modelsSection.createDiv({cls: 'vaultbot-pot-subhead'});
+		providersHeader.createEl('span', {text: 'Providers'});
+		const addProviderToggle = providersHeader.createEl('button', {
+			text: '+ Add provider', cls: 'vaultbot-pot-mini-btn'});
+		const addProviderWrap = modelsSection.createEl('details', {cls: 'vaultbot-pot-add'});
+		// Toggle the disclosure with the header button so the user has one
+		// obvious affordance (the summary is hidden — see CSS).
+		addProviderToggle.addEventListener('click', () => {
+			addProviderWrap.open = !addProviderWrap.open;
+		});
+		addProviderWrap.createEl('summary', {text: 'Add a provider'});
 
-		// Add-provider form: a provider preset (or custom) + model id + key.
-		const newProvRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;'}});
-		newProvRow.createEl('span', {text: 'Provider', attr: {style: 'min-width:64px;font-size:0.85em;'}});
-		const provPresetSel = newProvRow.createEl('select');
-		provPresetSel.style.minWidth = '150px';
+		const provListEl = modelsSection.createDiv({cls: 'vaultbot-pot-providers'});
 
-		const provUrlInput = newProvRow.createEl('input', {type: 'text', attr: {placeholder: 'base URL (auto-filled)', style: 'flex:1;min-width:170px;'}});
-		const provKeyInput = newProvRow.createEl('input', {type: 'password', attr: {placeholder: 'API key (blank for local Ollama)', style: 'flex:1;min-width:170px;'}});
-		const addProvBtn = newProvRow.createEl('button', {text: 'Add provider', cls: 'mod-cta'});
+		// Add-provider form fields.
+		const provForm = addProviderWrap.createDiv({cls: 'vaultbot-pot-form'});
+		const provPresetSel = provForm.createEl('select', {cls: 'vaultbot-pot-input'});
+		provPresetSel.style.minWidth = '160px';
+		const provTypeSel = provForm.createEl('select', {cls: 'vaultbot-pot-input'});
+		provTypeSel.createEl('option', {text: 'OpenAI-compatible', attr: {value: 'openai'}});
+		provTypeSel.createEl('option', {text: 'Ollama', attr: {value: 'ollama'}});
+		const provIdInput = provForm.createEl('input', {type: 'text', cls: 'vaultbot-pot-input',
+			attr: {placeholder: 'provider id (unique)'}});
+		const provLabelInput = provForm.createEl('input', {type: 'text', cls: 'vaultbot-pot-input',
+			attr: {placeholder: 'display name (optional)'}});
+		const provUrlInput = provForm.createEl('input', {type: 'text', cls: 'vaultbot-pot-input',
+			attr: {placeholder: 'base URL (auto-filled)'}});
+		const provKeyInput = provForm.createEl('input', {type: 'password', cls: 'vaultbot-pot-input',
+			attr: {placeholder: 'API key (blank for local Ollama)'}});
+		const addProvBtn = provForm.createEl('button', {text: 'Connect provider', cls: 'mod-cta vaultbot-pot-btn'});
 
-		// Add-model form: pick one of the configured providers, name the model.
-		const newModelRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;'}});
-		newModelRow.createEl('span', {text: 'Model', attr: {style: 'min-width:64px;font-size:0.85em;'}});
-		const modelProvSel = newModelRow.createEl('select');
-		modelProvSel.style.minWidth = '150px';
+		// ── The pot: models in the registry ───────────────────────────
+		// Each model is a card showing the model name, its provider, role
+		// badges (big/small/vision), capability tags (👁 vision, 🆓/💰
+		// cost), and a Remove button. New models are added via the
+		// "Add model" disclosure below.
+		const potHeader = modelsSection.createDiv({cls: 'vaultbot-pot-subhead'});
+		potHeader.createEl('span', {text: 'Models in the pot'});
+		const addModelToggle = potHeader.createEl('button', {
+			text: '+ Add model', cls: 'vaultbot-pot-mini-btn'});
+		const addModelWrap = modelsSection.createEl('details', {cls: 'vaultbot-pot-add'});
+		addModelToggle.addEventListener('click', () => {
+			addModelWrap.open = !addModelWrap.open;
+		});
+		addModelWrap.createEl('summary', {text: 'Add a model'});
+
+		const potListEl = modelsSection.createDiv({cls: 'vaultbot-pot-models'});
+
+		// Add-model form fields.
+		const modelForm = addModelWrap.createDiv({cls: 'vaultbot-pot-form'});
+		const modelProvSel = modelForm.createEl('select', {cls: 'vaultbot-pot-input'});
 		// Live-model dropdown: populated from the provider's real /models list
 		// (fetched on provider change). Picks a model WITHOUT typing its id.
-		const liveModelSel = newModelRow.createEl('select');
-		liveModelSel.style.minWidth = '170px';
-		const modelIdInput = newModelRow.createEl('input', {type: 'text', attr: {placeholder: 'or type a model id', style: 'flex:1;min-width:120px;'}});
-		const visionChk = newModelRow.createEl('input', {type: 'checkbox'});
-		newModelRow.createEl('span', {text: 'vision', attr: {style: 'font-size:0.8em;opacity:0.7;'}});
-		const testModelBtn = newModelRow.createEl('button', {text: 'Test'});
-		const addModelBtn = newModelRow.createEl('button', {text: 'Add model', cls: 'mod-cta'});
+		const liveModelSel = modelForm.createEl('select', {cls: 'vaultbot-pot-input'});
+		const modelIdInput = modelForm.createEl('input', {type: 'text', cls: 'vaultbot-pot-input',
+			attr: {placeholder: 'or type a model id'}});
+		const visionChkWrap = modelForm.createEl('label', {cls: 'vaultbot-pot-check'});
+		const visionChk = visionChkWrap.createEl('input', {type: 'checkbox'});
+		visionChkWrap.createEl('span', {text: ' vision'});
+		const testModelBtn = modelForm.createEl('button', {text: 'Test', cls: 'vaultbot-pot-btn'});
+		const addModelBtn = modelForm.createEl('button', {text: 'Add model', cls: 'mod-cta vaultbot-pot-btn'});
 
 		// Fetch the provider's live model list into the dropdown (called on
 		// provider change + after adding a provider). Picks the first model.
@@ -1745,38 +1788,99 @@ class VaultBotSettingTab extends PluginSettingTab {
 			}
 		});
 
-		// The pot: one row per model with provider + role tags + remove button.
-		const potListEl = containerEl.createDiv({attr: {style: 'margin-bottom:8px;'}});
+		// ── Role assignment ───────────────────────────────────────────
+		// The three role cards let the user assign any model in the pot to
+		// the big / small / vision cartridge directly from Settings, with a
+		// clear preview of which model is currently in each role. This is the
+		// same /llm/role call the header dropdowns use — just surfaced here
+		// so the pot management is self-contained (add a model, then assign
+		// it, without leaving the tab).
+		const rolesHeader = modelsSection.createDiv({cls: 'vaultbot-pot-subhead'});
+		rolesHeader.createEl('span', {text: 'Role assignments'});
+		const rolesGrid = modelsSection.createDiv({cls: 'vaultbot-pot-roles'});
+		const ROLE_META = [
+			{role: 'big', label: 'Big', desc: 'Main chat + reasoning model'},
+			{role: 'small', label: 'Small', desc: 'Lightweight model for procedures'},
+			{role: 'vision', label: 'Vision', desc: 'Reads textbook pages (images)'},
+		];
+		const roleSelects = {};
+		ROLE_META.forEach(rm => {
+			const card = rolesGrid.createDiv({cls: 'vaultbot-pot-role-card'});
+			card.createEl('div', {cls: 'vaultbot-pot-role-label', text: rm.label});
+			card.createEl('div', {cls: 'vaultbot-pot-role-desc', text: rm.desc});
+			const sel = card.createEl('select', {cls: 'vaultbot-pot-role-select'});
+			sel.createEl('option', {text: '(none)', attr: {value: ''}});
+			roleSelects[rm.role] = sel;
+			sel.addEventListener('change', async () => {
+				const chosen = sel.value;
+				provStatusEl.setText(`Setting ${rm.label} role...`);
+				const res = await this.plugin.setRoleCfg(rm.role, chosen);
+				if (res && res.ok) {
+					const label = chosen
+						? (sel.options[sel.selectedIndex]?.text || chosen)
+						: '(none)';
+					provStatusEl.setText(`✓ ${rm.label} → ${label}`);
+					// Refresh the whole pot UI so role badges update on every model.
+					refreshPotUI();
+				} else {
+					provStatusEl.setText(`✗ ${rm.label} not saved: ${(res && res.detail) || 'no response'}`);
+					refreshPotUI();
+				}
+			});
+		});
 
 		const refreshPotUI = async () => {
+			// Wait for the backend to be ready before fetching — the header
+			// dropdowns do this via onceBackendReady, but the settings tab
+			// used to fire fetchProviders/fetchAllModels directly. If the
+			// backend was busy (e.g. a model preload freezing the event
+			// loop), both returned null and the pot appeared empty even
+			// though the models were there. This gate makes the settings
+			// tab as resilient as the header dropdowns.
+			provStatusEl.setText('Checking backend…');
+			const online = await this.plugin.onceBackendReady(5000, 500);
+			if (!online) {
+				provStatusEl.setText('Backend offline — start it to manage models.');
+				provListEl.empty();
+				potListEl.empty();
+				provPresetSel.empty();
+				modelProvSel.empty();
+				return;
+			}
 			const prov = await this.plugin.fetchProviders();
 			const all = await this.plugin.fetchAllModels();
 			// Rebuild provider preset dropdown from the backend's known presets.
 			if (prov && prov.known) {
 				const curPreset = provPresetSel.value;
 				provPresetSel.empty();
+				provPresetSel.createEl('option', {text: 'Custom provider...', attr: {value: '', disabled: true, selected: true}});
 				Object.entries(prov.known).forEach(([id, info]) => {
-					provPresetSel.createEl('option', {text: info.label || id, attr: {value: id, 'data-url': info.base_url || ''}});
+					provPresetSel.createEl('option', {text: info.label || id, attr: {value: id, 'data-url': info.base_url || '', 'data-type': info.type || 'openai'}});
 				});
 				if (curPreset) provPresetSel.value = curPreset;
-				// Fill the URL field from the selected preset.
+				// Fill the URL and type fields from the selected preset.
 				const fillUrl = () => {
 					const opt = provPresetSel.options[provPresetSel.selectedIndex];
 					if (opt && opt.getAttribute('data-url')) provUrlInput.value = opt.getAttribute('data-url');
+					if (opt && opt.getAttribute('data-type')) provTypeSel.value = opt.getAttribute('data-type');
+					if (opt && opt.value && !provIdInput.value.trim()) provIdInput.value = opt.value;
+					if (opt && opt.value && !provLabelInput.value.trim()) provLabelInput.value = opt.text;
 				};
-				fillUrl();
 				provPresetSel.onchange = fillUrl;
+				fillUrl();
 			}
-			// Existing providers list.
+			// Existing providers list — one card per provider.
 			provListEl.empty();
 			const providers = (prov && Array.isArray(prov.providers)) ? prov.providers : [];
 			if (!providers.length) {
-				provListEl.createEl('div', {text: 'No providers yet — add one above (local Ollama is preset with no key).', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
+				provListEl.createEl('div', {cls: 'vaultbot-pot-empty', text: 'No providers yet — add one below (local Ollama is preset with no key).'});
 			}
 			providers.forEach(p => {
-				const row = provListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin:2px 0;'}});
-				row.createEl('span', {text: `${p.label || p.id} — ${p.base_url}${p.has_key ? ' 🔑' : ''}`, attr: {style: 'flex:1;font-size:0.85em;'}});
-				const rm = row.createEl('button', {text: 'Remove'});
+				const card = provListEl.createDiv({cls: 'vaultbot-pot-prov-card'});
+				const info = card.createDiv({cls: 'vaultbot-pot-prov-info'});
+				info.createEl('div', {cls: 'vaultbot-pot-prov-name', text: p.label || p.id});
+				info.createEl('div', {cls: 'vaultbot-pot-prov-url', text: `${p.base_url}${p.has_key ? '  🔑' : ''}`});
+				const rm = card.createEl('button', {text: 'Remove', cls: 'vaultbot-pot-mini-btn'});
 				rm.addEventListener('click', async () => {
 					await this.plugin.removeProviderCfg(p.id);
 					new Notice(`Provider removed: ${p.label || p.id}`);
@@ -1787,24 +1891,58 @@ class VaultBotSettingTab extends PluginSettingTab {
 			modelProvSel.empty();
 			providers.forEach(p => modelProvSel.createEl('option', {text: p.label || p.id, attr: {value: p.id}}));
 			loadLiveModels();
-			// The pot list.
+			// The pot list — one card per model with role badges + tags.
 			potListEl.empty();
 			const models = (all && Array.isArray(all.models)) ? all.models : [];
 			if (!models.length) {
-				potListEl.createEl('div', {text: 'No models in the pot yet — add one above.', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
+				potListEl.createEl('div', {cls: 'vaultbot-pot-empty', text: 'No models in the pot yet — add one below.'});
 			}
 			models.forEach(m => {
-				const row = potListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin:2px 0;'}});
-				const tags = [];
-				if (m.vision) tags.push('👁');
-				if (m.roles && m.roles.length) tags.push('[' + m.roles.join(',') + ']');
-				row.createEl('span', {text: `${tags.length ? tags.join(' ') + ' ' : ''}${m.model}`, attr: {style: 'flex:1;font-size:0.85em;'}, title: `${m.provider_label || m.provider}`});
-				row.createEl('span', {text: m.provider_label || m.provider, attr: {style: 'font-size:0.75em;opacity:0.6;'}});
-				const rm = row.createEl('button', {text: 'Remove'});
+				const card = potListEl.createDiv({cls: 'vaultbot-pot-model-card'});
+				const info = card.createDiv({cls: 'vaultbot-pot-model-info'});
+				info.createEl('div', {cls: 'vaultbot-pot-model-name', text: m.model, title: `${m.provider_label || m.provider}`});
+				// Tag row: capability + cost + role badges.
+				const tagsEl = info.createDiv({cls: 'vaultbot-pot-tags'});
+				if (m.vision) tagsEl.createEl('span', {cls: 'vaultbot-tag vaultbot-tag-vision', text: '👁 vision'});
+				if (m.free === false) tagsEl.createEl('span', {cls: 'vaultbot-tag vaultbot-tag-paid', text: '💰 paid'});
+				else if (m.free) tagsEl.createEl('span', {cls: 'vaultbot-tag vaultbot-tag-free', text: '🆓 free'});
+				if (m.roles && m.roles.length) {
+					m.roles.forEach(r => tagsEl.createEl('span', {cls: 'vaultbot-tag vaultbot-tag-role', text: r}));
+				}
+				info.createEl('div', {cls: 'vaultbot-pot-model-prov', text: m.provider_label || m.provider});
+				const rm = card.createEl('button', {text: 'Remove', cls: 'vaultbot-pot-mini-btn'});
 				rm.addEventListener('click', async () => {
 					await this.plugin.removeModelCfg(m.id);
 					new Notice(`Removed ${m.model}`);
 					refreshPotUI();
+				});
+			});
+			// Role assignment dropdowns — populate each from the pot.
+			const roleModels = (all && Array.isArray(all.models)) ? all.models : [];
+			const roles = (all && all.roles) ? all.roles : {};
+			ROLE_META.forEach(rm => {
+				const sel = roleSelects[rm.role];
+				const cur = roles[rm.role] || '';
+				sel.empty();
+				sel.createEl('option', {text: '(none)', attr: {value: ''}});
+				// Group by provider for readability.
+				const byProvider = {};
+				roleModels.forEach(m => {
+					if (!m.instruct) return;
+					const key = m.provider_label || m.provider || '';
+					(byProvider[key] = byProvider[key] || []).push(m);
+				});
+				Object.keys(byProvider).forEach(provLabel => {
+					const og = sel.createEl('optgroup', {label: provLabel});
+					byProvider[provLabel].forEach(m => {
+						const tags = [];
+						if (m.vision) tags.push('👁');
+						if (m.free === false) tags.push('💰');
+						else if (m.free) tags.push('🆓');
+						const text = (tags.length ? tags.join(' ') + ' ' : '') + m.model;
+						const opt = og.createEl('option', {text, attr: {value: m.id}});
+						if (m.id === cur) opt.selected = true;
+					});
 				});
 			});
 			provStatusEl.setText(providers.length
@@ -1815,17 +1953,27 @@ class VaultBotSettingTab extends PluginSettingTab {
 		addProvBtn.addEventListener('click', async () => {
 			provStatusEl.setText('Testing endpoint...');
 			const opt = provPresetSel.options[provPresetSel.selectedIndex];
-			const id = opt ? opt.value : 'custom';
+			const id = provIdInput.value.trim() || (opt ? opt.value : '');
 			const url = provUrlInput.value.trim();
+			const type = provTypeSel.value || (opt ? opt.getAttribute('data-type') : 'openai');
+			const label = provLabelInput.value.trim() || id || (opt ? opt.text : 'custom');
+			if (!id) {
+				provStatusEl.setText('Enter a provider id/name first.');
+				return;
+			}
+			if (!url) {
+				provStatusEl.setText('Enter the provider base URL first.');
+				return;
+			}
 			const res = await this.plugin.addProviderCfg({
-				id, type: (id.includes('ollama') ? 'ollama' : 'openai'),
-				baseUrl: url, apiKey: provKeyInput.value.trim(),
-				label: opt ? opt.text : id});
+				id, type, baseUrl: url, apiKey: provKeyInput.value.trim(),
+				label});
 			if (res && res.status === 'ok') {
 				provKeyInput.value = '';
 				const n = res.probe ? res.probe.count : 0;
-				new Notice(`Provider connected: ${opt ? opt.text : id} (${n} model${n === 1 ? '' : 's'} found)`);
+				new Notice(`Provider connected: ${label} (${n} model${n === 1 ? '' : 's'} found)`);
 				provStatusEl.setText(`✓ connected — ${n} model(s) available.`);
+				addProviderWrap.open = false;
 				refreshPotUI();
 			} else {
 				provStatusEl.setText(`✗ ${res && res.detail ? res.detail : 'endpoint test failed'} — not saved.`);
@@ -1844,6 +1992,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				modelIdInput.value = '';
 				visionChk.checked = false;
 				new Notice(`Model added to the pot: ${modelId}`);
+				addModelWrap.open = false;
 				refreshPotUI();
 			} else {
 				provStatusEl.setText('Failed — pick a provider and a model.');
@@ -1855,12 +2004,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// so the user can see which config source is "winning" (plugin panel
 		// vs .env file) without grepping .env. Conflicts (panel and .env
 		// disagree) are shown as warnings. Calls GET /config/effective.
-		containerEl.createEl('h3', {text: 'Configuration Status'});
-		const configStatusEl = containerEl.createEl('div',
-			{cls: 'vaultbot-config-status'});
-		const configRefreshBtn = containerEl.createEl('button',
-			{text: 'Refresh config status'});
-		configRefreshBtn.style.marginBottom = '8px';
+		const configSection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		configSection.createEl('h3', {text: 'Configuration Status'});
+		const configStatusEl = configSection.createEl('div', {cls: 'vaultbot-config-status'});
+		const configRefreshBtn = configSection.createEl('button',
+			{text: 'Refresh config status', cls: 'vaultbot-pot-mini-btn'});
 		const refreshConfigStatus = async () => {
 			configStatusEl.empty();
 			configStatusEl.createEl('div', {
@@ -1925,12 +2073,9 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// but still accessible for the rare case it's needed. The placeholder
 		// is 127.0.0.1 (not localhost — the code rewrites localhost to
 		// 127.0.0.1 on load to avoid the IPv6/IPv4 resolution bug).
-		const advDisclosure = containerEl.createEl('details',
-			{cls: 'vaultbot-advanced'});
-		advDisclosure.createEl('summary',
-			{text: 'Advanced', cls: 'vaultbot-advanced-summary'});
-		const advBody = advDisclosure.createEl('div');
-		advBody.style.marginTop = '8px';
+		const advDisclosure = configSection.createEl('details', {cls: 'vaultbot-advanced'});
+		advDisclosure.createEl('summary', {text: 'Advanced', cls: 'vaultbot-advanced-summary'});
+		const advBody = advDisclosure.createEl('div', {cls: 'vaultbot-advanced-body'});
 		new Setting(advBody)
 			.setName('Backend URL')
 			.setDesc('URL of the VaultBot backend API. Only change this if you ' +
@@ -1943,9 +2088,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', {text: 'Research Backend'});
+		// ── Research Backend ──────────────────────────────────────────
+		const researchSection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		researchSection.createEl('h3', {text: 'Research Backend'});
 
-		new Setting(containerEl)
+		new Setting(researchSection)
 			.setName('Search backend')
 			.setDesc('Tavily is the sole search backend (API-key\u2019d, reliable, no rate-limiting). Set your key below.')
 			.addDropdown(dropdown => dropdown
@@ -1957,12 +2104,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 					await this.plugin.pushResearchConfig();
 				}));
 
-		const tavilySetting = new Setting(containerEl)
+		const tavilySetting = new Setting(researchSection)
 			.setName('Tavily API key')
 			.setDesc('Free key from tavily.com. Stored in the plugin settings + written to the vault .env. Required for research.');
-		const tavilyInput = tavilySetting.controlEl.createEl('input', {type: 'password', attr: {placeholder: 'tvly-...'}});
+		const tavilyInput = tavilySetting.controlEl.createEl('input', {type: 'password', cls: 'vaultbot-pot-input', attr: {placeholder: 'tvly-...'}});
 		tavilyInput.value = this.plugin.settings.tavilyApiKey || '';
-		tavilyInput.style.minWidth = '220px';
 		tavilyInput.addEventListener('change', async () => {
 			this.plugin.settings.tavilyApiKey = tavilyInput.value.trim();
 			await this.plugin.saveSettings();
@@ -1983,16 +2129,13 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// without navigating folders or editing markdown — the panel writes
 		// the file (and the directive takes effect on the next chat turn
 		// via retrieval). Power users can still edit the .md directly.
-		containerEl.createEl('h3', {text: 'Directives'});
-		const dirDesc = containerEl.createEl('div');
-		dirDesc.setText(
-			'These toggles shape how VaultBot behaves. Each one writes a ' +
+		const directivesSection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		directivesSection.createEl('h3', {text: 'Directives'});
+		directivesSection.createEl('div', {cls: 'vaultbot-settings-blurb',
+			text: 'These toggles shape how VaultBot behaves. Each one writes a ' +
 			'short directive note that VaultBot reads on its next turn. ' +
 			'You can also edit the notes directly at the vault root — the ' +
-			'toggles are just a quick way to turn them on or off.');
-		dirDesc.style.opacity = '0.7';
-		dirDesc.style.fontSize = '0.85em';
-		dirDesc.style.marginBottom = '10px';
+			'toggles are just a quick way to turn them on or off.'});
 
 		// Each directive: path at vault root, short title, description,
 		// and the content to write when enabled. The content is a concise
@@ -2052,7 +2195,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				exists = !!(file && file.path);
 			} catch (e) { exists = false; }
 
-			const setting = new Setting(containerEl)
+			const setting = new Setting(directivesSection)
 				.setName(d.title)
 				.setDesc(d.desc);
 			const toggle = setting.addToggle(t => t
@@ -2089,16 +2232,16 @@ class VaultBotSettingTab extends PluginSettingTab {
 			dirToggles.push(toggle);
 		}
 
-		containerEl.createEl('h3', {text: 'Community contributions'});
-		containerEl.createEl('div', {text:
+		const communitySection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		communitySection.createEl('h3', {text: 'Community contributions'});
+		communitySection.createEl('div', {cls: 'vaultbot-settings-blurb', text:
 			'Allow your VaultBot to submit improvements (bug fixes, new tools, ' +
 			'documentation) to the upstream VaultBot repo as pull requests. ' +
 			'Your notes, chat logs, and personal data are NEVER included \u2014 ' +
 			'only code files. You also need a GITHUB_TOKEN in your .env file. ' +
-			'See CONTRIBUTING.md for details.',
-			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+			'See CONTRIBUTING.md for details.'});
 
-		new Setting(containerEl)
+		new Setting(communitySection)
 			.setName('Allow contributions')
 			.setDesc('Let your VaultBot submit pull requests to the VaultBot project')
 			.addToggle(toggle => toggle
@@ -2109,7 +2252,8 @@ class VaultBotSettingTab extends PluginSettingTab {
 					new Notice(value ? 'Contributions enabled' : 'Contributions disabled');
 				}));
 
-		containerEl.createEl('h3', {text: 'Updates'});
+		const updatesSection = containerEl.createDiv({cls: 'vaultbot-settings-section'});
+		updatesSection.createEl('h3', {text: 'Updates'});
 
 		// One-click self-updater. Pulls the latest CODE from GitHub and
 		// applies it over the live vault. User state is never touched:
@@ -2123,23 +2267,21 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// Only vaultbot_backend/*.py + the plugin's main.js/manifest/styles
 		// are replaced. The backend is stopped first (Windows locks .py
 		// files while running) and restarted automatically when done.
-		containerEl.createEl('div', {text:
+		updatesSection.createEl('div', {cls: 'vaultbot-settings-blurb', text:
 			'Update VaultBot to the latest version from GitHub. This replaces ' +
 			'only the code (backend Python files + this plugin) \u2014 your notes, ' +
 			'chat logs, API keys, model choice, custom tools your bot built, and ' +
 			'all other settings are kept safe. Any file that differs from the ' +
 			'update is backed up to .vaultbot-update-backup/ first, so nothing ' +
-			'is ever lost. The backend restarts automatically when done.',
-			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+			'is ever lost. The backend restarts automatically when done.'});
 
-		const updateRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;'}});
-		const refInput = updateRow.createEl('input', {type: 'text', attr: {
-			placeholder: 'main (branch or tag)',
-			style: 'flex:1;min-width:140px;'}});
+		const updateRow = updatesSection.createDiv({cls: 'vaultbot-pot-form'});
+		const refInput = updateRow.createEl('input', {type: 'text', cls: 'vaultbot-pot-input',
+			attr: {placeholder: 'main (branch or tag)'}});
 		refInput.value = 'main';
-		const checkBtn = updateRow.createEl('button', {text: 'Check for updates'});
-		const updateBtn = updateRow.createEl('button', {text: 'Update from GitHub', cls: 'mod-cta'});
-		const updateStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin-top:6px;'}});
+		const checkBtn = updateRow.createEl('button', {text: 'Check for updates', cls: 'vaultbot-pot-btn'});
+		const updateBtn = updateRow.createEl('button', {text: 'Update from GitHub', cls: 'mod-cta vaultbot-pot-btn'});
+		const updateStatusEl = updatesSection.createEl('div', {cls: 'vaultbot-pot-status'});
 
 		// Show the currently-installed version from manifest.json.
 		let installedVersion = '?';
@@ -2184,7 +2326,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// the backend so the restored (pre-update) code runs. This surfaces
 		// the existing .vaultbot-update-backup/ safety net to the user.
 		const restoreBtn = updateRow.createEl('button', {
-			text: 'Restore last version', cls: 'mod-cta'});
+			text: 'Restore last version', cls: 'mod-cta vaultbot-pot-btn'});
 		restoreBtn.style.display = 'none';
 		restoreBtn.title = 'Restore the code from before the last update attempt.';
 
@@ -3228,13 +3370,46 @@ class VaultBotSidebarView extends ItemView {
 		// collapse when the actual answer starts streaming so they don't
 		// clutter the chat. The header stays as a clickable toggle so the
 		// user can re-expand any past thinking block.
-		let currentThinkingHeader = null;
+	let currentThinkingHeader = null;
+		// thinkingConsumed: true once the current thinking block has been
+		// collapsed (answer text or a tool call started after it). When
+		// true, the NEXT thinking event must spawn a FRESH thinking block
+		// at the end of the message (correct chronological position) instead
+		// of appending to the old block that sits above already-rendered
+		// answer text. Without this, round-2 thinking gets glued onto the
+		// round-1 thinking block at the top of the message — appearing BEFORE
+		// the answer that was already written, which looks broken.
+		let thinkingConsumed = false;
 		const setThinkingVisible = (visible) => {
+			if (visible && thinkingConsumed) beginNewThinkingBlock();
 			if (!currentThinkingBlock || !currentThinkingHeader) return;
 			currentThinkingBlock.style.display = visible ? 'block' : 'none';
 			currentThinkingHeader.textContent = visible
 				? 'Thinking (click to hide)'
 				: 'Thinking (click to show)';
+			if (!visible) thinkingConsumed = true;
+		};
+		// Spawn a fresh collapsible thinking block at the END of the current
+		// assistant message. Used when thinking resumes after the previous
+		// block was already collapsed, so the new reasoning appears in the
+		// correct chronological position (after the answer/tool that
+		// preceded it), not glued to the old block at the top.
+		const beginNewThinkingBlock = () => {
+			if (!currentAssistantMessage) startAssistantMessage();
+			const thinkingHeader = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-header', text: '💭 Thinking (click to show)'});
+			const thinkingBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-block'});
+			thinkingBlock.style.display = 'none';
+			thinkingHeader.addEventListener('click', () => {
+				const hidden = thinkingBlock.style.display === 'none';
+				thinkingBlock.style.display = hidden ? 'block' : 'none';
+				thinkingHeader.textContent = hidden
+					? '💭 Thinking (click to hide)'
+					: '💭 Thinking (click to show)';
+			});
+			currentThinkingHeader = thinkingHeader;
+			currentThinkingBlock = thinkingBlock;
+			thinkingConsumed = false;
+			smartScrollToBottom();
 		};
 		// In-order streaming: text is rendered into a *segment* element that
 		// is created fresh whenever the model starts talking again (after a
@@ -3393,6 +3568,15 @@ class VaultBotSidebarView extends ItemView {
 			const head = card.createDiv({cls: 'vaultbot-problem-head'});
 			head.createSpan({cls: 'vaultbot-problem-icon', text: icon});
 			head.createSpan({cls: 'vaultbot-problem-title', text: d.user_message || 'Something went wrong.'});
+			// Dismiss (X) button: lets the operator close the card so it
+			// doesn't sit front-and-center forever. New streaming content
+			// below it will also bury it in the scroll history.
+			const dismissBtn = head.createEl('button', {cls: 'vaultbot-problem-dismiss', text: '\u00d7'});
+			dismissBtn.addEventListener('click', () => {
+				card.style.transition = 'opacity 0.2s';
+				card.style.opacity = '0';
+				setTimeout(() => { card.remove(); }, 200);
+			});
 			if (d.remedy_hint) {
 				const r = card.createDiv({cls: 'vaultbot-problem-remedy', text: d.remedy_hint});
 			}
@@ -3454,6 +3638,7 @@ class VaultBotSidebarView extends ItemView {
 			// Expose to the streaming handlers via the module-level refs.
 			currentThinkingHeader = thinkingHeader;
 			currentThinkingBlock = thinkingBlock;
+			thinkingConsumed = false;
 			// NOTE: no answer block is created up front. Text segments are
 			// created on demand so they sit in true stream order relative to
 			// tool calls, instead of always above them.
@@ -3647,6 +3832,12 @@ class VaultBotSidebarView extends ItemView {
 					updateConsoleSummary(msg.content);
 				} else if (msg.type === 'thinking') {
 					if (!currentAssistantMessage) startAssistantMessage();
+					// If the previous thinking block was already collapsed (an
+					// answer or tool call happened between rounds), spawn a FRESH
+					// block at the end of the message so this new reasoning appears
+					// in the correct chronological position - not glued to the old
+					// block at the top of the message.
+					if (thinkingConsumed) beginNewThinkingBlock();
 					setTyping(true);
 					// Show the thinking block live while the model reasons.
 					setThinkingVisible(true);
@@ -3852,6 +4043,7 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerBlock = null;
 					currentSegmentText = '';
 					currentAnswerText = '';
+					thinkingConsumed = false;
 				} else if (msg.type === 'error') {
 					endActivity();
 					setTyping(false);
@@ -3915,6 +4107,7 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerBlock = null;
 					currentSegmentText = '';
 					currentAnswerText = '';
+					thinkingConsumed = false;
 				} else if (msg.type === 'session_info') {
 				// Backend sent session metadata (id + title). Update the title
 				// display so the user knows which session they're in.
@@ -3931,6 +4124,7 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentText = '';
 					currentSegmentRenderTimer = null;
 					currentAnswerText = '';
+					thinkingConsumed = false;
 					statusEl.setText('New session');
 				sessionTitleEl.setText('New Session');
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system'});
@@ -4090,6 +4284,7 @@ class VaultBotSidebarView extends ItemView {
 			currentAnswerBlock = null;
 			currentSegmentText = '';
 			currentAnswerText = '';
+			thinkingConsumed = false;
 		};
 
 		// Ingest button: a one-press way for a non-tech user to feed new
