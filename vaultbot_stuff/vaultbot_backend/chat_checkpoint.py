@@ -64,11 +64,38 @@ def _now_iso() -> str:
 
 
 class ChatLoopCheckpointer:
-    """Durable per-turn checkpoint for the agentic chat loop."""
+    """Durable per-turn checkpoint for the agentic chat loop.
 
-    def __init__(self, state_path: str | Path, session_logger: Any = None):
+    When ``session_id`` is provided the checkpoint file is namespaced per
+    session (``session_state/chat_loop_checkpoint_<session_id>.json``) so
+    concurrent tabs don't stomp each other's in-flight turn state.  The
+    legacy single-file path (``chat_loop_checkpoint.json``) is still used
+    when no ``session_id`` is given (back-compat for tests).
+    """
+
+    # Directory for per-session checkpoint files.
+    _SESSIONS_DIR = Path(__file__).with_name("session_state")
+
+    def __init__(self, state_path: str | Path | None = None,
+                 session_logger: Any = None,
+                 session_id: str | None = None):
+        if state_path is None:
+            if session_id:
+                self._SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+                state_path = self._SESSIONS_DIR / \
+                    f"chat_loop_checkpoint_{session_id}.json"
+            else:
+                state_path = Path(__file__).with_name("chat_loop_checkpoint.json")
         self.state_path = Path(state_path)
         self.session_logger = session_logger
+        self.session_id = session_id
+
+    @classmethod
+    def for_session(cls, session_id: str,
+                    session_logger: Any = None) -> ChatLoopCheckpointer:
+        """Create a per-session checkpointer."""
+        return cls(state_path=None, session_logger=session_logger,
+                   session_id=session_id)
 
     # ------------------------------------------------------------------
     def _log(self, event: str, data: dict[str, Any]) -> None:

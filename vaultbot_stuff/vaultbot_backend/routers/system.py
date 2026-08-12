@@ -941,9 +941,14 @@ async def broadcast_questionnaire(
     request: Request,
     svc: Annotated[Services, Depends(get_services)],
 ):
-    """Receive a questionnaire from the ask_user tool and broadcast it over
-    WebSocket to all connected plugin clients. The plugin renders interactive
-    question cards; the user's answers come back via POST /user_response.
+    """Receive a questionnaire from the ask_user tool and send it over
+    WebSocket to the owning tab.  The plugin renders interactive question
+    cards; the user's answers come back via POST /user_response.
+
+    When the ask_user tool stored a websocket reference in
+    ``_pending_requests`` (multi-tab isolation), the questionnaire is sent
+    to THAT websocket only.  Fallback: broadcast to all connected clients
+    (legacy behavior when no websocket ref is available).
     """
     try:
         payload = await request.json()
@@ -954,10 +959,26 @@ async def broadcast_questionnaire(
     if not request_id:
         return {"status": "error", "message": "Missing request_id"}
 
-    await svc.manager.broadcast(
-        json.dumps(payload),
-        session_logger=svc.session_logger,
-    )
+    # Look up the owning websocket from the ask_user registry.
+    try:
+        from custom_tools.ask_user import _pending_requests
+    except ImportError:
+        _pending_requests = {}
+
+    entry = _pending_requests.get(request_id)
+    ws_ref = entry[2] if entry and len(entry) >= 3 else None
+
+    if ws_ref is not None:
+        # Send to the owning tab only.
+        await svc.manager.send_personal_message(
+            json.dumps(payload), ws_ref,
+            session_logger=svc.session_logger)
+    else:
+        # Fallback: broadcast to all tabs (legacy behavior).
+        await svc.manager.broadcast(
+            json.dumps(payload),
+            session_logger=svc.session_logger,
+        )
     return {"status": "ok", "request_id": request_id}
 
 
@@ -1000,7 +1021,7 @@ async def user_response_endpoint(request: Request):
         _dbg(f"request_id {request_id} NOT in pending_requests")
         return {"status": "error", "message": f"No pending request with id {request_id}"}
 
-    event, response_holder = entry
+    event, response_holder = entry[0], entry[1]
     # Copy the user's answers into the response holder.
     answers = payload.get("answers", {})
     comments = payload.get("comments", "")

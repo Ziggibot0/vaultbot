@@ -620,6 +620,9 @@ fused_retriever = FusedRetriever(
 # research `checkpointer` (which snapshots the autonomous researcher's gap
 # list). One file, atomic writes, cleared on normal completion.
 from chat_checkpoint import ChatLoopCheckpointer
+# Legacy singleton for back-compat (non-session callers). Per-session
+# checkpoints are created via ChatLoopCheckpointer.for_session(session_id)
+# in chat_handler.py — this singleton is only used as a fallback.
 chat_checkpointer = ChatLoopCheckpointer(
     state_path=Path(__file__).with_name("chat_loop_checkpoint.json"),
     session_logger=default_session_logger)
@@ -732,8 +735,16 @@ class ConnectionManager:
                 session_logger.log("websocket_send_failed", {"error": str(e)})
             return
         if session_logger is not None:
+            # Skip per-message logging for high-frequency streaming events
+            # (answer_chunk, thinking, heartbeat). These fire 50+/sec and
+            # the per-token JSONL writes create disk I/O backpressure that
+            # throttles the LLM's streaming throughput. The full conversation
+            # is saved at session end via save_history().
             try:
-                session_logger.log_message("out", json.loads(message))
+                _msg = json.loads(message)
+                _msg_type = _msg.get("type", "")
+                if _msg_type not in ("answer_chunk", "thinking", "heartbeat"):
+                    session_logger.log_message("out", _msg)
             except json.JSONDecodeError:
                 session_logger.log_message("out", {"raw": message})
 
@@ -762,19 +773,23 @@ manager = ConnectionManager()
 # functions change to `svc.<name>` access.
 from services import Services
 from app_state import set_services  # Phase 3: DI surface for routers
-from conversation_index import ConversationIndex
+from conversation_index import ConversationIndexRegistry
 
-# Conversation-aware retrieval: a searchable index of recent conversation
-# turns.  Built from the persisted conversation_state.json on startup so
-# the bot wakes up after a restart already able to recall what was said.
-conversation_index = ConversationIndex(ollama_client=ollama_client)
+# Conversation-aware retrieval: a per-session registry of searchable indexes
+# of recent conversation turns.  Each tab gets its own index so cross-tab
+# recall is impossible.  The legacy single-index behavior is preserved for
+# callers that don't pass a session_id (the registry returns a throwaway).
+conversation_index = ConversationIndexRegistry(ollama_client=ollama_client)
 try:
     from conversation_state import load_history
     _prior_history = load_history()
     if _prior_history:
-        conversation_index.rebuild_from_history(_prior_history)
+        # Rebuild into a temporary index for the log; the per-session
+        # indexes are rebuilt on-demand when each tab connects.
+        _temp_idx = ConversationIndexRegistry(ollama_client=ollama_client)
+        _temp_idx.rebuild_from_history(_prior_history, session_id="_startup")
         default_session_logger.log("conversation_index_restored", {
-            "turns": conversation_index.size,
+            "turns": _temp_idx.size,
         })
 except Exception as e:  # noqa: BLE001
     default_session_logger.log("conversation_index_restore_failed",

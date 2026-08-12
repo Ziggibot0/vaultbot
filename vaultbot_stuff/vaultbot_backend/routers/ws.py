@@ -56,6 +56,10 @@ async def websocket_endpoint(websocket: WebSocket,
     session_logger = SessionLogger()
     client_host = websocket.client.host if websocket.client else "unknown"
     session_logger.log("websocket_connect", {"client_host": client_host})
+    # Store the session_id on the websocket so chat_handler and tools can
+    # read it for per-session persistence (conversation_state, working_memory,
+    # checkpoint).  Updated on /new when a new SessionLogger is rolled.
+    websocket.session_id = session_logger.session_id
     await svc.manager.connect(websocket)
     # Send session info (id + title) so the frontend can display it.
     await svc.manager.send_personal_message(json.dumps({
@@ -142,8 +146,56 @@ async def websocket_endpoint(websocket: WebSocket,
     # only clears on explicit /new. This is the Hermes Agent shape: session
     # persists across restarts, user controls when to reset.
     _is_restart_resume = _RESTART_CONTEXT_PATH.exists()  # only used for auto-resume nudge
+    # ── Restart-resume: adopt the most recent per-session state ──────
+    # When the backend restarts, the new WebSocket gets a NEW session_id.
+    # The per-session state files (conversation_state_*.json,
+    # working_memory_state_*.json) are keyed by the OLD session_id, so
+    # load_history(session_id=NEW) and load_from_disk(session_id=NEW)
+    # find nothing.  On a restart-resume (RESTART_CONTEXT.md exists),
+    # find the most recent state files in session_state/ and adopt them
+    # under the new session_id so the model wakes up with its plan and
+    # conversation intact.
+    _adopted_old_session_id: str | None = None
+    if _is_restart_resume:
+        try:
+            import glob as _glob
+            _ss_dir = Path(__file__).resolve().parent.parent / "session_state"
+            # Find the most recent working_memory_state_*.json
+            _wm_candidates = sorted(
+                _glob.glob(str(_ss_dir / "working_memory_state_*.json")),
+                key=lambda f: Path(f).stat().st_mtime, reverse=True)
+            if _wm_candidates:
+                _old_stem = Path(_wm_candidates[0]).stem
+                # Extract the old session_id: "working_memory_state_<uuid>"
+                _old_sid = _old_stem.replace("working_memory_state_", "")
+                if _old_sid and _old_sid != session_logger.session_id:
+                    _adopted_old_session_id = _old_sid
+                    # Adopt the working memory under the new session_id.
+                    _old_wm = TaskList.load_from_disk(session_id=_old_sid)
+                    if _old_wm is not None and _old_wm.has_plan():
+                        _old_wm.save_to_disk(
+                            session_id=session_logger.session_id)
+                        session_logger.log("wm_adopted_from_old_session", {
+                            "old_session_id": _old_sid,
+                            "new_session_id": session_logger.session_id,
+                            "goal": _old_wm.goal[:100],
+                            "tasks": len(_old_wm.tasks),
+                        })
+                    # Adopt the conversation history under the new session_id.
+                    _old_conv = load_history(session_id=_old_sid)
+                    if _old_conv:
+                        from conversation_state import save_history
+                        save_history(_old_conv,
+                                     session_id=session_logger.session_id)
+                        session_logger.log("conv_adopted_from_old_session", {
+                            "old_session_id": _old_sid,
+                            "new_session_id": session_logger.session_id,
+                            "turns": len(_old_conv),
+                        })
+        except Exception as _e:  # noqa: BLE001 — best-effort
+            session_logger.log("restart_adopt_failed", {"error": str(_e)})
     try:
-        restored = load_history()
+        restored = load_history(session_id=session_logger.session_id)
         websocket.conversation_history = restored
         # Rebuild the conversation index from the restored history so
         # the bot can recall what was said before the restart.
@@ -151,7 +203,8 @@ async def websocket_endpoint(websocket: WebSocket,
             try:
                 _conv_idx = getattr(svc, "conversation_index", None)
                 if _conv_idx is not None:
-                    _conv_idx.rebuild_from_history(restored)
+                    _conv_idx.rebuild_from_history(
+                        restored, session_id=session_logger.session_id)
             except Exception:  # noqa: BLE001 — best-effort, index rebuild is optional
                 pass
     except ValueError as _hist_err:
@@ -169,7 +222,8 @@ async def websocket_endpoint(websocket: WebSocket,
     # EVERY reconnect if a persisted plan exists — same rationale as
     # conversation history: a crash/reload shouldn't wipe the plan. Cleared
     # only on explicit /new.
-    _saved_wm = TaskList.load_from_disk()
+    _saved_wm = TaskList.load_from_disk(
+        session_id=session_logger.session_id)
     if _saved_wm is not None and _saved_wm.has_plan():
         websocket.working_memory = _saved_wm
         session_logger.log("working_memory_restored", {
@@ -277,13 +331,18 @@ async def websocket_endpoint(websocket: WebSocket,
                     task._stopped_by_user = True
                     task.cancel()
                 websocket.conversation_history = []
+                # Capture the old session_id before rolling a new one so we
+                # can clear ONLY this session's persisted state — other
+                # tabs' sessions are untouched.
+                _old_sid = getattr(websocket, "session_id", None)
                 # Clear the working-memory task list too so /new wipes the plan.
                 if hasattr(websocket, "working_memory"):
                     websocket.working_memory.clear()
-                    # Also wipe the persisted working-memory state.
+                    # Also wipe the persisted working-memory state for the
+                    # old session only.
                     try:
                         from working_memory import TaskList as _TL
-                        _TL.clear_disk()
+                        _TL.clear_disk(session_id=_old_sid)
                     except Exception:  # noqa: BLE001
                         pass
                 # Reset compression counters so anti-thrash starts fresh.
@@ -291,18 +350,22 @@ async def websocket_endpoint(websocket: WebSocket,
                 websocket._last_compression_tokens_before = 0
                 websocket._last_compression_tokens_after = 0
                 # Wipe the persisted copy too so a restart after /new doesn't
-                # resurrect the cleared thread.
-                clear_history()
+                # resurrect the cleared thread.  Clear the OLD session's files
+                # only — other tabs' sessions are untouched.
+                clear_history(session_id=_old_sid)
                 clear_trail_tracker()
                 # Clear the conversation index so recall starts fresh.
                 try:
                     _conv_idx = getattr(svc, "conversation_index", None)
                     if _conv_idx is not None:
-                        _conv_idx.clear()
+                        _conv_idx.clear(session_id=_old_sid)
                 except Exception:  # noqa: BLE001
                     pass
                 old_session_id = session_logger.session_id
                 session_logger = SessionLogger()
+                # Update the websocket's session_id to the new session so
+                # subsequent save/load calls target the new session's files.
+                websocket.session_id = session_logger.session_id
                 session_logger.log("session_reset", {
                     "trigger": "/new", "previous_session_id": old_session_id})
                 session_logger.log("websocket_connect", {"client_host": client_host})
@@ -424,7 +487,7 @@ async def websocket_endpoint(websocket: WebSocket,
                                     "content": f"No pending request with id {request_id}"}),
                         websocket)
                     continue
-                event, response_holder = entry
+                event, response_holder = entry[0], entry[1]
                 answers = payload.get("answers", {})
                 comments = payload.get("comments", "")
                 response_holder.clear()

@@ -442,3 +442,81 @@ def build_conversation_context(results: list[dict[str, Any]],
         lines.append(block)
         total += len(block)
     return "\n\n".join(lines)
+
+
+# ── Per-session index registry ──────────────────────────────────────────
+# Holds one ConversationIndex per session_id with an LRU cap so RAM stays
+# bounded when the user opens many tabs.
+
+from collections import OrderedDict  # noqa: E402
+
+MAX_CONCURRENT_SESSIONS = 4  # LRU cap
+
+
+class ConversationIndexRegistry:
+    """Per-session conversation index registry (LRU-bounded).
+
+    Replaces the single global ``conversation_index`` singleton so each
+    tab gets its own searchable index of its own conversation turns.
+    Cross-tab recall is impossible — session A's turns are never in
+    session B's index.
+
+    Usage:
+        registry = ConversationIndexRegistry(ollama_client)
+        idx = registry.get(session_id)           # create if absent
+        idx.add_turn(...)
+        results = idx.search(...)
+        registry.clear(session_id)               # on /new
+    """
+
+    def __init__(self, ollama_client: Any = None) -> None:
+        self._ollama = ollama_client
+        self._indexes: OrderedDict[str, ConversationIndex] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, session_id: str | None) -> ConversationIndex:
+        """Return the index for ``session_id``, creating it if needed.
+
+        When ``session_id`` is None, returns a throwaway index (back-compat
+        for callers that haven't been updated).
+        """
+        if session_id is None:
+            return ConversationIndex(ollama_client=self._ollama)
+        with self._lock:
+            idx = self._indexes.get(session_id)
+            if idx is None:
+                idx = ConversationIndex(ollama_client=self._ollama)
+                self._indexes[session_id] = idx
+                # LRU eviction: drop the oldest entry if over cap.
+                while len(self._indexes) > MAX_CONCURRENT_SESSIONS:
+                    self._indexes.popitem(last=False)
+            else:
+                # Move to end (most recently used).
+                self._indexes.move_to_end(session_id)
+            return idx
+
+    def clear(self, session_id: str | None = None) -> None:
+        """Clear the index for ``session_id``.  When ``session_id`` is None,
+        clears all indexes (legacy behavior)."""
+        with self._lock:
+            if session_id is None:
+                for idx in self._indexes.values():
+                    idx.clear()
+                self._indexes.clear()
+            elif session_id in self._indexes:
+                self._indexes[session_id].clear()
+
+    @property
+    def size(self) -> int:
+        """Total turns across all sessions (diagnostic)."""
+        with self._lock:
+            return sum(idx.size for idx in self._indexes.values())
+
+    # Back-compat: proxy the legacy ``size`` property and ``rebuild_from_history``
+    # to the first index so existing callers that use ``svc.conversation_index``
+    # directly still work.  New callers should use ``get(session_id)``.
+    def rebuild_from_history(self, history: list[dict[str, Any]],
+                             session_id: str | None = None) -> None:
+        """Rebuild the index for ``session_id`` from history."""
+        idx = self.get(session_id)
+        idx.rebuild_from_history(history)

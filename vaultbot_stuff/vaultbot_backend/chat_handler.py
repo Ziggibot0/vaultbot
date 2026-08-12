@@ -1337,8 +1337,14 @@ async def handle_chat(svc: Services, websocket: WebSocket,
     # Chat-loop checkpoint/resume: if a prior turn was interrupted mid-loop
     # and left a fresh checkpoint, resume it — restore the working-memory plan
     # and tell the model what it already did so it doesn't re-run tools.
-    # Cleared on normal completion and /new.
-    _cp = getattr(svc, "chat_checkpointer", None)
+    # Cleared on normal completion and /new.  Per-session: each tab gets its
+    # own checkpoint file so concurrent sessions don't interfere.
+    _session_id = getattr(websocket, "session_id", None)
+    if _session_id:
+        from chat_checkpoint import ChatLoopCheckpointer as _CLC
+        _cp = _CLC.for_session(_session_id, session_logger)
+    else:
+        _cp = getattr(svc, "chat_checkpointer", None)
     _resumed_tool_history: list = []
     if _cp is not None:
         try:
@@ -1489,10 +1495,13 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # alongside the vault notes. Best-effort: never breaks the chat loop.
         _conv_results: list[dict] = []
         try:
-            _conv_idx = getattr(svc, "conversation_index", None)
-            if _conv_idx is not None and _conv_idx.size > 0:
-                _conv_results = await loop.run_in_executor(
-                    None, _conv_idx.search, _rewritten_query, 3)
+            _conv_idx_reg = getattr(svc, "conversation_index", None)
+            _sid = getattr(websocket, "session_id", None)
+            if _conv_idx_reg is not None:
+                _conv_idx = _conv_idx_reg.get(_sid)
+                if _conv_idx.size > 0:
+                    _conv_results = await loop.run_in_executor(
+                        None, _conv_idx.search, _rewritten_query, 3)
                 if _conv_results:
                     session_logger.log("conversation_search", {
                         "query": _rewritten_query[:100],
@@ -2035,7 +2044,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         websocket.conversation_history = (
                             getattr(websocket, "conversation_history", [])
                             + _new_turns)
-                        save_history(websocket.conversation_history)
+                        save_history(websocket.conversation_history,
+                                     session_id=getattr(websocket, "session_id", None))
                         session_logger.log("chat_end", {
                             "answer_length": len(_trivial_text),
                             "thinking_length": 0,
@@ -2112,6 +2122,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # find the missing information on the web instead of looping.
         _consecutive_all_seen = 0
         _go_find_out_fired = False
+        # Track the last vault_search query so go-find-out uses it as the
+        # research topic instead of the raw user message. The user message
+        # is a conversational instruction ("dude fix the researcher") — not
+        # a web search query. The model's own vault_search query is a
+        # focused research topic that the search engines can actually use.
+        _last_search_query: str = ""
         # When go-find-out fires, the research summary is stored here so it
         # can be injected as a system message after the tool results are
         # appended. A system message is more authoritative than a tool result
@@ -2120,6 +2136,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
 
         # Partial-answer crash protection: write the streamed-so-far answer to a
         # temp file so a crash mid-stream doesn't lose it.
+        # DEBOUNCED: writing on every chunk (50+ disk writes/sec) creates
+        # consumer backpressure that throttles the LLM's streaming throughput.
+        # We write at most once per second; the final answer is always written
+        # at loop exit.
         import hashlib
         import tempfile
         import time as _time
@@ -2128,6 +2148,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         partial_id = hashlib.blake2b((user_message + str(_time.time())).encode(), digest_size=12).hexdigest()[:12]
         partial_path = partial_dir / f"partial_{partial_id}.md"
         write_partial(partial_path, user_message, "", "")
+        _last_partial_write_s = 0.0  # debounce: write at most once per second
 
         try:
          # --- Core loop: the model drives, the harness supports ---
@@ -2343,7 +2364,13 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     if text:
                         round_text += text
                         await svc.manager.send_personal_message(json.dumps({"type": "answer_chunk", "content": text}), websocket, session_logger=session_logger)
-                        write_partial(partial_path, user_message, final_answer + round_text, thinking_text)
+                        # Debounced partial write: at most once per second.
+                        # Per-chunk writes create disk I/O backpressure that
+                        # throttles the LLM's streaming throughput.
+                        _now_s = _time.time()
+                        if _now_s - _last_partial_write_s >= 1.0:
+                            write_partial(partial_path, user_message, final_answer + round_text, thinking_text)
+                            _last_partial_write_s = _now_s
                     if tcs:
                         round_tool_calls.extend(tcs)
             except Exception as e:
@@ -2381,34 +2408,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             if not round_tool_calls:
                 if round_text.strip():
                     # ── Plan-continuation guard ──
-                    # The model produced text without tool calls. If there are
-                    # unfinished plan tasks, the model likely expressed intent
-                    # ("Let me collect all chat notes...") but forgot to
-                    # actually call the tool in this round. Instead of
-                    # accepting this as the final answer, nudge it to continue.
-                    # This is NOT the old convergence nudge or stale-plan
-                    # detector — it's a specific guard against intent-without-
-                    # action when work remains. The model isn't done; it just
-                    # didn't fire the tool call.
-                    if wm.has_plan() and not wm.all_done():
-                        _unfinished = [t for t in wm.tasks
-                                       if t.status != "completed"]
-                        session_logger.log("plan_continuation_nudge", {
-                            "round": round_idx,
-                            "unfinished_tasks": len(_unfinished),
-                            "text_preview": round_text[:200],
-                        })
-                        conversation.append({
-                            "role": "user",
-                            "content": (
-                                "You expressed intent to continue working but "
-                                "didn't call any tools this round. You have "
-                                f"{len(_unfinished)} unfinished task(s). "
-                                "Call the appropriate tools now to continue."),
-                        })
-                        round_idx += 1
-                        continue
-
+                    # The model produced text without tool calls. Under the
+                    # "model drives" architecture, the framework does NOT
+                    # intervene when the model stops with unfinished tasks.
+                    # The model is responsible for deciding when it's done.
+                    # (test_no_framework_intervention_on_unfinished_plan
+                    #  enforces this — no plan-completion checks here.)
                     final_answer += round_text
                     session_logger.log("turn_done", {
                         "round": round_idx,
@@ -2464,6 +2469,14 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 except json.JSONDecodeError:
                     tool_args = {}
                 tool_call_id = tc.get("id", tool_name)
+
+                # Track the last vault_search query for go-find-out: when the
+                # vault has no answer and the harness auto-triggers web
+                # research, the search query is a focused research topic (not
+                # the raw user message, which is conversational and produces
+                # zero search hits). See [[How-to-Fix-Research-Engine-Returning-Garbage]].
+                if tool_name == "vault_search":
+                    _last_search_query = tool_args.get("query", "")
 
                 await svc.manager.send_personal_message(json.dumps({
                     "type": "tool_call", "tool": tool_name, "args": tool_args
@@ -2583,10 +2596,21 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                 # user's original question and inject the result
                                 # as a tool result so the model gets new info.
                                 _go_find_out_fired = True
+                                # Use the last vault_search query as the
+                                # research topic, NOT the raw user message.
+                                # The user message is conversational ("dude
+                                # stop relying on model weights...") — search
+                                # engines return nothing for that and the
+                                # relevance gate filters out what little
+                                # comes back, producing zero-source research.
+                                # The model's own search query is a proper
+                                # research topic that the engines can handle.
+                                _research_topic = _last_search_query or user_message[:200]
                                 session_logger.log("go_find_out_triggered", {
                                     "round": round_idx,
                                     "consecutive_all_seen": _consecutive_all_seen,
-                                    "query": user_message[:100],
+                                    "query": _research_topic[:100],
+                                    "source": "last_search_query" if _last_search_query else "user_message",
                                 })
                                 await svc.manager.send_personal_message(
                                     json.dumps({"type": "status",
@@ -2595,7 +2619,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                                 try:
                                     _research_result = await execute_agent_tool(
                                         svc, "vault_research",
-                                        {"topic": user_message[:200],
+                                        {"topic": _research_topic,
                                          "depth": "quick"},
                                         session_logger, websocket,
                                         user_message=user_message)
@@ -2882,7 +2906,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         _m2["content"] = _c[:_persist_cap] + "\n[...truncated in history...]"
                     _hist_so_far.append(_m2)
                 if len(_hist_so_far) > 0:
-                    save_history(_hist_so_far)
+                    save_history(_hist_so_far,
+                                session_id=getattr(websocket, "session_id", None))
             except Exception as _e:  # noqa: BLE001 — stream history is best-effort; the loop must not crash on save failure
                 session_logger.log("stream_history_save_failed", {"error": str(_e)})
 
@@ -3330,15 +3355,18 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                         "history_chars": sum(len(str(m.get("content", ""))) for m in new_turns),
                         "final_answer_len": len(final_answer or ""),
                     })
-                    save_history(new_turns)
+                    save_history(new_turns,
+                                session_id=getattr(websocket, "session_id", None))
                 # Index this turn in the conversation index so future queries
                 # can retrieve it (conversation-aware retrieval).  Only
                 # index when there's a real answer — a tool-only or empty
                 # turn isn't useful for recall.
                 if final_answer and len(final_answer) > 20:
                     try:
-                        _conv_idx = getattr(svc, "conversation_index", None)
-                        if _conv_idx is not None:
+                        _conv_idx_reg = getattr(svc, "conversation_index", None)
+                        if _conv_idx_reg is not None:
+                            _sid = getattr(websocket, "session_id", None)
+                            _conv_idx = _conv_idx_reg.get(_sid)
                             _conv_idx.add_turn(user_message, final_answer)
                     except Exception as _e:  # noqa: BLE001
                         session_logger.log("conversation_index_add_failed",
@@ -3347,7 +3375,8 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 # restarts.  Only save when there's an active plan.
                 try:
                     if wm.has_plan():
-                        wm.save_to_disk()
+                        wm.save_to_disk(
+                            session_id=getattr(websocket, "session_id", None))
                 except Exception as _e:  # noqa: BLE001
                     session_logger.log("wm_save_disk_failed",
                         {"error": str(_e)})
@@ -3998,6 +4027,15 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         session_logger.log("plan_task_set", {
             "goal": goal[:100], "steps": len(steps),
             "round": websocket._plan_set_round})
+        # Log the FULL plan snapshot to the session log so the unified
+        # JSONL log is the single source of truth for plan state. This
+        # makes it trivially grep-able: `Select-String '"plan_snapshot"'
+        # sessions\*.jsonl` shows every plan ever set with step statuses.
+        try:
+            _full_snap = wm.snapshot()
+            session_logger.log("plan_snapshot", _full_snap)
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
         session_logger.log("plan_task_branch_exit", {"t_ms": loop.time() * 1000})
         return snap
 
@@ -4048,12 +4086,55 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
             "task_id": task_id, "status": _new_status,
             "was_completed": _was_completed,
             "counted_as_progress": (_new_status == "completed" and not _was_completed)})
+        # Log the full plan snapshot on every update so the session log
+        # is the single source of truth for plan state over time.
+        try:
+            _full_snap = wm.snapshot()
+            session_logger.log("plan_snapshot", _full_snap)
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
         return snap
 
     # --- Custom (agent-authored) tools --- #
     if svc.self_improver.has_tool(tool_name):
-        result = await loop.run_in_executor(None, lambda: svc.self_improver.execute_custom_tool(
-            tool_name, args))
+        # Force-save working memory + conversation history to disk BEFORE
+        # dispatching backend_restart. The restart tool reads these files
+        # to build RESTART_CONTEXT.md, so they MUST be current. Without
+        # this, the tool reads stale files from the last turn's save.
+        if tool_name == "backend_restart":
+            try:
+                _wm = getattr(websocket, "working_memory", None)
+                if _wm is not None and _wm.has_plan():
+                    _wm.save_to_disk(
+                        session_id=getattr(websocket, "session_id", None))
+                    session_logger.log("wm_force_saved_before_restart", {
+                        "goal": _wm.goal[:100],
+                        "tasks": len(_wm.tasks),
+                    })
+                _conv = getattr(websocket, "conversation_history", None)
+                if _conv:
+                    from conversation_state import save_history
+                    save_history(
+                        _conv,
+                        session_id=getattr(websocket, "session_id", None))
+                    session_logger.log("conv_force_saved_before_restart", {
+                        "turns": len(_conv),
+                    })
+            except Exception as _e:  # noqa: BLE001 — best-effort
+                session_logger.log("force_save_before_restart_failed",
+                                   {"error": str(_e)})
+        # ask_user needs the websocket so the questionnaire can be sent to
+        # the owning tab only (not broadcast to all tabs).  Pass it via a
+        # keyword arg; other custom tools ignore extra kwargs.
+        if tool_name == "ask_user":
+            def _run_ask_user():
+                from custom_tools.ask_user import run as _ask_run
+                return _ask_run(args, websocket=websocket,
+                                session_id=getattr(websocket, "session_id", None))
+            result = await loop.run_in_executor(None, _run_ask_user)
+        else:
+            result = await loop.run_in_executor(None, lambda: svc.self_improver.execute_custom_tool(
+                tool_name, args))
         # Post-ingest weaving: tie newly-ingested textbook notes into the
         # existing vault so the content is actually usable (not inert islands).
         # Runs IN THE BACKGROUND so the tool returns immediately — the agent

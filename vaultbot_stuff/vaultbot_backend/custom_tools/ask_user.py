@@ -23,27 +23,32 @@ import time
 import urllib.request
 import uuid
 
-# Module-level registry: request_id -> (event, response_dict)
+# Module-level registry: request_id -> (event, response_dict, websocket_ref)
 # The /user_response HTTP endpoint reads this to unblock the waiting tool.
-_pending_requests: dict[str, tuple[threading.Event, dict]] = {}
+# websocket_ref is used by /broadcast_questionnaire to send the
+# questionnaire to the owning tab only (not broadcast to all tabs).  May be
+# None for back-compat (legacy callers that don't pass websocket=).
+_pending_requests: dict[str, tuple[threading.Event, dict, object]] = {}
 
 
 def _cleanup_stale():
     """Remove requests older than 10 minutes (defensive cleanup)."""
     now = time.time()
     stale = []
-    for rid, (ev, _) in list(_pending_requests.items()):
+    for rid, entry in list(_pending_requests.items()):
+        ev = entry[0]
         if not ev.is_set() and hasattr(ev, '_created_at') and (now - ev._created_at) > 600:
             stale.append(rid)
     for rid in stale:
         try:
-            ev, _ = _pending_requests.pop(rid)
-            ev.set()  # unblock with error
+            entry = _pending_requests.pop(rid)
+            entry[0].set()  # unblock with error
         except KeyError:
             pass
 
 
-def run(args: dict) -> dict:
+def run(args: dict, websocket: object | None = None,
+        session_id: str | None = None) -> dict:
     """Send a questionnaire to the user and wait for their response.
 
     Args:
@@ -56,6 +61,10 @@ def run(args: dict) -> dict:
             - options: list of option strings (for radio type)
             - default: "best_practices" to pre-select the "I don't know" option,
                        or a string for text default
+        websocket: The owning WebSocket connection (optional).  When
+            provided, the questionnaire is sent to THIS tab only, not
+            broadcast to all tabs.  This enables multi-tab isolation.
+        session_id: The session_id of the owning tab (optional, for logging).
 
     Returns:
         dict with keys matching question ids, each value being the user's
@@ -74,7 +83,7 @@ def run(args: dict) -> dict:
                 {"id": "nuance", "question": "Any constraints?",
                  "type": "text", "default": ""}
             ]
-        })
+        }, websocket=ws, session_id=session_id)
     """
     _cleanup_stale()
 
@@ -89,7 +98,7 @@ def run(args: dict) -> dict:
     event = threading.Event()
     event._created_at = time.time()
     response_holder: dict = {}
-    _pending_requests[request_id] = (event, response_holder)
+    _pending_requests[request_id] = (event, response_holder, websocket)
 
     # Send the questionnaire over WebSocket via the backend's HTTP endpoint.
     payload = {
@@ -98,6 +107,7 @@ def run(args: dict) -> dict:
         "title": title,
         "context": context,
         "questions": questions,
+        "session_id": session_id,
     }
 
     try:

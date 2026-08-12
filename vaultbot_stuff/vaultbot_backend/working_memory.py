@@ -59,7 +59,21 @@ logger = logging.getLogger(__name__)
 # Default path for the working-memory disk snapshot.  Lives alongside
 # conversation_state.json so both are wiped together on /new.
 _DEFAULT_DISK_PATH = str(Path(__file__).with_name("working_memory_state.json"))
+# Per-session snapshots live in session_state/ (same dir as conversation_state).
+_SESSIONS_DIR = Path(__file__).with_name("session_state")
 _disk_lock = threading.Lock()
+
+
+def _resolve_disk_path(path: str | None, session_id: str | None) -> str:
+    """Resolve the working-memory disk path.
+
+    Priority: explicit ``path`` > per-session file > legacy default.
+    """
+    if path:
+        return path
+    if session_id:
+        return str(_SESSIONS_DIR / f"working_memory_state_{session_id}.json")
+    return _DEFAULT_DISK_PATH
 
 
 @dataclass
@@ -311,13 +325,16 @@ class TaskList:
     # Disk persistence (survives backend restarts)
     # ------------------------------------------------------------------ #
 
-    def save_to_disk(self, path: str | None = None) -> None:
+    def save_to_disk(self, path: str | None = None,
+                     session_id: str | None = None) -> None:
         """Persist the working-memory state to disk (atomic, best-effort).
 
         Called after each turn so the plan survives a backend restart.
-        Never raises — persistence is best-effort.
+        Never raises — persistence is best-effort.  When ``session_id`` is
+        given the snapshot is written to a per-session file so concurrent
+        tabs don't stomp each other.
         """
-        p = path or _DEFAULT_DISK_PATH
+        p = _resolve_disk_path(path, session_id)
         try:
             snap = self.snapshot()
             payload = json.dumps(snap, ensure_ascii=False, default=str)
@@ -339,13 +356,35 @@ class TaskList:
             logger.debug("working_memory save_to_disk failed: %s", e)
 
     @classmethod
-    def load_from_disk(cls, path: str | None = None) -> "TaskList | None":
+    def load_from_disk(cls, path: str | None = None,
+                       session_id: str | None = None) -> "TaskList | None":
         """Load a persisted working-memory state from disk.
 
         Returns a TaskList with the restored plan, or None when the file
-        doesn't exist or is corrupt.  Never raises.
+        doesn't exist or is corrupt.  Never raises.  When ``session_id``
+        is given the per-session file is loaded.  One-shot legacy migration:
+        if the per-session file doesn't exist but the legacy default does,
+        adopt it for this session and delete the original.
         """
-        p = path or _DEFAULT_DISK_PATH
+        p = _resolve_disk_path(path, session_id)
+        # One-shot legacy migration.
+        if session_id and not path and not os.path.exists(p) \
+                and os.path.exists(_DEFAULT_DISK_PATH):
+            try:
+                with open(_DEFAULT_DISK_PATH, encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if isinstance(data, dict):
+                    tl = cls()
+                    tl.restore_snapshot(data)
+                    if tl.has_plan():
+                        tl.save_to_disk(session_id=session_id)
+                        try:
+                            os.remove(_DEFAULT_DISK_PATH)
+                        except OSError:
+                            pass
+                        return tl
+            except Exception as e:  # noqa: BLE001
+                logger.debug("working_memory legacy migration failed: %s", e)
         try:
             if not os.path.exists(p):
                 return None
@@ -365,10 +404,11 @@ class TaskList:
             return None
 
     @staticmethod
-    def clear_disk(path: str | None = None) -> None:
+    def clear_disk(path: str | None = None,
+                   session_id: str | None = None) -> None:
         """Wipe the persisted working-memory state (called on /new).
         Best-effort."""
-        p = path or _DEFAULT_DISK_PATH
+        p = _resolve_disk_path(path, session_id)
         try:
             if os.path.exists(p):
                 os.remove(p)

@@ -66,16 +66,42 @@ MAX_TURNS = 40
 MAX_DISK_CHARS = int(os.getenv("VAULTBOT_HISTORY_MAX_CHARS", "2000000"))
 
 _DEFAULT_PATH = str(Path(__file__).with_name("conversation_state.json"))
+# Directory for per-session state files (parallel to the single legacy file).
+_SESSIONS_DIR = Path(__file__).with_name("session_state")
 
 # Serialize writes — the chat loop and any background thread never race.
 _write_lock = threading.Lock()
 
 
-def _resolve_path(path: str | None) -> str:
-    return path if path else _DEFAULT_PATH
+def _session_path(session_id: str) -> str:
+    """Return the per-session conversation state file path.
+
+    Per-session files live in ``session_state/`` so multiple concurrent
+    tabs don't stomp each other's persisted conversation.  The legacy
+    bare ``conversation_state.json`` is migrated on first connect (see
+    :func:`load_history`).
+    """
+    return str(_SESSIONS_DIR / f"conversation_state_{session_id}.json")
 
 
-def load_history(path: str | None = None) -> list[dict[str, Any]]:
+def _resolve_path(path: str | None, session_id: str | None = None) -> str:
+    """Resolve the state file path.
+
+    Priority: explicit ``path`` > per-session file > legacy default.
+    When ``session_id`` is given the per-session file under
+    ``session_state/`` is used, enabling multi-tab isolation.  When neither
+    is provided the legacy single-file path is returned (back-compat for
+    tests and callers that have not been updated).
+    """
+    if path:
+        return path
+    if session_id:
+        return _session_path(session_id)
+    return _DEFAULT_PATH
+
+
+def load_history(path: str | None = None,
+                 session_id: str | None = None) -> list[dict[str, Any]]:
     """Load the persisted conversation history.
 
     Returns ``[]`` when the file doesn't exist yet (first run — no history
@@ -84,8 +110,31 @@ def load_history(path: str | None = None) -> list[dict[str, Any]]:
     should catch this and call ``notify_problem`` with the
     ``history_lost`` category so the user knows their conversation was
     lost, rather than silently starting fresh with no indication.
+
+    When ``session_id`` is given the per-session file under
+    ``session_state/`` is used.  If that file doesn't exist yet but the
+    legacy single-file ``conversation_state.json`` does, a one-shot
+    migration imports the legacy history and deletes the original so
+    subsequent sessions start fresh (first-tab-wins).
     """
-    p = _resolve_path(path)
+    p = _resolve_path(path, session_id)
+    # One-shot legacy migration: if the per-session file doesn't exist
+    # but the legacy single-file does, adopt it for this session.
+    if session_id and not path and not os.path.exists(p) \
+            and os.path.exists(_DEFAULT_PATH):
+        try:
+            legacy = _load_file(_DEFAULT_PATH)
+            # Persist a copy under the session-specific path.
+            _save_file(legacy, p)
+            # Remove the legacy file so the next session starts fresh.
+            try:
+                os.remove(_DEFAULT_PATH)
+            except OSError:
+                pass
+            logger.info("conversation_state: migrated legacy history to %s", p)
+            return legacy
+        except (json.JSONDecodeError, ValueError, OSError) as exc:
+            logger.warning("conversation_state: legacy migration failed: %s", exc)
     if not os.path.exists(p):
         return []  # first run — no history is correct
     try:
@@ -119,8 +168,49 @@ def load_history(path: str | None = None) -> list[dict[str, Any]]:
         ) from exc
 
 
+def _load_file(p: str) -> list[dict[str, Any]]:
+    """Load and validate a conversation history file."""
+    with open(p, encoding="utf-8") as fh:
+        data = json.load(fh)
+    if not isinstance(data, list):
+        raise ValueError(
+            f"conversation_state: history file is not a list "
+            f"({type(data).__name__}): {p}"
+        )
+    # Defensive: each entry must be a dict with a role.
+    return [m for m in data
+            if isinstance(m, dict) and m.get("role")]
+
+
+def _save_file(history: list[dict[str, Any]], p: str) -> None:
+    """Write history to path (atomic, locked). Never raises."""
+    try:
+        payload = json.dumps(history, ensure_ascii=False, default=str)
+    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        logger.warning("conversation_state serialize failed: %s", exc)
+        return
+    try:
+        with _write_lock:
+            d = Path(p).parent
+            d.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=str(d), suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(payload)
+                os.replace(tmp, p)
+            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        logger.warning("conversation_state save failed: %s", exc)
+
+
 def save_history(history: list[dict[str, Any]],
-                 path: str | None = None) -> None:
+                 path: str | None = None,
+                 session_id: str | None = None) -> None:
     """Persist the conversation history to disk (atomic, bounded, locked).
 
     Best-effort: never raises. Truncates to the last ``MAX_TURNS`` messages
@@ -128,7 +218,7 @@ def save_history(history: list[dict[str, Any]],
     """
     if not isinstance(history, list):
         return
-    p = _resolve_path(path)
+    p = _resolve_path(path, session_id)
     # Bound the disk copy: keep the most recent MAX_TURNS messages.
     bounded = history[-MAX_TURNS:] if len(history) > MAX_TURNS else history
     # Hard char cap: if the bounded slice is still too large (e.g. 40
@@ -153,34 +243,13 @@ def save_history(history: list[dict[str, Any]],
                         old_len = len(str(val))
                         m[key] = str(val)[:200] + "\n[...truncated on persist...]"
                         total_chars -= (old_len - len(str(m[key])))
-    # Strip any non-serializable leftovers defensively.
-    try:
-        payload = json.dumps(bounded, ensure_ascii=False, default=str)
-    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        logger.warning("conversation_state serialize failed: %s", exc)
-        return
-    try:
-        with _write_lock:
-            d = Path(p).parent
-            d.mkdir(parents=True, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=str(d), suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    fh.write(payload)
-                os.replace(tmp, p)
-            except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-                raise
-    except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        logger.warning("conversation_state save failed: %s", exc)
+    _save_file(bounded, p)
 
 
-def clear_history(path: str | None = None) -> None:
+def clear_history(path: str | None = None,
+                   session_id: str | None = None) -> None:
     """Wipe the persisted history (called on ``/new``). Best-effort."""
-    p = _resolve_path(path)
+    p = _resolve_path(path, session_id)
     try:
         if os.path.exists(p):
             os.remove(p)
