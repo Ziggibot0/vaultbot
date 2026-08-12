@@ -1,7 +1,8 @@
 ---
-type: engineering-spec
-status: draft
+type: plan
+status: complete
 created: 2026-07-31
+updated: 2026-08-11
 title: "Fix Specification: Remove All Masking Fallbacks"
 tags:
   - engineering
@@ -13,6 +14,11 @@ summary: Removing masking fallbacks to enforce strict fail loudly behavior ensur
 ---
 
 # Fix Specification: Remove All Masking Fallbacks
+
+> **<!-- updated 2026-08-11 -->** This spec was written 2026-07-31 and has been applied. Some code references have since changed:
+> - `compactor.py` no longer exists — replaced by `lazy_condenser.py` (588 lines). Compaction is now a sliding window, not LLM-based.
+> - Line numbers and function locations may have shifted since the original audit.
+> - See `vaultbot_stuff/System/Procedures/Fix-Masking-Fallbacks.md` for the applied version.
 
 ## Law
 

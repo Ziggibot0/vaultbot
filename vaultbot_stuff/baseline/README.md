@@ -2,7 +2,7 @@
 type: claim
 status: raw
 created: 2026-08-03
-summary: SUMMARY
+summary: The note explains that the provided directives are templates where VaultBot acts autonomously on its own without asking for permission each time or referencing training data. These guidelines emphasiz
 tags:
   - claim
   - baseline

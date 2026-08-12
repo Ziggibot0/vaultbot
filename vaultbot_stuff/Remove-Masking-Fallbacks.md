@@ -124,8 +124,9 @@ Remove all masking fallbacks from the framework. Each step is a self-contained P
    ```
 
 6. ```python
+   # <!-- updated 2026-08-11: compactor.py was replaced by lazy_condenser.py — this fix target is historical -->
    import py_compile, tempfile, os
-   f = "vaultbot_backend/compactor.py"
+   f = "vaultbot_backend/lazy_condenser.py"
    content = open(f, encoding="utf-8").read()
    old = '            except Exception as exc:\n                logger.warning("summarization failed, falling back to extractive: %s", exc)\n                try:\n                    self._log_exc(exc, context="summarize_middle")\n                except Exception:\n                    pass\n                summary = self._extractive_summary(middle)'
    new = '            except Exception as exc:\n                logger.error("summarization failed — FAILING LOUD, no fallback to extractive: %s", exc)\n                raise'
