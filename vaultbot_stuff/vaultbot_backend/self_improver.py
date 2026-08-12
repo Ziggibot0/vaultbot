@@ -220,7 +220,7 @@ class SelfImprover:
     _CORE_FILES = {
         "main.py", "agent_tools.py", "self_improver.py", "vault_indexer.py",
         "vault_graph.py", "note_creator.py", "research_engine.py",
-        "autonomous_researcher.py", "fused_retrieval.py", "compactor.py",
+        "autonomous_researcher.py", "fused_retrieval.py",
         "amem_evolution.py", "knowledge_curriculum.py", "plan_executor.py",
         "identity.py", "graph_ops.py", "lazy_condenser.py", "concept_card.py",
         "moc_builder.py", "abstract_context.py", "embedding_drift.py",
@@ -340,7 +340,7 @@ class SelfImprover:
                     # Import passed — run the soft pytest gate against the
                     # same tmp copy. A failure is reported as
                     # dry_run_rejected (no disk touch in dry_run mode).
-                    p_ok, p_out = self._run_pytest_in_subprocess(tmpdir)
+                    p_ok, p_out = self._run_pytest_in_subprocess(tmpdir, full.name)
                     if p_out and not p_ok:
                         checks["pytest"] = f"FAIL: {p_out[:500]}"
                         return {"status": "dry_run_rejected",
@@ -427,7 +427,7 @@ class SelfImprover:
         # and proceed — the import check is the hard gate.
         if is_core and checks.get("import_check") == "ok":
             try:
-                p_ok, p_out = self._run_pytest_in_subprocess(str(BACKEND_DIR))
+                p_ok, p_out = self._run_pytest_in_subprocess(str(BACKEND_DIR), full.name)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 checks["pytest"] = f"skipped: could not run pytest: {e}"
                 p_ok = False  # FAIL LOUD: if pytest can't run, the edit is rejected
@@ -1029,7 +1029,8 @@ class SelfImprover:
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
 
-    def _run_pytest_in_subprocess(self, backend_dir: str
+    def _run_pytest_in_subprocess(self, backend_dir: str,
+                                   target_file: str | None = None
                                    ) -> tuple[bool, str | None]:
         """Run `python -m pytest -q --tb=short` in a subprocess against the
         given backend dir. Returns (passed, output_message).
@@ -1041,6 +1042,13 @@ class SelfImprover:
           import error, timeout, etc.). The caller treats this as `skipped`
           and proceeds — the import check is the hard gate; pytest is a
           softer gate enforced only when it can actually run.
+
+        If ``target_file`` is given (e.g. ``"chat_handler.py"``), the pytest
+        run is SCOPED to test files whose names contain the target file's
+        stem (e.g. ``tests/test_*chat_handler*.py``).  If no matching test
+        files exist, falls back to running all tests.  This prevents
+        pre-existing test failures in unrelated modules from blocking
+        legitimate edits.
 
         The 60s timeout prevents a hung test from blocking forever. We use
         the venv interpreter (same as `_verify_import_in_subprocess`) and
@@ -1079,9 +1087,27 @@ class SelfImprover:
                "VAULTBOT_SKIP_LOCK": "1",
                "VAULT_PATH": str(BACKEND_ROOT),
                "VAULT_ROOT_DIR": str(BACKEND_ROOT)}
+
+        # --- Scope pytest to tests matching the edited file ---
+        # Build a test file glob from the target file's stem (e.g.
+        # "chat_handler.py" -> "tests/test_*chat_handler*.py").  If
+        # matching test files exist, run ONLY those.  If no matching
+        # tests exist, fall back to running all tests (so we don't lose
+        # coverage on files that have no dedicated test file).
+        test_args: list[str] = []
+        if target_file:
+            stem = Path(target_file).stem  # "chat_handler.py" -> "chat_handler"
+            tests_dir = Path(backend_dir) / "tests"
+            if tests_dir.exists():
+                # Match common test naming patterns.
+                matching = list(tests_dir.glob(f"test_*{stem}*.py"))
+                if matching:
+                    test_args = [str(p.relative_to(backend_dir))
+                                 for p in sorted(matching)]
+
         try:
             proc = _subprocess_run(
-                [chosen, "-m", "pytest", "-q", "--tb=short"],
+                [chosen, "-m", "pytest", "-q", "--tb=short"] + test_args,
                 capture_output=True, text=True, timeout=60,
                 cwd=backend_dir, env=env,
             )

@@ -454,7 +454,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        _tracker_log = os.environ.get("PROCEDURE_TRACKER_LOG", "")\n'
             '        if _tracker_log:\n'
             '            _child_env["PROCEDURE_TRACKER_LOG"] = _tracker_log\n'
-            '        r = _sp_run(cmd, capture_output=True, text=True, timeout=120,\n'
+            '        r = _sp_run(cmd, capture_output=True, text=True, timeout=300,\n'
             '                    env=_child_env)\n'
             '        if not r.stdout.strip():\n'
             '            raise RuntimeError("run_procedure produced no output; "\n'
