@@ -199,12 +199,18 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
         line = line.rstrip()
         if not line:
             continue
-        if line.startswith("  - ") and current_key:
-            value = _strip_quotes(line[4:].strip())
-            if current_list is None:
-                current_list = []
-                fm[current_key] = current_list
-            current_list.append(value)
+        # Only treat lines with NO leading whitespace as top-level keys.
+        # Indented lines (e.g. "  - item" or "    type: string" inside a
+        # nested list) are list items or nested keys — they must NOT
+        # overwrite top-level fields.  This prevents a nested "type: string"
+        # inside an "inputs:" list from clobbering the real "type: procedure".
+        if line.startswith(" ") or line.startswith("\t"):
+            if line.lstrip().startswith("- ") and current_key:
+                value = _strip_quotes(line.lstrip()[2:].strip())
+                if current_list is None:
+                    current_list = []
+                    fm[current_key] = current_list
+                current_list.append(value)
             continue
         if ":" in line:
             current_list = None

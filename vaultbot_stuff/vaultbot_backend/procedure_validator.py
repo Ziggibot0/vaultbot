@@ -4,10 +4,12 @@ This module catches the friction points that were discovered during the
 Dream-Pass creation process (see [[Dream-Pass]] and the chat log
 "Chat-have-a-look-at-the-WOLE-process-of-creating-the-dream-pass-procedure").
 
-Eight categories of checks, each addressing a specific friction point:
+Checks (all aligned with the unified procedure format from
+[[Procedural-Bootstrap-and-Evolution-Plan#Part 3 Procedural Note Schema (UNIFIED — 2026-08-10)]]):
 
-1. **Frontmatter** — type, description, allowed_tools, falsifiable_if
-   (Friction: procedures without description can't be retrieved efficiently)
+1. **Frontmatter** — type, description, when_to_use, allowed_tools,
+   falsifiable_if, status, model_cartridge, created, summary, tags
+   (Friction: procedures without these can't be retrieved or executed)
 2. **Naming convention** — title must not use "How to" prefix
    (Friction: "How to" names sound like tutorials, not tools. Procedures
    are machine-executable protocols, not advice to read.)
@@ -238,6 +240,41 @@ def validate_procedure_text(
             "(condition that would prove this procedure wrong)"
         )
 
+    checks_run.append("status_exists")
+    if not fm.get("status"):
+        errors.append(
+            "Frontmatter missing 'status' "
+            "(must be one of: experimental, active, verified, archived)"
+        )
+
+    checks_run.append("model_cartridge_exists")
+    if not fm.get("model_cartridge"):
+        errors.append(
+            "Frontmatter missing 'model_cartridge' "
+            "(must be one of: small, big, vision)"
+        )
+
+    checks_run.append("created_exists")
+    if not fm.get("created"):
+        errors.append(
+            "Frontmatter missing 'created' "
+            "(date in YYYY-MM-DD format)"
+        )
+
+    checks_run.append("summary_exists")
+    if not fm.get("summary"):
+        errors.append(
+            "Frontmatter missing 'summary' "
+            "(short title for the procedure)"
+        )
+
+    checks_run.append("tags_exists")
+    if not fm.get("tags"):
+        errors.append(
+            "Frontmatter missing 'tags' "
+            "(at minimum: [procedure, procedures])"
+        )
+
     # --- 1c. provides field (optional composition declaration) ---
     # When a procedure composes sub-procedures, a ``provides:`` list lets
     # the surface renderer show the full capability set in one glance
@@ -315,14 +352,18 @@ def validate_procedure_text(
         )
     else:
         checks_run.append("sequential_numbering")
-        expected = list(range(
-            step_numbers[0], step_numbers[0] + len(step_numbers)
-        ))
-        if step_numbers != expected:
-            errors.append(
-                f"Step numbers not sequential: found {step_numbers}, "
-                f"expected {expected}"
-            )
+        # Only check sequential for integer steps — decimal steps
+        # (e.g. 1.5, 2.5) are explicitly allowed for inserting steps
+        # between existing ones without renumbering.
+        if all(isinstance(n, int) or (isinstance(n, float) and n == int(n)) for n in step_numbers):
+            expected = list(range(
+                int(step_numbers[0]), int(step_numbers[0]) + len(step_numbers)
+            ))
+            if [int(n) for n in step_numbers] != expected:
+                errors.append(
+                    f"Step numbers not sequential: found {step_numbers}, "
+                    f"expected {expected}"
+                )
         if len(step_numbers) != len(set(step_numbers)):
             errors.append(f"Duplicate step numbers: {step_numbers}")
 
