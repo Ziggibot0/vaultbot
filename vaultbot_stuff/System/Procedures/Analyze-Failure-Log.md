@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_read
   - llm_generate
-summary: SUMMARY
+summary: When procedures keep failing and you want to know why by reading the JSON failure log. Analyzes Python code patterns for specific error handling issues in vaultbot backend. Identifies missing or incor
 tags:
   - procedure
   - procedures

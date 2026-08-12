@@ -12,7 +12,7 @@ applies_to:
 allowed_tools:
   - vault_search
   - vault_list
-summary: "# Discover-Procedures"
+summary: "Discover-Procedures: A Python script that scans chat logs to find repetitive workflows and drafts automated procedures for them."
 tags:
   - procedure
   - procedures

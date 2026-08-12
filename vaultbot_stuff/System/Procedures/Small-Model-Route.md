@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: "## Summary"
+summary: When to Run This
 tags:
   - procedure
   - procedures

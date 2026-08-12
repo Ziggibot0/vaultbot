@@ -42,7 +42,7 @@ provides:
 success_count: 108
 failure_count: 1
 success_rate: 0.99
-summary: SUMMARY
+summary: "1. A thin orchestrator that calls 7 modular sub-procedures to process journals and chat logs by consolidating them in a step-by-step sequence, with reasoning logic stored within the [[Dream-Consolidat"
 tags:
   - procedure
   - procedures

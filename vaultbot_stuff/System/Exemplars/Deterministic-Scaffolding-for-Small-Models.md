@@ -9,7 +9,7 @@ tags:
   - scaffolding
   - small-models
   - deterministic
-status: raw
+status: stale
 ---
 
 <!-- EXEMPLAR ANNOTATION: ARCHITECTURE NOTE

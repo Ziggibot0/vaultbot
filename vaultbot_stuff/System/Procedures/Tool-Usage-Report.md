@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: "## Summary"
+summary: When automating repetitive vaultbot tool sequences and gathering chat logs for procedure library growth. |automate,chat_logs,vault_bot_tool_calls,recurring_procedures
 tags:
   - procedure
   - procedures

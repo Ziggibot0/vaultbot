@@ -12,7 +12,7 @@ applies_to:
   - memory-consolidation
 allowed_tools:
   - llm_generate
-summary: Summary
+summary: "1. A one-sentence summary (max 120 chars) describing what the note SAYS, not just its title. Use a verb. SUMMARY|# Regenerate-Self-Model means running this procedure at the end of each chat turn to re"
 tags:
   - procedure
   - procedures

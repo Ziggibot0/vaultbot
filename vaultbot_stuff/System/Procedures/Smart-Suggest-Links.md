@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: SUMMARY
+summary: Smart-Suggest-Links reads notes to suggest wikilinks by identifying concepts with existing links and filtering for meaningful stems.
 tags:
   - procedure
   - procedures

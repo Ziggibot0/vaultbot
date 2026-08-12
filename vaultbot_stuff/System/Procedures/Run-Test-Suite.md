@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - code_run
   - llm_generate
-summary: "# Summary"
+summary: Run pytest suite in backend to verify no code broke after changes, filtering tests with `not step_gate` and `-q -x`, parsing N passed/N failed output. | pass/fail|pytest|backend|validation|code-checks
 tags:
   - procedure
   - procedures
