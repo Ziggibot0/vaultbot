@@ -62,7 +62,18 @@ Build-Procedure
 
 ## Steps
 
-1. [llm: You are a procedure writer. Write a complete, valid procedure note for this task:
+### Step 1: Draft the procedure markdown from the task description
+
+1. ```python
+import json
+
+task = args.get("task", "")
+tools_available = args.get("tools_available", "vault_search, vault_read_note, vault_list, vault_lint, llm_generate, run_procedure, code_read, vault_safe_write, vault_append, web_read_source")
+
+if not task:
+    result = json.dumps({"error": "task argument required"})
+else:
+    prompt = f"""You are a procedure writer. Write a complete, valid procedure note for this task:
 
 **Task:** {task}
 
@@ -70,25 +81,74 @@ Build-Procedure
 
 ## Rules
 
-- `type: procedure` in frontmatter
-- `model_cartridge: small` for classification, extraction, routing, formatting
-- `model_cartridge: big` only for novel reasoning or complex synthesis
-- Code steps use ```python blocks
-- EVERY step MUST have a `### Step N: short-summary` header (e.g. `### Step 1: Search the vault`).
-  The header summary becomes the step's human-readable description. Put the ```python fence
-  or [llm: ...] tag on the line(s) AFTER the header. NEVER use bare `N.` without a header.
-- `description` must be specific enough that RAG surfaces it for the right intent
-- `when_to_use` must describe SITUATIONS, not topics
-- Include `falsifiable_if` — a specific, observable failure condition
-- Include `inputs` section documenting all args the procedure needs
-- Include `allowed_tools` listing every tool used in code steps
+### Step Format (UNIFIED — the only format the compiler guarantees)
+Every step MUST use this exact format:
 
-Write the FULL markdown including YAML frontmatter. Return ONLY the markdown, no commentary.]
+```
+### Step N: Short human-readable summary
+
+N. ```python
+code here
+```
+
+### Step N: Short human-readable summary
+
+N. [llm: instruction here]
+```
+
+- The `### Step N:` header provides the human-readable description (shown in logs and progress callbacks).
+- The `N.` prefix on the code fence or LLM tag makes step numbers visible in raw markdown.
+- Code steps use ```python blocks. LLM steps use `[llm: ...]` tags.
+- NEVER use bare `N.` without a `### Step N:` header above it.
+- NEVER use `[vllm:]`, `[model_cartridge:]`, or any other tag format — only `[llm: ...]`.
+
+### Required Frontmatter (all fields mandatory)
+```yaml
+---
+type: procedure
+status: experimental
+model_cartridge: small  # or big, or vision
+created: YYYY-MM-DD
+description: "one-line summary for retrieval — specific enough that RAG surfaces it"
+when_to_use: "SITUATIONS that trigger this procedure, not topics"
+falsifiable_if: "specific, observable failure condition"
+allowed_tools:
+  - tool_name
+summary: Short-Title
+tags:
+  - procedure
+  - procedures
+---
+```
+
+- `model_cartridge: small` for classification, extraction, routing, formatting.
+- `model_cartridge: big` only for novel reasoning or complex synthesis.
+- `status` should be `experimental` for new procedures.
+- `created` should be today's date (YYYY-MM-DD).
+
+### Standardized Sections (in this order)
+1. `## When to Run This` — trigger conditions (required)
+2. `## Inputs` — documented args if the procedure takes any (required if args exist)
+3. `## Steps` — the machine-executable steps (required)
+4. `## Why This Exists` — the failure or gap that spawned this procedure
+5. `## Related` — wikilinks to related notes
+
+Additional sections (Architecture, History, Composition Map, etc.) are optional and go after `## Related`.
+
+### Output Rules
+- Do NOT wrap the output in ```markdown or any code fences. Return raw markdown.
+- The output must start with `---` (YAML frontmatter).
+
+Write the FULL markdown including YAML frontmatter. Return ONLY the raw markdown, no code fences wrapping it, no commentary."""
+
+    draft_md = llm_generate(prompt)
+    result = draft_md
+```
 
 2. ```python
 import json, os
 
-draft_md = prior_results[0] if prior_results else ""
+draft_md = output if output else ""
 
 if not draft_md or len(draft_md) < 50:
     result = json.dumps({"error": "draft too short", "len": len(draft_md)})
@@ -105,8 +165,8 @@ else:
 3. ```python
 import json, os
 
-# Read the draft from temp file
-step2 = json.loads(prior_results[1]) if len(prior_results) > 1 and prior_results[1] else {}
+# Read the draft from temp file (Step 2 output is in `output`)
+step2 = json.loads(output) if output else {}
 draft_path = step2.get("p", "")
 if not draft_path or not os.path.exists(draft_path):
     result = json.dumps({"error": "draft file not found", "path": draft_path})
@@ -126,9 +186,11 @@ Check:
 1. DESCRIPTION: specific enough for RAG? Says what it DOES, not what it's ABOUT?
 2. WHEN_TO_USE: describes SITUATIONS, not topics?
 3. FALSIFIABLE_IF: specific, observable failure condition?
-4. STEPS: executable with listed allowed_tools? Complete workflow?
+4. STEPS: executable with listed allowed_tools? Complete workflow? Each step has a ### Step N: header? Code steps use ```python fences? LLM steps use [llm: ...] tags? NO [vllm:...] or [model_cartridge:...] tags — those are invalid.
 5. MODEL_CARTRIDGE: correct? (small=classification/extraction/routing, big=reasoning/synthesis)
 6. INPUTS: all args.get() calls have corresponding docs?
+7. NO_CODE_FENCE_WRAP: the draft must NOT be wrapped in ```markdown or any outer code fence. It must be raw markdown starting with --- frontmatter.
+8. FRONTMATTER: has type, status, created, summary, tags fields?
 
 Return JSON:
 {{"verdict": "APPROVED" or "NEEDS_FIXES", "suggested_name": "Name-Here", "checks": {{"description": {{"pass": true/false, "fix": "rewrite if failed"}}, "when_to_use": {{"pass": true/false, "fix": "rewrite if failed"}}, "falsifiable_if": {{"pass": true/false, "fix": "rewrite if failed"}}, "steps": {{"pass": true/false, "issues": []}}, "model_cartridge": {{"pass": true/false, "fix": ""}}, "inputs": {{"pass": true/false, "missing": []}}}}, "fixed_draft": "FULL FIXED MARKDOWN if NEEDS_FIXES, else empty"}}
@@ -142,8 +204,8 @@ Return ONLY the JSON."""
 4. ```python
 import json, os, re
 
-# Parse review from step 3
-review_text = prior_results[2] if len(prior_results) > 2 and prior_results[2] else ""
+# Parse review from step 3 (output = step 3's result)
+review_text = output if output else ""
 try:
     start = review_text.find("{")
     end = review_text.rfind("}")
@@ -155,8 +217,8 @@ verdict = review.get("verdict", "APPROVED")
 suggested_name = review.get("suggested_name", args.get("procedure_name", "New-Procedure"))
 fixed_draft = review.get("fixed_draft", "")
 
-# Read original draft
-step2 = json.loads(prior_results[1]) if len(prior_results) > 1 and prior_results[1] else {}
+# Read original draft from step 2 (prior_results keyed by step number)
+step2 = json.loads(prior_results.get(2, prior_results.get(2.0, "{}"))) if prior_results.get(2, prior_results.get(2.0)) else {}
 draft_path = step2.get("p", "")
 original_draft = ""
 if draft_path and os.path.exists(draft_path):
@@ -171,19 +233,31 @@ else:
     proc_name = suggested_name.replace(" ", "-").replace("_", "-")
     file_path = f"vaultbot_stuff/System/Procedures/{proc_name}.md"
     write_result = vault_safe_write(file_path, final_md)
-    result = json.dumps({
-        "s": "written",
-        "n": proc_name,
-        "fp": file_path,
-        "v": verdict,
-        "fixed": verdict == "NEEDS_FIXES"
-    })
+    # Check if the write actually succeeded
+    write_status = write_result.get("status", "blocked") if isinstance(write_result, dict) else "blocked"
+    if write_status != "written":
+        result = json.dumps({
+            "s": "write_blocked",
+            "n": proc_name,
+            "fp": file_path,
+            "v": verdict,
+            "fixed": verdict == "NEEDS_FIXES",
+            "blocked_reason": write_result.get("blocked_reason", "unknown") if isinstance(write_result, dict) else str(write_result)
+        })
+    else:
+        result = json.dumps({
+            "s": "written",
+            "n": proc_name,
+            "fp": file_path,
+            "v": verdict,
+            "fixed": verdict == "NEEDS_FIXES"
+        })
 ```
 
 5. ```python
 import json
 
-step4 = json.loads(prior_results[3]) if len(prior_results) > 3 and prior_results[3] else {}
+step4 = json.loads(output) if output else {}
 proc_name = step4.get("n", "")
 
 if not proc_name:
@@ -219,7 +293,7 @@ else:
 6. ```python
 import json
 
-step4 = json.loads(prior_results[3]) if len(prior_results) > 3 and prior_results[3] else {}
+step4 = json.loads(output) if output else {}
 proc_name = step4.get("n", "")
 file_path = f"vaultbot_stuff/System/Procedures/{proc_name}.md"
 
@@ -235,7 +309,7 @@ result = json.dumps({
 7. ```python
 import json
 
-step4 = json.loads(prior_results[3]) if len(prior_results) > 3 and prior_results[3] else {}
+step4 = json.loads(output) if output else {}
 proc_name = step4.get("n", "")
 test_args_str = args.get("test_args", "{}")
 
@@ -276,7 +350,7 @@ result = json.dumps({
 8. ```python
 import json
 
-step4 = json.loads(prior_results[3]) if len(prior_results) > 3 and prior_results[3] else {}
+step4 = json.loads(output) if output else {}
 proc_name = step4.get("n", "")
 file_path = f"vaultbot_stuff/System/Procedures/{proc_name}.md"
 
@@ -289,15 +363,7 @@ result = json.dumps({
 })
 ```
 
-9. [llm: Report the results of this procedure build. Use the prior step outputs:
-
-Step 1 (draft): {step_1_output}
-Step 3 (review): {step_3_output}
-Step 4 (write): {step_4_output}
-Step 5 (verify): {step_5_output}
-Step 6 (lint): {step_6_output}
-Step 7 (test): {step_7_output}
-Step 8 (final lint): {step_8_output}
+9. [llm: Report the results of this procedure build. Use the prior step outputs provided above.
 
 Write a clean summary:
 

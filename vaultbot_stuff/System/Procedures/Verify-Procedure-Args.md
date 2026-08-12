@@ -34,7 +34,10 @@ args that aren't documented, importing modules that don't exist.
 ### Step 1: Parse the procedure and extract code steps + frontmatter
 
 1. ```python
-import re, json
+import re, json, os
+from pathlib import Path
+
+vault_path = os.environ.get("VAULT_PATH", ".")
 
 proc_path = args.get("procedure_path", args.get("note_path", ""))
 if not proc_path:
@@ -73,6 +76,7 @@ else:
 ### Step 2: Small model checks for runtime issues
 
 2. ```python
+import json
 import json as _json
 
 data = _json.loads(output)

@@ -3,9 +3,9 @@ type: procedure
 status: experimental
 model_cartridge: small
 created: 2026-08-09
-description: "Orchestrator that runs a suite of library-maintenance probes and produces a unified procedure-library health report. Aggregates redundancy, underuse, staleness, failure patterns, coverage gaps, and drift into a single JSON report."
-when_to_use: "When you need a comprehensive view of the procedure library's health — after a batch of new procedures, before a promotion cycle, or when the autonomous researcher reports gaps."
-falsifiable_if: "Any sub-procedure returns empty results when data exists, or the aggregated report is missing a section."
+description: Orchestrator that runs a suite of library-maintenance probes and produces a unified procedure-library health report. Aggregates redundancy, underuse, staleness, failure patterns, coverage gaps, and drift into a single JSON report.
+when_to_use: When you need a comprehensive view of the procedure library's health — after a batch of new procedures, before a promotion cycle, or when the autonomous researcher reports gaps.
+falsifiable_if: Any sub-procedure returns empty results when data exists, or the aggregated report is missing a section.
 applies_to:
   - procedure-library
   - maintenance
@@ -23,17 +23,7 @@ provides:
   - Analyze-Failure-Log
   - Check-Procedure-Drift
   - Procedure-Coverage-Check
-summary: |
-  Procedure-Library-Health is the single entry point for procedure library
-  maintenance. It orchestrates 6 probes to produce a live health snapshot:
-  1. Redundancy Probe — runs Find-Redundant-Procedures for near-duplicates
-  2. Underuse Probe — runs Find-Underused-Procedures for zero-use procedures
-  3. Staleness Probe — runs Find-Unverified-Procedures for stuck-at-experimental
-  4. Failure Probe — runs Analyze-Failure-Log for failure patterns
-  5. Drift Probe — runs Check-Procedure-Drift for embedding drift from intent
-  6. Coverage Probe — runs Procedure-Coverage-Check for task gaps
-  Output is a structured JSON report written to
-  Memory/Build-Log/procedure-library-health.json with a human-readable summary.
+summary: "## Summary"
 tags:
   - procedure
   - library-health

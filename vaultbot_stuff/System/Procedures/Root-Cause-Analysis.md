@@ -246,16 +246,23 @@ Answer in ONE sentence starting with "BECAUSE: ". If you have reached a fundamen
         resp = llm_generate(prompt).strip()
         responses.append(resp)
 
-    # Parse each response
+    # Parse each response — structural line-by-line parsing, no substring matching on prose
     def parse_why(text):
-        if "ROOT CAUSE REACHED:" in text:
-            root = text.replace("ROOT CAUSE REACHED:", "").strip()
-            if 5 < len(root) < 500:
-                return ("root", root)
-        if "BECAUSE" in text:
-            answer = text.split("BECAUSE", 1)[1].lstrip(": ").strip()
-            if 5 < len(answer) < 500:
-                return ("because", answer)
+        for line in text.split('\n'):
+            line = line.strip()
+            if line.startswith("ROOT CAUSE REACHED:"):
+                root = line.replace("ROOT CAUSE REACHED:", "").strip()
+                if 5 < len(root) < 500:
+                    return ("root", root)
+            elif line.startswith("BECAUSE:"):
+                answer = line.replace("BECAUSE:", "").strip()
+                if 5 < len(answer) < 500:
+                    return ("because", answer)
+            elif line.startswith("BECAUSE"):
+                # Handle "BECAUSE <answer>" without colon
+                answer = line.replace("BECAUSE", "", 1).strip()
+                if 5 < len(answer) < 500:
+                    return ("because", answer)
         return None
 
     parsed = [parse_why(r) for r in responses]
@@ -347,9 +354,11 @@ def parse_links(text):
             if len(parts) > 1:
                 link_num = parts[0].replace("LINK", "").strip()
                 rest = parts[1].strip()
-                if "supported" in rest.lower():
+                # Structural parse: check for exact bracketed label, not substring
+                rest_lower = rest.lower()
+                if rest_lower.startswith("supported"):
                     links[link_num] = ("supported", rest)
-                elif "assumption" in rest.lower():
+                elif rest_lower.startswith("assumption"):
                     links[link_num] = ("assumption", rest)
                 else:
                     links[link_num] = ("unknown", rest)
@@ -441,14 +450,14 @@ def parse_alternatives(text):
             parts = line.split("—")
             if len(parts) >= 3:
                 cause = parts[0].split(":", 1)[-1].strip()
+                # Extract PLAUSIBILITY field structurally, not by substring
                 plausibility = "medium"
                 for p in parts[1:]:
-                    if "high" in p.lower():
-                        plausibility = "high"
-                    elif "low" in p.lower():
-                        plausibility = "low"
-                    elif "medium" in p.lower():
-                        plausibility = "medium"
+                    if "PLAUSIBILITY:" in p:
+                        pval = p.replace("PLAUSIBILITY:", "").strip().lower()
+                        if pval in ['high', 'low', 'medium']:
+                            plausibility = pval
+                        break
                 reason = parts[-1].replace("REASON:", "").strip()
                 alts[cause] = (plausibility, reason)
     return alts
@@ -707,10 +716,12 @@ verification = "Re-run the procedure after applying the fix and confirm the symp
 for line in response.split("\n"):
     if line.startswith("ADDRESSES:"):
         addr = line.replace("ADDRESSES:", "").strip().lower()
-        if "symptom" in addr and "root" not in addr:
-            addresses = "symptom only"
-        elif "root" in addr:
+        # Exact match against known values — no substring matching on prose
+        if addr in ['root cause', 'root cause only', 'root']:
             addresses = "root cause"
+        elif addr in ['symptom only', 'symptom']:
+            addresses = "symptom only"
+        # If the LLM wrote prose, the format check above will catch it via format_failed
     elif line.startswith("VERIFICATION:"):
         verification = line.replace("VERIFICATION:", "").strip()
 

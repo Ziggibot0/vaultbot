@@ -16,7 +16,7 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
-summary: Prompt-Architecture-Audit
+summary: SUMMARY
 tags:
   - procedure
   - procedures
@@ -47,21 +47,24 @@ suggestion as the last thing before the model acts is a starting point.
 
 1. ```python
 import json
+from pathlib import Path
 
 # The conversation list is built in chat_handler.py. Find the block
 # where `conversation = [...]` is constructed — this is where the
 # prompt pipeline's final order is determined.
-from custom_tools.code_read import run as _read
-backend = "vaultbot_stuff/vaultbot_backend/chat_handler.py"
+vault_root = Path(__file__).resolve().parent.parent.parent.parent
+backend = vault_root / "vaultbot_stuff" / "vaultbot_backend" / "chat_handler.py"
+content = backend.read_text(encoding="utf-8")
+lines = content.splitlines()
 
-# Read the region around conversation assembly. Search for the
-# conversation list construction.
-result = _read({
-    "file_path": backend,
-    "start_line": 1,
-    "end_line": 50
-})
-print(result)
+# Find the conversation assembly block — search for "conversation = ["
+for i, line in enumerate(lines):
+    if "conversation = [" in line and "system" in lines[i+1] if i+1 < len(lines) else False:
+        print(f"Found conversation assembly at line {i+1}")
+        # Print 100 lines starting from the match
+        for j in range(i, min(i+100, len(lines))):
+            print(f"{j+1}: {lines[j]}")
+        break
 ```
 
 2. [llm: Search chat_handler.py for the line `conversation = [` or `conversation.append`. This is where the final prompt order is set. Read a generous range around it (at least 80 lines) to see every block that gets appended. List every `conversation.append` or `conversation.extend` call you find, in order, with what each one injects.]
@@ -70,18 +73,25 @@ print(result)
 
 3. ```python
 import json
+from pathlib import Path
 
 # Now read the system prompt construction — everything that gets appended
 # to system_prompt BEFORE the conversation list is built. These are blocks
 # injected into the first system message.
-# Search for `system_prompt +=` and `system_prompt = system_prompt +` lines.
-from custom_tools.code_read import run as _read
-result = _read({
-    "file_path": "vaultbot_stuff/vaultbot_backend/chat_handler.py",
-    "start_line": 1180,
-    "end_line": 1320
-})
-print(result)
+vault_root = Path(__file__).resolve().parent.parent.parent.parent
+backend = vault_root / "vaultbot_stuff" / "vaultbot_backend" / "chat_handler.py"
+content = backend.read_text(encoding="utf-8")
+lines = content.splitlines()
+
+# Search for system_prompt assembly — lines that append to system_prompt
+for i, line in enumerate(lines):
+    if "system_prompt" in line and ("+=" in line or "= system_prompt +" in line or "system_prompt =" in line):
+        # Print context around each match
+        start = max(0, i-2)
+        end = min(len(lines), i+5)
+        for j in range(start, end):
+            print(f"{j+1}: {lines[j]}")
+        print("---")
 ```
 
 4. [llm: Build the complete injection map. For each block that gets added to the prompt, record:

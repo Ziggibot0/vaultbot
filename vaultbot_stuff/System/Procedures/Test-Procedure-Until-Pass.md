@@ -211,25 +211,25 @@ else:
         fix_result = run_procedure("Procedure-Fixer", {"procedure_name": target})
         simple_fix_applied = "Procedure-Fixer"
 
-    if isinstance(fix_result, str):
-        try:
-            fix_data = _json.loads(fix_result)
-        except _json.JSONDecodeError:
-            fix_data = {"final_output": fix_result[:2000]}
-    else:
-        fix_data = fix_result
+        if isinstance(fix_result, str):
+            try:
+                fix_data = _json.loads(fix_result)
+            except _json.JSONDecodeError:
+                fix_data = {"final_output": fix_result[:2000]}
+        else:
+            fix_data = fix_result
 
-    result = json.dumps({
-        "target": target,
-        "iteration": data.get("iteration"),
-        "max_iterations": data.get("max_iterations"),
-        "overall_passed": False,
-        "fix_method": simple_fix_applied,
-        "fix_result": fix_data.get("final_output", str(fix_data)[:2000]),
-        "proc_args": data.get("proc_args", {}),
-        "diagnosis": diag,
-        "status": "fixed" if fix_data.get("overall_passed", False) else "fix_attempted"
-    })
+        result = json.dumps({
+            "target": target,
+            "iteration": data.get("iteration"),
+            "max_iterations": data.get("max_iterations"),
+            "overall_passed": False,
+            "fix_method": simple_fix_applied,
+            "fix_result": fix_data.get("final_output", str(fix_data)[:2000]),
+            "proc_args": data.get("proc_args", {}),
+            "diagnosis": diag,
+            "status": "fixed" if fix_data.get("overall_passed", False) else "fix_attempted"
+        })
     ```
 
 ### Step 4: Re-run the target procedure to check if the fix worked

@@ -71,10 +71,10 @@ Problem: {problem}
 Respond with ONLY the word, nothing else."""
     try:
         response = llm_generate(prompt).strip().upper()
-        # Extract valid type from response
+        # Exact match against valid types — no substring matching on prose
         classified = None
         for vt in valid_types:
-            if vt in response:
+            if response.strip() == vt:
                 classified = vt
                 break
         if classified:
@@ -279,7 +279,16 @@ If none show functional fixedness, output:
 CLEAN"""
         try:
             response = llm_generate(prompt).strip()
-            if 'CLEAN' in response.upper() or 'REVISE' in response.upper():
+            # Structural check: look for CLEAN or REVISE as a line prefix, not substring
+            has_clean = False
+            has_revise = False
+            for line in response.split('\n'):
+                stripped = line.strip().upper()
+                if stripped == 'CLEAN' or stripped.startswith('CLEAN '):
+                    has_clean = True
+                if stripped.startswith('REVISE'):
+                    has_revise = True
+            if has_clean or has_revise:
                 best_response = response
                 break
         except:

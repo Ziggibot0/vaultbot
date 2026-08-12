@@ -5,6 +5,7 @@ model_cartridge: small
 created: 2026-07-28
 restored: 2026-08-09
 description: "Meta-procedure for creating new procedures: reads a draft from _procedure_draft.md, runs static validation + dry-run sandbox test, publishes only if all checks pass. Catches the 7 friction points from Dream-Pass creation."
+when_to_use: when you need to create a new procedure from a draft, when a draft is ready at _procedure_draft.md, when you want sandboxed validation before publishing, or when asked to publish a procedure draft
 falsifiable_if: "a procedure published by following these steps fails on first live execution"
 applies_to:
   - procedure-creation
@@ -48,26 +49,54 @@ Use this procedure when you need to create a new procedure note for a recurring 
 3. Write the draft to `_procedure_draft.md` in the vault root
 4. Then call `execute_procedure("Procedure-Creator")`
 
-The draft must have:
-- `type: procedure` in frontmatter
-- `description` (one-line summary)
-- `allowed_tools` (list of tool names)
-- `falsifiable_if` (condition that would prove it wrong)
-- `## Steps` section where EVERY step has a `### Step N: short-summary` header followed by a ```python fence or `[llm: ...]` tag. The header summary is the step's human-readable description — without it, the step has no description. Example:
+The draft must follow the **unified procedure format** (see [[Procedural-Bootstrap-and-Evolution-Plan]] Part 3 and [[Build-Procedure]]):
 
+### Required Frontmatter
+```yaml
+---
+type: procedure
+status: experimental
+model_cartridge: small  # or big, or vision
+created: YYYY-MM-DD
+description: "one-line summary for retrieval"
+when_to_use: "SITUATIONS that trigger this procedure"
+falsifiable_if: "specific, observable failure condition"
+allowed_tools:
+  - tool_name
+summary: Short-Title
+tags:
+  - procedure
+  - procedures
+---
 ```
-  ## Steps
 
-  ### Step 1: Search the vault
+### Step Format
+Every step MUST use this exact format:
 
-  ```python
-  results = vault_search(query)
-  ```
+```markdown
+### Step N: Short human-readable summary
 
-  ### Step 2: Classify the results
+N. ```python
+code here
+```
 
-  [llm: Classify each result as relevant or not.]
-  ```
+### Step N: Short human-readable summary
+
+N. [llm: instruction here]
+```
+
+- The `### Step N:` header provides the human-readable description.
+- The `N.` prefix on the code fence or LLM tag makes step numbers visible in raw markdown.
+- Code steps use ```python blocks. LLM steps use `[llm: ...]` tags.
+- NEVER use bare `N.` without a `### Step N:` header above it.
+- NEVER use `[vllm:]`, `[model_cartridge:]`, or any other tag format — only `[llm: ...]`.
+
+### Standardized Sections (in this order)
+1. `## When to Run This` — trigger conditions
+2. `## Inputs` — documented args (if any)
+3. `## Steps` — the machine-executable steps
+4. `## Why This Exists` — the failure or gap that spawned this procedure
+5. `## Related` — wikilinks to related notes
 
 ## Steps
 

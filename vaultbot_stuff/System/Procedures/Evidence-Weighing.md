@@ -55,14 +55,24 @@ for i in range(3):
     resp = llm_generate(prompt).strip().lower()
     responses.append(resp)
 
-# Parse each response to a valid type
+# Parse each response to a valid type — exact match only, no substring
 parsed = []
 for resp in responses:
-    if resp in valid_types:
-        parsed.append(resp)
+    resp_clean = resp.strip().lower()
+    # Remove trailing punctuation the LLM might add
+    resp_clean = resp_clean.rstrip('.').rstrip(',')
+    if resp_clean in valid_types:
+        parsed.append(resp_clean)
     else:
-        found = [t for t in valid_types if t in resp]
-        parsed.append(found[0] if found else 'unknown')
+        # Check if the response line starts with a valid type (LLM might add "The type is X")
+        words = resp_clean.split()
+        for w in words:
+            w = w.rstrip('.').rstrip(',')
+            if w in valid_types:
+                parsed.append(w)
+                break
+        else:
+            parsed.append('unknown')
 
 # Majority vote
 from collections import Counter

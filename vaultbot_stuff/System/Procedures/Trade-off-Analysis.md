@@ -69,14 +69,24 @@ if valid:
     most_common = Counter(serialized).most_common(1)[0][0]
     options = json.loads(most_common)
 else:
-    # DETERMINISTIC FALLBACK: split on common separators
-    import re
-    vs_match = re.search(r'(\w[\w\s]+?)\s+(?:vs\.?|versus|or)\s+(\w[\w\s]+)', problem, re.IGNORECASE)
-    if vs_match:
-        options = [vs_match.group(1).strip(), vs_match.group(2).strip()]
-    else:
-        parts = re.split(r'[,;]', problem)
-        options = [p.strip()[:50] for p in parts[:4] if len(p.strip()) > 3]
+    # DETERMINISTIC FALLBACK: structural split on common separators
+    # No regex on prose — use simple string operations for structural splitting
+    options = []
+    for sep in [' vs ', ' vs. ', ' versus ', ' or ']:
+        if sep in problem.lower():
+            idx = problem.lower().index(sep)
+            left = problem[:idx].strip()
+            right = problem[idx + len(sep):].strip()
+            if left and right:
+                options = [left[:80], right[:80]]
+                break
+    if len(options) < 2:
+        # Split on commas/semicolons as last resort
+        for sep in [',', ';']:
+            if sep in problem:
+                parts = problem.split(sep)
+                options = [p.strip()[:50] for p in parts[:4] if len(p.strip()) > 3]
+                break
     if len(options) < 2:
         options = ["Option A", "Option B"]
 
