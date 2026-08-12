@@ -1,8 +1,8 @@
 const { Plugin, Notice, Modal } = require('obsidian');
 const { spawn } = require('child_process');
 const path = require('path');
-const VaultBotSettingTab = require('./settings.js');
-const VaultBotSidebarView = require('./sidebar.js');
+const VaultBotSettingTab = require(path.join(__dirname, 'settings.js'));
+const VaultBotSidebarView = require(path.join(__dirname, 'sidebar.js'));
 
 class VaultBotPlugin extends Plugin {
 	async onload() {

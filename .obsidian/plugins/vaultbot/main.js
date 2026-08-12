@@ -8,5 +8,6 @@
 //   settings.js  — VaultBotSettingTab (settings UI)
 //   sidebar.js   — VaultBotSidebarView (chat UI, WebSocket, console)
 
-const VaultBotPlugin = require('./plugin.js');
+const path = require('path');
+const VaultBotPlugin = require(path.join(__dirname, 'plugin.js'));
 module.exports = VaultBotPlugin;
