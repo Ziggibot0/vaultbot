@@ -9,6 +9,7 @@ allowed_tools:
   - vault_read_note
   - llm_generate
   - run_procedure
+  - vault_research
 tags: [procedure, reasoning, think, v3, code-steps, bite-sized, small-model]
 ---
 
@@ -244,10 +245,54 @@ for claim in all_claims:
     else:
         premise_verified.append(f"VERIFIED: {claim} (supported by: {doc_titles})")
 
+# --- Research gate: if ALL claims are UNVERIFIED and vault docs are thin, research the gap ---
+# The BS detector should not just say "unverified" and give up — it should
+# trigger vault_research to fill the knowledge gap, then re-verify.
+if not premise_verified and premise_warnings and full_docs:
+    # Check if vault docs are actually relevant (not just random noise)
+    # by asking the LLM if any doc is semantically related to the problem
+    doc_snippets = '\\n'.join([d['text'][:500] for d in full_docs[:3]])
+    relevance_prompt = f"Problem: {problem}\\n\\nVault docs found:\\n{doc_snippets}\\n\\nAre these docs relevant to the problem? Answer YES or NO."
+    relevance_resp = llm_generate(relevance_prompt).strip().upper()
+    docs_irrelevant = 'NO' in relevance_resp
+
+    if docs_irrelevant or len(full_docs) < 2:
+        # Vault is thin — trigger research
+        try:
+            research_result = vault_research(problem, depth='deep')
+            if research_result and 'error' not in research_result:
+                research_synthesis = research_result.get('synthesis', '')
+                research_note = research_result.get('note_path', '')
+                # Re-verify claims against the research synthesis
+                if research_synthesis:
+                    premise_warnings = []
+                    premise_verified = []
+                    for claim in all_claims:
+                        recheck_prompt = f"Read this research. Does it support this claim? Answer YES, NO, or NEUTRAL.\\n\\nClaim: {claim}\\n\\nResearch:\\n{research_synthesis[:2000]}"
+                        recheck_resp = llm_generate(recheck_prompt).strip().upper()
+                        recheck_verdict = 'NEUTRAL'
+                        for word in recheck_resp.split():
+                            word = word.rstrip('.,!;')
+                            if word in ('YES', 'NO', 'NEUTRAL'):
+                                recheck_verdict = word
+                                break
+                        if recheck_verdict == 'YES':
+                            premise_verified.append(f"VERIFIED: {claim} (supported by vault_research: {research_note})")
+                        else:
+                            premise_warnings.append(f"UNVERIFIED: {claim} (researched, verdict: {recheck_verdict}, note: {research_note})")
+        except Exception:
+            pass  # Research failed — keep original UNVERIFIED status
+
+# --- Premise Gate: if ALL claims are unverified after research, block downstream ---
+# The BS detector correctly flags false premises, but Steps 4-8 would still
+# classify, dispatch lenses, and synthesize an answer about a fictional system.
+# PREMISE_GATE: BLOCKED tells Step 8 to produce an honest refusal instead.
+premise_gate = 'BLOCKED' if (not premise_verified and premise_warnings) else 'OPEN'
+
 warnings_str = ' ||| '.join(premise_warnings) if premise_warnings else 'ALL_VERIFIED'
 verified_str = ' ||| '.join(premise_verified) if premise_verified else 'NONE_VERIFIED'
 
-result = f"PREMISE_WARNINGS: {warnings_str}\nPREMISE_VERIFIED: {verified_str}\nPROBLEM: {problem}"
+result = f"PREMISE_WARNINGS: {warnings_str}\nPREMISE_VERIFIED: {verified_str}\nPREMISE_GATE: {premise_gate}\nPROBLEM: {problem}"
 if context:
     result += f"\nCONTEXT: {context}"
 if lens_override:
@@ -270,6 +315,7 @@ problem = ''
 context = ''
 lens_override = ''
 premise_warnings = ''
+premise_gate = ''
 for line in lines:
     if line.startswith('PROBLEM: '):
         problem = line.replace('PROBLEM: ', '').strip()
@@ -279,6 +325,8 @@ for line in lines:
         lens_override = line.replace('LENS_OVERRIDE: ', '').strip()
     elif line.startswith('PREMISE_WARNINGS: '):
         premise_warnings = line.replace('PREMISE_WARNINGS: ', '').strip()
+    elif line.startswith('PREMISE_GATE: '):
+        premise_gate = line.replace('PREMISE_GATE: ', '').strip()
 
 # Triple-try classification — one word from a short list
 valid_types = ['WHY', 'CHOOSE', 'EXPLAIN', 'BUILD', 'EVALUATE', 'VERIFY']
@@ -299,7 +347,7 @@ if votes:
 else:
     problem_type = 'EXPLAIN'  # safe default
 
-result = f"PROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}"
+result = f"PROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}"
 if context:
     result += f"\nCONTEXT: {context}"
 if lens_override:
@@ -323,6 +371,7 @@ problem_type = ''
 context = ''
 lens_override = ''
 premise_warnings = ''
+premise_gate = ''
 for line in lines:
     if line.startswith('PROBLEM: '):
         problem = line.replace('PROBLEM: ', '').strip()
@@ -334,6 +383,8 @@ for line in lines:
         lens_override = line.replace('LENS_OVERRIDE: ', '').strip()
     elif line.startswith('PREMISE_WARNINGS: '):
         premise_warnings = line.replace('PREMISE_WARNINGS: ', '').strip()
+    elif line.startswith('PREMISE_GATE: '):
+        premise_gate = line.replace('PREMISE_GATE: ', '').strip()
 
 # Deterministic mapping from problem type to default lens
 type_to_lens = {
@@ -367,7 +418,7 @@ else:
                 lens_stack.append(lens)
                 break
 
-result = f"LENS_STACK: {','.join(lens_stack)}\nPROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}"
+result = f"LENS_STACK: {','.join(lens_stack)}\nPROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}"
 if context:
     result += f"\nCONTEXT: {context}"
 print(result)
@@ -389,6 +440,7 @@ problem_type = ''
 lens_stack_str = ''
 context = ''
 premise_warnings = ''
+premise_gate = ''
 for line in lines:
     if line.startswith('PROBLEM: '):
         problem = line.replace('PROBLEM: ', '').strip()
@@ -400,6 +452,8 @@ for line in lines:
         context = line.replace('CONTEXT: ', '').strip()
     elif line.startswith('PREMISE_WARNINGS: '):
         premise_warnings = line.replace('PREMISE_WARNINGS: ', '').strip()
+    elif line.startswith('PREMISE_GATE: '):
+        premise_gate = line.replace('PREMISE_GATE: ', '').strip()
 
 lens_queue = [l.strip() for l in lens_stack_str.split(',') if l.strip()]
 completed = []
@@ -440,7 +494,7 @@ for lens_name in lens_queue:
     completed.append(lens_name)
 
 # Format output
-result = f"PROBLEM: {problem}\nLENSES_RUN: {','.join(completed)}\nVAULT_DOCS: {' | '.join(all_docs)}\nPREMISE_WARNINGS: {premise_warnings}\n"
+result = f"PROBLEM: {problem}\nLENSES_RUN: {','.join(completed)}\nVAULT_DOCS: {' | '.join(all_docs)}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}\n"
 for name, out in lens_outputs.items():
     # Escape newlines in lens output for single-line storage
     escaped = out.replace('\n', '\\n')
@@ -463,6 +517,7 @@ lines = output.strip().split('\n')
 problem = ''
 completed_str = ''
 premise_warnings = ''
+premise_gate = ''
 lens_data = {}
 for line in lines:
     if line.startswith('PROBLEM: '):
@@ -471,6 +526,8 @@ for line in lines:
         completed_str = line.replace('LENSES_RUN: ', '').strip()
     elif line.startswith('PREMISE_WARNINGS: '):
         premise_warnings = line.replace('PREMISE_WARNINGS: ', '').strip()
+    elif line.startswith('PREMISE_GATE: '):
+        premise_gate = line.replace('PREMISE_GATE: ', '').strip()
     elif line.startswith('LENS_OUTPUT: '):
         rest = line.replace('LENS_OUTPUT: ', '').strip()
         if '::: ' in rest:
@@ -526,7 +583,7 @@ for lens_name in extra_lenses:
         completed.append(lens_name)
 
 # Rebuild output with all lens data
-result = f"PROBLEM: {problem}\nLENSES_RUN: {','.join(completed)}\nPREMISE_WARNINGS: {premise_warnings}\n"
+result = f"PROBLEM: {problem}\nLENSES_RUN: {','.join(completed)}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}\n"
 for name, out in lens_data.items():
     escaped = out.replace('\n', '\\n')
     result += f"LENS_OUTPUT: {name}::: {escaped}\n"
@@ -547,6 +604,7 @@ lines = output.strip().split('\n')
 problem = ''
 completed_str = ''
 premise_warnings = ''
+premise_gate = ''
 lens_data = {}
 for line in lines:
     if line.startswith('PROBLEM: '):
@@ -555,6 +613,8 @@ for line in lines:
         completed_str = line.replace('LENSES_RUN: ', '').strip()
     elif line.startswith('PREMISE_WARNINGS: '):
         premise_warnings = line.replace('PREMISE_WARNINGS: ', '').strip()
+    elif line.startswith('PREMISE_GATE: '):
+        premise_gate = line.replace('PREMISE_GATE: ', '').strip()
     elif line.startswith('LENS_OUTPUT: '):
         rest = line.replace('LENS_OUTPUT: ', '').strip()
         if '::: ' in rest:
@@ -563,45 +623,83 @@ for line in lines:
 
 completed = [c.strip() for c in completed_str.split(',') if c.strip()]
 
-# Build synthesis
-synth_lines = []
-synth_lines.append(f"## Think v3 Analysis: {problem}")
-synth_lines.append("")
+# Read user preference: show BS Detector messages directly, or let the LLM handle it gently?
+import os
+bs_detector_messages = os.environ.get('VAULTBOT_BS_DETECTOR_MESSAGES', 'true').lower() != 'false'
 
-# Premise warnings first — BS detector results
-if premise_warnings and premise_warnings != 'ALL_VERIFIED':
-    synth_lines.append("### BS Detector: Unverified Claims")
-    for w in premise_warnings.split('|||'):
-        w = w.strip()
-        if w:
-            synth_lines.append(f"- {w}")
+# --- PREMISE GATE: if all premises are unverified, refuse to fabricate ---
+if premise_gate == 'BLOCKED':
+    synth_lines = []
+    synth_lines.append(f"## Think v4 Analysis: {problem}")
     synth_lines.append("")
+    synth_lines.append("### ⚠️ Premise Gate: BLOCKED")
+    synth_lines.append("")
+    synth_lines.append("All factual premises in this question could not be verified against the vault. "
+                       "The question may be based on false assumptions. Rather than fabricating an answer "
+                       "about a system that may not exist, I'm stopping here.")
+    synth_lines.append("")
+
+    if bs_detector_messages:
+        synth_lines.append("#### BS Detector: Unverified Claims")
+        for w in premise_warnings.split('|||'):
+            w = w.strip()
+            if w:
+                synth_lines.append(f"- {w}")
+        synth_lines.append("")
+    else:
+        synth_lines.append("Here's what I checked:")
+        for w in premise_warnings.split('|||'):
+            w = w.strip()
+            if w:
+                synth_lines.append(f"- {w}")
+        synth_lines.append("")
+
+    synth_lines.append("If you believe this question is valid, could you rephrase it with verifiable claims? "
+                       "I'm happy to research the topic from scratch.")
+    synth_lines.append("")
+    synth_lines.append("### Confidence: N/A (premise gate blocked)")
+    synthesis = '\n'.join(synth_lines)
+    print(synthesis)
 else:
-    synth_lines.append("### BS Detector: All premises verified against vault")
+    # --- PREMISE GATE OPEN: normal synthesis ---
+    synth_lines = []
+    synth_lines.append(f"## Think v4 Analysis: {problem}")
     synth_lines.append("")
 
-# Lens results
-synth_lines.append(f"### Analysis (lenses applied: {', '.join(completed)})")
-synth_lines.append("")
-for name in completed:
-    out = lens_data.get(name, 'No output')
-    synth_lines.append(f"#### {name}")
-    synth_lines.append(out)
+    if premise_warnings and premise_warnings != 'ALL_VERIFIED':
+        if bs_detector_messages:
+            synth_lines.append("### BS Detector: Unverified Claims")
+        else:
+            synth_lines.append("### Things I couldn't fully verify")
+        for w in premise_warnings.split('|||'):
+            w = w.strip()
+            if w:
+                synth_lines.append(f"- {w}")
+        synth_lines.append("")
+    else:
+        synth_lines.append("### BS Detector: All premises verified against vault")
+        synth_lines.append("")
+
+    synth_lines.append(f"### Analysis (lenses applied: {', '.join(completed)}")
     synth_lines.append("")
+    for name in completed:
+        out = lens_data.get(name, 'No output')
+        synth_lines.append(f"#### {name}")
+        synth_lines.append(out)
+        synth_lines.append("")
 
-# Confidence note
-if premise_warnings and premise_warnings != 'ALL_VERIFIED':
-    synth_lines.append("### Confidence: MEDIUM")
-    synth_lines.append("Some premises could not be verified against vault documents. Findings may rest on unverified assumptions.")
-else:
-    synth_lines.append("### Confidence: HIGH")
-    synth_lines.append("All premises verified against vault documents.")
+    if premise_warnings and premise_warnings != 'ALL_VERIFIED':
+        synth_lines.append("### Confidence: MEDIUM")
+        synth_lines.append("Some premises could not be verified against vault documents. Findings may rest on unverified assumptions.")
+    else:
+        synth_lines.append("### Confidence: HIGH")
+        synth_lines.append("All premises verified against vault documents.")
 
-synthesis = '\n'.join(synth_lines)
-print(synthesis)
+    synthesis = '\n'.join(synth_lines)
+    print(synthesis)
 ```
 
-[validate: contains "Think v3 Analysis"]
+[validate: contains "Think v4 Analysis"]
 [validate: contains "BS Detector"]
 
 ---

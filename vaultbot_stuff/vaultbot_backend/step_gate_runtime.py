@@ -621,6 +621,30 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    namespace["vaultbot_status"] = vaultbot_status\n'
         )
 
+    if "vault_research" in allowed_tools:
+        snippets.append(
+            'if "vault_research" in allowed:\n'
+            '    import requests as _requests\n'
+            '    def vault_research(topic, depth="deep"):\n'
+            '        """Research a topic via the backend research engine.\n'
+            '        Calls the /research_tool HTTP endpoint so the procedure\n'
+            '        subprocess does not need to import the full engine.\n'
+            '        Returns a dict with synthesis, sources, and note_path.\n'
+            '        On failure, returns {"error": ...} for graceful degradation.\n'
+            '        """\n'
+            '        try:\n'
+            '            resp = _requests.post(\n'
+            '                "http://localhost:8000/research_tool",\n'
+            '                json={"topic": topic, "depth": depth},\n'
+            '                timeout=120\n'
+            '            )\n'
+            '            resp.raise_for_status()\n'
+            '            return resp.json()\n'
+            '        except Exception as _e:\n'
+            '            return {"error": str(_e), "topic": topic}\n'
+            '    namespace["vault_research"] = vault_research\n'
+        )
+
     return "\n".join(snippets)
 
 
