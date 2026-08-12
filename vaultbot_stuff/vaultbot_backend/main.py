@@ -433,7 +433,7 @@ app.add_middleware(_RateLimitMiddleware)
 # in vaultbot_backend/.vaultbot_auth_token (gitignored). The Obsidian plugin
 # reads the same file and attaches the header automatically.
 # See auth.py for the full design rationale.
-from auth import get_or_create_token, is_auth_exempt, validate_token
+from auth import get_or_create_token, is_auth_exempt, is_auth_required, validate_token
 
 # Ensure the token exists before the first request arrives.
 _auth_token = get_or_create_token()
@@ -443,11 +443,12 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         # Exempt health checks and preflight (needed before plugin can read token).
         if is_auth_exempt(request.url.path):
             return await call_next(request)
+        # Only gate destructive/sensitive endpoints. Read/config endpoints
+        # are trusted from localhost — the backend only listens on 127.0.0.1.
+        if not is_auth_required(request.url.path):
+            return await call_next(request)
         # WebSocket upgrade requests carry the token as a query param
-        # (the plugin appends ?token=... to the WS URL). The header check
-        # below also works for WS if the client sets it, but the Obsidian
-        # WebSocket API doesn't support custom headers on connect, so we
-        # also check query params.
+        # (the plugin appends ?token=... to the WS URL).
         token = request.headers.get("X-VaultBot-Token")
         if not token:
             token = request.query_params.get("token")

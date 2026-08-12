@@ -48,6 +48,15 @@ _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset({
     "/shutdown",  # sendBeacon can't set custom headers; PID lock prevents abuse
 })
 
+# Endpoints that ALWAYS require auth, even from localhost. These are the
+# destructive/sensitive operations that a malicious local process could abuse.
+# Everything else is trusted when the request comes from localhost (127.0.0.1
+# or ::1) — the Obsidian plugin and local browser are trusted clients.
+_AUTH_REQUIRED_PATHS: frozenset[str] = frozenset({
+    "/custom_tools/call",
+    "/ws",
+})
+
 
 def _generate_token() -> str:
     """Generate a new 64-char hex token (256 bits)."""
@@ -97,6 +106,19 @@ def is_auth_exempt(path: str) -> bool:
     if not p.startswith("/"):
         p = "/" + p
     return p in _AUTH_EXEMPT_PATHS
+
+
+def is_auth_required(path: str) -> bool:
+    """Return True if the given path ALWAYS requires authentication.
+
+    Only destructive/sensitive endpoints require auth. Read/config endpoints
+    are trusted from localhost — the backend only listens on 127.0.0.1.
+    """
+    # Normalize: strip trailing slash, ensure leading slash.
+    p = path.rstrip("/")
+    if not p.startswith("/"):
+        p = "/" + p
+    return p in _AUTH_REQUIRED_PATHS
 
 
 def validate_token(token: str | None) -> bool:
