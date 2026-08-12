@@ -17,6 +17,7 @@ class VaultBotPlugin extends Plugin {
 			tavilyApiKey: '',
 			safeMode: true,
 			allowWebResearch: true,
+			bsDetectorMessages: true,
 		};
 		this.backendStarting = false;
 		this.mcpProcess = null;
@@ -1549,6 +1550,7 @@ class VaultBotPlugin extends Plugin {
 					VAULTBOT_ALLOW_CONTRIBUTIONS: this.settings.allowContributions ? 'true' : 'false',
 				VAULTBOT_SAFE_MODE: this.settings.safeMode !== false ? 'true' : 'false',
 				VAULTBOT_ALLOW_WEB_RESEARCH: this.settings.allowWebResearch !== false ? 'true' : 'false',
+				VAULTBOT_BS_DETECTOR_MESSAGES: this.settings.bsDetectorMessages !== false ? 'true' : 'false',
 				})
 		});
 		backendProcess.unref();
@@ -2106,6 +2108,19 @@ class VaultBotSettingTab extends PluginSettingTab {
 					new Notice(value
 						? 'Web research enabled'
 						: 'Web research disabled — VaultBot will only use your vault. Restart backend to apply.');
+				}));
+
+		new Setting(containerEl)
+			.setName('BS Detector messages')
+			.setDesc('When the Think procedure detects unverified premises, show the BS Detector warning directly in chat. Turn off to let VaultBot handle it more gently — the detector still runs in the backend, but the LLM decides how to tell you.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.bsDetectorMessages !== false)
+				.onChange(async (value) => {
+					this.plugin.settings.bsDetectorMessages = value;
+					await this.plugin.saveSettings();
+					new Notice(value
+						? 'BS Detector messages shown in chat'
+						: 'BS Detector runs silently — VaultBot will tell you gently');
 				}));
 
 		containerEl.createEl('h3', {text: 'Community contributions'});
@@ -2815,6 +2830,11 @@ class VaultBotSidebarView extends ItemView {
 		const stopButton = chatBar.createEl('button', {text: 'Stop', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-stop'});
 		stopButton.title = 'Interrupt VaultBot immediately.';
 		stopButton.style.display = 'none'; // hidden until a turn is active
+		stopButton.addEventListener('click', () => {
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({type: 'stop'}));
+			}
+		});
 
 		// --- Drag & drop file support -----------------------------------
 		// Drag files onto the chat bar to insert their vault-relative
@@ -2945,6 +2965,7 @@ class VaultBotSidebarView extends ItemView {
 		// in place by progress/heartbeat events so the user is never staring
 		// at a frozen "Calling X..." with no idea if it's still working.
 		let currentActivityEl = null;
+		let currentToolCallEl = null;   // collapsible tool-call container (header + body)
 		let activityStartTs = 0;
 		let activityTimer = null;
 
@@ -3208,6 +3229,12 @@ class VaultBotSidebarView extends ItemView {
 				}
 				currentActivityEl = null;
 			}
+			// Finalize any pending collapsible tool-call element.
+			if (currentToolCallEl) {
+				const elapsed = Date.now() - currentToolCallEl.startTs;
+				currentToolCallEl.header.setText('🔧 ' + currentToolCallEl.toolName + '  [' + fmtMs(elapsed) + ']');
+				currentToolCallEl = null;
+			}
 		};
 
 		let ws = null;
@@ -3334,7 +3361,33 @@ class VaultBotSidebarView extends ItemView {
 					closeCurrentSegment();
 					const toolName = msg.tool || 'tool';
 					const argsStr = msg.args ? JSON.stringify(msg.args) : '';
-					startActivity('Calling ' + toolName + (argsStr ? ': ' + argsStr : '...'), {});
+					const shortArgs = argsStr.length > 80 ? argsStr.slice(0, 77) + '…' : argsStr;
+					// Collapsible tool-call container: header is always visible,
+					// body (args + result) is hidden until clicked.
+					const container = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-call'});
+					const header = container.createDiv({cls: 'vaultbot-tool-call-header'});
+					header.setText('🔧 ' + toolName + (shortArgs ? ': ' + shortArgs : '') + ' …');
+					const body = container.createDiv({cls: 'vaultbot-tool-call-body'});
+					body.style.display = 'none';
+					if (argsStr) {
+						const argsDiv = body.createDiv({cls: 'vaultbot-tool-call-args'});
+						argsDiv.setText(argsStr);
+					}
+					// Click header to toggle expand/collapse.
+					header.addEventListener('click', () => {
+						const hidden = body.style.display === 'none';
+						body.style.display = hidden ? 'block' : 'none';
+						// Refresh header text (elapsed may have updated).
+						const el = currentToolCallEl;
+						if (el && el.toolName === toolName) {
+							const e = Date.now() - el.startTs;
+							header.setText((hidden ? '🔽 ' : '🔧 ') + toolName + (shortArgs ? ': ' + shortArgs : '') + '  [' + fmtMs(e) + ']');
+						} else {
+							header.setText((hidden ? '🔽 ' : '🔧 ') + toolName + (shortArgs ? ': ' + shortArgs : ''));
+						}
+					});
+					currentToolCallEl = { container, header, body, toolName, startTs: Date.now() };
+					smartScrollToBottom();
 				} else if (msg.type === 'progress') {
 					// Granular stage events from the backend (research rounds,
 					// scraping, synthesis, gap fill, note writing, A-MEM).
@@ -3353,10 +3406,31 @@ class VaultBotSidebarView extends ItemView {
 				} else if (msg.type === 'tool_result') {
 					if (!currentAssistantMessage) startAssistantMessage();
 					closeCurrentSegment();
-					const summary = (msg.tool || 'tool') + ' - ' + (msg.summary || 'done');
-					endActivity(summary);
-					const resDiv = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-result'});
-					resDiv.setText('  - ' + summary);
+					const summary = msg.summary || 'done';
+					const toolName = msg.tool || 'tool';
+					if (currentToolCallEl && currentToolCallEl.toolName === toolName) {
+						// Populate the matching collapsible tool-call body.
+						const elapsed = Date.now() - currentToolCallEl.startTs;
+						const resultDiv = currentToolCallEl.body.createDiv({cls: 'vaultbot-tool-call-result'});
+						resultDiv.setText(summary);
+						currentToolCallEl.header.setText('🔧 ' + toolName + '  [' + fmtMs(elapsed) + ']');
+						currentToolCallEl = null;
+					} else {
+						// No matching tool_call (e.g. reconnected mid-stream):
+						// create a standalone collapsible result.
+						const container = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-call'});
+						const header = container.createDiv({cls: 'vaultbot-tool-call-header'});
+						header.setText('🔧 ' + toolName);
+						const body = container.createDiv({cls: 'vaultbot-tool-call-body'});
+						body.style.display = 'none';
+						const resultDiv = body.createDiv({cls: 'vaultbot-tool-call-result'});
+						resultDiv.setText(summary);
+						header.addEventListener('click', () => {
+							const hidden = body.style.display === 'none';
+							body.style.display = hidden ? 'block' : 'none';
+							header.setText((hidden ? '🔽 ' : '🔧 ') + toolName);
+						});
+					}
 					smartScrollToBottom();
 				} else if (msg.type === 'context_usage') {
 					// Live token-usage meter update from the backend. Fires
@@ -3438,6 +3512,7 @@ class VaultBotSidebarView extends ItemView {
 			} else if (msg.type === 'session_reset') {
 					// /new command: clear the chat UI for a fresh session.
 					endActivity();
+					setTurnActive(false);
 					chatContainer.empty();
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
@@ -3629,6 +3704,8 @@ class VaultBotSidebarView extends ItemView {
 				setStatus('offline', 'Disconnected from backend — retrying...');
 				// Null out the socket so ensureConnection() will reconnect next tick.
 				ws = null;
+				// Hide the Stop button — nothing to stop when disconnected.
+				setTurnActive(false);
 			};
 			ws.onerror = (error) => {
 				console.error('WebSocket error:', error);

@@ -278,14 +278,51 @@
 	box-shadow: 0 1px 1px var(--vb-shadow-soft);
 }
 
-/* ---- Tool result: a quiet stone chip ---- */
-.vaultbot-tool-result {
-	font-size: 0.85em;
+/* ---- Tool call: collapsible container (header always visible, body hidden) ---- */
+.vaultbot-tool-call {
+	margin: 4px 0;
+	border: 1px solid var(--vb-stone);
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: var(--vb-bg-elev);
+}
+
+.vaultbot-tool-call-header {
+	font-size: 0.82em;
 	color: var(--vb-ink-muted);
-	padding: 2px 10px;
-	margin: 2px 0 8px 0;
+	padding: 5px 10px;
+	cursor: pointer;
+	user-select: none;
+	font-family: var(--font-monospace);
+	border-left: 3px solid var(--vb-moss);
+	transition: background-color 0.12s ease;
+}
+
+.vaultbot-tool-call-header:hover {
+	background-color: var(--vb-sand);
+}
+
+.vaultbot-tool-call-body {
+	font-size: 0.8em;
+	color: var(--vb-ink-muted);
+	padding: 6px 10px 6px 14px;
+	border-top: 1px solid var(--vb-stone);
+	background-color: var(--vb-bg);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.vaultbot-tool-call-args {
+	margin-bottom: 4px;
+	padding-bottom: 4px;
+	border-bottom: 1px dashed var(--vb-stone);
+	opacity: 0.8;
+}
+
+.vaultbot-tool-call-result {
 	opacity: 0.85;
-	border-left: 2px solid var(--vb-stone-deep);
 }
 
 /* ---- Status line ---- */
