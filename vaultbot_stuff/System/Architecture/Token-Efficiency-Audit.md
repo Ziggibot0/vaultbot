@@ -17,6 +17,12 @@ summary: Token Efficiency Audit
 
 # Token Efficiency Audit
 
+> **<!-- updated 2026-08-11 -->** This audit was written 2026-07-31. Some code references have since changed:
+> - `compactor.py` was replaced by `lazy_condenser.py`. References to `compactor.py` and `should_compact()` are historical — the compaction system was redesigned. See `main.py` docstring for current context management (sliding window, not LLM-based compaction).
+> - `build_system_prompt()` in `agent_tools.py` — still current as of 2026-08-11.
+> - `truncate_tool_result()` in `chat_helpers.py` — still current as of 2026-08-11.
+> - `context_budgeter.py` — still current as of 2026-08-11.
+
 ## Why This Matters
 
 The mission is to make cloud models obsolete by moving cognition into the vault. But there's a prerequisite: **before you can replace the cloud model with a small local one, you have to stop feeding the cloud model a mountain of tokens it doesn't need.** A small local model has a small context window (8K–32K tokens typically). If the system prompt alone is 16K tokens, no small model can run it. Reducing token usage is the first step toward model independence — not because cloud tokens are expensive (they're cheap), but because the token budget determines what models can run the system at all.
@@ -52,6 +58,7 @@ Every LLM call in the chat loop sends these components:
 ### After 20 Tool Rounds
 ~17,000 + 20 × 4,500 = **~107,000 tokens**
 
+<!-- updated 2026-08-11: compactor.py no longer exists. Compaction was replaced by lazy_condenser.py and then by a sliding-window approach in chat_handler.py. The should_compact() function and its 500K threshold are historical. -->
 The compactor is disabled (`should_compact()` returns `False`), so history grows without bound. The threshold was raised to 500K tokens because the model has a 1M context window — but that means a 20-round agentic session sends 100K+ tokens to the API every single call, and a small local model with an 8K window can't even load the system prompt.
 
 ---
@@ -62,6 +69,8 @@ The compactor is disabled (`should_compact()` returns `False`), so history grows
 **Impact:** ~4,500 tokens added per tool round. After 10 rounds, 45K tokens of history sent on every subsequent call. This is the #1 sink by far.
 
 **Root cause:** `compactor.py`'s `should_compact()` hard-returns `False`. The threshold was set to 500K tokens (50% of a 1M context window) to prevent mid-task summarization from shredding tool results. But this means history never compacts — it just accumulates.
+
+> **<!-- updated 2026-08-11 -->** `compactor.py` no longer exists as a standalone file. Compaction was replaced by `lazy_condenser.py` (588 lines), which implements a sliding-window context management approach. The `should_compact()` function is gone. See `main.py` lines 630-635 for the removal note. The core problem (unbounded history growth) is still relevant, but the specific code reference is stale.
 
 **Why it matters for small models:** A small model with 8K context can't even fit the history from a 2-round session. Even with a 32K context model, after 5 rounds the history alone consumes 60% of the context window.
 
@@ -105,7 +114,7 @@ The compactor is disabled (`should_compact()` returns `False`), so history grows
 
 #### Strategy 1: Re-enable Compaction at a Reasonable Threshold
 **Sink:** Conversation history (Sink 1)
-**Effort:** 1 line change in `compactor.py`
+**Effort:** 1 line change in `lazy_condenser.py` <!-- updated 2026-08-11: compactor.py was replaced by lazy_condenser.py -->
 **Expected savings:** 50–70% of total tokens after 10+ rounds
 
 Change `should_compact()` to return `True` when the conversation exceeds ~40K tokens (10K chars × 4 chars/token). The compactor already implements the OpenHands Condenser pattern: it keeps the head (system prompt + vault context) and tail (recent turns) verbatim, and summarizes the middle. The key fix: set the threshold to a value appropriate for the target model, not the current cloud model.

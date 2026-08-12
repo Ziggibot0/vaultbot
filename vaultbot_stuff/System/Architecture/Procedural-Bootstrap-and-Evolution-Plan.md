@@ -196,42 +196,76 @@ This is A/B testing, but the metric is deterministic: validation pass rate, not 
 
 ---
 
-## Part 3: Procedural Note Schema
+## Part 3: Procedural Note Schema (UNIFIED — 2026-08-10)
 
-### Frontmatter
+This is the **single authoritative format** for all procedure notes. The compiler, validator, and Build-Procedure factory all agree on this format. See [[Build-Procedure]] for the factory that enforces it.
+
+### Step Format
+
+Every step MUST use this exact format:
+
+```markdown
+### Step N: Short human-readable summary
+
+N. ```python
+code here
+```
+
+### Step N: Short human-readable summary
+
+N. [llm: instruction here]
+```
+
+- The `### Step N:` header provides the human-readable description (shown in logs and progress callbacks).
+- The `N.` prefix on the code fence or LLM tag makes step numbers visible in raw markdown.
+- Code steps use ```python blocks. LLM steps use `[llm: ...]` tags.
+- NEVER use bare `N.` without a `### Step N:` header above it.
+- NEVER use `[vllm:]`, `[model_cartridge:]`, or any other tag format — only `[llm: ...]`.
+- Decimal step numbers (e.g., 1.5, 2.5) are allowed for inserting steps between existing ones without renumbering.
+
+### Required Frontmatter
 
 ```yaml
 ---
 type: procedure
-status: experimental | verified | archived | rejected
-created: 2026-07-26
-last_reviewed: 2026-07-26
-review_interval_days: 90
-success_count: 0
-failure_count: 0
-success_rate: 0.0
-falsifiable_if: "a note produced by following these steps fails vault_lint or the operator's review"
-applies_to:
-  - research
-  - note-writing
-depends_on:
-  - "Example-Procedure-Name"
-sources:
-  - "https://example.com/guide"
-  - "https://example.com/best-practices"
+status: experimental | active | verified | archived
+model_cartridge: small  # or big, or vision
+created: YYYY-MM-DD
+description: "one-line summary for retrieval — specific enough that RAG surfaces it"
+when_to_use: "SITUATIONS that trigger this procedure, not topics"
+falsifiable_if: "specific, observable failure condition"
+allowed_tools:
+  - tool_name
+summary: Short-Title
+tags:
+  - procedure
+  - procedures
 ---
 ```
 
-### Body Structure
+- `model_cartridge: small` for classification, extraction, routing, formatting.
+- `model_cartridge: big` only for novel reasoning or complex synthesis.
+- `status` should be `experimental` for new procedures.
 
-Each procedural note should contain:
+### Optional Frontmatter
 
-1. **When to use this** -- trigger conditions (if-then rules)
-2. **Steps** -- numbered, explicit, deterministic
-3. **Decision points** -- explicit branches with conditions
-4. **Validation criteria** -- what "done correctly" looks like
-5. **Common failure modes** -- what goes wrong and how to fix it
-6. **Examples** -- one or two exemplar applications (few-shot in the vault)
+```yaml
+last_reviewed: YYYY-MM-DD
+applies_to:
+  - category
+provides:
+  - Sub-Procedure-Name
+```
+
+### Standardized Sections (in this order)
+
+1. `## When to Run This` — trigger conditions (required)
+2. `## Inputs` — documented args if the procedure takes any (required if args exist)
+3. `## Steps` — the machine-executable steps (required)
+4. `## Why This Exists` — the failure or gap that spawned this procedure
+5. `## Related` — wikilinks to related notes
+
+Additional sections (Architecture, History, Composition Map, etc.) are optional and go after `## Related`.
 
 ### The `falsifiable_if` Field
 

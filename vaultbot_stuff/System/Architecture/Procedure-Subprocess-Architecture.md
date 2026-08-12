@@ -193,13 +193,14 @@ Because procedures are vault docs:
 
 ## What Already Exists vs What Changes
 
-| Component | Current state | What changes |
+> **<!-- updated 2026-08-11 -->** Line counts below are from the original design date (2026-07-27). Current actual line counts: `procedure_compiler.py` = 1241, `step_gate_runtime.py` = 1430, `procedure_tracker.py` = 996, `chat_handler.py` = 4181. See the "Implementation Status" section below for verified post-build counts.
+
+| Component | Current state (as of 2026-07-27 design date) | What changes |
 |---|---|---|
 | `procedure_compiler.py` (289 lines) | Parses numbered steps with `[validate:]`, `[condition:]`, `[branch:]` annotations | Add: parse code blocks as step type "code", parse `[llm:]` tags as step type "llm", parse `description` and `allowed_tools` from frontmatter |
 | `step_gate_runtime.py` (354 lines) | Every step -> LLM call with active frame | **Major rewrite**: code steps execute in sandbox (no LLM), LLM steps use stripped-down minimal context call, blocking execution, loud failures |
 | `procedure_tracker.py` (613 lines) | Logs pass/fail per procedure | Add: step-level failure tracking with error details, traceback logging |
-| `chat_handler.py` (970 lines) | Dumps procedure text into context, hopes LLM follows | Add: procedure invocation logic — read description, decide to invoke, run as subprocess, receive result |
-| `chat_handler_new.py` (1127 lines) | Draft integration, NOT live | Replace with surgical merge into `chat_handler.py` — don't swap the whole file |
+| `chat_handler.py` (970 lines → 4181 lines) | Dumps procedure text into context, hopes LLM follows | Procedure invocation logic merged surgically — no separate draft file. <!-- updated 2026-08-05: line count updated from 970 to 4181, chat_handler_new.py reference removed (file never merged) --> |
 
 ## Design Decisions
 
@@ -537,11 +538,11 @@ if "result" in namespace:
 
 | Component | File | Status |
 |---|---|---|
-| **Procedure Compiler v2** | `procedure_compiler.py` (418 lines) | DONE — parses v1 text steps + v2 code blocks + `[llm:]` tags, `description` and `allowed_tools` from frontmatter, `textwrap.dedent()` on code blocks |
-| **Step-Gate Runtime v2** | `step_gate_runtime.py` (765 lines) | DONE — code steps run in subprocess with tool injection, LLM steps use `get_llm_client()`, text steps use active-frame (v1 compat), loud failures with traceback, step-level + procedure-level tracking |
+| **Procedure Compiler v2** | `procedure_compiler.py` (1241 lines) | DONE — parses v1 text steps + v2 code blocks + `[llm:]` tags, `description` and `allowed_tools` from frontmatter, `textwrap.dedent()` on code blocks |
+| **Step-Gate Runtime v2** | `step_gate_runtime.py` (1430 lines) | DONE — code steps run in subprocess with tool injection, LLM steps use `get_llm_client()`, text steps use active-frame (v1 compat), loud failures with traceback, step-level + procedure-level tracking |
 | **Tool Registry** | `step_gate_runtime.py` `_build_tool_preamble()` | DONE — supports `llm_generate`, `vault_search`, `web_read_source`, `vault_lint`, `vault_append`, `vault_list`, `code_read` |
 | **Integration** | `chat_handler.py` + `agent_tools.py` | DONE — `execute_procedure` tool registered as 8th meta-tool, execution logic in `execute_agent_tool` |
-| **Procedure Tracker** | `procedure_tracker.py` (734 lines) | UNCHANGED — already had step-level logging, now actually called by the v2 runtime |
+| **Procedure Tracker** | `procedure_tracker.py` (996 lines) | UNCHANGED — already had step-level logging, now actually called by the v2 runtime |
 
 ### What's NOT Done Yet
 
