@@ -426,42 +426,7 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(_RateLimitMiddleware)
 
-# ── Auth middleware: shared-secret token between plugin and backend ─────
-# Any process on the same machine can hit localhost:8000. This middleware
-# requires a valid X-VaultBot-Token header on every request except /health
-# and /preflight. The token is auto-generated on first startup and stored
-# in vaultbot_backend/.vaultbot_auth_token (gitignored). The Obsidian plugin
-# reads the same file and attaches the header automatically.
-# See auth.py for the full design rationale.
-from auth import get_or_create_token, is_auth_exempt, is_auth_required, validate_token
-
-# Ensure the token exists before the first request arrives.
-_auth_token = get_or_create_token()
-
-class _AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        # Exempt health checks and preflight (needed before plugin can read token).
-        if is_auth_exempt(request.url.path):
-            return await call_next(request)
-        # Only gate destructive/sensitive endpoints. Read/config endpoints
-        # are trusted from localhost — the backend only listens on 127.0.0.1.
-        if not is_auth_required(request.url.path):
-            return await call_next(request)
-        # WebSocket upgrade requests carry the token as a query param
-        # (the plugin appends ?token=... to the WS URL).
-        token = request.headers.get("X-VaultBot-Token")
-        if not token:
-            token = request.query_params.get("token")
-        if not validate_token(token):
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Missing or invalid VaultBot auth token. "
-                         "The Obsidian plugin handles this automatically. "
-                         "If you're seeing this, make sure the plugin is "
-                         "running and has read access to .vaultbot_auth_token."})
-        return await call_next(request)
-
-app.add_middleware(_AuthMiddleware)
+app.add_middleware(_RateLimitMiddleware)
 
 # Default global session logger for startup/shutdown and background tasks.
 default_session_logger = SessionLogger()

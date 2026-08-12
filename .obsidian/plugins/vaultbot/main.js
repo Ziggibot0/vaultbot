@@ -34,13 +34,6 @@ class VaultBotPlugin extends Plugin {
 		// Without this, Obsidian bogs down when VaultBot is actively working.
 		this._ensureIgnoredDirs();
 
-		// Read the shared-secret auth token that the backend generated on
-		// first startup. The token is stored in vaultbot_backend/.vaultbot_auth_token
-		// (gitignored). We attach it as X-VaultBot-Token header on every HTTP
-		// request and as ?token= query param on the WebSocket. This prevents
-		// other processes on the same machine from hijacking the backend API.
-		this._authToken = this._readAuthToken();
-
 		this.addCommand({
 			id: 'open-vaultbot-sidebar',
 			name: 'Open VaultBot Sidebar',
@@ -206,47 +199,6 @@ class VaultBotPlugin extends Plugin {
 			// Non-fatal: if the Obsidian API doesn't support this, just skip.
 			console.warn('VaultBot: could not update userIgnoreFilters', e);
 		}
-	}
-
-	// ── Auth token helpers ──────────────────────────────────────────────
-	// The backend generates a shared-secret token on first startup and stores
-	// it in vaultbot_backend/.vaultbot_auth_token. We read it once on plugin
-	// load and attach it to every HTTP request (X-VaultBot-Token header) and
-	// WebSocket connection (?token= query param). This prevents other
-	// processes on the same machine from calling the backend API.
-	_readAuthToken() {
-		try {
-			let vaultRoot;
-			if (this.app.vault.adapter.getBasePath) {
-				vaultRoot = this.app.vault.adapter.getBasePath();
-			} else {
-				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
-			}
-			const tokenPath = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', '.vaultbot_auth_token');
-			const fs = require('fs');
-			if (fs.existsSync(tokenPath)) {
-				return fs.readFileSync(tokenPath, 'utf8').trim();
-			}
-		} catch (e) {
-			console.warn('VaultBot: could not read auth token', e);
-		}
-		return null;
-	}
-
-	// Refresh the auth token (called after backend restart, since a new
-	// backend instance may have generated a new token).
-	_refreshAuthToken() {
-		this._authToken = this._readAuthToken();
-	}
-
-	// Fetch wrapper that attaches the auth token header automatically.
-	// Use this instead of raw fetch() for all backend API calls.
-	async _authFetch(url, options = {}) {
-		const headers = Object.assign({}, options.headers || {});
-		if (this._authToken) {
-			headers['X-VaultBot-Token'] = this._authToken;
-		}
-		return fetch(url, Object.assign({}, options, { headers }));
 	}
 
 	async openSidebar() {
@@ -3268,8 +3220,7 @@ class VaultBotSidebarView extends ItemView {
 			if (ws) {
 				try { ws.close(); } catch (e) {}
 			}
-			const wsUrl = this.backendUrl.replace('http', 'ws') + '/ws'
-				+ (this.plugin._authToken ? '?token=' + encodeURIComponent(this.plugin._authToken) : '');
+			const wsUrl = this.backendUrl.replace('http', 'ws') + '/ws';
 			ws = new WebSocket(wsUrl);
 			ws.onopen = () => {
 				statusEl.setText('Connected to VaultBot backend');
