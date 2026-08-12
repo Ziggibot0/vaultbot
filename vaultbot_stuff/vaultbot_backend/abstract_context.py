@@ -43,8 +43,25 @@ from pathlib import Path
 from typing import Any
 
 from concept_card import card_path_for, is_card, l0_path_for_card
+from config import TUNABLES
 from moc_builder import MOC_PREFIX
 from vault_graph import VaultGraph, build_graph_context
+
+# Simple stop words for keyword extraction — same set as
+# small_model_filters._STOP_WORDS, duplicated here to keep this
+# leaf module decoupled.
+_STOP_WORDS = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "in",
+    "on", "at", "and", "or", "it", "this", "that", "for", "with", "as", "by",
+    "its", "has", "have", "from", "which", "not", "but", "can", "will", "do",
+    "does", "did", "you", "your", "we", "our", "they", "their", "he", "she",
+})
+
+
+def _content_words(text: str) -> set[str]:
+    """Extract content words (non-stop-words, >2 chars) for keyword overlap."""
+    return {w.lower() for w in re.split(r"\s+", text)
+            if w.lower() not in _STOP_WORDS and len(w) > 2}
 
 
 def _read(path: str | Path) -> str:
@@ -189,25 +206,44 @@ def build_abstract_context(
             "l0_drill": None,
         }
 
-    # ---- Relevance-prune: cap the highway at MAX_CARDS_IN_CONTEXT ----
-    MAX_CARDS_IN_CONTEXT = 30
+    # ---- Relevance-prune: cap the highway at max_files_in_context ----
+    # The total files in context = L1 cards + 1 MOC + 1 L0 drill-down.
+    # Reserve 2 slots for the MOC and L0 drill-down so the L1 highway gets
+    # max_files_in_context - 2 cards.  This guarantees the TOTAL distinct
+    # files shown to the model never exceeds TUNABLES.max_files_in_context,
+    # regardless of how many seeds FUSED returned or how large the graph
+    # walk is.
+    MAX_CARDS_IN_CONTEXT = max(1, TUNABLES.max_files_in_context - 2)
     if len(l1_cards) > MAX_CARDS_IN_CONTEXT:
-        # Rank cards by their seed's retrieval rank (search_results order).
-        score_by_stem: dict[str, float] = {}
-        for i, r in enumerate(search_results):
+        # Score each card by its OWN keyword overlap with the query —
+        # NOT by which seed it came from.  A card 2 hops from seed #1
+        # about a different topic should NOT beat a highly relevant card
+        # from seed #5.  The FUSED score (from search_results) is used
+        # as a tiebreaker when keyword overlap is equal.
+        query_words = _content_words(query)
+        # Build a stem → FUSED score map for tiebreaking.
+        fused_by_stem: dict[str, float] = {}
+        for r in search_results:
             fp = r.get("file_path", "")
-            if not fp:
-                continue
-            # Top result = 1.0, decays by 0.1 per rank (rank 0 -> 1.0).
-            score_by_stem[Path(fp).stem] = 1.0 - i * 0.1
+            if fp:
+                fused_by_stem[Path(fp).stem] = r.get("score", 0.0)
 
-        def card_score(c: dict[str, Any]) -> float:
+        def card_score(c: dict[str, Any]) -> tuple[int, float]:
+            """(keyword_overlap_count, fused_score) — higher is better."""
             name = c["name"]
-            if name in score_by_stem:
-                return score_by_stem[name]
-            # A card stem ends in -L1; score by its L0 stem if present.
+            body = c.get("content", "")
+            # Score by how many query content words appear in the card's
+            # title + body (case-insensitive).  This is the same keyword-
+            # overlap approach used by filter_context, but applied BEFORE
+            # the cap so relevant cards survive the cut.
+            card_text = (name + " " + body[:500]).lower()
+            card_words = _content_words(card_text)
+            overlap = len(query_words & card_words) if query_words else 0
+            # Tiebreaker: FUSED score.  Resolve the card stem to its L0
+            # stem for lookup (cards end in -L1).
             l0_stem = name[:-3] if name.endswith("-L1") else name
-            return score_by_stem.get(l0_stem, 0.0)
+            fused = fused_by_stem.get(name, fused_by_stem.get(l0_stem, 0.0))
+            return (overlap, fused)
 
         l1_cards.sort(key=card_score, reverse=True)
         l1_cards = l1_cards[:MAX_CARDS_IN_CONTEXT]

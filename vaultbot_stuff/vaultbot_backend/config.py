@@ -120,6 +120,18 @@ class Tunables:
     code_run_stdout_tail: int = 4000     # bytes of stdout read back
     code_run_stderr_tail: int = 2000     # bytes of stderr read back
 
+    # ── Vault context file count cap ──────────────────────────────────────
+    # Maximum number of files (L1 cards + MOC + L0 drill-down in the abstract
+    # path, or raw notes in the legacy path) that the retrieved vault context
+    # can show the model at any given time. This is the hard ceiling on how
+    # many distinct files' content appears in the context window — regardless
+    # of how many seeds the FUSED retrieval returned or how many nodes the
+    # graph walk found. Keeps the context window lean for any model size and
+    # saves the user token cost by not flooding the prompt with noise.
+    # 15 is the maximum — smaller models benefit from even fewer (the context
+    # budgeter + filter_context will further trim by token budget + relevance).
+    max_files_in_context: int = 15
+
     # ── Token estimation ─────────────────────────────────────────────────
     # Rough chars-per-token heuristic for English text. Used by
     # context_budgeter and identity (consolidated from both).

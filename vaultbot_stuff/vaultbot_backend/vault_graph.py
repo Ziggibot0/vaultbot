@@ -4,6 +4,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from config import TUNABLES
+
 WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")
 # Directories the graph should skip when scanning the vault. Mirrors the
 # indexer's IGNORED_DIRS so the graph and the FAISS index see the same files;
@@ -513,7 +515,7 @@ class VaultGraph:
 
 def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
                         query: str, k: int = 5, depth: int = 2,
-                        max_notes: int = 25, per_note_cap: int = 900,
+                        max_notes: int = 0, per_note_cap: int = 900,
                         total_cap: int = 20000) -> str:
     """
     Given flat search results, turn them into a rich graph context prompt.
@@ -527,7 +529,13 @@ def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
     note's snippet, and hard-cap the whole context. The full notes are always
     reachable via vault_search / the L1 card `> source` link if the model
     needs more — this is an orientation map, not the whole vault.
+
+    ``max_notes`` defaults to ``TUNABLES.max_files_in_context`` so the legacy
+    path respects the same 15-file ceiling as the abstract context path.
+    Pass an explicit value to override (tests do this).
     """
+    if max_notes <= 0:
+        max_notes = TUNABLES.max_files_in_context
     seed_names = []
     for res in search_results[:k]:
         path = Path(res.get("file_path", ""))
