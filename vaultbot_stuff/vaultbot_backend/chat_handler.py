@@ -1834,10 +1834,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # with concrete pre-computed results.
         if _preflight_chain:
             _pf_lines = [
-                f"# PREFLIGHT ROUTING (framework already ran Route-Task)",
+                "# PREFLIGHT ROUTING (framework already ran Route-Task)",
                 f"Category: {_preflight_category}",
                 f"Full chain: {' → '.join(_preflight_chain)}",
-                f"",
+                "",
             ]
             _pending_chain: list[str] = []
             for _pr in _preflight_results:
@@ -3460,7 +3460,24 @@ async def execute_agent_tool(svc: Services, tool_name: str, args: dict[str, Any]
         "tool": tool_name, "t_ms": loop.time() * 1000,
     })
 
+    # ── Safe Mode gate ─────────────────────────────────────────────────
+    # In Safe Mode (default), dangerous tools (code_write, code_run,
+    # tool_create, vault_delete, etc.) are blocked. The user must explicitly
+    # opt into Developer Mode to enable self-modification. See safe_mode.py.
+    from safe_mode import is_tool_allowed, blocked_tool_message
+    if not is_tool_allowed(tool_name):
+        msg = blocked_tool_message(tool_name)
+        session_logger.log("safe_mode_blocked", {"tool": tool_name})
+        return {"error": msg, "safe_mode_blocked": True}
+
     if tool_name == "vault_research":
+        # ── Web research gate ──────────────────────────────────────────
+        # If VAULTBOT_ALLOW_WEB_RESEARCH is disabled, block web research.
+        # The agent can still search the vault and read notes, but cannot
+        # fetch new content from the internet.
+        if os.environ.get("VAULTBOT_ALLOW_WEB_RESEARCH", "true").strip().lower() in ("0", "false", "off", "no"):
+            return {"error": "Web research is disabled. Set 'Allow web research' in VaultBot Settings to enable it."}
+
         topic = (args.get("topic") or "").strip()
         depth = args.get("depth", "deep")
         if not topic:

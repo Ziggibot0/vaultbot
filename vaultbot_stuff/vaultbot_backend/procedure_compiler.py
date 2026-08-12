@@ -964,15 +964,15 @@ def _compile_condition(entry: dict, step_num: int,
         )
     if filt == "length":
         code += (
-            f'_check = len(_val) if isinstance(_val, (list, dict, str)) else 0\n'
+            '_check = len(_val) if isinstance(_val, (list, dict, str)) else 0\n'
         )
     elif filt == "truthy":
         code += '_check = bool(_val)\n'
     elif filt:
         # Unknown filter — treat as identity
-        code += f'_check = _val\n'
+        code += '_check = _val\n'
     else:
-        code += f'_check = _val\n'
+        code += '_check = _val\n'
 
     code += (
         f'_then = json.loads({json.dumps(then_json)})\n'

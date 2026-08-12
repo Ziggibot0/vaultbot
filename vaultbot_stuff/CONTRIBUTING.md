@@ -4,7 +4,6 @@ status: raw
 created: 2026-08-03
 summary: "# Contributing to VaultBot"
 tags:
-  - skelogg124@gmail.com
   - vaultbot
   - sessions.md
   - knowledge.md
@@ -19,10 +18,12 @@ private.
 
 ## Project founder & custodian
 
-**Sean Kellogg** (skelogg124@gmail.com) is the project founder and
-custodian, and the sole merge authority for this repository. He has final
-say on what ships and on project direction. He does **not** claim ownership
-of your contributions — see the licensing section below.
+**Sean Kellogg** is the project founder and custodian, and the sole merge
+authority for this repository. He has final say on what ships and on
+project direction. He does **not** claim ownership of your contributions —
+see the licensing section below. The best way to reach the project is
+through [GitHub Issues](https://github.com/ziggibot-uni/vaultbot/issues) or
+[GitHub Discussions](https://github.com/ziggibot-uni/vaultbot/discussions).
 
 ## The golden rule
 
@@ -235,7 +236,7 @@ To keep this safe for everyone, every automated contribution **must**:
 The maintainer will reject — without merging — any contribution that
 contains personal data, vault contents, or anything that looks like a
 leaked secret. If you realize a report you filed contains private
-material, email skelogg124@gmail.com to have it taken down.
+material, open a [GitHub Issue](https://github.com/ziggibot-uni/vaultbot/issues) and the maintainer will take it down.
 
 ## Further reading
 

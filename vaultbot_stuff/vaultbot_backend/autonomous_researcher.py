@@ -340,6 +340,14 @@ class AutonomousResearcher:
         """Research a single gap and write a note. Returns note path or None."""
         topic = gap["topic"]
 
+        # --- Web research gate ---
+        # If VAULTBOT_ALLOW_WEB_RESEARCH is disabled, skip web research.
+        # The autonomous researcher can still run consolidation (hippocampal
+        # replay) but won't fetch new content from the internet.
+        if os.environ.get("VAULTBOT_ALLOW_WEB_RESEARCH", "true").strip().lower() in ("0", "false", "off", "no"):
+            self._log("autonomous_skip_web_research_disabled", {"topic": topic})
+            return None
+
         # --- Already-researched guard (deterministic, zero LLM) -------------
         # If a research note for this topic already exists on disk, skip the
         # web research + LLM synthesis entirely. The note was already written

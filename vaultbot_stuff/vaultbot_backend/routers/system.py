@@ -995,7 +995,7 @@ async def user_response_endpoint(request: Request):
     def _dbg(msg):
         with open(_debug_log, "a", encoding="utf-8") as _f:
             _f.write(f"{_time.strftime('%H:%M:%S')} {msg}\n")
-    _dbg(f"POST /user_response received")
+    _dbg("POST /user_response received")
     try:
         payload = await request.json()
     except Exception as e:

@@ -10,13 +10,9 @@ Uses tmp_path for state files.
 from __future__ import annotations
 
 import json
-import os
-import sys
 import time
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +50,7 @@ def test_two_sessions_are_isolated(tmp_path):
 
 def test_clear_only_affects_specified_session(tmp_path):
     """clear_history(session_id=A) does not delete session B's file."""
-    from conversation_state import save_history, load_history, clear_history, _DEFAULT_PATH
+    from conversation_state import save_history, load_history, clear_history
 
     sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -75,7 +71,7 @@ def test_clear_only_affects_specified_session(tmp_path):
 def test_legacy_migration_first_tab_wins(tmp_path):
     """Legacy conversation_state.json is migrated to the first session that
     loads it, then deleted so the next session starts fresh."""
-    from conversation_state import save_history, load_history, _DEFAULT_PATH
+    from conversation_state import load_history
 
     sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"

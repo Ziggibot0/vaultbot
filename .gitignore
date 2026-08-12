@@ -7,6 +7,7 @@
 .env.*.local
 providers.json
 providers.json.tmp
+vaultbot_stuff/vaultbot_backend/.vaultbot_auth_token
 
 # ─────────────────────────────────────────────────────────────────────
 # Python virtual environment
@@ -22,8 +23,8 @@ env/
 # Nested vault from in-repo installer runs
 # If someone runs setup.ps1/setup.sh inside the repo itself, it creates a
 # VaultBot/ subfolder — never commit that.
-# ─────────────────────────────────────────────────────────────────────
-VaultBot/
+# Anchored to root so it doesn't match .obsidian/plugins/vaultbot/.
+/VaultBot/
 
 # ─────────────────────────────────────────────────────────────────────
 # Python cache

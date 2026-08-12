@@ -13,7 +13,6 @@ instances are). This module only holds the schemas + a registry so the
 system prompt and the handler share a single source of truth.
 """
 
-import os
 from typing import Any
 
 # Ollama tool schema format mirrors OpenAI function-calling.
@@ -269,7 +268,12 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "Execute Python code in a sandboxed subprocess to test it "
                 "before writing or adopting it. Returns stdout, stderr, and "
                 "exit code. Use this to verify new tools work before creating "
-                "them."
+                "them. IMPORTANT: code_run is for TESTING only — do NOT use it "
+                "to write or modify files. Use safe_write (Python), "
+                "js_safe_write (JavaScript), vault_safe_write (markdown), or "
+                "vault_append (markdown append) for any file modification. "
+                "code_run has no backup/rollback — files you create or modify "
+                "in code_run are permanent and untracked."
             ),
             "parameters": {
                 "type": "object",

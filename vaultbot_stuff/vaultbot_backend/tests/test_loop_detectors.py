@@ -18,7 +18,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
 
 _BACKEND = Path(__file__).resolve().parent.parent
 _CHAT_HANDLER = _BACKEND / "chat_handler.py"

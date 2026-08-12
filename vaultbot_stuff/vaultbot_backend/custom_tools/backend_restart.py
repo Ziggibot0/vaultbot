@@ -31,7 +31,6 @@ def run(args: dict) -> dict:
 
     # --- Cache context before restart ---------------------------------
     try:
-        vault_path = os.getenv("VAULT_PATH", ".")
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         identity_dir = os.path.join(backend_dir, "identity")
         session_state_dir = os.path.join(backend_dir, "session_state")

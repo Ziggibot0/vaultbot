@@ -9,6 +9,10 @@
 #   pip install -r requirements.txt
 #   pip freeze > requirements.lock
 #
+# For hash-pinned installs (supply-chain hardening):
+#   pip install -r requirements.txt
+#   pip freeze --require-hashes > requirements.lock  # or use pip-tools
+#
 # Install for reproducible builds:
 #   pip install -r requirements.lock
 #
