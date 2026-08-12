@@ -95,6 +95,9 @@ vaultbot_stuff/vaultbot_backend/e
 # Runtime working-memory snapshot (regenerated each session; contains
 # personal goals/tasks scraped from the live conversation)
 vaultbot_stuff/vaultbot_backend/working_memory_state.json
+# Session state checkpoints (chat loop + conversation + working memory
+# snapshots; regenerated each session)
+vaultbot_stuff/vaultbot_backend/session_state/
 # Idle-time QA worker queue (regenerated from vault state on startup)
 vaultbot_stuff/vaultbot_backend/qa_queue.json
 
