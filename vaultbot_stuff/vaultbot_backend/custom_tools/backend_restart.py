@@ -8,13 +8,15 @@ def run(args: dict) -> dict:
     """Restart the VaultBot backend by asking the Obsidian plugin to do it.
 
     Before sending the restart signal, this tool:
-    1. Reads the 5 most recent chat logs from 08-Chat/
+    1. Reads the CURRENT session's working memory plan and conversation
+       history from session_state/ (NOT old chat notes from 08-Chat/).
     2. Writes them to vaultbot_backend/identity/RESTART_CONTEXT.md
     3. The Identity layer picks this up on boot and injects it into the
        system prompt automatically, then deletes the file (one-shot).
 
-    This means after a restart, the agent wakes up already knowing what
-    was happening — no manual steps needed.
+    This means after a restart, the agent wakes up with the EXACT plan it
+    was working on (with step statuses) and the most recent conversation
+    turns — not old chat notes from days ago.
 
     The plugin then:
     1. Calls POST /shutdown (graceful backend shutdown)
@@ -30,20 +32,10 @@ def run(args: dict) -> dict:
     # --- Cache context before restart ---------------------------------
     try:
         vault_path = os.getenv("VAULT_PATH", ".")
-        chat_dir = os.path.join(vault_path, "08-Chat")
-        identity_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "identity"
-        )
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        identity_dir = os.path.join(backend_dir, "identity")
+        session_state_dir = os.path.join(backend_dir, "session_state")
         restart_ctx_path = os.path.join(identity_dir, "RESTART_CONTEXT.md")
-
-        # Get 5 most recent chat logs
-        chat_files = []
-        if os.path.isdir(chat_dir):
-            for f in glob.glob(os.path.join(chat_dir, "*.md")):
-                mtime = os.path.getmtime(f)
-                chat_files.append((mtime, f))
-            chat_files.sort(key=lambda x: x[0], reverse=True)
 
         parts = []
         parts.append("# RESTART CONTEXT")
@@ -53,26 +45,102 @@ def run(args: dict) -> dict:
         )
         parts.append("")
         parts.append(
-            "You were restarted mid-session. The chat history below shows "
-            "what was happening. Continue from where you left off — do not "
-            "ask the operator to re-explain."
+            "You were restarted mid-session. Below is your CURRENT plan "
+            "(with step statuses) and recent conversation. Continue from "
+            "where you left off — do NOT ask the operator to re-explain. "
+            "Do NOT start a new task. Pick up the EXACT plan below."
         )
         parts.append("")
 
-        # Include recent chats (last 3000 chars each, most recent first)
-        parts.append("## Recent Chat History")
-        for mtime, fpath in chat_files[:5]:
+        # ── Read the CURRENT session's working memory plan ──────────
+        # Find the most recent working_memory_state_*.json in session_state/.
+        # This is the plan the model was actively working on — NOT old chat
+        # notes from days ago.
+        wm_files = []
+        if os.path.isdir(session_state_dir):
+            for f in glob.glob(os.path.join(session_state_dir,
+                                            "working_memory_state_*.json")):
+                mtime = os.path.getmtime(f)
+                wm_files.append((mtime, f))
+            wm_files.sort(key=lambda x: x[0], reverse=True)
+
+        plan_included = False
+        if wm_files:
             try:
-                with open(fpath, encoding="utf-8") as f:
-                    content = f.read()
-                if len(content) > 3000:
-                    content = "...[truncated]...\n" + content[-3000:]
-                parts.append(f"### {os.path.basename(fpath)}")
-                parts.append(content)
+                with open(wm_files[0][1], encoding="utf-8") as f:
+                    wm_data = json.load(f)
+                if isinstance(wm_data, dict) and wm_data.get("tasks"):
+                    parts.append("## YOUR CURRENT PLAN (with step statuses)")
+                    parts.append(f"Goal: {wm_data.get('goal', '(no goal)')}")
+                    parts.append("")
+                    for t in wm_data.get("tasks", []):
+                        mark = {"completed": "[x]", "in_progress": "[~]",
+                                "pending": "[ ]"}.get(t.get("status", ""), "[ ]")
+                        parts.append(f"{mark} {t.get('id', '?')}. {t.get('content', '')}")
+                        if t.get("notes"):
+                            parts.append(f"   Notes: {t['notes']}")
+                    done = sum(1 for t in wm_data.get("tasks", [])
+                              if t.get("status") == "completed")
+                    total = len(wm_data.get("tasks", []))
+                    parts.append(f"Progress: {done}/{total} done")
+                    # Include step summaries for completed steps.
+                    summaries = wm_data.get("step_summaries", {})
+                    if summaries:
+                        parts.append("")
+                        parts.append("Step summaries (what was accomplished):")
+                        for tid, summary in summaries.items():
+                            parts.append(f"  Step {tid}: {summary[:500]}")
+                    parts.append("")
+                    plan_included = True
+            except Exception as e:  # noqa: BLE001 — best-effort
+                parts.append(f"(Could not read working memory: {e})")
                 parts.append("")
-            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                parts.append(f"### {os.path.basename(fpath)}")
-                parts.append(f"Error reading: {e}")
+
+        if not plan_included:
+            parts.append("## No active plan found")
+            parts.append("(No working memory state file existed at restart time.)")
+            parts.append("")
+
+        # ── Read the CURRENT session's conversation history ─────────
+        # Find the most recent conversation_state_*.json in session_state/.
+        conv_files = []
+        if os.path.isdir(session_state_dir):
+            for f in glob.glob(os.path.join(session_state_dir,
+                                            "conversation_state_*.json")):
+                mtime = os.path.getmtime(f)
+                conv_files.append((mtime, f))
+            conv_files.sort(key=lambda x: x[0], reverse=True)
+
+        if conv_files:
+            try:
+                with open(conv_files[0][1], encoding="utf-8") as f:
+                    conv_data = json.load(f)
+                if isinstance(conv_data, list) and conv_data:
+                    parts.append("## Recent Conversation (last few turns)")
+                    # Only include the last 8 messages (4 turns) to keep
+                    # the restart context focused and bounded.
+                    recent = conv_data[-8:]
+                    for msg in recent:
+                        role = msg.get("role", "?")
+                        content = msg.get("content", "") or ""
+                        # Skip system messages (they're rebuilt on boot).
+                        if role == "system":
+                            continue
+                        # Skip tool results (they're huge and the model
+                        # already processed them).
+                        if role == "tool":
+                            tool_name = msg.get("tool_name", "tool")
+                            parts.append(
+                                f"[{role}] Called {tool_name} — result omitted "
+                                f"(re-call the tool if needed)")
+                            continue
+                        # Truncate long messages.
+                        if len(content) > 500:
+                            content = content[:500] + "...[truncated]"
+                        parts.append(f"[{role}] {content}")
+                    parts.append("")
+            except Exception as e:  # noqa: BLE001 — best-effort
+                parts.append(f"(Could not read conversation history: {e})")
                 parts.append("")
 
         restart_context = "\n".join(parts)
@@ -82,7 +150,10 @@ def run(args: dict) -> dict:
             f.write(restart_context)
 
         cached = True
-        cache_msg = f"Cached {len(chat_files[:5])} recent chats to RESTART_CONTEXT.md"
+        cache_msg = (
+            f"Cached current plan ({'found' if plan_included else 'none'}) "
+            f"and conversation to RESTART_CONTEXT.md"
+        )
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         cached = False
         cache_msg = f"Failed to cache context: {e}"
