@@ -84,4 +84,10 @@ jobs:
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
-        run: pytest -q --tb=short
+          VAULT_PATH: ${{ github.workspace }}
+        run: |
+          # Create minimal vault dirs that tests expect
+          mkdir -p "$VAULT_PATH/vaultbot_stuff/Memory/Chat"
+          mkdir -p "$VAULT_PATH/vaultbot_stuff/Knowledge"
+          mkdir -p "$VAULT_PATH/vaultbot_stuff/System"
+          pytest -q --tb=short
