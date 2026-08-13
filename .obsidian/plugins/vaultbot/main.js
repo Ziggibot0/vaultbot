@@ -8,7 +8,7 @@ class VaultBotPlugin extends Plugin {
 			// Use 127.0.0.1, NOT localhost: the backend (uvicorn) binds to
 			// 127.0.0.1 (IPv4 only). On Windows, 'localhost' resolves to ::1
 			// (IPv6) first, and fetch() to [::1]:8000 gets ERR_CONNECTION_REFUSED
-			// even though the backend is up on IPv4 — which made the liveness
+			// even though the backend is up on IPv4 â€” which made the liveness
 			// probe + restart button intermittently fail.
 			backendUrl: 'http://127.0.0.1:8000',
 			autoStartBackend: true,
@@ -78,14 +78,14 @@ class VaultBotPlugin extends Plugin {
 			const delay = this._syncWarningShown ? 4000 : 2000;
 			setTimeout(() => this.startBackendIfNeeded(), delay);
 		}
-		// The MCP server is part of the plugin â€” it just works when Obsidian
+		// The MCP server is part of the plugin Ã¢â‚¬â€ it just works when Obsidian
 		// opens. It waits for the backend to be ready, then spawns and writes
 		// MCP client configs so VS Code Copilot Chat / Claude auto-discover it.
 		setTimeout(() => this.startMcpServerIfNeeded(), 6000);
 
 		// Belt-and-suspenders: fire-and-forget a /shutdown beacon the moment
 		// the Obsidian window starts closing. navigator.sendBeacon is built
-		// for exactly this â€” it delivers the POST during teardown without
+		// for exactly this Ã¢â‚¬â€ it delivers the POST during teardown without
 		// needing a response and isn't cancelled like fetch when the renderer
 		// is destroyed. The backend's /shutdown endpoint self-terminates via
 		// os._exit, so no response is needed. This survives the case where
@@ -112,7 +112,7 @@ class VaultBotPlugin extends Plugin {
 		// of spawning a new one. This makes plugin reload ~2s instead of
 		// ~8s (no backend shutdown + restart cycle).
 		if (this._isReloading) {
-			console.log('Plugin reload in progress — keeping backend alive');
+			console.log('Plugin reload in progress â€” keeping backend alive');
 		} else {
 			await this.stopBackend();
 		}
@@ -139,7 +139,7 @@ class VaultBotPlugin extends Plugin {
 				try { new Notice('VaultBot plugin reloaded.'); } catch (e) {}
 			} catch (e) {
 				console.error('Failed to re-enable plugin:', e);
-				try { new Notice('Plugin reload failed — re-enable manually in Settings > Community plugins'); } catch (e2) {}
+				try { new Notice('Plugin reload failed â€” re-enable manually in Settings > Community plugins'); } catch (e2) {}
 			}
 		}, 500);
 
@@ -178,7 +178,7 @@ class VaultBotPlugin extends Plugin {
 		// Add VaultBot's internal directories to Obsidian's userIgnoreFilters
 		// so Obsidian's file watcher doesn't fire on every backend file write.
 		// This is the root-cause fix for "Obsidian bogs down when VaultBot is
-		// cooking" — the backend writes session logs, conversation state, and
+		// cooking" â€” the backend writes session logs, conversation state, and
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
 		const required = ['vaultbot_stuff/vaultbot_backend/', '.venv/', 'vaultbot_stuff/vaultbot_backend/vaultbot_index/'];
@@ -214,7 +214,7 @@ class VaultBotPlugin extends Plugin {
 	async isBackendRunning() {
 		// Probe liveness. Use GET throughout: the backend registers /health as
 		// a GET handler, and FastAPI returns 405 Method Not Allowed for HEAD on
-		// GET-only routes — which previously made this poll always report "down"
+		// GET-only routes â€” which previously made this poll always report "down"
 		// even when the backend was healthy, causing endless respawn loops.
 		// /health returns a small JSON dict; / returns a small marker dict, so
 		// GET is cheap on both.
@@ -255,7 +255,7 @@ class VaultBotPlugin extends Plugin {
 			const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
 			const fs = require('fs');
 			while (Date.now() - start < timeoutMs) {
-				// Only probe with fetch if the PID file exists — the backend
+				// Only probe with fetch if the PID file exists â€” the backend
 				// writes it early in startup. If the file is absent, the
 				// backend hasn't started yet, so a fetch would just generate
 				// ERR_CONNECTION_REFUSED console spam. Wait for the file.
@@ -327,9 +327,9 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
-	// ── Provider + Model Registry helpers (the interchangeable "pot") ─────
+	// â”€â”€ Provider + Model Registry helpers (the interchangeable "pot") â”€â”€â”€â”€â”€
 	// One combined list of providers + models feeds all three role dropdowns
-	// (big/small/vision). Every model — local Ollama, OpenRouter, OpenAI — is
+	// (big/small/vision). Every model â€” local Ollama, OpenRouter, OpenAI â€” is
 	// in the same pot and can be mapped into any role with one call.
 	async fetchProviders() {
 		try {
@@ -397,7 +397,7 @@ class VaultBotPlugin extends Plugin {
 		} catch (e) { return {models: []}; }
 	}
 
-	// ── Tournament helpers ─────────────────────────────────────────────
+	// â”€â”€ Tournament helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	async fetchTournamentModels() {
 		try {
 			const r = await fetch(this.settings.backendUrl + '/tournament/models');
@@ -438,12 +438,12 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────
+	// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	// Cross-platform venv path helpers.
 	// Windows: .venv/Scripts/{pythonw.exe,python.exe}
 	// macOS/Linux: .venv/bin/python
 	// `.venv` is hidden in Obsidian's file explorer (dots filtered).
-	// ─────────────────────────────────────────────────────────────────────
+	// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	_venvBinDir() {
 		return process.platform === 'win32' ? 'Scripts' : 'bin';
 	}
@@ -490,7 +490,7 @@ class VaultBotPlugin extends Plugin {
 	}
 
 	_showSyncedFolderModal(vaultRoot) {
-		try { new Notice('VaultBot: sync-folder warning — see the dialog.'); } catch (e) {}
+		try { new Notice('VaultBot: sync-folder warning â€” see the dialog.'); } catch (e) {}
 		const modal = new Modal(this.app);
 		modal.titleEl.setText('Your vault is in a sync folder');
 		modal.titleEl.style.color = 'var(--text-error)';
@@ -515,7 +515,7 @@ class VaultBotPlugin extends Plugin {
 		rec.setText(
 			'To keep your data safe, move your vault folder to a plain ' +
 			'local folder (like Documents/VaultBot), then re-open it in ' +
-			'Obsidian. You don\'t need to reinstall — just move the folder.'
+			'Obsidian. You don\'t need to reinstall â€” just move the folder.'
 		);
 		rec.style.opacity = '0.85';
 		rec.style.lineHeight = '1.5';
@@ -525,7 +525,7 @@ class VaultBotPlugin extends Plugin {
 		btnRow.style.display = 'flex';
 		btnRow.style.gap = '8px';
 
-		// "I understand, keep going" — lets the user proceed at their own
+		// "I understand, keep going" â€” lets the user proceed at their own
 		// risk. We don't hard-block because some users use a single-device
 		// sync with no conflict risk and would be annoyed by a dead-end.
 		const proceedBtn = btnRow.createEl('button', {text: 'I understand, keep going'});
@@ -541,7 +541,7 @@ class VaultBotPlugin extends Plugin {
 	// Show a friendly setup wizard when the venv or backend code is
 	// missing. Instead of just showing a one-liner command, this calls
 	// /preflight (which doesn't need the backend) to detect WHAT is
-	// missing — Python, Ollama, the venv, or just the backend code — and
+	// missing â€” Python, Ollama, the venv, or just the backend code â€” and
 	// shows a checklist with per-item "Get X" download buttons so the user
 	// knows exactly what to install and where to get it. The one-liner
 	// is still shown at the bottom for the "just run it" path.
@@ -554,7 +554,7 @@ class VaultBotPlugin extends Plugin {
 			? 'irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex'
 			: 'curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash';
 
-		// ── Checklist: what's missing? ──────────────────────────────────
+		// â”€â”€ Checklist: what's missing? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		// /preflight checks Python + Ollama presence, port, and sync folder
 		// without needing the backend running. We call it to build a
 		// tailored checklist so the user sees "Install Python" only if
@@ -571,7 +571,7 @@ class VaultBotPlugin extends Plugin {
 				text: 'Checking...', cls: 'vaultbot-setup-checking'});
 			try {
 				// /preflight runs on the backend even when the backend
-				// isn't fully started — it only does environment checks.
+				// isn't fully started â€” it only does environment checks.
 				// If the backend isn't up at all (no venv), the fetch fails
 				// and we fall back to the generic one-liner instructions.
 				const resp = await fetch(this.settings.backendUrl + '/preflight');
@@ -589,7 +589,7 @@ class VaultBotPlugin extends Plugin {
 							cls: 'vaultbot-setup-item'});
 						item.createEl('span', {
 							cls: 'vaultbot-setup-item-icon',
-							text: p.severity === 'broken' ? '⚠️' : '⚙️'});
+							text: p.severity === 'broken' ? 'âš ï¸' : 'âš™ï¸'});
 						const textCol = item.createDiv({
 							cls: 'vaultbot-setup-item-text'});
 						textCol.createEl('div', {
@@ -614,24 +614,24 @@ class VaultBotPlugin extends Plugin {
 								window.open('https://ollama.com', '_blank');
 							});
 						} else if (p.action === 'finish_setup') {
-							// The venv/backend code is missing — the
+							// The venv/backend code is missing â€” the
 							// one-liner below is the fix for this.
 						}
 					}
 				}
 			} catch (e) {
-				// Backend not reachable (no venv) — show the generic
+				// Backend not reachable (no venv) â€” show the generic
 				// one-liner instructions. This is the expected path for a
 				// first install where nothing exists yet.
 				checklistEl.empty();
 				checklistEl.createEl('div', {
-					text: 'VaultBot isn\'t installed yet. That\'s OK — it only takes one command.',
+					text: 'VaultBot isn\'t installed yet. That\'s OK â€” it only takes one command.',
 					cls: 'vaultbot-setup-ok'});
 			}
 		};
 		runPreflight();
 
-		// ── One-liner: the "just run it" path ───────────────────────────
+		// â”€â”€ One-liner: the "just run it" path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		const divider = modal.contentEl.createEl('hr');
 		divider.style.margin = '16px 0';
 		divider.style.border = 'none';
@@ -639,7 +639,7 @@ class VaultBotPlugin extends Plugin {
 
 		const oneLinerDesc = modal.contentEl.createEl('p');
 		oneLinerDesc.setText(
-			'Open a terminal and paste this one line — the installer asks ' +
+			'Open a terminal and paste this one line â€” the installer asks ' +
 			'your name, downloads everything, and opens Obsidian for you.'
 		);
 		oneLinerDesc.style.opacity = '0.85';
@@ -683,7 +683,7 @@ class VaultBotPlugin extends Plugin {
 		modal.titleEl.setText('Download a model');
 		const desc = modal.contentEl.createEl('p');
 		desc.setText(
-			'VaultBot needs an AI model to think with. Pick one below — ' +
+			'VaultBot needs an AI model to think with. Pick one below â€” ' +
 			'it downloads once and you\'re set. No terminal needed.');
 		desc.style.opacity = '0.85';
 		desc.style.lineHeight = '1.5';
@@ -700,7 +700,7 @@ class VaultBotPlugin extends Plugin {
 				{name: 'qwen3.6:latest', label: 'Qwen 3.6 (recommended)',
 				 desc: 'Balanced text model.', size: '~2 GB'},
 				{name: 'nomic-embed-text', label: 'Nomic Embed (for search)',
-				 desc: 'Embedding model — needed for vault search.', size: '~270 MB'},
+				 desc: 'Embedding model â€” needed for vault search.', size: '~270 MB'},
 			];
 		}
 
@@ -744,7 +744,7 @@ class VaultBotPlugin extends Plugin {
 				// The progress events are also handled by the sidebar's
 				// WS handler, but we need a local listener here too so
 				// this modal updates even if the sidebar isn't open.
-				// We poll the model list instead — simpler + robust.
+				// We poll the model list instead â€” simpler + robust.
 				const poll = window.setInterval(async () => {
 					try {
 						const r = await fetch(this.settings.backendUrl + '/models');
@@ -755,9 +755,9 @@ class VaultBotPlugin extends Plugin {
 							window.clearInterval(poll);
 							progressEl.value = 100;
 							statusEl.setText('Done!');
-							btn.setText('Installed ✓');
+							btn.setText('Installed âœ“');
 							if (onDone) try { onDone(); } catch (e) {}
-							// Don't auto-close — let the user see success
+							// Don't auto-close â€” let the user see success
 							// and close manually, or download another.
 						}
 					} catch (e) {}
@@ -774,7 +774,7 @@ class VaultBotPlugin extends Plugin {
 		if (this.mcpProcess) return;
 		try {
 			// Use the single-flight ready promise instead of probing directly
-			// — avoids ERR_CONNECTION_REFUSED console spam while the backend
+			// â€” avoids ERR_CONNECTION_REFUSED console spam while the backend
 			// is still booting.
 			const running = await this.onceBackendReady();
 			if (!running) {
@@ -826,7 +826,7 @@ class VaultBotPlugin extends Plugin {
 	// Kill the backend process when Obsidian closes so nothing is left
 	// running in the background. The backend writes its PID to
 	// vaultbot_backend/vaultbot.pid on startup; we read that and taskkill it.
-	// PRIMARY path: POST /shutdown â€” the backend self-terminates, which is
+	// PRIMARY path: POST /shutdown Ã¢â‚¬â€ the backend self-terminates, which is
 	// more reliable than taskkill fired from an Obsidian process that is
 	// itself being torn down (onunload may race with window destruction and
 	// taskkill may not complete). FALLBACK: if the HTTP call fails or the
@@ -856,7 +856,7 @@ class VaultBotPlugin extends Plugin {
 		}
 
 		// 2) Wait briefly for the process to actually exit. Check the PID
-		//    file instead of probing with fetch — the backend deletes
+		//    file instead of probing with fetch â€” the backend deletes
 		//    vaultbot.pid on graceful shutdown (release_lock), so the file
 		//    disappearing is a reliable signal. Using fetch here generates
 		//    ERR_CONNECTION_REFUSED console spam that worries users.
@@ -916,12 +916,12 @@ class VaultBotPlugin extends Plugin {
 		return await this.isBackendRunning();
 	}
 
-	// ─────────────────────────────────────────────────────────────────────
+	// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	// Check the latest version available on GitHub without applying it.
 	// Fetches the repo's manifest.json from the raw GitHub URL and compares
 	// its version field against the locally-installed manifest. Resolves to
 	// {latest, current, updateAvailable} on success or {error} on failure.
-	// ─────────────────────────────────────────────────────────────────────
+	// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	async checkLatestVersion(ref) {
 		const fs = require('fs');
 		const refSpec = (ref && String(ref).trim()) || 'main';
@@ -952,7 +952,7 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────
+	// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	// Self-updater: pull the latest CODE from GitHub and apply it over the
 	// live vault, WITHOUT touching any user state.
 	//
@@ -967,7 +967,7 @@ class VaultBotPlugin extends Plugin {
 	//   - every .md doc in the vault (notes, chat logs, research, textbooks)
 	//   - vaultbot_backend/*_log.json, sessions/, checkpoints/,
 	//     vaultbot_index/, *.log, *.pid,
-	//     trash/, __pycache__/  — all runtime state stays put
+	//     trash/, __pycache__/  â€” all runtime state stays put
 	//
 	// The backend is stopped first (Windows locks .py files while running),
 	// the tarball is downloaded to a temp dir, code paths are extracted to a
@@ -977,7 +977,7 @@ class VaultBotPlugin extends Plugin {
 	//
 	// `onProgress(statusString)` is optional; the UI uses it for a live line.
 	// Resolves to {ok:true, version} on success or {ok:false, error} on failure.
-	// ─────────────────────────────────────────────────────────────────────
+	// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	async performSelfUpdate(onProgress, ref) {
 		const fs = require('fs');
 		const os = require('os');
@@ -998,7 +998,7 @@ class VaultBotPlugin extends Plugin {
 
 		const refSpec = (ref && String(ref).trim()) || 'main';
 		// GitHub serves a tarball for any branch/tag/commit ref. The archive
-		// prefix is always "<repo>-<ref-with-slashes-collapsed>/" — but the
+		// prefix is always "<repo>-<ref-with-slashes-collapsed>/" â€” but the
 		// safest way to find the prefix is to list the archive and read the
 		// first path component. We do that after download.
 		const tarballUrl = `https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/${encodeURIComponent(refSpec)}.tar.gz`;
@@ -1018,14 +1018,14 @@ class VaultBotPlugin extends Plugin {
 		};
 
 		try {
-			notify(`Stopping VaultBot before update…`);
+			notify(`Stopping VaultBot before updateâ€¦`);
 			// Stop MCP + backend so Windows releases file locks on .py files.
 			try { this.stopMcpServer(); } catch (e) {}
 			await this.stopBackend();
 			// Best-effort: make sure nothing is still up holding locks.
 			await new Promise(r => setTimeout(r, 800));
 
-			notify(`Downloading update from GitHub (${refSpec})…`);
+			notify(`Downloading update from GitHub (${refSpec})â€¦`);
 			// Use curl.exe explicitly: PowerShell aliases `curl` to
 			// Invoke-WebRequest, but we spawn a real shell so we control the
 			// binary. execFileSync throws on non-zero exit, which a 404 is.
@@ -1044,7 +1044,7 @@ class VaultBotPlugin extends Plugin {
 			}
 			if (lastErr) throw new Error('Could not download update from GitHub: ' + lastErr.message);
 
-			notify(`Extracting update…`);
+			notify(`Extracting updateâ€¦`);
 			// Extract ONLY code paths into staging. Exclusions guard against
 			// the repo's tracked-but-state files (logs, *.json state, pid,
 			// sessions, checkpoints, indexes, models, trash, pycache) ever
@@ -1093,7 +1093,7 @@ class VaultBotPlugin extends Plugin {
 			}
 			const archiveRoot = path.join(stagingDir, entries[0].name);
 
-			notify(`Applying backend code…`);
+			notify(`Applying backend codeâ€¦`);
 			// Copy the backend code tree over the live one. We copy individual
 			// tracked files rather than nuking the whole directory, so any
 			// untracked local state files (sessions/, logs, models, etc.) that
@@ -1102,7 +1102,7 @@ class VaultBotPlugin extends Plugin {
 			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot_stuff/vaultbot_backend/ folder.');
 			await copyCodeTree(srcBackend, backendDir);
 
-			notify(`Applying plugin files…`);
+			notify(`Applying plugin filesâ€¦`);
 			// Back up the user's data.json + mcp.json first; restore after.
 			// (data.json is excluded from extraction, but we defend in depth.)
 			const backups = {};
@@ -1150,7 +1150,7 @@ class VaultBotPlugin extends Plugin {
 				notify('Could not check new dependencies - will try starting anyway.');
 			}
 
-			notify(`Update applied (v${newVersion}). Restarting backend…`);
+			notify(`Update applied (v${newVersion}). Restarting backendâ€¦`);
 			// Bring the backend + MCP back up so the user is not left dark.
 			await this.startBackendIfNeeded();
 			if (this.settings.autoStartMcpServer) {
@@ -1176,11 +1176,11 @@ class VaultBotPlugin extends Plugin {
 			cleanup();
 		}
 
-		// ── helper: copy a code tree, overwriting changed files but leaving
+		// â”€â”€ helper: copy a code tree, overwriting changed files but leaving
 		// any untracked local files in the destination intact. Recursively
 		// walks the source dir; for each file, mkdirp the relative parent in
 		// the destination and copyFileSync over it. Does NOT delete files that
-		// exist in dest but not src — that's intentional, so user state files
+		// exist in dest but not src â€” that's intentional, so user state files
 		// (logs, sessions, models, agent-authored custom tools) that aren't in
 		// the repo are kept.
 		//
@@ -1493,7 +1493,7 @@ class VaultBotPlugin extends Plugin {
 			// Check if the backend is already running via the PID file first.
 			// The backend writes vaultbot.pid on startup and deletes it on
 			// graceful shutdown. If the file exists, the backend is likely up
-			// — confirm with a fetch probe (which succeeds silently). If the
+			// â€” confirm with a fetch probe (which succeeds silently). If the
 			// file does NOT exist, the backend is definitely down, so we skip
 			// the fetch entirely and go straight to spawning. This avoids the
 			// ERR_CONNECTION_REFUSED console spam that Chromium logs for every
@@ -1508,7 +1508,7 @@ class VaultBotPlugin extends Plugin {
 			const fs = require('fs');
 			let running = false;
 			if (fs.existsSync(pidFile)) {
-				// PID file exists — backend may be running. Probe to confirm.
+				// PID file exists â€” backend may be running. Probe to confirm.
 				running = await this.isBackendRunning();
 			}
 			if (running) {
@@ -1566,7 +1566,7 @@ class VaultBotPlugin extends Plugin {
 					// Use the plugin's saved key if set; otherwise pass an empty
 					// string and let the backend load it from .env via load_dotenv.
 					// This fixes the case where the key was set in .env but not
-					// in the plugin settings â€” the backend's load_dotenv('../.env')
+					// in the plugin settings Ã¢â‚¬â€ the backend's load_dotenv('../.env')
 					// will pick it up.
 					TAVILY_API_KEY: this.settings.tavilyApiKey || process.env.TAVILY_API_KEY || '',
 					// Pass the allowContributions setting so the submit_contribution
@@ -1639,7 +1639,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		containerEl.createEl('h2', {text: 'VaultBot Settings'});
 
 		// Backend URL moved to the Advanced disclosure at the bottom of
-		// the settings tab — a non-tech user should never need to change it.
+		// the settings tab â€” a non-tech user should never need to change it.
 		// The config status panel below shows effective values instead.
 
 		new Setting(containerEl)
@@ -1667,16 +1667,16 @@ class VaultBotSettingTab extends PluginSettingTab {
 					}
 				}));
 
-		// ── AI Models & Providers (the interchangeable "pot") ────────────
+		// â”€â”€ AI Models & Providers (the interchangeable "pot") â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		// One places to add provider connections (one-time API key) and
 		// register models. Once a model is in the pot, ANY role (big / small /
-		// vision) can use it — picked from the header dropdowns or here. Local
+		// vision) can use it â€” picked from the header dropdowns or here. Local
 		// Ollama, OpenRouter, OpenAI, etc. all behave the same.
 		containerEl.createEl('h3', {text: 'AI Models & Providers'});
 		containerEl.createEl('div', {text:
 			'Add a provider once (paste its API key), then add its models. ' +
 			'Every model you add appears in the Big / Small / Vision pickers in ' +
-			'the sidebar — assign any model to any role, across providers.',
+			'the sidebar â€” assign any model to any role, across providers.',
 			attr: {style: 'opacity:0.7;font-size:0.85em;margin:2px 0 10px 0;'}});
 
 		const provStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.75;font-size:0.85em;min-height:1.1em;margin-bottom:8px;'}});
@@ -1715,17 +1715,17 @@ class VaultBotSettingTab extends PluginSettingTab {
 			const pid = modelProvSel.value;
 			liveModelSel.empty();
 			if (!pid) { liveModelSel.createEl('option', {text: '(add a provider first)', attr: {disabled: true}}); return; }
-			liveModelSel.createEl('option', {text: 'loading…', attr: {disabled: true}});
+			liveModelSel.createEl('option', {text: 'loadingâ€¦', attr: {disabled: true}});
 			const res = await this.plugin.fetchProviderLiveModels(pid);
 			liveModelSel.empty();
 			const models = (res && Array.isArray(res.models)) ? res.models : [];
 			if (!models.length) {
-				liveModelSel.createEl('option', {text: res && res.detail ? `⚠ ${res.detail}` : '(none found — type manually)', attr: {disabled: true}});
+				liveModelSel.createEl('option', {text: res && res.detail ? `âš  ${res.detail}` : '(none found â€” type manually)', attr: {disabled: true}});
 				return;
 			}
 			models.forEach(m => {
 				const name = typeof m === 'string' ? m : m.name;
-				const opt = liveModelSel.createEl('option', {text: (m.vision ? '👁 ' : '') + name, attr: {value: name}});
+				const opt = liveModelSel.createEl('option', {text: (m.vision ? 'ðŸ‘ ' : '') + name, attr: {value: name}});
 				if (m.vision) opt.setAttribute('data-vision', '1');
 			});
 			// Auto-check vision if the selected model is vision-capable.
@@ -1739,7 +1739,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		modelProvSel.addEventListener('change', loadLiveModels);
 
 		// Test-model: does this model actually respond on the endpoint? Shows
-		// the model's own reply (e.g. the color it saw → proves vision works).
+		// the model's own reply (e.g. the color it saw â†’ proves vision works).
 		testModelBtn.addEventListener('click', async () => {
 			const providerId = modelProvSel.value;
 			const modelId = modelIdInput.value.trim() || liveModelSel.value;
@@ -1750,9 +1750,9 @@ class VaultBotSettingTab extends PluginSettingTab {
 				body: JSON.stringify({provider_id: providerId, model: modelId, vision: visionChk.checked})});
 			const data = await r.json().catch(() => ({}));
 			if (data.ok) {
-				provStatusEl.setText(`✓ ${modelId} works${visionChk.checked ? ' (vision confirmed)' : ''}: "${(data.response || '').slice(0, 40)}"`);
+				provStatusEl.setText(`âœ“ ${modelId} works${visionChk.checked ? ' (vision confirmed)' : ''}: "${(data.response || '').slice(0, 40)}"`);
 			} else {
-				provStatusEl.setText(`✗ ${modelId}: ${data.error || data.detail || 'no response'}`);
+				provStatusEl.setText(`âœ— ${modelId}: ${data.error || data.detail || 'no response'}`);
 			}
 		});
 
@@ -1782,11 +1782,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 			provListEl.empty();
 			const providers = (prov && Array.isArray(prov.providers)) ? prov.providers : [];
 			if (!providers.length) {
-				provListEl.createEl('div', {text: 'No providers yet — add one above (local Ollama is preset with no key).', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
+				provListEl.createEl('div', {text: 'No providers yet â€” add one above (local Ollama is preset with no key).', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
 			}
 			providers.forEach(p => {
 				const row = provListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin:2px 0;'}});
-				row.createEl('span', {text: `${p.label || p.id} — ${p.base_url}${p.has_key ? ' 🔑' : ''}`, attr: {style: 'flex:1;font-size:0.85em;'}});
+				row.createEl('span', {text: `${p.label || p.id} â€” ${p.base_url}${p.has_key ? ' ðŸ”‘' : ''}`, attr: {style: 'flex:1;font-size:0.85em;'}});
 				const rm = row.createEl('button', {text: 'Remove'});
 				rm.addEventListener('click', async () => {
 					await this.plugin.removeProviderCfg(p.id);
@@ -1802,12 +1802,12 @@ class VaultBotSettingTab extends PluginSettingTab {
 			potListEl.empty();
 			const models = (all && Array.isArray(all.models)) ? all.models : [];
 			if (!models.length) {
-				potListEl.createEl('div', {text: 'No models in the pot yet — add one above.', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
+				potListEl.createEl('div', {text: 'No models in the pot yet â€” add one above.', attr: {style: 'opacity:0.65;font-size:0.8em;'}});
 			}
 			models.forEach(m => {
 				const row = potListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin:2px 0;'}});
 				const tags = [];
-				if (m.vision) tags.push('👁');
+				if (m.vision) tags.push('ðŸ‘');
 				if (m.roles && m.roles.length) tags.push('[' + m.roles.join(',') + ']');
 				row.createEl('span', {text: `${tags.length ? tags.join(' ') + ' ' : ''}${m.model}`, attr: {style: 'flex:1;font-size:0.85em;'}, title: `${m.provider_label || m.provider}`});
 				row.createEl('span', {text: m.provider_label || m.provider, attr: {style: 'font-size:0.75em;opacity:0.6;'}});
@@ -1845,10 +1845,10 @@ class VaultBotSettingTab extends PluginSettingTab {
 				provKeyInput.value = '';
 				const n = res.probe ? res.probe.count : 0;
 				new Notice(`Provider connected: ${opt ? opt.text : id} (${n} model${n === 1 ? '' : 's'} found)`);
-				provStatusEl.setText(`✓ connected — ${n} model(s) available.`);
+				provStatusEl.setText(`âœ“ connected â€” ${n} model(s) available.`);
 				refreshPotUI();
 			} else {
-				provStatusEl.setText(`✗ ${res && res.detail ? res.detail : 'endpoint test failed'} — not saved.`);
+				provStatusEl.setText(`âœ— ${res && res.detail ? res.detail : 'endpoint test failed'} â€” not saved.`);
 			}
 		});
 
@@ -1866,23 +1866,23 @@ class VaultBotSettingTab extends PluginSettingTab {
 				new Notice(`Model added to the pot: ${modelId}`);
 				refreshPotUI();
 			} else {
-				provStatusEl.setText('Failed — pick a provider and a model.');
+				provStatusEl.setText('Failed â€” pick a provider and a model.');
 			}
 		});
 		refreshPotUI();
-		// ── Model Tournament ──────────────────────────────────────────
+		// â”€â”€ Model Tournament â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		// A separate "staging pot" for models you want to evaluate BEFORE
 		// adding to the main pot. Add models by picking a provider (from
 		// the SAME provider list you already configured above) and typing
 		// the model name. Then run a tournament to see how they perform.
 		containerEl.createEl('h3', {text: 'Model Tournament'});
 		containerEl.createEl('div', {text:
-			'Add models to the tournament staging pot below — these are ' +
+			'Add models to the tournament staging pot below â€” these are ' +
 			'separate from your main model pot. Test them against vaultbot-' +
 			'specific benchmarks, then promote the winners to your main pot.',
 			attr: {style: 'opacity:0.7;font-size:0.85em;margin:2px 0 10px 0;'}});
 
-		// ── Add to staging: reuses the SAME provider dropdown data as the
+		// â”€â”€ Add to staging: reuses the SAME provider dropdown data as the
 		// main pot (no duplicate fetch). The provider list is already loaded
 		// by refreshPotUI() in the AI Models & Providers section above.
 		const stagingAddRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;'}});
@@ -1912,7 +1912,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 			stagingLiveSel.empty();
 			const models = (res && Array.isArray(res.models)) ? res.models : [];
 			if (!models.length) {
-				stagingLiveSel.createEl('option', {text: '(none found — type manually)', attr: {disabled: true}});
+				stagingLiveSel.createEl('option', {text: '(none found â€” type manually)', attr: {disabled: true}});
 				return;
 			}
 			models.forEach(m => {
@@ -1922,7 +1922,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		};
 		stagingProvSel.addEventListener('change', loadStagingLiveModels);
 
-		// Staging pot list — checkboxes for each entry
+		// Staging pot list â€” checkboxes for each entry
 		const stagingListEl = containerEl.createDiv({attr: {style: 'max-height:180px;overflow-y:auto;border:1px solid var(--background-modifier-border);border-radius:4px;padding:6px;margin-bottom:6px;'}});
 		const stagingBtnRow = containerEl.createDiv({attr: {style: 'display:flex;gap:8px;margin-bottom:8px;'}});
 		const stagingSelectAllBtn = stagingBtnRow.createEl('button', {text: 'Select all'});
@@ -1962,7 +1962,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					const sr = await fetch(this.plugin.settings.backendUrl + '/tournament/staging/sizes');
 					const sd = await sr.json();
 					sizes = sd.sizes || {};
-				} catch (e) { /* sizes unavailable — show without */ }
+				} catch (e) { /* sizes unavailable â€” show without */ }
 
 				entries.forEach(e => {
 					const row = stagingListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;padding:2px 0;'}});
@@ -1970,7 +1970,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					const sizeStr = sizes[e.id] ? ` (${sizes[e.id]})` : '';
 					row.createEl('label', {text: `${e.model}${sizeStr}`, attr: {style: 'font-size:0.85em;'}});
 					row.createEl('span', {text: e.provider_label || e.provider, attr: {style: 'font-size:0.7em;opacity:0.5;'}});
-					const rm = row.createEl('button', {text: '✕', attr: {style: 'font-size:0.7em;padding:0 4px;'}});
+					const rm = row.createEl('button', {text: 'âœ•', attr: {style: 'font-size:0.7em;padding:0 4px;'}});
 					rm.addEventListener('click', async () => {
 						await fetch(this.plugin.settings.backendUrl + '/tournament/staging/' + encodeURIComponent(e.id), {method: 'DELETE'});
 						refreshStagingList();
@@ -1978,7 +1978,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				});
 			} catch (e) {
 				stagingListEl.empty();
-				stagingListEl.createEl('div', {text: 'Backend offline — start the backend to manage staging.', attr: {style: 'opacity:0.5;font-size:0.85em;padding:4px;'}});
+				stagingListEl.createEl('div', {text: 'Backend offline â€” start the backend to manage staging.', attr: {style: 'opacity:0.5;font-size:0.85em;padding:4px;'}});
 			}
 		};
 
@@ -2034,7 +2034,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 			tourneyRunBtn.setText('Running...');
 			tourneyStatusEl.setText(`Testing ${contestants.length} model(s) on ${role} benchmarks...`);
 			tourneyResultsEl.empty();
-			tourneyResultsEl.createEl('div', {text: 'Running tournament — this may take a few minutes. Results will appear here when done.', attr: {style: 'opacity:0.7;font-size:0.85em;'}});
+			tourneyResultsEl.createEl('div', {text: 'Running tournament â€” this may take a few minutes. Results will appear here when done.', attr: {style: 'opacity:0.7;font-size:0.85em;'}});
 
 			try {
 				const r = await fetch(this.plugin.settings.backendUrl + '/tournament/run', {
@@ -2051,18 +2051,18 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 				tourneyStatusEl.setText(`Done in ${result.duration_s}s. Judge: ${result.judge_model}.`);
 
-				// ── Results: bar chart visualization ──────────────────
+				// â”€â”€ Results: bar chart visualization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 				// Sort by combined score (accuracy 70% + speed 30%) descending
 				const sorted = (result.models || []).slice().sort((a, b) => b.combined_score - a.combined_score);
 				const maxCombined = sorted.length ? sorted[0].combined_score : 1;
 
 				// Summary line
 				const summaryRow = tourneyResultsEl.createDiv({attr: {style: 'display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8em;opacity:0.7;'}});
-				summaryRow.createEl('span', {text: `🏆 ${sorted[0]?.model_name || '—'} wins`});
-				summaryRow.createEl('span', {text: `📊 ${result.benchmarks?.length || 0} benchmarks`});
-				summaryRow.createEl('span', {text: `⚖️ Score = 70% accuracy + 30% speed`});
+				summaryRow.createEl('span', {text: `ðŸ† ${sorted[0]?.model_name || 'â€”'} wins`});
+				summaryRow.createEl('span', {text: `ðŸ“Š ${result.benchmarks?.length || 0} benchmarks`});
+				summaryRow.createEl('span', {text: `âš–ï¸ Score = 70% accuracy + 30% speed`});
 
-				// Bar chart — one row per model
+				// Bar chart â€” one row per model
 				const chartEl = tourneyResultsEl.createDiv({attr: {style: 'margin-bottom:10px;'}});
 				sorted.forEach((m, i) => {
 					const row = chartEl.createDiv({attr: {style: 'margin-bottom:6px;'}});
@@ -2071,14 +2071,14 @@ class VaultBotSettingTab extends PluginSettingTab {
 					const rank = labelRow.createEl('span', {text: `#${i + 1}`, attr: {style: 'font-weight:700;font-size:0.85em;color:var(--text-accent);min-width:24px;'}});
 					labelRow.createEl('span', {text: m.model_name, attr: {style: 'font-weight:600;font-size:0.9em;'}});
 					if (m.error) {
-						labelRow.createEl('span', {text: '⚠ ' + m.error, attr: {style: 'color:var(--text-error);font-size:0.75em;'}});
+						labelRow.createEl('span', {text: 'âš  ' + m.error, attr: {style: 'color:var(--text-error);font-size:0.75em;'}});
 					}
 					// Score numbers
 					const pct = (m.combined_score * 100).toFixed(0);
 					const accPct = (m.overall_score * 100).toFixed(0);
-					const timeStr = m.avg_latency_ms ? (m.avg_latency_ms / 1000).toFixed(1) + 's' : '—';
+					const timeStr = m.avg_latency_ms ? (m.avg_latency_ms / 1000).toFixed(1) + 's' : 'â€”';
 					labelRow.createEl('span', {text: `${pct}%`, attr: {style: 'font-weight:700;font-size:0.9em;margin-left:auto;'}});
-					labelRow.createEl('span', {text: `acc ${accPct}% · ${timeStr}/q`, attr: {style: 'font-size:0.7em;opacity:0.6;'}});
+					labelRow.createEl('span', {text: `acc ${accPct}% Â· ${timeStr}/q`, attr: {style: 'font-size:0.7em;opacity:0.6;'}});
 
 					// Combined bar (full width background, filled by score)
 					const barBg = row.createDiv({attr: {style: 'height:18px;background:var(--background-modifier-border);border-radius:3px;overflow:hidden;position:relative;'}});
@@ -2094,7 +2094,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					barBg.createDiv({attr: {style: `position:absolute;top:0;left:0;width:${accW}%;height:3px;background:var(--text-success);border-radius:0 2px 2px 0;opacity:0.8;`}});
 				});
 
-				// ── Per-benchmark heatmap ──────────────────────────────
+				// â”€â”€ Per-benchmark heatmap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 				const detDisclosure = tourneyResultsEl.createEl('details', {attr: {style: 'margin-top:8px;'}});
 				detDisclosure.createEl('summary', {text: 'Per-benchmark breakdown'});
 				const detBody = detDisclosure.createEl('div', {attr: {style: 'margin-top:6px;overflow-x:auto;'}});
@@ -2117,13 +2117,13 @@ class VaultBotSettingTab extends PluginSettingTab {
 							const mb = (m.benchmarks || []).find(x => x.benchmark_id === b.id);
 							const cell = bRow.createEl('td', {attr: {style: 'text-align:center;padding:2px 4px;'}});
 							if (!mb) {
-								cell.setText('—');
+								cell.setText('â€”');
 							} else if (mb.error) {
-								cell.createEl('span', {text: '⚠', attr: {style: 'color:var(--text-error);', title: mb.error}});
+								cell.createEl('span', {text: 'âš ', attr: {style: 'color:var(--text-error);', title: mb.error}});
 							} else if (mb.passed) {
-								cell.createEl('span', {text: '✓', attr: {style: 'color:var(--text-success);font-weight:700;'}});
+								cell.createEl('span', {text: 'âœ“', attr: {style: 'color:var(--text-success);font-weight:700;'}});
 							} else {
-								cell.createEl('span', {text: '✗', attr: {style: 'color:var(--text-error);'}});
+								cell.createEl('span', {text: 'âœ—', attr: {style: 'color:var(--text-error);'}});
 							}
 							// Show latency in tiny text
 							if (mb && !mb.error) {
@@ -2145,12 +2145,12 @@ class VaultBotSettingTab extends PluginSettingTab {
 			}
 		});
 
-		// Staging provider dropdown is populated by refreshPotUI() above —
+		// Staging provider dropdown is populated by refreshPotUI() above â€”
 		// no standalone fetch needed (it would be a duplicate of the same
 		// /llm/providers call that refreshPotUI already makes).
 		refreshStagingList();
 
-		// ── Configuration status panel ────────────────────────────────
+		// â”€â”€ Configuration status panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		// Shows the effective value + source for each user-facing config key,
 		// so the user can see which config source is "winning" (plugin panel
 		// vs .env file) without grepping .env. Conflicts (panel and .env
@@ -2202,28 +2202,28 @@ class VaultBotSettingTab extends PluginSettingTab {
 					if (item.conflict) {
 						const warn = row.createEl('span',
 							{cls: 'vaultbot-config-warn',
-							 text: '⚠ .env and panel disagree'});
+							 text: 'âš  .env and panel disagree'});
 						warn.title = 'The .env file and the settings panel ' +
 							'have different values for this key. The ' +
-							'panel value is in effect — edit .env to match ' +
+							'panel value is in effect â€” edit .env to match ' +
 							'if you want them consistent.';
 					}
 				});
 			} catch (e) {
 				configStatusEl.empty();
 				configStatusEl.createEl('div', {
-					text: 'Backend offline — start the backend to see config status.',
+					text: 'Backend offline â€” start the backend to see config status.',
 					cls: 'vaultbot-config-offline'});
 			}
 		};
 		configRefreshBtn.addEventListener('click', () => refreshConfigStatus());
 		refreshConfigStatus();
 
-		// ── Advanced disclosure (Backend URL) ─────────────────────────
+		// â”€â”€ Advanced disclosure (Backend URL) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		// Backend URL is an internal setting most users never need. It's
 		// behind a disclosure so a non-tech user isn't confronted with it,
 		// but still accessible for the rare case it's needed. The placeholder
-		// is 127.0.0.1 (not localhost — the code rewrites localhost to
+		// is 127.0.0.1 (not localhost â€” the code rewrites localhost to
 		// 127.0.0.1 on load to avoid the IPv6/IPv4 resolution bug).
 		const advDisclosure = containerEl.createEl('details',
 			{cls: 'vaultbot-advanced'});
@@ -2272,124 +2272,11 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 		// Note: starting the backend is handled by the Restart button in the
 		// VaultBot sidebar. There's no separate "Start backend now" button
-		// here anymore — having two entry points could race each other
+		// here anymore â€” having two entry points could race each other
 		// (one starts while the other restarts), leaving the backend in a
 		// half-up state. Use the sidebar Restart button instead.
 
-		// ── Directives panel ────────────────────────────────────────────
-		// High-leverage behavioral toggles that map to writing/removing
-		// directive .md files at the vault root via the Obsidian vault API.
-		// A non-tech user can flip "Autonomy on/off" or "Keep replies short"
-		// without navigating folders or editing markdown — the panel writes
-		// the file (and the directive takes effect on the next chat turn
-		// via retrieval). Power users can still edit the .md directly.
-		containerEl.createEl('h3', {text: 'Directives'});
-		const dirDesc = containerEl.createEl('div');
-		dirDesc.setText(
-			'These toggles shape how VaultBot behaves. Each one writes a ' +
-			'short directive note that VaultBot reads on its next turn. ' +
-			'You can also edit the notes directly at the vault root — the ' +
-			'toggles are just a quick way to turn them on or off.');
-		dirDesc.style.opacity = '0.7';
-		dirDesc.style.fontSize = '0.85em';
-		dirDesc.style.marginBottom = '10px';
-
-		// Each directive: path at vault root, short title, description,
-		// and the content to write when enabled. The content is a concise
-		// version of the baseline template — short enough to be readable
-		// in the settings panel but complete enough to direct the model.
-		const DIRECTIVES = [
-			{path: 'Autonomy-Directive.md',
-			 title: 'Autonomy',
-			 desc: 'Let VaultBot act on its own — store, organize, research, ' +
-				'and self-improve without asking permission each time. Report after.',
-			 on: '# Autonomy Directive\n\nAct on your own. Store, organize, ' +
-				'research, and self-improve without asking permission each ' +
-				'time. Report what you did after the fact.\n'},
-			{path: 'Vault-Knowledge-Only-Directive.md',
-			 title: 'Vault knowledge only',
-			 desc: 'The vault is the ONLY knowledge source. Never reference ' +
-				'training data. If the vault has nothing, say "I don\'t know."',
-			 on: '# Vault Knowledge Only Directive\n\nThe vault is the ONLY ' +
-				'knowledge source. Never reference training data. If the ' +
-				'vault has nothing on a topic, say "I don\'t know" and offer ' +
-				'to research it.\n'},
-			{path: 'IDK-Fallback-Directive.md',
-			 title: 'Honest "I don\'t know"',
-			 desc: 'When the vault is empty AND research is down, say ' +
-				'"I don\'t know." No hedging, no training-data leakage.',
-			 on: '# IDK Fallback Directive\n\nWhen the vault has nothing on ' +
-				'a topic AND research is unavailable, say "I don\'t know." ' +
-				'No hedging, no guessing from training data, no filler.\n'},
-			{path: 'No-Wikipedia-Directive.md',
-			 title: 'No Wikipedia',
-			 desc: 'Never cite Wikipedia as a source. Use primary sources, ' +
-				'academic papers, or specialist forums instead.',
-			 on: '# No Wikipedia Directive\n\nNever cite Wikipedia as a ' +
-				'source. Prefer primary sources, academic papers, and ' +
-				'specialist forums. If the only available source is ' +
-				'Wikipedia, say so and offer to find better sources.\n'},
-			{path: 'Communication-Preferences.md',
-			 title: 'Keep replies short',
-			 desc: 'Bottom line up front. Bullet points over paragraphs. ' +
-				'Report accomplishments, not regurgitation.',
-			 on: '# Communication Preferences\n\n## Style\n- Keep it short. ' +
-				'No walls of text.\n- Report accomplishments, not ' +
-				'regurgitation. Tell me what you DID, not everything you ' +
-				'learned.\n- Bottom line up front. Lead with the outcome.\n' +
-				'## Format\n- Bullet points over paragraphs.\n- If research ' +
-				'was done, say what was researched and where the note lives. ' +
-				'Don\'t paste the full synthesis into chat.\n'},
-		];
-
-		const vault = this.app.vault;
-		const dirToggles = [];
-		for (const d of DIRECTIVES) {
-			// Check if the file already exists to set the initial toggle state.
-			let exists = false;
-			try {
-				const file = vault.getAbstractFileByPath(d.path);
-				exists = !!(file && file.path);
-			} catch (e) { exists = false; }
-
-			const setting = new Setting(containerEl)
-				.setName(d.title)
-				.setDesc(d.desc);
-			const toggle = setting.addToggle(t => t
-				.setValue(exists)
-				.onChange(async (value) => {
-					toggle.setDisabled(true);
-					try {
-						if (value) {
-							// Write the directive file via the vault API
-							// so Obsidian detects it immediately (no file-
-							// watcher lag + graph view updates in real time).
-							await vault.adapter.write(d.path, d.on);
-						} else {
-							// Remove the directive file. Use trash if
-							// available, otherwise delete.
-							const file = vault.getAbstractFileByPath(d.path);
-							if (file) {
-								try {
-									await vault.trash(file, true);
-								} catch (e2) {
-									await vault.delete(file);
-								}
-							}
-						}
-					} catch (e) {
-						new Notice('Could not ' + (value ? 'enable' : 'disable') +
-							' directive: ' + (e.message || e));
-						// Revert the toggle on failure.
-						t.setValue(!value);
-					} finally {
-						toggle.setDisabled(false);
-					}
-				}));
-			dirToggles.push(toggle);
-		}
-
-		containerEl.createEl('h3', {text: 'Safety'});
+		// âcontainerEl.createEl('h3', {text: 'Safety'});
 		containerEl.createEl('div', {text:
 			'Safe Mode prevents VaultBot from modifying its own code, creating ' +
 			'new tools, executing arbitrary Python, restarting the backend, or ' +
@@ -2406,8 +2293,8 @@ class VaultBotSettingTab extends PluginSettingTab {
 					this.plugin.settings.safeMode = value;
 					await this.plugin.saveSettings();
 					new Notice(value
-						? 'Safe Mode enabled — self-modification blocked. Restart backend to apply.'
-						: 'Developer Mode enabled — full self-modification unlocked. Restart backend to apply.');
+						? 'Safe Mode enabled â€” self-modification blocked. Restart backend to apply.'
+						: 'Developer Mode enabled â€” full self-modification unlocked. Restart backend to apply.');
 				}));
 
 		new Setting(containerEl)
@@ -2420,12 +2307,12 @@ class VaultBotSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 					new Notice(value
 						? 'Web research enabled'
-						: 'Web research disabled — VaultBot will only use your vault. Restart backend to apply.');
+						: 'Web research disabled â€” VaultBot will only use your vault. Restart backend to apply.');
 				}));
 
 		new Setting(containerEl)
 			.setName('BS Detector messages')
-			.setDesc('When the Think procedure detects unverified premises, show the BS Detector warning directly in chat. Turn off to let VaultBot handle it more gently — the detector still runs in the backend, but the LLM decides how to tell you.')
+			.setDesc('When the Think procedure detects unverified premises, show the BS Detector warning directly in chat. Turn off to let VaultBot handle it more gently â€” the detector still runs in the backend, but the LLM decides how to tell you.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.bsDetectorMessages !== false)
 				.onChange(async (value) => {
@@ -2433,7 +2320,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 					new Notice(value
 						? 'BS Detector messages shown in chat'
-						: 'BS Detector runs silently — VaultBot will tell you gently');
+						: 'BS Detector runs silently â€” VaultBot will tell you gently');
 				}));
 
 		containerEl.createEl('h3', {text: 'Community contributions'});
@@ -2596,7 +2483,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				if (res && res.ok) {
 					updateStatusEl.setText(`Done. VaultBot is now v${res.version}.`);
 					new Notice(`VaultBot updated to v${res.version}.`);
-					// Hide the restore button on success — no rollback needed.
+					// Hide the restore button on success â€” no rollback needed.
 					restoreBtn.style.display = 'none';
 				} else {
 					updateStatusEl.setText(`Update failed: ${res && res.error ? res.error : 'unknown error'}`);
@@ -2660,7 +2547,7 @@ class VaultBotSidebarView extends ItemView {
 		// upper-right corner without disturbing the title block.
 		const headerLeft = headerEl.createDiv({cls: 'vaultbot-header-left'});
 		const titleEl = headerLeft.createEl('div', {cls: 'vaultbot-header-title'});
-		titleEl.createEl('span', {cls: 'vaultbot-header-mark', text: '🌿'});
+		titleEl.createEl('span', {cls: 'vaultbot-header-mark', text: 'ðŸŒ¿'});
 		titleEl.createEl('span', {text: 'VaultBot'});
 		headerLeft.createEl('div', {cls: 'vaultbot-header-sub', text: 'a garden for your thoughts'});
 
@@ -2697,7 +2584,7 @@ class VaultBotSidebarView extends ItemView {
 				const og = sel.createEl('optgroup', {label: provLabel});
 				byProvider[provLabel].forEach(m => {
 					const tags = [];
-					if (m.vision) tags.push('👁');
+					if (m.vision) tags.push('ðŸ‘');
 					if (Array.isArray(m.roles) && m.roles.length) tags.push('[' + m.roles.join(',') + ']');
 					const text = (tags.length ? tags.join(' ') + ' ' : '') + m.model;
 					const opt = og.createEl('option', {text, attr: {value: m.id}});
@@ -2749,12 +2636,12 @@ class VaultBotSidebarView extends ItemView {
 			} catch (e) {}
 			[bigSelect, smallSelect, visionSelect].forEach(s => {
 				s.empty();
-				s.createEl('option', {text: 'no pot — add models in Settings', attr: {disabled: true}});
+				s.createEl('option', {text: 'no pot â€” add models in Settings', attr: {disabled: true}});
 			});
 		};
 		refreshAllModelDropdowns();
 
-		// Big model change → map this pot model into the big role.
+		// Big model change â†’ map this pot model into the big role.
 		bigSelect.addEventListener('change', async () => {
 			await this.plugin.setRoleCfg('big', bigSelect.value);
 			new Notice(`Big model set: ${bigSelect.value}`);
@@ -2767,20 +2654,20 @@ class VaultBotSidebarView extends ItemView {
 				updateTokenMeter(0, ctxWin);
 			}
 		});
-		// Small model change → map this pot model into the small role.
+		// Small model change â†’ map this pot model into the small role.
 		smallSelect.addEventListener('change', async () => {
 			await this.plugin.setRoleCfg('small', smallSelect.value);
 			new Notice(smallSelect.value
 				? `Small model set: ${smallSelect.value}`
-				: 'Small model cleared — procedures fall back to the big model.');
+				: 'Small model cleared â€” procedures fall back to the big model.');
 			refreshAllModelDropdowns();
 		});
-		// Vision model change → map this pot model into the vision role.
+		// Vision model change â†’ map this pot model into the vision role.
 		visionSelect.addEventListener('change', async () => {
 			await this.plugin.setRoleCfg('vision', visionSelect.value);
 			new Notice(visionSelect.value
 				? `Vision model set: ${visionSelect.value}`
-				: 'Vision model cleared — page reading falls back to your big model.');
+				: 'Vision model cleared â€” page reading falls back to your big model.');
 			refreshAllModelDropdowns();
 		});
 
@@ -2866,7 +2753,7 @@ class VaultBotSidebarView extends ItemView {
 					}
 				}
 				historyPanel.style.display = 'block';
-				historyToggle.setText('Recent ▴');
+				historyToggle.setText('Recent â–´');
 				historyLoaded = true;
 			} catch (e) {
 				new Notice('Could not load conversation history.');
@@ -2944,7 +2831,7 @@ class VaultBotSidebarView extends ItemView {
 		let backendWasOnline = false;
 		// Typed status: kind drives the color + icon, action is an optional
 		// click handler (replaces the old boolean `clickable`). Only states
-		// that carry an action look clickable — pure status never does, so a
+		// that carry an action look clickable â€” pure status never does, so a
 		// user isn't tempted to click "Done" or "Backend online".
 		const STATUS_KIND_CLASS = {
 			online:    'vaultbot-status-online',
@@ -2973,7 +2860,7 @@ class VaultBotSidebarView extends ItemView {
 		};
 
 		const ensureConnection = async () => {
-			// If a boot is in progress, don't open another fetch probe here —
+			// If a boot is in progress, don't open another fetch probe here â€”
 			// just await the shared ready promise. This is what was spamming
 			// the dev console with ERR_CONNECTION_REFUSED every 5s while the
 			// backend was still coming up.
@@ -3029,7 +2916,7 @@ class VaultBotSidebarView extends ItemView {
 		// A horizontal bar that fills proportional to how many tokens the
 		// current conversation is using, capped at the equipped model's
 		// context window. Updates live from context_usage events the backend
-		// emits each turn (pre-loop + post-answer). Color shifts moss→clay→
+		// emits each turn (pre-loop + post-answer). Color shifts mossâ†’clayâ†’
 		// bark as it fills so the user can see at a glance how close the
 		// context is to overflowing.
 		const modelBar = footerEl.createDiv({cls: 'vaultbot-model-bar'});
@@ -3037,8 +2924,8 @@ class VaultBotSidebarView extends ItemView {
 		tokenMeterWrap.setAttribute('aria-hidden', 'true');
 		const tokenMeterEl = tokenMeterWrap.createDiv({cls: 'vaultbot-token-meter'});
 		const tokenMeterFill = tokenMeterEl.createDiv({cls: 'vaultbot-token-meter-fill'});
-		const tokenMeterLabel = tokenMeterWrap.createEl('span', {cls: 'vaultbot-token-meter-label', text: '—'});
-		tokenMeterEl.setAttribute('title', 'Context usage — fills as the conversation grows');
+		const tokenMeterLabel = tokenMeterWrap.createEl('span', {cls: 'vaultbot-token-meter-label', text: 'â€”'});
+		tokenMeterEl.setAttribute('title', 'Context usage â€” fills as the conversation grows');
 		let tokenMeterCtxWindow = 32768;
 		function updateTokenMeter(used, window) {
 			if (window && window > 0) tokenMeterCtxWindow = window;
@@ -3062,7 +2949,7 @@ class VaultBotSidebarView extends ItemView {
 		// Polls /ollama/stats every 5s for model/VRAM status; updates
 		// instantly when ollama_stats WS messages arrive during chat.
 		const statsBar = footerEl.createDiv({cls: 'vaultbot-stats-bar'});
-		const statsModelEl = statsBar.createEl('span', {cls: 'vaultbot-stats-model', text: '—'});
+		const statsModelEl = statsBar.createEl('span', {cls: 'vaultbot-stats-model', text: 'â€”'});
 		const statsVramEl = statsBar.createEl('span', {cls: 'vaultbot-stats-vram', text: ''});
 		const statsCtxEl = statsBar.createEl('span', {cls: 'vaultbot-stats-ctx', text: ''});
 		const statsPerfEl = statsBar.createEl('span', {cls: 'vaultbot-stats-perf', text: ''});
@@ -3090,7 +2977,7 @@ class VaultBotSidebarView extends ItemView {
 			} else {
 				// Show the first (primary) loaded model
 				const m = models[0];
-				statsModelEl.setText(m.name || '—');
+				statsModelEl.setText(m.name || 'â€”');
 				statsModelEl.addClass('vaultbot-stats-model-loaded');
 				const vram = formatBytes(m.size_vram);
 				const total = formatBytes(m.size_total);
@@ -3114,7 +3001,7 @@ class VaultBotSidebarView extends ItemView {
 			if (stats.eval_count > 0) {
 				parts.push(stats.eval_count + ' tok');
 			}
-			statsPerfEl.setText(parts.join(' · '));
+			statsPerfEl.setText(parts.join(' Â· '));
 		}
 		// Poll /ollama/stats every 5s for model/VRAM status
 		let statsPollTimer = null;
@@ -3232,7 +3119,7 @@ class VaultBotSidebarView extends ItemView {
 		});
 
 		// Action row: clay (primary) buttons grouped, then moss (quiet)
-		// buttons grouped — each cluster sits together.
+		// buttons grouped â€” each cluster sits together.
 		const buttonContainer = inputContainer.createDiv({cls: 'vaultbot-button-container'});
 		const clayGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-clay'});
 		const mossGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-moss'});
@@ -3268,7 +3155,7 @@ class VaultBotSidebarView extends ItemView {
 		// is created fresh whenever the model starts talking again (after a
 		// tool call, etc.) and appended at the END of the message at that
 		// moment. Tool calls/results/progress lines are also appended at the
-		// end when they happen. This preserves the true talk→tool→talk→tool
+		// end when they happen. This preserves the true talkâ†’toolâ†’talkâ†’tool
 		// order instead of clustering all text above all tool calls.
 		let currentAnswerBlock = null;     // current text-segment container
 		let currentSegmentText = '';       // markdown accumulated for the segment
@@ -3285,7 +3172,7 @@ class VaultBotSidebarView extends ItemView {
 		const appendUserMessage = (text) => {
 			const div = chatContainer.createDiv({cls: 'vaultbot-message user'});
 			renderMarkdownInto(div, text).then(() => {
-				// Force scroll on user send — user explicitly wants to see the response
+				// Force scroll on user send â€” user explicitly wants to see the response
 				chatContainer.scrollTop = chatContainer.scrollHeight;
 			});
 		};
@@ -3369,8 +3256,8 @@ class VaultBotSidebarView extends ItemView {
 		//      known in-product remedy (restart / pull_model / finish_setup /
 		//      open_download_ollama / open_download_python / restore_backup).
 		//   4. Offers "Copy for support" that copies a REDACTED bundle
-		//      (category + user_message + timestamp) — never raw_for_log,
-		//      never paths, never keys — so the operator can paste it to a helper.
+		//      (category + user_message + timestamp) â€” never raw_for_log,
+		//      never paths, never keys â€” so the operator can paste it to a helper.
 		// This is the frontend half of the classify-at-the-edge contract:
 		// the backend translates exceptions into Diagnoses; the frontend
 		// renders Diagnoses. Raw strings never cross the boundary.
@@ -3424,7 +3311,7 @@ class VaultBotSidebarView extends ItemView {
 			const d = diagnosis || {};
 			const sev = d.severity || 'broken';
 			const card = chatContainer.createDiv({cls: 'vaultbot-message system problem severity-' + sev});
-			const icon = sev === 'info' ? '🌿' : (sev === 'fixable' ? '⚙️' : '⚠️');
+			const icon = sev === 'info' ? 'ðŸŒ¿' : (sev === 'fixable' ? 'âš™ï¸' : 'âš ï¸');
 			const head = card.createDiv({cls: 'vaultbot-problem-head'});
 			head.createSpan({cls: 'vaultbot-problem-icon', text: icon});
 			head.createSpan({cls: 'vaultbot-problem-title', text: d.user_message || 'Something went wrong.'});
@@ -3463,7 +3350,7 @@ class VaultBotSidebarView extends ItemView {
 					copyBtn.setText('Copied!');
 					setTimeout(() => copyBtn.setText('Copy for support'), 2000);
 				} catch (e) {
-					new Notice('Could not copy — see the console.');
+					new Notice('Could not copy â€” see the console.');
 				}
 			});
 			smartScrollToBottom();
@@ -3473,7 +3360,7 @@ class VaultBotSidebarView extends ItemView {
 		const startAssistantMessage = () => {
 			currentAssistantMessage = chatContainer.createDiv({cls: 'vaultbot-message assistant'});
 			// Create per-message locals so the click handler closes over
-			// THESE specific elements — not the module-level vars that get
+			// THESE specific elements â€” not the module-level vars that get
 			// nulled when the turn ends. This keeps every past thinking
 			// block clickable even after the turn is over.
 			const thinkingHeader = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-header', text: 'Thinking (click to show)'});
@@ -3545,7 +3432,7 @@ class VaultBotSidebarView extends ItemView {
 			// Finalize any pending collapsible tool-call element.
 			if (currentToolCallEl) {
 				const elapsed = Date.now() - currentToolCallEl.startTs;
-				currentToolCallEl.header.setText('🔧 ' + currentToolCallEl.toolName + '  [' + fmtMs(elapsed) + ']');
+				currentToolCallEl.header.setText('ðŸ”§ ' + currentToolCallEl.toolName + '  [' + fmtMs(elapsed) + ']');
 				currentToolCallEl = null;
 			}
 		};
@@ -3674,12 +3561,12 @@ class VaultBotSidebarView extends ItemView {
 					closeCurrentSegment();
 					const toolName = msg.tool || 'tool';
 					const argsStr = msg.args ? JSON.stringify(msg.args) : '';
-					const shortArgs = argsStr.length > 80 ? argsStr.slice(0, 77) + '…' : argsStr;
+					const shortArgs = argsStr.length > 80 ? argsStr.slice(0, 77) + 'â€¦' : argsStr;
 					// Collapsible tool-call container: header is always visible,
 					// body (args + result) is hidden until clicked.
 					const container = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-call'});
 					const header = container.createDiv({cls: 'vaultbot-tool-call-header'});
-					header.setText('🔧 ' + toolName + (shortArgs ? ': ' + shortArgs : '') + ' …');
+					header.setText('ðŸ”§ ' + toolName + (shortArgs ? ': ' + shortArgs : '') + ' â€¦');
 					const body = container.createDiv({cls: 'vaultbot-tool-call-body'});
 					body.style.display = 'none';
 					if (argsStr) {
@@ -3694,9 +3581,9 @@ class VaultBotSidebarView extends ItemView {
 						const el = currentToolCallEl;
 						if (el && el.toolName === toolName) {
 							const e = Date.now() - el.startTs;
-							header.setText((hidden ? '🔽 ' : '🔧 ') + toolName + (shortArgs ? ': ' + shortArgs : '') + '  [' + fmtMs(e) + ']');
+							header.setText((hidden ? 'ðŸ”½ ' : 'ðŸ”§ ') + toolName + (shortArgs ? ': ' + shortArgs : '') + '  [' + fmtMs(e) + ']');
 						} else {
-							header.setText((hidden ? '🔽 ' : '🔧 ') + toolName + (shortArgs ? ': ' + shortArgs : ''));
+							header.setText((hidden ? 'ðŸ”½ ' : 'ðŸ”§ ') + toolName + (shortArgs ? ': ' + shortArgs : ''));
 						}
 					});
 					currentToolCallEl = { container, header, body, toolName, startTs: Date.now() };
@@ -3706,7 +3593,7 @@ class VaultBotSidebarView extends ItemView {
 					// scraping, synthesis, gap fill, note writing, A-MEM).
 					startActivity(msg.stage, msg.detail || {});
 				} else if (msg.type === 'procedure_step') {
-					// Live procedure step visibility — the user sees every
+					// Live procedure step visibility â€” the user sees every
 					// step of every procedure running in preflight or during
 					// the agentic loop. Shows procedure name, step number,
 					// instruction, and status. Kills the black box.
@@ -3746,14 +3633,14 @@ class VaultBotSidebarView extends ItemView {
 						const elapsed = Date.now() - currentToolCallEl.startTs;
 						const resultDiv = currentToolCallEl.body.createDiv({cls: 'vaultbot-tool-call-result'});
 						resultDiv.setText(summary);
-						currentToolCallEl.header.setText('🔧 ' + toolName + '  [' + fmtMs(elapsed) + ']');
+						currentToolCallEl.header.setText('ðŸ”§ ' + toolName + '  [' + fmtMs(elapsed) + ']');
 						currentToolCallEl = null;
 					} else {
 						// No matching tool_call (e.g. reconnected mid-stream):
 						// create a standalone collapsible result.
 						const container = currentAssistantMessage.createDiv({cls: 'vaultbot-tool-call'});
 						const header = container.createDiv({cls: 'vaultbot-tool-call-header'});
-						header.setText('🔧 ' + toolName);
+						header.setText('ðŸ”§ ' + toolName);
 						const body = container.createDiv({cls: 'vaultbot-tool-call-body'});
 						body.style.display = 'none';
 						const resultDiv = body.createDiv({cls: 'vaultbot-tool-call-result'});
@@ -3761,7 +3648,7 @@ class VaultBotSidebarView extends ItemView {
 						header.addEventListener('click', () => {
 							const hidden = body.style.display === 'none';
 							body.style.display = hidden ? 'block' : 'none';
-							header.setText((hidden ? '🔽 ' : '🔧 ') + toolName);
+							header.setText((hidden ? 'ðŸ”½ ' : 'ðŸ”§ ') + toolName);
 						});
 					}
 					smartScrollToBottom();
@@ -3859,7 +3746,7 @@ class VaultBotSidebarView extends ItemView {
 					div.createSpan({text: msg.content || 'New session started.'});
 					smartScrollToBottom();
 				} else if (msg.type === 'restart') {
-					// Backend requested restart — same code path as the GUI button.
+					// Backend requested restart â€” same code path as the GUI button.
 					statusEl.setText('Backend requested restart...');
 					this.plugin.restartBackend();
 				} else if (msg.type === 'reload_plugin') {
@@ -3899,7 +3786,7 @@ class VaultBotSidebarView extends ItemView {
 				// Close the current assistant message so the card appears
 				// AFTER any text already streamed, and null it out so the
 				// post-submit reply creates a NEW assistant message below
-				// the card — not appended to the old one above.
+				// the card â€” not appended to the old one above.
 				closeCurrentSegment();
 				currentAssistantMessage = null;
 				currentThinkingBlock = null;
@@ -4013,10 +3900,10 @@ class VaultBotSidebarView extends ItemView {
 							try {
 								const file = app.vault.getAbstractFileByPath(filePath);
 								if (file && file.path) {
-									// File exists in Obsidian's vault — re-read from
+									// File exists in Obsidian's vault â€” re-read from
 									// disk and re-write through the vault API to trigger
-									// the modify event → metadata cache re-processes
-									// → graph view updates.
+									// the modify event â†’ metadata cache re-processes
+									// â†’ graph view updates.
 									const content = await app.vault.adapter.read(filePath);
 									await app.vault.modify(file, content);
 								} else {
@@ -4034,10 +3921,10 @@ class VaultBotSidebarView extends ItemView {
 				}
 			};
 			ws.onclose = () => {
-				setStatus('offline', 'Disconnected from backend — retrying...');
+				setStatus('offline', 'Disconnected from backend â€” retrying...');
 				// Null out the socket so ensureConnection() will reconnect next tick.
 				ws = null;
-				// Hide the Stop button — nothing to stop when disconnected.
+				// Hide the Stop button â€” nothing to stop when disconnected.
 				setTurnActive(false);
 			};
 			ws.onerror = (error) => {
@@ -4053,7 +3940,7 @@ class VaultBotSidebarView extends ItemView {
 				const running = await this.plugin.isBackendRunning();
 				if (running) {
 					window.clearInterval(poll);
-					setStatus('online', 'Backend online — connecting...');
+					setStatus('online', 'Backend online â€” connecting...');
 					connectWebSocket();
 				} else if (attempts > 30) {
 					window.clearInterval(poll);
@@ -4108,7 +3995,7 @@ class VaultBotSidebarView extends ItemView {
 			// page-reading model can read textbook pages (equations/figures).
 			// The probed model is the dedicated vision model if one is
 			// configured, else the chat model. If it can't see images, alert
-			// the user RIGHT HERE in the chat — in plain language — that they
+			// the user RIGHT HERE in the chat â€” in plain language â€” that they
 			// should pick a vision model in Settings, so the LLM can later read
 			// the pages it's pointed to. This is the moment a non-coder learns
 			// their setup needs one extra field, not a silent failure later
@@ -4120,8 +4007,8 @@ class VaultBotSidebarView extends ItemView {
 						? 'your vision model'
 						: 'your current chat model';
 					const settingsPath = vcheck.source === 'vision'
-						? 'VaultBot Settings → Vision Model'
-						: 'VaultBot Settings → Vision Model (or pick a vision-capable chat model under LLM Backend)';
+						? 'VaultBot Settings â†’ Vision Model'
+						: 'VaultBot Settings â†’ Vision Model (or pick a vision-capable chat model under LLM Backend)';
 					appendAssistantMessage(
 						`Heads up: ${which} (${vcheck.model || 'unknown'}) can't read images. ` +
 						`That's fine for ingest (it just indexes the PDFs), but when you later ask about ` +
@@ -4162,7 +4049,7 @@ class VaultBotSidebarView extends ItemView {
 		// Restart button: stops the backend (self-shutdown + taskkill
 		// fallback) and starts it fresh. While the backend is down or
 		// restarting, the button stays in its dark "busy" state and only
-		// returns to normal once the backend is confirmed back online — so
+		// returns to normal once the backend is confirmed back online â€” so
 		// the user can see at a glance when it's safe to use again.
 		const setRestartBusy = (busy) => {
 			if (busy) {
@@ -4203,7 +4090,7 @@ class VaultBotSidebarView extends ItemView {
 					restartButton.setText('Offline');
 					restartButton.addClass('vaultbot-restart-busy');
 					// Auto-run Diagnose so the user sees WHY it didn't come
-					// back, with remedy hints — instead of a dark button and
+					// back, with remedy hints â€” instead of a dark button and
 					// no next step. This closes the "Restart failed, now
 					// what?" gap for a non-tech user.
 					if (typeof runDiagnose === 'function') {
@@ -4214,7 +4101,7 @@ class VaultBotSidebarView extends ItemView {
 		});
 		// Diagnose button: runs the proactive /diagnose battery and renders
 		// each returned problem as a card. This is the user's "what's
-		// wrong and how do I fix it?" affordance — no terminal, no log
+		// wrong and how do I fix it?" affordance â€” no terminal, no log
 		// file, just plain-English remedy cards. Reuses renderProblem so
 		// reactive (WS problem events) and proactive (this button) share
 		// one render path.
@@ -4226,7 +4113,7 @@ class VaultBotSidebarView extends ItemView {
 			try {
 				const online = await this.plugin.isBackendRunning();
 				if (!online) {
-					// Backend is down — we can still run /preflight (which
+					// Backend is down â€” we can still run /preflight (which
 					// doesn't need the backend) to check Python/Ollama/sync/
 					// port. Surface those as problem cards.
 					if (statusDiv) statusDiv.setText('Backend is down. Checking your setup...');
@@ -4247,7 +4134,7 @@ class VaultBotSidebarView extends ItemView {
 					}
 					return;
 				}
-				// Backend is up — run the full /diagnose battery.
+				// Backend is up â€” run the full /diagnose battery.
 				const resp = await fetch(this.backendUrl + '/diagnose');
 				const data = await resp.json();
 				const problems = data.problems || [];
@@ -4269,7 +4156,7 @@ class VaultBotSidebarView extends ItemView {
 		// dropdown of available commands. Selecting one fills the input
 		// with that command. On Enter, the command is sent via WS and the
 		// backend handles it (/new, /help, /clear, /stop, /diagnose). This
-		// makes commands discoverable — no need to read the source or
+		// makes commands discoverable â€” no need to read the source or
 		// README to learn /new exists.
 		const SLASH_COMMANDS = [
 			{cmd: '/new',      desc: 'Start a fresh conversation'},
@@ -4323,10 +4210,10 @@ class VaultBotSidebarView extends ItemView {
 			// navigate it instead of sending the message.
 			if (cmdDropdown && cmdDropdown.style.display !== 'none') {
 				if (e.key === 'Enter' && !e.shiftKey) {
-					// Let the default send handle it — the user typed a
+					// Let the default send handle it â€” the user typed a
 					// command and pressed Enter. The backend handles it.
 					hideSlashCommands();
-					// Don't preventDefault — fall through to the send
+					// Don't preventDefault â€” fall through to the send
 					// handler below so the command is sent.
 				} else if (e.key === 'Escape') {
 					e.preventDefault();
