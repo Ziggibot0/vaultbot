@@ -162,11 +162,19 @@ if (Test-StepDone "venv_created") {
 # ── 5. Install dependencies ─────────────────────────────────────────────────
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
 $reqPath    = Join-Path $vaultPath "vaultbot_stuff\vaultbot_backend\requirements.txt"
-# Reproducible install: prefer the lockfile (exact pins) if present so a
-# fresh clone gets the same versions the project was tested with. Fall back
-# to requirements.txt (the >= bounds) if the lock is missing or stale.
+# Reproducible install: prefer the lockfile (exact pins) if present AND the
+# Python version is 3.12+ (the lock was generated on 3.12; numpy 2.5+ requires
+# 3.12). Fall back to requirements.txt (the >= bounds) for Python 3.11.
 $lockPath   = Join-Path $vaultPath "vaultbot_stuff\vaultbot_backend\requirements.lock"
-$installReq = if (Test-Path $lockPath) { $lockPath } else { $reqPath }
+$pyVer = & $venvPython -c "import sys; print(sys.version_info.minor)" 2>$null
+$useLock = $false
+if (Test-Path $lockPath) {
+    try {
+        $minor = [int]$pyVer.Trim()
+        if ($minor -ge 12) { $useLock = $true }
+    } catch {}
+}
+$installReq = if ($useLock) { $lockPath } else { $reqPath }
 
 if (Test-StepDone "deps_installed") {
     Write-Warn2 "Dependencies already installed -- skipping."

@@ -5,6 +5,12 @@
 # reproducible install target that prevents the faiss/numpy ABI class
 # of breakage.
 #
+# IMPORTANT: This lock was generated on Python 3.12. Some pins (numpy 2.5+)
+# require Python >= 3.12. The setup scripts (setup.ps1 / setup.sh) will
+# automatically fall back to requirements.txt on Python 3.11. If you
+# regenerate this lock on a different Python version, update the version
+# guard in the setup scripts.
+#
 # Regenerate after changing requirements.txt:
 #   pip install -r requirements.txt
 #   pip freeze > requirements.lock
