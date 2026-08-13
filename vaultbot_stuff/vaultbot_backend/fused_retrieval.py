@@ -45,11 +45,11 @@ class FusedRetriever:
     """Fuse FAISS vector search with the Obsidian link graph."""
 
     # Channel weight multipliers (from the research design).
-    GRAPH_BOOST = 0.5      # forward-link neighbors
-    BACKLINK_BOOST = 0.7   # backlinks (hubs)
-    ALL_CHANNEL_RERANK = 1.3   # appears in vector + graph + backlink
-    HUB_RERANK = 1.1       # high backlink degree
-    HUB_DEGREE_THRESHOLD = 3   # min backlinks to count as a hub
+    GRAPH_BOOST = 0.5  # forward-link neighbors
+    BACKLINK_BOOST = 0.7  # backlinks (hubs)
+    ALL_CHANNEL_RERANK = 1.3  # appears in vector + graph + backlink
+    HUB_RERANK = 1.1  # high backlink degree
+    HUB_DEGREE_THRESHOLD = 3  # min backlinks to count as a hub
     # Minimum normalized score to be included in results. Results below
     # this threshold are dropped — they're semantically too distant from
     # the query to be useful and just waste context budget with noise.
@@ -159,24 +159,36 @@ class FusedRetriever:
             try:
                 graph_candidates = self._graph_channel(vector_hits, norm_scores, depth)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("graph.channel_failed",
-                          f"{type(e).__name__}: {e} — graph channel skipped")
+                self._log(
+                    "graph.channel_failed",
+                    f"{type(e).__name__}: {e} — graph channel skipped",
+                )
                 if self.session_logger is not None:
-                    self.session_logger.log("retrieval_channel_failed", {
-                        "channel": "graph", "error": str(e),
-                    })
+                    self.session_logger.log(
+                        "retrieval_channel_failed",
+                        {
+                            "channel": "graph",
+                            "error": str(e),
+                        },
+                    )
 
             # ---- channel (c): backlinks ----
             backlink_candidates: dict[str, dict[str, Any]] = {}
             try:
                 backlink_candidates = self._backlink_channel(vector_hits, norm_scores)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("backlink.channel_failed",
-                          f"{type(e).__name__}: {e} — backlink channel skipped")
+                self._log(
+                    "backlink.channel_failed",
+                    f"{type(e).__name__}: {e} — backlink channel skipped",
+                )
                 if self.session_logger is not None:
-                    self.session_logger.log("retrieval_channel_failed", {
-                        "channel": "backlink", "error": str(e),
-                    })
+                    self.session_logger.log(
+                        "retrieval_channel_failed",
+                        {
+                            "channel": "backlink",
+                            "error": str(e),
+                        },
+                    )
 
             # ---- (d) merge + dedup ----
             merged = self._merge(
@@ -193,17 +205,20 @@ class FusedRetriever:
             try:
                 self._rerank(merged)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("rerank.failed",
-                          f"{type(e).__name__}: {e} — skipping rerank boosts")
+                self._log(
+                    "rerank.failed", f"{type(e).__name__}: {e} — skipping rerank boosts"
+                )
                 if self.session_logger is not None:
-                    self.session_logger.log("retrieval_channel_failed", {
-                        "channel": "rerank", "error": str(e),
-                    })
+                    self.session_logger.log(
+                        "retrieval_channel_failed",
+                        {
+                            "channel": "rerank",
+                            "error": str(e),
+                        },
+                    )
 
             # ---- (f) filter by minimum score + truncate to top-k ----
-            ranked = sorted(
-                merged.values(), key=lambda c: c["score"], reverse=True
-            )
+            ranked = sorted(merged.values(), key=lambda c: c["score"], reverse=True)
             # Drop results below the relevance threshold — they waste
             # context budget with semantically distant noise.  But only
             # apply the threshold when we have ENOUGH candidates to be
@@ -218,8 +233,10 @@ class FusedRetriever:
                 # than returning empty (better one marginal hit than nothing).
                 if not filtered and ranked:
                     filtered = [ranked[0]]
-                    self._log("retrieve.threshold_fallback",
-                              f"All {len(ranked)} results below threshold {self.MIN_SCORE_THRESHOLD} — keeping top result")
+                    self._log(
+                        "retrieve.threshold_fallback",
+                        f"All {len(ranked)} results below threshold {self.MIN_SCORE_THRESHOLD} — keeping top result",
+                    )
             else:
                 filtered = ranked
             top_k = filtered[:k]
@@ -241,10 +258,13 @@ class FusedRetriever:
             # notifies the user via notify_problem with retrieval_broken.
             self._log("retrieve.error", f"{type(e).__name__}: {e}")
             if self.session_logger is not None:
-                self.session_logger.log("retrieval_failed", {
-                    "error": f"{type(e).__name__}: {e}",
-                    "category": "retrieval_broken",
-                })
+                self.session_logger.log(
+                    "retrieval_failed",
+                    {
+                        "error": f"{type(e).__name__}: {e}",
+                        "category": "retrieval_broken",
+                    },
+                )
             raise
 
     # ------------------------------------------------------------------
@@ -306,12 +326,16 @@ class FusedRetriever:
         # Truncate to the requested k AFTER drift re-ranking so the promoted
         # notes actually make it into the returned set.
         raw = raw[:k]
-        norm = {fp: norm[fp] for fp in (h.get("file_path") for h in raw)
-                if fp and fp in norm}
+        norm = {
+            fp: norm[fp]
+            for fp in (h.get("file_path") for h in raw)
+            if fp and fp in norm
+        }
         return raw, norm
 
-    def _drift_rerank(self, raw: list[dict[str, Any]],
-                      query: str) -> list[dict[str, Any]] | None:
+    def _drift_rerank(
+        self, raw: list[dict[str, Any]], query: str
+    ) -> list[dict[str, Any]] | None:
         """Re-rank `raw` hits by drift-adjusted L2 distance to the query.
 
         For each candidate: reconstruct its content embedding from the
@@ -354,9 +378,11 @@ class FusedRetriever:
 
         # Sort by the (possibly drift-adjusted) distance, ascending.
         drifted_hits.sort(key=lambda h: h.get("score", 0.0))
-        self._log("vector.drift_rerank",
-                  f"re-ranked {len(drifted_hits)} hits, drift applied to "
-                  f"{sum(1 for h in drifted_hits if h.get('_drifted'))}")
+        self._log(
+            "vector.drift_rerank",
+            f"re-ranked {len(drifted_hits)} hits, drift applied to "
+            f"{sum(1 for h in drifted_hits if h.get('_drifted'))}",
+        )
         return drifted_hits
 
     def _graph_channel(
@@ -385,7 +411,7 @@ class FusedRetriever:
                 nfp = self._file_path_for_node(node)
                 if not nfp or nfp == fp:
                     continue
-                score = self.GRAPH_BOOST * base * (0.85 ** d)
+                score = self.GRAPH_BOOST * base * (0.85**d)
                 existing = candidates.get(nfp)
                 if existing is None or score > existing["score"]:
                     candidates[nfp] = {
@@ -395,9 +421,7 @@ class FusedRetriever:
                         "channels": {"graph"},
                     }
                 if d + 1 < depth:
-                    frontier.extend(
-                        (n, d + 1) for n in self._neighbors(node, "both")
-                    )
+                    frontier.extend((n, d + 1) for n in self._neighbors(node, "both"))
         return candidates
 
     def _backlink_channel(
@@ -556,10 +580,10 @@ class FusedRetriever:
 
     def _finalize(self, cand: dict[str, Any], query: str) -> dict[str, Any]:
         """Shape a merged candidate into the final result dict."""
-        channels = sorted(
-            ch for ch in cand.get("channels", set()) if ch
+        channels = sorted(ch for ch in cand.get("channels", set()) if ch)
+        content = cand.get("content", "") or self._content_for_node(
+            cand.get("name", "")
         )
-        content = cand.get("content", "") or self._content_for_node(cand.get("name", ""))
         return {
             "file_path": cand.get("file_path", ""),
             "name": cand.get("name", ""),
@@ -669,7 +693,9 @@ class FusedRetriever:
     def _log(self, event: str, detail: str) -> None:
         try:
             if self.session_logger is not None:
-                self.session_logger.log("fused_retrieval", {"event": event, "detail": detail})
+                self.session_logger.log(
+                    "fused_retrieval", {"event": event, "detail": detail}
+                )
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             _frlog.debug("fused_retrieval log failed")
 
@@ -688,6 +714,7 @@ if __name__ == "__main__":
 
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass

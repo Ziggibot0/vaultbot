@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find notes that should be merged because they're fragments of the same topic — each one is too thin alone but together they'd make a complete note. Scans for short notes (< 200 words) that share significant content overlap, and the small model determines which should be merged. Use when cleaning up fragmented knowledge.

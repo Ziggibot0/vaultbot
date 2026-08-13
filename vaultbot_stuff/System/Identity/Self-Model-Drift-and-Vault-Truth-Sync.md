@@ -1,6 +1,7 @@
 ---
 type: semantic
 status: obsolete
+baseline: true
 created: 2026-07-27
 last_reviewed: 2026-08-13
 obsoleted: 2026-08-13

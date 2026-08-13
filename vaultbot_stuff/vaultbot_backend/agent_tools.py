@@ -112,9 +112,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "max_lines": {
                         "type": "integer",
                         "default": 0,
-                        "description": (
-                            "Maximum lines to return (0 = whole file)."
-                        ),
+                        "description": ("Maximum lines to return (0 = whole file)."),
                     },
                 },
                 "required": ["title"],
@@ -421,7 +419,6 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             },
         },
     },
-
     {
         "type": "function",
         "function": {
@@ -487,7 +484,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "procedure's 'Inputs' section documents. Common keys: "
                             "file_path (a Python file to audit), procedure_name "
                             "(a procedure to fix), note_path (a note to read). "
-                            "Example: {\"file_path\": \"vaultbot_stuff/vaultbot_backend/main.py\"}"
+                            'Example: {"file_path": "vaultbot_stuff/vaultbot_backend/main.py"}'
                         ),
                         "additionalProperties": True,
                     },
@@ -520,42 +517,42 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 # write notes. Everything else is a procedure. This pressures the model
 # into calling execute_procedure instead of reaching for raw tools.
 CORE_TOOL_NAMES: set[str] = {
-    "vault_read_note",       # deterministic read by wikilink title
-    "code_read",             # read any file (vault or backend source)
-    "plan_task",             # plan a multi-step task (working memory)
-    "update_task",           # mark plan progress
-    "execute_procedure",     # run a procedure note — THE primary tool
-    "vault_safe_write",      # write/create notes (bootstrapping new procedures)
+    "vault_read_note",  # deterministic read by wikilink title
+    "code_read",  # read any file (vault or backend source)
+    "plan_task",  # plan a multi-step task (working memory)
+    "update_task",  # mark plan progress
+    "execute_procedure",  # run a procedure note — THE primary tool
+    "vault_safe_write",  # write/create notes (bootstrapping new procedures)
 }
 
 # Tier 2: Contextual tools (sent when keywords match)
 CONTEXTUAL_TOOLS: dict[str, list[str]] = {
     "research": [
-        "vault_research",        # web research when the vault is thin
-        "vault_search",          # semantic search over the vault
-        "web_read_source",       # re-read saved web sources
+        "vault_research",  # web research when the vault is thin
+        "vault_search",  # semantic search over the vault
+        "web_read_source",  # re-read saved web sources
     ],
     "code_edit": [
-        "code_run",              # test Python in a sandboxed subprocess
-        "safe_write",            # verified self-edit of backend .py files
-        "js_safe_write",         # verified self-edit of plugin .js files
-        "md_safe_replace",       # targeted edit of markdown notes (custom tool)
-        "git_rollback",          # recover from a bad self-edit
-        "backend_restart",       # restart the backend (custom tool)
-        "plugin_reload",         # reload the Obsidian plugin (custom tool)
+        "code_run",  # test Python in a sandboxed subprocess
+        "safe_write",  # verified self-edit of backend .py files
+        "js_safe_write",  # verified self-edit of plugin .js files
+        "md_safe_replace",  # targeted edit of markdown notes (custom tool)
+        "git_rollback",  # recover from a bad self-edit
+        "backend_restart",  # restart the backend (custom tool)
+        "plugin_reload",  # reload the Obsidian plugin (custom tool)
     ],
     "vault_maintenance": [
-        "vault_gaps",            # check vault knowledge gaps
-        "vault_list",            # list all .md files (custom tool)
-        "vault_delete",          # delete a note safely (custom tool)
-        "vault_lint",            # lint a note for quality (custom tool)
-        "vault_append",          # append to existing notes
+        "vault_gaps",  # check vault knowledge gaps
+        "vault_list",  # list all .md files (custom tool)
+        "vault_delete",  # delete a note safely (custom tool)
+        "vault_lint",  # lint a note for quality (custom tool)
+        "vault_append",  # append to existing notes
     ],
     "self_improvement": [
-        "tool_create",           # create + register a new custom tool
+        "tool_create",  # create + register a new custom tool
     ],
     "status": [
-        "vaultbot_status",       # system status check
+        "vaultbot_status",  # system status check
     ],
 }
 
@@ -564,42 +561,95 @@ CONTEXTUAL_TOOLS: dict[str, list[str]] = {
 # advertised as tool schemas. They are discovered via RAG as procedure
 # cards and executed via execute_procedure.
 PROCEDURE_CANDIDATES: set[str] = {
-    "self_reflect",              # propose new tools (custom tool)
-    "capability_audit",          # inventory tools + coverage (custom tool)
-    "preflight_safety_check",    # pre-flight before self-edit (custom tool)
-    "vault_graph_analyzer",      # analyze vault graph (custom tool)
-    "vault_cluster_analyzer",    # analyze vault clusters (custom tool)
-    "textbook_ingest",           # ingest a textbook (custom tool)
-    "textbook_read_page",        # read a textbook page (custom tool)
-    "review_contributions",      # review open PRs (custom tool)
-    "submit_contribution",       # submit a PR (custom tool)
-    "torture_test",              # torture test a PR (custom tool)
+    "self_reflect",  # propose new tools (custom tool)
+    "capability_audit",  # inventory tools + coverage (custom tool)
+    "preflight_safety_check",  # pre-flight before self-edit (custom tool)
+    "vault_graph_analyzer",  # analyze vault graph (custom tool)
+    "vault_cluster_analyzer",  # analyze vault clusters (custom tool)
+    "textbook_ingest",  # ingest a textbook (custom tool)
+    "textbook_read_page",  # read a textbook page (custom tool)
+    "review_contributions",  # review open PRs (custom tool)
+    "submit_contribution",  # submit a PR (custom tool)
+    "torture_test",  # torture test a PR (custom tool)
 }
 
 # Keyword mapping for contextual tool selection
 _CONTEXTUAL_KEYWORDS: dict[str, list[str]] = {
     "research": [
-        "research", "investigate", "look up", "find out", "what is",
-        "how does", "source", "web", "study", "learn about", "topic",
+        "research",
+        "investigate",
+        "look up",
+        "find out",
+        "what is",
+        "how does",
+        "source",
+        "web",
+        "study",
+        "learn about",
+        "topic",
     ],
     "code_edit": [
-        "code", "fix", "edit", "write", "modify", "bug", "implement",
-        "function", "python", "javascript", ".py", ".js", "backend",
-        "frontend", "plugin", "restart", "reload", "refactor", "debug",
-        "safe_write", "js_safe_write", "md_safe_replace", "git_rollback",
+        "code",
+        "fix",
+        "edit",
+        "write",
+        "modify",
+        "bug",
+        "implement",
+        "function",
+        "python",
+        "javascript",
+        ".py",
+        ".js",
+        "backend",
+        "frontend",
+        "plugin",
+        "restart",
+        "reload",
+        "refactor",
+        "debug",
+        "safe_write",
+        "js_safe_write",
+        "md_safe_replace",
+        "git_rollback",
     ],
     "vault_maintenance": [
-        "vault", "graph", "gaps", "note", "link", "wikilink", "cluster",
-        "lint", "delete", "orphan", "island", "maintenance", "cleanup",
-        "consolidate", "merge",
+        "vault",
+        "graph",
+        "gaps",
+        "note",
+        "link",
+        "wikilink",
+        "cluster",
+        "lint",
+        "delete",
+        "orphan",
+        "island",
+        "maintenance",
+        "cleanup",
+        "consolidate",
+        "merge",
     ],
     "self_improvement": [
-        "tool", "build", "create", "improve", "self-improve", "reflect",
-        "capability", "audit", "new ability",
+        "tool",
+        "build",
+        "create",
+        "improve",
+        "self-improve",
+        "reflect",
+        "capability",
+        "audit",
+        "new ability",
     ],
     "status": [
-        "status", "running", "operational", "what are you doing",
-        "system", "goal", "machine", "spec",
+        "status",
+        "running",
+        "operational",
+        "what are you doing",
+        "system",
+        "goal",
+        "machine",
+        "spec",
     ],
 }
 
@@ -620,14 +670,17 @@ def select_contextual_tools(user_message: str, plan_text: str = "") -> set[str]:
     return selected
 
 
-def get_core_tools(custom_schemas: list[dict[str, Any]] | None = None
-                  ) -> list[dict[str, Any]]:
+def get_core_tools(
+    custom_schemas: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Return the tool schemas for core tools (always sent to the LLM).
 
     Checks built-in definitions first, then falls back to custom_schemas
     for core tools that are custom tools (e.g. vault_safe_write).
     """
-    all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
+    all_defs = {
+        t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS
+    }
     schemas = []
     for name in CORE_TOOL_NAMES:
         if name in all_defs:
@@ -640,15 +693,17 @@ def get_core_tools(custom_schemas: list[dict[str, Any]] | None = None
     return schemas
 
 
-def _get_contextual_tool_schemas(names: set[str],
-                                  custom_schemas: list[dict[str, Any]] | None = None
-                                  ) -> list[dict[str, Any]]:
+def _get_contextual_tool_schemas(
+    names: set[str], custom_schemas: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     """Return tool schemas for the named contextual tools.
 
     Looks up both built-in (TOOL_DEFINITIONS + META_TOOL_DEFINITIONS) and
     custom tool schemas.
     """
-    all_defs = {t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS}
+    all_defs = {
+        t["function"]["name"]: t for t in TOOL_DEFINITIONS + META_TOOL_DEFINITIONS
+    }
     schemas: list[dict[str, Any]] = []
 
     for name in names:
@@ -663,12 +718,11 @@ def _get_contextual_tool_schemas(names: set[str],
     return schemas
 
 
-
-
-
-
-def build_tool_list(user_message: str, plan_text: str = "",
-                    custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def build_tool_list(
+    user_message: str,
+    plan_text: str = "",
+    custom_schemas: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Build the tool list for the LLM call using three-tier selection.
 
     Tier 1 (core): always included.
@@ -714,14 +768,15 @@ def build_tool_list(user_message: str, plan_text: str = "",
 
     return deduped
 
-
     return deduped
 
 
-
-def build_system_prompt_briefing(autonomous_state: dict[str, Any],
-                                  gaps_summary: str, custom_tools: str = "",
-                                  custom_tool_names: list[str] = None) -> str:
+def build_system_prompt_briefing(
+    autonomous_state: dict[str, Any],
+    gaps_summary: str,
+    custom_tools: str = "",
+    custom_tool_names: list[str] = None,
+) -> str:
     """Build the DYNAMIC per-turn system prompt WITHOUT the vault context.
 
     This is the stable briefing: identity + instructions + tool schemas +
@@ -740,6 +795,7 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
     injecting the vault context as its own message.
     """
     import os
+
     owner_name = os.getenv("VAULTBOT_OWNER", "").strip() or "the user"
 
     running = autonomous_state.get("running", False)
@@ -785,7 +841,8 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"procedures, and exemplars — so a small local model can do everything "
         f"you do today. Every note, procedure, and gap filled moves cognition "
         f"from LLM weights into the vault where it is permanent, verifiable, "
-        f"and model-independent.\n\n"        f"# DIRECTIVES\n"
+        f"and model-independent.\n\n"
+        f"# DIRECTIVES\n"
         f"These are your core behavioral rules — always active, never optional:\n"
         f"- AUTONOMY: Act on your own. Store, organize, research, and "
         f"self-improve without asking permission each time. Report what you "
@@ -804,7 +861,8 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"sources.\n"
         f"- COMMUNICATION: Keep it short. Bottom line up front. Bullet points "
         f"over paragraphs. Report accomplishments, not regurgitation. Match "
-        f"{owner_name}'s energy — casual and direct. Lead with outcome.\n\n"        f"# HOW YOU WORK\n"
+        f"{owner_name}'s energy — casual and direct. Lead with outcome.\n\n"
+        f"# HOW YOU WORK\n"
         f"Your primary tool is execute_procedure. Procedures live in "
         f"vaultbot_stuff/System/Procedures/ and encode specific workflows. "
         f"They are deterministic, graded, and self-healing. You grow by "
@@ -877,8 +935,7 @@ def build_system_prompt_briefing(autonomous_state: dict[str, Any],
         f"[[Whining-Directive]] for the full reasoning.\n\n"
         f"# YOUR CUSTOM TOOLS\n"
         f"{custom_tools or '(none yet — use tool_create to build some)'}\n\n"
-        f"# CURRENT SYSTEM STATE\n"
-        + "\n".join(state_lines) + "\n\n"
+        f"# CURRENT SYSTEM STATE\n" + "\n".join(state_lines) + "\n\n"
         f"# CURRENT VAULT KNOWLEDGE GAPS\n"
         f"{gaps_summary}"
     )

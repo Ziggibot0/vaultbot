@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Condense a verbose note to a terse, dense version. Preserves all concepts, definitions, formulas, and wikilinks while dropping repetition, scaffolding, and verbose examples. Uses the small model — condensing is simple text reduction.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: "Suggest wikilinks for the most recently modified note(s). After writing or editing a note, this finds existing vault notes whose titles relate to the new note's content (and vice versa: notes that mention it but don't link it), so the graph stays woven. Deterministic scan + small-model ranking; the LLM only picks which candidates are genuinely related."

@@ -19,6 +19,7 @@ Offline: no LLM, no I/O, no Services. Pure AST inspection.
 
 Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 """
+
 from __future__ import annotations
 
 import ast
@@ -57,6 +58,7 @@ def _raise_matches_agent_silent(node: ast.Raise) -> bool:
 # ---------------------------------------------------------------------------
 # Contract: finish_reason-based turn protocol
 # ---------------------------------------------------------------------------
+
 
 class TestFinishReasonProtocol:
     """The finish_reason signal from /v1/chat/completions must be used as
@@ -116,9 +118,7 @@ class TestFinishReasonProtocol:
         30B local model that stops should not be re-prompted by a char/
         length heuristic."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        assert "truncation_nudge" not in source, (
-            "The truncation nudge must be removed."
-        )
+        assert "truncation_nudge" not in source, "The truncation nudge must be removed."
         assert 'finish_reason == "length"' not in source, (
             "No finish_reason='length' special-casing should remain."
         )
@@ -157,9 +157,7 @@ class TestFinishReasonProtocol:
             "The old plan_gate_forced log must be removed."
         )
         # The old _EXEC_TOOLS gate set must stay gone:
-        assert "_EXEC_TOOLS" not in source, (
-            "The _EXEC_TOOLS gate set must be removed."
-        )
+        assert "_EXEC_TOOLS" not in source, "The _EXEC_TOOLS gate set must be removed."
         assert "plan_gate_blocked" not in source, (
             "The plan_gate_blocked log must be removed."
         )
@@ -185,9 +183,7 @@ class TestFinishReasonProtocol:
         assert "code_read_duplicate" not in source, (
             "The code_read_duplicate log must be removed."
         )
-        assert "_dedup_notice" not in source, (
-            "The dedup notice must be removed."
-        )
+        assert "_dedup_notice" not in source, "The dedup notice must be removed."
 
     def test_no_synthesize_forced(self):
         """The forced-synthesize nudge (all_done → 'synthesize now') must
@@ -204,9 +200,7 @@ class TestFinishReasonProtocol:
         """No other nudge mechanism should survive: no truncation nudge and
         no old empty-answer nudge remain after the simplification."""
         source = _CHAT_HANDLER.read_text(encoding="utf-8")
-        assert "truncation_nudge" not in source, (
-            "The truncation nudge must be removed."
-        )
+        assert "truncation_nudge" not in source, "The truncation nudge must be removed."
         assert "empty_answer_nudge" not in source, (
             "The empty_answer_nudge must be removed."
         )
@@ -233,6 +227,7 @@ class TestFinishReasonProtocol:
     def test_diagnostics_handles_agent_silent(self):
         """The diagnostics module must still classify AgentSilentError."""
         from diagnostics import classify_error
+
         try:
             raise AgentSilentError("empty turn after nudge")
         except AgentSilentError as exc:

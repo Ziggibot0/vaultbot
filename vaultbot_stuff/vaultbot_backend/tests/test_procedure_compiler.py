@@ -7,6 +7,7 @@ and the ``## Steps``-absent fallback.  No LLM, no vault, no I/O.
 See [[Procedure-Subprocess-Architecture]] and
 [[Deterministic-Scaffolding-for-Small-Models]].
 """
+
 from procedure_compiler import (
     _extract_annotations,
     _parse_frontmatter,
@@ -16,6 +17,7 @@ from procedure_compiler import (
 
 
 # ── Frontmatter ─────────────────────────────────────────────────────────
+
 
 def test_parse_frontmatter_flat_kv():
     text = "---\ntype: procedure\nstatus: experimental\n---\nbody"
@@ -63,8 +65,10 @@ def test_compile_from_text_exemplar_procedure():
 
 
 def test_compile_from_text_carries_allowed_tools():
-    text = ("---\ntype: procedure\nallowed_tools:\n"
-            "  - vault_search\n  - llm_generate\n---\n## Steps\n1. Do thing")
+    text = (
+        "---\ntype: procedure\nallowed_tools:\n"
+        "  - vault_search\n  - llm_generate\n---\n## Steps\n1. Do thing"
+    )
     proc = compile_from_text("X", text)
     assert proc is not None
     assert "vault_search" in proc.allowed_tools
@@ -72,6 +76,7 @@ def test_compile_from_text_carries_allowed_tools():
 
 
 # ── Annotation extraction ──────────────────────────────────────────────
+
 
 def test_extract_annotations_all_three():
     text = "Search the vault [validate: mention 2 note titles] [condition: if < 3 notes] [branch: step 4]"
@@ -92,13 +97,15 @@ def test_extract_annotations_none():
 
 def test_extract_annotations_validation_only():
     clean, val, cond, branch = _extract_annotations(
-        "Check sources [validate: at_least 2 sources]")
+        "Check sources [validate: at_least 2 sources]"
+    )
     assert val == "at_least 2 sources"
     assert cond is None
     assert branch is None
 
 
 # ── Step parsing ────────────────────────────────────────────────────────
+
 
 def test_parse_steps_v1_text_with_annotation():
     body = "## Steps\n1. Search the vault [validate: mention 2 note titles]"
@@ -135,8 +142,7 @@ def test_parse_steps_v2_llm_multi_line():
 
 
 def test_parse_steps_scoped_to_steps_section():
-    body = ("## Steps\n1. First step\n2. Second step\n\n"
-            "## Notes\nThis is not a step")
+    body = "## Steps\n1. First step\n2. Second step\n\n## Notes\nThis is not a step"
     steps = _parse_steps(body)
     assert len(steps) == 2
     assert steps[0].instruction == "First step"
@@ -150,10 +156,12 @@ def test_parse_steps_fallback_when_no_steps_header():
 
 
 def test_parse_steps_mixed_v1_and_v2():
-    body = ("## Steps\n"
-            "1. Search the vault [validate: mention 2 titles]\n"
-            "2. ```python\nresult = vault_search('claim')\n```\n"
-            "3. [llm: Is the claim supported?]\n")
+    body = (
+        "## Steps\n"
+        "1. Search the vault [validate: mention 2 titles]\n"
+        "2. ```python\nresult = vault_search('claim')\n```\n"
+        "3. [llm: Is the claim supported?]\n"
+    )
     steps = _parse_steps(body)
     assert len(steps) == 3
     assert steps[0].step_type == "text"

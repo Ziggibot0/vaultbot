@@ -45,7 +45,9 @@ SCHEMA = {
 }
 
 try:
-    VAULT_DIR = Path(__file__).resolve().parent.parent.parent  # vaultbot_stuff/ (framework root, 3 levels up from vaultbot_stuff/vaultbot_backend/custom_tools/)
+    VAULT_DIR = (
+        Path(__file__).resolve().parent.parent.parent
+    )  # vaultbot_stuff/ (framework root, 3 levels up from vaultbot_stuff/vaultbot_backend/custom_tools/)
     BACKEND_DIR = Path(__file__).resolve().parent.parent  # backend dir (2 levels up)
 except NameError:
     VAULT_DIR = Path(".").resolve()
@@ -59,6 +61,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     directly). Returns the article text + provenance.
     """
     import sys
+
     sys.path.insert(0, str(BACKEND_DIR))
     from web_source_store import find_source, read_source_text, source_path
 

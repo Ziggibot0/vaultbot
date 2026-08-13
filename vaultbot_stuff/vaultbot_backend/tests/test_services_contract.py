@@ -72,7 +72,8 @@ def test_services_has_vault_path_property():
     assert hasattr(svc, "vault_path"), (
         "Services has no vault_path attribute — chat_handler's "
         "vault-change broadcast and research route would crash with "
-        "'Services' object has no attribute 'vault_path'.")
+        "'Services' object has no attribute 'vault_path'."
+    )
     assert isinstance(svc.vault_path, str)
     assert svc.vault_path == str(Path("/fake/vault"))
 
@@ -87,7 +88,8 @@ def test_services_vault_path_delegates_to_indexer():
     svc.vault_indexer.vault_path = new_path
     assert svc.vault_path == str(new_path), (
         "Services.vault_path did not reflect a change to the indexer's "
-        "vault_path — it should delegate, not cache a copy.")
+        "vault_path — it should delegate, not cache a copy."
+    )
 
 
 def test_services_required_fields_present():
@@ -102,11 +104,23 @@ def test_services_required_fields_present():
     # NOTE: 'compactor' removed — the sliding-window refactor replaced
     #   compaction; no live consumer reads svc.compactor (the Compactor
     #   class is a no-op shim kept for import compat only).
-    for attr in ("ollama_client", "manager", "session_logger",
-                 "vault_indexer", "research_engine", "fused_retriever",
-                 "identity", "vault_graph", "note_creator",
-                 "amem", "pattern_extractor", "procedure_tracker",
-                 "autonomous_researcher", "vault_path"):
+    for attr in (
+        "ollama_client",
+        "manager",
+        "session_logger",
+        "vault_indexer",
+        "research_engine",
+        "fused_retriever",
+        "identity",
+        "vault_graph",
+        "note_creator",
+        "amem",
+        "pattern_extractor",
+        "procedure_tracker",
+        "autonomous_researcher",
+        "vault_path",
+    ):
         assert hasattr(svc, attr), (
             f"Services is missing '{attr}' — a consumer reads svc.{attr} "
-            f"and would crash with AttributeError.")
+            f"and would crash with AttributeError."
+        )

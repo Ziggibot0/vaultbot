@@ -53,7 +53,9 @@ from typing import Any
 # vaultbot_stuff/vaultbot_backend/, so parent = vaultbot_backend,
 # parent.parent = vaultbot_stuff/ (the framework root).
 try:
-    VAULT_DIR = Path(__file__).resolve().parent.parent  # vaultbot_stuff/ (framework root, 2 levels up from vaultbot_stuff/vaultbot_backend/)
+    VAULT_DIR = (
+        Path(__file__).resolve().parent.parent
+    )  # vaultbot_stuff/ (framework root, 2 levels up from vaultbot_stuff/vaultbot_backend/)
 except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"
@@ -63,6 +65,7 @@ TEXTBOOKS_DIR = VAULT_DIR / "Knowledge" / "Textbooks"
 # ---------------------------------------------------------------------------
 # PDF index extraction (fast: font metadata only, no content copy, no OCR)
 # ---------------------------------------------------------------------------
+
 
 def _source_key(source: str) -> str:
     """Stable hash of a source path — identifies a prior index of it."""
@@ -155,8 +158,15 @@ def build_pdf_index(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
                     text = span["text"].strip()
                     if not text:
                         continue
-                    spans.append((page_num, text, span["size"],
-                                  bool(span["flags"] & 16), line["bbox"][1]))
+                    spans.append(
+                        (
+                            page_num,
+                            text,
+                            span["size"],
+                            bool(span["flags"] & 16),
+                            line["bbox"][1],
+                        )
+                    )
 
     if not spans:
         doc.close()
@@ -164,6 +174,7 @@ def build_pdf_index(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
 
     # Body text = most common font size (statistical mode).
     from collections import Counter
+
     size_counts = Counter(s[2] for s in spans if 7.0 <= s[2] <= 20.0)
     if not size_counts:
         doc.close()
@@ -194,22 +205,30 @@ def build_pdf_index(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
             # Collapse the letter-spacing artifact ("G ILBERT S TRANG" ->
             # "GILBERT STRANG") then drop all-caps author/publisher lines.
             collapsed = re.sub(r"([A-Z])\s([A-Z])", r"\1\2", heading_text)
-            if (len(collapsed) >= 3
-                    and not re.match(r"^\d+\s+\d+$", collapsed)
-                    and collapsed not in seen_headings
-                    and _is_real_heading(collapsed)):
+            if (
+                len(collapsed) >= 3
+                and not re.match(r"^\d+\s+\d+$", collapsed)
+                and collapsed not in seen_headings
+                and _is_real_heading(collapsed)
+            ):
                 seen_headings.add(collapsed)
-                entries.append({
-                    "heading": collapsed,
-                    "page": page_num + 1,  # 1-indexed for humans
-                    "level": 2,
-                })
+                entries.append(
+                    {
+                        "heading": collapsed,
+                        "page": page_num + 1,  # 1-indexed for humans
+                        "level": 2,
+                    }
+                )
             i = j
         else:
             i += 1
     doc.close()
 
-    title = _pdf_title(fitz.open(pdf_path), pdf_path) if entries else _pdf_title_fallback(pdf_path)
+    title = (
+        _pdf_title(fitz.open(pdf_path), pdf_path)
+        if entries
+        else _pdf_title_fallback(pdf_path)
+    )
     if len(entries) < 3:
         # Too few headings via fonts (maybe a scanned book, or unusual
         # typesetting). Fall back to a regex text-layer scan which still
@@ -229,6 +248,7 @@ def _pdf_title(doc, pdf_path: str) -> str:
                 return t
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).debug("pdf metadata title access failed: %s", e)
     doc.close()
     return _pdf_title_fallback(pdf_path)
@@ -250,6 +270,7 @@ def _build_pdf_index_regex(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
     """
     try:
         import fitz
+
         doc = fitz.open(pdf_path)
         title = _pdf_title(doc, pdf_path)
         entries: list[dict[str, Any]] = []
@@ -283,9 +304,10 @@ def _build_pdf_index_regex(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
 # TOC note writing (pointers, not content)
 # ---------------------------------------------------------------------------
 
-def write_index_toc(title: str, source_path: str,
-                    entries: list[dict[str, Any]],
-                    skey: str = "") -> str:
+
+def write_index_toc(
+    title: str, source_path: str, entries: list[dict[str, Any]], skey: str = ""
+) -> str:
     """Build the markdown for an index-only TOC note.
 
     Each entry is a pointer: the heading text + which page of which PDF it
@@ -319,6 +341,7 @@ def write_index_toc(title: str, source_path: str,
 # Idempotency + ingest driver
 # ---------------------------------------------------------------------------
 
+
 def _find_prior_index(skey: str) -> Path | None:
     """Find an existing index TOC carrying this source-key, if any."""
     if not TEXTBOOKS_DIR.exists():
@@ -343,14 +366,20 @@ def index_one_pdf(pdf_path: str) -> dict[str, Any]:
     skey = _source_key(pdf_path)
     prior = _find_prior_index(skey)
     if prior is not None:
-        return {"status": "skipped", "file": os.path.basename(pdf_path),
-                "toc_note": str(prior.relative_to(VAULT_DIR))}
+        return {
+            "status": "skipped",
+            "file": os.path.basename(pdf_path),
+            "toc_note": str(prior.relative_to(VAULT_DIR)),
+        }
 
     title, entries = build_pdf_index(pdf_path)
     if not entries:
-        return {"status": "error", "file": os.path.basename(pdf_path),
-                "error": "no headings found (scanned PDF with no text layer? "
-                         "marker OCR fallback not yet wired for index mode)"}
+        return {
+            "status": "error",
+            "file": os.path.basename(pdf_path),
+            "error": "no headings found (scanned PDF with no text layer? "
+            "marker OCR fallback not yet wired for index mode)",
+        }
 
     TEXTBOOKS_DIR.mkdir(parents=True, exist_ok=True)
     slug = _slugify(title)
@@ -376,12 +405,22 @@ def index_learning_material(learning_dir: str) -> dict[str, Any]:
     """
     learning_dir = Path(learning_dir)
     if not learning_dir.exists():
-        return {"error": "learningMaterial/ not found at %s" % learning_dir,
-                "indexed": 0, "skipped": 0, "errors": 0, "details": []}
+        return {
+            "error": "learningMaterial/ not found at %s" % learning_dir,
+            "indexed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "details": [],
+        }
     pdfs = sorted(learning_dir.glob("*.pdf"))
     if not pdfs:
-        return {"indexed": 0, "skipped": 0, "errors": 0, "details": [],
-                "message": "No PDFs in learningMaterial/"}
+        return {
+            "indexed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "details": [],
+            "message": "No PDFs in learningMaterial/",
+        }
 
     details = []
     indexed = skipped = errors = 0
@@ -400,5 +439,5 @@ def index_learning_material(learning_dir: str) -> dict[str, Any]:
         "errors": errors,
         "details": details,
         "message": "Indexed %d new textbook(s); %d skipped, %d errors."
-                   % (indexed, skipped, errors),
+        % (indexed, skipped, errors),
     }

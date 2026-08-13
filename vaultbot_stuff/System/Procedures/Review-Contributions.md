@@ -2,6 +2,7 @@
 type: procedure
 status: verified
 model_cartridge: small
+baseline: true
 created: 2026-07-31
 description: List and review open pull requests on the VaultBot GitHub repo. Fetches diffs, runs safety scans, and returns structured reports.
 when: When reviewing community contributions to the VaultBot repo

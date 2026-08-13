@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Suggest wikilinks to add to a note based on what it's about. Reads the note content, identifies concepts that have existing notes, and suggests [[wikilinks]] to add. More precise than a simple keyword scan because it reads context and only suggests links that make sense. Use after writing a note or during graph organization."

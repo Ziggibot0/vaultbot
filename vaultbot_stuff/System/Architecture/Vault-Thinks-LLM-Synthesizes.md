@@ -7,6 +7,7 @@ tags:
   - core
 type: architecture
 status: raw
+baseline: true
 ---
 
 # Vault-Thinks-LLM-Synthesizes

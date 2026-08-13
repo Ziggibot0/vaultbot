@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-04
 description: Debug test to inspect what run_procedure returns inside a code step

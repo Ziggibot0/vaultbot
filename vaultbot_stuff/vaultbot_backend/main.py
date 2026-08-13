@@ -50,6 +50,7 @@ from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 
 from forum_backends import ForumEnhancedFreeSearch
+
 # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
 # backends, skips arXiv for technical queries, prioritizes forum results.
 FreeSearch = ForumEnhancedFreeSearch  # noqa: F811  — intentional override of the base class
@@ -63,7 +64,7 @@ from rag_eval import RAGEvaluator
 # Load environment variables from the parent directory (Vault2 root).
 # override=True ensures .env values win over any stale env passed by the
 # Obsidian plugin spawn (which used to carry an empty TAVILY_API_KEY).
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(dotenv_path, override=True)
 
 # Resolve VAULT_PATH relative to the vault root (two levels up from this
@@ -71,7 +72,7 @@ load_dotenv(dotenv_path, override=True)
 # dir, "." resolves to the backend dir — not the vault root.  This makes
 # every vault_path=os.getenv("VAULT_PATH", ".") call site resolve correctly
 # regardless of the process working directory.
-_VAULT_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_VAULT_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _vp = os.environ.get("VAULT_PATH", ".")
 if not os.path.isabs(_vp):
     os.environ["VAULT_PATH"] = os.path.normpath(os.path.join(_VAULT_ROOT, _vp))
@@ -83,11 +84,13 @@ if not os.path.isabs(_vp):
 # `ruff check vaultbot_backend/` before deploy (see CONTRIBUTING.md).
 
 # Prevent duplicate backend instances on the same vault.
-PID_FILE = Path(__file__).with_name('vaultbot.pid')
+PID_FILE = Path(__file__).with_name("vaultbot.pid")
+
 
 def _check_pid_alive(pid: int) -> bool:
-    if os.name == 'nt':
+    if os.name == "nt":
         import ctypes
+
         handle = ctypes.windll.kernel32.OpenProcess(1, False, pid)
         if handle:
             ctypes.windll.kernel32.CloseHandle(handle)
@@ -99,6 +102,7 @@ def _check_pid_alive(pid: int) -> bool:
             return True
         except ProcessLookupError:
             return False
+
 
 def acquire_lock() -> None:
     # Allow tests / subprocess smoke checks to import main without
@@ -113,6 +117,7 @@ def acquire_lock() -> None:
     # Try once exclusively; on EEXIST, verify the recorded pid is alive and
     # exit if so, or unlink a stale file and retry once.
     import errno
+
     for _ in range(2):
         try:
             fd = os.open(str(PID_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -144,12 +149,14 @@ def acquire_lock() -> None:
     print("VaultBot backend lock contention; another starter won. Exiting.")
     sys.exit(0)
 
+
 def release_lock() -> None:
     try:
         if PID_FILE.exists() and PID_FILE.read_text().strip() == str(os.getpid()):
             PID_FILE.unlink()
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.debug("swallowed: %s", e)
+
 
 acquire_lock()
 atexit.register(release_lock)
@@ -179,6 +186,7 @@ async def lifespan(app: FastAPI):
         global main_event_loop
         loop = asyncio.get_event_loop()
         main_event_loop = loop
+
         # Purge stale crash-recovery partials. The old in-vault location
         # (vaultbot_backend/partials/) caused Obsidian's file-recovery core
         # plugin to race the backend's delete and spam ENOENT errors, so
@@ -187,6 +195,7 @@ async def lifespan(app: FastAPI):
         # that already restarted, so it's stale and safe to remove.
         def _purge_partials():
             import tempfile
+
             for d in (
                 Path(__file__).with_name("partials"),  # legacy in-vault dir
                 Path(tempfile.gettempdir()) / "vaultbot_partials",  # current
@@ -198,6 +207,7 @@ async def lifespan(app: FastAPI):
                         p.unlink()
                     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                         logger.debug("swallowed: %s", e)
+
         await loop.run_in_executor(None, _purge_partials)
         # Load the persisted index and start watching for live edits immediately.
         # Heavy re-indexing is deferred so the server/API is available right away.
@@ -211,6 +221,7 @@ async def lifespan(app: FastAPI):
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 startup_logger.log_exception(e, context="background_index")
                 app_state.set_startup_reindex_failed(str(e))
+
         asyncio.create_task(background_index())
 
         # ── Schema self-heal ──────────────────────────────────────────
@@ -223,22 +234,30 @@ async def lifespan(app: FastAPI):
         async def background_schema_heal():
             try:
                 from note_schema import heal_vault_schema
+
                 _vault_root = os.getenv("VAULT_PATH", ".")
+
                 def _heal():
                     return heal_vault_schema(
                         _vault_root,
                         logger=lambda msg: startup_logger.log(
-                            "schema_heal", {"msg": msg}),
+                            "schema_heal", {"msg": msg}
+                        ),
                     )
+
                 result = await loop.run_in_executor(None, _heal)
-                startup_logger.log("schema_heal_complete", {
-                    "scanned": result["scanned"],
-                    "healed": result["healed"],
-                    "skipped": result["skipped"],
-                    "errors": result["errors"],
-                })
+                startup_logger.log(
+                    "schema_heal_complete",
+                    {
+                        "scanned": result["scanned"],
+                        "healed": result["healed"],
+                        "skipped": result["skipped"],
+                        "errors": result["errors"],
+                    },
+                )
             except Exception as e:  # noqa: BLE001 — best-effort
                 startup_logger.log_exception(e, context="schema_heal")
+
         asyncio.create_task(background_schema_heal())
 
         # ── Build initial QA queue ────────────────────────────────────
@@ -250,19 +269,29 @@ async def lifespan(app: FastAPI):
         async def background_build_qa_queue():
             try:
                 from qa_worker import build_qa_queue, save_qa_queue
+
                 _vault_root = os.getenv("VAULT_PATH", ".")
+
                 def _build():
                     q = build_qa_queue(_vault_root)
                     save_qa_queue(q)
                     return len(q)
+
                 count = await loop.run_in_executor(None, _build)
                 startup_logger.log("qa_queue_built", {"notes": count})
             except Exception as e:  # noqa: BLE001 — best-effort
                 startup_logger.log_exception(e, context="build_qa_queue")
+
         asyncio.create_task(background_build_qa_queue())
 
-        startup_logger.log("server_startup", {"stage": "end", "status": "ok",
-                                   "vectors": vault_indexer.index.ntotal if vault_indexer.index else 0})
+        startup_logger.log(
+            "server_startup",
+            {
+                "stage": "end",
+                "status": "ok",
+                "vectors": vault_indexer.index.ntotal if vault_indexer.index else 0,
+            },
+        )
 
         # ── Model preload ──────────────────────────────────────────────
         # Ollama loads models lazily: the first request to a cold model
@@ -273,6 +302,7 @@ async def lifespan(app: FastAPI):
         # The preload is a no-op for cloud backends (OpenAICompatibleClient).
         # Skip if disabled via VAULTBOT_PRELOAD_ON_STARTUP=0.
         if os.environ.get("VAULTBOT_PRELOAD_ON_STARTUP", "1") != "0":
+
             def _preload_models():
                 _preloaded = []
 
@@ -280,8 +310,9 @@ async def lifespan(app: FastAPI):
                     """Preload a model with retry — keeps trying until Ollama
                     is available (it may not be up yet when the backend starts)
                     or the max wait is reached."""
-                    _max_wait = int(os.environ.get(
-                        "VAULTBOT_PRELOAD_MAX_WAIT_S", "300"))
+                    _max_wait = int(
+                        os.environ.get("VAULTBOT_PRELOAD_MAX_WAIT_S", "300")
+                    )
                     _interval = 10  # retry every 10s
                     _elapsed = 0
                     while _elapsed < _max_wait:
@@ -292,8 +323,9 @@ async def lifespan(app: FastAPI):
                             pass
                         time.sleep(_interval)
                         _elapsed += _interval
-                    startup_logger.log("model_preload_timeout", {
-                        "model": label, "waited_s": _elapsed})
+                    startup_logger.log(
+                        "model_preload_timeout", {"model": label, "waited_s": _elapsed}
+                    )
                     return False
 
                 # Big model (chat/reasoning).
@@ -305,15 +337,21 @@ async def lifespan(app: FastAPI):
                         _preload_with_retry(small_client, "small")
                         _preloaded.append(small_client.llm_model)
                 except Exception as e:  # noqa: BLE001
-                    startup_logger.log("model_preload_startup_failed", {"model": "small", "error": str(e)})
+                    startup_logger.log(
+                        "model_preload_startup_failed",
+                        {"model": "small", "error": str(e)},
+                    )
                 startup_logger.log("models_preloaded", {"models": _preloaded})
+
             # Run in a DEDICATED thread (not the default ThreadPoolExecutor)
             # so a long preload (up to 300s for a cold large model) can't
             # starve the executor pool that endpoints like /models and
             # /llm/providers/live_models rely on for run_in_executor calls.
             import threading as _threading
+
             _preload_thread = _threading.Thread(
-                target=_preload_models, name="startup-preload", daemon=True)
+                target=_preload_models, name="startup-preload", daemon=True
+            )
             _preload_thread.start()
 
         # Start the autonomous researcher so it begins filling vault gaps
@@ -332,28 +370,38 @@ async def lifespan(app: FastAPI):
             try:
                 recovery = checkpointer.recover(autonomous_researcher)
                 if recovery.get("recovered"):
-                    startup_logger.log("checkpointer_recovered", {
-                        "interrupted_count": len(recovery["recovered"]),
-                        "topics": [c.topic for c in recovery["recovered"]],
-                    })
+                    startup_logger.log(
+                        "checkpointer_recovered",
+                        {
+                            "interrupted_count": len(recovery["recovered"]),
+                            "topics": [c.topic for c in recovery["recovered"]],
+                        },
+                    )
                     # Re-queue the interrupted gaps so the next cycle
                     # researches them FIRST, before the curriculum's
                     # normal proposals. This is the actual retry.
                     recovered_gaps = []
                     for ckpt in recovery["recovered"]:
-                        recovered_gaps.append(ckpt.gap if ckpt.gap else {
-                            "kind": ckpt.kind,
-                            "topic": ckpt.topic,
-                            "priority": 9999,  # top priority
-                            "normalized_name": ckpt.topic.lower(),
-                            "referenced_by": [],
-                        })
+                        recovered_gaps.append(
+                            ckpt.gap
+                            if ckpt.gap
+                            else {
+                                "kind": ckpt.kind,
+                                "topic": ckpt.topic,
+                                "priority": 9999,  # top priority
+                                "normalized_name": ckpt.topic.lower(),
+                                "referenced_by": [],
+                            }
+                        )
                     if recovered_gaps:
                         autonomous_researcher._recovered_gaps = recovered_gaps
-                        startup_logger.log("checkpointer_requeued", {
-                            "count": len(recovered_gaps),
-                            "topics": [g["topic"] for g in recovered_gaps],
-                        })
+                        startup_logger.log(
+                            "checkpointer_requeued",
+                            {
+                                "count": len(recovered_gaps),
+                                "topics": [g["topic"] for g in recovered_gaps],
+                            },
+                        )
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 startup_logger.log("checkpointer_recovery_failed", {"error": str(e)})
             startup_logger.log("autonomous_researcher_started", {})
@@ -415,14 +463,19 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from rate_limit import is_rate_allowed
 
+
 class _RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         client = request.client.host if request.client else "127.0.0.1"
         if not is_rate_allowed(request.url.path, client):
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded. Please wait before sending more requests."})
+                content={
+                    "detail": "Rate limit exceeded. Please wait before sending more requests."
+                },
+            )
         return await call_next(request)
+
 
 app.add_middleware(_RateLimitMiddleware)
 
@@ -458,18 +511,26 @@ if ollama_client is None:
     # Settings -> AI Models & Providers. We still keep the backend process
     # alive so the settings UI is reachable, but chat will surface the error.
     from diagnostics import classify_error
+
     _llm_diag = classify_error(
-        RuntimeError("No model assigned to the 'big' cartridge in "
-                     "providers.json. Settings -> AI Models & Providers."),
-        {"stage": "startup"})
-    default_session_logger.log("llm_no_big_model", {
-        "category": _llm_diag.category.value,
-        "user_message": _llm_diag.user_message,
-    })
+        RuntimeError(
+            "No model assigned to the 'big' cartridge in "
+            "providers.json. Settings -> AI Models & Providers."
+        ),
+        {"stage": "startup"},
+    )
+    default_session_logger.log(
+        "llm_no_big_model",
+        {
+            "category": _llm_diag.category.value,
+            "user_message": _llm_diag.user_message,
+        },
+    )
     print(f"[CONFIG ERROR] {_llm_diag.user_message}")
     # Minimal sentinel so downstream attribute access doesn't AttributeError
     # before the user configures a model. is_running() -> False.
     from llm_client import LLMClient as _LC
+
     ollama_client = _LC()  # type: ignore[abstract]
 # VaultBot's own search engine: a keyless, rate-limit-resistant
 # multi-engine aggregator (DuckDuckGo Lite + Marginalia + arXiv) PLUS an
@@ -485,17 +546,28 @@ if ollama_client is None:
 searxng_manager = None
 try:
     from searxng_manager import SearxngManager
+
     searxng_manager = SearxngManager(session_logger=default_session_logger)
 except Exception as _searxng_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-    print(f"[startup] SearXNG backend disabled (Docker/SearxngManager unavailable: {_searxng_err})")
+    print(
+        f"[startup] SearXNG backend disabled (Docker/SearxngManager unavailable: {_searxng_err})"
+    )
 
 search_client = FreeSearch(
     session_logger=default_session_logger,
     searxng_manager=searxng_manager,
 )
-vault_indexer = VaultIndexer(vault_path=os.getenv("VAULT_PATH", "."), session_logger=default_session_logger)
-vault_graph = VaultGraph(vault_path=os.getenv("VAULT_PATH", "."), session_logger=default_session_logger)
-note_creator = NoteCreator(vault_path=os.getenv("VAULT_PATH", "."), indexer=vault_indexer, session_logger=default_session_logger)
+vault_indexer = VaultIndexer(
+    vault_path=os.getenv("VAULT_PATH", "."), session_logger=default_session_logger
+)
+vault_graph = VaultGraph(
+    vault_path=os.getenv("VAULT_PATH", "."), session_logger=default_session_logger
+)
+note_creator = NoteCreator(
+    vault_path=os.getenv("VAULT_PATH", "."),
+    indexer=vault_indexer,
+    session_logger=default_session_logger,
+)
 
 # LLM-light deep research engine. Used by both the /research_tool endpoint
 # (for MCP clients) and the autonomous researcher. No LLM calls inside.
@@ -512,7 +584,8 @@ research_engine = ResearchEngine(
 # vault should learn next based on diversity + state + completed/failed.
 # Instantiated BEFORE the autonomous researcher so the researcher can use it.
 knowledge_curriculum = KnowledgeCurriculum(
-    vault_graph=vault_graph, session_logger=default_session_logger)
+    vault_graph=vault_graph, session_logger=default_session_logger
+)
 
 # Checkpointer: persists the autonomous researcher's in-flight work so a
 # crashed/restarted backend can resume mid-research instead of losing it.
@@ -520,7 +593,8 @@ knowledge_curriculum = KnowledgeCurriculum(
 # the autonomous researcher so the researcher can use it.
 checkpointer = Checkpointer(
     checkpoint_dir=str(Path(__file__).with_name("checkpoints")),
-    session_logger=default_session_logger)
+    session_logger=default_session_logger,
+)
 
 # Procedure tracker: the deterministic feedback loop for procedural notes.
 # Logs validation pass/fail per procedure, triggers re-research when
@@ -534,6 +608,7 @@ procedure_tracker = ProcedureTracker(
 # Autonomous researcher: scans the vault for knowledge gaps and fills them
 # in the background. Started on server startup; can be toggled via the API.
 
+
 def _researcher_crash_callback(error: str) -> None:
     """Broadcast a type:"problem" WS event when the researcher thread crashes.
 
@@ -544,13 +619,14 @@ def _researcher_crash_callback(error: str) -> None:
     """
     import json as _json
     from diagnostics import classify_error
+
     try:
-        diag = classify_error(RuntimeError(error),
-                               {"stage": "autonomous researcher"})
+        diag = classify_error(RuntimeError(error), {"stage": "autonomous researcher"})
         diag.user_message = (
             "VaultBot's autonomous researcher stopped unexpectedly. "
             "It won't fill knowledge gaps on its own until you restart. "
-            "Your chat still works normally.")
+            "Your chat still works normally."
+        )
         diag.remedy_hint = "Click Restart to start the researcher again."
         payload = _json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
         # manager is module-level (defined below); at call time (crash) it
@@ -558,20 +634,28 @@ def _researcher_crash_callback(error: str) -> None:
         if manager is not None and manager.active_connections:
             if main_event_loop is not None and main_event_loop.is_running():
                 asyncio.run_coroutine_threadsafe(
-                    manager.broadcast(payload), main_event_loop)
-        default_session_logger.log("problem_notified", {
-            "category": diag.category.value,
-            "user_message": diag.user_message,
-            "source": "autonomous_researcher_crash",
-        })
+                    manager.broadcast(payload), main_event_loop
+                )
+        default_session_logger.log(
+            "problem_notified",
+            {
+                "category": diag.category.value,
+                "user_message": diag.user_message,
+                "source": "autonomous_researcher_crash",
+            },
+        )
     except Exception as notify_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         # The crash notification itself failed — log it loudly.
         # This is the one place where we MUST not silently pass:
         # if the user doesn't know the researcher crashed, they think
         # the vault is being maintained when it isn't.
         default_session_logger.log_exception(
-            notify_err, context="autonomous_researcher_crash_notification")
-        print(f"[CRITICAL] Researcher crashed AND crash notification failed: {notify_err}")
+            notify_err, context="autonomous_researcher_crash_notification"
+        )
+        print(
+            f"[CRITICAL] Researcher crashed AND crash notification failed: {notify_err}"
+        )
+
 
 autonomous_researcher = AutonomousResearcher(
     vault_path=os.getenv("VAULT_PATH", "."),
@@ -600,28 +684,37 @@ self_improver = SelfImprover(session_logger=default_session_logger)
 # the same agent across days regardless of which model is in the slot.
 identity = Identity(
     identity_dir=str(Path(__file__).with_name("identity")),
-    ollama_client=ollama_client, session_logger=default_session_logger)
+    ollama_client=ollama_client,
+    session_logger=default_session_logger,
+)
 
 # Curated graph-op vocabulary (small, fixed, idempotent, verifiable): the 7
 # ops the plan executor calls. Also exposed to the LLM for direct tool-calling.
 graph_op_registry = GraphOpRegistry(
-    vault_graph=vault_graph, vault_indexer=vault_indexer,
-    note_creator=note_creator, research_engine=research_engine,
-    ollama_client=ollama_client, session_logger=default_session_logger)
+    vault_graph=vault_graph,
+    vault_indexer=vault_indexer,
+    note_creator=note_creator,
+    research_engine=research_engine,
+    ollama_client=ollama_client,
+    session_logger=default_session_logger,
+)
 
 # Model-robust plan executor: takes a JSON plan of atomic idempotent subtasks,
 # each with a deterministic verifier, executes them against the graph ops,
 # and closes the loop with a judge — not the worker model's self-report.
 plan_executor = PlanExecutor(
-    op_registry=graph_op_registry.ops,
-    session_logger=default_session_logger)
+    op_registry=graph_op_registry.ops, session_logger=default_session_logger
+)
 
 # A-MEM note evolution (arXiv:2502.12110): when a new note is created, evolve
 # its neighbors' tags/links so the vault "learns by refining."
 amem = AMemeEvolution(
     vault_path=os.getenv("VAULT_PATH", "."),
-    vault_graph=vault_graph, vault_indexer=vault_indexer,
-    ollama_client=ollama_client, session_logger=default_session_logger)
+    vault_graph=vault_graph,
+    vault_indexer=vault_indexer,
+    ollama_client=ollama_client,
+    session_logger=default_session_logger,
+)
 
 # Fused retrieval (vector + wikilink graph + backlinks): replaces flat FAISS
 # search in the chat loop so the vault reasons graph-awarely.  The embedding-
@@ -630,11 +723,14 @@ amem = AMemeEvolution(
 # to" — notes that proved helpful for similar queries drift toward them.
 embedding_drift = EmbeddingDrift(
     state_path=Path(__file__).with_name("embedding_drift.json"),
-    session_logger=default_session_logger)
+    session_logger=default_session_logger,
+)
 fused_retriever = FusedRetriever(
-    vault_graph=vault_graph, vault_indexer=vault_indexer,
+    vault_graph=vault_graph,
+    vault_indexer=vault_indexer,
     embedding_drift=embedding_drift,
-    session_logger=default_session_logger)
+    session_logger=default_session_logger,
+)
 
 # Chat-loop checkpoint/resume (multi-day sturdiness): snapshots an in-flight
 # agentic turn (round idx, tool history, working memory, partial answer) so a
@@ -642,12 +738,14 @@ fused_retriever = FusedRetriever(
 # research `checkpointer` (which snapshots the autonomous researcher's gap
 # list). One file, atomic writes, cleared on normal completion.
 from chat_checkpoint import ChatLoopCheckpointer
+
 # Legacy singleton for back-compat (non-session callers). Per-session
 # checkpoints are created via ChatLoopCheckpointer.for_session(session_id)
 # in chat_handler.py — this singleton is only used as a fallback.
 chat_checkpointer = ChatLoopCheckpointer(
     state_path=Path(__file__).with_name("chat_loop_checkpoint.json"),
-    session_logger=default_session_logger)
+    session_logger=default_session_logger,
+)
 
 # Context management: a sliding window (not LLM-based compaction) bounds
 # the conversation sent to the LLM. The vault IS the memory — chat history
@@ -672,7 +770,9 @@ chat_checkpointer = ChatLoopCheckpointer(
 # places the user/agent actually look.
 lazy_condenser = LazyCondenser(
     vault_path=os.getenv("VAULT_PATH", "."),
-    ollama_client=ollama_client, session_logger=default_session_logger)
+    ollama_client=ollama_client,
+    session_logger=default_session_logger,
+)
 
 # Health monitor: heartbeat + liveness for the autonomous researcher + a
 # /health endpoint so a watchdog can detect hangs.
@@ -692,9 +792,12 @@ _ctx_limit = 0
 try:
     _ctx_limit = ollama_client.context_window() or 0
 except Exception as _ctx_probe_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-    default_session_logger.log("context_window_probe_failed", {
-        "error": str(_ctx_probe_err),
-    })
+    default_session_logger.log(
+        "context_window_probe_failed",
+        {
+            "error": str(_ctx_probe_err),
+        },
+    )
     _ctx_limit = 0
 if not _ctx_limit:
     _env_limit = int(os.getenv("VAULTBOT_CONTEXT_LIMIT", "0") or "0")
@@ -702,10 +805,13 @@ if not _ctx_limit:
         # Neither probe nor env var gave us a limit. Default to 128K as a
         # generous ceiling for modern models, but log it so it's visible
         # — this is a notified default, not a silent guess.
-        default_session_logger.log("context_window_defaulted", {
-            "reason": "probe failed and VAULTBOT_CONTEXT_LIMIT not set",
-            "default": 131072,
-        })
+        default_session_logger.log(
+            "context_window_defaulted",
+            {
+                "reason": "probe failed and VAULTBOT_CONTEXT_LIMIT not set",
+                "default": 131072,
+            },
+        )
         _env_limit = 131072
     _ctx_limit = _env_limit
 context_budgeter = ContextBudgeter(model_context_limit=_ctx_limit)
@@ -736,6 +842,7 @@ pattern_extractor = PatternExtractor(
     vault_path=os.getenv("VAULT_PATH", "."),
 )
 
+
 # Connection manager for WebSocket
 class ConnectionManager:
     def __init__(self):
@@ -748,7 +855,9 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
 
-    async def send_personal_message(self, message: str, websocket: WebSocket, session_logger: SessionLogger = None):
+    async def send_personal_message(
+        self, message: str, websocket: WebSocket, session_logger: SessionLogger = None
+    ):
         try:
             await websocket.send_text(message)
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
@@ -784,6 +893,7 @@ class ConnectionManager:
                 except json.JSONDecodeError:
                     session_logger.log_message("out", {"raw": message})
 
+
 manager = ConnectionManager()
 
 
@@ -804,18 +914,21 @@ from conversation_index import ConversationIndexRegistry
 conversation_index = ConversationIndexRegistry(ollama_client=ollama_client)
 try:
     from conversation_state import load_history
+
     _prior_history = load_history()
     if _prior_history:
         # Rebuild into a temporary index for the log; the per-session
         # indexes are rebuilt on-demand when each tab connects.
         _temp_idx = ConversationIndexRegistry(ollama_client=ollama_client)
         _temp_idx.rebuild_from_history(_prior_history, session_id="_startup")
-        default_session_logger.log("conversation_index_restored", {
-            "turns": _temp_idx.size,
-        })
+        default_session_logger.log(
+            "conversation_index_restored",
+            {
+                "turns": _temp_idx.size,
+            },
+        )
 except Exception as e:  # noqa: BLE001
-    default_session_logger.log("conversation_index_restore_failed",
-        {"error": str(e)})
+    default_session_logger.log("conversation_index_restore_failed", {"error": str(e)})
 
 svc = Services(
     ollama_client=ollama_client,
@@ -858,8 +971,7 @@ svc = Services(
 # chat_handler (which rebuilds the stem index); here we seed it once at
 # startup so the boost is active before the first procedure call.
 try:
-    _proc_idx = procedure_tracker.get_procedure_index(
-        os.getenv("VAULT_PATH", "."))
+    _proc_idx = procedure_tracker.get_procedure_index(os.getenv("VAULT_PATH", "."))
     fused_retriever.procedure_status_index = {
         stem: entry.get("frontmatter", {}).get("status", "")
         for stem, entry in _proc_idx.items()
@@ -897,6 +1009,7 @@ from routers import task as _task_router
 from routers import identity as _identity_router
 from routers import ws as _ws_router
 from routers import tournament as _tournament_router
+
 app.include_router(_system_router.router)
 app.include_router(_llm_router.router)
 app.include_router(_config_router.router)
@@ -908,6 +1021,7 @@ app.include_router(_identity_router.router)
 app.include_router(_ws_router.router)
 app.include_router(_tournament_router.router)
 
+
 @app.post("/reload-plugin")
 async def reload_plugin_endpoint():
     """Broadcast a reload_plugin WebSocket message so the Obsidian plugin
@@ -916,10 +1030,12 @@ async def reload_plugin_endpoint():
     effect immediately. The backend stays running — only the plugin reloads.
     """
     import asyncio
+
     asyncio.ensure_future(
-        manager.broadcast(json.dumps({"type": "reload_plugin"})),
-        main_event_loop)
+        manager.broadcast(json.dumps({"type": "reload_plugin"})), main_event_loop
+    )
     return {"status": "reload_broadcast"}
+
 
 @app.post("/shutdown")
 async def shutdown_endpoint(request: Request):
@@ -949,6 +1065,7 @@ async def shutdown_endpoint(request: Request):
         try:
             # Give the HTTP response time to flush back to the client.
             import time
+
             time.sleep(0.25)
             # Run the graceful shutdown path synchronously (best effort).
             try:

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Check if a backend file follows the project's code conventions: proper imports, no bare excepts, no hardcoded paths, functions have type hints, modules have __init__.py. Scans a file and returns convention violations. Use when auditing code quality before a commit or after an edit."

@@ -53,10 +53,10 @@ from knowledge_curriculum import (
 # Topics that start with these prefixes are conversation logs or synthetic
 # hub proposals, NOT knowledge concepts worth web-researching.
 _BAD_TOPIC_PREFIXES = (
-    "chat-",          # conversation log titles (Chat-what-can-you-do, etc.)
-    "moc for:",       # thin_community synthetic hub proposals
-    "moc-for:",       # variant normalization
-    "partial_",       # crash-recovery partial answer files
+    "chat-",  # conversation log titles (Chat-what-can-you-do, etc.)
+    "moc for:",  # thin_community synthetic hub proposals
+    "moc-for:",  # variant normalization
+    "partial_",  # crash-recovery partial answer files
 )
 
 # Topics matching these regex patterns are note titles / file artifacts,
@@ -74,20 +74,40 @@ _BAD_TOPIC_PATTERNS = re.compile(
 # for "code_run" (got Haskell c_safe_write + Docker Hub pages) and
 # "safe_write" (got Rust docs). These are internal identifiers; the web
 # has nothing useful on them.
-_INTERNAL_TOOL_NAMES = frozenset({
-    # Builtin vault tools
-    "vault_research", "vault_search", "vault_gaps", "vaultbot_status",
-    "plan_task", "update_task",
-    # Meta / self-improve tools
-    "code_read", "code_run", "code_write", "tool_create", "self_reflect",
-    "git_rollback", "safe_write", "js_safe_write", "capability_audit",
-    "execute_procedure",
-    # Common custom tools
-    "textbook_ingest", "textbook_read_page", "web_read_source",
-    "vault_append", "vault_delete", "vault_graph_analyzer", "vault_lint",
-    "vault_list", "preflight_safety_check", "backend_restart",
-    "plugin_reload",
-})
+_INTERNAL_TOOL_NAMES = frozenset(
+    {
+        # Builtin vault tools
+        "vault_research",
+        "vault_search",
+        "vault_gaps",
+        "vaultbot_status",
+        "plan_task",
+        "update_task",
+        # Meta / self-improve tools
+        "code_read",
+        "code_run",
+        "code_write",
+        "tool_create",
+        "self_reflect",
+        "git_rollback",
+        "safe_write",
+        "js_safe_write",
+        "capability_audit",
+        "execute_procedure",
+        # Common custom tools
+        "textbook_ingest",
+        "textbook_read_page",
+        "web_read_source",
+        "vault_append",
+        "vault_delete",
+        "vault_graph_analyzer",
+        "vault_lint",
+        "vault_list",
+        "preflight_safety_check",
+        "backend_restart",
+        "plugin_reload",
+    }
+)
 
 # How often to run consolidation instead of gap-filling.
 # Every Nth cycle, the researcher runs the semantic consolidation pipeline
@@ -108,7 +128,7 @@ def _is_internal_tool_topic(topic: str) -> bool:
     # Strip leading "how to " / "how to" / "what is " prefixes.
     for prefix in ("how to ", "how to", "what is ", "what is"):
         if t.startswith(prefix):
-            t = t[len(prefix):].strip()
+            t = t[len(prefix) :].strip()
             break
     # Direct tool-name match (e.g. "code_run", "safe_write").
     if t in _INTERNAL_TOOL_NAMES:
@@ -121,6 +141,7 @@ def _is_internal_tool_topic(topic: str) -> bool:
             # Underscored short token = internal API/tool name.
             return True
     return False
+
 
 # Maximum number of words in a researchable topic. Topics with more words
 # are almost certainly note titles (e.g. "Giant-pandas-biology-habitat-diet-
@@ -174,14 +195,18 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
         # Single-word stopic check (mirrors the curriculum's logic).
         alpha = re.sub(r"[^a-zA-Z\s]+", " ", topic).strip()
         alpha_words = [w for w in alpha.split() if w]
-        if len(alpha_words) == 1 and alpha_words[0].lower() in _CURRICULUM_SINGLE_WORD_STOPICS:
+        if (
+            len(alpha_words) == 1
+            and alpha_words[0].lower() in _CURRICULUM_SINGLE_WORD_STOPICS
+        ):
             return False
 
         # Reject file paths — dead links to learningMaterial/web/*.html or
         # any path containing "/" or ending in a file extension. These are
         # broken file references, not researchable concepts.
-        if "/" in topic or topic.endswith((".html", ".md", ".pdf", ".py",
-                                           ".js", ".json", ".txt")):
+        if "/" in topic or topic.endswith(
+            (".html", ".md", ".pdf", ".py", ".js", ".json", ".txt")
+        ):
             return False
 
         # Reject VaultBot's own tool / API names — "how to code_run",
@@ -260,10 +285,16 @@ class AutonomousResearcher:
         self.max_researches_per_cycle = max_researches_per_cycle
         self.min_dangling_references = min_dangling_references
         self.thin_note_threshold = thin_note_threshold
-        self.curriculum = curriculum  # KnowledgeCurriculum (Voyager-style self-directed growth)
+        self.curriculum = (
+            curriculum  # KnowledgeCurriculum (Voyager-style self-directed growth)
+        )
         self.checkpointer = checkpointer  # Checkpointer (crash recovery)
-        self.procedure_tracker = procedure_tracker  # ProcedureTracker (failure-driven evolution)
-        self.ollama_client = ollama_client  # OllamaClient (LLM-assisted note structuring)
+        self.procedure_tracker = (
+            procedure_tracker  # ProcedureTracker (failure-driven evolution)
+        )
+        self.ollama_client = (
+            ollama_client  # OllamaClient (LLM-assisted note structuring)
+        )
         self.on_crash = on_crash  # called if the background thread crashes
 
         self.engine = ResearchEngine(
@@ -313,8 +344,7 @@ class AutonomousResearcher:
         gap detection is broken, not silently get a different mechanism.
         """
         if self.curriculum is None:
-            raise ValueError(
-                "_identify_gaps: no knowledge curriculum configured")
+            raise ValueError("_identify_gaps: no knowledge curriculum configured")
         gaps = self.curriculum.propose_next_gaps()
         # Filter out non-researchable gaps.
         gaps = [g for g in gaps if _is_researchable_gap(g)]
@@ -329,8 +359,7 @@ class AutonomousResearcher:
         """
         safe_topic = re.sub(r"[^\w\s-]", "", topic).strip()
         safe_topic = re.sub(r"[-\s]+", "-", safe_topic)[:80] or "note"
-        research_dir = (
-            self.vault_path / "vaultbot_stuff/Knowledge/Research")
+        research_dir = self.vault_path / "vaultbot_stuff/Knowledge/Research"
         candidate = research_dir / f"{safe_topic}.md"
         if candidate.exists():
             return candidate
@@ -344,7 +373,12 @@ class AutonomousResearcher:
         # If VAULTBOT_ALLOW_WEB_RESEARCH is disabled, skip web research.
         # The autonomous researcher can still run consolidation (hippocampal
         # replay) but won't fetch new content from the internet.
-        if os.environ.get("VAULTBOT_ALLOW_WEB_RESEARCH", "true").strip().lower() in ("0", "false", "off", "no"):
+        if os.environ.get("VAULTBOT_ALLOW_WEB_RESEARCH", "true").strip().lower() in (
+            "0",
+            "false",
+            "off",
+            "no",
+        ):
             self._log("autonomous_skip_web_research_disabled", {"topic": topic})
             return None
 
@@ -360,10 +394,13 @@ class AutonomousResearcher:
         # 4-round web search + LLM synthesis every 10 minutes.
         existing = self._find_existing_research_note(topic)
         if existing is not None:
-            self._log("autonomous_skip_already_researched", {
-                "topic": topic,
-                "existing_path": str(existing),
-            })
+            self._log(
+                "autonomous_skip_already_researched",
+                {
+                    "topic": topic,
+                    "existing_path": str(existing),
+                },
+            )
             return str(existing)
 
         try:
@@ -391,8 +428,10 @@ class AutonomousResearcher:
                 try:
                     self.vault_indexer.index_note(note_path)
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    self._log("autonomous_index_note_failed",
-                        {"path": note_path, "error": str(e)})
+                    self._log(
+                        "autonomous_index_note_failed",
+                        {"path": note_path, "error": str(e)},
+                    )
 
             # Add to QA queue so the next idle window checks this note's
             # frontmatter quality. The researcher creates notes; QA heals
@@ -401,7 +440,10 @@ class AutonomousResearcher:
             # researcher's output as new work.
             try:
                 from qa_worker import load_qa_queue, save_qa_queue
-                rel = os.path.relpath(note_path, str(self.vault_path)).replace("\\", "/")
+
+                rel = os.path.relpath(note_path, str(self.vault_path)).replace(
+                    "\\", "/"
+                )
                 qa_queue = load_qa_queue()
                 # Insert at the FRONT of the queue — freshly researched notes
                 # are high-priority for QA (verify they have good frontmatter
@@ -413,9 +455,13 @@ class AutonomousResearcher:
 
             return note_path
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log("autonomous_research_error", {
-                "topic": topic, "error": str(e),
-            })
+            self._log(
+                "autonomous_research_error",
+                {
+                    "topic": topic,
+                    "error": str(e),
+                },
+            )
             return None
 
     def _structure_note(self, synthesis: str, topic: str) -> str:
@@ -441,6 +487,7 @@ class AutonomousResearcher:
         """
         try:
             from consolidation_pipeline import ConsolidationPipeline
+
             pipeline = ConsolidationPipeline(
                 vault_path=str(self.vault_path),
                 backend_path=str(self.vault_path / "vaultbot_stuff/vaultbot_backend"),
@@ -453,9 +500,12 @@ class AutonomousResearcher:
             prompts = result.get("synthesis_prompts", [])
 
             if not prompts:
-                self._log("autonomous_consolidation_empty", {
-                    "clusters": len(clusters),
-                })
+                self._log(
+                    "autonomous_consolidation_empty",
+                    {
+                        "clusters": len(clusters),
+                    },
+                )
                 return {"ok": False, "reason": "no clusters to consolidate"}
 
             consolidated = []
@@ -468,8 +518,11 @@ class AutonomousResearcher:
 
                 # Phase 4: Synthesis (template by default, LLM only if enabled)
                 import os as _os
-                _use_llm = _os.getenv(
-                    "VAULTBOT_CONSOLIDATION_MODE", "template").lower() == "llm"
+
+                _use_llm = (
+                    _os.getenv("VAULTBOT_CONSOLIDATION_MODE", "template").lower()
+                    == "llm"
+                )
 
                 content = None
                 if _use_llm and self.ollama_client:
@@ -483,20 +536,26 @@ class AutonomousResearcher:
                         if not content or len(content) < 100:
                             content = None
                     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                        self._log("autonomous_consolidation_error", {
-                            "theme": cluster["theme"],
-                            "error": str(e),
-                        })
+                        self._log(
+                            "autonomous_consolidation_error",
+                            {
+                                "theme": cluster["theme"],
+                                "error": str(e),
+                            },
+                        )
 
                 if content is None:
                     # Template synthesis (zero LLM, default path).
                     try:
                         content = pipeline.build_synthesis_template(cluster)
                     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                        self._log("autonomous_consolidation_error", {
-                            "theme": cluster["theme"],
-                            "error": str(e),
-                        })
+                        self._log(
+                            "autonomous_consolidation_error",
+                            {
+                                "theme": cluster["theme"],
+                                "error": str(e),
+                            },
+                        )
                         continue
 
                 if not content or len(content) < 100:
@@ -505,18 +564,24 @@ class AutonomousResearcher:
                 # Phases 5-6: Validate + Store
                 note_result = pipeline.finalize_note(cluster, content)
                 if note_result.get("ok"):
-                    consolidated.append({
-                        "theme": cluster["theme"],
-                        "note_path": note_result["note_path"],
-                        "warnings": note_result.get("warnings", []),
-                    })
-                    self._log("autonomous_consolidation_note", {
-                        "theme": cluster["theme"],
-                        "note_path": note_result["note_path"],
-                    })
+                    consolidated.append(
+                        {
+                            "theme": cluster["theme"],
+                            "note_path": note_result["note_path"],
+                            "warnings": note_result.get("warnings", []),
+                        }
+                    )
+                    self._log(
+                        "autonomous_consolidation_note",
+                        {
+                            "theme": cluster["theme"],
+                            "note_path": note_result["note_path"],
+                        },
+                    )
                     # Add consolidation notes to QA queue too
                     try:
                         from qa_worker import load_qa_queue, save_qa_queue
+
                         rel = os.path.relpath(
                             note_result["note_path"],
                             str(self.vault_path),
@@ -557,16 +622,20 @@ class AutonomousResearcher:
         # what the researcher made.
         try:
             from qa_worker import load_qa_queue
+
             qa_queue = load_qa_queue()
             if qa_queue:
-                self._log("autonomous_cycle_skipped_qa_pending", {
-                    "qa_queue_size": len(qa_queue),
-                })
+                self._log(
+                    "autonomous_cycle_skipped_qa_pending",
+                    {
+                        "qa_queue_size": len(qa_queue),
+                    },
+                )
                 return
         except Exception:  # noqa: BLE001 — best-effort
             pass
         cycle_t0 = time.time()
-        if hasattr(self, '_heartbeat'):
+        if hasattr(self, "_heartbeat"):
             self._heartbeat("cycle starting")
 
         try:
@@ -575,7 +644,7 @@ class AutonomousResearcher:
             # A crashed cycle must still heartbeat so the health monitor
             # knows the researcher thread is alive (just errored), not hung.
             self._log("autonomous_cycle_error", {"error": str(e)})
-            if hasattr(self, '_heartbeat'):
+            if hasattr(self, "_heartbeat"):
                 self._heartbeat(f"cycle error: {e}")
             # Re-raise so the _run loop's exception handler fires the
             # on_crash callback and logs the full traceback.
@@ -583,7 +652,7 @@ class AutonomousResearcher:
         finally:
             # Heartbeat at cycle end so the health monitor always has a
             # fresh timestamp — even if the cycle was skipped or errored.
-            if hasattr(self, '_heartbeat'):
+            if hasattr(self, "_heartbeat"):
                 self._heartbeat("cycle complete")
 
     async def _cycle_impl(self, cycle_t0: float):
@@ -596,9 +665,12 @@ class AutonomousResearcher:
         # logs for patterns and writes semantic knowledge notes.
         self._cycle_count += 1
         if self._cycle_count % _CONSOLIDATION_INTERVAL == 0:
-            self._log("autonomous_consolidation_cycle", {
-                "cycle": self._cycle_count,
-            })
+            self._log(
+                "autonomous_consolidation_cycle",
+                {
+                    "cycle": self._cycle_count,
+                },
+            )
             consolidation_result = await self._run_consolidation()
             self.last_run = {
                 "timestamp": time.time(),
@@ -614,14 +686,17 @@ class AutonomousResearcher:
 
         # If there are recovered gaps from a previous crash, research those
         # FIRST before the curriculum proposes new ones. This is the retry.
-        recovered = getattr(self, '_recovered_gaps', None)
+        recovered = getattr(self, "_recovered_gaps", None)
         if recovered:
             # Filter recovered gaps too — they may have been pre-filter garbage.
             recovered = [g for g in recovered if _is_researchable_gap(g)]
-            self._log("autonomous_recovering_interrupted", {
-                "count": len(recovered),
-                "topics": [g.get("topic") for g in recovered],
-            })
+            self._log(
+                "autonomous_recovering_interrupted",
+                {
+                    "count": len(recovered),
+                    "topics": [g.get("topic") for g in recovered],
+                },
+            )
             gaps = recovered
             self._recovered_gaps = None  # consume them
         elif self.procedure_tracker is not None:
@@ -629,7 +704,8 @@ class AutonomousResearcher:
             # These are higher priority than normal knowledge gaps because
             # they represent tasks where the system is actively failing.
             proc_gaps = self.procedure_tracker.get_research_gaps(
-                vault_path=str(self.vault_path))
+                vault_path=str(self.vault_path)
+            )
             # Partition into researchable gaps and rejected procedure gaps.
             # Procedure-name gaps (failing_procedure, failing_step,
             # stale_procedure) are NOT web-researchable — the procedure's
@@ -652,40 +728,58 @@ class AutonomousResearcher:
                 if proc_name:
                     try:
                         self.procedure_tracker.update_after_research(
-                            proc_name, vault_path=str(self.vault_path))
-                        self._log("autonomous_procedure_gap_reset", {
-                            "procedure": proc_name,
-                            "kind": g.get("kind"),
-                            "reason": "not web-researchable",
-                        })
+                            proc_name, vault_path=str(self.vault_path)
+                        )
+                        self._log(
+                            "autonomous_procedure_gap_reset",
+                            {
+                                "procedure": proc_name,
+                                "kind": g.get("kind"),
+                                "reason": "not web-researchable",
+                            },
+                        )
                     except Exception as e:  # noqa: BLE001 — best-effort
-                        self._log("autonomous_procedure_reset_failed", {
-                            "procedure": proc_name, "error": str(e),
-                        })
+                        self._log(
+                            "autonomous_procedure_reset_failed",
+                            {
+                                "procedure": proc_name,
+                                "error": str(e),
+                            },
+                        )
             if rejected_proc:
-                self._log("autonomous_procedure_gaps_rejected", {
-                    "count": len(rejected_proc),
-                    "topics": [g.get("topic", "") for g in rejected_proc[:5]],
-                })
+                self._log(
+                    "autonomous_procedure_gaps_rejected",
+                    {
+                        "count": len(rejected_proc),
+                        "topics": [g.get("topic", "") for g in rejected_proc[:5]],
+                    },
+                )
             if researchable_proc:
                 gaps = researchable_proc
-                self._log("autonomous_procedure_gaps", {
-                    "count": len(gaps),
-                    "topics": [g.get("topic", "") for g in gaps[:5]],
-                })
+                self._log(
+                    "autonomous_procedure_gaps",
+                    {
+                        "count": len(gaps),
+                        "topics": [g.get("topic", "") for g in gaps[:5]],
+                    },
+                )
             else:
                 gaps = self._identify_gaps()
         else:
             gaps = self._identify_gaps()
-        self._log("autonomous_cycle_begin", {
-            "gap_count": len(gaps),
-            "top_gaps": [g["topic"] for g in gaps[:5]],
-        })
+        self._log(
+            "autonomous_cycle_begin",
+            {
+                "gap_count": len(gaps),
+                "top_gaps": [g["topic"] for g in gaps[:5]],
+            },
+        )
         filled: list[dict[str, Any]] = []
         budget = min(self.max_researches_per_cycle, len(gaps))
         # Checkpoint the cycle's gaps so a crash mid-research can be recovered.
         cycle_checkpoints = []
         from datetime import datetime
+
         now_iso = lambda: datetime.now(UTC).isoformat()
         for gap in gaps[:budget]:
             if self._stop_event.is_set():
@@ -695,36 +789,50 @@ class AutonomousResearcher:
             # started research finishes; the next gap waits for the next
             # cycle (after the chat ends + the interval).
             if self._chat_active.is_set():
-                self._log("autonomous_cycle_paused_mid_cycle", {
-                    "completed": len(cycle_checkpoints),
-                    "remaining": budget - len(cycle_checkpoints),
-                })
+                self._log(
+                    "autonomous_cycle_paused_mid_cycle",
+                    {
+                        "completed": len(cycle_checkpoints),
+                        "remaining": budget - len(cycle_checkpoints),
+                    },
+                )
                 break
             # Mark this gap as 'running' in the checkpoint before researching.
             ckpt = {
-                "topic": gap["topic"], "kind": gap["kind"],
-                "status": "running", "started_at": now_iso(),
-                "completed_at": None, "note_path": None, "error": None,
+                "topic": gap["topic"],
+                "kind": gap["kind"],
+                "status": "running",
+                "started_at": now_iso(),
+                "completed_at": None,
+                "note_path": None,
+                "error": None,
                 "gap": gap,
             }
             cycle_checkpoints.append(ckpt)
             if self.checkpointer is not None:
                 try:
-                    self.checkpointer.save([
-                        __import__("checkpointer").ResearchCheckpoint(**c) for c in cycle_checkpoints
-                    ])
+                    self.checkpointer.save(
+                        [
+                            __import__("checkpointer").ResearchCheckpoint(**c)
+                            for c in cycle_checkpoints
+                        ]
+                    )
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     # Checkpoint failure means no resume after restart.
                     # Log loudly — the operator needs to know the researcher
                     # can't recover from a crash.
-                    self._log("checkpoint_save_failed", {
-                        "error": str(e), "category": "compaction_broken",
-                    })
+                    self._log(
+                        "checkpoint_save_failed",
+                        {
+                            "error": str(e),
+                            "category": "compaction_broken",
+                        },
+                    )
             note_path = self._research_to_note(gap)
             # Heartbeat after each gap is researched so the health monitor
             # knows the researcher is making progress, not hung on a slow
             # web request or LLM call.
-            if hasattr(self, '_heartbeat'):
+            if hasattr(self, "_heartbeat"):
                 self._heartbeat(f"researched: {gap.get('topic', 'unknown')[:60]}")
             # Update the checkpoint with the result.
             ckpt["status"] = "done" if note_path else "failed"
@@ -732,12 +840,14 @@ class AutonomousResearcher:
             ckpt["note_path"] = note_path
             if not note_path:
                 ckpt["error"] = "research returned no note"
-            filled.append({
-                "topic": gap["topic"],
-                "kind": gap["kind"],
-                "note_path": note_path,
-                "ok": note_path is not None,
-            })
+            filled.append(
+                {
+                    "topic": gap["topic"],
+                    "kind": gap["kind"],
+                    "note_path": note_path,
+                    "ok": note_path is not None,
+                }
+            )
         # --- Phase 3: Run the promotion cycle after each research cycle ---
         # Scan all procedural notes in the vault, check their success rates,
         # and promote/flag them based on the deterministic thresholds.
@@ -746,12 +856,12 @@ class AutonomousResearcher:
         if self.procedure_tracker is not None:
             try:
                 promo_result = self.procedure_tracker.run_promotion_cycle(
-                    str(self.vault_path))
+                    str(self.vault_path)
+                )
                 if promo_result["promoted"] or promo_result["flagged"]:
                     self._log("autonomous_procedure_promotion", promo_result)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("autonomous_promotion_cycle_failed",
-                          {"error": str(e)})
+                self._log("autonomous_promotion_cycle_failed", {"error": str(e)})
         self.last_run = {
             "timestamp": time.time(),
             "gap_count": len(gaps),
@@ -773,10 +883,13 @@ class AutonomousResearcher:
     async def _run(self):
         """Main loop: sleep, cycle, repeat until stopped."""
         self._loop = asyncio.get_event_loop()
-        self._log("autonomous_researcher_start", {
-            "interval_seconds": self.interval_seconds,
-            "max_per_cycle": self.max_researches_per_cycle,
-        })
+        self._log(
+            "autonomous_researcher_start",
+            {
+                "interval_seconds": self.interval_seconds,
+                "max_per_cycle": self.max_researches_per_cycle,
+            },
+        )
         # Run an initial cycle shortly after start so the user sees value
         # without waiting the full interval.
         initial_delay = 15
@@ -818,7 +931,8 @@ class AutonomousResearcher:
                 loop.close()
 
         self._thread = threading.Thread(
-            target=runner, name="autonomous-researcher", daemon=True)
+            target=runner, name="autonomous-researcher", daemon=True
+        )
         self._thread.start()
 
     def stop(self):

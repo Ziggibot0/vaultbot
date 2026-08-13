@@ -6,6 +6,7 @@ after rebuilding the client it writes to BOTH the main.py globals (still
 used by the chat loop's free-variable references until the ws router lands)
 AND the svc fields (so Depends consumers see the new client).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,14 +32,19 @@ logger = logging.getLogger(__name__)
 # user picked in settings (persisted here) was silently ignored on every
 # restart and the boot-time default won. Resolve via .parent chain so it
 # tracks the real location regardless of how the backend is launched.
-_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"  # 3 levels up for vault root (vaultbot_stuff/vaultbot_backend/routers/ -> vaultbot_stuff/)
+_ENV_PATH = (
+    Path(__file__).resolve().parent.parent.parent / ".env"
+)  # 3 levels up for vault root (vaultbot_stuff/vaultbot_backend/routers/ -> vaultbot_stuff/)
 
 
 def _persist_env_value(key: str, value: str) -> None:
     """Write/update a KEY=VALUE line in the vault root .env file."""
     try:
-        lines = (_ENV_PATH.read_text(encoding="utf-8").splitlines()
-                 if _ENV_PATH.exists() else [])
+        lines = (
+            _ENV_PATH.read_text(encoding="utf-8").splitlines()
+            if _ENV_PATH.exists()
+            else []
+        )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         lines = []
     found = False
@@ -144,15 +150,17 @@ async def config_effective() -> dict[str, Any]:
             value = ""
             source = "default"
         conflict = bool(file_val and process_val and file_val != process_val)
-        items.append({
-            "key": key,
-            "label": label,
-            "value": ("" if is_secret else value),
-            "has_value": bool(value),
-            "source": source,
-            "conflict": conflict,
-            "is_secret": is_secret,
-        })
+        items.append(
+            {
+                "key": key,
+                "label": label,
+                "value": ("" if is_secret else value),
+                "has_value": bool(value),
+                "source": source,
+                "conflict": conflict,
+                "is_secret": is_secret,
+            }
+        )
     return {"config": items}
 
 
@@ -189,6 +197,7 @@ def _rebuild_llm_client(svc: Services) -> None:
     # __main__ under uvicorn) and crash the server with duplicate bindings.
     try:
         import sys
+
         _main = sys.modules.get("__main__") or sys.modules.get("main")
         if _main is not None:
             _main.ollama_client = new_client
@@ -199,7 +208,9 @@ def _rebuild_llm_client(svc: Services) -> None:
 
 
 @router.get("/models")
-async def list_models(svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
+async def list_models(
+    svc: Annotated[Services, Depends(get_services)],
+) -> dict[str, Any]:
     """Return available models from the active LLM backend.
 
     Backend-agnostic: works for local Ollama (list_local_models) AND any
@@ -208,8 +219,10 @@ async def list_models(svc: Annotated[Services, Depends(get_services)]) -> dict[s
     they get a live list of models to choose from.
     """
     loop = asyncio.get_event_loop()
-    list_fn = (getattr(svc.ollama_client, "list_models", None)
-               or svc.ollama_client.list_local_models)
+    list_fn = (
+        getattr(svc.ollama_client, "list_models", None)
+        or svc.ollama_client.list_local_models
+    )
     models = await loop.run_in_executor(None, list_fn)
     # Enrich each model with capability metadata (vision, instruct) so the
     # frontend can group + tag them. For Ollama this calls /api/show per
@@ -226,9 +239,15 @@ async def list_models(svc: Annotated[Services, Depends(get_services)]) -> dict[s
                 caps = await loop.run_in_executor(None, caps_fn, name)
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # keep defaults
-        enriched.append({"name": name, "vision": caps.get("vision", False),
-                         "instruct": caps.get("instruct", True)})
+        enriched.append(
+            {
+                "name": name,
+                "vision": caps.get("vision", False),
+                "instruct": caps.get("instruct", True),
+            }
+        )
     return {"models": enriched, "current": svc.ollama_client.llm_model}
+
 
 @router.get("/llm/local_models")
 async def list_local_models() -> dict[str, Any]:
@@ -248,17 +267,19 @@ async def list_local_models() -> dict[str, Any]:
     """
     from ollama_client import OllamaClient  # local daemon only
 
-    host = (os.getenv("OLLAMA_HOST") or "http://localhost:11434")
-    probe = OllamaClient(base_url=host, llm_model="",
-                         embed_model=os.getenv("OLLAMA_EMBED_MODEL",
-                                                "nomic-embed-text"))
+    host = os.getenv("OLLAMA_HOST") or "http://localhost:11434"
+    probe = OllamaClient(
+        base_url=host,
+        llm_model="",
+        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+    )
     loop = asyncio.get_event_loop()
     try:
         names = await loop.run_in_executor(None, probe.list_local_models)
     except Exception as exc:
         raise HTTPException(
-            status_code=502,
-            detail=f"Could not reach local Ollama at {host}: {exc}") from exc
+            status_code=502, detail=f"Could not reach local Ollama at {host}: {exc}"
+        ) from exc
     caps_fn = getattr(probe, "get_model_capabilities", None)
     enriched = []
     for name in names:
@@ -268,21 +289,36 @@ async def list_local_models() -> dict[str, Any]:
                 caps = await loop.run_in_executor(None, caps_fn, name)
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
-        enriched.append({"name": name, "vision": caps.get("vision", False),
-                         "instruct": caps.get("instruct", True)})
+        enriched.append(
+            {
+                "name": name,
+                "vision": caps.get("vision", False),
+                "instruct": caps.get("instruct", True),
+            }
+        )
     return {"models": enriched}
+
 
 # Recommended models for the "Download a recommended model" button when the
 # user has no models installed. These are small, capable, and cover both
 # text + vision use cases. The frontend offers these as one-click downloads
 # via /models/pull so the user never has to type ``ollama pull``.
 RECOMMENDED_MODELS = [
-    {"name": "qwen3.6:latest", "label": "Qwen 3.6 (recommended)",
-     "desc": "Balanced text model. Good for chat, research, and notes.",
-     "vision": False, "size": "~2 GB"},
-    {"name": "nomic-embed-text", "label": "Nomic Embed (required for search)",
-     "desc": "Embedding model — VaultBot needs this for vault search.",
-     "vision": False, "size": "~270 MB", "required": True},
+    {
+        "name": "qwen3.6:latest",
+        "label": "Qwen 3.6 (recommended)",
+        "desc": "Balanced text model. Good for chat, research, and notes.",
+        "vision": False,
+        "size": "~2 GB",
+    },
+    {
+        "name": "nomic-embed-text",
+        "label": "Nomic Embed (required for search)",
+        "desc": "Embedding model — VaultBot needs this for vault search.",
+        "vision": False,
+        "size": "~270 MB",
+        "required": True,
+    },
 ]
 
 
@@ -338,8 +374,11 @@ async def pull_model(
             # line by line and broadcast percentage updates.
             proc = _popen(
                 ["ollama", "pull", model],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             for line in proc.stdout:
                 line = line.strip()
@@ -359,15 +398,19 @@ async def pull_model(
                 # Broadcast progress to all WS clients.
                 try:
                     import json as _json
-                    msg = _json.dumps({
-                        "type": "model_pull_progress",
-                        "model": model,
-                        "progress": pct if pct is not None else -1,
-                        "line": line[:200],
-                    })
+
+                    msg = _json.dumps(
+                        {
+                            "type": "model_pull_progress",
+                            "model": model,
+                            "progress": pct if pct is not None else -1,
+                            "line": line[:200],
+                        }
+                    )
                     if svc.manager:
                         asyncio.run_coroutine_threadsafe(
-                            svc.manager.broadcast(msg), main_loop)
+                            svc.manager.broadcast(msg), main_loop
+                        )
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
             proc.wait()
@@ -375,14 +418,18 @@ async def pull_model(
             # Broadcast completion.
             try:
                 import json as _json
-                msg = _json.dumps({
-                    "type": "model_pull_done",
-                    "model": model,
-                    "success": done_ok,
-                })
+
+                msg = _json.dumps(
+                    {
+                        "type": "model_pull_done",
+                        "model": model,
+                        "success": done_ok,
+                    }
+                )
                 if svc.manager:
                     asyncio.run_coroutine_threadsafe(
-                        svc.manager.broadcast(msg), main_loop)
+                        svc.manager.broadcast(msg), main_loop
+                    )
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -394,8 +441,9 @@ async def pull_model(
 
 
 @router.post("/set_model")
-async def set_model_endpoint(payload: dict,
-                              svc: Annotated[Services, Depends(get_services)]):
+async def set_model_endpoint(
+    payload: dict, svc: Annotated[Services, Depends(get_services)]
+):
     """Set the active LLM model immediately and persist to .env.
 
     Persists the selection so subprocesses (subagent) and backend restarts
@@ -425,20 +473,28 @@ async def set_model_endpoint(payload: dict,
         if reg.get_model(new_mid) is None:
             try:
                 old = reg.get_model(mid)
-                reg.add_model(new_mid, requested_model, prov,
-                              vision=(old.vision if old else False),
-                              instruct=True)
+                reg.add_model(
+                    new_mid,
+                    requested_model,
+                    prov,
+                    vision=(old.vision if old else False),
+                    instruct=True,
+                )
             except Exception:  # noqa: BLE001 — best-effort persist
                 pass
         reg.set_role("big", new_mid)
 
-    return {"status": "ok", "model": requested_model,
-            "current": svc.ollama_client.llm_model}
+    return {
+        "status": "ok",
+        "model": requested_model,
+        "current": svc.ollama_client.llm_model,
+    }
 
 
 @router.get("/model_context_window")
-async def model_context_window(svc: Annotated[Services, Depends(get_services)],
-                               model: str | None = None) -> dict[str, Any]:
+async def model_context_window(
+    svc: Annotated[Services, Depends(get_services)], model: str | None = None
+) -> dict[str, Any]:
     """Return the context-window size (in tokens) for a model.
 
     Auto-detects from the active backend: Ollama queries /api/show for the
@@ -454,11 +510,13 @@ async def model_context_window(svc: Annotated[Services, Depends(get_services)],
     loop = asyncio.get_event_loop()
     try:
         ctx = await loop.run_in_executor(
-            None, lambda: svc.ollama_client.context_window(target))
+            None, lambda: svc.ollama_client.context_window(target)
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Could not determine context window for model {target!r}: {exc}") from exc
+            detail=f"Could not determine context window for model {target!r}: {exc}",
+        ) from exc
     return {"model": target, "context_window": ctx}
 
 
@@ -471,14 +529,16 @@ async def vision_check(svc: Annotated[Services, Depends(get_services)]):
     OpenRouter/OpenAI model reading textbook pages is fully supported.
     """
     loop = asyncio.get_event_loop()
-    probe_client = svc.vision_client if svc.vision_client is not None else svc.ollama_client
+    probe_client = (
+        svc.vision_client if svc.vision_client is not None else svc.ollama_client
+    )
     source = "vision" if svc.vision_client is not None else "big"
     try:
         capable = await loop.run_in_executor(None, probe_client.vision_capable)
     except Exception as exc:
         raise HTTPException(
-            status_code=502,
-            detail=f"Vision probe failed: {exc}") from exc
+            status_code=502, detail=f"Vision probe failed: {exc}"
+        ) from exc
     return {
         "vision_capable": bool(capable),
         "model": getattr(probe_client, "llm_model", ""),
@@ -501,8 +561,7 @@ async def list_providers(svc: Annotated[Services, Depends(get_services)]):
 
 
 @router.post("/llm/providers")
-async def add_provider(payload: dict,
-                       svc: Annotated[Services, Depends(get_services)]):
+async def add_provider(payload: dict, svc: Annotated[Services, Depends(get_services)]):
     """Add (or overwrite) a provider connection.
 
     Fields: id, type ("ollama"|"openai"), base_url, api_key (optional),
@@ -524,8 +583,7 @@ async def add_provider(payload: dict,
     if not pid:
         return {"status": "error", "detail": "id required"}, 400
     if ptype not in ("ollama", "openai"):
-        return {"status": "error",
-                "detail": "type must be 'ollama' or 'openai'"}, 400
+        return {"status": "error", "detail": "type must be 'ollama' or 'openai'"}, 400
     if not base_url:
         return {"status": "error", "detail": "base_url required"}, 400
     try:
@@ -538,14 +596,14 @@ async def add_provider(payload: dict,
     if not probe["ok"] and not save_anyway:
         reg.remove_provider(pid)
         _rebuild_llm_client(svc)
-        return {"status": "error", "detail": probe["error"],
-                "probe": probe}, 502
+        return {"status": "error", "detail": probe["error"], "probe": probe}, 502
     return {"status": "ok", "provider": prov.to_public(), "probe": probe}
 
 
 @router.delete("/llm/providers/{provider_id}")
-async def remove_provider(provider_id: str,
-                          svc: Annotated[Services, Depends(get_services)]):
+async def remove_provider(
+    provider_id: str, svc: Annotated[Services, Depends(get_services)]
+):
     """Remove a provider + its models + any role that used them."""
     reg = _registry(svc)
     ok = reg.remove_provider(provider_id)
@@ -565,19 +623,19 @@ async def list_all_models(svc: Annotated[Services, Depends(get_services)]):
     models = []
     for m in reg.list_models():
         prov = reg.get_provider(m.provider)
-        models.append({
-            **m.to_dict(),
-            "provider_label": prov.label if prov else m.provider,
-            "provider_type": prov.type if prov else "",
-            "roles": [r for r in ROLES if reg.get_role(r) == m.id],
-        })
-    return {"models": models,
-            "roles": {r: reg.get_role(r) for r in ROLES}}
+        models.append(
+            {
+                **m.to_dict(),
+                "provider_label": prov.label if prov else m.provider,
+                "provider_type": prov.type if prov else "",
+                "roles": [r for r in ROLES if reg.get_role(r) == m.id],
+            }
+        )
+    return {"models": models, "roles": {r: reg.get_role(r) for r in ROLES}}
 
 
 @router.post("/llm/models")
-async def add_model(payload: dict,
-                    svc: Annotated[Services, Depends(get_services)]):
+async def add_model(payload: dict, svc: Annotated[Services, Depends(get_services)]):
     """Register a model into the pot.
 
     Fields: id (unique), model (provider's model id), provider (provider id),
@@ -599,18 +657,32 @@ async def add_model(payload: dict,
     # money-spending role. Ollama local = always free; OpenRouter ":free" = free.
     prov = reg.get_provider(provider)
     from providers import _is_free_model
-    free = bool(payload.get("free", _is_free_model(model, prov.type if prov else "openai", prov.base_url if prov else "")))
+
+    free = bool(
+        payload.get(
+            "free",
+            _is_free_model(
+                model, prov.type if prov else "openai", prov.base_url if prov else ""
+            ),
+        )
+    )
     try:
-        entry = reg.add_model(mid, model, provider, vision=vision,
-                              instruct=instruct, label=label, free=free)
+        entry = reg.add_model(
+            mid,
+            model,
+            provider,
+            vision=vision,
+            instruct=instruct,
+            label=label,
+            free=free,
+        )
     except ValueError as e:
         return {"status": "error", "detail": str(e)}, 400
     return {"status": "ok", "model": entry.to_dict()}
 
 
 @router.delete("/llm/models/{model_id:path}")
-async def remove_model(model_id: str,
-                       svc: Annotated[Services, Depends(get_services)]):
+async def remove_model(model_id: str, svc: Annotated[Services, Depends(get_services)]):
     """Remove a model from the pot (and any role that referenced it)."""
     reg = _registry(svc)
     ok = reg.remove_model(model_id)
@@ -619,8 +691,7 @@ async def remove_model(model_id: str,
 
 
 @router.post("/llm/role")
-async def set_role(payload: dict,
-                   svc: Annotated[Services, Depends(get_services)]):
+async def set_role(payload: dict, svc: Annotated[Services, Depends(get_services)]):
     """Assign a role (big|small|vision) to any model in the pot.
 
     Fields: role, model_id (empty clears the role). This is the single
@@ -638,13 +709,18 @@ async def set_role(payload: dict,
     except ValueError as e:
         return {"status": "error", "detail": str(e)}, 400
     _rebuild_llm_client(svc)
-    return {"status": "ok", "role": role, "model_id": model_id,
-            "roles": {r: reg.get_role(r) for r in ROLES}}
+    return {
+        "status": "ok",
+        "role": role,
+        "model_id": model_id,
+        "roles": {r: reg.get_role(r) for r in ROLES},
+    }
 
 
 @router.get("/llm/providers/{provider_id}/live_models")
-async def provider_live_models(provider_id: str,
-                               svc: Annotated[Services, Depends(get_services)]):
+async def provider_live_models(
+    provider_id: str, svc: Annotated[Services, Depends(get_services)]
+):
     """Probe a provider and return the models it actually serves (dropdown list).
 
     If the endpoint works, the live model list IS the dropdown content — the
@@ -658,20 +734,31 @@ async def provider_live_models(provider_id: str,
     reg = _registry(svc)
     prov = reg.get_provider(provider_id)
     if prov is None:
-        return {"status": "error", "detail": "unknown provider",
-                "ok": False, "models": []}, 404
+        return {
+            "status": "error",
+            "detail": "unknown provider",
+            "ok": False,
+            "models": [],
+        }, 404
     probe = await asyncio.get_event_loop().run_in_executor(None, test_provider, prov)
     if not probe["ok"]:
-        return {"status": "error", "detail": probe["error"],
-                "ok": False, "models": [], "latency_ms": probe["latency_ms"]}
+        return {
+            "status": "error",
+            "detail": probe["error"],
+            "ok": False,
+            "models": [],
+            "latency_ms": probe["latency_ms"],
+        }
     names = probe["models"]
     # Ollama: enrich with vision/instruct caps for the dropdown grouping.
     if prov.type == "ollama":
         from ollama_client import OllamaClient
         from providers import _is_free_model
+
         loop = asyncio.get_event_loop()
-        caps_probe = OllamaClient(base_url=prov.base_url, llm_model="",
-                                  embed_model="nomic-embed-text")
+        caps_probe = OllamaClient(
+            base_url=prov.base_url, llm_model="", embed_model="nomic-embed-text"
+        )
         caps_fn = getattr(caps_probe, "get_model_capabilities", None)
         enriched = []
         for n in names:
@@ -681,22 +768,44 @@ async def provider_live_models(provider_id: str,
                     caps = await loop.run_in_executor(None, caps_fn, n)
                 except Exception:  # noqa: BLE001 — best-effort per-model caps
                     pass
-            enriched.append({"name": n, "vision": caps.get("vision", False),
-                             "instruct": caps.get("instruct", True),
-                             "free": _is_free_model(n, "ollama", prov.base_url)})
-        return {"status": "ok", "ok": True, "models": enriched,
-                "provider": provider_id, "latency_ms": probe["latency_ms"]}
+            enriched.append(
+                {
+                    "name": n,
+                    "vision": caps.get("vision", False),
+                    "instruct": caps.get("instruct", True),
+                    "free": _is_free_model(n, "ollama", prov.base_url),
+                }
+            )
+        return {
+            "status": "ok",
+            "ok": True,
+            "models": enriched,
+            "provider": provider_id,
+            "latency_ms": probe["latency_ms"],
+        }
     from providers import _is_free_model
-    return {"status": "ok", "ok": True,
-            "models": [{"name": n, "vision": False, "instruct": True,
-                        "free": _is_free_model(n, "openai", prov.base_url)}
-                       for n in names],
-            "provider": provider_id, "latency_ms": probe["latency_ms"]}
+
+    return {
+        "status": "ok",
+        "ok": True,
+        "models": [
+            {
+                "name": n,
+                "vision": False,
+                "instruct": True,
+                "free": _is_free_model(n, "openai", prov.base_url),
+            }
+            for n in names
+        ],
+        "provider": provider_id,
+        "latency_ms": probe["latency_ms"],
+    }
 
 
 @router.post("/llm/test_model")
-async def test_model_endpoint(payload: dict,
-                              svc: Annotated[Services, Depends(get_services)]):
+async def test_model_endpoint(
+    payload: dict, svc: Annotated[Services, Depends(get_services)]
+):
     """Test whether a specific model actually responds on an endpoint.
 
     Separate from the provider test: the endpoint can work while a specific
@@ -717,52 +826,88 @@ async def test_model_endpoint(payload: dict,
         try:
             if prov.type == "openai":
                 from llm_client import OpenAICompatibleClient, _test_image_base64
-                client = OpenAICompatibleClient(base_url=prov.base_url,
-                                                api_key=prov.api_key, llm_model=model)
+
+                client = OpenAICompatibleClient(
+                    base_url=prov.base_url, api_key=prov.api_key, llm_model=model
+                )
                 content: list | str = "Say ok."
                 if want_vision:
                     content = [
-                        {"type": "text", "text": "What color is this square? one word."},
-                        {"type": "image_url", "image_url": {
-                            "url": f"data:image/png;base64,{_test_image_base64()}"}},
+                        {
+                            "type": "text",
+                            "text": "What color is this square? one word.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{_test_image_base64()}"
+                            },
+                        },
                     ]
-                result = client.chat([{"role": "user", "content": content}],
-                                     stream=False, temperature=0.0)
+                result = client.chat(
+                    [{"role": "user", "content": content}],
+                    stream=False,
+                    temperature=0.0,
+                )
                 text = (result.get("response") or "").strip()
                 if want_vision:
                     ok = "red" in text.lower()
-                    return {"ok": ok, "response": text,
-                            "error": None if ok else
-                            "model did not identify the color (not vision-capable?)"}
-                return {"ok": bool(text), "response": text,
-                        "error": None if text else "empty response"}
+                    return {
+                        "ok": ok,
+                        "response": text,
+                        "error": None
+                        if ok
+                        else "model did not identify the color (not vision-capable?)",
+                    }
+                return {
+                    "ok": bool(text),
+                    "response": text,
+                    "error": None if text else "empty response",
+                }
             # Ollama native
             import requests as _rq
-            body = {"model": model,
-                    "messages": [{"role": "user", "content": "Say ok."}],
-                    "stream": False, "options": {"temperature": 0}}
+
+            body = {
+                "model": model,
+                "messages": [{"role": "user", "content": "Say ok."}],
+                "stream": False,
+                "options": {"temperature": 0},
+            }
             if want_vision:
                 from llm_client import _test_image_base64
+
                 body["messages"][0]["images"] = [_test_image_base64()]
                 body["messages"][0]["content"] = "What color is this square? one word."
-            r = _rq.post(f"{prov.base_url.rstrip('/')}/api/chat", json=body,
-                         timeout=60)
+            r = _rq.post(f"{prov.base_url.rstrip('/')}/api/chat", json=body, timeout=60)
             if r.status_code == 404:
-                return {"ok": False, "response": "",
-                        "error": f"model {model!r} not found on this daemon"}
+                return {
+                    "ok": False,
+                    "response": "",
+                    "error": f"model {model!r} not found on this daemon",
+                }
             r.raise_for_status()
             content = (r.json().get("message", {}) or {}).get("content", "").strip()
             if want_vision:
                 ok = "red" in content.lower()
-                return {"ok": ok, "response": content,
-                        "error": None if ok else
-                        "model did not identify the color (not vision-capable?)"}
-            return {"ok": bool(content), "response": content,
-                    "error": None if content else "empty response"}
+                return {
+                    "ok": ok,
+                    "response": content,
+                    "error": None
+                    if ok
+                    else "model did not identify the color (not vision-capable?)",
+                }
+            return {
+                "ok": bool(content),
+                "response": content,
+                "error": None if content else "empty response",
+            }
         except Exception as e:  # noqa: BLE001
-            return {"ok": False, "response": "",
-                    "error": f"{type(e).__name__}: {e}"}
+            return {"ok": False, "response": "", "error": f"{type(e).__name__}: {e}"}
 
     result = await asyncio.get_event_loop().run_in_executor(None, _probe)
-    return {"status": "ok" if result["ok"] else "error", **result,
-            "provider": prov.id, "model": model}
+    return {
+        "status": "ok" if result["ok"] else "error",
+        **result,
+        "provider": prov.id,
+        "model": model,
+    }

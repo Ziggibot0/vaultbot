@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Break a self-modification goal into a minimal ordered procedure step list. Given a goal like 'add a retry to the chat handler', reads the relevant code, identifies the exact functions to change, and returns a numbered list of surgical edits. Does NOT write code — just plans the edits so the big model can execute them one at a time.

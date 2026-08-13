@@ -11,6 +11,7 @@ Documentation grounding:
 - Anatomy of a test (arrange / act / assert):
   https://docs.pytest.org/en/stable/explanation/anatomy.html
 """
+
 from pathlib import Path
 
 import custom_tools.textbook_ingest as tbi
@@ -52,10 +53,10 @@ def _write_toc(tmp_path: Path, key: str, slugs_headings):
     toc_path = tmp_path / "physics-toc.md"
     lines = [
         "# Physics Textbook",
-                "",
-                _source_key_line(key),
-                "",
-            ]
+        "",
+        _source_key_line(key),
+        "",
+    ]
     for slug, heading in slugs_headings:
         lines.append("[[%s|%s]]" % (slug, heading))
     toc_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

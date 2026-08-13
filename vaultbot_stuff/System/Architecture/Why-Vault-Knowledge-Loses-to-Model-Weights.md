@@ -1,6 +1,7 @@
 ---
 type: diagnostic
 status: complete
+baseline: true
 created: 2026-07-31
 summary: "Root-cause diagnosis of why VaultBot's thinking is decoupled from the vault — 7 structural problems in the RAG pipeline that let model weights override vault knowledge, with concrete fixes for each."
 tags: [architecture, diagnostic, rag, grounding, retrieval, enforcement, critical]

@@ -48,8 +48,9 @@ class VaultWriteForbidden(Exception):
 # The LOCKED pragma. Matched on its own line, case-insensitive, allowing a
 # leading # or <!-- comment marker so it can sit naturally in markdown.
 # Examples that trigger: "LOCKED", "# LOCKED", "<!-- LOCKED -->".
-_LOCKED_RE = re.compile(r"^\s*(?:<!--\s*)?(?:#\s*)?LOCKED(?:\s*-->)?\s*$",
-                        re.IGNORECASE | re.MULTILINE)
+_LOCKED_RE = re.compile(
+    r"^\s*(?:<!--\s*)?(?:#\s*)?LOCKED(?:\s*-->)?\s*$", re.IGNORECASE | re.MULTILINE
+)
 
 # A date-only stem. Matches common date formats as the ENTIRE filename
 # (excluding extension), with optional leading zeros:
@@ -58,8 +59,8 @@ _LOCKED_RE = re.compile(r"^\s*(?:<!--\s*)?(?:#\s*)?LOCKED(?:\s*-->)?\s*$",
 #   like a journal year file? No — a bare year is too broad (could be a
 #   topic). Require at least month + day granularity.
 _DATE_STEM_RE = re.compile(
-    r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}$"   # M-D-Y or Y-M-D or Y-M-D with seps
-    , re.IGNORECASE,
+    r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}$",  # M-D-Y or Y-M-D or Y-M-D with seps
+    re.IGNORECASE,
 )
 
 
@@ -128,12 +129,16 @@ def assert_writable(path: Path) -> None:
     p = Path(path)
     if is_date_only_stem(p.stem):
         raise VaultWriteForbidden(
-            p, "date-only notes are the user's sacred journal space; "
-               "the LLM may not create or edit them.")
+            p,
+            "date-only notes are the user's sacred journal space; "
+            "the LLM may not create or edit them.",
+        )
     if p.exists() and is_locked(p):
         raise VaultWriteForbidden(
-            p, "this note is LOCKED (read-only to the LLM). "
-               "The user must remove the LOCKED marker to allow edits.")
+            p,
+            "this note is LOCKED (read-only to the LLM). "
+            "The user must remove the LOCKED marker to allow edits.",
+        )
 
 
 def writable_check(path: Path) -> str | None:

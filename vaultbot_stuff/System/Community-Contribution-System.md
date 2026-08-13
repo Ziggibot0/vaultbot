@@ -9,6 +9,7 @@ tags:
   - contributions
 created: 2025-01-20
 status: raw
+baseline: true
 summary: "VaultBot creates cross-fork PRs to verify user-generated AI tokens before merging them into the main branch, preventing unauthorized token contributions without approval review."
 ---
 
@@ -148,6 +149,42 @@ If any check fails:
 5. **No direct push to main** — all contributions go through PR review
 6. **Token scope** — contributors only need `repo` scope (for forking
    and pushing to their fork)
+
+## Baseline Membrane
+
+VaultBot is a single repo that is both the public baseline AND each user's
+personal vault. The `.gitignore` keeps personal data out of git, but
+procedures and System notes (`vaultbot_stuff/System/`) are a gray zone:
+some are general-purpose, some are bespoke to one user's vault.
+
+The **baseline membrane** solves this with a single frontmatter field:
+
+```yaml
+baseline: true   # ← this procedure ships to everyone
+```
+
+**How it works:**
+
+1. **Pre-commit hook** — blocks commits of `System/` `.md` files that
+   lack `baseline: true`. Runs locally on every commit.
+2. **`submit_contribution` tool** — filters changed files to baseline-only
+   before staging. Non-baseline files are excluded with a warning.
+3. **`review_contributions` tool** — flags new `System/` files without
+   the marker as a high-severity issue during PR review.
+
+**What this means for contributors:**
+
+- Your personal procedures (no `baseline: true`) never appear in PRs.
+- Backend `.py` code always ships — no marker needed.
+- To share a procedure, add `baseline: true` to its frontmatter.
+- The membrane is automatic — you don't need to think about it unless
+  you're intentionally sharing a procedure.
+
+**What this means for the maintainer:**
+
+- Every PR is clean by construction — no personal content leaks through.
+- The review tool catches missing markers as a safety net.
+- The baseline grows organically from the community's best procedures.
 
 ## Tools to Build
 

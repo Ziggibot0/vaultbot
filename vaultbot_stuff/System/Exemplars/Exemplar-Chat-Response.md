@@ -9,6 +9,7 @@ tags:
   - communication
   - how-to
 status: raw
+baseline: true
 ---
 
 <!-- EXEMPLAR ANNOTATION: CHAT RESPONSE

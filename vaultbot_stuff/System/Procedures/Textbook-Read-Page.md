@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Read one page of an ingested textbook PDF and get its content as text. The page is rendered to an image and read by a vision model so equations, figures, and tables come through exactly as printed.

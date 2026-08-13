@@ -1,6 +1,7 @@
 ---
 type: playbook
 status: active
+baseline: true
 created: 2026-07-29
 summary: "Obsidian plugin development playbook for VaultBot: plugin structure, lifecycle, settings, views, commands, backend communication, WebSocket patterns, and GUI components. Sourced from the actual VaultBot plugin code (main.js, 2508 lines)."
 tags: [obsidian, plugin, gui, playbook, reference, javascript]

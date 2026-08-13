@@ -10,6 +10,7 @@ These tests use a mock OllamaClient that returns canned /api/show responses
 so they don't depend on Ollama being running.
 Run: pytest tests/test_model_capabilities.py -v
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -20,10 +21,12 @@ import pytest
 class TestGetModelCapabilities:
     """get_model_capabilities on OllamaClient with mocked /api/show."""
 
-    def _make_client(self, show_response: dict | None = None,
-                     show_error: Exception | None = None):
+    def _make_client(
+        self, show_response: dict | None = None, show_error: Exception | None = None
+    ):
         """Build an OllamaClient with a mocked _session.post."""
         from ollama_client import OllamaClient
+
         client = OllamaClient()
         # Mock the requests.Session.post so /api/show returns canned data.
         mock_resp = MagicMock()
@@ -95,6 +98,7 @@ class TestGetModelCapabilities:
     def test_empty_model_returns_defaults(self):
         """Empty string model → safe defaults without calling Ollama."""
         from ollama_client import OllamaClient
+
         client = OllamaClient()
         client._session = MagicMock()  # ensure no real HTTP call
         caps = client.get_model_capabilities("")

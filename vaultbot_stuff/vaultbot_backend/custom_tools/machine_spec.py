@@ -2,7 +2,20 @@
 Agent-authored tool: machine_spec
 """
 
-SCHEMA = {"name": "machine_spec", "description": "Report machine specs relevant to local LLM inference: CPU, RAM, GPU/iGPU status, Ollama config, loaded models, and environment variables.", "parameters": {"properties": {"ollama_host": {"description": "Ollama server host (default: http://localhost:11434)", "type": "string"}}, "required": [], "type": "object"}}
+SCHEMA = {
+    "name": "machine_spec",
+    "description": "Report machine specs relevant to local LLM inference: CPU, RAM, GPU/iGPU status, Ollama config, loaded models, and environment variables.",
+    "parameters": {
+        "properties": {
+            "ollama_host": {
+                "description": "Ollama server host (default: http://localhost:11434)",
+                "type": "string",
+            }
+        },
+        "required": [],
+        "type": "object",
+    },
+}
 
 import os
 import re
@@ -105,7 +118,11 @@ def get_ram_info() -> dict:
             pages_free = 0
             page_size = 16384
             for line in out.splitlines():
-                if "Pages free" in line or "Pages inactive" in line or "Pages speculative" in line:
+                if (
+                    "Pages free" in line
+                    or "Pages inactive" in line
+                    or "Pages speculative" in line
+                ):
                     pages_free += _safe_int(re.search(r"(\d+)", line).group(1))
             info["available_gb"] = _bytes_to_gb(pages_free * page_size)
     return info
@@ -118,7 +135,11 @@ def get_gpu_info() -> dict:
         rc, out, _ = _run(["lspci", "-nnk"])
         if rc == 0:
             for line in out.splitlines():
-                if "VGA" in line or "3D controller" in line or "Display controller" in line:
+                if (
+                    "VGA" in line
+                    or "3D controller" in line
+                    or "Display controller" in line
+                ):
                     gpus.append({"pci_line": line.strip()})
         # ROCm / AMD GPU info
         rc, out, _ = _run(["rocminfo"])
@@ -183,7 +204,9 @@ def get_env_info() -> dict:
 
 
 def run(args: dict) -> dict:
-    host = args.get("ollama_host", os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
+    host = args.get(
+        "ollama_host", os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    )
     return {
         "os": get_os_info(),
         "cpu": get_cpu_info(),
@@ -192,4 +215,3 @@ def run(args: dict) -> dict:
         "ollama": get_ollama_info(host),
         "ollama_env": get_env_info(),
     }
-

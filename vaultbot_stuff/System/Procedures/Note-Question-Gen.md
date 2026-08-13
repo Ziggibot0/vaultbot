@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Generate questions a vault note should be able to answer but currently can't. Reads a note, has the small model generate questions about the topic, then checks if the note answers each. Returns unanswered questions as gap-filling prompts. Use when expanding a thin note or finding what's missing.

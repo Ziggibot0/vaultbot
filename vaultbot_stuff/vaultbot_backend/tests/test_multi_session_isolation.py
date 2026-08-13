@@ -7,12 +7,12 @@ sessions isolated — one tab's state never leaks into another.
 Offline: no FAISS, no Ollama, no network, no main import.
 Uses tmp_path for state files.
 """
+
 from __future__ import annotations
 
 import json
 import time
 from unittest.mock import patch
-
 
 
 # ---------------------------------------------------------------------------
@@ -58,8 +58,10 @@ def test_clear_only_affects_specified_session(tmp_path):
     # up the real conversation_state.json from the backend dir.
     sessions_dir = tmp_path / "session_state"
     fake_default = str(tmp_path / "conversation_state.json")
-    with patch("conversation_state._SESSIONS_DIR", sessions_dir), \
-         patch("conversation_state._DEFAULT_PATH", fake_default):
+    with (
+        patch("conversation_state._SESSIONS_DIR", sessions_dir),
+        patch("conversation_state._DEFAULT_PATH", fake_default),
+    ):
         save_history([{"role": "user", "content": "A"}], session_id=sid_a)
         save_history([{"role": "user", "content": "B"}], session_id=sid_b)
         clear_history(session_id=sid_a)
@@ -81,8 +83,10 @@ def test_legacy_migration_first_tab_wins(tmp_path):
     legacy_path.write_text(json.dumps(legacy_data), encoding="utf-8")
 
     sessions_dir = tmp_path / "session_state"
-    with patch("conversation_state._DEFAULT_PATH", str(legacy_path)), \
-         patch("conversation_state._SESSIONS_DIR", sessions_dir):
+    with (
+        patch("conversation_state._DEFAULT_PATH", str(legacy_path)),
+        patch("conversation_state._SESSIONS_DIR", sessions_dir),
+    ):
         # First session: should inherit the legacy file.
         loaded_a = load_history(session_id=sid_a)
         assert loaded_a == legacy_data

@@ -9,11 +9,11 @@ returned empty text, making the entire feature dead.
 These tests stub the LLM client and verify the condenser extracts the text
 correctly from the real response shape.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
 
 
 class _StubClient:
@@ -65,17 +65,16 @@ def test_condense_extracts_response_key_from_chat(tmp_path):
 
     # The import is deferred (inside _llm_condense), so patch llm_client.
     with patch("llm_client.get_small_client_or_big", return_value=stub):
-        condenser = LazyCondenser(
-            vault_path=str(tmp_path), ollama_client=MagicMock())
+        condenser = LazyCondenser(vault_path=str(tmp_path), ollama_client=MagicMock())
         result = condenser.condense_note(str(note_path))
 
     # The condensed text must be extracted correctly — not empty.
-    assert result["condensed"] is True, \
-        f"condense should succeed, got: {result}"
+    assert result["condensed"] is True, f"condense should succeed, got: {result}"
     # The note should now contain the condensed text, not the original long body.
     new_text = note_path.read_text(encoding="utf-8")
-    assert "condensed version" in new_text, \
+    assert "condensed version" in new_text, (
         "the LLM's response text should be written to the note"
+    )
 
 
 def test_condense_returns_empty_on_empty_response(tmp_path):
@@ -87,11 +86,11 @@ def test_condense_returns_empty_on_empty_response(tmp_path):
     stub = _StubClient("")  # empty response
 
     with patch("llm_client.get_small_client_or_big", return_value=stub):
-        condenser = LazyCondenser(
-            vault_path=str(tmp_path), ollama_client=MagicMock())
+        condenser = LazyCondenser(vault_path=str(tmp_path), ollama_client=MagicMock())
         result = condenser.condense_note(str(note_path))
 
     # Must not crash — empty response handled gracefully.
     assert result is not None
-    assert result["error"] is None or result["condensed"] is False, \
+    assert result["error"] is None or result["condensed"] is False, (
         f"empty response should not crash, got: {result}"
+    )

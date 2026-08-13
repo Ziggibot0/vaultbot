@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-10
 summary: "Parent reasoning procedure: extracts premises, validates them against the vault (BS detector), classifies the problem, picks lenses, dispatches them, and synthesizes results. v3: fully v2 code-step format with bite-sized LLM calls designed for 0.8B models. Procedure terminology never appears in LLM prompts."

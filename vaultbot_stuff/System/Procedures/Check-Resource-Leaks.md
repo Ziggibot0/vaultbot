@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-05
 description: "Scan a Python file for resource-leak anti-patterns: open() calls without with-blocks, socket/database connections not closed, missing finally cleanup. Returns structured findings with line numbers and suggested fixes."

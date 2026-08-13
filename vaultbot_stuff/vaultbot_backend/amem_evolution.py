@@ -57,10 +57,14 @@ class AMemeEvolution:
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
-    def evolve_on_create(self, note_path: str, note_content: str,
-                         heuristic_only: bool = False,
-                         query_embedding: list | None = None,
-                         skip_refresh: bool = False) -> dict:
+    def evolve_on_create(
+        self,
+        note_path: str,
+        note_content: str,
+        heuristic_only: bool = False,
+        query_embedding: list | None = None,
+        skip_refresh: bool = False,
+    ) -> dict:
         """
         Main entry point. Called after a new note is created.
 
@@ -108,13 +112,15 @@ class AMemeEvolution:
             if query_embedding is not None:
                 try:
                     hits = self.vault_indexer.search_by_vector(
-                        np.asarray(query_embedding, dtype=np.float32),
-                        k=self.DEFAULT_K)
+                        np.asarray(query_embedding, dtype=np.float32), k=self.DEFAULT_K
+                    )
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_error("indexer_search_failed", e)
                     hits = []
             else:
-                query = (title + " " + note_content[: self.CONTENT_PREVIEW_CHARS]).strip()
+                query = (
+                    title + " " + note_content[: self.CONTENT_PREVIEW_CHARS]
+                ).strip()
                 try:
                     hits = self.vault_indexer.search(query, k=self.DEFAULT_K)
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -156,8 +162,9 @@ class AMemeEvolution:
                     self._log_error("read_neighbor_failed", e, {"path": npath})
                     continue
 
-                ev = self._evolve_neighbor(npath, ncontent, title, note_content,
-                                            heuristic_only=heuristic_only)
+                ev = self._evolve_neighbor(
+                    npath, ncontent, title, note_content, heuristic_only=heuristic_only
+                )
                 if ev.get("changed"):
                     result["evolved_count"] += 1
                 result["links_added"] += ev.get("links_added", 0)
@@ -215,8 +222,7 @@ class AMemeEvolution:
             # research path). The LLM only runs when the heuristic misses,
             # i.e. the relation is semantic but not lexical.
             heuristic_match = (
-                bool(new_note_title)
-                and new_note_title.lower() in content.lower()
+                bool(new_note_title) and new_note_title.lower() in content.lower()
             )
             if heuristic_match:
                 suggested_tags = [new_note_title]
@@ -226,7 +232,8 @@ class AMemeEvolution:
                 # similarity sentence fragments. Zero generative LLM calls.
                 try:
                     suggested_tags = self._embedding_suggest_tags(
-                        new_note_title, new_note_content, content)
+                        new_note_title, new_note_content, content
+                    )
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     self._log_error("embedding_suggest_tags_failed", e)
                     suggested_tags = []
@@ -306,28 +313,50 @@ class AMemeEvolution:
         try:
             import numpy as _np
             import re as _re
+
             # Embed the new note: title + first 500 chars.
             new_text = (new_title + " " + new_content[:500]).strip()
             new_emb = self.vault_indexer._get_embedding(new_text)
             if new_emb is None:
                 return []
-            neighbor_emb = self.vault_indexer._get_embedding(
-                neighbor_content[:4000])
+            neighbor_emb = self.vault_indexer._get_embedding(neighbor_content[:4000])
             if neighbor_emb is None:
                 return []
             new_v = _np.asarray(new_emb, dtype=_np.float32)
             neigh_v = _np.asarray(neighbor_emb, dtype=_np.float32)
-            cos_sim = float(_np.dot(new_v, neigh_v) / (
-                _np.linalg.norm(new_v) * _np.linalg.norm(neigh_v) + 1e-8))
+            cos_sim = float(
+                _np.dot(new_v, neigh_v)
+                / (_np.linalg.norm(new_v) * _np.linalg.norm(neigh_v) + 1e-8)
+            )
             if cos_sim < 0.3:
                 return []
             # Extract noun phrases from the neighbor (capitalized phrases).
             phrases = _re.findall(
                 r"\b([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+){0,2})\b",
-                neighbor_content)
-            stop = {"The", "This", "That", "These", "Those", "It", "They",
-                    "We", "You", "He", "She", "There", "Here", "Note", "Notes",
-                    "Section", "Chapter", "Figure", "Table", "Example"}
+                neighbor_content,
+            )
+            stop = {
+                "The",
+                "This",
+                "That",
+                "These",
+                "Those",
+                "It",
+                "They",
+                "We",
+                "You",
+                "He",
+                "She",
+                "There",
+                "Here",
+                "Note",
+                "Notes",
+                "Section",
+                "Chapter",
+                "Figure",
+                "Table",
+                "Example",
+            }
             candidates = [p for p in phrases if p not in stop and len(p) >= 3]
             seen: set[str] = set()
             tags: list[str] = []
@@ -372,6 +401,7 @@ class AMemeEvolution:
         messages = [{"role": "user", "content": prompt}]
         # Use the small model for tag suggestion (simple structured task).
         from llm_client import get_small_client_or_big
+
         _tag_client = get_small_client_or_big()
         resp = _tag_client.chat(messages, temperature=0.3, stream=False)
         text = ""
@@ -462,7 +492,7 @@ class AMemeEvolution:
         if idx == -1:
             # maybe content is just "---\n... with closing at very end w/o newline
             if rest.rstrip().endswith("---"):
-                return rest[: -3].rstrip()
+                return rest[:-3].rstrip()
             return None
         return rest[:idx]
 
@@ -549,7 +579,9 @@ class AMemeEvolution:
         i = 0
         while i < len(lines):
             line = lines[i]
-            if re.match(r"^tags\s*:\s*\[.*\]\s*$", line) or re.match(r"^tags\s*:\s+\S+", line):
+            if re.match(r"^tags\s*:\s*\[.*\]\s*$", line) or re.match(
+                r"^tags\s*:\s+\S+", line
+            ):
                 # inline/scalar tags — drop it, we'll re-add
                 i += 1
                 continue
@@ -593,7 +625,9 @@ class AMemeEvolution:
         # We must avoid replacing occurrences that sit inside an existing [[...]].
         # Strategy: split content into wikilink spans and non-wikilink spans,
         # only operate on non-wikilink spans.
-        return self._replace_outside_wikilinks(content, pat, f"[[{target}]]", max_count=1)
+        return self._replace_outside_wikilinks(
+            content, pat, f"[[{target}]]", max_count=1
+        )
 
     @staticmethod
     def _replace_outside_wikilinks(
@@ -609,7 +643,9 @@ class AMemeEvolution:
             if open_idx == -1:
                 segment = content[i:]
                 if count < max_count:
-                    new_seg, n = pattern.subn(replacement, segment, count=max_count - count)
+                    new_seg, n = pattern.subn(
+                        replacement, segment, count=max_count - count
+                    )
                     count += n
                     result_parts.append(new_seg)
                 else:
@@ -645,6 +681,7 @@ class AMemeEvolution:
         resolves in milliseconds, so we retry a few times before giving up.
         """
         import time as _time
+
         max_retries = 5
         retry_delay = 0.05  # 50ms — the watcher releases handles fast
         for attempt in range(max_retries):
@@ -672,7 +709,9 @@ class AMemeEvolution:
                 if attempt < max_retries - 1:
                     _time.sleep(retry_delay)
                     continue
-                self._log_error("atomic_write_failed", e, {"path": path, "retries": max_retries})
+                self._log_error(
+                    "atomic_write_failed", e, {"path": path, "retries": max_retries}
+                )
                 return False
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_error("atomic_write_failed", e, {"path": path})

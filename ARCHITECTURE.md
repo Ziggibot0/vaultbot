@@ -123,6 +123,49 @@ chat_handler.handle_chat()
 - Auto-migrates from legacy `.env` vars on first run
 - Persisted to `providers.json` (gitignored)
 
+## Repository Architecture: The Baseline Membrane
+
+VaultBot lives in a **single repo** that serves two roles: it's the public
+baseline anyone downloads, AND it's each user's personal vault that grows
+with them. The `.gitignore` keeps personal data out of git, and a
+`baseline` frontmatter field draws the line for the gray zone.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                 A User's Working Vault                     │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  COMMITTED (shipped to everyone)                   │   │
+│  │  • vaultbot_backend/*.py    (all backend code)     │   │
+│  │  • System/**/*.md           (baseline: true only)  │   │
+│  │  • .obsidian/plugins/       (plugin source)        │   │
+│  │  • baseline/                (directive templates)   │   │
+│  │  • Root docs                (README, LICENSE, etc) │   │
+│  └──────────────────────────────────────────────────┘   │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  LOCAL ONLY (gitignored or baseline: false)       │   │
+│  │  • Knowledge/, Memory/, User/    (personal notes) │   │
+│  │  • identity/, sessions/, .env   (personal data)   │   │
+│  │  • System/Procedures/My-Workflow.md  (bespoke)    │   │
+│  │  • System/Identity/Sean-*.md    (personal)        │   │
+│  └──────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────┘
+```
+
+**The membrane is enforced at three layers:**
+
+1. **Pre-commit hook** (`check_baseline_markers.py`) — blocks commits of
+   `System/` `.md` files that lack `baseline: true`.
+2. **`submit_contribution` tool** — filters changed files to baseline-only
+   before creating a PR.
+3. **`review_contributions` tool** — flags missing markers during PR review
+   as a safety net.
+
+Backend `.py` files are always baseline — no marker needed. The membrane
+only applies to `vaultbot_stuff/System/` `.md` files, which is where the
+ambiguity between "general-purpose" and "personal" lives.
+
 ## Directory Map
 
 ```

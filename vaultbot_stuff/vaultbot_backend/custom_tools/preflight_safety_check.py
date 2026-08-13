@@ -2,7 +2,15 @@
 Agent-authored tool: preflight_safety_check
 """
 
-SCHEMA = {"name": "preflight_safety_check", "description": "Pre-flight safety check before self-modifying operations. Verifies git clean state (for rollback safety), critical backend files exist, identity files intact, disk space adequate, custom tools still import cleanly, and vault directory is accessible. Returns PASS / WARN / BLOCK with full details. Run this before any code_write or tool_create operation to verify the system is healthy enough to safely edit.", "parameters": {"description": "No arguments needed. The tool auto-detects paths from its own file location.", "properties": {}, "type": "object"}}
+SCHEMA = {
+    "name": "preflight_safety_check",
+    "description": "Pre-flight safety check before self-modifying operations. Verifies git clean state (for rollback safety), critical backend files exist, identity files intact, disk space adequate, custom tools still import cleanly, and vault directory is accessible. Returns PASS / WARN / BLOCK with full details. Run this before any code_write or tool_create operation to verify the system is healthy enough to safely edit.",
+    "parameters": {
+        "description": "No arguments needed. The tool auto-detects paths from its own file location.",
+        "properties": {},
+        "type": "object",
+    },
+}
 
 import importlib.util
 import shutil
@@ -15,7 +23,12 @@ from pathlib import Path
 try:
     BACKEND_DIR = Path(__file__).resolve().parent.parent
 except NameError:
-    r = _subprocess_run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=10)
+    r = _subprocess_run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
     git_root = Path(r.stdout.strip()) if r.returncode == 0 else Path.cwd()
     BACKEND_DIR = git_root / "vaultbot_stuff" / "vaultbot_backend"
 
@@ -34,16 +47,22 @@ def run(args: dict) -> dict:
         "checks": {},
         "warnings": [],
         "blocks": [],
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
     backend_dir = BACKEND_DIR
 
     # --- 1. Git state check ---
     try:
+
         def git(*cmd):
-            r = _subprocess_run(["git"] + list(cmd), capture_output=True, text=True,
-                             cwd=str(backend_dir), timeout=10)
+            r = _subprocess_run(
+                ["git"] + list(cmd),
+                capture_output=True,
+                text=True,
+                cwd=str(backend_dir),
+                timeout=10,
+            )
             return r.stdout.strip(), r.stderr.strip(), r.returncode
 
         status_out, _, _ = git("status", "--porcelain")
@@ -55,12 +74,14 @@ def run(args: dict) -> dict:
             "clean_working_tree": len(uncommitted) == 0,
             "has_head_for_rollback": has_head,
             "uncommitted_files": uncommitted[:10],
-            "uncommitted_count": len(uncommitted)
+            "uncommitted_count": len(uncommitted),
         }
         results["checks"]["git"] = git_check
 
         if not has_head:
-            results["blocks"].append("No git HEAD — cannot roll back if self-edit fails")
+            results["blocks"].append(
+                "No git HEAD — cannot roll back if self-edit fails"
+            )
             results["status"] = "BLOCK"
         elif uncommitted:
             results["warnings"].append(
@@ -74,17 +95,24 @@ def run(args: dict) -> dict:
 
     # --- 2. Critical backend files ---
     critical_files = [
-        "main.py", "agent_tools.py", "self_improver.py",
-        "vault_indexer.py", "note_creator.py", "research_engine.py",
-        "identity.py", "fused_retrieval.py", "autonomous_researcher.py",
-        "session_logger.py", "knowledge_curriculum.py",
+        "main.py",
+        "agent_tools.py",
+        "self_improver.py",
+        "vault_indexer.py",
+        "note_creator.py",
+        "research_engine.py",
+        "identity.py",
+        "fused_retrieval.py",
+        "autonomous_researcher.py",
+        "session_logger.py",
+        "knowledge_curriculum.py",
     ]
     missing = [f for f in critical_files if not (backend_dir / f).exists()]
 
     results["checks"]["critical_files"] = {
         "checked_count": len(critical_files),
         "missing": missing,
-        "all_present": len(missing) == 0
+        "all_present": len(missing) == 0,
     }
     if missing:
         results["blocks"].append(f"Critical files missing: {missing}")
@@ -98,7 +126,7 @@ def run(args: dict) -> dict:
     results["checks"]["identity"] = {
         "dir_exists": identity_dir.exists(),
         "missing": identity_missing,
-        "all_present": len(identity_missing) == 0
+        "all_present": len(identity_missing) == 0,
     }
     if identity_missing:
         results["blocks"].append(f"Identity files missing: {identity_missing}")
@@ -112,7 +140,7 @@ def run(args: dict) -> dict:
             "total_gb": round(usage.total / (1024**3), 1),
             "used_gb": round(usage.used / (1024**3), 1),
             "free_gb": round(usage.free / (1024**3), 1),
-            "used_pct": round(disk_pct, 1)
+            "used_pct": round(disk_pct, 1),
         }
         if disk_pct > 95:
             results["blocks"].append(f"Disk nearly full: {disk_pct:.1f}%")
@@ -129,8 +157,11 @@ def run(args: dict) -> dict:
     tool_files = []
     broken_tools = []
     if custom_dir.exists():
-        tool_files = [f for f in custom_dir.glob("*.py")
-                     if f.name != "__init__.py" and f.name != "preflight_safety_check.py"]
+        tool_files = [
+            f
+            for f in custom_dir.glob("*.py")
+            if f.name != "__init__.py" and f.name != "preflight_safety_check.py"
+        ]
 
     for tf in tool_files:
         try:
@@ -147,7 +178,7 @@ def run(args: dict) -> dict:
     results["checks"]["custom_tools"] = {
         "total": len(tool_files),
         "broken": broken_tools,
-        "all_healthy": len(broken_tools) == 0
+        "all_healthy": len(broken_tools) == 0,
     }
     if broken_tools:
         results["warnings"].append(
@@ -159,18 +190,33 @@ def run(args: dict) -> dict:
     # --- 6. Vault notes directory ---
     # Check for the current vault folder structure (post-reorganization)
     # The vault uses function-based top-level folders: Knowledge/, Memory/, System/, User/
-    vault_dir = backend_dir.parent.parent  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
-    expected_folders = ["vaultbot_stuff/Knowledge", "vaultbot_stuff/Memory", "vaultbot_stuff/System", "User"]
+    vault_dir = (
+        backend_dir.parent.parent
+    )  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
+    expected_folders = [
+        "vaultbot_stuff/Knowledge",
+        "vaultbot_stuff/Memory",
+        "vaultbot_stuff/System",
+        "User",
+    ]
     found_folders = [f for f in expected_folders if (vault_dir / f).exists()]
-    note_count = sum(1 for f in vault_dir.rglob("*.md")
-                     if "vaultbot_backend" not in str(f) and ".venv" not in str(f) and "vaultbot_venv" not in str(f) and "vaultbot_stuff/vaultbot_backend" not in str(f))
+    note_count = sum(
+        1
+        for f in vault_dir.rglob("*.md")
+        if "vaultbot_backend" not in str(f)
+        and ".venv" not in str(f)
+        and "vaultbot_venv" not in str(f)
+        and "vaultbot_stuff/vaultbot_backend" not in str(f)
+    )
     results["checks"]["vault"] = {
         "exists": len(found_folders) >= 2,
         "found_folders": found_folders,
-        "note_count": note_count
+        "note_count": note_count,
     }
     if len(found_folders) < 2:
-        results["blocks"].append("Vault notes directory not found (expected folders like Knowledge/, Memory/, System/, User/)")
+        results["blocks"].append(
+            "Vault notes directory not found (expected folders like Knowledge/, Memory/, System/, User/)"
+        )
         results["status"] = "BLOCK"
 
     # --- Final status ---

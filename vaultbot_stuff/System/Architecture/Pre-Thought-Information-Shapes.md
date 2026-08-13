@@ -8,6 +8,7 @@ tags:
   - framework
 type: architecture
 status: raw
+baseline: true
 ---
 
 # Pre-Thought: Information Shapes That Think

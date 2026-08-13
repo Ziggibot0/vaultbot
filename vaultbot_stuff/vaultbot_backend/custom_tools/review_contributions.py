@@ -2,17 +2,34 @@
 Agent-authored tool: review_contributions
 """
 
-SCHEMA = {"name": "review_contributions", "description": "List and review open pull requests on the VaultBot GitHub repo. For each PR, fetches the diff, runs a safety scan (checks for secrets, dangerous code patterns, path traversal, .gitignore tampering), and returns a structured report. Requires GITHUB_TOKEN in .env.", "parameters": {"properties": {"merge": {"description": "If true and the PR passes all safety checks, merge it after reviewing. Default: false (review only).", "type": "boolean"}, "pr_number": {"description": "Optional: review a specific PR by number. If omitted, reviews all open PRs.", "type": "integer"}}, "type": "object"}}
+SCHEMA = {
+    "name": "review_contributions",
+    "description": "List and review open pull requests on the VaultBot GitHub repo. For each PR, fetches the diff, runs a safety scan (checks for secrets, dangerous code patterns, path traversal, .gitignore tampering), and returns a structured report. Requires GITHUB_TOKEN in .env.",
+    "parameters": {
+        "properties": {
+            "merge": {
+                "description": "If true and the PR passes all safety checks, merge it after reviewing. Default: false (review only).",
+                "type": "boolean",
+            },
+            "pr_number": {
+                "description": "Optional: review a specific PR by number. If omitted, reviews all open PRs.",
+                "type": "integer",
+            },
+        },
+        "type": "object",
+    },
+}
+
 
 def run(args: dict) -> dict:
     """List and review open PRs on the VaultBot repo.
-    
+
     For each PR:
     1. Fetch metadata (title, author, branch, changed files)
     2. Fetch the file diff
     3. Run safety scan on each changed file
     4. Return a structured report
-    
+
     If merge=True and all checks pass, merges the PR.
     """
     import os
@@ -24,7 +41,7 @@ def run(args: dict) -> dict:
     if not token:
         return {
             "error": "GITHUB_TOKEN not found in environment.",
-            "hint": "Add GITHUB_TOKEN=ghp_your_token to .env"
+            "hint": "Add GITHUB_TOKEN=ghp_your_token to .env",
         }
 
     headers = {
@@ -39,12 +56,20 @@ def run(args: dict) -> dict:
     # Try to get it from git remote (in case it changes)
     try:
         import subprocess
+
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         vault_root = os.path.dirname(os.path.dirname(backend_dir))
-        r = subprocess.run(["git", "remote", "get-url", "origin"],
-                          capture_output=True, text=True, cwd=vault_root, timeout=10)
+        r = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            cwd=vault_root,
+            timeout=10,
+        )
         if r.returncode == 0:
-            match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", r.stdout.strip())
+            match = re.search(
+                r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", r.stdout.strip()
+            )
             if match:
                 upstream_owner, upstream_repo = match.group(1), match.group(2)
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -59,7 +84,9 @@ def run(args: dict) -> dict:
         try:
             resp = requests.get(
                 f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}",
-                headers=headers, timeout=15)
+                headers=headers,
+                timeout=15,
+            )
             if resp.status_code != 200:
                 return {"error": f"PR #{pr_number} not found: {resp.status_code}"}
             prs = [resp.json()]
@@ -70,7 +97,9 @@ def run(args: dict) -> dict:
         try:
             resp = requests.get(
                 f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls?state=open&per_page=30",
-                headers=headers, timeout=15)
+                headers=headers,
+                timeout=15,
+            )
             if resp.status_code != 200:
                 return {"error": f"Could not list PRs: {resp.status_code}"}
             prs = resp.json()
@@ -78,11 +107,7 @@ def run(args: dict) -> dict:
             return {"error": f"Failed to list PRs: {e}"}
 
     if not prs:
-        return {
-            "status": "success",
-            "open_prs": 0,
-            "message": "No open PRs to review."
-        }
+        return {"status": "success", "open_prs": 0, "message": "No open PRs to review."}
 
     # 4. Safety scan definitions
     DANGER_PATTERNS = [
@@ -120,10 +145,21 @@ def run(args: dict) -> dict:
     ]
 
     SENSITIVE_FILES = [
-        ".env", "data.json", "mcp.json", "workspace.json",
-        ".venv/", "sessions/", "identity/", "vaultbot_index/", "trash/",
-        "checkpoints/", "vaultbot_venv/", "Memory/", "Knowledge/",
-        "learningMaterial/", "User/",
+        ".env",
+        "data.json",
+        "mcp.json",
+        "workspace.json",
+        ".venv/",
+        "sessions/",
+        "identity/",
+        "vaultbot_index/",
+        "trash/",
+        "checkpoints/",
+        "vaultbot_venv/",
+        "Memory/",
+        "Knowledge/",
+        "learningMaterial/",
+        "User/",
     ]
 
     def scan_file(file_info):
@@ -134,37 +170,45 @@ def run(args: dict) -> dict:
         file_info.get("status", "")
 
         # Check: file in allowed paths?
-        path_allowed = any(filename.startswith(p) or filename == p.rstrip("/") for p in ALLOWED_PATHS)
+        path_allowed = any(
+            filename.startswith(p) or filename == p.rstrip("/") for p in ALLOWED_PATHS
+        )
         if not path_allowed:
-            issues.append({
-                "severity": "high",
-                "check": "path_whitelist",
-                "message": f"File '{filename}' is outside allowed contribution paths"
-            })
+            issues.append(
+                {
+                    "severity": "high",
+                    "check": "path_whitelist",
+                    "message": f"File '{filename}' is outside allowed contribution paths",
+                }
+            )
 
         # Check: sensitive file?
         for sf in SENSITIVE_FILES:
             if sf in filename:
-                issues.append({
-                    "severity": "critical",
-                    "check": "sensitive_file",
-                    "message": f"File '{filename}' matches sensitive pattern '{sf}'"
-                })
+                issues.append(
+                    {
+                        "severity": "critical",
+                        "check": "sensitive_file",
+                        "message": f"File '{filename}' matches sensitive pattern '{sf}'",
+                    }
+                )
 
         # Check: .gitignore modifications that un-ignore sensitive paths
         if filename == ".gitignore" and patch:
-            for line in patch.split('\n'):
+            for line in patch.split("\n"):
                 # Lines starting with - in the patch are removals
-                if line.startswith('-') and not line.startswith('---'):
+                if line.startswith("-") and not line.startswith("---"):
                     removed = line[1:].strip()
                     # Check if a sensitive path is being un-ignored
                     for sf in SENSITIVE_FILES:
                         if sf in removed:
-                            issues.append({
-                                "severity": "critical",
-                                "check": "gitignore_tampering",
-                                "message": f".gitignore removes ignore rule for '{removed}' (matches '{sf}')"
-                            })
+                            issues.append(
+                                {
+                                    "severity": "critical",
+                                    "check": "gitignore_tampering",
+                                    "message": f".gitignore removes ignore rule for '{removed}' (matches '{sf}')",
+                                }
+                            )
 
         # Check: danger patterns in patch (skip markdown — docs mentioning patterns are not dangerous)
         if patch and not filename.endswith(".md"):
@@ -173,30 +217,104 @@ def run(args: dict) -> dict:
                 if matches:
                     # Filter out false positives in comments and pattern definitions
                     real_matches = []
-                    for line in patch.split('\n'):
-                        if line.startswith('+') and not line.startswith('+++'):
+                    for line in patch.split("\n"):
+                        if line.startswith("+") and not line.startswith("+++"):
                             code = line[1:]
-                            if not code.strip().startswith('#') and not code.strip().startswith('//'):
+                            if not code.strip().startswith(
+                                "#"
+                            ) and not code.strip().startswith("//"):
                                 # Skip lines that are regex pattern definitions (defining detection patterns)
-                                if 'r"' in code and ('\\' in code or '\\s' in code or '\\.' in code):
+                                if 'r"' in code and (
+                                    "\\" in code or "\\s" in code or "\\." in code
+                                ):
                                     continue
                                 if re.search(pattern, code):
                                     real_matches.append(code.strip()[:80])
                     if real_matches:
-                        issues.append({
-                            "severity": "high" if "token" in desc.lower() or "key" in desc.lower() else "medium",
-                            "check": "danger_pattern",
-                            "message": f"{desc} found in {filename}",
-                            "evidence": real_matches[:3]
-                        })
+                        issues.append(
+                            {
+                                "severity": "high"
+                                if "token" in desc.lower() or "key" in desc.lower()
+                                else "medium",
+                                "check": "danger_pattern",
+                                "message": f"{desc} found in {filename}",
+                                "evidence": real_matches[:3],
+                            }
+                        )
 
         # Check: binary or large file
         if file_info.get("additions", 0) > 5000:
-            issues.append({
-                "severity": "medium",
-                "check": "large_file",
-                "message": f"File '{filename}' has {file_info.get('additions', 0)} additions — unusually large"
-            })
+            issues.append(
+                {
+                    "severity": "medium",
+                    "check": "large_file",
+                    "message": f"File '{filename}' has {file_info.get('additions', 0)} additions — unusually large",
+                }
+            )
+
+        # Check: baseline marker for new System/ .md files.
+        # New procedures and System notes must have "baseline: true" in
+        # their YAML frontmatter. Modified files are checked for marker
+        # removal. Backend .py files and root-level files are exempt.
+        _SYSTEM_PREFIX = "vaultbot_stuff/System/"
+        if filename.startswith(_SYSTEM_PREFIX) and filename.endswith(".md"):
+            _status = file_info.get("status", "")
+            if _status == "added":
+                # New file — the patch contains the full content.
+                # Check if the frontmatter has baseline: true.
+                _has_baseline = False
+                for _line in patch.split("\n"):
+                    if _line.startswith("+") and not _line.startswith("+++"):
+                        _stripped = _line[1:].strip()
+                        if (
+                            _stripped.lower().startswith("baseline:")
+                            and "true" in _stripped.lower()
+                        ):
+                            _has_baseline = True
+                            break
+                if not _has_baseline:
+                    issues.append(
+                        {
+                            "severity": "high",
+                            "check": "missing_baseline_marker",
+                            "message": (
+                                f"New System/ file '{filename}' is missing "
+                                f"'baseline: true' in its YAML frontmatter. "
+                                f"Add it to mark this as shippable baseline content."
+                            ),
+                        }
+                    )
+            elif _status in ("modified", "renamed"):
+                # Modified file — check if baseline: true was removed.
+                _had_baseline = False
+                _removed_baseline = False
+                for _line in patch.split("\n"):
+                    if _line.startswith("-") and not _line.startswith("---"):
+                        _stripped = _line[1:].strip()
+                        if (
+                            _stripped.lower().startswith("baseline:")
+                            and "true" in _stripped.lower()
+                        ):
+                            _removed_baseline = True
+                    if _line.startswith("+") and not _line.startswith("+++"):
+                        _stripped = _line[1:].strip()
+                        if (
+                            _stripped.lower().startswith("baseline:")
+                            and "true" in _stripped.lower()
+                        ):
+                            _had_baseline = True
+                if _removed_baseline and not _had_baseline:
+                    issues.append(
+                        {
+                            "severity": "high",
+                            "check": "baseline_marker_removed",
+                            "message": (
+                                f"'{filename}' had its 'baseline: true' marker "
+                                f"removed. If this file is no longer shippable, "
+                                f"explain why in the PR description."
+                            ),
+                        }
+                    )
 
         return issues
 
@@ -208,31 +326,41 @@ def run(args: dict) -> dict:
         pr_author = pr["user"]["login"]
         pr_url = pr["html_url"]
         head_ref = pr["head"]["ref"]
-        head_repo = pr["head"].get("repo", {}).get("full_name", "deleted") if pr["head"].get("repo") else "deleted"
+        head_repo = (
+            pr["head"].get("repo", {}).get("full_name", "deleted")
+            if pr["head"].get("repo")
+            else "deleted"
+        )
 
         # Fetch PR files
         try:
             resp = requests.get(
                 f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/files",
-                headers=headers, timeout=30)
+                headers=headers,
+                timeout=30,
+            )
             if resp.status_code != 200:
-                results.append({
+                results.append(
+                    {
+                        "pr_number": pr_num,
+                        "title": pr_title,
+                        "author": pr_author,
+                        "url": pr_url,
+                        "error": f"Could not fetch PR files: {resp.status_code}",
+                    }
+                )
+                continue
+            files = resp.json()
+        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            results.append(
+                {
                     "pr_number": pr_num,
                     "title": pr_title,
                     "author": pr_author,
                     "url": pr_url,
-                    "error": f"Could not fetch PR files: {resp.status_code}"
-                })
-                continue
-            files = resp.json()
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            results.append({
-                "pr_number": pr_num,
-                "title": pr_title,
-                "author": pr_author,
-                "url": pr_url,
-                "error": f"Failed to fetch files: {e}"
-            })
+                    "error": f"Failed to fetch files: {e}",
+                }
+            )
             continue
 
         # Scan each file
@@ -241,13 +369,15 @@ def run(args: dict) -> dict:
         for f in files:
             issues = scan_file(f)
             all_issues.extend(issues)
-            file_summaries.append({
-                "filename": f.get("filename", ""),
-                "status": f.get("status", ""),
-                "additions": f.get("additions", 0),
-                "deletions": f.get("deletions", 0),
-                "issues": len(issues),
-            })
+            file_summaries.append(
+                {
+                    "filename": f.get("filename", ""),
+                    "status": f.get("status", ""),
+                    "additions": f.get("additions", 0),
+                    "deletions": f.get("deletions", 0),
+                    "issues": len(issues),
+                }
+            )
 
         # Determine overall verdict
         critical = [i for i in all_issues if i["severity"] == "critical"]
@@ -290,14 +420,20 @@ def run(args: dict) -> dict:
                 merge_resp = requests.put(
                     f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/merge",
                     headers=headers,
-                    json={"merge_method": "merge", "commit_title": f"Merge PR #{pr_num}: {pr_title}"},
-                    timeout=30)
+                    json={
+                        "merge_method": "merge",
+                        "commit_title": f"Merge PR #{pr_num}: {pr_title}",
+                    },
+                    timeout=30,
+                )
                 if merge_resp.status_code == 200:
                     result["merged"] = True
                     result["merge_message"] = merge_resp.json().get("message", "Merged")
                 else:
                     result["merged"] = False
-                    result["merge_error"] = merge_resp.json().get("message", str(merge_resp.status_code))
+                    result["merge_error"] = merge_resp.json().get(
+                        "message", str(merge_resp.status_code)
+                    )
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 result["merged"] = False
                 result["merge_error"] = str(e)
@@ -307,7 +443,9 @@ def run(args: dict) -> dict:
         if all_issues:
             comment_body += "### Issues Found\n\n"
             for issue in all_issues:
-                emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡"}.get(issue["severity"], "⚪")
+                emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡"}.get(
+                    issue["severity"], "⚪"
+                )
                 comment_body += f"- {emoji} [{issue['severity']}] {issue['check']}: {issue['message']}\n"
                 if issue.get("evidence"):
                     for ev in issue["evidence"]:
@@ -319,7 +457,9 @@ def run(args: dict) -> dict:
             if result.get("merged"):
                 comment_body += f"\n**Merged:** ✅ {result.get('merge_message', '')}\n"
             else:
-                comment_body += f"\n**Merge failed:** {result.get('merge_error', 'unknown')}\n"
+                comment_body += (
+                    f"\n**Merge failed:** {result.get('merge_error', 'unknown')}\n"
+                )
 
         comment_body += "\n---\n*Automated review by VaultBot safety scanner*"
 
@@ -328,7 +468,8 @@ def run(args: dict) -> dict:
                 f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/issues/{pr_num}/comments",
                 headers=headers,
                 json={"body": comment_body},
-                timeout=15)
+                timeout=15,
+            )
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass  # Comment is best-effort
 

@@ -46,8 +46,12 @@ from config import TUNABLES
 
 BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"
-BACKEND_ROOT = BACKEND_DIR.parent.parent  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
-TRASH_DIR = BACKEND_DIR / "trash" / "backups"  # all .bak files go here, not alongside source
+BACKEND_ROOT = (
+    BACKEND_DIR.parent.parent
+)  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
+TRASH_DIR = (
+    BACKEND_DIR / "trash" / "backups"
+)  # all .bak files go here, not alongside source
 
 
 class SelfImprover:
@@ -60,7 +64,9 @@ class SelfImprover:
         # Ensure there's an __init__.py so custom_tools is a package.
         init = CUSTOM_TOOLS_DIR / "__init__.py"
         if not init.exists():
-            init.write_text("# VaultBot custom tools (agent-authored)\n", encoding="utf-8")
+            init.write_text(
+                "# VaultBot custom tools (agent-authored)\n", encoding="utf-8"
+            )
         # Track loaded tool modules for hot-reload.
         self._loaded_tools: dict[str, Any] = {}
         self._loaded_schemas: dict[str, dict[str, Any]] = {}
@@ -97,9 +103,14 @@ class SelfImprover:
                 mod = importlib.import_module(full_name)
                 importlib.reload(mod)
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("custom_tool_import_failed",
-                          {"module": mod_name, "error": str(e),
-                           "traceback": traceback.format_exc()})
+                self._log(
+                    "custom_tool_import_failed",
+                    {
+                        "module": mod_name,
+                        "error": str(e),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
                 continue
             schema = getattr(mod, "SCHEMA", None)
             run_fn = getattr(mod, "run", None)
@@ -114,15 +125,18 @@ class SelfImprover:
         """Return Ollama-format tool definitions for loaded custom tools."""
         out = []
         for name, schema in self._loaded_schemas.items():
-            out.append({
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": schema.get("description", ""),
-                    "parameters": schema.get("parameters",
-                                              {"type": "object", "properties": {}}),
-                },
-            })
+            out.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": schema.get("description", ""),
+                        "parameters": schema.get(
+                            "parameters", {"type": "object", "properties": {}}
+                        ),
+                    },
+                }
+            )
         return out
 
     def has_tool(self, name: str) -> bool:
@@ -139,19 +153,31 @@ class SelfImprover:
             result = fn(args)
             if not isinstance(result, dict):
                 result = {"result": str(result)}
-            self._log("custom_tool_executed",
-                      {"name": name, "args": args, "duration_ms": (time.time()-t0)*1000})
+            self._log(
+                "custom_tool_executed",
+                {"name": name, "args": args, "duration_ms": (time.time() - t0) * 1000},
+            )
             return result
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log("custom_tool_error",
-                      {"name": name, "args": args, "error": str(e),
-                       "traceback": traceback.format_exc()})
-            return {"error": f"{type(e).__name__}: {e}", "traceback": traceback.format_exc()}
+            self._log(
+                "custom_tool_error",
+                {
+                    "name": name,
+                    "args": args,
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            return {
+                "error": f"{type(e).__name__}: {e}",
+                "traceback": traceback.format_exc(),
+            }
 
     # --- code_read -------------------------------------------------------
 
-    def code_read(self, file_path: str, start_line: int = 1, end_line: int = 0
-                  ) -> dict[str, Any]:
+    def code_read(
+        self, file_path: str, start_line: int = 1, end_line: int = 0
+    ) -> dict[str, Any]:
         """Read a file under the vault/backend. Paths are relative to the vault root."""
         full = self._resolve_path(file_path)
         if not full:
@@ -160,9 +186,14 @@ class SelfImprover:
             lines = full.read_text(encoding="utf-8").splitlines()
             s = max(1, start_line)
             e = len(lines) if end_line <= 0 else min(end_line, len(lines))
-            snippet = "\n".join(lines[s-1:e])
-            return {"file_path": str(full), "total_lines": len(lines),
-                    "start_line": s, "end_line": e, "content": snippet}
+            snippet = "\n".join(lines[s - 1 : e])
+            return {
+                "file_path": str(full),
+                "total_lines": len(lines),
+                "start_line": s,
+                "end_line": e,
+                "content": snippet,
+            }
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
@@ -178,11 +209,11 @@ class SelfImprover:
         # notes. Non-markdown files (code, config) are unaffected.
         if full.suffix == ".md":
             from vault_guard import VaultWriteForbidden, assert_writable
+
             try:
                 assert_writable(full)
             except VaultWriteForbidden as e:
-                return {"error": f"write blocked: {e.reason}",
-                        "file_path": str(full)}
+                return {"error": f"write blocked: {e.reason}", "file_path": str(full)}
         try:
             full.parent.mkdir(parents=True, exist_ok=True)
             # Back up the existing file before overwriting so we can rollback.
@@ -218,22 +249,44 @@ class SelfImprover:
     # imports main.py (the entry point) — if that subprocess can't import
     # main, the edit is rejected and the original is restored.
     _CORE_FILES = {
-        "main.py", "agent_tools.py", "self_improver.py", "vault_indexer.py",
-        "vault_graph.py", "note_creator.py", "research_engine.py",
-        "autonomous_researcher.py", "fused_retrieval.py",
-        "amem_evolution.py", "knowledge_curriculum.py", "plan_executor.py",
-        "identity.py", "graph_ops.py", "lazy_condenser.py", "concept_card.py",
-        "moc_builder.py", "abstract_context.py", "embedding_drift.py",
-        "llm_client.py", "ollama_client.py", "session_logger.py",
-        "vault_guard.py", "supervision.py", "checkpointer.py",
-        "free_search.py", "duckduckgo_client.py", "tavily_client.py",
-        "searxng_manager.py", "web_source_store.py",
-        "vault_maintenance.py", "textbook_index.py",
+        "main.py",
+        "agent_tools.py",
+        "self_improver.py",
+        "vault_indexer.py",
+        "vault_graph.py",
+        "note_creator.py",
+        "research_engine.py",
+        "autonomous_researcher.py",
+        "fused_retrieval.py",
+        "amem_evolution.py",
+        "knowledge_curriculum.py",
+        "plan_executor.py",
+        "identity.py",
+        "graph_ops.py",
+        "lazy_condenser.py",
+        "concept_card.py",
+        "moc_builder.py",
+        "abstract_context.py",
+        "embedding_drift.py",
+        "llm_client.py",
+        "ollama_client.py",
+        "session_logger.py",
+        "vault_guard.py",
+        "supervision.py",
+        "checkpointer.py",
+        "free_search.py",
+        "duckduckgo_client.py",
+        "tavily_client.py",
+        "searxng_manager.py",
+        "web_source_store.py",
+        "vault_maintenance.py",
+        "textbook_index.py",
         "services.py",
     }
 
-    def safe_write(self, file_path: str, content: str,
-                   dry_run: bool = False) -> dict[str, Any]:
+    def safe_write(
+        self, file_path: str, content: str, dry_run: bool = False
+    ) -> dict[str, Any]:
         """Write a file with safety verification. Use this INSTEAD of
         code_write when editing backend source code (.py files under
         vaultbot_backend/). For markdown notes or non-code files, code_write
@@ -275,50 +328,61 @@ class SelfImprover:
         full = self._resolve_path(file_path, allow_create=True)
         if not full:
             return {"error": f"path not allowed: {file_path}"}
-        is_core = (full.parent.resolve() == BACKEND_DIR
-                   and full.name in self._CORE_FILES)
+        is_core = full.parent.resolve() == BACKEND_DIR and full.name in self._CORE_FILES
         # --- 0. JS guard: reject JS files (use js_safe_write instead) ---
-        if full.suffix in ('.js', '.mjs', '.cjs'):
-            return {"status": "rejected",
-                    "error": f"safe_write is for Python (.py) files only. "
-                             f"Got '{full.suffix}' — use js_safe_write for "
-                             f"JavaScript files.",
-                    "hint": "Call js_safe_write with the same file_path and "
-                            "content. js_safe_write validates JS syntax with "
-                            "node --check before writing."}
+        if full.suffix in (".js", ".mjs", ".cjs"):
+            return {
+                "status": "rejected",
+                "error": f"safe_write is for Python (.py) files only. "
+                f"Got '{full.suffix}' — use js_safe_write for "
+                f"JavaScript files.",
+                "hint": "Call js_safe_write with the same file_path and "
+                "content. js_safe_write validates JS syntax with "
+                "node --check before writing.",
+            }
 
         checks: dict[str, Any] = {}
 
         # --- 1. Syntax check (no disk touch) ---
         import ast
+
         try:
             ast.parse(content)
             checks["syntax"] = "ok"
         except SyntaxError as e:
             checks["syntax"] = f"FAIL: {e}"
-            return {"status": "rejected", "checks": checks,
-                    "error": f"SyntaxError: {e.msg} (line {e.lineno})",
-                    "hint": "Fix the syntax error; nothing was written."}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": f"SyntaxError: {e.msg} (line {e.lineno})",
+                "hint": "Fix the syntax error; nothing was written.",
+            }
 
         # --- 1b. Import-target check (any backend .py, before disk touch) ---
         # Catches "I wrote `from chat_helpers import run_with_heartbeat` but
         # the function doesn't exist" — even for files NOT in _CORE_FILES.
         # Runs against the CURRENT backend (no disk mutation yet), so it's
         # safe in dry_run and real-write modes alike.
-        is_backend_py = (full.suffix == ".py"
-                         and BACKEND_DIR in full.resolve().parents)
+        is_backend_py = full.suffix == ".py" and BACKEND_DIR in full.resolve().parents
         if is_backend_py:
             ok, err = self._verify_import_targets(content, str(BACKEND_DIR))
             checks["import_refs"] = "ok" if ok else f"FAIL: {err}"
             if not ok:
-                self._log("safe_write_import_refs_rejected", {
-                    "file_path": str(full), "error": err})
-                return {"status": "rejected", "checks": checks,
-                        "error": err,
-                        "hint": ("The edit imports a name that doesn't exist "
-                                 "on the target module yet. Did you finish "
-                                 "writing the function/class you're importing? "
-                                 "Nothing was written.")}
+                self._log(
+                    "safe_write_import_refs_rejected",
+                    {"file_path": str(full), "error": err},
+                )
+                return {
+                    "status": "rejected",
+                    "checks": checks,
+                    "error": err,
+                    "hint": (
+                        "The edit imports a name that doesn't exist "
+                        "on the target module yet. Did you finish "
+                        "writing the function/class you're importing? "
+                        "Nothing was written."
+                    ),
+                }
 
         # --- dry_run: stop here, report whether it WOULD be safe ---
         if dry_run:
@@ -326,6 +390,7 @@ class SelfImprover:
             # temp copy so we don't disturb the live file.
             if is_core and full.exists():
                 import tempfile
+
                 tmpdir = tempfile.mkdtemp(prefix="vaultbot_dryrun_")
                 try:
                     # Copy the backend dir, swap in the new content, import.
@@ -333,41 +398,50 @@ class SelfImprover:
                     ok, err = self._verify_import_in_subprocess(tmpdir)
                     checks["import_check"] = "ok" if ok else f"FAIL: {err}"
                     if not ok:
-                        return {"status": "dry_run_rejected",
-                                "checks": checks,
-                                "would_break_backend": True,
-                                "error": err}
+                        return {
+                            "status": "dry_run_rejected",
+                            "checks": checks,
+                            "would_break_backend": True,
+                            "error": err,
+                        }
                     # Import passed — run the soft pytest gate against the
                     # same tmp copy. A failure is reported as
                     # dry_run_rejected (no disk touch in dry_run mode).
                     p_ok, p_out = self._run_pytest_in_subprocess(tmpdir, full.name)
                     if p_out and not p_ok:
                         checks["pytest"] = f"FAIL: {p_out[:500]}"
-                        return {"status": "dry_run_rejected",
-                                "checks": checks,
-                                "would_break_backend": True,
-                                "error": p_out[:500]}
-                    checks["pytest"] = (
-                        "ok" if p_ok
-                        else f"skipped: {(p_out or 'unknown')[:200]}")
-                    return {"status": "dry_run_ok",
+                        return {
+                            "status": "dry_run_rejected",
                             "checks": checks,
-                            "would_break_backend": False,
-                            "error": None}
+                            "would_break_backend": True,
+                            "error": p_out[:500],
+                        }
+                    checks["pytest"] = (
+                        "ok" if p_ok else f"skipped: {(p_out or 'unknown')[:200]}"
+                    )
+                    return {
+                        "status": "dry_run_ok",
+                        "checks": checks,
+                        "would_break_backend": False,
+                        "error": None,
+                    }
                 finally:
                     shutil.rmtree(tmpdir, ignore_errors=True)
             checks["import_check"] = "skipped (not a core backend file)"
-            return {"status": "dry_run_ok", "checks": checks,
-                    "would_break_backend": False}
+            return {
+                "status": "dry_run_ok",
+                "checks": checks,
+                "would_break_backend": False,
+            }
 
         # --- Markdown guard (same as code_write) ---
         if full.suffix == ".md":
             from vault_guard import VaultWriteForbidden, assert_writable
+
             try:
                 assert_writable(full)
             except VaultWriteForbidden as e:
-                return {"error": f"write blocked: {e.reason}",
-                        "file_path": str(full)}
+                return {"error": f"write blocked: {e.reason}", "file_path": str(full)}
 
         # --- 2. Write (UTF-8) + backup ---
         try:
@@ -381,8 +455,11 @@ class SelfImprover:
             full.write_text(content, encoding="utf-8")
             checks["encoding"] = "utf-8 ok"
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            return {"status": "rejected", "checks": checks,
-                    "error": f"write failed: {e}"}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": f"write failed: {e}",
+            }
 
         # --- 3. Import verification (subprocess, core files only) ---
         if is_core:
@@ -410,13 +487,20 @@ class SelfImprover:
                         bak.unlink()
                     except Exception:  # noqa: BLE001 — non-critical cleanup
                         pass
-                self._log("safe_write_rejected", {
-                    "file_path": str(full), "error": err, "checks": checks})
-                return {"status": "rejected", "checks": checks,
-                        "error": err,
-                        "hint": ("The edit would break the backend on restart. "
-                                 "The original file was restored. Fix the error "
-                                 "and try again, or use git_rollback if needed.")}
+                self._log(
+                    "safe_write_rejected",
+                    {"file_path": str(full), "error": err, "checks": checks},
+                )
+                return {
+                    "status": "rejected",
+                    "checks": checks,
+                    "error": err,
+                    "hint": (
+                        "The edit would break the backend on restart. "
+                        "The original file was restored. Fix the error "
+                        "and try again, or use git_rollback if needed."
+                    ),
+                }
 
         # --- 3b. Pytest gate (soft; core files only) ---
         # Only run pytest if the import check passed (don't waste time
@@ -427,7 +511,9 @@ class SelfImprover:
         # and proceed — the import check is the hard gate.
         if is_core and checks.get("import_check") == "ok":
             try:
-                p_ok, p_out = self._run_pytest_in_subprocess(str(BACKEND_DIR), full.name)
+                p_ok, p_out = self._run_pytest_in_subprocess(
+                    str(BACKEND_DIR), full.name
+                )
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 checks["pytest"] = f"skipped: could not run pytest: {e}"
                 p_ok = False  # FAIL LOUD: if pytest can't run, the edit is rejected
@@ -444,8 +530,7 @@ class SelfImprover:
                 else:
                     try:
                         full.unlink()
-                        checks["auto_rollback"] = (
-                            "deleted new file (no prior .bak)")
+                        checks["auto_rollback"] = "deleted new file (no prior .bak)"
                     except Exception as rb_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         checks["auto_rollback"] = f"FAILED: {rb_err}"
                 # Clean up the backup after rollback.
@@ -454,33 +539,51 @@ class SelfImprover:
                         bak.unlink()
                     except Exception:  # noqa: BLE001 — non-critical cleanup
                         pass
-                self._log("safe_write_pytest_rejected", {
-                    "file_path": str(full),
-                    "error": p_out[:500], "checks": checks})
-                return {"status": "rejected", "checks": checks,
-                        "error": p_out[:500],
-                        "hint": ("The edit passed the import check but "
-                                 "failed a pytest run. The original file "
-                                 "was restored. Fix the failing test and "
-                                 "try again, or use git_rollback if needed.")}
+                self._log(
+                    "safe_write_pytest_rejected",
+                    {"file_path": str(full), "error": p_out[:500], "checks": checks},
+                )
+                return {
+                    "status": "rejected",
+                    "checks": checks,
+                    "error": p_out[:500],
+                    "hint": (
+                        "The edit passed the import check but "
+                        "failed a pytest run. The original file "
+                        "was restored. Fix the failing test and "
+                        "try again, or use git_rollback if needed."
+                    ),
+                }
             checks["pytest"] = (
-                "ok" if p_ok
-                else f"skipped: {(p_out or 'unknown')[:200]}")
+                "ok" if p_ok else f"skipped: {(p_out or 'unknown')[:200]}"
+            )
 
-        self._log("safe_write", {"file_path": str(full), "length": len(content),
-                                  "is_core": is_core, "checks": checks})
+        self._log(
+            "safe_write",
+            {
+                "file_path": str(full),
+                "length": len(content),
+                "is_core": is_core,
+                "checks": checks,
+            },
+        )
         # Clean up backup on success.
         if had_backup:
             try:
                 bak.unlink()
             except Exception:  # noqa: BLE001 — non-critical cleanup
                 pass
-        return {"status": "written", "file_path": str(full),
-                "bytes": len(content), "checks": checks, "is_core": is_core}
+        return {
+            "status": "written",
+            "file_path": str(full),
+            "bytes": len(content),
+            "checks": checks,
+            "is_core": is_core,
+        }
 
-
-    def js_safe_write(self, file_path: str, content: str,
-                      dry_run: bool = False) -> dict[str, Any]:
+    def js_safe_write(
+        self, file_path: str, content: str, dry_run: bool = False
+    ) -> dict[str, Any]:
         """Write a JavaScript file with syntax validation. Use this for
         .js, .mjs, and .cjs files — especially the Obsidian plugin's
         main.js. It validates JS syntax with `node --check` BEFORE
@@ -515,13 +618,15 @@ class SelfImprover:
             return {"error": f"path not allowed: {file_path}"}
 
         # --- 1. Extension guard ---
-        if full.suffix not in ('.js', '.mjs', '.cjs'):
-            return {"status": "rejected",
-                    "error": f"js_safe_write is for JavaScript (.js, .mjs, "
-                             f".cjs) files only. Got '{full.suffix}' — use "
-                             f"safe_write for Python (.py) files.",
-                    "hint": "Call safe_write with the same file_path and "
-                            "content for Python files."}
+        if full.suffix not in (".js", ".mjs", ".cjs"):
+            return {
+                "status": "rejected",
+                "error": f"js_safe_write is for JavaScript (.js, .mjs, "
+                f".cjs) files only. Got '{full.suffix}' — use "
+                f"safe_write for Python (.py) files.",
+                "hint": "Call safe_write with the same file_path and "
+                "content for Python files.",
+            }
 
         checks: dict[str, Any] = {}
 
@@ -529,50 +634,70 @@ class SelfImprover:
         node_path = _shutil.which("node")
         if not node_path:
             checks["syntax"] = "skipped: node not found"
-            return {"status": "rejected", "checks": checks,
-                    "error": "Node.js not found on PATH. Cannot validate "
-                             "JS syntax. Install Node.js or set PATH.",
-                    "hint": "Node.js is required for js_safe_write."}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": "Node.js not found on PATH. Cannot validate "
+                "JS syntax. Install Node.js or set PATH.",
+                "hint": "Node.js is required for js_safe_write.",
+            }
 
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.js',
-                                               delete=False,
-                                               encoding='utf-8') as tmp:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".js", delete=False, encoding="utf-8"
+            ) as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            return {"status": "rejected", "checks": checks,
-                    "error": f"failed to create temp file: {e}"}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": f"failed to create temp file: {e}",
+            }
 
         try:
             result = _subprocess_run(
-                [node_path, '--check', tmp_path],
-                capture_output=True, text=True, timeout=15)
+                [node_path, "--check", tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
         except subprocess.TimeoutExpired:
             os.unlink(tmp_path)
-            return {"status": "rejected", "checks": checks,
-                    "error": "node --check timed out (15s)"}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": "node --check timed out (15s)",
+            }
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             os.unlink(tmp_path)
-            return {"status": "rejected", "checks": checks,
-                    "error": f"node --check failed to run: {e}"}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": f"node --check failed to run: {e}",
+            }
 
         if result.returncode != 0:
             # Extract the useful part of the error (skip node internals)
-            err_lines = result.stderr.strip().split('\n')
-            syntax_err = '\n'.join(
-                l for l in err_lines
-                if not l.startswith('    at ')
-                and not l.startswith('Node.js'))
+            err_lines = result.stderr.strip().split("\n")
+            syntax_err = "\n".join(
+                l
+                for l in err_lines
+                if not l.startswith("    at ") and not l.startswith("Node.js")
+            )
             checks["syntax"] = f"FAIL: {syntax_err}"
             os.unlink(tmp_path)
-            self._log("js_safe_write_rejected", {
-                "file_path": str(full),
-                "syntax_error": syntax_err[:500]})
-            return {"status": "rejected", "checks": checks,
-                    "error": syntax_err[:500],
-                    "hint": "Fix the JS syntax error; nothing was written. "
-                            "The real file was never touched."}
+            self._log(
+                "js_safe_write_rejected",
+                {"file_path": str(full), "syntax_error": syntax_err[:500]},
+            )
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": syntax_err[:500],
+                "hint": "Fix the JS syntax error; nothing was written. "
+                "The real file was never touched.",
+            }
 
         checks["syntax"] = "ok (node --check passed)"
         os.unlink(tmp_path)
@@ -588,20 +713,31 @@ class SelfImprover:
         load_ok, load_err = self._verify_js_load(content)
         if not load_ok:
             checks["load_check"] = f"FAIL: {load_err}"
-            self._log("js_safe_write_load_rejected", {
-                "file_path": str(full), "load_error": (load_err or "")[:500]})
-            return {"status": "rejected", "checks": checks,
-                    "error": (load_err or "load check failed")[:500],
-                    "hint": ("The file has valid syntax but fails to load "
-                             "(hangs or throws at module level). This is "
-                             "often an infinite recursion or loop at the "
-                             "top level. Nothing was written.")}
+            self._log(
+                "js_safe_write_load_rejected",
+                {"file_path": str(full), "load_error": (load_err or "")[:500]},
+            )
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": (load_err or "load check failed")[:500],
+                "hint": (
+                    "The file has valid syntax but fails to load "
+                    "(hangs or throws at module level). This is "
+                    "often an infinite recursion or loop at the "
+                    "top level. Nothing was written."
+                ),
+            }
         checks["load_check"] = "ok (require exited cleanly)"
 
         # --- dry_run: stop here, report it WOULD be safe ---
         if dry_run:
-            return {"status": "dry_run_ok", "checks": checks,
-                    "would_break_plugin": False, "error": None}
+            return {
+                "status": "dry_run_ok",
+                "checks": checks,
+                "would_break_plugin": False,
+                "error": None,
+            }
 
         # --- 3. Atomic write: backup, write, verify ---
         had_backup = False
@@ -615,8 +751,11 @@ class SelfImprover:
             full.write_text(content, encoding="utf-8")
             checks["encoding"] = "utf-8 ok"
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            return {"status": "rejected", "checks": checks,
-                    "error": f"write failed: {e}"}
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": f"write failed: {e}",
+            }
 
         # Verify the write
         try:
@@ -638,11 +777,16 @@ class SelfImprover:
                     bak.unlink()
                 except Exception:  # noqa: BLE001 — non-critical cleanup
                     pass
-            self._log("js_safe_write_verify_failed", {
-                "file_path": str(full), "error": str(e), "checks": checks})
-            return {"status": "rejected", "checks": checks,
-                    "error": f"write verification failed: {e}",
-                    "hint": "The original file was restored from .bak."}
+            self._log(
+                "js_safe_write_verify_failed",
+                {"file_path": str(full), "error": str(e), "checks": checks},
+            )
+            return {
+                "status": "rejected",
+                "checks": checks,
+                "error": f"write verification failed: {e}",
+                "hint": "The original file was restored from .bak.",
+            }
 
         # Clean up backup on success
         if had_backup:
@@ -651,16 +795,20 @@ class SelfImprover:
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass  # non-critical
 
-        self._log("js_safe_write", {
-            "file_path": str(full), "length": len(content),
-            "checks": checks})
-        return {"status": "written", "file_path": str(full),
-                "bytes": len(content), "checks": checks}
+        self._log(
+            "js_safe_write",
+            {"file_path": str(full), "length": len(content), "checks": checks},
+        )
+        return {
+            "status": "written",
+            "file_path": str(full),
+            "bytes": len(content),
+            "checks": checks,
+        }
 
-
-
-    def _copy_backend_for_check(self, tmpdir: str, target_name: str,
-                                new_content: str) -> None:
+    def _copy_backend_for_check(
+        self, tmpdir: str, target_name: str, new_content: str
+    ) -> None:
         """Copy the backend dir into tmpdir, then overwrite target_name with
         new_content, so a subprocess can import main.py against the proposed
         edit without touching the live files."""
@@ -696,8 +844,7 @@ class SelfImprover:
         # Overwrite the target with the proposed new content.
         (Path(tmpdir) / target_name).write_text(new_content, encoding="utf-8")
 
-    def _verify_import_in_subprocess(self, backend_dir: str
-                                     ) -> tuple[bool, str | None]:
+    def _verify_import_in_subprocess(self, backend_dir: str) -> tuple[bool, str | None]:
         """Run `python -c 'import main'` in a subprocess against the given
         backend dir. Returns (ok, error_message). A clean import means the
         whole import graph resolves with the proposed edit in place."""
@@ -715,17 +862,22 @@ class SelfImprover:
             "os.environ.setdefault('VAULT_PATH', os.environ['VAULT_ROOT_DIR']); "
             "import main; print('IMPORT_OK')"
         )
-        env = {**os.environ,
-               "CHECK_DIR": backend_dir,
-               "PYTHONPATH": backend_dir,
-               "VAULTBOT_SKIP_LOCK": "1",
-               "VAULT_PATH": str(BACKEND_ROOT),
-               "VAULT_ROOT_DIR": str(BACKEND_ROOT)}
+        env = {
+            **os.environ,
+            "CHECK_DIR": backend_dir,
+            "PYTHONPATH": backend_dir,
+            "VAULTBOT_SKIP_LOCK": "1",
+            "VAULT_PATH": str(BACKEND_ROOT),
+            "VAULT_ROOT_DIR": str(BACKEND_ROOT),
+        }
         try:
             proc = _subprocess_run(
                 [venv_python, "-c", check_code],
-                capture_output=True, text=True, timeout=30,
-                cwd=str(BACKEND_ROOT), env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(BACKEND_ROOT),
+                env=env,
             )
             if proc.returncode == 0 and "IMPORT_OK" in proc.stdout:
                 return True, None
@@ -739,8 +891,9 @@ class SelfImprover:
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False, f"import check could not run: {e}"
 
-    def _verify_import_targets(self, content: str,
-                               backend_dir: str) -> tuple[bool, str | None]:
+    def _verify_import_targets(
+        self, content: str, backend_dir: str
+    ) -> tuple[bool, str | None]:
         """Statically verify every ``from X import Y`` (and ``from X
         import Y as Z``) in ``content`` actually resolves against the
         *current* backend (before the write). This is the check that
@@ -765,6 +918,7 @@ class SelfImprover:
         it, e.g. a new optional dep) and report it as ``skipped``.
         """
         import ast as _ast
+
         try:
             tree = _ast.parse(content)
         except SyntaxError:
@@ -787,8 +941,7 @@ class SelfImprover:
         if not targets:
             return True, None
 
-        venv_python = str(
-            BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
+        venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
 
@@ -805,8 +958,8 @@ class SelfImprover:
             "except AttributeError:\n"
             f"    print('MISSING {mod} {name}')\n"
             "    raise SystemExit(1)\n"
-            
-            for (mod, name) in targets)
+            for (mod, name) in targets
+        )
         check_code = (
             "import sys, os\n"
             "sys.path.insert(0, os.environ['CHECK_DIR'])\n"
@@ -815,17 +968,22 @@ class SelfImprover:
             + checks
             + "print('IMPORT_REFS_OK')\n"
         )
-        env = {**os.environ,
-               "CHECK_DIR": backend_dir,
-               "PYTHONPATH": backend_dir,
-               "VAULTBOT_SKIP_LOCK": "1",
-               "VAULT_PATH": str(BACKEND_ROOT),
-               "VAULT_ROOT_DIR": str(BACKEND_ROOT)}
+        env = {
+            **os.environ,
+            "CHECK_DIR": backend_dir,
+            "PYTHONPATH": backend_dir,
+            "VAULTBOT_SKIP_LOCK": "1",
+            "VAULT_PATH": str(BACKEND_ROOT),
+            "VAULT_ROOT_DIR": str(BACKEND_ROOT),
+        }
         try:
             proc = _subprocess_run(
                 [venv_python, "-c", check_code],
-                capture_output=True, text=True, timeout=40,
-                cwd=str(BACKEND_ROOT), env=env,
+                capture_output=True,
+                text=True,
+                timeout=40,
+                cwd=str(BACKEND_ROOT),
+                env=env,
             )
         except subprocess.TimeoutExpired:
             return False, "import-targets check timed out (40s)"
@@ -839,15 +997,18 @@ class SelfImprover:
         for line in (proc.stdout or "").splitlines():
             if line.startswith("MISSING "):
                 _, mod, name = line.split(" ", 2)
-                return False, (f"ImportError: cannot import name '{name}' "
-                               f"from '{mod}' — the name doesn't exist on "
-                               f"that module. Did you finish the edit?")
+                return False, (
+                    f"ImportError: cannot import name '{name}' "
+                    f"from '{mod}' — the name doesn't exist on "
+                    f"that module. Did you finish the edit?"
+                )
         err = (proc.stderr or proc.stdout or "unknown").strip()
         tail = err.splitlines()[-1] if err.splitlines() else err
         return False, tail[:500]
 
-    def _verify_js_load(self, content: str,
-                        timeout_s: int = 8) -> tuple[bool, str | None]:
+    def _verify_js_load(
+        self, content: str, timeout_s: int = 8
+    ) -> tuple[bool, str | None]:
         """Require() a JS module in a child Node process with a hard
         timeout and an 'obsidian' stub, to catch load-time hangs (infinite
         recursion / infinite loops at module top level) that ``node --check``
@@ -871,13 +1032,14 @@ class SelfImprover:
         load failure. A timeout is a hard reject.
         """
         import tempfile
+
         node_path = shutil.which("node")
         if not node_path:
             return True, None  # can't check; don't block the write
         # Write the candidate content to a temp .js file.
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.js',
-                                         delete=False,
-                                         encoding='utf-8') as tmp:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".js", delete=False, encoding="utf-8"
+        ) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
         # Node script: stub obsidian, set a watchdog timeout that kills the
@@ -903,7 +1065,7 @@ class SelfImprover:
             "  console.error('LOAD_TIMEOUT'); process.exit(2);\n"
             "}, " + str(timeout_s * 1000) + ");\n"
             "try {\n"
-            "  require(" + repr(tmp_path).replace('\\\\', '/') + ");\n"
+            "  require(" + repr(tmp_path).replace("\\\\", "/") + ");\n"
             "  clearTimeout(watchdog);\n"
             "  console.log('LOAD_OK'); process.exit(0);\n"
             "} catch (e) {\n"
@@ -915,11 +1077,16 @@ class SelfImprover:
         try:
             result = _subprocess_run(
                 [node_path, "-e", loader],
-                capture_output=True, text=True, timeout=timeout_s + 5,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s + 5,
             )
         except subprocess.TimeoutExpired:
             os.unlink(tmp_path)
-            return False, f"load check timed out ({timeout_s}s) — likely infinite recursion"
+            return (
+                False,
+                f"load check timed out ({timeout_s}s) — likely infinite recursion",
+            )
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             os.unlink(tmp_path)
             return True, None  # can't run the check; don't block
@@ -931,16 +1098,24 @@ class SelfImprover:
         if result.returncode == 0 and "LOAD_OK" in (result.stdout or ""):
             return True, None
         if result.returncode == 2 or "LOAD_TIMEOUT" in (result.stderr or ""):
-            return False, f"load hung (infinite recursion/loop at module level, {timeout_s}s)"
+            return (
+                False,
+                f"load hung (infinite recursion/loop at module level, {timeout_s}s)",
+            )
         if "LOAD_THROW" in (result.stderr or ""):
-            err = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "load threw"
+            err = (
+                result.stderr.strip().splitlines()[-1]
+                if result.stderr.strip()
+                else "load threw"
+            )
             return False, f"load threw: {err[:400]}"
         err = (result.stderr or result.stdout or "unknown load failure").strip()
         tail = err.splitlines()[-1] if err.splitlines() else err
         return False, tail[:400]
 
-    def _verify_startup_smoke(self, backend_dir: str,
-                               timeout_s: int = 40) -> tuple[bool, str | None]:
+    def _verify_startup_smoke(
+        self, backend_dir: str, timeout_s: int = 40
+    ) -> tuple[bool, str | None]:
         """Actually START the backend in a subprocess (import main, run
         uvicorn on a throwaway port) and hit /health. Catches runtime
         AttributeErrors (``svc.vault_path`` missing, ``log_event`` not on
@@ -958,8 +1133,8 @@ class SelfImprover:
         attribute bugs more reliably and cheaply.
         """
         import urllib.request
-        venv_python = str(
-            BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
+
+        venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
         # Bind a high, almost-certainly-free port. We can't reuse 8000
@@ -982,17 +1157,21 @@ class SelfImprover:
             "uvicorn.run(main.app, host='127.0.0.1', port=" + smoke_port + ", "
             "access_log=False, log_level='error')\n"
         )
-        env = {**os.environ,
-               "CHECK_DIR": backend_dir,
-               "PYTHONPATH": backend_dir,
-               "VAULTBOT_SKIP_LOCK": "1",
-               "VAULT_PATH": str(BACKEND_ROOT),
-               "VAULT_ROOT_DIR": str(BACKEND_ROOT)}
+        env = {
+            **os.environ,
+            "CHECK_DIR": backend_dir,
+            "PYTHONPATH": backend_dir,
+            "VAULTBOT_SKIP_LOCK": "1",
+            "VAULT_PATH": str(BACKEND_ROOT),
+            "VAULT_ROOT_DIR": str(BACKEND_ROOT),
+        }
         try:
             proc = subprocess.Popen(
                 [venv_python, "-c", check_code],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                cwd=str(BACKEND_ROOT), env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(BACKEND_ROOT),
+                env=env,
                 text=True,
             )
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -1005,8 +1184,8 @@ class SelfImprover:
             while time.time() < deadline:
                 if proc.poll() is not None:
                     # Process exited before serving — a startup crash.
-                    out = (proc.stdout.read() or "")
-                    err = (proc.stderr.read() or "")
+                    out = proc.stdout.read() or ""
+                    err = proc.stderr.read() or ""
                     tail = (err or out).strip().splitlines()
                     line = tail[-1] if tail else (err or out or "exited")
                     return False, f"startup crashed: {line[:400]}"
@@ -1029,9 +1208,9 @@ class SelfImprover:
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
 
-    def _run_pytest_in_subprocess(self, backend_dir: str,
-                                   target_file: str | None = None
-                                   ) -> tuple[bool, str | None]:
+    def _run_pytest_in_subprocess(
+        self, backend_dir: str, target_file: str | None = None
+    ) -> tuple[bool, str | None]:
         """Run `python -m pytest -q --tb=short` in a subprocess against the
         given backend dir. Returns (passed, output_message).
 
@@ -1061,8 +1240,7 @@ class SelfImprover:
         # but pytest + faiss live in the SYSTEM Python in this environment,
         # not in .venv. Probe both: use the first interpreter that
         # can import pytest. If neither can, soft-skip.
-        venv_python = str(
-            BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
+        venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         candidates = [venv_python, sys.executable]
         chosen = None
         for cand in candidates:
@@ -1071,7 +1249,10 @@ class SelfImprover:
             try:
                 probe = _subprocess_run(
                     [cand, "-c", "import pytest"],
-                    capture_output=True, text=True, timeout=10)
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
                 if probe.returncode == 0:
                     chosen = cand
                     break
@@ -1081,12 +1262,14 @@ class SelfImprover:
             # pytest not importable in any available interpreter — soft-skip.
             return True, "pytest not installed in any interpreter"
 
-        env = {**os.environ,
-               "PYTHONPATH": backend_dir,
-               # Keep the test process off the live vault / PID lock.
-               "VAULTBOT_SKIP_LOCK": "1",
-               "VAULT_PATH": str(BACKEND_ROOT),
-               "VAULT_ROOT_DIR": str(BACKEND_ROOT)}
+        env = {
+            **os.environ,
+            "PYTHONPATH": backend_dir,
+            # Keep the test process off the live vault / PID lock.
+            "VAULTBOT_SKIP_LOCK": "1",
+            "VAULT_PATH": str(BACKEND_ROOT),
+            "VAULT_ROOT_DIR": str(BACKEND_ROOT),
+        }
 
         # --- Scope pytest to tests matching the edited file ---
         # Build a test file glob from the target file's stem (e.g.
@@ -1102,14 +1285,18 @@ class SelfImprover:
                 # Match common test naming patterns.
                 matching = list(tests_dir.glob(f"test_*{stem}*.py"))
                 if matching:
-                    test_args = [str(p.relative_to(backend_dir))
-                                 for p in sorted(matching)]
+                    test_args = [
+                        str(p.relative_to(backend_dir)) for p in sorted(matching)
+                    ]
 
         try:
             proc = _subprocess_run(
                 [chosen, "-m", "pytest", "-q", "--tb=short"] + test_args,
-                capture_output=True, text=True, timeout=60,
-                cwd=backend_dir, env=env,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=backend_dir,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             # Hung test — treat as skipped (soft gate), not a hard reject.
@@ -1131,15 +1318,17 @@ class SelfImprover:
         if proc.returncode in (2, 3, 4):
             # Usage error / internal error — soft-skip.
             tail = combined.strip().splitlines()[-1] if combined.strip() else ""
-            return True, (f"pytest usage/internal error "
-                         f"(rc={proc.returncode}): {tail[:200]}")
+            return True, (
+                f"pytest usage/internal error (rc={proc.returncode}): {tail[:200]}"
+            )
         if proc.returncode == 5:
             # No tests collected — benign; treat as pass.
             return True, None
         # rc == 1 (or anything else): real test failure — hard reject.
         tail = combined.strip().splitlines()[-1] if combined.strip() else ""
         return False, tail[:500] if tail else (
-            f"pytest exit code {proc.returncode} (no output captured)")
+            f"pytest exit code {proc.returncode} (no output captured)"
+        )
 
     # --- capability_audit ------------------------------------------------
 
@@ -1162,25 +1351,30 @@ class SelfImprover:
             a 'gap_assessment' note.
         """
         from agent_tools import META_TOOL_DEFINITIONS, TOOL_DEFINITIONS
+
         tools: list[dict[str, Any]] = []
 
         def _add(schema_list, kind):
             for t in schema_list:
                 fn = t.get("function", {})
-                tools.append({
-                    "name": fn.get("name", "?"),
-                    "kind": kind,
-                    "description": fn.get("description", ""),
-                })
+                tools.append(
+                    {
+                        "name": fn.get("name", "?"),
+                        "kind": kind,
+                        "description": fn.get("description", ""),
+                    }
+                )
 
         _add(TOOL_DEFINITIONS, "builtin")
         _add(META_TOOL_DEFINITIONS, "meta")
         for name, schema in self._loaded_schemas.items():
-            tools.append({
-                "name": name,
-                "kind": "custom",
-                "description": schema.get("description", ""),
-            })
+            tools.append(
+                {
+                    "name": name,
+                    "kind": "custom",
+                    "description": schema.get("description", ""),
+                }
+            )
 
         result: dict[str, Any] = {
             "tools": tools,
@@ -1196,8 +1390,7 @@ class SelfImprover:
             # Rough keyword coverage: tokenize the task, see which tools'
             # name+description mention any task word (>=4 chars to skip
             # stopwords like "the", "a", "for").
-            words = {w.lower() for w in re.split(r"\W+", task)
-                     if len(w) >= 4}
+            words = {w.lower() for w in re.split(r"\W+", task) if len(w) >= 4}
             relevant = []
             for t in tools:
                 hay = (t["name"] + " " + t["description"]).lower()
@@ -1212,15 +1405,17 @@ class SelfImprover:
                 "has_relevant_tool": len(relevant) > 0,
                 "gap_assessment": (
                     f"{len(relevant)} tool(s) appear relevant to '{task}'. "
-                    + ("If none directly accomplish it, you can build a new "
-                       "tool with tool_create (test with code_run first), or "
-                       "edit your source with safe_write."
-                       if relevant else
-                       "No existing tool matches. You have a CAPABILITY GAP. "
-                       "Fill it: (1) self_reflect on the gap to propose a "
-                       "tool, (2) code_run to test the implementation, "
-                       "(3) tool_create to add it, or safe_write to edit an "
-                       "existing module. Always preflight_safety_check first.")
+                    + (
+                        "If none directly accomplish it, you can build a new "
+                        "tool with tool_create (test with code_run first), or "
+                        "edit your source with safe_write."
+                        if relevant
+                        else "No existing tool matches. You have a CAPABILITY GAP. "
+                        "Fill it: (1) self_reflect on the gap to propose a "
+                        "tool, (2) code_run to test the implementation, "
+                        "(3) tool_create to add it, or safe_write to edit an "
+                        "existing module. Always preflight_safety_check first."
+                    )
                 ),
             }
         return result
@@ -1243,12 +1438,20 @@ class SelfImprover:
 
         out_path = err_path = None
         try:
-            with tempfile.NamedTemporaryFile(mode="w+b", delete=False, prefix="cr_out_") as out_f, \
-                 tempfile.NamedTemporaryFile(mode="w+b", delete=False, prefix="cr_err_") as err_f:
+            with (
+                tempfile.NamedTemporaryFile(
+                    mode="w+b", delete=False, prefix="cr_out_"
+                ) as out_f,
+                tempfile.NamedTemporaryFile(
+                    mode="w+b", delete=False, prefix="cr_err_"
+                ) as err_f,
+            ):
                 out_path, err_path = out_f.name, err_f.name
                 proc = _subprocess_run(
                     [venv_python, "-c", code],
-                    stdout=out_f, stderr=err_f, timeout=timeout,
+                    stdout=out_f,
+                    stderr=err_f,
+                    timeout=timeout,
                     cwd=str(BACKEND_ROOT),
                     # Scrubbed env: LLM-authored code must not see API keys,
                     # tokens, or passwords from the parent process. Only
@@ -1271,11 +1474,16 @@ class SelfImprover:
             stderr_tail = _tail(err_path, TUNABLES.code_run_stderr_tail)
             truncated = False
             try:
-                truncated = (os.path.getsize(out_path) > TUNABLES.code_run_stdout_tail) or (os.path.getsize(err_path) > TUNABLES.code_run_stderr_tail)
+                truncated = (
+                    os.path.getsize(out_path) > TUNABLES.code_run_stdout_tail
+                ) or (os.path.getsize(err_path) > TUNABLES.code_run_stderr_tail)
             except OSError:
                 pass
-            result = {"stdout": stdout_tail, "stderr": stderr_tail,
-                      "exit_code": proc.returncode}
+            result = {
+                "stdout": stdout_tail,
+                "stderr": stderr_tail,
+                "exit_code": proc.returncode,
+            }
             if truncated:
                 result["output_truncated"] = True
             return result
@@ -1290,10 +1498,12 @@ class SelfImprover:
                         os.unlink(tmp)
                     except OSError:
                         pass
+
     # --- tool_create -----------------------------------------------------
 
-    def tool_create(self, tool_name: str, description: str,
-                    parameters: dict[str, Any], code: str) -> dict[str, Any]:
+    def tool_create(
+        self, tool_name: str, description: str, parameters: dict[str, Any], code: str
+    ) -> dict[str, Any]:
         """Create a new tool file in custom_tools/, load it, and register it.
         `code` must define a `run(args: dict) -> dict` function.
         Returns the new tool's schema if it loaded successfully."""
@@ -1313,10 +1523,11 @@ class SelfImprover:
         try:
             ast.parse(full_code)
         except SyntaxError as e:
-            return {"error": f"syntax error in tool code: {e}",
-                    "tool_name": tool_name,
-                    "hint": "Fix the syntax error and try again. "
-                            "The file was NOT written."}
+            return {
+                "error": f"syntax error in tool code: {e}",
+                "tool_name": tool_name,
+                "hint": "Fix the syntax error and try again. The file was NOT written.",
+            }
         try:
             file_path.write_text(full_code, encoding="utf-8")
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -1326,16 +1537,27 @@ class SelfImprover:
         self.load_custom_tools()
         set(self._loaded_schemas.keys())
         loaded = tool_name in self._loaded_schemas or safe in self._loaded_schemas
-        self._log("tool_create", {"tool_name": tool_name, "file": str(file_path),
-                                   "loaded": loaded})
+        self._log(
+            "tool_create",
+            {"tool_name": tool_name, "file": str(file_path), "loaded": loaded},
+        )
         if loaded:
-            schema = self._loaded_schemas.get(tool_name) or self._loaded_schemas.get(safe)
-            return {"status": "created", "tool_name": tool_name,
-                    "file_path": str(file_path), "schema": schema}
-        # Import failed — return the error so the agent can fix its code.
-        return {"status": "created_but_import_failed", "tool_name": tool_name,
+            schema = self._loaded_schemas.get(tool_name) or self._loaded_schemas.get(
+                safe
+            )
+            return {
+                "status": "created",
+                "tool_name": tool_name,
                 "file_path": str(file_path),
-                "hint": "Check code_run to debug; the file exists but has a syntax/runtime error."}
+                "schema": schema,
+            }
+        # Import failed — return the error so the agent can fix its code.
+        return {
+            "status": "created_but_import_failed",
+            "tool_name": tool_name,
+            "file_path": str(file_path),
+            "hint": "Check code_run to debug; the file exists but has a syntax/runtime error.",
+        }
 
     # --- self_reflect ----------------------------------------------------
 
@@ -1347,6 +1569,7 @@ class SelfImprover:
         reviews proposals before implementing them. Saves cloud tokens."""
         try:
             from llm_client import get_small_client_or_big
+
             client = get_small_client_or_big()
             prompt = (
                 "You are VaultBot reflecting on your own abilities in service "
@@ -1358,17 +1581,19 @@ class SelfImprover:
                 "what the code would do. Be concrete and practical — focus "
                 "on what would actually advance your owner's goals.\n\n"
                 f"Topic: {topic}\n\nVault context:\n{vault_context[:2000]}\n\n"
-                "Respond as JSON: {\"proposals\": [{\"name\", \"description\", "
-                "\"parameters\", \"code_sketch\"}]}"
+                'Respond as JSON: {"proposals": [{"name", "description", '
+                '"parameters", "code_sketch"}]}'
             )
             # Use chat() not generate() — OpenAICompatibleClient only
             # exposes chat().  The old code called client.generate() which
             # exists on OllamaClient but NOT on the OpenAI backend, so
             # self_reflect was silently dead when LLM_BACKEND=openai.
             result = client.chat(
-                [{"role": "user", "content": prompt}],
-                temperature=0.4, stream=False)
-            text = result.get("response", "") if isinstance(result, dict) else str(result)
+                [{"role": "user", "content": prompt}], temperature=0.4, stream=False
+            )
+            text = (
+                result.get("response", "") if isinstance(result, dict) else str(result)
+            )
             return {"reflection": text, "topic": topic}
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
@@ -1386,13 +1611,31 @@ class SelfImprover:
             if file_path:
                 proc = _subprocess_run(
                     ["git", "checkout", "HEAD", "--", rel],
-                    capture_output=True, text=True, cwd=str(BACKEND_ROOT), timeout=10)
+                    capture_output=True,
+                    text=True,
+                    cwd=str(BACKEND_ROOT),
+                    timeout=10,
+                )
             else:
                 proc = _subprocess_run(
-                    ["git", "checkout", "HEAD", "--", "vaultbot_stuff/vaultbot_backend"],
-                    capture_output=True, text=True, cwd=str(BACKEND_ROOT), timeout=10)
-            return {"stdout": proc.stdout, "stderr": proc.stderr,
-                    "exit_code": proc.returncode, "restored": rel}
+                    [
+                        "git",
+                        "checkout",
+                        "HEAD",
+                        "--",
+                        "vaultbot_stuff/vaultbot_backend",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(BACKEND_ROOT),
+                    timeout=10,
+                )
+            return {
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+                "exit_code": proc.returncode,
+                "restored": rel,
+            }
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return {"error": str(e)}
 
@@ -1400,10 +1643,10 @@ class SelfImprover:
 
     def _safe_name(self, name: str) -> str:
         import re
+
         return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
-    def _resolve_path(self, file_path: str, allow_create: bool = False
-                      ) -> Path | None:
+    def _resolve_path(self, file_path: str, allow_create: bool = False) -> Path | None:
         """Resolve a path relative to the vault root, restricted to the vault
         directory so the agent can't write outside it."""
         if not file_path:
@@ -1432,5 +1675,7 @@ class SelfImprover:
         except ValueError:
             # Target is outside vault root — fall back to filename only.
             rel = Path(target.name)
-        bak = TRASH_DIR / str(rel).replace("\\", "/").replace("/", "_").replace("..", "_")
+        bak = TRASH_DIR / str(rel).replace("\\", "/").replace("/", "_").replace(
+            "..", "_"
+        )
         return bak.with_suffix(bak.suffix + ".bak")

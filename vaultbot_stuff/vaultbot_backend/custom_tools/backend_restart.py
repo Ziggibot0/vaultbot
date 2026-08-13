@@ -2,7 +2,12 @@
 Agent-authored tool: backend_restart
 """
 
-SCHEMA = {"name": "backend_restart", "description": "Restart the VaultBot backend process and reconnect. Sends a WebSocket message to the Obsidian plugin, which calls restartBackend() — the exact same code path as the GUI restart button. The plugin handles shutdown + respawn. Before restarting, this tool automatically caches recent chat history to RESTART_CONTEXT.md so the next session boots with full context — no manual resume needed. Use this after self-edits that require a backend restart, or to recover from a stale state.", "parameters": {"properties": {}, "required": [], "type": "object"}}
+SCHEMA = {
+    "name": "backend_restart",
+    "description": "Restart the VaultBot backend process and reconnect. Sends a WebSocket message to the Obsidian plugin, which calls restartBackend() — the exact same code path as the GUI restart button. The plugin handles shutdown + respawn. Before restarting, this tool automatically caches recent chat history to RESTART_CONTEXT.md so the next session boots with full context — no manual resume needed. Use this after self-edits that require a backend restart, or to recover from a stale state.",
+    "parameters": {"properties": {}, "required": [], "type": "object"},
+}
+
 
 def run(args: dict) -> dict:
     """Restart the VaultBot backend by asking the Obsidian plugin to do it.
@@ -57,8 +62,9 @@ def run(args: dict) -> dict:
         # notes from days ago.
         wm_files = []
         if os.path.isdir(session_state_dir):
-            for f in glob.glob(os.path.join(session_state_dir,
-                                            "working_memory_state_*.json")):
+            for f in glob.glob(
+                os.path.join(session_state_dir, "working_memory_state_*.json")
+            ):
                 mtime = os.path.getmtime(f)
                 wm_files.append((mtime, f))
             wm_files.sort(key=lambda x: x[0], reverse=True)
@@ -73,13 +79,21 @@ def run(args: dict) -> dict:
                     parts.append(f"Goal: {wm_data.get('goal', '(no goal)')}")
                     parts.append("")
                     for t in wm_data.get("tasks", []):
-                        mark = {"completed": "[x]", "in_progress": "[~]",
-                                "pending": "[ ]"}.get(t.get("status", ""), "[ ]")
-                        parts.append(f"{mark} {t.get('id', '?')}. {t.get('content', '')}")
+                        mark = {
+                            "completed": "[x]",
+                            "in_progress": "[~]",
+                            "pending": "[ ]",
+                        }.get(t.get("status", ""), "[ ]")
+                        parts.append(
+                            f"{mark} {t.get('id', '?')}. {t.get('content', '')}"
+                        )
                         if t.get("notes"):
                             parts.append(f"   Notes: {t['notes']}")
-                    done = sum(1 for t in wm_data.get("tasks", [])
-                              if t.get("status") == "completed")
+                    done = sum(
+                        1
+                        for t in wm_data.get("tasks", [])
+                        if t.get("status") == "completed"
+                    )
                     total = len(wm_data.get("tasks", []))
                     parts.append(f"Progress: {done}/{total} done")
                     # Include step summaries for completed steps.
@@ -104,8 +118,9 @@ def run(args: dict) -> dict:
         # Find the most recent conversation_state_*.json in session_state/.
         conv_files = []
         if os.path.isdir(session_state_dir):
-            for f in glob.glob(os.path.join(session_state_dir,
-                                            "conversation_state_*.json")):
+            for f in glob.glob(
+                os.path.join(session_state_dir, "conversation_state_*.json")
+            ):
                 mtime = os.path.getmtime(f)
                 conv_files.append((mtime, f))
             conv_files.sort(key=lambda x: x[0], reverse=True)
@@ -131,7 +146,8 @@ def run(args: dict) -> dict:
                             tool_name = msg.get("tool_name", "tool")
                             parts.append(
                                 f"[{role}] Called {tool_name} — result omitted "
-                                f"(re-call the tool if needed)")
+                                f"(re-call the tool if needed)"
+                            )
                             continue
                         # Truncate long messages.
                         if len(content) > 500:

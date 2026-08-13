@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-07-27
 last_reviewed: 2026-08-04

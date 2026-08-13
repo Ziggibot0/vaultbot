@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find procedures that overlap or duplicate each other using deterministic string similarity. Reads all procedure descriptions and when_to_use fields, computes pairwise similarity using difflib + keyword overlap, and returns ranked overlapping pairs. No LLM needed — pure deterministic. Use when the procedure library feels redundant.

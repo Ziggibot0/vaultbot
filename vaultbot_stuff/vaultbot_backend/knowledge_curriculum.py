@@ -56,8 +56,27 @@ from vault_graph import WIKILINK_RE, VaultGraph
 _DEFAULT_DIVERSITY_WINDOW: int = 5
 # Tokens that carry almost no signal and are dropped before overlap scoring.
 _STOP_TOKENS: set[str] = {
-    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
-    "is", "are", "be", "by", "at", "as", "it", "this", "that", "from",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "be",
+    "by",
+    "at",
+    "as",
+    "it",
+    "this",
+    "that",
+    "from",
 }
 # Single-token common English words that are valid dictionary entries but
 # are NOT worth a research note — researching them yields dictionary-scraping
@@ -65,29 +84,149 @@ _STOP_TOKENS: set[str] = {
 # ALONE as the entire topic; multi-word topics containing them pass.
 _SINGLE_WORD_STOPICS: set[str] = {
     # prepositions / conjunctions / articles / particles
-    "from", "to", "of", "in", "on", "at", "by", "for", "with", "about",
-    "into", "over", "under", "after", "before", "between", "through",
-    "during", "without", "within", "against", "among", "around", "above",
-    "below", "up", "down", "out", "off", "than", "then", "when", "where",
-    "while", "and", "or", "but", "nor", "yet", "so", "if", "as", "like",
-    "per", "via", "versus", "vs",
+    "from",
+    "to",
+    "of",
+    "in",
+    "on",
+    "at",
+    "by",
+    "for",
+    "with",
+    "about",
+    "into",
+    "over",
+    "under",
+    "after",
+    "before",
+    "between",
+    "through",
+    "during",
+    "without",
+    "within",
+    "against",
+    "among",
+    "around",
+    "above",
+    "below",
+    "up",
+    "down",
+    "out",
+    "off",
+    "than",
+    "then",
+    "when",
+    "where",
+    "while",
+    "and",
+    "or",
+    "but",
+    "nor",
+    "yet",
+    "so",
+    "if",
+    "as",
+    "like",
+    "per",
+    "via",
+    "versus",
+    "vs",
     # pronouns / determiners
-    "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us",
-    "them", "my", "your", "his", "its", "our", "their", "this", "that",
-    "these", "those", "who", "whom", "which", "what", "whose",
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "me",
+    "him",
+    "her",
+    "us",
+    "them",
+    "my",
+    "your",
+    "his",
+    "its",
+    "our",
+    "their",
+    "this",
+    "that",
+    "these",
+    "those",
+    "who",
+    "whom",
+    "which",
+    "what",
+    "whose",
     # be / auxiliaries
-    "is", "are", "was", "were", "be", "been", "being", "am", "do", "does",
-    "did", "done", "have", "has", "had", "will", "would", "can", "could",
-    "should", "shall", "may", "might", "must",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "am",
+    "do",
+    "does",
+    "did",
+    "done",
+    "have",
+    "has",
+    "had",
+    "will",
+    "would",
+    "can",
+    "could",
+    "should",
+    "shall",
+    "may",
+    "might",
+    "must",
     # trivial / UI / placeholder words that yield junk notes when alone
-    "welcome", "home", "index", "readme", "notes", "note", "title",
-    "summary", "references", "sources", "see", "also", "todo", "draft",
-    "untitled", "new", "old", "next", "prev", "previous", "back", "top",
-    "yes", "no", "ok", "okay", "test", "example", "examples", "sample",
-    "here", "there", "now", "today", "yesterday", "tomorrow",
+    "welcome",
+    "home",
+    "index",
+    "readme",
+    "notes",
+    "note",
+    "title",
+    "summary",
+    "references",
+    "sources",
+    "see",
+    "also",
+    "todo",
+    "draft",
+    "untitled",
+    "new",
+    "old",
+    "next",
+    "prev",
+    "previous",
+    "back",
+    "top",
+    "yes",
+    "no",
+    "ok",
+    "okay",
+    "test",
+    "example",
+    "examples",
+    "sample",
+    "here",
+    "there",
+    "now",
+    "today",
+    "yesterday",
+    "tomorrow",
     # generic terms used as illustrative wikilinks in exemplar/chat notes
     # ([[Wikilink]], [[Note]], [[Target]], [[TODO]]) — not research concepts
-    "wikilink", "wikilinks", "target", "chat-name",
+    "wikilink",
+    "wikilinks",
+    "target",
+    "chat-name",
 }
 # Template / placeholder patterns that show up as dangling links from
 # scaffolding or example notes ("Actual-Note-Title", "Note Name", "Topic").
@@ -151,8 +290,9 @@ def _is_researchable_topic(gap: dict[str, Any]) -> bool:
         # Reject file paths — dead links to learningMaterial/web/*.html or
         # any path with "/" or a file extension. These are broken file
         # references, not researchable concepts.
-        if "/" in topic or topic.endswith((".html", ".md", ".pdf", ".py",
-                                            ".js", ".json", ".txt")):
+        if "/" in topic or topic.endswith(
+            (".html", ".md", ".pdf", ".py", ".js", ".json", ".txt")
+        ):
             return False
         # Strip non-alpha for length/word checks but keep the original for
         # the placeholder regex above.
@@ -285,9 +425,7 @@ class KnowledgeCurriculum:
         # Invalidated by mark_completed / mark_failed (state changes) and by
         # the env-configurable TTL below. The autonomous researcher, which
         # runs on its own schedule, also benefits: rapid re-queries are free.
-        self._GAPS_TTL: float = float(
-            os.getenv("VAULTBOT_GAPS_TTL", "60")
-        )
+        self._GAPS_TTL: float = float(os.getenv("VAULTBOT_GAPS_TTL", "60"))
         self._gaps_cache: list[dict[str, Any]] | None = None
         self._gaps_cache_ts: float = 0.0
         # ---- Thin-communities sub-cache ---------------------------------
@@ -350,11 +488,14 @@ class KnowledgeCurriculum:
         """Best-effort error log through the session logger."""
         try:
             if self.session_logger is not None:
-                self.session_logger.log("curriculum_error", {
-                    "context": context,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "traceback": traceback.format_exc(),
-                })
+                self.session_logger.log(
+                    "curriculum_error",
+                    {
+                        "context": context,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "traceback": traceback.format_exc(),
+                    },
+                )
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
@@ -387,17 +528,22 @@ class KnowledgeCurriculum:
         """
         # Fast path: serve cached gaps if still fresh. Slicing respects the
         # caller's `n` without recomputing.
-        if (self._gaps_cache is not None
-                and (time.time() - self._gaps_cache_ts) < self._GAPS_TTL):
+        if (
+            self._gaps_cache is not None
+            and (time.time() - self._gaps_cache_ts) < self._GAPS_TTL
+        ):
             if self.session_logger is not None:
                 try:
-                    self.session_logger.log("gaps_cache_hit", {
-                        "age_s": round(time.time() - self._gaps_cache_ts, 1),
-                        "returned": min(len(self._gaps_cache), max(0, int(n))),
-                    })
+                    self.session_logger.log(
+                        "gaps_cache_hit",
+                        {
+                            "age_s": round(time.time() - self._gaps_cache_ts, 1),
+                            "returned": min(len(self._gaps_cache), max(0, int(n))),
+                        },
+                    )
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     pass
-            return self._gaps_cache[:max(0, int(n))] if self._gaps_cache else []
+            return self._gaps_cache[: max(0, int(n))] if self._gaps_cache else []
 
         try:
             self.graph.refresh()
@@ -435,13 +581,16 @@ class KnowledgeCurriculum:
             self._gaps_cache = top
             self._gaps_cache_ts = time.time()
 
-            self._log_event("curriculum_proposed", {
-                "candidate_count": len(candidates),
-                "filtered_count": len(filtered),
-                "returned": len(top[:max(0, int(n))]),
-                "top_topics": [g.get("topic") for g in top[:max(0, int(n))]],
-            })
-            return top[:max(0, int(n))]
+            self._log_event(
+                "curriculum_proposed",
+                {
+                    "candidate_count": len(candidates),
+                    "filtered_count": len(filtered),
+                    "returned": len(top[: max(0, int(n))]),
+                    "top_topics": [g.get("topic") for g in top[: max(0, int(n))]],
+                },
+            )
+            return top[: max(0, int(n))]
         except Exception as e:
             self._log_error("propose_next_gaps", e)
             raise
@@ -498,12 +647,14 @@ class KnowledgeCurriculum:
                     found = True
                     break
             if not found:
-                failed.append({
-                    "topic": topic,
-                    "reason": reason,
-                    "attempts": 1,
-                    "last_failed": _now_iso(),
-                })
+                failed.append(
+                    {
+                        "topic": topic,
+                        "reason": reason,
+                        "attempts": 1,
+                        "last_failed": _now_iso(),
+                    }
+                )
 
             # Keep the failure log bounded.
             if len(failed) > 200:
@@ -513,14 +664,21 @@ class KnowledgeCurriculum:
             # A failure changes achievability scoring; drop the gaps cache so
             # the next propose_next_gaps reflects the updated failure history.
             self._gaps_cache = None
-            self._log_event("curriculum_failed", {
-                "topic": topic,
-                "reason": reason,
-                "attempts": next(
-                    (fr.get("attempts") for fr in failed if fr.get("topic") == topic),
-                    1,
-                ),
-            })
+            self._log_event(
+                "curriculum_failed",
+                {
+                    "topic": topic,
+                    "reason": reason,
+                    "attempts": next(
+                        (
+                            fr.get("attempts")
+                            for fr in failed
+                            if fr.get("topic") == topic
+                        ),
+                        1,
+                    ),
+                },
+            )
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("mark_failed", e)
 
@@ -535,7 +693,7 @@ class KnowledgeCurriculum:
             return {
                 "completed_count": len(completed),
                 "failed_count": len(failed),
-                "recently_completed": list(completed[-self.diversity_window:]),
+                "recently_completed": list(completed[-self.diversity_window :]),
                 "failed_topics": [
                     {"topic": f.get("topic"), "attempts": f.get("attempts", 0)}
                     for f in failed
@@ -592,15 +750,17 @@ class KnowledgeCurriculum:
                 dangling = self.graph.dangling_links(min_references=1)
             out: list[dict[str, Any]] = []
             for d in dangling:
-                out.append({
-                    "kind": "dangling_link",
-                    "topic": d.get("name", d.get("normalized_name", "")),
-                    "normalized_name": d.get("normalized_name", ""),
-                    "reference_count": int(d.get("reference_count", 1)),
-                    "referenced_by": list(d.get("referenced_by", []) or []),
-                    "file_path": None,
-                    "base_priority": int(d.get("reference_count", 1)) * 10,
-                })
+                out.append(
+                    {
+                        "kind": "dangling_link",
+                        "topic": d.get("name", d.get("normalized_name", "")),
+                        "normalized_name": d.get("normalized_name", ""),
+                        "reference_count": int(d.get("reference_count", 1)),
+                        "referenced_by": list(d.get("referenced_by", []) or []),
+                        "file_path": None,
+                        "base_priority": int(d.get("reference_count", 1)) * 10,
+                    }
+                )
             return out
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_dangling_links", e)
@@ -617,20 +777,28 @@ class KnowledgeCurriculum:
             out: list[dict[str, Any]] = []
             for t in thin:
                 file_path = t.get("file_path", "") or ""
-                if self.skip_vaultbot_paths and any(d in file_path.replace("\\", "/") for d in ("vaultbot_stuff/Memory/Chat/", "vaultbot_stuff/Knowledge/Research/")):
+                if self.skip_vaultbot_paths and any(
+                    d in file_path.replace("\\", "/")
+                    for d in (
+                        "vaultbot_stuff/Memory/Chat/",
+                        "vaultbot_stuff/Knowledge/Research/",
+                    )
+                ):
                     continue
-                out.append({
-                    "kind": "thin_note",
-                    "topic": t.get("name", t.get("normalized_name", "")),
-                    "normalized_name": t.get("normalized_name", ""),
-                    "reference_count": 0,
-                    "referenced_by": self.graph.neighbors(
-                        t.get("normalized_name", ""), direction="in"
-                    ),
-                    "file_path": file_path,
-                    "content_length": int(t.get("content_length", 0)),
-                    "base_priority": 1,
-                })
+                out.append(
+                    {
+                        "kind": "thin_note",
+                        "topic": t.get("name", t.get("normalized_name", "")),
+                        "normalized_name": t.get("normalized_name", ""),
+                        "reference_count": 0,
+                        "referenced_by": self.graph.neighbors(
+                            t.get("normalized_name", ""), direction="in"
+                        ),
+                        "file_path": file_path,
+                        "content_length": int(t.get("content_length", 0)),
+                        "base_priority": 1,
+                    }
+                )
             return out
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_thin_notes", e)
@@ -655,7 +823,9 @@ class KnowledgeCurriculum:
             if dangling is None:
                 dangling = self.graph.dangling_links(min_references=1)
             dangling_names: set[str] = {
-                d.get("normalized_name", "") for d in dangling if d.get("normalized_name")
+                d.get("normalized_name", "")
+                for d in dangling
+                if d.get("normalized_name")
             }
             # Re-scan every note's raw content for wikilinks to non-existent
             # notes — same logic as dangling_links but we keep only entries
@@ -692,15 +862,17 @@ class KnowledgeCurriculum:
                             break
                     if display != norm:
                         break
-                out.append({
-                    "kind": "missing_entity",
-                    "topic": display,
-                    "normalized_name": norm,
-                    "reference_count": count,
-                    "referenced_by": sorted(ref_sources.get(norm, set())),
-                    "file_path": None,
-                    "base_priority": count * 10,
-                })
+                out.append(
+                    {
+                        "kind": "missing_entity",
+                        "topic": display,
+                        "normalized_name": norm,
+                        "reference_count": count,
+                        "referenced_by": sorted(ref_sources.get(norm, set())),
+                        "file_path": None,
+                        "base_priority": count * 10,
+                    }
+                )
             return out
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_missing_entities", e)
@@ -727,9 +899,11 @@ class KnowledgeCurriculum:
         """
         try:
             graph_mtime = getattr(self.graph, "_last_refresh_mtime", 0.0)
-            if (self._thin_communities_cache is not None
-                    and self._thin_communities_graph_mtime == graph_mtime
-                    and graph_mtime > 0.0):
+            if (
+                self._thin_communities_cache is not None
+                and self._thin_communities_graph_mtime == graph_mtime
+                and graph_mtime > 0.0
+            ):
                 # Graph topology unchanged since last compute — reuse.
                 return list(self._thin_communities_cache)
 
@@ -741,7 +915,8 @@ class KnowledgeCurriculum:
                 neighbors = self.graph.neighbors(name, direction="both")
                 # Restrict to neighbors that aren't themselves hubs.
                 non_hub_neighbors = [
-                    n for n in neighbors
+                    n
+                    for n in neighbors
                     if not _is_hub_name(self.graph.nodes.get(n, {}).get("name", n))
                     and not _is_hub_name(name)
                 ]
@@ -776,15 +951,17 @@ class KnowledgeCurriculum:
                 ]
                 topic = "MOC for: " + ", ".join(display_members[:6])
                 # Referenced_by = the clique members (they'd backlink a hub).
-                out.append({
-                    "kind": "thin_community",
-                    "topic": topic,
-                    "normalized_name": "|".join(clique_sorted),
-                    "reference_count": len(clique_sorted),
-                    "referenced_by": clique_sorted,
-                    "file_path": None,
-                    "base_priority": len(clique_sorted),
-                })
+                out.append(
+                    {
+                        "kind": "thin_community",
+                        "topic": topic,
+                        "normalized_name": "|".join(clique_sorted),
+                        "reference_count": len(clique_sorted),
+                        "referenced_by": clique_sorted,
+                        "file_path": None,
+                        "base_priority": len(clique_sorted),
+                    }
+                )
 
             # Cache keyed on graph mtime so an unchanged topology reuses
             # this O(n*k^2) result on the next scoring pass.
@@ -809,15 +986,17 @@ class KnowledgeCurriculum:
                 out_links = self.graph.edges.get(name, set())
                 in_links = self.graph.backlinks.get(name, set())
                 if len(out_links) >= threshold and not in_links:
-                    out.append({
-                        "kind": "link_density",
-                        "topic": node.get("name", name),
-                        "normalized_name": name,
-                        "reference_count": len(out_links),
-                        "referenced_by": [],  # by definition, nobody links in
-                        "file_path": node.get("file_path"),
-                        "base_priority": 1,  # deliberately low
-                    })
+                    out.append(
+                        {
+                            "kind": "link_density",
+                            "topic": node.get("name", name),
+                            "normalized_name": name,
+                            "reference_count": len(out_links),
+                            "referenced_by": [],  # by definition, nobody links in
+                            "file_path": node.get("file_path"),
+                            "base_priority": 1,  # deliberately low
+                        }
+                    )
             return out
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("collect_link_density_anomalies", e)
@@ -837,7 +1016,8 @@ class KnowledgeCurriculum:
         an immediate retry loop.
         """
         completed: set[str] = {
-            t.lower() for t in (self.state.get("completed_topics") or [])
+            t.lower()
+            for t in (self.state.get("completed_topics") or [])
             if isinstance(t, str)
         }
         failed_recently: set[str] = {
@@ -899,7 +1079,7 @@ class KnowledgeCurriculum:
         A gap whose tokens heavily overlap the last ``diversity_window``
         completed topics gets ×0.3; moderate overlap → ×0.6; no overlap → ×1.0.
         """
-        completed = (self.state.get("completed_topics") or [])[-self.diversity_window:]
+        completed = (self.state.get("completed_topics") or [])[-self.diversity_window :]
         if not completed:
             return 1.0
 
@@ -908,8 +1088,10 @@ class KnowledgeCurriculum:
         # considers the actual notes, not the synthetic "MOC for: ..." string.
         if gap.get("kind") == "thin_community":
             ref_by = gap.get("referenced_by") or []
-            topic = topic + " " + " ".join(
-                self.graph.nodes.get(n, {}).get("name", n) for n in ref_by
+            topic = (
+                topic
+                + " "
+                + " ".join(self.graph.nodes.get(n, {}).get("name", n) for n in ref_by)
             )
 
         max_overlap = 0.0
@@ -994,9 +1176,7 @@ class KnowledgeCurriculum:
             return 1.1
         return 1.0
 
-    def _explain(
-        self, gap: dict[str, Any], breakdown: dict[str, float]
-    ) -> str:
+    def _explain(self, gap: dict[str, Any], breakdown: dict[str, float]) -> str:
         """Human-readable reason string for why this gap was selected."""
         try:
             kind = gap.get("kind", "gap")

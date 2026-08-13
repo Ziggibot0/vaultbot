@@ -2,6 +2,7 @@
 
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from note_schema import (
@@ -128,9 +129,7 @@ def test_path_inference_default_claim():
 
 def test_force_type_override():
     """Caller can force the type."""
-    result = inject_schema(
-        "# X\n\nbody", "vaultbot_stuff/X.md", force_type="semantic"
-    )
+    result = inject_schema("# X\n\nbody", "vaultbot_stuff/X.md", force_type="semantic")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "semantic"
 
@@ -163,7 +162,9 @@ def test_no_split_single_argument():
         "## Evidence\n\n" + "Evidence text. " * 30 + "\n\n"
         "## Conclusion\n\n" + "Conclusion text. " * 30 + "\n\n"
     )
-    result = split_note_if_needed(content, "vaultbot_stuff/Knowledge/Research/Single.md")
+    result = split_note_if_needed(
+        content, "vaultbot_stuff/Knowledge/Research/Single.md"
+    )
     assert result is None
 
 
@@ -176,7 +177,9 @@ def test_no_split_procedure():
         "## Step 2\n\n" + "Do step 2. " * 30 + "\n\n"
         "## Step 3\n\n" + "Do step 3. " * 30 + "\n\n"
     )
-    result = split_note_if_needed(content, "vaultbot_stuff/System/Procedures/My-Proc.md")
+    result = split_note_if_needed(
+        content, "vaultbot_stuff/System/Procedures/My-Proc.md"
+    )
     assert result is None
 
 
@@ -262,11 +265,17 @@ def test_heal_vault_schema_scans_all():
         os.makedirs(os.path.join(tmp, "vaultbot_stuff", "Knowledge", "Research"))
         os.makedirs(os.path.join(tmp, "vaultbot_stuff", "Memory", "Chat"))
 
-        with_schema = os.path.join(tmp, "vaultbot_stuff", "Knowledge", "Research", "Good.md")
+        with_schema = os.path.join(
+            tmp, "vaultbot_stuff", "Knowledge", "Research", "Good.md"
+        )
         with open(with_schema, "w", encoding="utf-8") as f:
-            f.write("---\ntype: research\nstatus: raw\ncreated: 2026-08-03\nsummary: x\ntags: [research]\n---\n# Good\n\nbody")
+            f.write(
+                "---\ntype: research\nstatus: raw\ncreated: 2026-08-03\nsummary: x\ntags: [research]\n---\n# Good\n\nbody"
+            )
 
-        without_schema = os.path.join(tmp, "vaultbot_stuff", "Memory", "Chat", "Chat-Test.md")
+        without_schema = os.path.join(
+            tmp, "vaultbot_stuff", "Memory", "Chat", "Chat-Test.md"
+        )
         with open(without_schema, "w", encoding="utf-8") as f:
             f.write("# Chat Test\n\nNo frontmatter.")
 

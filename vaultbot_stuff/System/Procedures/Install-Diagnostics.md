@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: "System installation health check. Deterministically verifies: Ollama is running and responsive, expected models are installed, vault index is built and current, backend process is alive, plugin WebSocket is connected, and all custom tools are registered. Returns a pass/fail report with specific failure reasons. Zero LLM reasoning needed — pure status checks formatted into prose."

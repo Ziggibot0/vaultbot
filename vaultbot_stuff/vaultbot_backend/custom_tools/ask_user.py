@@ -2,7 +2,56 @@
 Agent-authored tool: ask_user
 """
 
-SCHEMA = {"name": "ask_user", "description": "Send an interactive questionnaire to the user via the Obsidian plugin GUI and block until the user responds. The user can answer each question, pick \"I don't know\" for any question, and add free-text comments for nuance. Use this when you need the user's input to crystallize an idea or make a decision.", "parameters": {"properties": {"context": {"description": "Background context explaining what you're trying to decide or what information you need", "type": "string"}, "questions": {"description": "List of question objects to present to the user", "items": {"properties": {"default": {"description": "Default value: 'best_practices' to pre-select the 'I don't know, use best practices' option, or a string for text default", "type": "string"}, "id": {"description": "Unique key for this question (used as the key in the returned dict)", "type": "string"}, "options": {"description": "List of option strings (for radio type only)", "items": {"type": "string"}, "type": "array"}, "question": {"description": "The question text to display", "type": "string"}, "type": {"description": "'radio' for single-choice with options, 'text' for free-form input", "enum": ["radio", "text"], "type": "string"}}, "required": ["id", "question", "type"], "type": "object"}, "type": "array"}, "title": {"description": "Short title for the question card (e.g. 'Research approach')", "type": "string"}}, "required": ["title", "questions"], "type": "object"}}
+SCHEMA = {
+    "name": "ask_user",
+    "description": "Send an interactive questionnaire to the user via the Obsidian plugin GUI and block until the user responds. The user can answer each question, pick \"I don't know\" for any question, and add free-text comments for nuance. Use this when you need the user's input to crystallize an idea or make a decision.",
+    "parameters": {
+        "properties": {
+            "context": {
+                "description": "Background context explaining what you're trying to decide or what information you need",
+                "type": "string",
+            },
+            "questions": {
+                "description": "List of question objects to present to the user",
+                "items": {
+                    "properties": {
+                        "default": {
+                            "description": "Default value: 'best_practices' to pre-select the 'I don't know, use best practices' option, or a string for text default",
+                            "type": "string",
+                        },
+                        "id": {
+                            "description": "Unique key for this question (used as the key in the returned dict)",
+                            "type": "string",
+                        },
+                        "options": {
+                            "description": "List of option strings (for radio type only)",
+                            "items": {"type": "string"},
+                            "type": "array",
+                        },
+                        "question": {
+                            "description": "The question text to display",
+                            "type": "string",
+                        },
+                        "type": {
+                            "description": "'radio' for single-choice with options, 'text' for free-form input",
+                            "enum": ["radio", "text"],
+                            "type": "string",
+                        },
+                    },
+                    "required": ["id", "question", "type"],
+                    "type": "object",
+                },
+                "type": "array",
+            },
+            "title": {
+                "description": "Short title for the question card (e.g. 'Research approach')",
+                "type": "string",
+            },
+        },
+        "required": ["title", "questions"],
+        "type": "object",
+    },
+}
 
 
 """
@@ -37,7 +86,11 @@ def _cleanup_stale():
     stale = []
     for rid, entry in list(_pending_requests.items()):
         ev = entry[0]
-        if not ev.is_set() and hasattr(ev, '_created_at') and (now - ev._created_at) > 600:
+        if (
+            not ev.is_set()
+            and hasattr(ev, "_created_at")
+            and (now - ev._created_at) > 600
+        ):
             stale.append(rid)
     for rid in stale:
         try:
@@ -47,8 +100,9 @@ def _cleanup_stale():
             pass
 
 
-def run(args: dict, websocket: object | None = None,
-        session_id: str | None = None) -> dict:
+def run(
+    args: dict, websocket: object | None = None, session_id: str | None = None
+) -> dict:
     """Send a questionnaire to the user and wait for their response.
 
     Args:
@@ -134,4 +188,3 @@ def run(args: dict, websocket: object | None = None,
         return {"error": "No response received from user"}
 
     return dict(response_holder)
-

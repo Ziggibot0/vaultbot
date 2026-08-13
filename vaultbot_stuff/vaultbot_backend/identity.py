@@ -81,7 +81,9 @@ class Identity:
         self.session_logger = session_logger
 
         self._identity_path = os.path.join(identity_dir, _IDENTITY_FILENAME)
-        self._restart_context_path = os.path.join(identity_dir, _RESTART_CONTEXT_FILENAME)
+        self._restart_context_path = os.path.join(
+            identity_dir, _RESTART_CONTEXT_FILENAME
+        )
 
         try:
             os.makedirs(identity_dir, exist_ok=True)
@@ -142,10 +144,7 @@ class Identity:
             except OSError:
                 current_mtime = float("inf")
 
-            if (
-                self._boot_cache is not None
-                and current_mtime == self._boot_cache_mtime
-            ):
+            if self._boot_cache is not None and current_mtime == self._boot_cache_mtime:
                 self._safe_log("identity_boot_cache_hit", {})
                 if restart_ctx:
                     return restart_ctx + "\n\n" + self._boot_cache

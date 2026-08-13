@@ -14,6 +14,7 @@ This gives IDE autocomplete + type-checking across every extracted module
 without changing the no-cycle property.  ``get_services()`` / ``set_services()``
 live in ``app_state.py`` and are the FastAPI dependency-injection surface.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,6 +65,7 @@ class Services:
     ``Depends(get_services)`` consumer sees the new client immediately
     (the dataclass instance is shared, not re-created per request).
     """
+
     # LLM + embeddings
     ollama_client: OllamaClient
     vision_client: LLMClient | None

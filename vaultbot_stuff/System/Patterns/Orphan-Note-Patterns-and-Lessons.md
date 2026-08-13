@@ -8,6 +8,7 @@ tags:
   - graph-health
 type: pattern
 status: raw
+baseline: true
 ---
 
 # Orphan Note Patterns and Lessons Learned

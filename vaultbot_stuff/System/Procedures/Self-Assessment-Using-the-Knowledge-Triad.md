@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: Evaluate a vault note on three axes — Faithfulness, Connectivity, Utility — by composing existing procedures. Thin orchestrator that calls Cross-Check-Claims (faithfulness), Note-Quality-Score (connectivity), and Evaluate-Retrieval (utility) with conditional branches based on note type. Returns a triadic score with per-axis reasoning. Backed by RAG evaluation research.

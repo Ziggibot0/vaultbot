@@ -8,6 +8,7 @@ These tests verify the fail-safe contract: a broken small model degrades to
 exactly today's behavior. The big model never sees worse data than it would
 without the filters.
 """
+
 import sys
 import types
 
@@ -21,16 +22,20 @@ if "faiss" not in sys.modules:
     sys.modules["faiss"] = _faiss_stub
 
 
-
 from small_model_filters import (
-    dedup_results, expand_query, filter_context,
-    _content_words, _parse_json_array, _split_context_sections,
+    dedup_results,
+    expand_query,
+    filter_context,
+    _content_words,
+    _parse_json_array,
+    _split_context_sections,
 )
 
 
 # ---------------------------------------------------------------------------
 # Stub helpers
 # ---------------------------------------------------------------------------
+
 
 class _FakeClient:
     """LLM client stub that returns canned text for chat()."""
@@ -64,11 +69,17 @@ class _FakeSessionLogger:
 # rerank_results delegates to execute_procedure, which is async and lives in
 # chat_handler.py. We test it by monkeypatching execute_agent_tool.
 
+
 def _make_results(n: int) -> list[dict]:
     """Generate n fake FUSED retrieval results."""
     return [
-        {"file_path": f"note_{i}.md", "name": f"Note-{i}",
-         "score": 1.0 - i * 0.1, "channels": {"vector"}, "snippet": f"content {i}"}
+        {
+            "file_path": f"note_{i}.md",
+            "name": f"Note-{i}",
+            "score": 1.0 - i * 0.1,
+            "channels": {"vector"},
+            "snippet": f"content {i}",
+        }
         for i in range(n)
     ]
 
@@ -97,9 +108,11 @@ def _make_fake_indexer(embeddings_map: dict, query_vec=None):
 
 def _make_fake_svc(embeddings_map: dict, query_vec=None):
     """Create a fake svc with a vault_indexer attribute."""
+
     class _FakeSvc:
         def __init__(self):
             self.vault_indexer = _make_fake_indexer(embeddings_map, query_vec)
+
     return _FakeSvc()
 
 
@@ -121,9 +134,15 @@ def test_rerank_reorders_by_relevance():
     embeddings["note_5.md"] = note5_v
 
     svc = _make_fake_svc(embeddings, query_vec=query_v)
-    out = asyncio.run(rerank_results(
-        svc=svc, query="test", results=results, k=5,
-        session_logger=_FakeSessionLogger()))
+    out = asyncio.run(
+        rerank_results(
+            svc=svc,
+            query="test",
+            results=results,
+            k=5,
+            session_logger=_FakeSessionLogger(),
+        )
+    )
     # note_5 should be first (highest cosine similarity).
     assert out[0]["file_path"] == "note_5.md"
     assert len(out) == 5
@@ -135,9 +154,15 @@ def test_rerank_noop_when_few_results():
     import asyncio
 
     results = _make_results(3)
-    out = asyncio.run(rerank_results(
-        svc=None, query="test", results=results, k=5,
-        session_logger=_FakeSessionLogger()))
+    out = asyncio.run(
+        rerank_results(
+            svc=None,
+            query="test",
+            results=results,
+            k=5,
+            session_logger=_FakeSessionLogger(),
+        )
+    )
     # Should return the original 3 results unchanged.
     assert len(out) == 3
     assert out == results
@@ -153,9 +178,15 @@ def test_rerank_fallback_on_no_indexer():
     class _SvcNoIndexer:
         pass
 
-    out = asyncio.run(rerank_results(
-        svc=_SvcNoIndexer(), query="test", results=results, k=5,
-        session_logger=_FakeSessionLogger()))
+    out = asyncio.run(
+        rerank_results(
+            svc=_SvcNoIndexer(),
+            query="test",
+            results=results,
+            k=5,
+            session_logger=_FakeSessionLogger(),
+        )
+    )
     assert len(out) == 5
     # Original order preserved.
     assert out[0]["file_path"] == "note_0.md"
@@ -170,17 +201,25 @@ def test_rerank_fallback_on_embedding_failure():
 
     class _BrokenIndexer:
         index = True
+
         def _get_embedding(self, query):
             raise RuntimeError("embedding service down")
+
         def reconstruct_embedding(self, fp):
             return None
 
     class _Svc:
         vault_indexer = _BrokenIndexer()
 
-    out = asyncio.run(rerank_results(
-        svc=_Svc(), query="test", results=results, k=5,
-        session_logger=_FakeSessionLogger()))
+    out = asyncio.run(
+        rerank_results(
+            svc=_Svc(),
+            query="test",
+            results=results,
+            k=5,
+            session_logger=_FakeSessionLogger(),
+        )
+    )
     assert len(out) == 5
     assert out[0]["file_path"] == "note_0.md"
 
@@ -189,11 +228,15 @@ def test_rerank_fallback_on_embedding_failure():
 # Phase 2: expand_query tests
 # ---------------------------------------------------------------------------
 
+
 def test_expand_returns_original_plus_alternatives():
     """Valid expansion produces original + at least 1 alternative."""
     client = _FakeClient("small models for vault\nsmall language model efficiency")
-    out = expand_query(client, "tell me about small models for vault",
-                       session_logger=_FakeSessionLogger())
+    out = expand_query(
+        client,
+        "tell me about small models for vault",
+        session_logger=_FakeSessionLogger(),
+    )
     assert len(out) >= 2
     assert out[0] == "tell me about small models for vault"
     # At least one expanded query should mention "small".
@@ -203,16 +246,18 @@ def test_expand_returns_original_plus_alternatives():
 def test_expand_fallback_on_failure():
     """When client raises, only the original message is returned."""
     client = _FakeClient(raises=True)
-    out = expand_query(client, "what is embedding drift",
-                       session_logger=_FakeSessionLogger())
+    out = expand_query(
+        client, "what is embedding drift", session_logger=_FakeSessionLogger()
+    )
     assert out == ["what is embedding drift"]
 
 
 def test_expand_drops_unrelated_query():
     """Expanded queries with no word overlap are dropped."""
     client = _FakeClient("quantum physics formulas\nmacaroni recipe ingredients")
-    out = expand_query(client, "tell me about embedding drift",
-                       session_logger=_FakeSessionLogger())
+    out = expand_query(
+        client, "tell me about embedding drift", session_logger=_FakeSessionLogger()
+    )
     # Both expanded queries have no overlap with "embedding drift" — only
     # the original should survive.
     assert out == ["tell me about embedding drift"]
@@ -220,8 +265,9 @@ def test_expand_drops_unrelated_query():
 
 def test_expand_none_client_returns_original():
     """When client is None, only the original message is returned."""
-    out = expand_query(None, "search for procedures",
-                       session_logger=_FakeSessionLogger())
+    out = expand_query(
+        None, "search for procedures", session_logger=_FakeSessionLogger()
+    )
     assert out == ["search for procedures"]
 
 
@@ -229,11 +275,17 @@ def test_expand_none_client_returns_original():
 # dedup_results tests
 # ---------------------------------------------------------------------------
 
+
 def test_dedup_merges_by_file_path():
     """Two results for the same path merge into one with max score."""
     results = [
         {"file_path": "note.md", "name": "Note", "score": 0.5, "channels": {"vector"}},
-        {"file_path": "note.md", "name": "Note", "score": 0.8, "channels": {"backlink"}},
+        {
+            "file_path": "note.md",
+            "name": "Note",
+            "score": 0.8,
+            "channels": {"backlink"},
+        },
     ]
     out = dedup_results(results)
     assert len(out) == 1
@@ -260,6 +312,7 @@ def test_dedup_keeps_different_paths():
 # Phase 4: filter_context tests
 # ---------------------------------------------------------------------------
 
+
 def _make_context(n_sections: int) -> str:
     """Build a context string with n L1 card sections."""
     parts = ["# Vault Context\n"]
@@ -272,9 +325,15 @@ def test_filter_noop_on_short_context():
     """Context under 3000 chars is not filtered."""
     short_ctx = "short context " * 10
     import asyncio
-    out = asyncio.run(filter_context(
-        svc=None, query="test", context=short_ctx,
-        session_logger=_FakeSessionLogger()))
+
+    out = asyncio.run(
+        filter_context(
+            svc=None,
+            query="test",
+            context=short_ctx,
+            session_logger=_FakeSessionLogger(),
+        )
+    )
     assert out == short_ctx
 
 
@@ -283,9 +342,12 @@ def test_filter_fallback_no_query_overlap():
     the original context is returned unchanged (fail-safe)."""
     ctx = _make_context(6)
     import asyncio
-    out = asyncio.run(filter_context(
-        svc=None, query="zzzzzzz", context=ctx,
-        session_logger=_FakeSessionLogger()))
+
+    out = asyncio.run(
+        filter_context(
+            svc=None, query="zzzzzzz", context=ctx, session_logger=_FakeSessionLogger()
+        )
+    )
     # With no overlap, keep_set only has first+last = 2 sections,
     # which triggers the "fewer than 2" guard is NOT triggered (2 >= 2),
     # but keep_set != all sections, so filtering happens.
@@ -317,6 +379,7 @@ def test_split_context_sections_no_headers():
 # ---------------------------------------------------------------------------
 # Helper function tests
 # ---------------------------------------------------------------------------
+
 
 def test_parse_json_array_valid():
     """Valid JSON array is parsed."""

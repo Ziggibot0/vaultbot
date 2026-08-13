@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Check whether a source text supports, contradicts, or does not support a claim. Returns JSON with verdict and reasoning. Uses the small model — entailment checking is simple classification.

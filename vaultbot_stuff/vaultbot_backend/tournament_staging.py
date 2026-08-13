@@ -21,16 +21,19 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-_STAGING_PATH = Path(__file__).resolve().parent.parent.parent / "tournament_staging.json"
+_STAGING_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "tournament_staging.json"
+)
 
 
 @dataclass
 class StagingEntry:
     """One model in the tournament staging pot."""
-    id: str                    # unique, e.g. "ollama-local:qwen3.6:27b"
-    model: str                 # provider's model name
-    provider: str              # provider id (must exist in main registry)
-    label: str = ""            # optional display label
+
+    id: str  # unique, e.g. "ollama-local:qwen3.6:27b"
+    model: str  # provider's model name
+    provider: str  # provider id (must exist in main registry)
+    label: str = ""  # optional display label
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -89,7 +92,9 @@ class TournamentStaging:
         """Add a model to the staging pot. Generates id as provider:model."""
         entry_id = f"{provider}:{model}"
         with self._lock:
-            entry = StagingEntry(id=entry_id, model=model, provider=provider, label=label)
+            entry = StagingEntry(
+                id=entry_id, model=model, provider=provider, label=label
+            )
             self._entries[entry_id] = entry
             self.save()
             return entry

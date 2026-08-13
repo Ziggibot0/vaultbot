@@ -10,6 +10,7 @@ Verifies that:
 
 Run: pytest tests/test_update_rollback.py -v
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -58,8 +59,11 @@ class TestListBackups:
     def test_sorted_newest_first(self, tmp_path):
         d = tmp_path / ".vaultbot-update-backup"
         d.mkdir()
-        for ts in ["2026-07-27T10-00-00.000Z", "2026-07-29T18-30-00.000Z",
-                    "2026-07-28T12-00-00.000Z"]:
+        for ts in [
+            "2026-07-27T10-00-00.000Z",
+            "2026-07-29T18-30-00.000Z",
+            "2026-07-28T12-00-00.000Z",
+        ]:
             sub = d / ts
             sub.mkdir()
             (sub / "test__file.py").write_text("old code")
@@ -80,6 +84,7 @@ class TestRollbackEndpoint:
         import asyncio
 
         from routers.config import rollback_update
+
         # We need to mock _find_latest_backup to return None and the svc
         # param. Since rollback_update takes svc as a Depends param, we
         # call it with None (the endpoint doesn't use svc).
@@ -109,8 +114,10 @@ class TestRollbackEndpoint:
         # overwritten by the rollback.
         (backend_dir / "routers" / "config.py").write_text("# new version")
 
-        with patch("routers.config._BACKUP_DIR", backup_dir), \
-             patch("routers.config._BACKEND_DIR", backend_dir):
+        with (
+            patch("routers.config._BACKUP_DIR", backup_dir),
+            patch("routers.config._BACKEND_DIR", backend_dir),
+        ):
             result = asyncio.run(rollback_update(svc=None))
 
         assert result["status"] == "ok"
@@ -140,8 +147,10 @@ class TestRollbackEndpoint:
         backend_dir = tmp_path / "vaultbot_backend"
         backend_dir.mkdir()
 
-        with patch("routers.config._BACKUP_DIR", backup_dir), \
-             patch("routers.config._BACKEND_DIR", backend_dir):
+        with (
+            patch("routers.config._BACKUP_DIR", backup_dir),
+            patch("routers.config._BACKEND_DIR", backend_dir),
+        ):
             result = asyncio.run(rollback_update(svc=None))
 
         assert result["status"] == "ok"

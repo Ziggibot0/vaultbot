@@ -61,7 +61,9 @@ SCHEMA = {
 # parent = custom_tools, parent.parent = vaultbot_backend, parent.parent.parent
 # = vaultbot_stuff/ (the framework root).
 try:
-    VAULT_DIR = Path(__file__).resolve().parent.parent.parent  # vaultbot_stuff/ (framework root, 3 levels up from vaultbot_stuff/vaultbot_backend/custom_tools/)
+    VAULT_DIR = (
+        Path(__file__).resolve().parent.parent.parent
+    )  # vaultbot_stuff/ (framework root, 3 levels up from vaultbot_stuff/vaultbot_backend/custom_tools/)
 except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"
@@ -84,6 +86,7 @@ def _resolve_pdf(pdf_name: str) -> Path | None:
         toc = TEXTBOOKS_DIR / ("%s.md" % pdf_name) if TEXTBOOKS_DIR.exists() else None
         if toc and toc.exists():
             import re
+
             text = toc.read_text(encoding="utf-8", errors="replace")
             m = re.search(r"Source PDF:\*\*\s*(.+)", text)
             if m:
@@ -104,8 +107,7 @@ def _resolve_pdf(pdf_name: str) -> Path | None:
     return None
 
 
-def _render_page_image(pdf_path: Path, page_num: int,
-                       dpi: int = 150) -> str | None:
+def _render_page_image(pdf_path: Path, page_num: int, dpi: int = 150) -> str | None:
     """Render one PDF page to a base64 PNG (for the vision model).
 
     dpi=150 balances legibility vs token cost (~800-1200 tokens/page at
@@ -113,6 +115,7 @@ def _render_page_image(pdf_path: Path, page_num: int,
     """
     try:
         import fitz
+
         doc = fitz.open(str(pdf_path))
         if page_num < 1 or page_num > len(doc):
             doc.close()
@@ -131,6 +134,7 @@ def _extract_page_text(pdf_path: Path, page_num: int) -> str:
     """Fast text-layer extract for one page (fallback when no vision model)."""
     try:
         import fitz
+
         doc = fitz.open(str(pdf_path))
         if page_num < 1 or page_num > len(doc):
             doc.close()
@@ -157,8 +161,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
 
     pdf_path = _resolve_pdf(pdf_ref)
     if pdf_path is None or not pdf_path.exists():
-        return {"error": "PDF not found: %s (looked in learningMaterial/)"
-                % pdf_ref}
+        return {"error": "PDF not found: %s (looked in learningMaterial/)" % pdf_ref}
 
     img_b64 = _render_page_image(pdf_path, page)
     if img_b64 is None:
@@ -189,10 +192,12 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
             "page": page,
             "content": text or "(no text on this page)",
             "method": "text_layer",
-            "caveat": ("Read via the text layer because the active model "
-                       "can't see images. Vector-drawn equations and figures "
-                       "may be MISSING from this text. Pick a vision model "
-                       "in Settings for complete page reads."),
+            "caveat": (
+                "Read via the text layer because the active model "
+                "can't see images. Vector-drawn equations and figures "
+                "may be MISSING from this text. Pick a vision model "
+                "in Settings for complete page reads."
+            ),
             "provenance": "%s page %d" % (pdf_path.name, page),
         }
 
@@ -209,8 +214,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     }
 
 
-def _read_with_vision(llm_client, img_b64: str, pdf_name: str,
-                       page: int) -> str:
+def _read_with_vision(llm_client, img_b64: str, pdf_name: str, page: int) -> str:
     """Ask the vision-capable llm_client to transcribe a page image.
 
     Builds an OpenAI-compatible image message and calls the client's chat.
@@ -228,22 +232,29 @@ def _read_with_vision(llm_client, img_b64: str, pdf_name: str,
     # Ollama uses the `images` field on the message; OpenAI uses image_url
     # content parts. Detect which by the client type.
     from llm_client import OpenAICompatibleClient
+
     if isinstance(llm_client, OpenAICompatibleClient):
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url",
-                 "image_url": {"url": "data:image/png;base64,%s" % img_b64}},
-            ],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,%s" % img_b64},
+                    },
+                ],
+            }
+        ]
     else:
         # Ollama-style: content string + images list.
-        messages = [{
-            "role": "user",
-            "content": prompt,
-            "images": [img_b64],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": prompt,
+                "images": [img_b64],
+            }
+        ]
     try:
         result = llm_client.chat(messages, temperature=0.0, stream=False)
         if isinstance(result, dict):

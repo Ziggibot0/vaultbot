@@ -8,6 +8,7 @@ neighbors(), etc.  Without a lock this raises
 These tests hammer refresh() in one thread while reading from another,
 asserting no RuntimeError for thousands of iterations.
 """
+
 from __future__ import annotations
 
 import threading
@@ -25,7 +26,7 @@ def test_concurrent_refresh_and_read_no_runtime_error(tmp_path):
     # Create a few notes so the graph has content to iterate over.
     for i in range(5):
         (tmp_path / f"Note-{i}.md").write_text(
-            f"# Note {i}\n\nLinks to [[Note-{(i+1) % 5}]] and [[Missing-Target]].\n",
+            f"# Note {i}\n\nLinks to [[Note-{(i + 1) % 5}]] and [[Missing-Target]].\n",
             encoding="utf-8",
         )
 
@@ -81,7 +82,7 @@ def test_concurrent_refresh_and_walk_no_runtime_error(tmp_path):
     refresh()."""
     for i in range(10):
         (tmp_path / f"Note-{i}.md").write_text(
-            f"# Note {i}\n\nLinks to [[Note-{(i+1) % 10}]] and [[Note-{(i+2) % 10}]].\n",
+            f"# Note {i}\n\nLinks to [[Note-{(i + 1) % 10}]] and [[Note-{(i + 2) % 10}]].\n",
             encoding="utf-8",
         )
 

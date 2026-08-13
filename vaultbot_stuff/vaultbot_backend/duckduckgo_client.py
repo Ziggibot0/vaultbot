@@ -55,22 +55,33 @@ class DuckDuckGoClient:
         "Accept-Language": "en-US,en;q=0.9",
     }
 
-    def __init__(self, api_key: str | None = None,
-                 session_logger=None, timeout: int = 20):
+    def __init__(
+        self, api_key: str | None = None, session_logger=None, timeout: int = 20
+    ):
         # api_key accepted for interface compat but not used.
         self.api_key = None
         self.session_logger = session_logger
         self.timeout = timeout
         self._last_request_time: float = 0.0
 
-    def _log(self, method: str, inputs: dict[str, Any] | None = None,
-             outputs: Any = None, duration_ms: float | None = None,
-             error: str | None = None):
+    def _log(
+        self,
+        method: str,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any = None,
+        duration_ms: float | None = None,
+        error: str | None = None,
+    ):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
-            tool="duckduckgo", method=method, inputs=inputs, outputs=outputs,
-            duration_ms=duration_ms, error=error)
+            tool="duckduckgo",
+            method=method,
+            inputs=inputs,
+            outputs=outputs,
+            duration_ms=duration_ms,
+            error=error,
+        )
 
     def set_api_key(self, key: str) -> None:
         """No-op — DuckDuckGo doesn't use API keys."""
@@ -87,8 +98,9 @@ class DuckDuckGoClient:
             time.sleep(1.0 - elapsed)
         self._last_request_time = time.time()
 
-    def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> dict[str, Any]:
+    def search(
+        self, query: str, max_results: int = 5, search_depth: str = "advanced"
+    ) -> dict[str, Any]:
         """Search DuckDuckGo and return a result dict.
 
         Returns {"results": [...], "unresponsive_engines": [...]}.
@@ -123,33 +135,39 @@ class DuckDuckGoClient:
                 # DuckDuckGo wraps URLs in a redirect; extract the real URL.
                 url_match = re.search(r"uddg=([^&]+)", raw_url)
                 actual_url = (
-                    requests.utils.unquote(url_match.group(1))
-                    if url_match else raw_url
+                    requests.utils.unquote(url_match.group(1)) if url_match else raw_url
                 )
                 # --- Source blocklist: skip Wikipedia and other banned domains ---
                 if _is_blocked_source(actual_url):
-                    self._log("search_source_blocked",
-                              {"url": actual_url, "title": title})
+                    self._log(
+                        "search_source_blocked", {"url": actual_url, "title": title}
+                    )
                     continue
-                snippet = (
-                    snippet_tag.get_text(strip=True) if snippet_tag else ""
+                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                results.append(
+                    {
+                        "url": actual_url,
+                        "title": title,
+                        "content": snippet,
+                        "raw_content": "",  # Fetched on demand via scrape()
+                    }
                 )
-                results.append({
-                    "url": actual_url,
-                    "title": title,
-                    "content": snippet,
-                    "raw_content": "",  # Fetched on demand via scrape()
-                })
 
-            self._log("search", {"query": query},
-                       outputs={"result_count": len(results)},
-                       duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "search",
+                {"query": query},
+                outputs={"result_count": len(results)},
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return {"results": results, "unresponsive_engines": []}
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-            self._log("search", {"query": query}, error=str(e),
-                      duration_ms=(time.time() - t0) * 1000)
-            return {"results": [],
-                    "unresponsive_engines": [["duckduckgo", str(e)]]}
+            self._log(
+                "search",
+                {"query": query},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
+            return {"results": [], "unresponsive_engines": [["duckduckgo", str(e)]]}
 
     def scrape(self, url: str, timeout: int = 12) -> str:
         """Return cleaned article text for a URL (direct fetch).
@@ -166,18 +184,23 @@ class DuckDuckGoClient:
             "Accept-Language": "en-US,en;q=0.9",
         }
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout,
-                                allow_redirects=True)
+            resp = requests.get(
+                url, headers=headers, timeout=timeout, allow_redirects=True
+            )
             resp.raise_for_status()
             from bs4 import BeautifulSoup
+
             soup = BeautifulSoup(resp.text, "lxml")
-            for tag in soup(["script", "style", "nav", "footer", "header",
-                             "aside", "form"]):
+            for tag in soup(
+                ["script", "style", "nav", "footer", "header", "aside", "form"]
+            ):
                 tag.decompose()
-            main = (soup.find("article") or soup.find("main")
-                    or soup.find("body"))
-            text = (main.get_text(separator="\n", strip=True) if main
-                    else soup.get_text(separator="\n", strip=True))
+            main = soup.find("article") or soup.find("main") or soup.find("body")
+            text = (
+                main.get_text(separator="\n", strip=True)
+                if main
+                else soup.get_text(separator="\n", strip=True)
+            )
             return text[:20000]
         except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             return ""

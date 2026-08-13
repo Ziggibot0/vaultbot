@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Run the vault graph analyzer to measure graph health: islands, isolated nodes, connectivity ratio. Returns metrics for downstream dream sub-procedures to act on."

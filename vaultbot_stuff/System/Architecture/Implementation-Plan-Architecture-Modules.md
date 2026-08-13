@@ -1,6 +1,7 @@
 ---
 type: architecture-plan
 status: draft
+baseline: true
 created: 2026-07-26
 tags:
   - architecture

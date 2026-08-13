@@ -1,7 +1,7 @@
 # Pre-commit hooks for VaultBot.
 # Install once with:
 #   pre-commit install
-# Then every commit auto-runs ruff + ruff-format.
+# Then every commit auto-runs ruff + ruff-format + baseline-marker check.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.0  # keep in sync with the ruff version in the venv
@@ -9,3 +9,18 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+
+  # Local hooks — run from the repo's own Python.
+  - repo: local
+    hooks:
+      - id: check-baseline-markers
+        name: Block non-baseline System/ files
+        description: >
+          Scans staged .md files under vaultbot_stuff/System/ and blocks
+          any that lack "baseline: true" in their YAML frontmatter. This
+          keeps personal/bespoke procedures from accidentally shipping.
+        entry: python vaultbot_stuff/vaultbot_backend/scripts/check_baseline_markers.py
+        language: system
+        files: ^vaultbot_stuff/System/.*\.md$
+        stages: [pre-commit]
+        pass_filenames: false

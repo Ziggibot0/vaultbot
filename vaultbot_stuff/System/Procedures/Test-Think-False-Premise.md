@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Test procedure that runs Think with a false-premise question and writes intermediate results to a vault note for inspection. Verifies PREMISE_WARNINGS content and wikilink resolution."
 description: "Runs the Think procedure with a false-premise architecture question, captures the full output, and writes it to a vault note for inspection. Checks that PREMISE_WARNINGS contains UNVERIFIED flags and that fabricated wikilinks are marked [UNRESOLVED: ...]."

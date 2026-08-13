@@ -2,7 +2,28 @@
 Agent-authored tool: vault_safe_write
 """
 
-SCHEMA = {"name": "vault_safe_write", "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root \u2014 those are gitignored hygiene zones.", "parameters": {"properties": {"content": {"description": "The full markdown content to write.", "type": "string"}, "dry_run": {"description": "If true, validate and report what would happen but do not write to disk.", "type": "boolean"}, "file_path": {"description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md', 'vaultbot_stuff/Memory/Chat/Chat-Topic.md', 'vaultbot_stuff/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER write to root-level Knowledge/, Memory/, or System/ \u2014 always use the vaultbot_stuff/ prefix.", "type": "string"}}, "required": ["file_path", "content"], "type": "object"}}
+SCHEMA = {
+    "name": "vault_safe_write",
+    "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root \u2014 those are gitignored hygiene zones.",
+    "parameters": {
+        "properties": {
+            "content": {
+                "description": "The full markdown content to write.",
+                "type": "string",
+            },
+            "dry_run": {
+                "description": "If true, validate and report what would happen but do not write to disk.",
+                "type": "boolean",
+            },
+            "file_path": {
+                "description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md', 'vaultbot_stuff/Memory/Chat/Chat-Topic.md', 'vaultbot_stuff/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER write to root-level Knowledge/, Memory/, or System/ \u2014 always use the vaultbot_stuff/ prefix.",
+                "type": "string",
+            },
+        },
+        "required": ["file_path", "content"],
+        "type": "object",
+    },
+}
 
 """
 Agent-authored tool: vault_safe_write
@@ -20,7 +41,9 @@ from pathlib import Path
 # custom_tools/vault_safe_write.py -> parent.parent = vaultbot_stuff/vaultbot_backend/
 # -> parent.parent.parent = vaultbot_stuff/ -> parent.parent.parent.parent = Vault2/ (vault root)
 try:
-    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot_stuff/vaultbot_backend/
+    BACKEND_DIR = (
+        Path(__file__).resolve().parent.parent
+    )  # vaultbot_stuff/vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
@@ -30,24 +53,24 @@ TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_stuff/vaultbot_backend/trash/
 def _is_sacred_journal(file_path: Path) -> bool:
     """Check if the filename is a date-only filename (the operator's personal journal)."""
     stem = file_path.stem
-    return bool(re.match(r'^\d{4}-\d{2}-\d{2}$', stem))
+    return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem))
 
 
 def _is_locked(content: str) -> bool:
     """Check if existing content contains a LOCKED marker."""
     # Check for standalone LOCKED line or frontmatter LOCKED
-    lines = content.split('\n')
+    lines = content.split("\n")
     for line in lines:
-        if line.strip() == 'LOCKED':
+        if line.strip() == "LOCKED":
             return True
-        if line.strip().startswith('LOCKED:'):
+        if line.strip().startswith("LOCKED:"):
             return True
     # Also check frontmatter
-    if content.strip().startswith('---'):
-        fm_end = content.find('---', 3)
+    if content.strip().startswith("---"):
+        fm_end = content.find("---", 3)
         if fm_end != -1:
             fm = content[3:fm_end]
-            if 'LOCKED' in fm:
+            if "LOCKED" in fm:
                 return True
     return False
 
@@ -83,7 +106,7 @@ def run(args: dict) -> dict:
         "backup_path": None,
         "bytes_written": 0,
         "checks": {},
-        "blocked_reason": None
+        "blocked_reason": None,
     }
 
     # --- Validation ---
@@ -94,13 +117,15 @@ def run(args: dict) -> dict:
         return result
 
     # 2. Must be a .md file
-    if not file_path_str.endswith('.md'):
+    if not file_path_str.endswith(".md"):
         result["blocked_reason"] = f"File must be a .md file (got: {file_path_str})"
         return result
 
     # 3. Path traversal check
     if _is_path_traversal(file_path_str, VAULT_ROOT):
-        result["blocked_reason"] = f"Path traversal detected: {file_path_str} resolves outside vault root"
+        result["blocked_reason"] = (
+            f"Path traversal detected: {file_path_str} resolves outside vault root"
+        )
         return result
 
     full_path = (VAULT_ROOT / file_path_str).resolve()
@@ -117,18 +142,22 @@ def run(args: dict) -> dict:
     result["checks"]["file_exists"] = file_exists
 
     if file_exists:
-        with open(full_path, encoding='utf-8') as f:
+        with open(full_path, encoding="utf-8") as f:
             existing = f.read()
 
         # 6. Block LOCKED notes
         if _is_locked(existing):
-            result["blocked_reason"] = f"Note is LOCKED — cannot overwrite: {file_path_str}"
+            result["blocked_reason"] = (
+                f"Note is LOCKED — cannot overwrite: {file_path_str}"
+            )
             return result
         result["checks"]["is_locked"] = False
 
         # 7. Block sacred journals
         if _is_sacred_journal(full_path):
-            result["blocked_reason"] = f"Sacred journal file — cannot overwrite: {file_path_str}"
+            result["blocked_reason"] = (
+                f"Sacred journal file — cannot overwrite: {file_path_str}"
+            )
             return result
         result["checks"]["is_sacred_journal"] = False
 
@@ -142,7 +171,9 @@ def run(args: dict) -> dict:
     else:
         # New file — check it's not a sacred journal name
         if _is_sacred_journal(full_path):
-            result["blocked_reason"] = f"Cannot create sacred journal file: {file_path_str}"
+            result["blocked_reason"] = (
+                f"Cannot create sacred journal file: {file_path_str}"
+            )
             return result
         result["checks"]["is_sacred_journal"] = False
 
@@ -150,17 +181,17 @@ def run(args: dict) -> dict:
     # Auto-inject missing required fields.  Validate to catch invalid values.
     try:
         from note_schema import inject_schema, validate_schema
+
         content = inject_schema(
-            content, file_path_str,
+            content,
+            file_path_str,
             existing_content=existing if file_exists else None,
         )
         ok, errors, warnings = validate_schema(content)
         result["checks"]["schema_valid"] = ok
         result["checks"]["schema_warnings"] = warnings
         if not ok:
-            result["blocked_reason"] = (
-                f"Schema validation failed: {'; '.join(errors)}"
-            )
+            result["blocked_reason"] = f"Schema validation failed: {'; '.join(errors)}"
             return result
     except ImportError:
         # note_schema not available (e.g. running outside backend dir) —
@@ -190,12 +221,10 @@ def run(args: dict) -> dict:
 
     # Atomic write: write to temp file, then rename
     fd, temp_path = tempfile.mkstemp(
-        dir=str(full_path.parent),
-        suffix='.tmp',
-        prefix=full_path.stem + '_'
+        dir=str(full_path.parent), suffix=".tmp", prefix=full_path.stem + "_"
     )
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
         # Atomic rename (on same filesystem)
         os.replace(temp_path, str(full_path))

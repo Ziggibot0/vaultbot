@@ -38,13 +38,14 @@ from tournament_benchmarks import Benchmark, get_benchmarks
 @dataclass
 class BenchmarkResult:
     """One model's result on one benchmark."""
+
     benchmark_id: str
     benchmark_name: str
     category: str
     passed: bool
-    score: float                    # 0.0 - 1.0
-    response: str                   # the model's raw response (truncated)
-    judge_reasoning: str = ""       # why the judge scored this way
+    score: float  # 0.0 - 1.0
+    response: str  # the model's raw response (truncated)
+    judge_reasoning: str = ""  # why the judge scored this way
     latency_ms: float = 0.0
     error: str | None = None
 
@@ -52,28 +53,32 @@ class BenchmarkResult:
 @dataclass
 class ModelResult:
     """One model's aggregate tournament results."""
-    model_id: str                   # registry model id, e.g. "ollama-local:qwen3.6:27b"
-    model_name: str                 # display name
-    provider_id: str                # provider id
-    role: str                       # "big" or "small"
+
+    model_id: str  # registry model id, e.g. "ollama-local:qwen3.6:27b"
+    model_name: str  # display name
+    provider_id: str  # provider id
+    role: str  # "big" or "small"
     benchmarks: list[BenchmarkResult] = field(default_factory=list)
     total: int = 0
     passed: int = 0
     failed: int = 0
     errors: int = 0
-    overall_score: float = 0.0      # average of all benchmark scores (accuracy)
+    overall_score: float = 0.0  # average of all benchmark scores (accuracy)
     total_latency_ms: float = 0.0
-    avg_latency_ms: float = 0.0     # average latency per benchmark
-    combined_score: float = 0.0     # accuracy (70%) + speed (30%), 0-1
-    error: str | None = None        # fatal error that prevented running
+    avg_latency_ms: float = 0.0  # average latency per benchmark
+    combined_score: float = 0.0  # accuracy (70%) + speed (30%), 0-1
+    error: str | None = None  # fatal error that prevented running
 
 
 @dataclass
 class TournamentResults:
     """Complete tournament results."""
+
     role: str
     models: list[ModelResult] = field(default_factory=list)
-    benchmarks: list[dict[str, str]] = field(default_factory=list)  # {id, name, category}
+    benchmarks: list[dict[str, str]] = field(
+        default_factory=list
+    )  # {id, name, category}
     judge_model: str = ""
     started_at: float = 0.0
     finished_at: float = 0.0
@@ -82,6 +87,7 @@ class TournamentResults:
 # ═══════════════════════════════════════════════════════════════════════════
 # Keyword pre-filter — fast pass/fail before invoking the judge
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _keyword_prefilter(benchmark: Benchmark, response: str) -> bool | None:
     """Fast keyword check. Returns True (pass), False (fail), or None (uncertain).
@@ -164,14 +170,17 @@ async def _judge_response(
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1:
-            parsed = json.loads(text[start:end + 1])
+            parsed = json.loads(text[start : end + 1])
             passed = bool(parsed.get("passed", False))
             score = float(parsed.get("score", 0.0))
             reasoning = str(parsed.get("reasoning", ""))
             return passed, max(0.0, min(1.0, score)), reasoning
         # Fallback: if the judge didn't return JSON, use keyword match
-        return pre or False, 0.5 if pre is None else (1.0 if pre else 0.0), \
-            "judge returned non-JSON; used keyword fallback"
+        return (
+            pre or False,
+            0.5 if pre is None else (1.0 if pre else 0.0),
+            "judge returned non-JSON; used keyword fallback",
+        )
     except Exception as e:
         return False, 0.0, f"judge error: {e}"
 
@@ -179,6 +188,7 @@ async def _judge_response(
 # ═══════════════════════════════════════════════════════════════════════════
 # Single-model runner
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 async def _run_model_benchmarks(
     model_id: str,
@@ -242,7 +252,9 @@ async def _run_model_benchmarks(
 
             # Judge the response
             passed, score, reasoning = await _judge_response(
-                judge_client, bench, judge_response_text,
+                judge_client,
+                bench,
+                judge_response_text,
             )
 
             br = BenchmarkResult(
@@ -330,6 +342,7 @@ def _compute_combined_scores(models: list[ModelResult]) -> None:
 # Main tournament runner
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 async def run_tournament(
     contestants: list[dict[str, str]],
     role: str,
@@ -359,8 +372,9 @@ async def run_tournament(
 
     results = TournamentResults(
         role=role,
-        benchmarks=[{"id": b.id, "name": b.name, "category": b.category}
-                     for b in benchmarks],
+        benchmarks=[
+            {"id": b.id, "name": b.name, "category": b.category} for b in benchmarks
+        ],
         judge_model=getattr(judge_client, "llm_model", "unknown"),
         started_at=time.time(),
     )
@@ -404,8 +418,7 @@ async def run_tournament(
             continue
 
         # Wrap the progress callback to include model_id
-        async def model_progress(benchmark_id: str, status: str,
-                                 mid=mid) -> None:
+        async def model_progress(benchmark_id: str, status: str, mid=mid) -> None:
             if progress_callback:
                 await progress_callback(mid, benchmark_id, status)
 
@@ -429,6 +442,7 @@ async def run_tournament(
 # ═══════════════════════════════════════════════════════════════════════════
 # Streaming tournament runner (for WebSocket progress)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 async def run_tournament_streaming(
     contestants: list[dict[str, str]],
@@ -463,8 +477,9 @@ async def run_tournament_streaming(
         "role": role,
         "model_count": len(contestants),
         "benchmark_count": len(benchmarks),
-        "benchmarks": [{"id": b.id, "name": b.name, "category": b.category}
-                        for b in benchmarks],
+        "benchmarks": [
+            {"id": b.id, "name": b.name, "category": b.category} for b in benchmarks
+        ],
     }
 
     all_results: list[ModelResult] = []

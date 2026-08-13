@@ -9,6 +9,7 @@ tags:
   - rag
 type: semantic
 status: raw
+baseline: true
 ---
 
 # Claim Verification for Vault Notes

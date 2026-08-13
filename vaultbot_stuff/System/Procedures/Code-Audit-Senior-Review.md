@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-05
 description: "Orchestrating code audit that calls granular check procedures (Check-Error-Handling, Check-Resource-Leaks, Check-Mutable-Defaults, Check-Complexity, Check-Dead-Code) via run_procedure(), aggregates findings, and produces a senior-level review summary with prioritized recommendations."

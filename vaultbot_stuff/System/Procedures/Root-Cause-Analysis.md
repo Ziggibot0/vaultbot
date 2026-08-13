@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Lens procedure for finding root causes of problems or failures. Based on abductive reasoning (Peirce) and the 5-Whys / fishbone tradition. Uses systematic causal chaining with deterministic stopping conditions. Updated with triple-try consistency and bite-sized steps for small model reliability."
 description: "Root cause analysis lens — abductive reasoning + 5-Whys causal chaining with triple-try. Called by Think when problem type is debugging/root-cause."

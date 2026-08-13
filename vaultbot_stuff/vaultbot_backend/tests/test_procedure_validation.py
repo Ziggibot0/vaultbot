@@ -6,10 +6,12 @@ and a fail case.
 
 See [[Procedure-Subprocess-Architecture]] validation section.
 """
+
 from step_gate_runtime import _parse_validation, _validate_step
 
 
 # ── at_least ───────────────────────────────────────────────────────────
+
 
 def test_at_least_notes_pass():
     ok, err = _validate_step("[[A]] [[B]] [[C]]", "at_least 2 notes")
@@ -24,8 +26,7 @@ def test_at_least_notes_fail():
 
 
 def test_at_least_sources_pass():
-    ok, _ = _validate_step(
-        "see https://x.com and https://y.com", "at_least 2 sources")
+    ok, _ = _validate_step("see https://x.com and https://y.com", "at_least 2 sources")
     assert ok
 
 
@@ -41,6 +42,7 @@ def test_at_least_generic_tokens():
 
 
 # ── contains ───────────────────────────────────────────────────────────
+
 
 def test_contains_double_quote_pass():
     ok, _ = _validate_step("the claim is supported", 'contains "supported"')
@@ -60,6 +62,7 @@ def test_contains_fail():
 
 # ── matches ────────────────────────────────────────────────────────────
 
+
 def test_matches_digit_pass():
     ok, _ = _validate_step("error code 42", r"matches /\d+/")
     assert ok
@@ -78,6 +81,7 @@ def test_matches_invalid_regex():
 
 # ── fallback ────────────────────────────────────────────────────────────
 
+
 def test_fallback_word_overlap_pass():
     ok, _ = _validate_step("the note mentions sources", "mention sources")
     assert ok
@@ -89,6 +93,7 @@ def test_fallback_word_overlap_fail():
 
 
 # ── parse_validation ────────────────────────────────────────────────────
+
 
 def test_parse_at_least():
     pred = _parse_validation("at_least 2 notes")

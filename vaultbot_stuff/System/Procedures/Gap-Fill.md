@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: "Triage dangling wikilinks into actionable categories: 'research needed' (concept has no note and should be created), 'typo/alias' (note exists under a slightly different title), 'chat log' (link points at a chat that wasn't saved), or 'ignore' (intentional reference to a concept that doesn't need its own note). Returns a prioritized work queue for the autonomous researcher or the big model. Small cartridge — pure classification over a bounded set of categories."

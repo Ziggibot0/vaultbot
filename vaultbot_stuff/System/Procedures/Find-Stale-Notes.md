@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: Find stale notes — notes not modified in over 30 days that may be outdated. Imports the Pattern-Scan engine and filters to is_stale=true, excluding daily notes. Use to find knowledge that needs refreshing or re-verification.

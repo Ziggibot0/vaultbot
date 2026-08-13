@@ -13,6 +13,7 @@ tags:
   - chain-of-thought
   - knowledge-graph
 status: raw
+baseline: true
 ---
 
 <!-- EXEMPLAR ANNOTATION: SYNTHESIS NOTE

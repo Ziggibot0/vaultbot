@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Pre-flight safety check before self-modifying operations. Verifies git clean state, critical files exist, identity files intact, disk space adequate, custom tools import cleanly, and vault directory is accessible.

@@ -1,6 +1,7 @@
 ---
 type: architecture
 status: draft
+baseline: true
 created: 2026-07-26
 updated: 2026-08-03
 record: true

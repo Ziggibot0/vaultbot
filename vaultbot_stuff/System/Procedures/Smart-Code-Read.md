@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Read a code file and extract its structure: all function/class signatures with line numbers, imports, and a one-line summary of each function. Given a file path, returns a structured map of the file's contents. Use when you need to navigate a large file and don't want to read all of it."

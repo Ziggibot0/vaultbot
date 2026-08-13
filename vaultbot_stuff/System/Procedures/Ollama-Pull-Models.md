@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: big
 created: 2026-07-31
 description: Pull Ollama models by tag. Runs ollama pull for each model in the list.

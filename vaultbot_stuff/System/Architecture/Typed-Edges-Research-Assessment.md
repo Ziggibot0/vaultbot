@@ -9,6 +9,7 @@ tags:
   - research-quality
 type: architecture
 status: raw
+baseline: true
 ---
 
 # Typed Edges Research Assessment

@@ -30,6 +30,7 @@ Configurable via environment variables:
     VAULTBOT_CONTEXT_OVERHEAD - system prompt overhead reserve (default 4096)
     VAULTBOT_CONTEXT_RESPONSE - response reserve (default 4096)
 """
+
 from __future__ import annotations
 
 import os
@@ -144,8 +145,7 @@ class ContextBudgeter:
         # don't build a huge context just to have the hard cap prune it
         # aggressively. 30K tokens (~120K chars) is generous for the L1
         # highway + L0 drill-down. Override via VAULTBOT_MAX_CONTEXT_TOKENS.
-        _max_context_tokens = int(os.getenv(
-            "VAULTBOT_MAX_CONTEXT_TOKENS", "30000"))
+        _max_context_tokens = int(os.getenv("VAULTBOT_MAX_CONTEXT_TOKENS", "30000"))
         if _max_context_tokens > 0 and available > _max_context_tokens:
             available = _max_context_tokens
 

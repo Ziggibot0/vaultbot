@@ -13,6 +13,7 @@ the three that touch ``manager`` / ``default_session_logger`` accept a
 read the singletons off it. ``tool_result_summary`` is pure (only uses
 built-ins) and needs no ``svc`` param.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,14 +26,16 @@ from typing import Any
 from services import Services
 
 
-async def send_progress(svc: Services, websocket, stage: str,
-                        detail: dict[str, Any] | None = None) -> None:
+async def send_progress(
+    svc: Services, websocket, stage: str, detail: dict[str, Any] | None = None
+) -> None:
     """Send a structured progress event to the live UI."""
     try:
         await svc.manager.send_personal_message(
-            json.dumps({"type": "progress", "stage": stage,
-                         "detail": detail or {}}),
-            websocket, session_logger=svc.session_logger)
+            json.dumps({"type": "progress", "stage": stage, "detail": detail or {}}),
+            websocket,
+            session_logger=svc.session_logger,
+        )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
@@ -138,16 +141,19 @@ async def notify_problem(
         payload = json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
         if websocket is not None and svc.manager is not None:
             await svc.manager.send_personal_message(
-                payload, websocket,
-                session_logger=getattr(svc, "session_logger", None))
+                payload, websocket, session_logger=getattr(svc, "session_logger", None)
+            )
         # Also log so the problem is traceable even if the WS is dead.
         slog = getattr(svc, "session_logger", None)
         if slog is not None:
-            slog.log("problem_notified", {
-                "category": diag.category.value,
-                "user_message": diag.user_message,
-                "context": context or {},
-            })
+            slog.log(
+                "problem_notified",
+                {
+                    "category": diag.category.value,
+                    "user_message": diag.user_message,
+                    "context": context or {},
+                },
+            )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         # This helper must never be the source of a cascade.
         pass
@@ -167,8 +173,8 @@ async def notify_info(svc: Services, websocket, message: str) -> None:
         payload = json.dumps({"type": "system_info", "content": message})
         if websocket is not None and svc.manager is not None:
             await svc.manager.send_personal_message(
-                payload, websocket,
-                session_logger=getattr(svc, "session_logger", None))
+                payload, websocket, session_logger=getattr(svc, "session_logger", None)
+            )
         slog = getattr(svc, "session_logger", None)
         if slog is not None:
             slog.log("info_notified", {"message": message})
@@ -213,12 +219,13 @@ async def notify_console_failure(
         payload = json.dumps({"type": "console_error", "content": line})
         if websocket is not None and svc.manager is not None:
             await svc.manager.send_personal_message(
-                payload, websocket,
-                session_logger=getattr(svc, "session_logger", None))
+                payload, websocket, session_logger=getattr(svc, "session_logger", None)
+            )
         slog = getattr(svc, "session_logger", None)
         if slog is not None:
-            slog.log("console_failure_notified", {
-                "message": message, "context": context})
+            slog.log(
+                "console_failure_notified", {"message": message, "context": context}
+            )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
@@ -273,40 +280,47 @@ def notify_problem_broadcast(
         if manager is not None:
             loop = getattr(svc, "_main_loop", None)
             if loop is not None and loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    manager.broadcast(payload), loop)
+                asyncio.run_coroutine_threadsafe(manager.broadcast(payload), loop)
             elif manager.active_connections:
                 # No loop reference — try a fire-and-forget via a new loop.
                 # This is a last resort; the normal path is via _main_loop.
                 pass
         slog = getattr(svc, "session_logger", None)
         if slog is not None:
-            slog.log("problem_notified", {
-                "category": diag.category.value,
-                "user_message": diag.user_message,
-                "context": context or {},
-                "broadcast": True,
-            })
+            slog.log(
+                "problem_notified",
+                {
+                    "category": diag.category.value,
+                    "user_message": diag.user_message,
+                    "context": context or {},
+                    "broadcast": True,
+                },
+            )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
-async def heartbeat(svc: Services, websocket, label: str,
-                    start_time: float, interval: float = 2.0) -> None:
+async def heartbeat(
+    svc: Services, websocket, label: str, start_time: float, interval: float = 2.0
+) -> None:
     """Push a one-shot heartbeat so the UI can render elapsed time + a
     'still alive' pulse. Called periodically by long-running executors."""
     try:
         elapsed = asyncio.get_event_loop().time() - start_time
         await svc.manager.send_personal_message(
-            json.dumps({"type": "heartbeat", "label": label,
-                         "elapsed_ms": int(elapsed * 1000)}),
-            websocket, session_logger=svc.session_logger)
+            json.dumps(
+                {"type": "heartbeat", "label": label, "elapsed_ms": int(elapsed * 1000)}
+            ),
+            websocket,
+            session_logger=svc.session_logger,
+        )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
 
-async def run_with_heartbeat(svc: Services, websocket, label: str,
-                             coro_or_fn, *args, **kwargs) -> Any:
+async def run_with_heartbeat(
+    svc: Services, websocket, label: str, coro_or_fn, *args, **kwargs
+) -> Any:
     """Run a blocking call in an executor while emitting heartbeats so the
     user is never staring at a frozen 'Calling X...' line.
 
@@ -326,8 +340,9 @@ async def run_with_heartbeat(svc: Services, websocket, label: str,
             # Re-raise the real exception from the task.
             return task.result()
     result = task.result()
-    await send_progress(svc, websocket, label + "_done", {
-        "duration_ms": int((loop.time() - t0) * 1000)})
+    await send_progress(
+        svc, websocket, label + "_done", {"duration_ms": int((loop.time() - t0) * 1000)}
+    )
     return result
 
 
@@ -367,11 +382,20 @@ def truncate_tool_result(result: Any, max_chars: int = 0) -> Any:
             for k, v in result.items():
                 if isinstance(v, str) and len(v) > per_key:
                     dropped = len(v) - per_key
-                    capped[k] = v[:per_key] + f"\n[...truncated: {dropped} chars dropped from '{k}' — re-read with narrower parameters if needed...]"
+                    capped[k] = (
+                        v[:per_key]
+                        + f"\n[...truncated: {dropped} chars dropped from '{k}' — re-read with narrower parameters if needed...]"
+                    )
                     truncated_keys.append(k)
-                elif isinstance(v, (list, tuple)) and len(json.dumps(v, default=str)) > per_key:
+                elif (
+                    isinstance(v, (list, tuple))
+                    and len(json.dumps(v, default=str)) > per_key
+                ):
                     dropped = len(json.dumps(v, default=str)) - per_key
-                    capped[k] = str(v)[:per_key] + f"\n[...truncated: ~{dropped} chars dropped from '{k}'...]"
+                    capped[k] = (
+                        str(v)[:per_key]
+                        + f"\n[...truncated: ~{dropped} chars dropped from '{k}'...]"
+                    )
                     truncated_keys.append(k)
                 else:
                     capped[k] = v
@@ -379,13 +403,21 @@ def truncate_tool_result(result: Any, max_chars: int = 0) -> Any:
             s2 = json.dumps(capped, default=str)
             if len(s2) <= max_chars:
                 if truncated_keys:
-                    capped["_truncation_notice"] = f"Result was truncated. Keys affected: {truncated_keys}. Total original size: {len(serialized)} chars, cap: {max_chars} chars."
+                    capped["_truncation_notice"] = (
+                        f"Result was truncated. Keys affected: {truncated_keys}. Total original size: {len(serialized)} chars, cap: {max_chars} chars."
+                    )
                 return capped
             dropped = len(s2) - max_chars
-            return s2[:max_chars] + f"\n[...truncated: {dropped} chars dropped from overall result — original size was {len(serialized)} chars...]"
+            return (
+                s2[:max_chars]
+                + f"\n[...truncated: {dropped} chars dropped from overall result — original size was {len(serialized)} chars...]"
+            )
         # Non-dict: cap the serialized form.
         dropped = len(serialized) - max_chars
-        return serialized[:max_chars] + f"\n[...truncated: {dropped} chars dropped — original size was {len(serialized)} chars...]"
+        return (
+            serialized[:max_chars]
+            + f"\n[...truncated: {dropped} chars dropped — original size was {len(serialized)} chars...]"
+        )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return str(result)[:max_chars]
 
@@ -403,20 +435,28 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
     if result.get("error"):
         return f"error: {str(result['error'])[:150]}"
     if tool_name == "vault_research":
-        return (f"{result.get('source_count', 0)} sources, "
-                f"{result.get('synthesis_facts', 0)} facts"
-                + (f", note: {Path(result['note_path']).stem}"
-                   if result.get("note_path") else ""))
+        return (
+            f"{result.get('source_count', 0)} sources, "
+            f"{result.get('synthesis_facts', 0)} facts"
+            + (
+                f", note: {Path(result['note_path']).stem}"
+                if result.get("note_path")
+                else ""
+            )
+        )
     if tool_name == "vault_search":
         return f"{len(result.get('results', []))} notes found"
     if tool_name == "vault_gaps":
         return f"{result.get('count', 0)} gaps found"
     if tool_name == "vaultbot_status":
         st = result
-        return ("running" if st.get("running") else "stopped") + \
-               f", {st.get('history_count', 0)} cycles"
+        return (
+            "running" if st.get("running") else "stopped"
+        ) + f", {st.get('history_count', 0)} cycles"
     if tool_name == "code_read":
-        return f"{result.get('total_lines', 0)} lines from {result.get('file_path', '?')}"
+        return (
+            f"{result.get('total_lines', 0)} lines from {result.get('file_path', '?')}"
+        )
     if tool_name == "code_run":
         return f"exit {result.get('exit_code', '?')}: {str(result.get('stdout', ''))[:80]!r}"
     if tool_name == "tool_create":

@@ -2,13 +2,41 @@
 Agent-authored tool: vault_list
 """
 
-SCHEMA = {"name": "vault_list", "description": "List all .md files in the vault. Optionally filter by directory or tag. Returns filenames relative to vault root. Use this to see what notes exist \u2014 complements semantic search when you need to know what's actually in the vault.", "parameters": {"properties": {"directory": {"description": "Optional subdirectory to search within (e.g. 'vaultbot/chat')", "type": "string"}, "tag": {"description": "Optional tag to filter by (checks for #tag in note content)", "type": "string"}}, "required": [], "type": "object"}}
+SCHEMA = {
+    "name": "vault_list",
+    "description": "List all .md files in the vault. Optionally filter by directory or tag. Returns filenames relative to vault root. Use this to see what notes exist \u2014 complements semantic search when you need to know what's actually in the vault.",
+    "parameters": {
+        "properties": {
+            "directory": {
+                "description": "Optional subdirectory to search within (e.g. 'vaultbot/chat')",
+                "type": "string",
+            },
+            "tag": {
+                "description": "Optional tag to filter by (checks for #tag in note content)",
+                "type": "string",
+            },
+        },
+        "required": [],
+        "type": "object",
+    },
+}
 
 import os
 from pathlib import Path
 
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
-EXCLUDE_DIRS = {".git", "node_modules", ".obsidian", "vaultbot_venv", "__pycache__", "checkpoints", ".venv"}
+VAULT_ROOT = Path(
+    __file__
+).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+EXCLUDE_DIRS = {
+    ".git",
+    "node_modules",
+    ".obsidian",
+    "vaultbot_venv",
+    "__pycache__",
+    "checkpoints",
+    ".venv",
+}
+
 
 def run(args: dict) -> dict:
     directory = args.get("directory", "")

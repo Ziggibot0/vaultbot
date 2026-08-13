@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: "Report VaultBot's operational state: backend status, autonomous researcher state, index/graph stats, and current model. Use when the user asks what you've been doing or what you can do."

@@ -38,6 +38,7 @@ See:
   - ``procedure_compiler.py`` — the compiler used for step parsing
   - ``step_gate_runtime.py`` — the runtime that executes procedures
 """
+
 from __future__ import annotations
 
 import json
@@ -53,56 +54,198 @@ from procedure_compiler import compile_from_text
 
 # ── Safe functions (builtins + stdlib, not tools) ─────────────────────
 
-_SAFE_FUNCS = frozenset({
-    "print", "len", "str", "int", "float", "bool", "list", "dict",
-    "set", "tuple", "range", "enumerate", "zip", "map", "filter",
-    "sorted", "reversed", "sum", "min", "max", "abs", "round",
-    "isinstance", "issubclass", "type", "hasattr", "getattr",
-    "setattr", "delattr", "open", "read", "write", "close",
-    "json", "os", "re", "sys", "pathlib", "Path", "datetime",
-    "date", "time", "textwrap", "collections", "itertools",
-    "functools", "hashlib", "math", "statistics", "copy",
-    "traceback", "logging", "subprocess", "import", "from",
-    "def", "class", "if", "else", "elif", "for", "while",
-    "try", "except", "finally", "with", "as", "return",
-    "yield", "lambda", "None", "True", "False", "and", "or",
-    "not", "in", "is", "pass", "break", "continue", "raise",
-    "assert", "del", "global", "nonlocal", "self", "cls",
-    "property", "staticmethod", "classmethod", "super",
-    "Exception", "ValueError", "TypeError", "KeyError",
-    "AttributeError", "RuntimeError", "FileNotFoundError",
-    "StopIteration", "ZeroDivisionError", "OverflowError",
-    "ImportError", "ModuleNotFoundError", "NameError",
-    "IndexError", "NotImplementedError", "Warning",
-    "OSError", "PermissionError", "TimeoutError",
-    "ConnectionError", "IOError", "LookupError",
-    "ArithmeticError", "MemoryError", "RecursionError",
-    "UnicodeError", "UnicodeDecodeError", "UnicodeEncodeError",
-    "iter", "next", "format", "vars", "dir", "repr", "id",
-    "hex", "oct", "bin", "chr", "ord", "ascii", "input",
-    "exec", "eval", "compile", "globals", "locals",
-    "callable", "complex", "bytes", "bytearray", "memoryview",
-    "frozenset", "object", "help", "divmod", "pow",
-    "all", "any", "slice",
-})
+_SAFE_FUNCS = frozenset(
+    {
+        "print",
+        "len",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "range",
+        "enumerate",
+        "zip",
+        "map",
+        "filter",
+        "sorted",
+        "reversed",
+        "sum",
+        "min",
+        "max",
+        "abs",
+        "round",
+        "isinstance",
+        "issubclass",
+        "type",
+        "hasattr",
+        "getattr",
+        "setattr",
+        "delattr",
+        "open",
+        "read",
+        "write",
+        "close",
+        "json",
+        "os",
+        "re",
+        "sys",
+        "pathlib",
+        "Path",
+        "datetime",
+        "date",
+        "time",
+        "textwrap",
+        "collections",
+        "itertools",
+        "functools",
+        "hashlib",
+        "math",
+        "statistics",
+        "copy",
+        "traceback",
+        "logging",
+        "subprocess",
+        "import",
+        "from",
+        "def",
+        "class",
+        "if",
+        "else",
+        "elif",
+        "for",
+        "while",
+        "try",
+        "except",
+        "finally",
+        "with",
+        "as",
+        "return",
+        "yield",
+        "lambda",
+        "None",
+        "True",
+        "False",
+        "and",
+        "or",
+        "not",
+        "in",
+        "is",
+        "pass",
+        "break",
+        "continue",
+        "raise",
+        "assert",
+        "del",
+        "global",
+        "nonlocal",
+        "self",
+        "cls",
+        "property",
+        "staticmethod",
+        "classmethod",
+        "super",
+        "Exception",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "RuntimeError",
+        "FileNotFoundError",
+        "StopIteration",
+        "ZeroDivisionError",
+        "OverflowError",
+        "ImportError",
+        "ModuleNotFoundError",
+        "NameError",
+        "IndexError",
+        "NotImplementedError",
+        "Warning",
+        "OSError",
+        "PermissionError",
+        "TimeoutError",
+        "ConnectionError",
+        "IOError",
+        "LookupError",
+        "ArithmeticError",
+        "MemoryError",
+        "RecursionError",
+        "UnicodeError",
+        "UnicodeDecodeError",
+        "UnicodeEncodeError",
+        "iter",
+        "next",
+        "format",
+        "vars",
+        "dir",
+        "repr",
+        "id",
+        "hex",
+        "oct",
+        "bin",
+        "chr",
+        "ord",
+        "ascii",
+        "input",
+        "exec",
+        "eval",
+        "compile",
+        "globals",
+        "locals",
+        "callable",
+        "complex",
+        "bytes",
+        "bytearray",
+        "memoryview",
+        "frozenset",
+        "object",
+        "help",
+        "divmod",
+        "pow",
+        "all",
+        "any",
+        "slice",
+    }
+)
 
 # Known tool names that the step-gate runtime can inject into code steps
 # (the authoritative list is step_gate_runtime._build_tool_preamble — this
 # frozenset MUST stay in sync with it). textbook_read_page and
 # textbook_ingest are custom_tools exposed to the LLM directly, NOT
 # injected into code-step subprocesses, so they are intentionally absent.
-_KNOWN_TOOLS = frozenset({
-    "vault_search", "vault_list", "vault_append", "vault_delete",
-    "vault_lint", "vault_graph_analyzer", "code_read",
-    "llm_generate", "web_read_source", "run_procedure",
-    "vault_safe_write", "vault_gaps", "machine_spec",
-    "ollama_model_search", "vaultbot_status",
-})
+_KNOWN_TOOLS = frozenset(
+    {
+        "vault_search",
+        "vault_list",
+        "vault_append",
+        "vault_delete",
+        "vault_lint",
+        "vault_graph_analyzer",
+        "code_read",
+        "llm_generate",
+        "web_read_source",
+        "run_procedure",
+        "vault_safe_write",
+        "vault_gaps",
+        "machine_spec",
+        "ollama_model_search",
+        "vaultbot_status",
+    }
+)
 
 # Idempotency indicator keywords
 _IDEMPOTENCY_KEYWORDS = [
-    "idempotent", "link_exists", "dedup", "already_exists",
-    "skip if", "if not", "check before", "exists_check",
+    "idempotent",
+    "link_exists",
+    "dedup",
+    "already_exists",
+    "skip if",
+    "if not",
+    "check before",
+    "exists_check",
 ]
 
 # Direct endpoint patterns (anti-pattern: should use get_llm_client)
@@ -116,6 +259,7 @@ _ENDPOINT_PATTERNS = [
 
 
 # ── Frontmatter parser (same logic as procedure_compiler) ─────────────
+
 
 def _parse_frontmatter(text: str) -> dict:
     """Parse YAML frontmatter into a dict (flat key-value + lists)."""
@@ -144,7 +288,9 @@ def _parse_frontmatter(text: str) -> dict:
             key, _, value = line.partition(":")
             key = key.strip()
             value = value.strip()
-            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
                 value = value[1:-1]
             if value:
                 fm[key] = value
@@ -156,6 +302,7 @@ def _parse_frontmatter(text: str) -> dict:
 
 
 # ── Public API ───────────────────────────────────────────────────────
+
 
 def validate_procedure_text(
     text: str,
@@ -189,29 +336,35 @@ def validate_procedure_text(
     checks_run.append("frontmatter_exists")
     if not text.startswith("---"):
         errors.append("Missing frontmatter (must start with ---)")
-        return {"passed": False, "errors": errors, "warnings": warnings,
-                "checks_run": checks_run}
+        return {
+            "passed": False,
+            "errors": errors,
+            "warnings": warnings,
+            "checks_run": checks_run,
+        }
 
     fm_end = text.find("\n---", 3)
     if fm_end == -1:
         errors.append("Frontmatter not closed (missing closing ---)")
-        return {"passed": False, "errors": errors, "warnings": warnings,
-                "checks_run": checks_run}
+        return {
+            "passed": False,
+            "errors": errors,
+            "warnings": warnings,
+            "checks_run": checks_run,
+        }
 
     fm = _parse_frontmatter(text)
 
     checks_run.append("type_procedure")
     if fm.get("type", "").lower() != "procedure":
         errors.append(
-            f"Frontmatter 'type' must be 'procedure', got "
-            f"'{fm.get('type', 'MISSING')}'"
+            f"Frontmatter 'type' must be 'procedure', got '{fm.get('type', 'MISSING')}'"
         )
 
     checks_run.append("description_exists")
     if not fm.get("description"):
         errors.append(
-            "Frontmatter missing 'description' "
-            "(one-line summary for retrieval)"
+            "Frontmatter missing 'description' (one-line summary for retrieval)"
         )
 
     checks_run.append("when_to_use_exists")
@@ -250,29 +403,21 @@ def validate_procedure_text(
     checks_run.append("model_cartridge_exists")
     if not fm.get("model_cartridge"):
         errors.append(
-            "Frontmatter missing 'model_cartridge' "
-            "(must be one of: small, big, vision)"
+            "Frontmatter missing 'model_cartridge' (must be one of: small, big, vision)"
         )
 
     checks_run.append("created_exists")
     if not fm.get("created"):
-        errors.append(
-            "Frontmatter missing 'created' "
-            "(date in YYYY-MM-DD format)"
-        )
+        errors.append("Frontmatter missing 'created' (date in YYYY-MM-DD format)")
 
     checks_run.append("summary_exists")
     if not fm.get("summary"):
-        errors.append(
-            "Frontmatter missing 'summary' "
-            "(short title for the procedure)"
-        )
+        errors.append("Frontmatter missing 'summary' (short title for the procedure)")
 
     checks_run.append("tags_exists")
     if not fm.get("tags"):
         errors.append(
-            "Frontmatter missing 'tags' "
-            "(at minimum: [procedure, procedures])"
+            "Frontmatter missing 'tags' (at minimum: [procedure, procedures])"
         )
 
     # --- 1c. provides field (optional composition declaration) ---
@@ -313,11 +458,11 @@ def validate_procedure_text(
     # --- 1b. Naming convention (procedures are tools, not tutorials) ---
     checks_run.append("naming_convention")
     body_start = text.find("\n---", 3)
-    body = text[body_start + 4:].lstrip() if body_start != -1 else text
-    title_match = re.match(r'^#\s+(.+)$', body, re.MULTILINE)
+    body = text[body_start + 4 :].lstrip() if body_start != -1 else text
+    title_match = re.match(r"^#\s+(.+)$", body, re.MULTILINE)
     if title_match:
         proc_title = title_match.group(1).strip()
-        if re.match(r'^how[\s-]+to', proc_title, re.IGNORECASE):
+        if re.match(r"^how[\s-]+to", proc_title, re.IGNORECASE):
             errors.append(
                 f"Procedure title '{proc_title}' uses 'How to' prefix — "
                 f"procedures are tools, not tutorials. Use action-oriented "
@@ -325,9 +470,7 @@ def validate_procedure_text(
                 f"'Procedure-Creator'."
             )
     else:
-        warnings.append(
-            "No title heading found — cannot check naming convention"
-        )
+        warnings.append("No title heading found — cannot check naming convention")
 
     # --- 2. Compile test (compiler is source of truth) ---
     checks_run.append("compile_test")
@@ -337,8 +480,12 @@ def validate_procedure_text(
             "Procedure compiler returned None — check that "
             "'type: procedure' is in frontmatter"
         )
-        return {"passed": False, "errors": errors, "warnings": warnings,
-                "checks_run": checks_run}
+        return {
+            "passed": False,
+            "errors": errors,
+            "warnings": warnings,
+            "checks_run": checks_run,
+        }
 
     compiled_steps = len(proc.steps)
     step_types = [s.step_type for s in proc.steps]
@@ -355,10 +502,13 @@ def validate_procedure_text(
         # Only check sequential for integer steps — decimal steps
         # (e.g. 1.5, 2.5) are explicitly allowed for inserting steps
         # between existing ones without renumbering.
-        if all(isinstance(n, int) or (isinstance(n, float) and n == int(n)) for n in step_numbers):
-            expected = list(range(
-                int(step_numbers[0]), int(step_numbers[0]) + len(step_numbers)
-            ))
+        if all(
+            isinstance(n, int) or (isinstance(n, float) and n == int(n))
+            for n in step_numbers
+        ):
+            expected = list(
+                range(int(step_numbers[0]), int(step_numbers[0]) + len(step_numbers))
+            )
             if [int(n) for n in step_numbers] != expected:
                 errors.append(
                     f"Step numbers not sequential: found {step_numbers}, "
@@ -397,16 +547,14 @@ def validate_procedure_text(
                 if re.search(pattern, code_block):
                     if "get_llm_client" not in code_block:
                         warnings.append(
-                            f"Code block {i+1} uses direct endpoint "
+                            f"Code block {i + 1} uses direct endpoint "
                             f"({name}) — should use get_llm_client() "
                             f"instead"
                         )
 
     # --- 4. Validation predicates ---
     checks_run.append("validation_predicates")
-    validations = re.findall(
-        r"\[validate:\s*(.+?)\]", text, re.IGNORECASE
-    )
+    validations = re.findall(r"\[validate:\s*(.+?)\]", text, re.IGNORECASE)
     for v in validations:
         v_stripped = v.strip()
         is_deterministic = (
@@ -414,8 +562,7 @@ def validate_procedure_text(
             or re.match(r'contains\s+["\']', v_stripped, re.IGNORECASE)
             or re.match(r"matches\s+/", v_stripped, re.IGNORECASE)
             or re.match(r"islands_after\s*[<>=]", v_stripped, re.IGNORECASE)
-            or re.match(r"connectivity_after\s*[<>=]",
-                        v_stripped, re.IGNORECASE)
+            or re.match(r"connectivity_after\s*[<>=]", v_stripped, re.IGNORECASE)
         )
         if not is_deterministic:
             warnings.append(
@@ -425,9 +572,7 @@ def validate_procedure_text(
 
     # --- 5. Idempotency indicators ---
     checks_run.append("idempotency_indicators")
-    has_idempotency = any(
-        kw in text.lower() for kw in _IDEMPOTENCY_KEYWORDS
-    )
+    has_idempotency = any(kw in text.lower() for kw in _IDEMPOTENCY_KEYWORDS)
     if not has_idempotency:
         warnings.append(
             "No idempotency indicators found — procedure may create "
@@ -439,10 +584,8 @@ def validate_procedure_text(
     code_steps = [s for s in proc.steps if s.step_type == "code"]
     for step in code_steps:
         if step.code:
-            if ("result = " not in step.code
-                    and "result=" not in step.code):
-                if ("vault_delete" not in step.code
-                        and "vault_append" not in step.code):
+            if "result = " not in step.code and "result=" not in step.code:
+                if "vault_delete" not in step.code and "vault_append" not in step.code:
                     warnings.append(
                         f"Step {step.number} (code) has no "
                         f"'result = ' assignment — runtime expects "
@@ -472,9 +615,7 @@ def validate_procedure_text(
     }
 
 
-def dry_run_procedure(
-    text: str, vault_path: str = ".", timeout: int = 10
-) -> dict:
+def dry_run_procedure(text: str, vault_path: str = ".", timeout: int = 10) -> dict:
     """Execute each code step in a subprocess with mocked tools.
 
     All tools are mocked — no side effects on the vault.
@@ -528,20 +669,24 @@ def dry_run_procedure(
 
     for step in proc.steps:
         if step.step_type != "code":
-            results.append({
-                "step": step.number,
-                "type": step.step_type,
-                "status": "skipped",
-            })
+            results.append(
+                {
+                    "step": step.number,
+                    "type": step.step_type,
+                    "status": "skipped",
+                }
+            )
             continue
 
         if not step.code:
-            results.append({
-                "step": step.number,
-                "type": "code",
-                "status": "error",
-                "error": "no code in step",
-            })
+            results.append(
+                {
+                    "step": step.number,
+                    "type": "code",
+                    "status": "error",
+                    "error": "no code in step",
+                }
+            )
             all_passed = False
             continue
 
@@ -568,17 +713,21 @@ def dry_run_procedure(
         try:
             r = _subprocess_run(
                 [sys.executable, "-c", script],
-                capture_output=True, text=True, timeout=timeout,
-                cwd=vault_path, env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=vault_path,
+                env=env,
             )
             if r.returncode != 0:
-                results.append({
-                    "step": step.number,
-                    "type": "code",
-                    "status": "error",
-                    "error": (r.stderr[:300] if r.stderr
-                              else "non-zero exit"),
-                })
+                results.append(
+                    {
+                        "step": step.number,
+                        "type": "code",
+                        "status": "error",
+                        "error": (r.stderr[:300] if r.stderr else "non-zero exit"),
+                    }
+                )
                 all_passed = False
             else:
                 stdout = r.stdout.strip()
@@ -587,38 +736,40 @@ def dry_run_procedure(
                         parsed = json.loads(stdout)
                         result_val = parsed.get("result", "")
                         if not isinstance(result_val, str):
-                            result_val = json.dumps(
-                                result_val, default=str
-                            )
+                            result_val = json.dumps(result_val, default=str)
                         prior_results.append(result_val)
                     except json.JSONDecodeError:
                         prior_results.append(stdout[:500])
-                results.append({
+                results.append(
+                    {
+                        "step": step.number,
+                        "type": "code",
+                        "status": "passed",
+                    }
+                )
+        except subprocess.TimeoutExpired:
+            results.append(
+                {
                     "step": step.number,
                     "type": "code",
-                    "status": "passed",
-                })
-        except subprocess.TimeoutExpired:
-            results.append({
-                "step": step.number,
-                "type": "code",
-                "status": "timeout",
-                "timeout": timeout,
-            })
+                    "status": "timeout",
+                    "timeout": timeout,
+                }
+            )
             all_passed = False
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-            results.append({
-                "step": step.number,
-                "type": "code",
-                "status": "error",
-                "error": str(e)[:300],
-            })
+            results.append(
+                {
+                    "step": step.number,
+                    "type": "code",
+                    "status": "error",
+                    "error": str(e)[:300],
+                }
+            )
             all_passed = False
 
     return {
         "passed": all_passed,
-        "steps_tested": len(
-            [r for r in results if r["status"] != "skipped"]
-        ),
+        "steps_tested": len([r for r in results if r["status"] != "skipped"]),
         "results": results,
     }

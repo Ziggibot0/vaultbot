@@ -117,15 +117,16 @@ FRAGMENT_TARGET_LINES = 350
 # Utility functions
 # ---------------------------------------------------------------------------
 
+
 def slugify(text, max_len=80):
     """Convert heading text to a filename-safe slug (no .md extension)."""
-    text = re.sub(r'\[edit\]', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'[^a-zA-Z0-9\s-]', '', text)
-    text = re.sub(r'\s+', '-', text.strip())
-    text = re.sub(r'-+', '-', text)
-    text = text.strip('-').lower()
+    text = re.sub(r"\[edit\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"[^a-zA-Z0-9\s-]", "", text)
+    text = re.sub(r"\s+", "-", text.strip())
+    text = re.sub(r"-+", "-", text)
+    text = text.strip("-").lower()
     if len(text) > max_len:
-        text = text[:max_len].rsplit('-', 1)[0]
+        text = text[:max_len].rsplit("-", 1)[0]
     return text or "untitled"
 
 
@@ -139,28 +140,30 @@ def truncate_content(content, max_chars=MAX_SECTION_CHARS):
     """
     if len(content) <= max_chars:
         return content
-    return content[:max_chars] + "\n\n*[... content truncated (section exceeded 200K char safety cap) ...]*"
+    return (
+        content[:max_chars]
+        + "\n\n*[... content truncated (section exceeded 200K char safety cap) ...]*"
+    )
+
 
 def is_toc_entry(content):
     """Check if a section's content is just a table of contents entry."""
     stripped = content.strip()
-    lines = [l for l in stripped.split('\n') if l.strip()]
+    lines = [l for l in stripped.split("\n") if l.strip()]
 
     # TOC entries are typically 1-3 lines
     if len(lines) > 3:
         return False
 
     # Check for dot-leader pattern: dots separated by spaces, 5+ occurrences
-    if re.search(r'(\.\s){5,}', stripped):
+    if re.search(r"(\.\s){5,}", stripped):
         return True
 
     # Also check: 5+ consecutive dots (no spaces)
-    if re.search(r'\.{5,}', stripped):
+    if re.search(r"\.{5,}", stripped):
         return True
 
     return False
-
-
 
 
 def safe_filename(slug):
@@ -168,10 +171,10 @@ def safe_filename(slug):
     # Remove any path components
     slug = os.path.basename(slug)
     # Remove dangerous characters
-    slug = re.sub(r'[<>:"/\\|?*]', '', slug)
+    slug = re.sub(r'[<>:"/\\|?*]', "", slug)
     # Ensure it ends with .md
-    if not slug.endswith('.md'):
-        slug = slug + '.md'
+    if not slug.endswith(".md"):
+        slug = slug + ".md"
     return slug
 
 
@@ -189,6 +192,7 @@ def _source_key_line(key):
     """The hidden marker line written into the TOC note."""
     return "<!-- vaultbot:textbook-source-key %s -->" % key
 
+
 def _max_sections_line(max_sections):
     """Hidden marker recording the cap used for this ingest.
 
@@ -198,6 +202,7 @@ def _max_sections_line(max_sections):
     clean append, not a duplication).
     """
     return "<!-- vaultbot:textbook-max-sections %d -->" % int(max_sections or 0)
+
 
 def find_prior_max_sections(toc_path):
     """Read the max_sections marker from a TOC note. Returns 0 if absent."""
@@ -265,30 +270,31 @@ def remove_stale_notes(stale_slugs):
 # (PyMuPDF font-metadata extraction) builds the TOC index; equations are
 # read later, one page at a time, only when the user asks about them.
 
+
 def detect_source_type(source):
     """Detect the type of source from URL or file path."""
     source_lower = source.lower()
-    if source.startswith(('http://', 'https://')):
-        if source_lower.endswith('.pdf'):
-            return 'pdf_url'
-        elif source_lower.endswith(('.txt', '.text')):
-            return 'text_url'
-        elif source_lower.endswith(('.md', '.markdown')):
-            return 'markdown_url'
+    if source.startswith(("http://", "https://")):
+        if source_lower.endswith(".pdf"):
+            return "pdf_url"
+        elif source_lower.endswith((".txt", ".text")):
+            return "text_url"
+        elif source_lower.endswith((".md", ".markdown")):
+            return "markdown_url"
         else:
-            return 'html_url'
+            return "html_url"
     else:
         # Local file
-        if source_lower.endswith('.pdf'):
-            return 'pdf_file'
-        elif source_lower.endswith(('.txt', '.text')):
-            return 'text_file'
-        elif source_lower.endswith(('.md', '.markdown')):
-            return 'markdown_file'
-        elif source_lower.endswith(('.html', '.htm')):
-            return 'html_file'
+        if source_lower.endswith(".pdf"):
+            return "pdf_file"
+        elif source_lower.endswith((".txt", ".text")):
+            return "text_file"
+        elif source_lower.endswith((".md", ".markdown")):
+            return "markdown_file"
+        elif source_lower.endswith((".html", ".htm")):
+            return "html_file"
         else:
-            return 'auto_file'
+            return "auto_file"
 
 
 def _auto_detect_subject(source, source_type, title="", sections=None):
@@ -306,24 +312,29 @@ def _auto_detect_subject(source, source_type, title="", sections=None):
     if sections is None:
         sections = []
     # 1. Metadata title
-    if title and title not in ("Untitled", "PDF Document", "Markdown Document",
-                                "Plain Text Document"):
-        clean = re.sub(r'[_\-]+', ' ', title).strip()
+    if title and title not in (
+        "Untitled",
+        "PDF Document",
+        "Markdown Document",
+        "Plain Text Document",
+    ):
+        clean = re.sub(r"[_\-]+", " ", title).strip()
         if clean and len(clean) > 2:
             return slugify(clean)[:60]
     # 2. First section heading
     if sections:
-        first_heading = sections[0].get('heading', '').strip()
-        if first_heading and first_heading.lower() not in ('untitled', 'section 1'):
+        first_heading = sections[0].get("heading", "").strip()
+        if first_heading and first_heading.lower() not in ("untitled", "section 1"):
             return slugify(first_heading)[:60]
     # 3. Filename stem
     try:
         from pathlib import Path as _P
+
         stem = _P(source).stem
         # Strip common suffixes like "_-__WEB", "_-_WEB_oNlbGYl".
-        stem = re.sub(r'_-__WEB.*$', '', stem, flags=re.IGNORECASE)
-        stem = re.sub(r'_-_WEB.*$', '', stem, flags=re.IGNORECASE)
-        stem = re.sub(r'[_\-]+', ' ', stem).strip()
+        stem = re.sub(r"_-__WEB.*$", "", stem, flags=re.IGNORECASE)
+        stem = re.sub(r"_-_WEB.*$", "", stem, flags=re.IGNORECASE)
+        stem = re.sub(r"[_\-]+", " ", stem).strip()
         if stem and len(stem) > 2:
             return slugify(stem)[:60]
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -333,9 +344,12 @@ def _auto_detect_subject(source, source_type, title="", sections=None):
 
 def fetch_url(url, timeout=30):
     """Fetch content from a URL with size limit."""
-    r = requests.get(url, timeout=timeout, headers={
-        "User-Agent": "Mozilla/5.0 (VaultBot/1.0; textbook ingest tool)"
-    }, stream=True)
+    r = requests.get(
+        url,
+        timeout=timeout,
+        headers={"User-Agent": "Mozilla/5.0 (VaultBot/1.0; textbook ingest tool)"},
+        stream=True,
+    )
     r.raise_for_status()
 
     # Download with size limit
@@ -343,22 +357,28 @@ def fetch_url(url, timeout=30):
     for chunk in r.iter_content(chunk_size=8192):
         content += chunk
         if len(content) > MAX_DOWNLOAD_BYTES:
-            raise ValueError("Download exceeds %d MB limit" % (MAX_DOWNLOAD_BYTES // (1024*1024)))
+            raise ValueError(
+                "Download exceeds %d MB limit" % (MAX_DOWNLOAD_BYTES // (1024 * 1024))
+            )
 
     # Detect encoding
-    encoding = r.encoding or 'utf-8'
-    return content.decode(encoding, errors='replace')
+    encoding = r.encoding or "utf-8"
+    return content.decode(encoding, errors="replace")
 
 
 def fetch_pdf_url(url, timeout=60):
     """Download a PDF from URL to a temp file."""
     import tempfile
-    r = requests.get(url, timeout=timeout, headers={
-        "User-Agent": "Mozilla/5.0 (VaultBot/1.0)"
-    }, stream=True)
+
+    r = requests.get(
+        url,
+        timeout=timeout,
+        headers={"User-Agent": "Mozilla/5.0 (VaultBot/1.0)"},
+        stream=True,
+    )
     r.raise_for_status()
 
-    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         total = 0
         for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
@@ -366,7 +386,10 @@ def fetch_pdf_url(url, timeout=60):
             if total > MAX_DOWNLOAD_BYTES:
                 f.close()
                 os.unlink(f.name)
-                raise ValueError("PDF download exceeds %d MB limit" % (MAX_DOWNLOAD_BYTES // (1024*1024)))
+                raise ValueError(
+                    "PDF download exceeds %d MB limit"
+                    % (MAX_DOWNLOAD_BYTES // (1024 * 1024))
+                )
         return f.name
 
 
@@ -375,21 +398,22 @@ def fetch_pdf_url(url, timeout=60):
 # with keys: heading, level, content
 # ---------------------------------------------------------------------------
 
+
 def parse_html(content_text, base_url=""):
     """Parse HTML into sections by headings."""
     import html2text
     from bs4 import BeautifulSoup, Tag
 
-    soup = BeautifulSoup(content_text, 'lxml')
+    soup = BeautifulSoup(content_text, "lxml")
 
     # Try to find main content area (try multiple strategies)
     main = (
-        soup.find('main') or
-        soup.find('article') or
-        soup.find('div', {'class': 'mw-parser-output'}) or
-        soup.find('div', {'id': 'content'}) or
-        soup.find('div', {'class': 'page-content'}) or
-        soup
+        soup.find("main")
+        or soup.find("article")
+        or soup.find("div", {"class": "mw-parser-output"})
+        or soup.find("div", {"id": "content"})
+        or soup.find("div", {"class": "page-content"})
+        or soup
     )
 
     h2t = html2text.HTML2Text()
@@ -408,29 +432,42 @@ def parse_html(content_text, base_url=""):
         in_unwanted = False
         p = elem.parent
         while p:
-            if p.get('class'):
-                classes = set(p.get('class', []))
-                if any(x in classes for x in [
-                    'infobox', 'sidebar', 'navbox', 'vertical-navbox',
-                    'reflist', 'references', 'mw-editsection', 'toc',
-                    'hatnote', 'ambox', 'mw-jump-link', 'printfooter',
-                    'catlinks', 'mw-navigation'
-                ]):
+            if p.get("class"):
+                classes = set(p.get("class", []))
+                if any(
+                    x in classes
+                    for x in [
+                        "infobox",
+                        "sidebar",
+                        "navbox",
+                        "vertical-navbox",
+                        "reflist",
+                        "references",
+                        "mw-editsection",
+                        "toc",
+                        "hatnote",
+                        "ambox",
+                        "mw-jump-link",
+                        "printfooter",
+                        "catlinks",
+                        "mw-navigation",
+                    ]
+                ):
                     in_unwanted = True
                     break
-            if p.name == 'table':
+            if p.name == "table":
                 in_unwanted = True
                 break
             p = p.parent
         if in_unwanted:
             continue
 
-        if elem.name in ('h1', 'h2', 'h3', 'h4'):
-            text = elem.get_text(strip=True).replace('[edit]', '').strip()
+        if elem.name in ("h1", "h2", "h3", "h4"):
+            text = elem.get_text(strip=True).replace("[edit]", "").strip()
             if text and len(text) > 1:
-                elements.append(('heading', text, int(elem.name[1]), elem))
-        elif elem.name in ('p', 'ul', 'ol', 'blockquote'):
-            elements.append(('content', '', 0, elem))
+                elements.append(("heading", text, int(elem.name[1]), elem))
+        elif elem.name in ("p", "ul", "ol", "blockquote"):
+            elements.append(("content", "", 0, elem))
 
     # Build sections
     sections = []
@@ -439,60 +476,66 @@ def parse_html(content_text, base_url=""):
     current_parts = []
 
     for etype, text, level, tag in elements:
-        if etype == 'heading':
+        if etype == "heading":
             if current_heading is not None:
-                sections.append({
-                    'heading': current_heading,
-                    'level': current_level,
-                    'content': '\n'.join(current_parts)
-                })
+                sections.append(
+                    {
+                        "heading": current_heading,
+                        "level": current_level,
+                        "content": "\n".join(current_parts),
+                    }
+                )
             current_heading = text
             current_level = level
             current_parts = []
-        elif etype == 'content':
+        elif etype == "content":
             md = h2t.handle(str(tag))
-            md = re.sub(r'\[edit\]\([^)]*\)', '', md)
-            md = re.sub(r'\[Edit section[^]]*\]\([^)]*\)', '', md)
+            md = re.sub(r"\[edit\]\([^)]*\)", "", md)
+            md = re.sub(r"\[Edit section[^]]*\]\([^)]*\)", "", md)
             if md.strip():
                 current_parts.append(md.strip())
 
     if current_heading is not None:
-        sections.append({
-            'heading': current_heading,
-            'level': current_level,
-            'content': '\n'.join(current_parts)
-        })
+        sections.append(
+            {
+                "heading": current_heading,
+                "level": current_level,
+                "content": "\n".join(current_parts),
+            }
+        )
 
     # Filter: only keep sections with real content
-    sections = [s for s in sections if len(s['content']) > 50]
-    sections = [s for s in sections if not is_toc_entry(s['content'])]
+    sections = [s for s in sections if len(s["content"]) > 50]
+    sections = [s for s in sections if not is_toc_entry(s["content"])]
 
     # Extract title
-    title_tag = soup.find('title')
+    title_tag = soup.find("title")
     title = title_tag.get_text(strip=True) if title_tag else "Untitled"
-    title = re.sub(r'\s*-\s*Wikipedia\s*$', '', title)
-    title = re.sub(r'\s*\|\s*.*$', '', title)
+    title = re.sub(r"\s*-\s*Wikipedia\s*$", "", title)
+    title = re.sub(r"\s*\|\s*.*$", "", title)
 
     return title, sections
 
 
 def parse_markdown(content_text):
     """Parse Markdown into sections by # headings."""
-    lines = content_text.split('\n')
+    lines = content_text.split("\n")
     sections = []
     current_heading = "Introduction"
     current_level = 1
     current_lines = []
 
     for line in lines:
-        m = re.match(r'^(#{1,4})\s+(.+)$', line)
+        m = re.match(r"^(#{1,4})\s+(.+)$", line)
         if m:
             if current_lines:
-                sections.append({
-                    'heading': current_heading,
-                    'level': len(m.group(1)),
-                    'content': '\n'.join(current_lines).strip()
-                })
+                sections.append(
+                    {
+                        "heading": current_heading,
+                        "level": len(m.group(1)),
+                        "content": "\n".join(current_lines).strip(),
+                    }
+                )
             current_heading = m.group(2).strip()
             current_level = len(m.group(1))
             current_lines = []
@@ -500,14 +543,16 @@ def parse_markdown(content_text):
             current_lines.append(line)
 
     if current_lines:
-        sections.append({
-            'heading': current_heading,
-            'level': current_level,
-            'content': '\n'.join(current_lines).strip()
-        })
+        sections.append(
+            {
+                "heading": current_heading,
+                "level": current_level,
+                "content": "\n".join(current_lines).strip(),
+            }
+        )
 
-    sections = [s for s in sections if len(s['content']) > 50]
-    sections = [s for s in sections if not is_toc_entry(s['content'])]
+    sections = [s for s in sections if len(s["content"]) > 50]
+    sections = [s for s in sections if not is_toc_entry(s["content"])]
     return "Markdown Document", sections
 
 
@@ -522,25 +567,25 @@ def parse_markdown(content_text):
 # These helpers fix both problems in a source-agnostic way.
 
 _HEADING_PATTERN = re.compile(
-    r'^('
-    r'CHAPTER\s+[IVXLCDM\d]+'              # CHAPTER IV / CHAPTER 4
-    r'|Chapter\s+\d+'                      # Chapter 1
-    r'|Section\s+\d+(?:\.\d+)*'           # Section 1.2
-    r'|Part\s+[IVXLCDM\d]+'               # Part I / Part 2
-    r'|\d+\.\s+\S'                       # 1. Title (period glued to number)
-    r'|\d+\.\d+(?:\.\d+)*\s+\S'         # 1.1 Title / 1.1.1 Title
-    r')',
-    re.MULTILINE
+    r"^("
+    r"CHAPTER\s+[IVXLCDM\d]+"  # CHAPTER IV / CHAPTER 4
+    r"|Chapter\s+\d+"  # Chapter 1
+    r"|Section\s+\d+(?:\.\d+)*"  # Section 1.2
+    r"|Part\s+[IVXLCDM\d]+"  # Part I / Part 2
+    r"|\d+\.\s+\S"  # 1. Title (period glued to number)
+    r"|\d+\.\d+(?:\.\d+)*\s+\S"  # 1.1 Title / 1.1.1 Title
+    r")",
+    re.MULTILINE,
 )
 
 
 def _full_line(text, pos):
     """Return the whole line of `text` starting at `pos`, without the newline."""
-    end = text.find('\n', pos)
+    end = text.find("\n", pos)
     if end == -1:
         end = len(text)
     line = text[pos:end]
-    if line.endswith('\r'):
+    if line.endswith("\r"):
         line = line[:-1]
     return line.strip()
 
@@ -563,11 +608,14 @@ def _looks_like_heading(text, start, line, require_blank=True):
         return False
     if len(line) > 90:
         return False
-    if re.search(r'[.?!]\s*$', line):
+    if re.search(r"[.?!]\s*$", line):
         return False
     body = re.sub(
-        r'^(\d+(?:\.\d+)*\s*|Chapter\s+\d+\s*|Section\s+\d+(?:\.\d+)*\s*|Part\s+[IVXLCDM\d]+\s*)',
-        '', line, flags=re.IGNORECASE).strip()
+        r"^(\d+(?:\.\d+)*\s*|Chapter\s+\d+\s*|Section\s+\d+(?:\.\d+)*\s*|Part\s+[IVXLCDM\d]+\s*)",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    ).strip()
     if not body or len(body) > 75:
         return False
     if len(body.split()) > 12:
@@ -576,22 +624,83 @@ def _looks_like_heading(text, start, line, require_blank=True):
     # that contains a'), lowercase fragments ('1.1  and'), page bleeds,
     # and symbol-led lines.  Real section/chapter titles in English-language
     # textbooks always start with a capital letter.
-    if not re.match(r'[A-Z]', body):
+    if not re.match(r"[A-Z]", body):
         return False
     # Reject sentence fragments -- real titles never end with a function
     # word like 'is', 'the', 'of', 'a'.  Filters answer-key references
     # ('4.13 The absolute maximum is') and wrapped sentences.
     _TRAILING_FN_WORDS = frozenset(
-        ['is', 'are', 'was', 'were', 'the', 'a', 'an', 'of', 'in', 'for', 'to', 'with', 'by', 'at', 'from', 'and', 'or', 'but', 'be', 'this', 'that', 'these', 'those', 'as', 'into', 'on', 'upon', 'over', 'under', 'than', 'within', 'without', 'about', 'above', 'below', 'behind', 'between', 'during', 'through', 'throughout', 'across', 'against', 'around', 'beyond', 'despite', 'except', 'inside', 'near', 'outside', 'toward', 'towards', 'until', 'up', 'upon', 'down', 'off', 'per', 'via', 'using'])
+        [
+            "is",
+            "are",
+            "was",
+            "were",
+            "the",
+            "a",
+            "an",
+            "of",
+            "in",
+            "for",
+            "to",
+            "with",
+            "by",
+            "at",
+            "from",
+            "and",
+            "or",
+            "but",
+            "be",
+            "this",
+            "that",
+            "these",
+            "those",
+            "as",
+            "into",
+            "on",
+            "upon",
+            "over",
+            "under",
+            "than",
+            "within",
+            "without",
+            "about",
+            "above",
+            "below",
+            "behind",
+            "between",
+            "during",
+            "through",
+            "throughout",
+            "across",
+            "against",
+            "around",
+            "beyond",
+            "despite",
+            "except",
+            "inside",
+            "near",
+            "outside",
+            "toward",
+            "towards",
+            "until",
+            "up",
+            "upon",
+            "down",
+            "off",
+            "per",
+            "via",
+            "using",
+        ]
+    )
     words = body.split()
-    if words[-1].lower().rstrip('.,;:') in _TRAILING_FN_WORDS:
+    if words[-1].lower().rstrip(".,;:") in _TRAILING_FN_WORDS:
         return False
     # Reject headings containing math symbols or answer-key artifacts.
     # Real section titles are prose noun phrases; they never contain '=',
     # '∞', '≈', '±', or semicolons (which separate answer-key list items
     # like '6.17 Use the method of washers;').  Source-agnostic: these
     # characters are universal math/answer markers, not book-specific.
-    if re.search(r'[=∞≈±∓≤≥≠∈∉√∑∏∫;]', body):
+    if re.search(r"[=∞≈±∓≤≥≠∈∉√∑∏∫;]", body):
         return False
     # Real section titles are at least 2 characters.  A single short word
     # can be a legitimate title ('4.10 Antiderivatives') so we don't
@@ -607,8 +716,26 @@ def _looks_like_heading(text, start, line, require_blank=True):
     # and are never section titles.  Source-agnostic: these are universal
     # numeric-result lead-ins.
     _ANSWER_LEADINS = frozenset(
-        ['approximately', 'about', 'around', 'roughly', 'nearly', 'exactly', 'since', 'because', 'therefore', 'thus', 'hence', 'consequently', 'yes', 'no', 'true', 'false'])
-    if words[0].lower().rstrip('.,;:') in _ANSWER_LEADINS:
+        [
+            "approximately",
+            "about",
+            "around",
+            "roughly",
+            "nearly",
+            "exactly",
+            "since",
+            "because",
+            "therefore",
+            "thus",
+            "hence",
+            "consequently",
+            "yes",
+            "no",
+            "true",
+            "false",
+        ]
+    )
+    if words[0].lower().rstrip(".,;:") in _ANSWER_LEADINS:
         return False
     # Reject sentence fragments.  Real section titles are noun phrases
     # (Title Case or proper nouns), not clauses.  They never contain
@@ -616,13 +743,14 @@ def _looks_like_heading(text, start, line, require_blank=True):
     # 'there will', 'let ... assume', 'we can', 'it is'.  We check for
     # these universal sentence-fragment markers anywhere in the body.
     _SENTENCE_MARKERS = re.compile(
-        r'\b(there\s+will|there\s+is|there\s+are|let\s+us|let\s+choose|'
-        r'we\s+can|we\s+have|we\s+need|we\s+use|we\s+want|it\s+is|it\s+was|'
-        r'this\s+is|they\s+are|she\s+must|he\s+must|one\s+must|you\s+must|'
-        r'will\s+be|has\s+been|have\s+been|can\s+be|must\s+be|'
-        r'after\s+years|after\s+months|after\s+days|at\s+interest|'
-        r'if\s+we|if\s+you|if\s+there)\b',
-        re.IGNORECASE)
+        r"\b(there\s+will|there\s+is|there\s+are|let\s+us|let\s+choose|"
+        r"we\s+can|we\s+have|we\s+need|we\s+use|we\s+want|it\s+is|it\s+was|"
+        r"this\s+is|they\s+are|she\s+must|he\s+must|one\s+must|you\s+must|"
+        r"will\s+be|has\s+been|have\s+been|can\s+be|must\s+be|"
+        r"after\s+years|after\s+months|after\s+days|at\s+interest|"
+        r"if\s+we|if\s+you|if\s+there)\b",
+        re.IGNORECASE,
+    )
     if _SENTENCE_MARKERS.search(body):
         return False
     if require_blank and start > 0:
@@ -636,36 +764,36 @@ def _blank_before(text, start):
     if start == 0:
         return True
     p = start - 1
-    if p >= 0 and text[p] == '\n':
+    if p >= 0 and text[p] == "\n":
         p -= 1
-    if p >= 0 and text[p] == '\r':
+    if p >= 0 and text[p] == "\r":
         p -= 1
-    while p >= 0 and text[p] in ' \t':
+    while p >= 0 and text[p] in " \t":
         p -= 1
-    return p < 0 or text[p] in '\n\r\f'
+    return p < 0 or text[p] in "\n\r\f"
 
 
 def _blank_after(text, start, line):
     """True if the line after the heading line is blank (or end of doc)."""
-    nl = text.find('\n', start)
+    nl = text.find("\n", start)
     if nl == -1:
         return True  # end of document
     p = nl + 1
-    while p < len(text) and text[p] in ' \t':
+    while p < len(text) and text[p] in " \t":
         p += 1
-    return p >= len(text) or text[p] in '\n\r\f'
+    return p >= len(text) or text[p] in "\n\r\f"
 
 
 def _assign_level(line):
     """Heading depth from its numbering: '1.' -> 1, '1.1' -> 2, '1.1.1' -> 3.
     'Chapter'/'Part' -> 1, 'Section' -> 2. Default 2."""
     s = line.strip()
-    m = re.match(r'^(\d+(?:\.\d+)*)', s)
+    m = re.match(r"^(\d+(?:\.\d+)*)", s)
     if m:
-        return m.group(1).count('.') + 1
-    if re.match(r'^(Chapter|Part)\b', s, re.IGNORECASE):
+        return m.group(1).count(".") + 1
+    if re.match(r"^(Chapter|Part)\b", s, re.IGNORECASE):
         return 1
-    if re.match(r'^Section\b', s, re.IGNORECASE):
+    if re.match(r"^Section\b", s, re.IGNORECASE):
         return 2
     return 2
 
@@ -675,16 +803,16 @@ def _section_sort_key(heading):
     'Section 1.1 Exercises' -> (1,1,0) so it sorts right after 1.1;
     non-numeric -> (inf,) so unknown headings sort after numbered ones."""
     s = heading.strip()
-    m = re.match(r'^(\d+(?:\.\d+)*)', s)
+    m = re.match(r"^(\d+(?:\.\d+)*)", s)
     if not m:
-        m = re.match(r'^(?:Chapter|Section|Part)\s+(\d+(?:\.\d+)*)', s, re.IGNORECASE)
+        m = re.match(r"^(?:Chapter|Section|Part)\s+(\d+(?:\.\d+)*)", s, re.IGNORECASE)
     if m:
-        parts = tuple(int(x) for x in m.group(1).split('.'))
+        parts = tuple(int(x) for x in m.group(1).split("."))
         # "Section 1.1 Exercises" sorts right after "1.1" by appending a 0.
-        if re.match(r'^(?:Chapter|Section|Part)\b', s, re.IGNORECASE):
+        if re.match(r"^(?:Chapter|Section|Part)\b", s, re.IGNORECASE):
             return parts + (0,)
         return parts
-    return (float('inf'),)
+    return (float("inf"),)
 
 
 def _clean_heading(line):
@@ -695,10 +823,10 @@ def _clean_heading(line):
     whitespace) if what remains is still meaningful (has at least one word
     beyond the section number).  Also collapses repeated whitespace.
     """
-    line = re.sub(r'\s+', ' ', line.strip())
+    line = re.sub(r"\s+", " ", line.strip())
     # Strip trailing page number: '... Title 419' -> '... Title'
     # Only if there's title text before the number (don't strip '4.10').
-    m = re.match(r'^(\d+(?:\.\d+)*\s+\S.*?)\s+\d+$', line)
+    m = re.match(r"^(\d+(?:\.\d+)*\s+\S.*?)\s+\d+$", line)
     if m:
         line = m.group(1)
     return line
@@ -716,11 +844,67 @@ def _is_learning_objective(heading):
     textbook learning-objective conventions -- not specific to any one book.
     """
     body = re.sub(
-        r'^(\d+(?:\.\d+)*\s*|Chapter\s+\d+\s*|Section\s+\d+(?:\.\d+)*\s*|Part\s+[IVXLCDM\d]+\s*)',
-        '', heading, flags=re.IGNORECASE).strip()
-    first_word = body.split()[0].lower().rstrip('.,;:') if body else ''
+        r"^(\d+(?:\.\d+)*\s*|Chapter\s+\d+\s*|Section\s+\d+(?:\.\d+)*\s*|Part\s+[IVXLCDM\d]+\s*)",
+        "",
+        heading,
+        flags=re.IGNORECASE,
+    ).strip()
+    first_word = body.split()[0].lower().rstrip(".,;:") if body else ""
     _IMPERATIVES = frozenset(
-        ['calculate', 'find', 'express', 'use', 'state', 'explain', 'recognize', 'describe', 'determine', 'identify', 'sketch', 'evaluate', 'compute', 'apply', 'verify', 'simplify', 'solve', 'graph', 'compare', 'classify', 'construct', 'derive', 'formulate', 'illustrate', 'interpret', 'list', 'name', 'prove', 'show', 'translate', 'write', 'demonstrate', 'discuss', 'explore', 'predict', 'analyze', 'assess', 'define', 'estimate', 'approximate', 'convert', 'factor', 'integrate', 'differentiate', 'plot', 'draw', 'label', 'measure', 'test', 'check', 'compute'])
+        [
+            "calculate",
+            "find",
+            "express",
+            "use",
+            "state",
+            "explain",
+            "recognize",
+            "describe",
+            "determine",
+            "identify",
+            "sketch",
+            "evaluate",
+            "compute",
+            "apply",
+            "verify",
+            "simplify",
+            "solve",
+            "graph",
+            "compare",
+            "classify",
+            "construct",
+            "derive",
+            "formulate",
+            "illustrate",
+            "interpret",
+            "list",
+            "name",
+            "prove",
+            "show",
+            "translate",
+            "write",
+            "demonstrate",
+            "discuss",
+            "explore",
+            "predict",
+            "analyze",
+            "assess",
+            "define",
+            "estimate",
+            "approximate",
+            "convert",
+            "factor",
+            "integrate",
+            "differentiate",
+            "plot",
+            "draw",
+            "label",
+            "measure",
+            "test",
+            "check",
+            "compute",
+        ]
+    )
     return first_word in _IMPERATIVES
 
 
@@ -743,8 +927,9 @@ def _detect_headings(text):
       line before (the strongest layout signal), and then drop any run
       of 3+ consecutive integers (exercise lists).
     """
+
     def is_subnumbered(h):
-        return bool(re.match(r'^\d+\.\d', h.strip()))
+        return bool(re.match(r"^\d+\.\d", h.strip()))
 
     found = []
     for m in _HEADING_PATTERN.finditer(text):
@@ -753,8 +938,9 @@ def _detect_headings(text):
             continue
         if not _looks_like_heading(text, m.start(), line, require_blank=False):
             continue
-        if is_subnumbered(line) or re.match(r'^(Chapter|Section|Part)\b',
-                                            line, re.IGNORECASE):
+        if is_subnumbered(line) or re.match(
+            r"^(Chapter|Section|Part)\b", line, re.IGNORECASE
+        ):
             # Sub-numbered or named structural headings: accept based on
             # content heuristics alone (uppercase, title-like).  PDF text
             # extraction collapses blank lines, so layout signals are
@@ -769,7 +955,7 @@ def _detect_headings(text):
     # Reject lines containing PDF running-header artifacts (bullets, page
     # markers).  These appear in repeated page headers like "4.10 •
     # Antiderivatives     419" and are never real section titles.
-    found = [(s, l) for s, l in found if '•' not in l]
+    found = [(s, l) for s, l in found if "•" not in l]
 
     # Drop learning objectives (level-3+ imperative sentences like
     # "1.2.1 Calculate the slope of a line").  These are sub-items within a
@@ -777,9 +963,11 @@ def _detect_headings(text):
     # (3+ dotted parts) to avoid accidentally dropping real level-2 sections
     # that happen to start with an imperative ('Calculate ...' as a section
     # title is rare but possible -- we only filter at depth 3+).
-    found = [(s, l) for s, l in found
-             if not (re.match(r'^\d+\.\d+\.\d', l.strip())
-                     and _is_learning_objective(l))]
+    found = [
+        (s, l)
+        for s, l in found
+        if not (re.match(r"^\d+\.\d+\.\d", l.strip()) and _is_learning_objective(l))
+    ]
 
     # Deduplicate by position.
     dedup, last = [], -1
@@ -794,8 +982,8 @@ def _detect_headings(text):
     # N+2, ...) where every heading is a bare integer.  Real chapters are
     # sparse; exercise lists are dense.
     def _bare_int(h):
-        m = re.match(r'^(\d+)\.', h.strip())
-        if not m or re.match(r'^\d+\.\d', h.strip()):
+        m = re.match(r"^(\d+)\.", h.strip())
+        if not m or re.match(r"^\d+\.\d", h.strip()):
             return None
         return int(m.group(1))
 
@@ -869,6 +1057,7 @@ def parse_pdf(file_path):
     # tiny sizes (< 7pt = page numbers/footers) and very large sizes
     # (> 20pt = title pages).
     from collections import Counter
+
     size_counts = Counter(s[2] for s in spans if 7.0 <= s[2] <= 20.0)
     if not size_counts:
         doc.close()
@@ -893,7 +1082,7 @@ def parse_pdf(file_path):
                 else:
                     break
             heading_text = " ".join(parts).strip()
-            if len(heading_text) >= 3 and not re.match(r'^\d+\s+\d+$', heading_text):
+            if len(heading_text) >= 3 and not re.match(r"^\d+\s+\d+$", heading_text):
                 headings.append((page_num, heading_text, size))
             i = j
         else:
@@ -906,9 +1095,10 @@ def parse_pdf(file_path):
     # Filter out ALL-CAPS (running headers like "SECTION 1.1 EXERCISES")
     # and chapter-title pages ("Limits 105", "Derivatives 187").
     headings = [
-        h for h in headings
+        h
+        for h in headings
         if not (h[1] == h[1].upper() and len(h[1]) > 5)
-        and not re.match(r'^.+\s+\d+$', h[1])  # "Limits 105" etc.
+        and not re.match(r"^.+\s+\d+$", h[1])  # "Limits 105" etc.
     ]
 
     if len(headings) < 3:
@@ -951,14 +1141,20 @@ def parse_pdf(file_path):
 
     sections = []
     for i, (pos, heading_text, size) in enumerate(heading_positions):
-        end = heading_positions[i + 1][0] if i + 1 < len(heading_positions) else len(flat_text)
+        end = (
+            heading_positions[i + 1][0]
+            if i + 1 < len(heading_positions)
+            else len(flat_text)
+        )
         body = flat_text[pos:end].strip()
         if len(body) > 200:
-            sections.append({
-                "heading": heading_text,
-                "level": size_to_level.get(size, 2),
-                "content": body,
-            })
+            sections.append(
+                {
+                    "heading": heading_text,
+                    "level": size_to_level.get(size, 2),
+                    "content": body,
+                }
+            )
 
     if len(sections) < 3:
         return _parse_pdf_regex(file_path)
@@ -975,6 +1171,7 @@ def parse_pdf(file_path):
     title = headings[0][1] if headings else "PDF Document"
     try:
         import fitz as _fitz
+
         d = _fitz.open(file_path)
         if d.metadata and d.metadata.get("title"):
             title = d.metadata["title"]
@@ -1014,11 +1211,13 @@ def _parse_pdf_regex(file_path):
             if nl == -1 or nl > end:
                 nl = end
             body = full_text[nl:end].strip()
-            sections.append({
-                "heading": line.strip(),
-                "level": _assign_level(line),
-                "content": body,
-            })
+            sections.append(
+                {
+                    "heading": line.strip(),
+                    "level": _assign_level(line),
+                    "content": body,
+                }
+            )
     else:
         pages = re.split(r"\f", full_text)
         current_text = ""
@@ -1028,21 +1227,25 @@ def _parse_pdf_regex(file_path):
             if not page_text:
                 continue
             if len(current_text) + len(page_text) > 3000 and current_text:
-                sections.append({
-                    "heading": "Section %d" % section_num,
-                    "level": 2,
-                    "content": current_text,
-                })
+                sections.append(
+                    {
+                        "heading": "Section %d" % section_num,
+                        "level": 2,
+                        "content": current_text,
+                    }
+                )
                 section_num += 1
                 current_text = page_text
             else:
                 current_text += "\n\n" + page_text if current_text else page_text
         if current_text.strip():
-            sections.append({
-                "heading": "Section %d" % section_num,
-                "level": 2,
-                "content": current_text,
-            })
+            sections.append(
+                {
+                    "heading": "Section %d" % section_num,
+                    "level": 2,
+                    "content": current_text,
+                }
+            )
 
     sections = [s for s in sections if len(s["content"]) > 200]
     sections = [s for s in sections if not is_toc_entry(s["content"])]
@@ -1074,18 +1277,20 @@ def parse_plain_text(content_text):
     if len(candidates) >= 3:
         for i, (start, line) in enumerate(candidates):
             end = candidates[i + 1][0] if i + 1 < len(candidates) else len(content_text)
-            nl = content_text.find('\n', start)
+            nl = content_text.find("\n", start)
             if nl == -1 or nl > end:
                 nl = end
             body = content_text[nl:end].strip()
-            sections.append({
-                'heading': line.strip(),
-                'level': _assign_level(line),
-                'content': body,
-            })
+            sections.append(
+                {
+                    "heading": line.strip(),
+                    "level": _assign_level(line),
+                    "content": body,
+                }
+            )
     else:
         # Split by double newlines, group into ~3000 char sections
-        chunks = re.split(r'\n\s*\n', content_text)
+        chunks = re.split(r"\n\s*\n", content_text)
         current_text = ""
         section_num = 1
         for chunk in chunks:
@@ -1093,26 +1298,30 @@ def parse_plain_text(content_text):
             if not chunk:
                 continue
             if len(current_text) + len(chunk) > 3000 and current_text:
-                sections.append({
-                    'heading': "Section %d" % section_num,
-                    'level': 2,
-                    'content': current_text
-                })
+                sections.append(
+                    {
+                        "heading": "Section %d" % section_num,
+                        "level": 2,
+                        "content": current_text,
+                    }
+                )
                 section_num += 1
                 current_text = chunk
             else:
                 current_text += "\n\n" + chunk if current_text else chunk
         if current_text.strip():
-            sections.append({
-                'heading': "Section %d" % section_num,
-                'level': 2,
-                'content': current_text
-            })
+            sections.append(
+                {
+                    "heading": "Section %d" % section_num,
+                    "level": 2,
+                    "content": current_text,
+                }
+            )
 
-    sections = [s for s in sections if len(s['content']) > 200]
-    sections = [s for s in sections if not is_toc_entry(s['content'])]
+    sections = [s for s in sections if len(s["content"]) > 200]
+    sections = [s for s in sections if not is_toc_entry(s["content"])]
     # Natural-order sort (1, 1.1, 1.2, 2, ...) so navigation follows the book.
-    sections = sorted(sections, key=lambda s: _section_sort_key(s['heading']))
+    sections = sorted(sections, key=lambda s: _section_sort_key(s["heading"]))
     return "Plain Text Document", sections
 
 
@@ -1141,6 +1350,7 @@ def parse_plain_text(content_text):
 # lost — it's just spread across small connected files, which is exactly what
 # the wikilink-graph + embedding-drift retrieval model needs to route well.
 
+
 def _split_on_subheadings(content):
     """Split a section body at markdown sub-headings.
 
@@ -1154,8 +1364,8 @@ def _split_on_subheadings(content):
     that genuinely contain nested markdown structure (e.g. a marker-parsed
     chapter with ## subsections).
     """
-    lines = content.split('\n')
-    md_heading = re.compile(r'^#{1,4}\s+\S')
+    lines = content.split("\n")
+    md_heading = re.compile(r"^#{1,4}\s+\S")
     bounds = []
     for i, line in enumerate(lines):
         if md_heading.match(line):
@@ -1170,13 +1380,13 @@ def _split_on_subheadings(content):
     pieces = []
     for idx, start in enumerate(bounds):
         end = bounds[idx + 1] if idx + 1 < len(bounds) else len(lines)
-        body = '\n'.join(lines[start:end]).strip()
+        body = "\n".join(lines[start:end]).strip()
         if not body:
             continue
         # Derive a sub-heading: first line if it's a heading, else "Introduction".
-        first_line = body.split('\n', 1)[0]
+        first_line = body.split("\n", 1)[0]
         if md_heading.match(first_line):
-            sub_h = re.sub(r'^#{1,4}\s+', '', first_line).strip()
+            sub_h = re.sub(r"^#{1,4}\s+", "", first_line).strip()
         else:
             sub_h = "Introduction"
         pieces.append((sub_h, body))
@@ -1195,12 +1405,12 @@ def _split_on_paragraphs(content, target_lines=FRAGMENT_TARGET_LINES):
     # newlines (some ingested text has one line per paragraph with no blanks).
     # Track the joiner so line accounting matches the emitted child (joining
     # single-newline paragraphs with \n\n would double the line count).
-    if re.search(r'\n\s*\n', content):
-        paragraphs = re.split(r'\n\s*\n', content)
-        joiner = '\n\n'
+    if re.search(r"\n\s*\n", content):
+        paragraphs = re.split(r"\n\s*\n", content)
+        joiner = "\n\n"
     else:
-        paragraphs = content.split('\n')
-        joiner = '\n'
+        paragraphs = content.split("\n")
+        joiner = "\n"
     chunks = []
     current = []
     current_lines = 0
@@ -1209,7 +1419,7 @@ def _split_on_paragraphs(content, target_lines=FRAGMENT_TARGET_LINES):
         para = para.strip()
         if not para:
             continue
-        plines = para.count('\n') + 1
+        plines = para.count("\n") + 1
         if current and current_lines + plines > target_lines:
             chunks.append(("Part %d" % part, joiner.join(current)))
             part += 1
@@ -1239,8 +1449,8 @@ def fragment_section(section):
     Returns [section] unchanged if it's under the line cap (no fragmentation
     needed).
     """
-    content = section.get('content', '')
-    line_count = content.count('\n') + 1
+    content = section.get("content", "")
+    line_count = content.count("\n") + 1
     if line_count <= MAX_NOTE_LINES:
         return [section]
 
@@ -1259,22 +1469,22 @@ def fragment_section(section):
     # actual child slugs are filled in by the writer after slug generation,
     # via the 'fragment_children' + 'is_fragment_parent' markers.
     parent = {
-        'heading': section['heading'],
-        'level': section.get('level', 2),
-        'content': '',  # replaced at write time with the child link list
-        'is_fragment_parent': True,
-        'fragment_children': [],  # filled in after slug generation
+        "heading": section["heading"],
+        "level": section.get("level", 2),
+        "content": "",  # replaced at write time with the child link list
+        "is_fragment_parent": True,
+        "fragment_children": [],  # filled in after slug generation
     }
     children = []
     for sub_h, body in pieces:
         child = {
-            'heading': "%s — %s" % (section['heading'], sub_h),
-            'level': (section.get('level', 2) + 1),
-            'content': body,
-            'is_fragment_child': True,
+            "heading": "%s — %s" % (section["heading"], sub_h),
+            "level": (section.get("level", 2) + 1),
+            "content": body,
+            "is_fragment_child": True,
         }
         children.append(child)
-    parent['fragment_children'] = children
+    parent["fragment_children"] = children
     return [parent] + children
 
 
@@ -1294,8 +1504,18 @@ def fragment_sections(sections):
 # Note writing
 # ---------------------------------------------------------------------------
 
-def create_section_note(section, subject, source_url, index, total,
-                         prev_slug, next_slug, toc_slug, base_title):
+
+def create_section_note(
+    section,
+    subject,
+    source_url,
+    index,
+    total,
+    prev_slug,
+    next_slug,
+    toc_slug,
+    base_title,
+):
     """Create the markdown content for a section note.
 
     Slugs should NOT include .md extension -- they are wikilink references.
@@ -1308,8 +1528,8 @@ def create_section_note(section, subject, source_url, index, total,
       - fragment child: the sub-body, with an "Up:" nav link back to the
         parent index page.
     """
-    heading = section['heading']
-    section.get('level', 2)
+    heading = section["heading"]
+    section.get("level", 2)
 
     # Build navigation (wikilinks without .md)
     nav_parts = []
@@ -1319,7 +1539,7 @@ def create_section_note(section, subject, source_url, index, total,
     if next_slug:
         nav_parts.append("[[%s|Next]]" % next_slug)
     # Fragment children link back up to their parent index page.
-    parent_slug = section.get('parent_slug')
+    parent_slug = section.get("parent_slug")
     if parent_slug:
         nav_parts.append("[[%s|Up]]" % parent_slug)
     nav = " | ".join(nav_parts)
@@ -1330,39 +1550,42 @@ def create_section_note(section, subject, source_url, index, total,
         tags.append("#%s" % slugify(subject))
 
     # Source attribution
-    source_line = "> **Source:** %s" % source_url if source_url else "> **Source:** local file"
+    source_line = (
+        "> **Source:** %s" % source_url if source_url else "> **Source:** local file"
+    )
 
     # --- Fragment parent: thin index page linking to its children ----------
-    if section.get('is_fragment_parent'):
-        child_slugs = section.get('fragment_child_slugs', [])
-        child_headings = [c['heading'] for c in section.get('fragment_children', [])]
+    if section.get("is_fragment_parent"):
+        child_slugs = section.get("fragment_child_slugs", [])
+        child_headings = [c["heading"] for c in section.get("fragment_children", [])]
         list_lines = []
         for cslug, chead in zip(child_slugs, child_headings):
             list_lines.append("- [[%s|%s]]" % (cslug, chead))
-        body = ("This section was long enough that it was split into smaller "
-                "linked pages so each stays a clean file-sized unit:\n\n%s\n"
-                % '\n'.join(list_lines))
-        note = "# %s\n\n%s\n> **Part of:** [[%s]]\n\n%s\n\n---\n**Navigation:** %s\n\n%s\n" % (
-            heading, source_line, toc_slug, body, nav, ' '.join(tags))
+        body = (
+            "This section was long enough that it was split into smaller "
+            "linked pages so each stays a clean file-sized unit:\n\n%s\n"
+            % "\n".join(list_lines)
+        )
+        note = (
+            "# %s\n\n%s\n> **Part of:** [[%s]]\n\n%s\n\n---\n**Navigation:** %s\n\n%s\n"
+            % (heading, source_line, toc_slug, body, nav, " ".join(tags))
+        )
         return note
 
     # --- Normal note or fragment child: the actual content ----------------
-    content = truncate_content(section['content'])
-    note = "# %s\n\n%s\n> **Part of:** [[%s]]\n\n%s\n\n---\n**Navigation:** %s\n\n%s\n" % (
-        heading,
-        source_line,
-        toc_slug,
-        content,
-        nav,
-        ' '.join(tags)
+    content = truncate_content(section["content"])
+    note = (
+        "# %s\n\n%s\n> **Part of:** [[%s]]\n\n%s\n\n---\n**Navigation:** %s\n\n%s\n"
+        % (heading, source_line, toc_slug, content, nav, " ".join(tags))
     )
     return note
 
 
-def create_toc_note(title, subject, source_url, sections, section_slugs,
-                    skey="", max_sections=0):
+def create_toc_note(
+    title, subject, source_url, sections, section_slugs, skey="", max_sections=0
+):
     """Create the table of contents note.
-    
+
     Slugs should NOT include .md extension -- they are wikilink references.
     A hidden ``source_key`` marker is embedded so a later re-ingest of the
     same source can find this TOC and delete orphaned section notes (making
@@ -1372,26 +1595,33 @@ def create_toc_note(title, subject, source_url, sections, section_slugs,
     if subject:
         tags.append("#%s" % slugify(subject))
 
-    source_line = "> **Source:** %s" % source_url if source_url else "> **Source:** local file"
+    source_line = (
+        "> **Source:** %s" % source_url if source_url else "> **Source:** local file"
+    )
 
     # Build TOC entries with indentation based on heading level
     toc_lines = []
     for i, (section, slug) in enumerate(zip(sections, section_slugs)):
-        level = section.get('level', 2)
+        level = section.get("level", 2)
         indent = "  " * (level - 1) if level > 1 else ""
-        toc_lines.append("%s- [[%s|%s]]" % (indent, slug, section['heading']))
+        toc_lines.append("%s- [[%s|%s]]" % (indent, slug, section["heading"]))
 
     marker = ("\n" + _source_key_line(skey)) if skey else ""
-    max_sections_marker = ("\n" + _max_sections_line(max_sections)) if max_sections else ""
-    toc_content = "# %s - Table of Contents\n\n%s\n> **Ingested:** %s\n> **Sections:** %d\n\n## Contents\n\n%s\n\n%s%s%s\n" % (
-        title,
-        source_line,
-        time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime()),
-        len(sections),
-        '\n'.join(toc_lines),
-        ' '.join(tags),
-        marker,
-        max_sections_marker,
+    max_sections_marker = (
+        ("\n" + _max_sections_line(max_sections)) if max_sections else ""
+    )
+    toc_content = (
+        "# %s - Table of Contents\n\n%s\n> **Ingested:** %s\n> **Sections:** %d\n\n## Contents\n\n%s\n\n%s%s%s\n"
+        % (
+            title,
+            source_line,
+            time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
+            len(sections),
+            "\n".join(toc_lines),
+            " ".join(tags),
+            marker,
+            max_sections_marker,
+        )
     )
     return toc_content
 
@@ -1400,16 +1630,17 @@ def create_toc_note(title, subject, source_url, sections, section_slugs,
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def run(args):
     """
     Main entry point for the textbook_ingest tool.
-    
+
     Args:
         source: URL or local file path
         subject: subject tag (optional)
         max_sections: max sections to ingest (default 50)
         title: override title (optional)
-    
+
     Returns:
         Dict with status, sections_ingested, notes_created, and any errors.
     """
@@ -1447,22 +1678,22 @@ def run(args):
         temp_pdf_path = None
         source_url = ""
 
-        if source_type == 'html_url':
+        if source_type == "html_url":
             content_text = fetch_url(source)
             source_url = source
             title, sections = parse_html(content_text, source)
 
-        elif source_type == 'text_url':
+        elif source_type == "text_url":
             content_text = fetch_url(source)
             source_url = source
             title, sections = parse_plain_text(content_text)
 
-        elif source_type == 'markdown_url':
+        elif source_type == "markdown_url":
             content_text = fetch_url(source)
             source_url = source
             title, sections = parse_markdown(content_text)
 
-        elif source_type == 'pdf_url':
+        elif source_type == "pdf_url":
             temp_pdf_path = fetch_pdf_url(source)
             source_url = source
             # PyMuPDF font-metadata extraction builds the TOC index in
@@ -1471,37 +1702,47 @@ def run(args):
             title, sections = parse_pdf(temp_pdf_path)
             result["parser"] = "pdf_text_layer"
 
-        elif source_type in ('pdf_file', 'text_file', 'markdown_file', 'html_file', 'auto_file'):
+        elif source_type in (
+            "pdf_file",
+            "text_file",
+            "markdown_file",
+            "html_file",
+            "auto_file",
+        ):
             file_path = Path(source)
             if not file_path.exists():
                 return {"status": "error", "error": "File not found: %s" % source}
 
-            if source_type == 'pdf_file':
+            if source_type == "pdf_file":
                 # PyMuPDF font-metadata extraction builds the TOC index
                 # in seconds. Equations/figures on individual pages are
                 # read later by textbook_read_page (vision model).
                 title, sections = parse_pdf(str(file_path))
                 result["parser"] = "pdf_text_layer"
-            elif source_type == 'text_file':
-                content_text = file_path.read_text(encoding='utf-8', errors='replace')
+            elif source_type == "text_file":
+                content_text = file_path.read_text(encoding="utf-8", errors="replace")
                 title, sections = parse_plain_text(content_text)
-            elif source_type == 'markdown_file':
-                content_text = file_path.read_text(encoding='utf-8', errors='replace')
+            elif source_type == "markdown_file":
+                content_text = file_path.read_text(encoding="utf-8", errors="replace")
                 title, sections = parse_markdown(content_text)
-            elif source_type == 'html_file':
-                content_text = file_path.read_text(encoding='utf-8', errors='replace')
+            elif source_type == "html_file":
+                content_text = file_path.read_text(encoding="utf-8", errors="replace")
                 title, sections = parse_html(content_text)
             else:
                 # auto_file: try HTML first, then markdown, then plain text
                 try:
-                    content_text = file_path.read_text(encoding='utf-8', errors='replace')
+                    content_text = file_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
                     title, sections = parse_html(content_text)
                     if not sections:
                         title, sections = parse_markdown(content_text)
                     if not sections:
                         title, sections = parse_plain_text(content_text)
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    content_text = file_path.read_text(encoding='utf-8', errors='replace')
+                    content_text = file_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
                     title, sections = parse_plain_text(content_text)
 
         else:
@@ -1525,7 +1766,8 @@ def run(args):
         # produce useless note filenames like "unknown-section-2.md".
         if not subject or subject.strip().lower() in ("unknown", "none", ""):
             detected = _auto_detect_subject(
-                source, source_type, title=title, sections=sections)
+                source, source_type, title=title, sections=sections
+            )
             if detected and detected != "textbook":
                 subject = detected
                 result["subject"] = subject
@@ -1545,7 +1787,10 @@ def run(args):
         # Limit sections
         if len(sections) > max_sections:
             sections = sections[:max_sections]
-            result["errors"].append("Limited to %d sections (found %d)" % (max_sections, result["sections_found"]))
+            result["errors"].append(
+                "Limited to %d sections (found %d)"
+                % (max_sections, result["sections_found"])
+            )
 
         # Fragment any oversized sections into linked child pages so every
         # note stays under the MAX_NOTE_LINES file-unit ceiling. A parent
@@ -1566,7 +1811,7 @@ def run(args):
 
         section_slugs = []
         for i, s in enumerate(sections):
-            slug = "%s-%s" % (subject_slug, slugify(s['heading']))
+            slug = "%s-%s" % (subject_slug, slugify(s["heading"]))
             # Ensure uniqueness
             base_slug = slug
             counter = 2
@@ -1582,20 +1827,20 @@ def run(args):
         i = 0
         while i < len(sections):
             s = sections[i]
-            if s.get('is_fragment_parent') and s.get('fragment_children'):
+            if s.get("is_fragment_parent") and s.get("fragment_children"):
                 child_slugs = []
-                for j, _child in enumerate(s['fragment_children']):
+                for j, _child in enumerate(s["fragment_children"]):
                     # The children immediately follow the parent in the list.
                     ci = i + 1 + j
                     if ci < len(sections):
                         child_slugs.append(section_slugs[ci])
-                s['fragment_child_slugs'] = child_slugs
+                s["fragment_child_slugs"] = child_slugs
                 # Also tag each child with its parent's slug for the "Up" link.
                 parent_slug = section_slugs[i]
-                for j, _child in enumerate(s['fragment_children']):
+                for j, _child in enumerate(s["fragment_children"]):
                     ci = i + 1 + j
                     if ci < len(sections):
-                        sections[ci]['parent_slug'] = parent_slug
+                        sections[ci]["parent_slug"] = parent_slug
             i += 1
 
         # Create textbooks directory
@@ -1624,18 +1869,25 @@ def run(args):
         # Write section notes (filename = slug + ".md", wikilink = slug).
         # Same slug => same filename => overwrites the old note in place.
         for i, (section, slug) in enumerate(zip(sections, section_slugs)):
-            prev_slug = section_slugs[i-1] if i > 0 else None
-            next_slug = section_slugs[i+1] if i+1 < len(section_slugs) else None
+            prev_slug = section_slugs[i - 1] if i > 0 else None
+            next_slug = section_slugs[i + 1] if i + 1 < len(section_slugs) else None
 
             note_content = create_section_note(
-                section, subject, source_url, i, len(sections),
-                prev_slug, next_slug, toc_slug, title
+                section,
+                subject,
+                source_url,
+                i,
+                len(sections),
+                prev_slug,
+                next_slug,
+                toc_slug,
+                title,
             )
 
             filename = safe_filename(slug)
             note_path = TEXTBOOKS_DIR / filename
             existed = note_path.exists()
-            note_path.write_text(note_content, encoding='utf-8')
+            note_path.write_text(note_content, encoding="utf-8")
             rel = str(note_path.relative_to(VAULT_DIR))
             if existed:
                 result["notes_updated"].append(rel)
@@ -1645,11 +1897,17 @@ def run(args):
         # Write TOC note (with the source-key marker so the next ingest can
         # find it and reconcile again).
         toc_content = create_toc_note(
-            title, subject, source_url, sections, section_slugs,
-            skey=skey, max_sections=max_sections)
+            title,
+            subject,
+            source_url,
+            sections,
+            section_slugs,
+            skey=skey,
+            max_sections=max_sections,
+        )
         toc_filename = safe_filename(toc_slug)
         toc_path = TEXTBOOKS_DIR / toc_filename
-        toc_path.write_text(toc_content, encoding='utf-8')
+        toc_path.write_text(toc_content, encoding="utf-8")
         result["toc_note"] = str(toc_path.relative_to(VAULT_DIR))
         result["sections_ingested"] = len(sections)
 
@@ -1657,6 +1915,7 @@ def run(args):
         result["status"] = "error"
         result["errors"].append(str(e))
         import traceback
+
         result["errors"].append(traceback.format_exc())
 
     return result

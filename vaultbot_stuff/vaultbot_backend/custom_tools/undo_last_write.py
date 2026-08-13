@@ -55,7 +55,10 @@ def run(args: dict) -> dict:
     trash_dir = backend_dir / "trash"
 
     if not trash_dir.exists() or not trash_dir.is_dir():
-        return {"status": "nothing_to_undo", "message": "Trash directory is empty or doesn't exist."}
+        return {
+            "status": "nothing_to_undo",
+            "message": "Trash directory is empty or doesn't exist.",
+        }
 
     # Find the most recently modified backup file in trash (recursively).
     newest = None
@@ -72,7 +75,10 @@ def run(args: dict) -> dict:
             continue
 
     if newest is None:
-        return {"status": "nothing_to_undo", "message": "No backup files found in trash."}
+        return {
+            "status": "nothing_to_undo",
+            "message": "No backup files found in trash.",
+        }
 
     # Determine the original path from the backup filename.
     # Backups are stored with the relative path flattened (slashes → underscores).
@@ -97,7 +103,7 @@ def run(args: dict) -> dict:
         # vault_safe_write backups include a header comment with the original path.
         for line in content.split("\n")[:5]:
             if line.startswith("<!-- original_path: "):
-                candidate = line[len("<!-- original_path: "):].rstrip(" -->").strip()
+                candidate = line[len("<!-- original_path: ") :].rstrip(" -->").strip()
                 candidate_path = vault_root / candidate
                 # The original might not exist anymore (it was deleted/overwritten),
                 # so we just use the path from the backup header.
@@ -111,13 +117,22 @@ def run(args: dict) -> dict:
         # Try to find a matching file by walking the vault.
         for root, dirs, files in os.walk(vault_root):
             # Skip excluded dirs.
-            dirs[:] = [d for d in dirs if d not in {".git", ".venv", ".obsidian", "__pycache__", "node_modules"}]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d
+                not in {".git", ".venv", ".obsidian", "__pycache__", "node_modules"}
+            ]
             for f in files:
                 if not f.endswith(".md"):
                     continue
                 full = Path(root) / f
                 try:
-                    rel = str(full.relative_to(vault_root)).replace("\\", "/").replace("/", "_")
+                    rel = (
+                        str(full.relative_to(vault_root))
+                        .replace("\\", "/")
+                        .replace("/", "_")
+                    )
                 except ValueError:
                     continue
                 if rel == original_rel or f == original_rel:

@@ -64,7 +64,8 @@ def patched_improver(tmp_path, monkeypatch):
     custom_tools = backend_dir / "custom_tools"
     custom_tools.mkdir()
     (custom_tools / "__init__.py").write_text(
-        "# VaultBot custom tools (agent-authored)\n", encoding="utf-8")
+        "# VaultBot custom tools (agent-authored)\n", encoding="utf-8"
+    )
 
     # Patch the module globals that safe_write / _resolve_path /
     # _copy_backend_for_check / __init__ all read. Order matters: these
@@ -72,8 +73,7 @@ def patched_improver(tmp_path, monkeypatch):
     # does CUSTOM_TOOLS_DIR.mkdir(...) and load_custom_tools().
     monkeypatch.setattr(self_improver, "BACKEND_ROOT", tmp_path, raising=True)
     monkeypatch.setattr(self_improver, "BACKEND_DIR", backend_dir, raising=True)
-    monkeypatch.setattr(
-        self_improver, "CUSTOM_TOOLS_DIR", custom_tools, raising=True)
+    monkeypatch.setattr(self_improver, "CUSTOM_TOOLS_DIR", custom_tools, raising=True)
 
     improver = self_improver.SelfImprover()
     return improver, backend_dir
@@ -108,7 +108,8 @@ def test_rejects_syntax_error(patched_improver, tmp_path):
 # Test 2 — dry run of a breaking core edit leaves disk untouched
 # ---------------------------------------------------------------------------
 def test_dry_run_rejects_breaking_edit_without_touching_disk(
-        patched_improver, tmp_path, monkeypatch):
+    patched_improver, tmp_path, monkeypatch
+):
     """A dry_run that WOULD break the backend is reported as
     dry_run_rejected, and the on-disk file is byte-for-byte unchanged.
 
@@ -135,14 +136,20 @@ def test_dry_run_rejects_breaking_edit_without_touching_disk(
     # tmp tree. safe_write calls self._verify_import_in_subprocess in the
     # dry_run core branch.
     monkeypatch.setattr(
-        improver, "_verify_import_in_subprocess",
-        lambda backend_dir: (False, "simulated ImportError: cannot import "
-                                      "name build_abstract_context from main"),
-        raising=True)
+        improver,
+        "_verify_import_in_subprocess",
+        lambda backend_dir: (
+            False,
+            "simulated ImportError: cannot import "
+            "name build_abstract_context from main",
+        ),
+        raising=True,
+    )
 
     # Valid Python syntax but guts the module -> would break a caller.
     result = improver.safe_write(
-        "vaultbot_backend/abstract_context.py", "# empty file\n", dry_run=True)
+        "vaultbot_backend/abstract_context.py", "# empty file\n", dry_run=True
+    )
 
     assert result["status"] == "dry_run_rejected"
     assert result["would_break_backend"] is True
@@ -151,14 +158,16 @@ def test_dry_run_rejects_breaking_edit_without_touching_disk(
     # Critical safety property: dry_run must NOT mutate the on-disk file.
     after_sha = hashlib.sha256(dst.read_bytes()).hexdigest()
     assert after_sha == original_sha, (
-        "dry_run mutated the on-disk file — it must be read-only!")
+        "dry_run mutated the on-disk file — it must be read-only!"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Test 3 — real write to a core file auto-rolls-back on import failure
 # ---------------------------------------------------------------------------
 def test_real_write_auto_rolls_back_on_import_failure(
-        patched_improver, tmp_path, monkeypatch):
+    patched_improver, tmp_path, monkeypatch
+):
     """A real (non-dry-run) write to a core file that fails the import
     check must be auto-rolled-back from the .bak, leaving the original
     content intact on disk.
@@ -173,9 +182,7 @@ def test_real_write_auto_rolls_back_on_import_failure(
     improver, backend_dir = patched_improver
 
     original_content = (
-        '"""Lazy condenser module."""\n'
-        "def condense(text):\n"
-        "    return text[:100]\n"
+        '"""Lazy condenser module."""\ndef condense(text):\n    return text[:100]\n'
     )
     core_file = backend_dir / "lazy_condenser.py"
     core_file.write_text(original_content, encoding="utf-8")
@@ -184,21 +191,27 @@ def test_real_write_auto_rolls_back_on_import_failure(
     # Simulate the post-write import check failing so the rollback path
     # fires deterministically (no real interpreter / main.py needed).
     monkeypatch.setattr(
-        improver, "_verify_import_in_subprocess",
-        lambda backend_dir: (False, "simulated ImportError: cannot import "
-                                      "name condense from lazy_condenser"),
-        raising=True)
+        improver,
+        "_verify_import_in_subprocess",
+        lambda backend_dir: (
+            False,
+            "simulated ImportError: cannot import name condense from lazy_condenser",
+        ),
+        raising=True,
+    )
 
     result = improver.safe_write("vaultbot_backend/lazy_condenser.py", "x = 1\n")
 
     assert result["status"] == "rejected"
     assert "auto_rollback" in result["checks"], (
-        "expected auto-rollback to fire on import failure")
+        "expected auto-rollback to fire on import failure"
+    )
     assert "restored from .bak" in result["checks"]["auto_rollback"]
 
     # Critical: the original content must be restored on disk.
     assert core_file.read_text(encoding="utf-8") == original_content, (
-        "auto-rollback did not restore the original file content")
+        "auto-rollback did not restore the original file content"
+    )
 
 
 # ---------------------------------------------------------------------------

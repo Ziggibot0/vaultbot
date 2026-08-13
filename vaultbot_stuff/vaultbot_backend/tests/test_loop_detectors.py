@@ -13,6 +13,7 @@ Verifies (via source-level AST inspection — no LLM, no I/O) that:
 
 Offline: no LLM, no I/O, no Services. Pure AST inspection.
 """
+
 from __future__ import annotations
 
 import ast
@@ -39,7 +40,9 @@ class TestDetectorsRemoved:
         src = _source(_CHAT_HANDLER)
         assert "_READ_TOOLS" not in src, "Read-loop detector must be removed"
         assert "_turn_read_count" not in src, "Read-loop tracking must be removed"
-        assert "_turn_effective_read_count" not in src, "Read-loop tracking must be removed"
+        assert "_turn_effective_read_count" not in src, (
+            "Read-loop tracking must be removed"
+        )
         assert "_read_loop_warned_soft" not in src, "Read-loop nudges must be removed"
         assert "_read_loop_warned_hard" not in src, "Read-loop nudges must be removed"
         assert "_read_loop_forced" not in src, "Read-loop force-stop must be removed"
@@ -71,7 +74,9 @@ class TestDetectorsRemoved:
 
     def test_convergence_nudge_gone(self):
         src = _source(_CHAT_HANDLER)
-        assert "_CONVERGENCE_NUDGE_ROUND" not in src, "Convergence nudge must be removed"
+        assert "_CONVERGENCE_NUDGE_ROUND" not in src, (
+            "Convergence nudge must be removed"
+        )
         assert "convergence_nudge" not in src, "Convergence nudge log must be removed"
         assert "BUDGET NOTICE" not in src, "Convergence nudge text must be removed"
 
@@ -82,8 +87,12 @@ class TestDetectorsRemoved:
 
     def test_plan_continuation_nudge_gone(self):
         src = _source(_CHAT_HANDLER)
-        assert "_plan_complete_nudge_used" not in src, "Plan-continuation nudge must be removed"
-        assert "plan_continuation_nudge" not in src, "Plan-continuation nudge log must be removed"
+        assert "_plan_complete_nudge_used" not in src, (
+            "Plan-continuation nudge must be removed"
+        )
+        assert "plan_continuation_nudge" not in src, (
+            "Plan-continuation nudge log must be removed"
+        )
 
 
 class TestSafetyNetsRemain:
@@ -99,7 +108,8 @@ class TestSafetyNetsRemain:
         src = _source(_CHAT_HANDLER)
         assert "_MAX_ROUNDS" in src, "MAX_ROUNDS safety net must remain"
         assert 'os.getenv("VAULTBOT_MAX_ROUNDS", "200")' in src, (
-            "VAULTBOT_MAX_ROUNDS default must be 200")
+            "VAULTBOT_MAX_ROUNDS default must be 200"
+        )
 
     def test_double_silent_failsafe_remains(self):
         src = _source(_CHAT_HANDLER)
@@ -113,26 +123,32 @@ class TestSystemPromptNoThreats:
     def test_no_stale_plan_in_prompt(self):
         src = _source(_AGENT_TOOLS)
         assert "STALE PLAN" not in src, (
-            "System prompt must NOT mention STALE PLAN — it's removed")
+            "System prompt must NOT mention STALE PLAN — it's removed"
+        )
 
     def test_no_force_plan_in_prompt(self):
         src = _source(_AGENT_TOOLS)
         assert "framework will force you" not in src, (
-            "System prompt must NOT threaten forced planning")
+            "System prompt must NOT threaten forced planning"
+        )
         assert "execution tools are masked" not in src, (
-            "System prompt must NOT threaten tool masking")
+            "System prompt must NOT threaten tool masking"
+        )
 
     def test_no_loop_stop_threat_in_prompt(self):
         src = _source(_AGENT_TOOLS)
         assert "framework treats your plan as stale" not in src, (
-            "System prompt must NOT threaten stale-plan stops")
+            "System prompt must NOT threaten stale-plan stops"
+        )
         assert "framework sends you back" not in src, (
-            "System prompt must NOT threaten sending back")
+            "System prompt must NOT threaten sending back"
+        )
 
     def test_permissive_tone_in_prompt(self):
         src = _source(_AGENT_TOOLS)
         assert "framework handles routing" in src, (
-            "System prompt must tell model the framework handles routing")
+            "System prompt must tell model the framework handles routing"
+        )
 
 
 class TestCodeReadWholeFile:
@@ -140,9 +156,10 @@ class TestCodeReadWholeFile:
 
     def test_auto_expand_logic_exists(self):
         src = _source(_CHAT_HANDLER)
-        assert "code_read_auto_expand" in src, (
-            "Missing code_read_auto_expand log event")
+        assert "code_read_auto_expand" in src, "Missing code_read_auto_expand log event"
         assert 'tool_args["end_line"] = 0' in src, (
-            "Auto-expand must set end_line=0 (whole file)")
-        assert '_seen_content.get(_cr_fp)' in src, (
-            "Auto-expand must check _seen_content for prior reads")
+            "Auto-expand must set end_line=0 (whole file)"
+        )
+        assert "_seen_content.get(_cr_fp)" in src, (
+            "Auto-expand must check _seen_content for prior reads"
+        )

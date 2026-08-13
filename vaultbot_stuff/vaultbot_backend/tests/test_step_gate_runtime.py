@@ -9,6 +9,7 @@ python available in tests.
 
 See [[Procedure-Subprocess-Architecture]].
 """
+
 import asyncio
 import json
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from step_gate_runtime import (
 
 
 # ── Fake LLM client (for v1 text steps) ─────────────────────────────────
+
 
 @dataclass
 class _FakeResp:
@@ -51,8 +53,10 @@ class FakeLLMClient:
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
-def _make_procedure(steps_text: str, name: str = "Test-Proc",
-                    allowed_tools: list[str] | None = None) -> Any:
+
+def _make_procedure(
+    steps_text: str, name: str = "Test-Proc", allowed_tools: list[str] | None = None
+) -> Any:
     fm = "type: procedure\n"
     if allowed_tools:
         fm += "allowed_tools:\n" + "".join(f"  - {t}\n" for t in allowed_tools)
@@ -63,13 +67,18 @@ def _make_procedure(steps_text: str, name: str = "Test-Proc",
 def _run(proc, client=None, vault_path="."):
     if client is None:
         client = FakeLLMClient(["ok"])
-    return asyncio.run(execute_procedure(
-        procedure=proc, context="", llm_client=client,
-        vault_path=vault_path,
-    ))
+    return asyncio.run(
+        execute_procedure(
+            procedure=proc,
+            context="",
+            llm_client=client,
+            vault_path=vault_path,
+        )
+    )
 
 
 # ── Condition evaluator ─────────────────────────────────────────────────
+
 
 def test_condition_count_lt():
     outputs = [(1, "[[A]] [[B]] [[C]]")]
@@ -100,6 +109,7 @@ def test_condition_unparseable_skips():
 
 # ── _count_thing ────────────────────────────────────────────────────────
 
+
 def test_count_thing_wikilinks():
     assert _count_thing("[[A]] and [[B|C]]", "notes") == 2
     assert _count_thing("no links here", "notes") == 0
@@ -115,6 +125,7 @@ def test_count_thing_items():
 
 
 # ── Structured validation ───────────────────────────────────────────────
+
 
 def test_validate_at_least_pass():
     ok, err = _validate_step("[[A]] [[B]] [[C]]", "at_least 2 notes")
@@ -167,9 +178,12 @@ def test_parse_validation_unknown_returns_none():
 
 # ── execute_procedure loop ──────────────────────────────────────────────
 
+
 def test_linear_text_pass():
-    proc = _make_procedure("1. First step [validate: contains \"ok\"]\n"
-                           "2. Second step [validate: contains \"ok\"]")
+    proc = _make_procedure(
+        '1. First step [validate: contains "ok"]\n'
+        '2. Second step [validate: contains "ok"]'
+    )
     result = _run(proc, FakeLLMClient(["ok", "ok"]))
     assert result.overall_passed
     assert result.failed_step is None
@@ -177,8 +191,10 @@ def test_linear_text_pass():
 
 
 def test_validation_fail_stops():
-    proc = _make_procedure('1. First step [validate: contains "ok"]\n'
-                           '2. Second step [validate: contains "ok"]')
+    proc = _make_procedure(
+        '1. First step [validate: contains "ok"]\n'
+        '2. Second step [validate: contains "ok"]'
+    )
     result = _run(proc, FakeLLMClient(["wrong", "ok"]))
     assert not result.overall_passed
     assert result.failed_step == 1
@@ -188,8 +204,9 @@ def test_validation_fail_stops():
 def test_condition_skips_step():
     # Step 1 produces no notes; step 2 has condition "< 3 notes" → run.
     proc = _make_procedure(
-        "1. Step one [validate: contains \"done\"]\n"
-        "2. Step two [condition: if < 3 notes] [validate: contains \"done\"]")
+        '1. Step one [validate: contains "done"]\n'
+        '2. Step two [condition: if < 3 notes] [validate: contains "done"]'
+    )
     # Step 1 returns "done" (no wikilinks → 0 notes, < 3 → condition met).
     result = _run(proc, FakeLLMClient(["done", "done"]))
     assert result.overall_passed
@@ -199,8 +216,9 @@ def test_condition_skips_step():
 def test_condition_not_met_skips_step():
     # Step 1 output has 5 wikilinks; step 2 condition "< 3 notes" → skip.
     proc = _make_procedure(
-        "1. Step one [validate: contains \"done\"]\n"
-        "2. Step two [condition: if < 3 notes] [validate: contains \"done\"]")
+        '1. Step one [validate: contains "done"]\n'
+        '2. Step two [condition: if < 3 notes] [validate: contains "done"]'
+    )
     step1_out = "done [[A]] [[B]] [[C]] [[D]] [[E]]"
     result = _run(proc, FakeLLMClient([step1_out, "done"]))
     assert result.overall_passed
@@ -211,9 +229,10 @@ def test_condition_not_met_skips_step():
 def test_branch_jump():
     # Step 1 branches to step 3 on pass; step 2 should be skipped.
     proc = _make_procedure(
-        "1. Step one [validate: contains \"ok\"] [branch: step 3]\n"
-        "2. Should be skipped [validate: contains \"ok\"]\n"
-        "3. Step three [validate: contains \"ok\"]")
+        '1. Step one [validate: contains "ok"] [branch: step 3]\n'
+        '2. Should be skipped [validate: contains "ok"]\n'
+        '3. Step three [validate: contains "ok"]'
+    )
     # Only steps 1 and 3 execute (step 2 is skipped via branch).
     result = _run(proc, FakeLLMClient(["ok", "ok"]))
     assert result.overall_passed
@@ -227,8 +246,9 @@ def test_branch_jump():
 def test_branch_to_missing_step_falls_through():
     # Branch target 99 doesn't exist → log + fall through to next step.
     proc = _make_procedure(
-        "1. Step one [validate: contains \"ok\"] [branch: step 99]\n"
-        "2. Step two [validate: contains \"ok\"]")
+        '1. Step one [validate: contains "ok"] [branch: step 99]\n'
+        '2. Step two [validate: contains "ok"]'
+    )
     result = _run(proc, FakeLLMClient(["ok", "ok"]))
     assert result.overall_passed
     assert {s.step_number for s in result.steps} == {1, 2}
@@ -258,8 +278,7 @@ def test_content_but_zero_steps_fails_loud():
     updated to recognize them). This test uses plain prose with no
     step markers at all to trigger the 0-steps path.
     """
-    proc = _make_procedure(
-        "## Steps\n\nJust some prose with no step markers at all.\n")
+    proc = _make_procedure("## Steps\n\nJust some prose with no step markers at all.\n")
     result = _run(proc)
     assert not result.overall_passed
     assert result.failed_step == 0
@@ -280,7 +299,7 @@ def test_code_step_executes(tmp_path):
 
 
 def test_child_procedures_field_default_empty():
-    proc = _make_procedure("1. Step [validate: contains \"ok\"]")
+    proc = _make_procedure('1. Step [validate: contains "ok"]')
     result = _run(proc, FakeLLMClient(["ok"]))
     assert result.child_procedures == []
 
@@ -290,6 +309,7 @@ def test_child_procedures_field_default_empty():
 # These exercise run_procedure.py as a subprocess.  They need the venv
 # python (or fall back to sys.executable) and a fixture procedure on
 # disk.  Skipped if the backend isn't importable in the test environment.
+
 
 @pytest.fixture
 def _fixture_procedures(tmp_path):
@@ -303,8 +323,7 @@ def _fixture_procedures(tmp_path):
     )
     child = tmp_path / "Child-Proc.md"
     child.write_text(
-        "---\ntype: procedure\n---\n## Steps\n"
-        "1. [llm: Say hello.]\n",
+        "---\ntype: procedure\n---\n## Steps\n1. [llm: Say hello.]\n",
         encoding="utf-8",
     )
     return tmp_path
@@ -326,11 +345,19 @@ def test_run_procedure_cycle_detection(_fixture_procedures, monkeypatch):
     backend = Path(__file__).parent.parent.resolve()
     env = {**os.environ, "PYTHONPATH": str(backend)}
     r = _subprocess_run(
-        [_sys.executable, str(backend / "run_procedure.py"),
-         "--procedure-name", "Cycle-Proc",
-         "--vault-path", str(_fixture_procedures),
-         "--call-stack", "[]"],
-        capture_output=True, text=True, timeout=60,
+        [
+            _sys.executable,
+            str(backend / "run_procedure.py"),
+            "--procedure-name",
+            "Cycle-Proc",
+            "--vault-path",
+            str(_fixture_procedures),
+            "--call-stack",
+            "[]",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
         env=env,
     )
     out = json.loads(r.stdout)
@@ -339,9 +366,9 @@ def test_run_procedure_cycle_detection(_fixture_procedures, monkeypatch):
     # failure in the parent.  Either form is acceptable:
     #   - top-level {"cycle_detected": true} (if the top-level IS the child)
     #   - top-level step failed (the child's cycle error raised in the parent)
-    assert (out.get("cycle_detected") is True
-            or out.get("overall_passed") is False), (
-        f"expected cycle detection or step failure, got: {out}")
+    assert out.get("cycle_detected") is True or out.get("overall_passed") is False, (
+        f"expected cycle detection or step failure, got: {out}"
+    )
 
 
 def test_run_procedure_depth_limit(_fixture_procedures):
@@ -352,12 +379,21 @@ def test_run_procedure_depth_limit(_fixture_procedures):
     backend = Path(__file__).parent.parent.resolve()
     env = {**os.environ, "PYTHONPATH": str(backend)}
     r = _subprocess_run(
-        [_sys.executable, str(backend / "run_procedure.py"),
-         "--procedure-name", "Parent-Proc",
-         "--vault-path", str(_fixture_procedures),
-         "--call-stack", '["A", "B", "C"]',  # already at depth 3
-         "--max-depth", "3"],
-        capture_output=True, text=True, timeout=60,
+        [
+            _sys.executable,
+            str(backend / "run_procedure.py"),
+            "--procedure-name",
+            "Parent-Proc",
+            "--vault-path",
+            str(_fixture_procedures),
+            "--call-stack",
+            '["A", "B", "C"]',  # already at depth 3
+            "--max-depth",
+            "3",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
         env=env,
     )
     out = json.loads(r.stdout)

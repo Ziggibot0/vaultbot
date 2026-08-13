@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-11
 summary: "Audit a procedure note for missing research provenance. Extracts claims/design decisions, checks each for wikilinks to research notes or inline citations, reports gaps. LLM identifies claims (semantic), code checks for citations (structural)."
 description: "Provenance audit: extract claims from a procedure note, verify each has a wikilink or citation to a research source, report missing provenance."

@@ -5,10 +5,10 @@ Without a syntax check, a broken tool file crashes the hot-reload on the
 next tool_create call.  The fix adds ast.parse() before writing — bad
 syntax is rejected and the file is NOT written to disk.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
-
 
 
 def test_tool_create_rejects_syntax_error(tmp_path, monkeypatch):
@@ -25,12 +25,15 @@ def test_tool_create_rejects_syntax_error(tmp_path, monkeypatch):
 
     # Monkeypatch the module-level CUSTOM_TOOLS_DIR.
     import self_improver as si_mod
+
     monkeypatch.setattr(si_mod, "CUSTOM_TOOLS_DIR", custom_dir)
 
     # Also patch _safe_name to just return the input.
     monkeypatch.setattr(
-        SelfImprover, "_safe_name",
-        staticmethod(lambda name: name.replace(" ", "_").lower()))
+        SelfImprover,
+        "_safe_name",
+        staticmethod(lambda name: name.replace(" ", "_").lower()),
+    )
 
     result = improver.tool_create(
         tool_name="broken_tool",
@@ -57,15 +60,16 @@ def test_tool_create_accepts_valid_code(tmp_path, monkeypatch):
     improver.session_logger = MagicMock()
 
     import self_improver as si_mod
+
     monkeypatch.setattr(si_mod, "CUSTOM_TOOLS_DIR", custom_dir)
     monkeypatch.setattr(
-        SelfImprover, "_safe_name",
-        staticmethod(lambda name: name.replace(" ", "_").lower()))
+        SelfImprover,
+        "_safe_name",
+        staticmethod(lambda name: name.replace(" ", "_").lower()),
+    )
 
     # Patch load_custom_tools so it doesn't try to import real modules.
-    monkeypatch.setattr(
-        SelfImprover, "load_custom_tools",
-        lambda self: None)
+    monkeypatch.setattr(SelfImprover, "load_custom_tools", lambda self: None)
 
     valid_code = "def run(args):\n    return {'status': 'ok'}\n"
     result = improver.tool_create(

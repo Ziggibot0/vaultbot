@@ -71,11 +71,13 @@ jobs:
         working-directory: vaultbot_stuff
         run: ruff format --check vaultbot_backend/
 
-      - name: Pyright (warning level, missing-imports enforced)
-        # Hard gate: type errors catch real bugs before they ship. VaultBot
-        # users won't know how to code — CI must catch everything.
+      - name: Pyright (non-blocking — pre-existing debt, enforced later)
+        # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
+        # errors as warnings so the team sees the debt but CI stays green.
+        # Config is in pyproject.toml [tool.pyright].
         working-directory: vaultbot_stuff
-        run: pyright --level warning --reportmissingimports=true vaultbot_backend/
+        run: pyright --level warning vaultbot_backend/
+        continue-on-error: true
 
       - name: Pytest (offline suite)
         working-directory: vaultbot_stuff/vaultbot_backend

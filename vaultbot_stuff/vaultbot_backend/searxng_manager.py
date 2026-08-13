@@ -13,18 +13,38 @@ _logger = logging.getLogger(__name__)
 # into the container ensures the JSON API survives container recreation.
 _SEARXNG_SETTINGS_PATH = Path(__file__).parent / "searxng_settings.yml"
 
+
 class SearxngManager:
-    def __init__(self, docker_image: str = "searxng/searxng", port: int = 8080, session_logger=None):
+    def __init__(
+        self,
+        docker_image: str = "searxng/searxng",
+        port: int = 8080,
+        session_logger=None,
+    ):
         self.docker_image = docker_image
         self.port = port
         self.container_name = "vaultbot_searxng"
         self.client = docker.from_env()
         self.session_logger = session_logger
 
-    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None, outputs: Any = None, duration_ms: float | None = None, error: str | None = None):
+    def _log_tool(
+        self,
+        method: str,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any = None,
+        duration_ms: float | None = None,
+        error: str | None = None,
+    ):
         if self.session_logger is None:
             return
-        self.session_logger.log_tool_call(tool="searxng", method=method, inputs=inputs, outputs=outputs, duration_ms=duration_ms, error=error)
+        self.session_logger.log_tool_call(
+            tool="searxng",
+            method=method,
+            inputs=inputs,
+            outputs=outputs,
+            duration_ms=duration_ms,
+            error=error,
+        )
 
     def is_running(self) -> bool:
         """Check if the searxng container is running and the service is ready."""
@@ -46,7 +66,11 @@ class SearxngManager:
         """Start the searxng container if not already running."""
         t0 = time.time()
         if self.is_running():
-            self._log_tool("start", {"action": "already_running"}, duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "start",
+                {"action": "already_running"},
+                duration_ms=(time.time() - t0) * 1000,
+            )
             _logger.info("Searxng container is already running.")
             return
 
@@ -82,17 +106,29 @@ class SearxngManager:
                 detach=True,
             )
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log_tool("start", {"action": "run_container"}, error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "start",
+                {"action": "run_container"},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
         # Wait for the service to be ready
         for _ in range(30):  # 30 seconds timeout
             if self.is_running():
-                self._log_tool("start", {"action": "ready"}, duration_ms=(time.time() - t0) * 1000)
+                self._log_tool(
+                    "start", {"action": "ready"}, duration_ms=(time.time() - t0) * 1000
+                )
                 _logger.info("Searxng is ready.")
                 return
             time.sleep(1)
         err = "Searxng container did not become ready in time."
-        self._log_tool("start", {"action": "wait_ready"}, error=err, duration_ms=(time.time() - t0) * 1000)
+        self._log_tool(
+            "start",
+            {"action": "wait_ready"},
+            error=err,
+            duration_ms=(time.time() - t0) * 1000,
+        )
         raise RuntimeError(err)
 
     def ensure_running(self):
@@ -108,15 +144,21 @@ class SearxngManager:
             if _SEARXNG_SETTINGS_PATH.exists():
                 try:
                     res = self.client.containers.get(self.container_name).exec_run(
-                        ["grep", "-c", "outgoing", "/etc/searxng/settings.yml"])
-                    has_tuning = (res.exit_code == 0
-                                  and res.output.decode("utf-8", "ignore").strip() not in ("", "0"))
+                        ["grep", "-c", "outgoing", "/etc/searxng/settings.yml"]
+                    )
+                    has_tuning = res.exit_code == 0 and res.output.decode(
+                        "utf-8", "ignore"
+                    ).strip() not in ("", "0")
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     has_tuning = False
                 if not has_tuning:
-                    _logger.info("Searxng container has stale settings — recreating with tuned mount.")
+                    _logger.info(
+                        "Searxng container has stale settings — recreating with tuned mount."
+                    )
                     try:
-                        self.client.containers.get(self.container_name).remove(force=True)
+                        self.client.containers.get(self.container_name).remove(
+                            force=True
+                        )
                     except docker.errors.NotFound:
                         pass
                     self.start()
@@ -146,28 +188,32 @@ class SearxngManager:
             container = self.client.containers.get(self.container_name)
             # Read the current settings to preserve the secret_key.
             try:
-                old_settings = container.exec_run(
-                    ["cat", "/etc/searxng/settings.yml"])
+                old_settings = container.exec_run(["cat", "/etc/searxng/settings.yml"])
                 if old_settings.exit_code == 0:
                     old_text = old_settings.output.decode("utf-8")
                     # Extract the existing secret_key to preserve it.
                     import re
+
                     m = re.search(r'secret_key:\s*"?([^"\n]+)"?', old_text)
                     if m:
                         secret = m.group(1).strip()
                         new_settings = _SEARXNG_SETTINGS_PATH.read_text(
-                            encoding="utf-8")
+                            encoding="utf-8"
+                        )
                         new_settings = new_settings.replace(
-                            "9Iu1NamztVUxXbMQWYLvWKMfNiZBsyit", secret)
+                            "9Iu1NamztVUxXbMQWYLvWKMfNiZBsyit", secret
+                        )
                         # Write via docker cp equivalent.
                         import tempfile
+
                         with tempfile.NamedTemporaryFile(
-                                mode="w", suffix=".yml", delete=False,
-                                encoding="utf-8") as tf:
+                            mode="w", suffix=".yml", delete=False, encoding="utf-8"
+                        ) as tf:
                             tf.write(new_settings)
                         # Use the low-level API for put_archive.
                         import io
                         import tarfile
+
                         stream = io.BytesIO()
                         with tarfile.open(fileobj=stream, mode="w") as tar:
                             info = tarfile.TarInfo(name="settings.yml")
@@ -178,11 +224,11 @@ class SearxngManager:
                         container.put_archive("/etc/searxng", stream)
                         container.restart()
                         time.sleep(3)
-                        self._log_tool("ensure_json_enabled",
-                                        {"action": "injected_and_restarted"})
+                        self._log_tool(
+                            "ensure_json_enabled", {"action": "injected_and_restarted"}
+                        )
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log_tool("ensure_json_enabled",
-                                {"error": str(e)})
+                self._log_tool("ensure_json_enabled", {"error": str(e)})
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("ensure_json_enabled", {"error": str(e)})
 
@@ -197,17 +243,26 @@ class SearxngManager:
         try:
             response = requests.get(
                 f"http://localhost:{self.port}/search",
-                params={"q": query, "format": "json",
-                       "categories": "science,general"},
+                params={"q": query, "format": "json", "categories": "science,general"},
                 timeout=timeout,
                 headers={"Accept": "application/json"},
             )
             response.raise_for_status()
             data = response.json()
-            self._log_tool("search", {"query": query, "format": "json"}, outputs={"result_count": len(data.get("results", []))}, duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "search",
+                {"query": query, "format": "json"},
+                outputs={"result_count": len(data.get("results", []))},
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return data
         except Exception as e:
-            self._log_tool("search", {"query": query, "format": "json"}, error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "search",
+                {"query": query, "format": "json"},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
 
     def scrape(self, url: str, timeout: int = 8) -> str:
@@ -242,17 +297,24 @@ class SearxngManager:
         last_err = None
         for hdr in headerss:
             try:
-                response = requests.get(url, headers=hdr, timeout=timeout,
-                                        allow_redirects=True)
+                response = requests.get(
+                    url, headers=hdr, timeout=timeout, allow_redirects=True
+                )
                 response.raise_for_status()
                 # Try to get readable text from HTML
                 soup = BeautifulSoup(response.text, "lxml")
                 # Remove script/style/nav/footer elements
-                for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
+                for tag in soup(
+                    ["script", "style", "nav", "footer", "header", "aside", "form"]
+                ):
                     tag.decompose()
                 # Prefer article/main content
                 main = soup.find("article") or soup.find("main") or soup.find("body")
-                text = main.get_text(separator="\n", strip=True) if main else soup.get_text(separator="\n", strip=True)
+                text = (
+                    main.get_text(separator="\n", strip=True)
+                    if main
+                    else soup.get_text(separator="\n", strip=True)
+                )
                 # Collapse whitespace
                 lines = [line.strip() for line in text.splitlines() if line.strip()]
                 text = "\n".join(lines)
@@ -262,7 +324,12 @@ class SearxngManager:
                     # Too short to be useful — try next UA.
                     last_err = "content too short"
                     continue
-                self._log_tool("scrape", {"url": url}, outputs={"text_length": len(result)}, duration_ms=(time.time() - t0) * 1000)
+                self._log_tool(
+                    "scrape",
+                    {"url": url},
+                    outputs={"text_length": len(result)},
+                    duration_ms=(time.time() - t0) * 1000,
+                )
                 return result
             except requests.HTTPError as e:
                 last_err = str(e)
@@ -272,5 +339,10 @@ class SearxngManager:
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 last_err = str(e)
                 break
-        self._log_tool("scrape", {"url": url}, error=last_err, duration_ms=(time.time() - t0) * 1000)
+        self._log_tool(
+            "scrape",
+            {"url": url},
+            error=last_err,
+            duration_ms=(time.time() - t0) * 1000,
+        )
         raise RuntimeError(f"Failed to scrape {url}: {last_err}")

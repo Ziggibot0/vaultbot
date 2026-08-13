@@ -13,16 +13,15 @@ Endpoints:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app_state import get_services
 from services import Services
-from providers import ROLES, ProviderRegistry
+from providers import ProviderRegistry
 from tournament_benchmarks import get_benchmarks
 from tournament_runner import run_tournament, run_tournament_streaming
 from tournament_staging import TournamentStaging
@@ -36,6 +35,7 @@ def _registry(svc: Services) -> ProviderRegistry:
     reg = getattr(svc, "registry", None)
     if reg is None:
         from providers import ProviderRegistry as PR
+
         reg = PR.migrate_from_env()
         svc.registry = reg
     return reg
@@ -50,6 +50,7 @@ def _staging() -> TournamentStaging:
 # Tournament staging pot — models to evaluate before adding to main pot
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @router.get("/tournament/staging")
 async def tournament_staging_list(
     svc: Annotated[Services, Depends(get_services)],
@@ -60,14 +61,16 @@ async def tournament_staging_list(
     entries = []
     for e in staging.list_entries():
         prov = reg.get_provider(e.provider)
-        entries.append({
-            "id": e.id,
-            "model": e.model,
-            "provider": e.provider,
-            "provider_label": prov.label if prov else e.provider,
-            "provider_type": prov.type if prov else "",
-            "label": e.label or e.model,
-        })
+        entries.append(
+            {
+                "id": e.id,
+                "model": e.model,
+                "provider": e.provider,
+                "provider_label": prov.label if prov else e.provider,
+                "provider_type": prov.type if prov else "",
+                "label": e.label or e.model,
+            }
+        )
     return {"entries": entries, "count": len(entries)}
 
 
@@ -93,8 +96,10 @@ async def tournament_staging_add(
 
     reg = _registry(svc)
     if reg.get_provider(provider) is None:
-        return {"status": "error",
-                "detail": f"Provider '{provider}' not found. Add it in AI Models & Providers first."}, 400
+        return {
+            "status": "error",
+            "detail": f"Provider '{provider}' not found. Add it in AI Models & Providers first.",
+        }, 400
 
     staging = _staging()
     entry = staging.add_entry(model, provider, label)
@@ -120,6 +125,7 @@ async def tournament_staging_clear() -> dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /tournament/staging/sizes — probe model sizes (MB/GB)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 @router.get("/tournament/staging/sizes")
 async def tournament_staging_sizes(
@@ -152,8 +158,11 @@ async def tournament_staging_sizes(
         try:
             proc = _popen(
                 ["ollama", "list"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, encoding="utf-8", errors="replace",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             out, _ = proc.communicate(timeout=15)
             if proc.returncode == 0:
@@ -173,7 +182,7 @@ async def tournament_staging_sizes(
                         size_str = None
                         for i in range(1, len(parts) - 1):
                             if parts[i + 1].upper() in ("GB", "MB", "KB", "B"):
-                                size_str = f"{parts[i]} {parts[i+1]}"
+                                size_str = f"{parts[i]} {parts[i + 1]}"
                                 break
                         if size_str:
                             model_sizes[name] = size_str
@@ -183,7 +192,11 @@ async def tournament_staging_sizes(
                     sz = model_sizes.get(model_name)
                     if sz is None:
                         # Try matching just the tag part (before :)
-                        tag = model_name.split(":")[0] if ":" in model_name else model_name
+                        tag = (
+                            model_name.split(":")[0]
+                            if ":" in model_name
+                            else model_name
+                        )
                         for k, v in model_sizes.items():
                             if k.startswith(tag + ":"):
                                 sz = v
@@ -203,6 +216,7 @@ async def tournament_staging_sizes(
 # GET /tournament/providers — list providers for the staging model picker
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @router.get("/tournament/providers")
 async def tournament_providers(
     svc: Annotated[Services, Depends(get_services)],
@@ -217,6 +231,7 @@ async def tournament_providers(
 # ═══════════════════════════════════════════════════════════════════════════
 # GET /tournament/benchmarks — list benchmarks for a role
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 @router.get("/tournament/benchmarks")
 async def tournament_benchmarks(role: str = "big") -> dict[str, Any]:
@@ -247,6 +262,7 @@ async def tournament_benchmarks(role: str = "big") -> dict[str, Any]:
 # POST /tournament/run — run a tournament (sync)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @router.post("/tournament/run")
 async def tournament_run(
     payload: dict,
@@ -267,7 +283,10 @@ async def tournament_run(
     role: str = (payload.get("role") or "big").strip().lower()
 
     if not contestants:
-        return {"status": "error", "detail": "contestants required (non-empty list)"}, 400
+        return {
+            "status": "error",
+            "detail": "contestants required (non-empty list)",
+        }, 400
     if role not in ("big", "small"):
         return {"status": "error", "detail": "role must be 'big' or 'small'"}, 400
 
@@ -276,8 +295,10 @@ async def tournament_run(
     # The judge is the current big model
     judge_client = svc.ollama_client
     if judge_client is None:
-        return {"status": "error",
-                "detail": "No big model assigned — a judge is required"}, 500
+        return {
+            "status": "error",
+            "detail": "No big model assigned — a judge is required",
+        }, 500
 
     try:
         results = await run_tournament(
@@ -336,6 +357,7 @@ async def tournament_run(
 # WS /tournament/ws — streaming tournament
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @router.websocket("/tournament/ws")
 async def tournament_ws(
     websocket: WebSocket,
@@ -363,7 +385,9 @@ async def tournament_ws(
         return
 
     if msg.get("type") != "start":
-        await websocket.send_json({"type": "error", "message": "Expected start message"})
+        await websocket.send_json(
+            {"type": "error", "message": "Expected start message"}
+        )
         return
 
     contestants: list[dict[str, str]] = msg.get("contestants", [])
@@ -373,10 +397,14 @@ async def tournament_ws(
         await websocket.send_json({"type": "error", "message": "contestants required"})
         return
     if role not in ("big", "small"):
-        await websocket.send_json({"type": "error", "message": "role must be 'big' or 'small'"})
+        await websocket.send_json(
+            {"type": "error", "message": "role must be 'big' or 'small'"}
+        )
         return
     if judge_client is None:
-        await websocket.send_json({"type": "error", "message": "No big model assigned as judge"})
+        await websocket.send_json(
+            {"type": "error", "message": "No big model assigned as judge"}
+        )
         return
 
     try:

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Verify that a procedure's code steps actually work — the imports resolve, the tools are in allowed_tools, and the args the steps reference are documented. Reads a procedure note, extracts its code steps, and checks each for common runtime failure patterns. Use when auditing procedures or before trusting a new procedure.

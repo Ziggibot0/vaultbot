@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: Extract factual claims from a text passage. Returns a JSON list of claims, each with the claim text and the supporting span from the source. Uses the small model — claim extraction is structured extraction, not reasoning.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: Audit the VaultBot backend after external changes (e.g. GitHub Copilot edits). Runs git diff to get exact changes, greps for safety-critical patterns (sliding window, failsafe, checkpointing, MAX_ROUNDS, tool dispatch, per-step RAG), lists new/removed files, and feeds all results to the small model for a final risk assessment + report. Zero big-model cost. Use when Sean says 'audit the changes' or 'what did Copilot change' or after any external code modification.

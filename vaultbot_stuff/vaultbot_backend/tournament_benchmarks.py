@@ -19,7 +19,6 @@ Design principles:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Benchmark dataclass
@@ -29,16 +28,17 @@ from typing import Any
 @dataclass
 class Benchmark:
     """One tournament benchmark problem."""
-    id: str                          # unique id, e.g. "big-reasoning-01"
-    name: str                        # human-readable name
-    description: str                 # what this tests
-    prompt: str                      # the user message to send
-    system: str = ""                 # optional system prompt
-    rubric: str = ""                 # scoring rubric for the judge
+
+    id: str  # unique id, e.g. "big-reasoning-01"
+    name: str  # human-readable name
+    description: str  # what this tests
+    prompt: str  # the user message to send
+    system: str = ""  # optional system prompt
+    rubric: str = ""  # scoring rubric for the judge
     expected_keywords: list[str] = field(default_factory=list)  # fast pre-filter
-    max_tokens: int = 512            # max output tokens
-    temperature: float = 0.0         # deterministic for eval
-    category: str = ""               # grouping: "reasoning", "extraction", etc.
+    max_tokens: int = 512  # max output tokens
+    temperature: float = 0.0  # deterministic for eval
+    category: str = ""  # grouping: "reasoning", "extraction", etc.
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -224,7 +224,7 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         category="classification",
         prompt=(
             "Classify this user message as 'trivial' or 'meaningful':\n\n"
-            "\"hey\"\n\n"
+            '"hey"\n\n'
             "Reply with exactly one word: trivial or meaningful."
         ),
         rubric=(
@@ -241,8 +241,8 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         category="classification",
         prompt=(
             "Classify this user message as 'trivial' or 'meaningful':\n\n"
-            "\"Can you search my vault for notes about machine learning "
-            "and summarize the key findings?\"\n\n"
+            '"Can you search my vault for notes about machine learning '
+            'and summarize the key findings?"\n\n'
             "Reply with exactly one word: trivial or meaningful."
         ),
         rubric=(
@@ -279,8 +279,8 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         prompt=(
             "Extract all factual claims from this text as a JSON array of "
             "strings:\n\n"
-            "\"Python 3.12 introduced the new type statement. It is 15% faster "
-            "than 3.11 on average. Many developers have adopted it.\"\n\n"
+            '"Python 3.12 introduced the new type statement. It is 15% faster '
+            'than 3.11 on average. Many developers have adopted it."\n\n'
             "Reply with ONLY a JSON array."
         ),
         rubric=(
@@ -336,7 +336,7 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         prompt=(
             "Rewrite this vague search query to be more specific for a "
             "vault search:\n\n"
-            "\"that thing about models\"\n\n"
+            '"that thing about models"\n\n'
             "Reply with the rewritten query only."
         ),
         rubric=(
@@ -397,10 +397,10 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         category="extraction",
         prompt=(
             "Refine this rough note into a 2-3 sentence concept card:\n\n"
-            "\"RAG is like when you give the AI some documents and it reads "
+            '"RAG is like when you give the AI some documents and it reads '
             "them and then answers your question using those documents. It's "
             "better than just asking the AI because it has context. People "
-            "use it for chatbots and stuff.\"\n\n"
+            'use it for chatbots and stuff."\n\n'
             "Refined concept card:"
         ),
         rubric=(

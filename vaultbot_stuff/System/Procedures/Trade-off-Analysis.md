@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Lens procedure for evaluating competing options by mapping trade-offs. Based on decision theory and dual-process theory research on preference construction. Hardened with triple-try consistency, bite-sized LLM calls, and deterministic fallbacks."
 description: "Lens for design/architecture problems — maps options against criteria, weights trade-offs, identifies Pareto-optimal choices."

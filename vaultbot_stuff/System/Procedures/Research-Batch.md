@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: Batch-triage multiple research topics at once. Given a list of topics or a note with multiple gaps, the small model classifies each topic by type (factual, conceptual, procedural, controversial) and priority, then fills a research plan template for each. The big model only does the actual research synthesis — all triage and planning is small-cartridge.

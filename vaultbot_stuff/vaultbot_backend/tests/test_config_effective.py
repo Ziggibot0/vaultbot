@@ -9,6 +9,7 @@ Verifies that the endpoint correctly:
 
 Run: pytest tests/test_config_effective.py -v
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -17,8 +18,7 @@ from unittest.mock import patch
 class TestConfigEffective:
     """Test the /config/effective endpoint logic directly."""
 
-    def _call_endpoint(self, env_file_content: str | None,
-                       process_env: dict[str, str]):
+    def _call_endpoint(self, env_file_content: str | None, process_env: dict[str, str]):
         """Call config_effective() with a mocked .env + process env.
 
         Returns the list of config items (dicts) for assertion.
@@ -42,9 +42,12 @@ class TestConfigEffective:
                 result[key.strip()] = val.strip()
             return result
 
-        with patch("routers.llm.os.getenv", side_effect=fake_getenv), \
-             patch("routers.llm._read_env_file", side_effect=fake_read_env_file):
+        with (
+            patch("routers.llm.os.getenv", side_effect=fake_getenv),
+            patch("routers.llm._read_env_file", side_effect=fake_read_env_file),
+        ):
             import asyncio
+
             result = asyncio.run(config_effective())
         return result["config"]
 
@@ -107,8 +110,16 @@ class TestConfigEffective:
         """The response includes all keys from _CONFIG_KEYS."""
         items = self._call_endpoint(env_file_content=None, process_env={})
         keys = {i["key"] for i in items}
-        expected = {"VAULTBOT_OWNER", "LLM_BACKEND", "OLLAMA_LLM_MODEL",
-                    "OLLAMA_EMBED_MODEL", "LLM_BASE_URL", "LLM_API_KEY",
-                    "LLM_MODEL", "VAULTBOT_RESEARCH_BACKEND",
-                    "TAVILY_API_KEY", "OLLAMA_HOST"}
+        expected = {
+            "VAULTBOT_OWNER",
+            "LLM_BACKEND",
+            "OLLAMA_LLM_MODEL",
+            "OLLAMA_EMBED_MODEL",
+            "LLM_BASE_URL",
+            "LLM_API_KEY",
+            "LLM_MODEL",
+            "VAULTBOT_RESEARCH_BACKEND",
+            "TAVILY_API_KEY",
+            "OLLAMA_HOST",
+        }
         assert keys == expected

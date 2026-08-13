@@ -49,43 +49,47 @@ CLAIM_FIELDS: tuple[str, ...] = (
     "evidence_sources",
 )
 
-VALID_TYPES: frozenset[str] = frozenset({
-    "research",
-    "research-note",
-    "semantic",
-    "architecture",
-    "architecture-plan",
-    "system-design",
-    "claim",
-    "pattern",
-    "pattern-highway",
-    "concept",
-    "procedure",
-    "exemplar",
-    "chat",
-    "bridge",
-    "audit",
-    "diagnostic",
-    "synthesis",
-    "roadmap",
-    "plan",
-})
+VALID_TYPES: frozenset[str] = frozenset(
+    {
+        "research",
+        "research-note",
+        "semantic",
+        "architecture",
+        "architecture-plan",
+        "system-design",
+        "claim",
+        "pattern",
+        "pattern-highway",
+        "concept",
+        "procedure",
+        "exemplar",
+        "chat",
+        "bridge",
+        "audit",
+        "diagnostic",
+        "synthesis",
+        "roadmap",
+        "plan",
+    }
+)
 
-VALID_STATUSES: frozenset[str] = frozenset({
-    "raw",
-    "draft",
-    "active",
-    "experimental",
-    "verified",
-    "complete",
-    "tentative",
-    "design-spec",
-    "superseded",
-    "deprecated",
-    "flagged",
-    "rejected",
-    "alias",
-})
+VALID_STATUSES: frozenset[str] = frozenset(
+    {
+        "raw",
+        "draft",
+        "active",
+        "experimental",
+        "verified",
+        "complete",
+        "tentative",
+        "design-spec",
+        "superseded",
+        "deprecated",
+        "flagged",
+        "rejected",
+        "alias",
+    }
+)
 
 # Path-prefix → type inference.  First match wins.
 _TYPE_INFERENCE: tuple[tuple[str, str], ...] = (
@@ -108,24 +112,32 @@ _TYPE_INFERENCE: tuple[tuple[str, str], ...] = (
 _DEFAULT_TYPE = "claim"
 
 # Fields whose values are lists of wikilink strings.
-_LIST_FIELDS: frozenset[str] = frozenset({
-    "supports",
-    "contradicts",
-    "derived_from",
-    "depends_on",
-    "evidence_sources",
-    "tags",
-    "scope",
-    "applies_to",
-    "evidence_sources",
-})
+_LIST_FIELDS: frozenset[str] = frozenset(
+    {
+        "supports",
+        "contradicts",
+        "derived_from",
+        "depends_on",
+        "evidence_sources",
+        "tags",
+        "scope",
+        "applies_to",
+        "evidence_sources",
+    }
+)
 
 # Fields that must be numeric.
 _FLOAT_FIELDS: frozenset[str] = frozenset({"confidence", "success_rate"})
-_INT_FIELDS: frozenset[str] = frozenset({
-    "evidence_count", "source_count", "fact_count", "review_interval_days",
-    "success_count", "failure_count",
-})
+_INT_FIELDS: frozenset[str] = frozenset(
+    {
+        "evidence_count",
+        "source_count",
+        "fact_count",
+        "review_interval_days",
+        "success_count",
+        "failure_count",
+    }
+)
 
 _FM_START = re.compile(r"\A---\s*\n")
 _FM_END = re.compile(r"\n---\s*(?:\n|$)")
@@ -245,8 +257,8 @@ def _split_frontmatter(text: str) -> tuple[str, str]:
     m_end = _FM_END.search(text, m_start.end())
     if not m_end:
         return "", text
-    fm_str = text[m_start.end():m_end.start()]
-    body = text[m_end.end():]
+    fm_str = text[m_start.end() : m_end.start()]
+    body = text[m_end.end() :]
     return fm_str, body
 
 
@@ -285,8 +297,13 @@ def _infer_tags(file_path: str, note_type: str) -> list[str]:
     # Add the immediate parent directory as a tag (e.g. "Research", "Chat")
     if parts:
         parent = parts[-1]
-        if parent.lower() not in ("vaultbot_stuff", "system", "knowledge",
-                                  "memory", "user"):
+        if parent.lower() not in (
+            "vaultbot_stuff",
+            "system",
+            "knowledge",
+            "memory",
+            "user",
+        ):
             tags.append(parent.lower())
     return tags
 
@@ -304,8 +321,9 @@ def _format_frontmatter(fm: dict[str, Any]) -> str:
                     item_str = str(item)
                     # Wrap in quotes if it contains special chars
                     if "[[" in item_str or ":" in item_str or "#" in item_str:
-                        lines.append(f'  - "[{item_str}]"' if False
-                                     else f'  - "{item_str}"')
+                        lines.append(
+                            f'  - "[{item_str}]"' if False else f'  - "{item_str}"'
+                        )
                     else:
                         lines.append(f"  - {item_str}")
         elif isinstance(value, (int, float)):
@@ -433,8 +451,7 @@ def validate_schema(content: str) -> tuple[bool, list[str], list[str]]:
     note_type = fm.get("type", "")
     if note_type and note_type not in VALID_TYPES:
         errors.append(
-            f"Invalid type '{note_type}'. Valid types: "
-            f"{', '.join(sorted(VALID_TYPES))}"
+            f"Invalid type '{note_type}'. Valid types: {', '.join(sorted(VALID_TYPES))}"
         )
 
     # Validate status
@@ -474,8 +491,15 @@ def validate_schema(content: str) -> tuple[bool, list[str], list[str]]:
                         )
 
     # Warnings for missing optional claim fields on claim-like types
-    claim_types = {"claim", "architecture", "architecture-plan", "semantic",
-                   "diagnostic", "pattern", "pattern-highway"}
+    claim_types = {
+        "claim",
+        "architecture",
+        "architecture-plan",
+        "semantic",
+        "diagnostic",
+        "pattern",
+        "pattern-highway",
+    }
     if note_type in claim_types:
         if "falsifiable_if" not in fm:
             warnings.append(
@@ -544,13 +568,40 @@ def split_note_if_needed(
     section_word_sets: list[set[str]] = []
     for _, section_body in sections:
         words = set(
-            w.lower() for w in re.findall(r"\w+", section_body)
-            if len(w) > 3 and w.lower() not in {
-                "that", "this", "with", "from", "have", "they", "their",
-                "which", "would", "could", "should", "there", "where",
-                "when", "what", "each", "also", "than", "then", "into",
-                "been", "more", "such", "these", "those", "will", "does",
-                "note", "section",
+            w.lower()
+            for w in re.findall(r"\w+", section_body)
+            if len(w) > 3
+            and w.lower()
+            not in {
+                "that",
+                "this",
+                "with",
+                "from",
+                "have",
+                "they",
+                "their",
+                "which",
+                "would",
+                "could",
+                "should",
+                "there",
+                "where",
+                "when",
+                "what",
+                "each",
+                "also",
+                "than",
+                "then",
+                "into",
+                "been",
+                "more",
+                "such",
+                "these",
+                "those",
+                "will",
+                "does",
+                "note",
+                "section",
             }
         )
         section_word_sets.append(words)
@@ -585,8 +636,12 @@ def split_note_if_needed(
         )
         # Copy relevant claim fields from parent
         parent_fm = parse_frontmatter(part_content)
-        for claim_field in ("falsifiable_if", "evidence_count",
-                            "evidence_sources", "confidence"):
+        for claim_field in (
+            "falsifiable_if",
+            "evidence_count",
+            "evidence_sources",
+            "confidence",
+        ):
             if claim_field in fm:
                 parent_fm[claim_field] = fm[claim_field]
         part_content = inject_schema(
@@ -594,11 +649,13 @@ def split_note_if_needed(
             part_path,
             force_type=fm.get("type", _DEFAULT_TYPE),
         )
-        proposals.append({
-            "title": title,
-            "file_path": part_path,
-            "content": part_content,
-        })
+        proposals.append(
+            {
+                "title": title,
+                "file_path": part_path,
+                "content": part_content,
+            }
+        )
 
     return proposals if proposals else None
 
@@ -613,17 +670,32 @@ def strip_frontmatter(content: str) -> str:
 
 # Directories the healer should skip (mirrors vault_graph._IGNORED_DIRS).
 _HEAL_SKIP_DIRS = {
-    ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials",
-    ".git", ".obsidian", "node_modules", "__pycache__", "vaultbot_backend",
-    ".vscode", "trash", ".github", "learningMaterial",
+    ".venv",
+    "vaultbot_venv",
+    "vaultbot_index",
+    "sessions",
+    "partials",
+    ".git",
+    ".obsidian",
+    "node_modules",
+    "__pycache__",
+    "vaultbot_backend",
+    ".vscode",
+    "trash",
+    ".github",
+    "learningMaterial",
 }
 
 # Root-level .md files that are repo meta-files, not vault knowledge.
 # The healer skips these so it doesn't inject frontmatter into README.md,
 # CONTRIBUTING.md, etc.
 _HEAL_SKIP_ROOT_FILES = {
-    "README.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE",
-    "CHANGELOG.md", "CODE_OF_CONDUCT.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
 }
 
 # Only heal files under these top-level directories (vault knowledge zones).
@@ -641,8 +713,7 @@ def heal_note_on_disk(file_path: str | Path, vault_root: str | Path) -> dict:
     try:
         content = p.read_text(encoding="utf-8")
     except Exception as e:  # noqa: BLE001
-        return {"healed": False, "file_path": str(p), "changes": [],
-                "error": str(e)}
+        return {"healed": False, "file_path": str(p), "changes": [], "error": str(e)}
 
     rel = str(p.relative_to(vault_root)).replace("\\", "/")
     original = content
@@ -650,8 +721,7 @@ def heal_note_on_disk(file_path: str | Path, vault_root: str | Path) -> dict:
     try:
         healed = inject_schema(content, rel, existing_content=content)
     except Exception as e:  # noqa: BLE001
-        return {"healed": False, "file_path": str(p), "changes": [],
-                "error": str(e)}
+        return {"healed": False, "file_path": str(p), "changes": [], "error": str(e)}
 
     if healed == original:
         return {"healed": False, "file_path": str(p), "changes": []}
@@ -667,15 +737,12 @@ def heal_note_on_disk(file_path: str | Path, vault_root: str | Path) -> dict:
     try:
         p.write_text(healed, encoding="utf-8")
     except Exception as e:  # noqa: BLE001
-        return {"healed": False, "file_path": str(p), "changes": [],
-                "error": str(e)}
+        return {"healed": False, "file_path": str(p), "changes": [], "error": str(e)}
 
-    return {"healed": True, "file_path": str(p), "changes": changes,
-            "error": None}
+    return {"healed": True, "file_path": str(p), "changes": changes, "error": None}
 
 
-def heal_vault_schema(vault_root: str | Path,
-                      logger=None) -> dict:
+def heal_vault_schema(vault_root: str | Path, logger=None) -> dict:
     """Scan every ``.md`` in the vault and heal missing schema fields.
 
     This is the boot-time self-heal.  It reads each note, calls

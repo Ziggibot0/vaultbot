@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find vault notes that reference code files, functions, or variables that no longer exist in the backend. Scans notes for .py file references, function names, and class names, then checks each against the actual code. Returns notes with stale references (file deleted, function renamed, class removed). Distinguishes between historical records and active references.

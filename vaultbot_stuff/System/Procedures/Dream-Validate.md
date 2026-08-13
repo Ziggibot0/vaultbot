@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Run the graph analyzer again and compare before/after metrics. Verifies the graph is healthier after the dream pass. Takes the 'before' metrics from Dream-Analyze as input.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find procedures that are never called by the vaultbot in chat. Scans chat history for execute_procedure calls, counts which procedures are used, and returns procedures with zero or very low usage. Use when auditing the procedure library for dead procedures.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: Find thin and stub notes — notes that exist but are nearly empty (< 500 chars) or contain stub markers (TODO/stub/placeholder/expand). Imports the Pattern-Scan engine and filters to is_thin or is_stub. Use to find notes worth expanding or merging.

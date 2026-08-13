@@ -22,6 +22,7 @@ each ``execute_procedure`` call).
 See [[Cloud-Model-Obsolescence-Architecture]] and
 [[Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge]].
 """
+
 from __future__ import annotations
 
 import json
@@ -35,12 +36,52 @@ from config import TUNABLES
 # Caps shared with step_summarizer.py — keep the conversation bounded.
 _MAX_SUMMARY_CHARS = 600
 # Stop words for word-overlap guards (same set as _small_model_query).
-_STOP_WORDS = frozenset({
-    "the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "in",
-    "on", "at", "and", "or", "it", "this", "that", "for", "with", "as", "by",
-    "its", "has", "have", "from", "which", "not", "but", "can", "will", "do",
-    "does", "did", "you", "your", "we", "our", "they", "their", "he", "she",
-})
+_STOP_WORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "to",
+        "of",
+        "in",
+        "on",
+        "at",
+        "and",
+        "or",
+        "it",
+        "this",
+        "that",
+        "for",
+        "with",
+        "as",
+        "by",
+        "its",
+        "has",
+        "have",
+        "from",
+        "which",
+        "not",
+        "but",
+        "can",
+        "will",
+        "do",
+        "does",
+        "did",
+        "you",
+        "your",
+        "we",
+        "our",
+        "they",
+        "their",
+        "he",
+        "she",
+    }
+)
 
 # ── Small-model circuit breaker ─────────────────────────────────────────
 # When a small-model pre-filter times out or fails, retrying it every turn
@@ -54,7 +95,8 @@ _STOP_WORDS = frozenset({
 # ("query", 0), ("digest", 0).  Value is the monotonic
 # timestamp of the last failure; entries expire after the cooldown.
 _BREAKER_COOLDOWN_SECONDS = float(
-    os.environ.get("VAULTBOT_SMALL_BREAKER_COOLDOWN", "1800"))  # 30 min
+    os.environ.get("VAULTBOT_SMALL_BREAKER_COOLDOWN", "1800")
+)  # 30 min
 _breaker: dict[str, float] = {}
 
 
@@ -90,13 +132,21 @@ def _breaker_reset(key: str) -> None:
 # query" and then time out — the single biggest contributor to the 3-minute
 # retrieve. With think=False + a 512-token cap the same call returns in
 # well under a second.
-_SMALL_TIMEOUT = float(os.environ.get("VAULTBOT_SMALL_TIMEOUT_SECONDS", str(TUNABLES.small_timeout_seconds)))
+_SMALL_TIMEOUT = float(
+    os.environ.get(
+        "VAULTBOT_SMALL_TIMEOUT_SECONDS", str(TUNABLES.small_timeout_seconds)
+    )
+)
 
 
-def _client_chat(client: Any, prompt: str, system: str = "",
-                 temperature: float = 0.2,
-                 max_predict: int = 512,
-                 breaker_key: str | None = None) -> str:
+def _client_chat(
+    client: Any,
+    prompt: str,
+    system: str = "",
+    temperature: float = 0.2,
+    max_predict: int = 512,
+    breaker_key: str | None = None,
+) -> str:
     """Call client.chat non-streaming with think=False + bounded output.
 
     Raises on failure. Callers wrap in try/except and fall back to the
@@ -113,8 +163,13 @@ def _client_chat(client: Any, prompt: str, system: str = "",
     # rewrite doesn't need chain-of-thought, and reasoning was the 60s
     # bottleneck. max_predict caps the tail so a confused model can't
     # burn the full read timeout.
-    resp = client.chat(msgs, temperature=temperature, stream=False,
-                       think=False, max_predict=max_predict)
+    resp = client.chat(
+        msgs,
+        temperature=temperature,
+        stream=False,
+        think=False,
+        max_predict=max_predict,
+    )
     text = ""
     if isinstance(resp, dict):
         msg = resp.get("message", {})
@@ -129,8 +184,10 @@ def _client_chat(client: Any, prompt: str, system: str = "",
 # Phase 1: RAG Reranking — delegates to Smart-Vault-Search procedure
 # ---------------------------------------------------------------------------
 
-async def rerank_results(svc: Any, query: str, results: list[dict],
-                          k: int = 5, session_logger: Any = None) -> list[dict]:
+
+async def rerank_results(
+    svc: Any, query: str, results: list[dict], k: int = 5, session_logger: Any = None
+) -> list[dict]:
     """Deterministic reranking using embedding cosine similarity.
 
     Replaces the old small-model ``Smart-Vault-Search`` procedure call.
@@ -154,6 +211,7 @@ async def rerank_results(svc: Any, query: str, results: list[dict],
     candidates = results[:15]
     try:
         import numpy as _np
+
         indexer = getattr(svc, "vault_indexer", None)
         if indexer is None or indexer.index is None:
             return results[:k]
@@ -206,11 +264,14 @@ async def rerank_results(svc: Any, query: str, results: list[dict],
             reranked = reranked[:k]
 
         if session_logger:
-            session_logger.log("deterministic_rerank", {
-                "candidates": len(candidates),
-                "kept": len(reranked),
-                "order_changed": [r.get("name", "") for r in reranked[:3]],
-            })
+            session_logger.log(
+                "deterministic_rerank",
+                {
+                    "candidates": len(candidates),
+                    "kept": len(reranked),
+                    "order_changed": [r.get("name", "") for r in reranked[:3]],
+                },
+            )
         return reranked
     except Exception as e:
         if session_logger:
@@ -222,8 +283,10 @@ async def rerank_results(svc: Any, query: str, results: list[dict],
 # Phase 2: Query Expansion — direct small-model call
 # ---------------------------------------------------------------------------
 
-def expand_query(client: Any, user_message: str,
-                 session_logger: Any = None) -> list[str]:
+
+def expand_query(
+    client: Any, user_message: str, session_logger: Any = None
+) -> list[str]:
     """Use the small model to generate 2 alternative search queries.
 
     Always returns a list with the original user_message first (fail-safe).
@@ -244,9 +307,11 @@ def expand_query(client: Any, user_message: str,
             "might find different relevant notes in a knowledge vault.\n\n"
             f"Question: {user_message[:300]}\n\n"
             "Output one query per line. No numbering, no preamble, no quotes.\n"
-            "Queries:")
-        text = _client_chat(client, prompt, temperature=0.3,
-                            max_predict=256, breaker_key="expand")
+            "Queries:"
+        )
+        text = _client_chat(
+            client, prompt, temperature=0.3, max_predict=256, breaker_key="expand"
+        )
         if not text:
             # Empty can mean the breaker tripped (skip silently) OR the
             # model returned nothing (treat as skip either way).
@@ -260,9 +325,12 @@ def expand_query(client: Any, user_message: str,
             # Guard: must share at least one content word with the original.
             if orig_words and not (_content_words(q) & orig_words):
                 if session_logger:
-                    session_logger.log("small_model_expand_dropped", {
-                        "query": q[:80],
-                    })
+                    session_logger.log(
+                        "small_model_expand_dropped",
+                        {
+                            "query": q[:80],
+                        },
+                    )
                 continue
             if q.lower() not in (x.lower() for x in queries):
                 queries.append(q)
@@ -270,9 +338,12 @@ def expand_query(client: Any, user_message: str,
                 break
 
         if session_logger:
-            session_logger.log("small_model_expand", {
-                "queries": queries,
-            })
+            session_logger.log(
+                "small_model_expand",
+                {
+                    "queries": queries,
+                },
+            )
         _breaker_reset("expand")
         return queries
     except Exception as e:
@@ -310,8 +381,9 @@ def dedup_results(results: list[dict]) -> list[dict]:
 _SECTION_RE = re.compile(r"^### \[\[([^\]]+)\]\]", re.MULTILINE)
 
 
-async def filter_context(svc: Any, query: str, context: str,
-                          session_logger: Any = None) -> str:
+async def filter_context(
+    svc: Any, query: str, context: str, session_logger: Any = None
+) -> str:
     """Deterministically drop irrelevant context sections by keyword overlap.
 
     Replaces the old small-model ``Filter-Context-For-Query`` procedure call.
@@ -364,12 +436,15 @@ async def filter_context(svc: Any, query: str, context: str,
         filtered = "\n\n".join(s["raw"] for s in kept)
 
         if session_logger:
-            session_logger.log("deterministic_filter", {
-                "total_sections": len(sections),
-                "kept_sections": len(kept),
-                "original_chars": len(context),
-                "filtered_chars": len(filtered),
-            })
+            session_logger.log(
+                "deterministic_filter",
+                {
+                    "total_sections": len(sections),
+                    "kept_sections": len(kept),
+                    "original_chars": len(context),
+                    "filtered_chars": len(filtered),
+                },
+            )
         return filtered
     except Exception as e:
         if session_logger:
@@ -380,6 +455,7 @@ async def filter_context(svc: Any, query: str, context: str,
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def rewrite_query_with_history(
     user_message: str,
@@ -425,6 +501,7 @@ def rewrite_query_with_history(
 
     try:
         from llm_client import get_small_client_or_big
+
         client = get_small_client_or_big(session_logger)
         if client is None:
             return user_message
@@ -438,10 +515,15 @@ def rewrite_query_with_history(
             "Output ONLY the rewritten query, nothing else.\n\n"
             f"Recent conversation:\n{context_str}\n\n"
             f"User's new message: {user_message[:500]}\n\n"
-            "Rewritten search query:")
+            "Rewritten search query:"
+        )
         resp = client.chat(
             [{"role": "user", "content": prompt}],
-            temperature=0.1, stream=False, think=False, max_predict=128)
+            temperature=0.1,
+            stream=False,
+            think=False,
+            max_predict=128,
+        )
         text = ""
         if isinstance(resp, dict):
             msg = resp.get("message", {})
@@ -461,20 +543,25 @@ def rewrite_query_with_history(
             # "GOAL_SHELL.md" from a different user's file path.)
             _orig_words = _content_words(user_message)
             _rewrite_words = _content_words(text)
-            if _orig_words and _rewrite_words \
-                    and not (_orig_words & _rewrite_words):
+            if _orig_words and _rewrite_words and not (_orig_words & _rewrite_words):
                 if session_logger:
-                    session_logger.log("query_rewrite_rejected", {
-                        "original": user_message[:100],
-                        "rewritten": text[:200],
-                        "reason": "zero content-word overlap",
-                    })
+                    session_logger.log(
+                        "query_rewrite_rejected",
+                        {
+                            "original": user_message[:100],
+                            "rewritten": text[:200],
+                            "reason": "zero content-word overlap",
+                        },
+                    )
                 return user_message
             if session_logger:
-                session_logger.log("query_rewritten", {
-                    "original": user_message[:100],
-                    "rewritten": text[:200],
-                })
+                session_logger.log(
+                    "query_rewritten",
+                    {
+                        "original": user_message[:100],
+                        "rewritten": text[:200],
+                    },
+                )
             return text
         return user_message
     except Exception as e:  # noqa: BLE001
@@ -485,8 +572,11 @@ def rewrite_query_with_history(
 
 def _content_words(text: str) -> set[str]:
     """Extract content words (non-stop-words) for overlap guards."""
-    return {w.lower() for w in re.split(r"\s+", text)
-            if w.lower() not in _STOP_WORDS and len(w) > 2}
+    return {
+        w.lower()
+        for w in re.split(r"\s+", text)
+        if w.lower() not in _STOP_WORDS and len(w) > 2
+    }
 
 
 def _parse_json_array(text: str) -> list | None:
@@ -498,7 +588,7 @@ def _parse_json_array(text: str) -> list | None:
         end = text.rfind("]")
         if start == -1 or end == -1:
             return None
-        return json.loads(text[start:end + 1])
+        return json.loads(text[start : end + 1])
     except (json.JSONDecodeError, ValueError):
         return None
 
@@ -519,12 +609,14 @@ def _split_context_sections(context: str) -> list[dict]:
         start = m.start()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(context)
         raw = context[start:end].strip()
-        body = raw[len(m.group(0)):].strip()
+        body = raw[len(m.group(0)) :].strip()
         sections.append({"title": title, "body": body, "raw": raw})
 
     # Anything before the first header is the preamble (L2 MOC).
     if matches[0].start() > 0:
-        preamble = context[:matches[0].start()].strip()
+        preamble = context[: matches[0].start()].strip()
         if preamble:
-            sections.insert(0, {"title": "(preamble)", "body": preamble, "raw": preamble})
+            sections.insert(
+                0, {"title": "(preamble)", "body": preamble, "raw": preamble}
+            )
     return sections

@@ -65,7 +65,6 @@ from typing import Any
 import requests
 
 
-
 def _test_image_base64() -> str:
     """Build a tiny red PNG, as base64.
 
@@ -77,6 +76,7 @@ def _test_image_base64() -> str:
     from io import BytesIO
 
     from PIL import Image, ImageDraw
+
     img = Image.new("RGB", (32, 32), (255, 0, 0))
     d = ImageDraw.Draw(img)
     d.text((4, 10), "RED", fill=(255, 255, 255))
@@ -104,13 +104,15 @@ class LLMClient:
     def list_models(self) -> list[str]:
         raise NotImplementedError
 
-    def chat(self,
-             messages: list[dict[str, Any]],
-             tools: list[dict[str, Any]] | None = None,
-             temperature: float = 0.7,
-             stream: bool = False,
-             think: bool | None = None,
-             max_predict: int | None = None) -> Any:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.7,
+        stream: bool = False,
+        think: bool | None = None,
+        max_predict: int | None = None,
+    ) -> Any:
         """Synthesize a chat response.
 
         ``think=False`` disables reasoning for bounded tasks (query rewrite,
@@ -141,7 +143,9 @@ class LLMClient:
         """
         raise NotImplementedError
 
-    def preload_model(self, model: str | None = None, keep_alive: str | None = None) -> bool:
+    def preload_model(
+        self, model: str | None = None, keep_alive: str | None = None
+    ) -> bool:
         """Force-load the model into backend memory so the next request
         doesn't pay cold-load latency.
 
@@ -188,12 +192,14 @@ class OpenAICompatibleClient(LLMClient):
     renderer works unchanged.
     """
 
-    def __init__(self,
-                 base_url: str,
-                 api_key: str,
-                 llm_model: str = "",
-                 session_logger: Any = None,
-                 timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        llm_model: str = "",
+        session_logger: Any = None,
+        timeout: float = 120.0,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.llm_model = llm_model
@@ -212,7 +218,8 @@ class OpenAICompatibleClient(LLMClient):
             return
         try:
             self.session_logger.log_tool_call(
-                tool="llm_openai", method=method,
+                tool="llm_openai",
+                method=method,
                 inputs=kw.get("inputs"),
                 outputs=kw.get("outputs"),
                 duration_ms=kw.get("duration_ms"),
@@ -233,8 +240,9 @@ class OpenAICompatibleClient(LLMClient):
     def list_models(self) -> list[str]:
         """List model IDs from /v1/models. Returns [] on any failure."""
         try:
-            r = requests.get(f"{self.base_url}/v1/models",
-                             headers=self._headers(), timeout=10)
+            r = requests.get(
+                f"{self.base_url}/v1/models", headers=self._headers(), timeout=10
+            )
             r.raise_for_status()
             data = r.json().get("data", [])
             return [m.get("id", "") for m in data if m.get("id")]
@@ -311,8 +319,9 @@ class OpenAICompatibleClient(LLMClient):
 
     def is_running(self) -> bool:
         try:
-            r = requests.get(f"{self.base_url}/v1/models",
-                             headers=self._headers(), timeout=5)
+            r = requests.get(
+                f"{self.base_url}/v1/models", headers=self._headers(), timeout=5
+            )
             return r.status_code == 200
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
@@ -334,20 +343,31 @@ class OpenAICompatibleClient(LLMClient):
         that genuinely saw the red square isn't falsely reported as blind.
         """
         img_b64 = _test_image_base64()
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What color is the square in this image? Reply with one word."},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
-            ],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "What color is the square in this image? Reply with one word.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{img_b64}"},
+                    },
+                ],
+            }
+        ]
         try:
             r = requests.post(
                 f"{self.base_url}/v1/chat/completions",
                 headers=self._headers(),
-                json={"model": self.llm_model, "messages": messages,
-                      "temperature": 0.0, "max_tokens": 128},
+                json={
+                    "model": self.llm_model,
+                    "messages": messages,
+                    "temperature": 0.0,
+                    "max_tokens": 128,
+                },
                 timeout=60,
             )
             if r.status_code != 200:
@@ -362,13 +382,15 @@ class OpenAICompatibleClient(LLMClient):
             return False
 
     # -- chat --------------------------------------------------------------
-    def chat(self,
-             messages: list[dict[str, Any]],
-             tools: list[dict[str, Any]] | None = None,
-             temperature: float = 0.7,
-             stream: bool = False,
-             think: bool | None = None,
-             max_predict: int | None = None) -> Any:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.7,
+        stream: bool = False,
+        think: bool | None = None,
+        max_predict: int | None = None,
+    ) -> Any:
         payload: dict[str, Any] = {
             "model": self.llm_model,
             "messages": messages,
@@ -390,13 +412,19 @@ class OpenAICompatibleClient(LLMClient):
         try:
             response = requests.post(
                 f"{self.base_url}/v1/chat/completions",
-                headers=self._headers(), json=payload,
-                stream=stream, timeout=self.timeout,
+                headers=self._headers(),
+                json=payload,
+                stream=stream,
+                timeout=self.timeout,
             )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log("chat", inputs={"model": self.llm_model, "stream": stream},
-                      error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "chat",
+                inputs={"model": self.llm_model, "stream": stream},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
 
         if stream:
@@ -414,12 +442,17 @@ class OpenAICompatibleClient(LLMClient):
             "thinking": msg.get("reasoning") or "",
             "tool_calls": tool_calls,
         }
-        self._log("chat", inputs={"model": self.llm_model, "stream": False},
-                  outputs={"tool_calls": len(tool_calls)},
-                  duration_ms=(time.time() - t0) * 1000)
+        self._log(
+            "chat",
+            inputs={"model": self.llm_model, "stream": False},
+            outputs={"tool_calls": len(tool_calls)},
+            duration_ms=(time.time() - t0) * 1000,
+        )
         return result
 
-    def _stream_chat(self, response, payload, t0) -> Generator[dict[str, Any], None, None]:
+    def _stream_chat(
+        self, response, payload, t0
+    ) -> Generator[dict[str, Any], None, None]:
         """Yield Ollama-shaped chunks from an OpenAI SSE stream.
 
         Accumulates fragmented tool-call argument strings per index and
@@ -433,10 +466,14 @@ class OpenAICompatibleClient(LLMClient):
             for raw in response.iter_lines():
                 if not raw:
                     continue
-                line = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else raw
+                line = (
+                    raw.decode("utf-8", "replace")
+                    if isinstance(raw, (bytes, bytearray))
+                    else raw
+                )
                 if not line.startswith("data:"):
                     continue
-                body = line[len("data:"):].strip()
+                body = line[len("data:") :].strip()
                 if body == "[DONE]":
                     break
                 try:
@@ -450,7 +487,9 @@ class OpenAICompatibleClient(LLMClient):
                 # Accumulate tool-call fragments.
                 for tc in delta.get("tool_calls") or []:
                     idx = tc.get("index", 0)
-                    slot = tc_acc.setdefault(idx, {"id": "", "name": "", "arguments_str": ""})
+                    slot = tc_acc.setdefault(
+                        idx, {"id": "", "name": "", "arguments_str": ""}
+                    )
                     if tc.get("id"):
                         slot["id"] = tc["id"]
                     fn = tc.get("function", {}) or {}
@@ -473,24 +512,33 @@ class OpenAICompatibleClient(LLMClient):
                         assembled = []
                         for idx in sorted(tc_acc):
                             slot = tc_acc[idx]
-                            assembled.append({
-                                "id": slot["id"] or f"call_{idx}",
-                                "function": {
-                                    "name": slot["name"],
-                                    "arguments": slot["arguments_str"] or "{}",
-                                },
-                            })
+                            assembled.append(
+                                {
+                                    "id": slot["id"] or f"call_{idx}",
+                                    "function": {
+                                        "name": slot["name"],
+                                        "arguments": slot["arguments_str"] or "{}",
+                                    },
+                                }
+                            )
                         yield {"response": "", "thinking": "", "tool_calls": assembled}
                         chunk_count += 1
                     break
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log("chat", inputs={"model": self.llm_model, "stream": True},
-                      error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "chat",
+                inputs={"model": self.llm_model, "stream": True},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
         finally:
-            self._log("chat", inputs={"model": self.llm_model, "stream": True},
-                      outputs={"chunks": chunk_count, "tool_calls": len(tc_acc)},
-                      duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "chat",
+                inputs={"model": self.llm_model, "stream": True},
+                outputs={"chunks": chunk_count, "tool_calls": len(tc_acc)},
+                duration_ms=(time.time() - t0) * 1000,
+            )
         # Terminal done sentinel (signals end of stream to the chat handler).
         yield {"done": True}
 
@@ -504,8 +552,9 @@ class OpenAICompatibleClient(LLMClient):
 # pot. build_role_client() constructs the live client for whichever model a
 # role points at, on whichever provider serves it — local Ollama, OpenRouter,
 # OpenAI — all interchangeable.
-def _client_for_model_entry(entry: Any, provider: Any,
-                            session_logger: Any = None) -> LLMClient:
+def _client_for_model_entry(
+    entry: Any, provider: Any, session_logger: Any = None
+) -> LLMClient:
     """Instantiate the right LLMClient for one registry ModelEntry.
 
     ``entry`` is a ``providers.ModelEntry``; ``provider`` is its ``Provider``.
@@ -519,22 +568,26 @@ def _client_for_model_entry(entry: Any, provider: Any,
     """
     if provider.type == "openai":
         return OpenAICompatibleClient(
-            base_url=provider.base_url, api_key=provider.api_key,
-            llm_model=entry.model, session_logger=session_logger,
+            base_url=provider.base_url,
+            api_key=provider.api_key,
+            llm_model=entry.model,
+            session_logger=session_logger,
         )
     # Default: Ollama (local daemon or Ollama-cloud — same /api/* surface).
     from ollama_client import OllamaClient
+
     return OllamaClient(
-        base_url=provider.base_url or os.getenv("OLLAMA_HOST",
-                                                  "http://localhost:11434"),
+        base_url=provider.base_url
+        or os.getenv("OLLAMA_HOST", "http://localhost:11434"),
         llm_model=entry.model,
         embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         session_logger=session_logger,
     )
 
 
-def build_role_client(role: str, registry: Any,
-                      session_logger: Any = None) -> LLMClient | None:
+def build_role_client(
+    role: str, registry: Any, session_logger: Any = None
+) -> LLMClient | None:
     """Build (or reuse) the live client for whichever model a role points at.
 
     This is the single interchange point for the whole backend: every role —
@@ -597,12 +650,14 @@ def _default_registry() -> Any:
     """
     try:
         from app_state import get_services
+
         reg = getattr(get_services(), "registry", None)
         if reg is not None:
             return reg
     except Exception:  # noqa: BLE001 — Services may not be set yet
         pass
     from providers import ProviderRegistry
+
     return ProviderRegistry.migrate_from_env()
 
 
@@ -628,7 +683,8 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
         raise RuntimeError(
             "No model assigned to the 'big' cartridge. Open VaultBot Settings "
             "-> AI Models & Providers, add a model, and assign it to Big. "
-            "(providers.json has no big role mapping.)")
+            "(providers.json has no big role mapping.)"
+        )
     return client
 
 

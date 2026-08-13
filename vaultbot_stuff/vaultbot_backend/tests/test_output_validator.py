@@ -5,6 +5,7 @@ JSON schemas.
 
 Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 """
+
 from __future__ import annotations
 
 from output_validator import corrective_message, validate_tool_call
@@ -50,13 +51,16 @@ SCHEMAS = [
 
 
 def test_valid_call_passes():
-    assert validate_tool_call(
-        "vault_research", {"topic": "faiss indexing"}, SCHEMAS) == []
+    assert (
+        validate_tool_call("vault_research", {"topic": "faiss indexing"}, SCHEMAS) == []
+    )
 
 
 def test_valid_call_with_optional_enum_passes():
-    assert validate_tool_call(
-        "vault_research", {"topic": "x", "depth": "quick"}, SCHEMAS) == []
+    assert (
+        validate_tool_call("vault_research", {"topic": "x", "depth": "quick"}, SCHEMAS)
+        == []
+    )
 
 
 def test_missing_required_flagged():
@@ -65,27 +69,27 @@ def test_missing_required_flagged():
 
 
 def test_wrong_type_flagged():
-    problems = validate_tool_call(
-        "vault_search", {"query": "x", "k": "five"}, SCHEMAS)
+    problems = validate_tool_call("vault_search", {"query": "x", "k": "five"}, SCHEMAS)
     assert any("must be type integer" in p for p in problems)
 
 
 def test_bool_is_not_integer():
     # bool is a subclass of int in Python — must NOT pass an integer check.
-    problems = validate_tool_call(
-        "vault_search", {"query": "x", "k": True}, SCHEMAS)
+    problems = validate_tool_call("vault_search", {"query": "x", "k": True}, SCHEMAS)
     assert any("must be type integer" in p for p in problems)
 
 
 def test_unknown_parameter_flagged():
     problems = validate_tool_call(
-        "vault_research", {"topic": "x", "topics": "y"}, SCHEMAS)
+        "vault_research", {"topic": "x", "topics": "y"}, SCHEMAS
+    )
     assert any("unknown parameter 'topics'" in p for p in problems)
 
 
 def test_bad_enum_flagged():
     problems = validate_tool_call(
-        "vault_research", {"topic": "x", "depth": "deeper"}, SCHEMAS)
+        "vault_research", {"topic": "x", "depth": "deeper"}, SCHEMAS
+    )
     assert any("must be one of" in p for p in problems)
 
 

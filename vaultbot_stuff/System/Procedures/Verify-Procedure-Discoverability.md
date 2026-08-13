@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-05
 description: "Verify that a procedure is discoverable by RAG retrieval — i.e. that when a user says something relevant to the procedure's intent, the fused retriever surfaces it in the top results. Runs a set of test queries (from the procedure's when_to_use phrasings) through the FusedRetriever and reports whether the target procedure ranks #1. Use when a procedure exists but the vaultbot doesn't seem to reach for it when it should, when tuning frontmatter for discoverability, or after creating a new procedure to confirm it will be found."

@@ -2,6 +2,7 @@
 
 Migrated from main.py. Handlers read singletons via Depends(get_services).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +17,9 @@ router = APIRouter()
 
 
 @router.get("/autonomous/status")
-async def autonomous_status(svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
+async def autonomous_status(
+    svc: Annotated[Services, Depends(get_services)],
+) -> dict[str, Any]:
     """Report autonomous researcher state and recent history."""
     return svc.autonomous_researcher.status()
 
@@ -32,9 +35,13 @@ async def autonomous_gaps(svc: Annotated[Services, Depends(get_services)]):
     try:
         loop = asyncio.get_event_loop()
         gaps = await loop.run_in_executor(
-            None, svc.knowledge_curriculum.propose_next_gaps, 20)
-        return {"gaps": gaps, "count": len(gaps),
-                "curriculum_state": svc.knowledge_curriculum.state_summary()}
+            None, svc.knowledge_curriculum.propose_next_gaps, 20
+        )
+        return {
+            "gaps": gaps,
+            "count": len(gaps),
+            "curriculum_state": svc.knowledge_curriculum.state_summary(),
+        }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="autonomous_gaps")
         return {"error": str(e)}, 500
@@ -60,9 +67,13 @@ async def consolidation_gaps(svc: Annotated[Services, Depends(get_services)]):
     try:
         loop = asyncio.get_event_loop()
         gaps = await loop.run_in_executor(
-            None, svc.pattern_extractor.get_consolidation_gaps)
-        return {"gaps": gaps, "count": len(gaps),
-                "report": svc.pattern_extractor.consolidation_report()}
+            None, svc.pattern_extractor.get_consolidation_gaps
+        )
+        return {
+            "gaps": gaps,
+            "count": len(gaps),
+            "report": svc.pattern_extractor.consolidation_report(),
+        }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="consolidation_gaps")
         return {"error": str(e)}, 500
@@ -87,7 +98,8 @@ async def consolidation_extract(svc: Annotated[Services, Depends(get_services)])
             "sentiment": patterns["sentiment"]["distribution"],
             "negative_rate": patterns["sentiment"]["negative_rate"],
             "tool_frequency": dict(
-                list(patterns["tool_patterns"]["tool_frequency"].items())[:10]),
+                list(patterns["tool_patterns"]["tool_frequency"].items())[:10]
+            ),
             "over_reporting": patterns["over_reporting"]["count"],
         }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
@@ -96,15 +108,18 @@ async def consolidation_extract(svc: Annotated[Services, Depends(get_services)])
 
 
 @router.post("/autonomous/toggle")
-async def autonomous_toggle(payload: dict | None = None,
-                             svc: Annotated[Services, Depends(get_services)] = None):
+async def autonomous_toggle(
+    payload: dict | None = None, svc: Annotated[Services, Depends(get_services)] = None
+):
     """Enable or disable the autonomous researcher."""
     if payload is None:
         payload = {}
     enable = payload.get("enabled", not svc.autonomous_researcher.enabled)
     svc.autonomous_researcher.enabled = bool(enable)
-    if enable and not (svc.autonomous_researcher._thread
-                       and svc.autonomous_researcher._thread.is_alive()):
+    if enable and not (
+        svc.autonomous_researcher._thread
+        and svc.autonomous_researcher._thread.is_alive()
+    ):
         svc.autonomous_researcher.start()
     elif not enable:
         svc.autonomous_researcher.stop()

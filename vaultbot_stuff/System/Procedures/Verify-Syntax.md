@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-07-31
 description: Verify Python file syntax before restarting backend.
 when_to_use: before restarting the backend after editing Python files

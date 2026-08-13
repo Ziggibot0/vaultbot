@@ -28,21 +28,29 @@ class NoteCreator:
         self.maintenance = VaultMaintenance(vault_path, session_logger=session_logger)
         self.graph = VaultGraph(vault_path, session_logger=session_logger)
 
-    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None,
-                  outputs: Any = None, error: str | None = None):
+    def _log_tool(
+        self,
+        method: str,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any = None,
+        error: str | None = None,
+    ):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
-            tool="note_creator", method=method, inputs=inputs,
-            outputs=outputs, error=error
+            tool="note_creator",
+            method=method,
+            inputs=inputs,
+            outputs=outputs,
+            error=error,
         )
 
     def _extract_entities(self, text: str) -> list[str]:
         """Pull out quoted phrases and title-cased proper nouns as link seeds."""
         patterns = [
-            r'\"([^\"]+)\"',
-            r'\'\'([^\']+)\'\'',
-            r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b'
+            r"\"([^\"]+)\"",
+            r"\'\'([^\']+)\'\'",
+            r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b",
         ]
         entities = set()
         for pattern in patterns:
@@ -53,7 +61,9 @@ class NoteCreator:
                 entities.add(match.strip())
         return list(entities)
 
-    def _find_related_notes(self, entities: list[str], k: int = 5) -> list[dict[str, Any]]:
+    def _find_related_notes(
+        self, entities: list[str], k: int = 5
+    ) -> list[dict[str, Any]]:
         """Vector-search the vault for each entity and deduplicate results.
 
         Gracefully returns an empty list if vector search fails (e.g. Ollama
@@ -65,33 +75,39 @@ class NoteCreator:
             try:
                 results = self.indexer.search(entity, k=k)
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                self._log_tool("find_related_notes_search_failed",
-                               {"entity": entity}, error=str(e))
+                self._log_tool(
+                    "find_related_notes_search_failed", {"entity": entity}, error=str(e)
+                )
                 continue
             for res in results:
-                file_path = res['file_path']
+                file_path = res["file_path"]
                 if file_path not in seen_files:
                     seen_files.add(file_path)
                     related.append(res)
         return related
 
-    def _generate_links(self, entities: list[str], related_notes: list[dict[str, Any]]) -> list[str]:
+    def _generate_links(
+        self, entities: list[str], related_notes: list[dict[str, Any]]
+    ) -> list[str]:
         """Turn discovered entities and related notes into Obsidian wikilinks."""
         links = set()
-        note_stems = {Path(meta['file_path']).stem: meta['file_path']
-                      for meta in self.indexer.metadata}
+        note_stems = {
+            Path(meta["file_path"]).stem: meta["file_path"]
+            for meta in self.indexer.metadata
+        }
         for entity in entities:
             for stem, file_path in note_stems.items():
                 if stem.lower() == entity.lower():
                     links.add(f"[[{stem}]]")
                     break
         for note in related_notes:
-            stem = Path(note['file_path']).stem
+            stem = Path(note["file_path"]).stem
             links.add(f"[[{stem}]]")
         return sorted(links)
 
-    def _refresh_and_clean(self, target_path: Path | None = None,
-                           skip_graph_refresh: bool = False):
+    def _refresh_and_clean(
+        self, target_path: Path | None = None, skip_graph_refresh: bool = False
+    ):
         """Rebuild graph awareness and run self-maintenance.
 
         Wrapped in try/except so cleanup failures never block note creation.
@@ -112,8 +128,7 @@ class NoteCreator:
             if not skip_graph_refresh:
                 self.graph.refresh()
             if target_path is not None:
-                cleanup = self.maintenance.run_cleanup_for_new(
-                    self.graph, target_path)
+                cleanup = self.maintenance.run_cleanup_for_new(self.graph, target_path)
             else:
                 cleanup = self.maintenance.run_cleanup(self.graph)
             self._log_tool("maintenance_cleanup", cleanup)
@@ -130,15 +145,17 @@ class NoteCreator:
         """
         try:
             from llm_client import get_small_client_or_big
+
             client = get_small_client_or_big(self.session_logger)
             prompt = (
                 "Write a short 3-5 word title summarizing this chat exchange. "
                 "Output ONLY the title, no quotes, no punctuation at the end.\n\n"
                 f"User: {user_message[:300]}\n\n"
-                f"Assistant: {assistant_response[:300]}\n\nTitle:")
+                f"Assistant: {assistant_response[:300]}\n\nTitle:"
+            )
             resp = client.chat(
-                [{"role": "user", "content": prompt}],
-                temperature=0.2, stream=False)
+                [{"role": "user", "content": prompt}], temperature=0.2, stream=False
+            )
             text = ""
             if isinstance(resp, dict):
                 msg = resp.get("message", {})
@@ -158,8 +175,9 @@ class NoteCreator:
             pass
         return f"Chat: {user_message[:50]}"
 
-    def create_note_from_research(self, topic: str, research_content: str,
-                                  summary: str | None = None) -> str:
+    def create_note_from_research(
+        self, topic: str, research_content: str, summary: str | None = None
+    ) -> str:
         """Create a research note under Knowledge/Research/ and clean up afterwards.
 
         The note file is written to disk FIRST, before any indexing or
@@ -178,6 +196,7 @@ class NoteCreator:
         "writing note..." stage.
         """
         import time
+
         t_start = time.monotonic()
 
         # --- Step 1: Write the note file immediately -------------------------
@@ -189,37 +208,42 @@ class NoteCreator:
         )
         t_write = time.monotonic()
 
-        self._log_tool("create_note_from_research", {
-            "topic": topic,
-            "file_path": str(note_path),
-            "write_ms": round((t_write - t_start) * 1000, 1),
-        })
+        self._log_tool(
+            "create_note_from_research",
+            {
+                "topic": topic,
+                "file_path": str(note_path),
+                "write_ms": round((t_write - t_start) * 1000, 1),
+            },
+        )
 
         # --- Step 2: Incremental cleanup for the new note (non-blocking) ----
         # Skip the graph refresh — every caller refreshes the graph itself
         # right after this returns, so a refresh here is wasted work.
-        self._refresh_and_clean(
-            target_path=Path(note_path), skip_graph_refresh=True)
+        self._refresh_and_clean(target_path=Path(note_path), skip_graph_refresh=True)
         t_clean = time.monotonic()
 
         # --- Step 3: Try to index the note (non-blocking) -------------------
         try:
             self.indexer._add_file_to_index(note_path)
-            self._log_tool("index_note", {
-                "file_path": str(note_path),
-                "cleanup_ms": round((t_clean - t_write) * 1000, 1),
-                "index_ms": round((time.monotonic() - t_clean) * 1000, 1),
-            })
+            self._log_tool(
+                "index_note",
+                {
+                    "file_path": str(note_path),
+                    "cleanup_ms": round((t_clean - t_write) * 1000, 1),
+                    "index_ms": round((time.monotonic() - t_clean) * 1000, 1),
+                },
+            )
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             # Indexing failure (e.g. Ollama 500) must NOT prevent the note
             # from being returned. The file is already on disk.
-            self._log_tool("index_note", {"file_path": str(note_path)},
-                           error=str(e))
+            self._log_tool("index_note", {"file_path": str(note_path)}, error=str(e))
 
         return str(note_path)
 
-    def create_note_from_chat(self, user_message: str, assistant_response: str,
-                              thinking: str | None = None) -> str:
+    def create_note_from_chat(
+        self, user_message: str, assistant_response: str, thinking: str | None = None
+    ) -> str:
         """Append chat exchanges to a running chat note and clean up afterwards."""
         topic = self._generate_chat_title(user_message, assistant_response)
         entry = f"**User:** {user_message}\n\n**Assistant:** {assistant_response}"
@@ -228,25 +252,27 @@ class NoteCreator:
 
         note_path = self.maintenance.merge_chat_note(topic, entry)
 
-        self._log_tool("create_note_from_chat", {
-            "topic": topic,
-            "file_path": str(note_path),
-        })
+        self._log_tool(
+            "create_note_from_chat",
+            {
+                "topic": topic,
+                "file_path": str(note_path),
+            },
+        )
 
         # Incremental cleanup for the new note; skip graph refresh — the
         # caller's handle_chat refreshes the graph, so a second refresh here
         # is wasted work.
-        self._refresh_and_clean(
-            target_path=Path(note_path), skip_graph_refresh=True)
+        self._refresh_and_clean(target_path=Path(note_path), skip_graph_refresh=True)
 
         try:
             self.indexer._add_file_to_index(note_path)
             self._log_tool("index_note", {"file_path": str(note_path)})
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-            self._log_tool("index_note", {"file_path": str(note_path)},
-                           error=str(e))
+            self._log_tool("index_note", {"file_path": str(note_path)}, error=str(e))
 
         return str(note_path)
+
 
 # Example usage (for testing)
 if __name__ == "__main__":

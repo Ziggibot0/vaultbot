@@ -2,12 +2,32 @@
 Agent-authored tool: vault_append
 """
 
-SCHEMA = {"name": "vault_append", "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ or the vault root (e.g. 'Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root.", "parameters": {"properties": {"content": {"description": "Content to append to the note", "type": "string"}, "file_path": {"description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Memory/Chat/Chat-Topic.md'). User-personal notes may be at the root (e.g. 'Autonomy-Directive.md') or in User/ (e.g. 'User/Research-Roadmap.md').", "type": "string"}}, "required": ["file_path", "content"], "type": "object"}}
+SCHEMA = {
+    "name": "vault_append",
+    "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ or the vault root (e.g. 'Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root.",
+    "parameters": {
+        "properties": {
+            "content": {
+                "description": "Content to append to the note",
+                "type": "string",
+            },
+            "file_path": {
+                "description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Memory/Chat/Chat-Topic.md'). User-personal notes may be at the root (e.g. 'Autonomy-Directive.md') or in User/ (e.g. 'User/Research-Roadmap.md').",
+                "type": "string",
+            },
+        },
+        "required": ["file_path", "content"],
+        "type": "object",
+    },
+}
 
 import re
 from pathlib import Path
 
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+VAULT_ROOT = Path(
+    __file__
+).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+
 
 def _is_locked(content: str) -> bool:
     """Check if a note is LOCKED — standalone line or frontmatter field."""
@@ -19,14 +39,15 @@ def _is_locked(content: str) -> bool:
             in_frontmatter = not in_frontmatter
             continue
         if in_frontmatter:
-            if re.match(r'^[\w-]+:\s*LOCKED\s*$', stripped, re.IGNORECASE):
+            if re.match(r"^[\w-]+:\s*LOCKED\s*$", stripped, re.IGNORECASE):
                 return True
-            if re.match(r'^locked:\s*true\s*$', stripped, re.IGNORECASE):
+            if re.match(r"^locked:\s*true\s*$", stripped, re.IGNORECASE):
                 return True
         else:
             if stripped == "LOCKED":
                 return True
     return False
+
 
 def run(args: dict) -> dict:
     file_path = args.get("file_path", "")
@@ -47,8 +68,12 @@ def run(args: dict) -> dict:
         if _is_locked(existing):
             return {"error": "note is LOCKED — cannot append"}
         stem = full.stem
-        if re.match(r"^\d{4}-\d{2}-\d{2}$", stem) or re.match(r"^\d{2}-\d{2}-\d{4}$", stem):
-            return {"error": "date-only filenames are sacred journal entries — cannot append"}
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", stem) or re.match(
+            r"^\d{2}-\d{2}-\d{4}$", stem
+        ):
+            return {
+                "error": "date-only filenames are sacred journal entries — cannot append"
+            }
         new_content = existing.rstrip() + "\n\n" + content + "\n"
     else:
         new_content = content + "\n"
@@ -56,6 +81,7 @@ def run(args: dict) -> dict:
     # Inject schema on the merged content so the whole note stays valid.
     try:
         from note_schema import inject_schema
+
         new_content = inject_schema(new_content, file_path)
     except ImportError:
         pass  # don't block append if note_schema unavailable
@@ -63,4 +89,8 @@ def run(args: dict) -> dict:
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_text(new_content, encoding="utf-8")
 
-    return {"file_path": str(full), "bytes_added": len(content), "total_bytes": len(new_content)}
+    return {
+        "file_path": str(full),
+        "bytes_added": len(content),
+        "total_bytes": len(new_content),
+    }

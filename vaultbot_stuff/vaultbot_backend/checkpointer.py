@@ -89,10 +89,14 @@ class Checkpointer:
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log(
-                "checkpointer_init_failed", {"dir": str(self.checkpoint_dir), "error": str(e)}
+                "checkpointer_init_failed",
+                {"dir": str(self.checkpoint_dir), "error": str(e)},
             )
-            logger.warning("Checkpointer: could not create checkpoint dir %s: %s",
-                           self.checkpoint_dir, e)
+            logger.warning(
+                "Checkpointer: could not create checkpoint dir %s: %s",
+                self.checkpoint_dir,
+                e,
+            )
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -156,7 +160,9 @@ class Checkpointer:
             with open(path, encoding="utf-8") as fh:
                 return json.load(fh)
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._safe_log("checkpointer_read_failed", {"path": str(path), "error": str(e)})
+            self._safe_log(
+                "checkpointer_read_failed", {"path": str(path), "error": str(e)}
+            )
             logger.warning("Checkpointer: could not read %s: %s", path, e)
             return None
 
@@ -167,12 +173,18 @@ class Checkpointer:
     def save(self, checkpoints: list[ResearchCheckpoint]) -> None:
         """Serialize and atomically write the checkpoint list. Never crashes."""
         try:
-            payload = json.dumps([asdict(c) for c in checkpoints], indent=2, ensure_ascii=False)
+            payload = json.dumps(
+                [asdict(c) for c in checkpoints], indent=2, ensure_ascii=False
+            )
             self._atomic_write(str(self.checkpoint_path), payload)
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log(
                 "checkpointer_save_failed",
-                {"path": str(self.checkpoint_path), "error": str(e), "count": len(checkpoints)},
+                {
+                    "path": str(self.checkpoint_path),
+                    "error": str(e),
+                    "count": len(checkpoints),
+                },
             )
             logger.warning("Checkpointer: save failed (non-fatal): %s", e)
 
@@ -195,7 +207,9 @@ class Checkpointer:
                         completed_at=item.get("completed_at"),
                         note_path=item.get("note_path"),
                         error=item.get("error"),
-                        gap=item.get("gap") if isinstance(item.get("gap"), dict) else {},
+                        gap=item.get("gap")
+                        if isinstance(item.get("gap"), dict)
+                        else {},
                     )
                 )
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -254,7 +268,9 @@ class Checkpointer:
                 if path.exists():
                     path.unlink()
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._safe_log("checkpointer_clear_failed", {"path": str(path), "error": str(e)})
+                self._safe_log(
+                    "checkpointer_clear_failed", {"path": str(path), "error": str(e)}
+                )
                 logger.warning("Checkpointer: could not remove %s: %s", path, e)
 
     def summary(self) -> dict[str, Any]:
@@ -273,7 +289,13 @@ class Checkpointer:
             }
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._safe_log("checkpointer_summary_failed", {"error": str(e)})
-            return {"total": 0, "running": 0, "done": 0, "failed": 0, "has_interrupted": False}
+            return {
+                "total": 0,
+                "running": 0,
+                "done": 0,
+                "failed": 0,
+                "has_interrupted": False,
+            }
 
     def recover(self, researcher: Any) -> dict[str, Any]:
         """Recovery entry point. Called on backend startup.
@@ -292,7 +314,9 @@ class Checkpointer:
         """
         try:
             if not self.has_interrupted_work():
-                self._safe_log("checkpointer_recover_skipped", {"reason": "no_interrupted_work"})
+                self._safe_log(
+                    "checkpointer_recover_skipped", {"reason": "no_interrupted_work"}
+                )
                 return {"recovered": [], "skipped": True}
             interrupted = self.get_interrupted_work()
             self._safe_log(

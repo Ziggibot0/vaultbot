@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find what the vaultbot does repeatedly in chat that could be turned into a procedure. Scans recent chat logs for recurring tool-call sequences (same tools in the same order, 3+ times) and returns the patterns with a suggested procedure name for each. Use when the vaultbot is doing the same thing manually over and over.

@@ -1,6 +1,7 @@
 ---
 type: proposal
 status: active
+baseline: true
 created: 2026-07-31
 summary: "Prioritized proposal for 10 new procedures to automate recurring LLM-requiring work, plus custom tool audit for small-LLM cartridge opportunities. Key finding: all 16 custom tools are deterministic or vision \u2014 the small-LLM opportunity is entirely in new PROCEDURES that wrap tools with small-cartridge LLM steps."
 tags: [procedures, small-llm, token-efficiency, automation, proposal]

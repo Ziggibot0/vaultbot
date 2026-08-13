@@ -37,8 +37,14 @@ from typing import Any
 # files, Obsidian config, session logs, etc. Kept inline (not imported from
 # vault_indexer) so this module stays dependency-free.
 _TRACKER_IGNORED_DIRS = {
-    ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials",
-    ".git", ".obsidian", "trash",
+    ".venv",
+    "vaultbot_venv",
+    "vaultbot_index",
+    "sessions",
+    "partials",
+    ".git",
+    ".obsidian",
+    "trash",
 }
 
 
@@ -50,8 +56,8 @@ _TRACKER_IGNORED_DIRS = {
 # an identifier — reject it so the autonomous researcher doesn't waste a
 # web-search cycle on the user's literal chat message.
 
-_MAX_TASK_WORDS = 5          # "code_run" = 1 word; a sentence = 10+
-_MAX_TASK_LEN = 40          # tool names are short; chat messages are 100
+_MAX_TASK_WORDS = 5  # "code_run" = 1 word; a sentence = 10+
+_MAX_TASK_LEN = 40  # tool names are short; chat messages are 100
 _TASK_PROSE_RE = re.compile(r"[.!?,;:'\"]")  # sentence punctuation = prose
 
 
@@ -85,23 +91,24 @@ FAILURE_CATEGORIES = {
 
 # --- Thresholds (start simple, make adaptive later) ---
 
-FAILURE_THRESHOLD = 3          # failures before re-research triggered
-FAILURE_WINDOW_DAYS = 30       # only count failures in this window
-PROMOTION_THRESHOLD = 5        # uses before promotion check
-PROMOTION_SUCCESS_RATE = 0.7   # 70% success rate to promote to verified
-DEMOTION_SUCCESS_RATE = 0.4     # below 40% -> flag for re-research
-MAX_LOG_ENTRIES = 500          # keep the log bounded
-STEP_FAILURE_THRESHOLD = 3     # step failures before step-level re-research
+FAILURE_THRESHOLD = 3  # failures before re-research triggered
+FAILURE_WINDOW_DAYS = 30  # only count failures in this window
+PROMOTION_THRESHOLD = 5  # uses before promotion check
+PROMOTION_SUCCESS_RATE = 0.7  # 70% success rate to promote to verified
+DEMOTION_SUCCESS_RATE = 0.4  # below 40% -> flag for re-research
+MAX_LOG_ENTRIES = 500  # keep the log bounded
+STEP_FAILURE_THRESHOLD = 3  # step failures before step-level re-research
 
 # --- Static (time-based) promotion thresholds ---
 # For procedures that never hit PROMOTION_THRESHOLD uses organically
 # (most of a large library), time-based trust provides an alternative
 # promotion path: procedures that don't break over time earn trust.
-PROMOTION_MIN_AGE_DAYS = 14       # experimental → active after 14 days
-ACTIVE_TO_VERIFIED_DAYS = 30      # active → verified after 30 more days
+PROMOTION_MIN_AGE_DAYS = 14  # experimental → active after 14 days
+ACTIVE_TO_VERIFIED_DAYS = 30  # active → verified after 30 more days
 
 
 # --- Frontmatter update helper ---
+
 
 def update_frontmatter(file_path: Path, updates: dict) -> bool:
     """Update specific frontmatter fields in a markdown note.
@@ -157,8 +164,9 @@ class ProcedureTracker:
 
     # --- Vault scanning ---
 
-    def _iter_procedural_notes(self, vault_path: str = "."
-                               ) -> Iterator[tuple[Path, str, str]]:
+    def _iter_procedural_notes(
+        self, vault_path: str = "."
+    ) -> Iterator[tuple[Path, str, str]]:
         """Yield (path, frontmatter_str, full_text) for every procedural note.
 
         Procedural notes are markdown files whose YAML frontmatter contains
@@ -202,8 +210,7 @@ class ProcedureTracker:
     # startup and refresh it on file-change events.  Stale entries (a
     # note that was deleted) are simply absent from the next rebuild.
 
-    def get_procedure_index(self, vault_path: str = "."
-                            ) -> dict[str, dict[str, Any]]:
+    def get_procedure_index(self, vault_path: str = ".") -> dict[str, dict[str, Any]]:
         """Build and return a stem -> {path, frontmatter} index.
 
         Walks the vault once, restricted to procedural notes.  The
@@ -259,16 +266,22 @@ class ProcedureTracker:
 
     def _write_log(self, data: dict):
         self.log_path.write_text(
-            json.dumps(data, indent=2, default=str), encoding="utf-8")
+            json.dumps(data, indent=2, default=str), encoding="utf-8"
+        )
 
     def _recompute_summary(self, data: dict) -> dict:
         """Recompute the summary from entries (only within the failure window)."""
         now = datetime.now(UTC)
         window_start = now - timedelta(days=FAILURE_WINDOW_DAYS)
-        summary = defaultdict(lambda: {
-            "total": 0, "failures": 0, "passes": 0,
-            "last_failure": None, "last_pass": None
-        })
+        summary = defaultdict(
+            lambda: {
+                "total": 0,
+                "failures": 0,
+                "passes": 0,
+                "last_failure": None,
+                "last_pass": None,
+            }
+        )
         for entry in data.get("entries", []):
             ts = entry.get("timestamp", "")
             try:
@@ -289,9 +302,16 @@ class ProcedureTracker:
 
     # --- Logging ---
 
-    def log_result(self, procedure: str, task: str, validation_result: str,
-                   validation_tool: str, error_details: str = "",
-                   category: str = "validation_error", severity: str = "medium"):
+    def log_result(
+        self,
+        procedure: str,
+        task: str,
+        validation_result: str,
+        validation_tool: str,
+        error_details: str = "",
+        category: str = "validation_error",
+        severity: str = "medium",
+    ):
         """Log a pass or fail for a procedure.
 
         Args:
@@ -325,8 +345,9 @@ class ProcedureTracker:
 
     # --- Step-level logging (for the step-gate runtime) ---
 
-    def log_step_result(self, procedure: str, step_number: int,
-                        passed: bool, error: str = ""):
+    def log_step_result(
+        self, procedure: str, step_number: int, passed: bool, error: str = ""
+    ):
         """Log a pass or fail for a single step within a procedure.
 
         This is called by the step-gate runtime after each step's
@@ -370,8 +391,10 @@ class ProcedureTracker:
         passes = 0
         failures = 0
         for entry in data.get("entries", []):
-            if (entry.get("procedure") != procedure
-                    or entry.get("step_number") != step_number):
+            if (
+                entry.get("procedure") != procedure
+                or entry.get("step_number") != step_number
+            ):
                 continue
             ts = entry.get("timestamp", "")
             try:
@@ -446,13 +469,15 @@ class ProcedureTracker:
             if proc == "no_procedure":
                 continue
             if stats.get("failures", 0) >= FAILURE_THRESHOLD:
-                failing.append({
-                    "procedure": proc,
-                    "failures": stats["failures"],
-                    "passes": stats.get("passes", 0),
-                    "total": stats.get("total", 0),
-                    "last_failure": stats.get("last_failure"),
-                })
+                failing.append(
+                    {
+                        "procedure": proc,
+                        "failures": stats["failures"],
+                        "passes": stats.get("passes", 0),
+                        "total": stats.get("total", 0),
+                        "last_failure": stats.get("last_failure"),
+                    }
+                )
         return failing
 
     # --- Procedural gap detection ---
@@ -469,8 +494,10 @@ class ProcedureTracker:
         if no_proc.get("failures", 0) >= FAILURE_THRESHOLD:
             task_counts = defaultdict(int)
             for entry in data.get("entries", []):
-                if (entry.get("procedure") == "no_procedure"
-                        and entry.get("validation_result") == "fail"):
+                if (
+                    entry.get("procedure") == "no_procedure"
+                    and entry.get("validation_result") == "fail"
+                ):
                     task_counts[entry.get("task", "unknown")] += 1
             gaps = []
             for task, count in task_counts.items():
@@ -483,12 +510,14 @@ class ProcedureTracker:
                     # identifiers (code_run, safe_write, vault_lint, etc.).
                     if not _is_valid_task_name(task):
                         continue
-                    gaps.append({
-                        "kind": "procedural_gap",
-                        "topic": f"how to {task}",
-                        "priority": count * 10,
-                        "failure_count": count,
-                    })
+                    gaps.append(
+                        {
+                            "kind": "procedural_gap",
+                            "topic": f"how to {task}",
+                            "priority": count * 10,
+                            "failure_count": count,
+                        }
+                    )
             return gaps
         return []
 
@@ -509,8 +538,7 @@ class ProcedureTracker:
                 interval = 90
                 for line in fm.split("\n"):
                     if line.strip().startswith("last_reviewed:"):
-                        date_str = (line.split(":", 1)[1].strip()
-                                    .strip('"').strip("'"))
+                        date_str = line.split(":", 1)[1].strip().strip('"').strip("'")
                         try:
                             last_reviewed = datetime.fromisoformat(date_str)
                         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -526,12 +554,14 @@ class ProcedureTracker:
                     last_reviewed = last_reviewed.replace(tzinfo=UTC)
                 age_days = (now - last_reviewed).days
                 if age_days > interval:
-                    stale.append({
-                        "procedure": md.stem,
-                        "file_path": str(md),
-                        "age_days": age_days,
-                        "interval": interval,
-                    })
+                    stale.append(
+                        {
+                            "procedure": md.stem,
+                            "file_path": str(md),
+                            "age_days": age_days,
+                            "interval": interval,
+                        }
+                    )
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 continue
         return stale
@@ -636,8 +666,11 @@ class ProcedureTracker:
              "static_promoted": [...], "cascade_downgraded": [...]}
         """
         result = {
-            "promoted": [], "flagged": [], "unchanged": [],
-            "static_promoted": [], "cascade_downgraded": [],
+            "promoted": [],
+            "flagged": [],
+            "unchanged": [],
+            "static_promoted": [],
+            "cascade_downgraded": [],
         }
         # Build the reverse dependency index once for cascading invalidation.
         rev_deps = self._build_reverse_deps(vault_path)
@@ -652,19 +685,29 @@ class ProcedureTracker:
                     if static is not None:
                         if static == "active":
                             if "status: active" not in fm:
-                                update_frontmatter(md, {
-                                    "status": "active",
-                                    "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
-                                })
+                                update_frontmatter(
+                                    md,
+                                    {
+                                        "status": "active",
+                                        "last_reviewed": datetime.now(UTC).strftime(
+                                            "%Y-%m-%d"
+                                        ),
+                                    },
+                                )
                                 result["static_promoted"].append(proc_name)
                             else:
                                 result["unchanged"].append(proc_name)
                         elif static == "verified":
                             if "status: verified" not in fm:
-                                update_frontmatter(md, {
-                                    "status": "verified",
-                                    "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
-                                })
+                                update_frontmatter(
+                                    md,
+                                    {
+                                        "status": "verified",
+                                        "last_reviewed": datetime.now(UTC).strftime(
+                                            "%Y-%m-%d"
+                                        ),
+                                    },
+                                )
                                 result["static_promoted"].append(proc_name)
                             else:
                                 result["unchanged"].append(proc_name)
@@ -683,28 +726,33 @@ class ProcedureTracker:
                 if promotion == "verified":
                     # Only update if not already verified
                     if "status: verified" not in fm:
-                        update_frontmatter(md, {
-                            "status": "verified",
-                            "success_count": passes,
-                            "failure_count": failures,
-                            "success_rate": round(rate, 2),
-                        })
+                        update_frontmatter(
+                            md,
+                            {
+                                "status": "verified",
+                                "success_count": passes,
+                                "failure_count": failures,
+                                "success_rate": round(rate, 2),
+                            },
+                        )
                         result["promoted"].append(proc_name)
                     else:
                         result["unchanged"].append(proc_name)
                 elif promotion == "flagged":
                     # Only update if not already flagged
                     if "status: flagged" not in fm:
-                        update_frontmatter(md, {
-                            "status": "flagged",
-                            "success_count": passes,
-                            "failure_count": failures,
-                            "success_rate": round(rate, 2),
-                        })
+                        update_frontmatter(
+                            md,
+                            {
+                                "status": "flagged",
+                                "success_count": passes,
+                                "failure_count": failures,
+                                "success_rate": round(rate, 2),
+                            },
+                        )
                         result["flagged"].append(proc_name)
                         # Cascading invalidation: downgrade verified parents.
-                        self._cascade_downgrade(
-                            proc_name, rev_deps, vault_path, result)
+                        self._cascade_downgrade(proc_name, rev_deps, vault_path, result)
                     else:
                         result["unchanged"].append(proc_name)
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -712,9 +760,7 @@ class ProcedureTracker:
 
         return result
 
-    def _build_reverse_deps(
-        self, vault_path: str = "."
-    ) -> dict[str, list[str]]:
+    def _build_reverse_deps(self, vault_path: str = ".") -> dict[str, list[str]]:
         """Build a reverse dependency index: {child_stem: [parent_stem, ...]}.
 
         Walks all procedural notes, reads their ``provides`` frontmatter,
@@ -769,12 +815,16 @@ class ProcedureTracker:
                 if "status: verified" not in fm:
                     continue
                 try:
-                    update_frontmatter(md, {
-                        "status": "active",
-                        "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
-                    })
+                    update_frontmatter(
+                        md,
+                        {
+                            "status": "active",
+                            "last_reviewed": datetime.now(UTC).strftime("%Y-%m-%d"),
+                        },
+                    )
                     result["cascade_downgraded"].append(
-                        f"{parent_name} (child {flagged_child} flagged)")
+                        f"{parent_name} (child {flagged_child} flagged)"
+                    )
                 except Exception:  # noqa: BLE001 — best-effort
                     pass
                 break
@@ -786,8 +836,9 @@ class ProcedureTracker:
         counter starts fresh after an update.
         """
         data = self._read_log()
-        data["entries"] = [e for e in data.get("entries", [])
-                           if e.get("procedure") != procedure]
+        data["entries"] = [
+            e for e in data.get("entries", []) if e.get("procedure") != procedure
+        ]
         data["summary"] = self._recompute_summary(data)
         self._write_log(data)
 
@@ -814,13 +865,16 @@ class ProcedureTracker:
                 continue
             try:
                 # Update frontmatter
-                update_frontmatter(md, {
-                    "status": "experimental",
-                    "last_reviewed": today,
-                    "success_count": 0,
-                    "failure_count": 0,
-                    "success_rate": 0.0,
-                })
+                update_frontmatter(
+                    md,
+                    {
+                        "status": "experimental",
+                        "last_reviewed": today,
+                        "success_count": 0,
+                        "failure_count": 0,
+                        "success_rate": 0.0,
+                    },
+                )
 
                 # Reset the failure log for this procedure
                 self.reset_failures(procedure)
@@ -849,43 +903,50 @@ class ProcedureTracker:
 
         # Failing procedures -> re-research
         for proc in self.get_failing_procedures():
-            gaps.append({
-                "kind": "failing_procedure",
-                "topic": proc["procedure"],
-                "priority": proc["failures"] * 15,
-                "procedure": proc["procedure"],
-                "failures": proc["failures"],
-            })
+            gaps.append(
+                {
+                    "kind": "failing_procedure",
+                    "topic": proc["procedure"],
+                    "priority": proc["failures"] * 15,
+                    "procedure": proc["procedure"],
+                    "failures": proc["failures"],
+                }
+            )
 
         # Failing steps -> re-research the specific step
         for proc in self.get_failing_procedures():
             for step in self.get_failing_steps(proc["procedure"]):
-                gaps.append({
-                    "kind": "failing_step",
-                    "topic": f"{proc['procedure']} step {step['step_number']}",
-                    "priority": step["failures"] * 12,
-                    "procedure": proc["procedure"],
-                    "step_number": step["step_number"],
-                    "failures": step["failures"],
-                })
+                gaps.append(
+                    {
+                        "kind": "failing_step",
+                        "topic": f"{proc['procedure']} step {step['step_number']}",
+                        "priority": step["failures"] * 12,
+                        "procedure": proc["procedure"],
+                        "step_number": step["step_number"],
+                        "failures": step["failures"],
+                    }
+                )
 
         # Procedural gaps -> find a new procedure
         gaps.extend(self.get_procedural_gaps())
 
         # Stale procedures -> re-research on schedule
         for stale in self.get_stale_procedures(vault_path):
-            gaps.append({
-                "kind": "stale_procedure",
-                "topic": stale["procedure"],
-                "priority": 5,  # lower priority than failing ones
-                "procedure": stale["procedure"],
-                "age_days": stale["age_days"],
-            })
+            gaps.append(
+                {
+                    "kind": "stale_procedure",
+                    "topic": stale["procedure"],
+                    "priority": 5,  # lower priority than failing ones
+                    "procedure": stale["procedure"],
+                    "age_days": stale["age_days"],
+                }
+            )
 
         return gaps
 
 
 # --- Standalone helper (used by main.py after FUSED retrieval) ---
+
 
 def parse_procedures_from_results(results: list[dict[str, Any]]) -> list[str]:
     """Extract procedure note names from FUSED retrieval results.
@@ -929,6 +990,7 @@ def parse_procedures_from_results(results: list[dict[str, Any]]) -> list[str]:
 
 # --- Validation result interpretation (used by main.py after tool calls) ---
 
+
 def interpret_validation_result(tool_name: str, tool_result: dict) -> tuple:
     """Interpret a tool result as pass/fail for procedure tracking.
 
@@ -956,8 +1018,13 @@ def interpret_validation_result(tool_name: str, tool_result: dict) -> tuple:
         if not passes_quality:
             issues.append("argument quality issues")
         if issues:
-            category = "broken_wikilinks" if broken else (
-                "missing_frontmatter" if not has_frontmatter else "argument_quality")
+            category = (
+                "broken_wikilinks"
+                if broken
+                else (
+                    "missing_frontmatter" if not has_frontmatter else "argument_quality"
+                )
+            )
             return ("fail", category, "; ".join(issues))
         return ("pass", "validation_error", "")
 

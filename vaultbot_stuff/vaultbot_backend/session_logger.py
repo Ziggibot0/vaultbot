@@ -113,13 +113,15 @@ class SessionLogger:
             "completion_tokens": 0,
         }
 
-        self._write({
-            "event": "session_start",
-            "session_id": self.session_id,
-            "timestamp": self._now(),
-            "started_at": self.started_at,
-            "title": self.title,
-        })
+        self._write(
+            {
+                "event": "session_start",
+                "session_id": self.session_id,
+                "timestamp": self._now(),
+                "started_at": self.started_at,
+                "title": self.title,
+            }
+        )
 
     def set_title(self, title: str) -> None:
         """Set the session title and persist it to the log.
@@ -130,12 +132,14 @@ class SessionLogger:
         back without parsing the full conversation.
         """
         self.title = title[:200] if title else "New Session"
-        self._write({
-            "event": "session_title",
-            "session_id": self.session_id,
-            "timestamp": self._now(),
-            "title": self.title,
-        })
+        self._write(
+            {
+                "event": "session_title",
+                "session_id": self.session_id,
+                "timestamp": self._now(),
+                "title": self.title,
+            }
+        )
 
     def _now(self) -> float:
         return time.time()
@@ -186,21 +190,27 @@ class SessionLogger:
         error: str | None = None,
     ) -> None:
         """Log a tool/framework call with input, output, timing, and error."""
-        self.log("tool_call", {
-            "tool": tool,
-            "method": method,
-            "inputs": inputs,
-            "outputs": outputs,
-            "duration_ms": duration_ms,
-            "error": error,
-        })
+        self.log(
+            "tool_call",
+            {
+                "tool": tool,
+                "method": method,
+                "inputs": inputs,
+                "outputs": outputs,
+                "duration_ms": duration_ms,
+                "error": error,
+            },
+        )
 
     def log_message(self, direction: str, payload: dict[str, Any]) -> None:
         """Log a WebSocket message sent or received."""
-        self.log("websocket_message", {
-            "direction": direction,  # "in" or "out"
-            "payload": payload,
-        })
+        self.log(
+            "websocket_message",
+            {
+                "direction": direction,  # "in" or "out"
+                "payload": payload,
+            },
+        )
 
     def log_stage(self, stage: str, detail: str = "", **extra: Any) -> None:
         """Log a structured stage boundary with a stable schema.
@@ -219,7 +229,9 @@ class SessionLogger:
         data.update(extra)
         self.log("stage", data)
 
-    def log_exception(self, exc: Exception | None = None, context: str | None = None) -> None:
+    def log_exception(
+        self, exc: Exception | None = None, context: str | None = None
+    ) -> None:
         """Log an exception with traceback."""
         data: dict[str, Any] = {
             "traceback": traceback.format_exc() if exc or context else "",
@@ -235,16 +247,23 @@ class SessionLogger:
         if self._closed:
             return
         # Log cumulative session-level token totals before closing.
-        self.log("session_token_total", {
-            "prompt_tokens": self.token_totals["prompt_tokens"],
-            "completion_tokens": self.token_totals["completion_tokens"],
-            "total_tokens": (
-                self.token_totals["prompt_tokens"]
-                + self.token_totals["completion_tokens"]),
-        })
-        self.log("session_end", {
-            "closed_at": datetime.now(UTC).isoformat(),
-        })
+        self.log(
+            "session_token_total",
+            {
+                "prompt_tokens": self.token_totals["prompt_tokens"],
+                "completion_tokens": self.token_totals["completion_tokens"],
+                "total_tokens": (
+                    self.token_totals["prompt_tokens"]
+                    + self.token_totals["completion_tokens"]
+                ),
+            },
+        )
+        self.log(
+            "session_end",
+            {
+                "closed_at": datetime.now(UTC).isoformat(),
+            },
+        )
         self._closed = True
 
 

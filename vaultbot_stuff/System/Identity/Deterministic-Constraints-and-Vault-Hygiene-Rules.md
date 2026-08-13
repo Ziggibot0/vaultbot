@@ -1,6 +1,7 @@
 ---
 type: semantic
 status: verified
+baseline: true
 created: 2026-07-28
 last_reviewed: 2026-07-28
 review_interval_days: 60

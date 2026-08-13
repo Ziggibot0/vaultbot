@@ -18,6 +18,7 @@ Documentation grounding:
   or directories are given on the command line."
 - tmp_path + monkeypatch fixtures auto-clean after each test.
 """
+
 import sys
 from pathlib import Path
 
@@ -42,16 +43,19 @@ def pytest_collection_modifyitems(items):
     """
     if "main" in sys.modules:
         import pytest
+
         for item in items:
-            mod = getattr(item, 'module', None)
-            if mod and getattr(mod, '__allows_main_import__', False):
+            mod = getattr(item, "module", None)
+            if mod and getattr(mod, "__allows_main_import__", False):
                 continue  # explicitly exempted (endpoint tests)
-            item.add_marker(pytest.mark.fail(
-                reason="A test imported `main` (forbidden — it calls "
-                       "acquire_lock() → sys.exit + loads the live FAISS "
-                       "index). Import leaf modules only. See "
-                       "conftest.py docstring. If you need `from main "
-                       "import app` for endpoint tests, set "
-                       "`__allows_main_import__ = True` at module level "
-                       "AND ensure VAULTBOT_SKIP_LOCK=1 is set."
-            ))
+            item.add_marker(
+                pytest.mark.fail(
+                    reason="A test imported `main` (forbidden — it calls "
+                    "acquire_lock() → sys.exit + loads the live FAISS "
+                    "index). Import leaf modules only. See "
+                    "conftest.py docstring. If you need `from main "
+                    "import app` for endpoint tests, set "
+                    "`__allows_main_import__ = True` at module level "
+                    "AND ensure VAULTBOT_SKIP_LOCK=1 is set."
+                )
+            )

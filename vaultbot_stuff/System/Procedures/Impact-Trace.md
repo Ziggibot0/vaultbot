@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Trace the blast radius of changing a function or variable in the backend. Given a function name, finds every file that imports it, every file that calls it, and every procedure that references it. Returns a dependency map so you know what to test before making the change.

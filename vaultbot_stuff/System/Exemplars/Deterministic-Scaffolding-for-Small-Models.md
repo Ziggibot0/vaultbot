@@ -10,6 +10,7 @@ tags:
   - small-models
   - deterministic
 status: stale
+baseline: true
 ---
 
 <!-- EXEMPLAR ANNOTATION: ARCHITECTURE NOTE

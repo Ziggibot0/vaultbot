@@ -100,8 +100,9 @@ def _resolve_path(path: str | None, session_id: str | None = None) -> str:
     return _DEFAULT_PATH
 
 
-def load_history(path: str | None = None,
-                 session_id: str | None = None) -> list[dict[str, Any]]:
+def load_history(
+    path: str | None = None, session_id: str | None = None
+) -> list[dict[str, Any]]:
     """Load the persisted conversation history.
 
     Returns ``[]`` when the file doesn't exist yet (first run — no history
@@ -120,8 +121,12 @@ def load_history(path: str | None = None,
     p = _resolve_path(path, session_id)
     # One-shot legacy migration: if the per-session file doesn't exist
     # but the legacy single-file does, adopt it for this session.
-    if session_id and not path and not os.path.exists(p) \
-            and os.path.exists(_DEFAULT_PATH):
+    if (
+        session_id
+        and not path
+        and not os.path.exists(p)
+        and os.path.exists(_DEFAULT_PATH)
+    ):
         try:
             legacy = _load_file(_DEFAULT_PATH)
             # Persist a copy under the session-specific path.
@@ -146,8 +151,7 @@ def load_history(path: str | None = None,
                 f"({type(data).__name__}): {p}"
             )
         # Defensive: each entry must be a dict with a role.
-        clean = [m for m in data
-                 if isinstance(m, dict) and m.get("role")]
+        clean = [m for m in data if isinstance(m, dict) and m.get("role")]
         return clean
     except (json.JSONDecodeError, ValueError) as exc:
         # Re-raise with context so the caller can notify the user.
@@ -155,11 +159,12 @@ def load_history(path: str | None = None,
         # data isn't lost if they want to try manual recovery.
         try:
             import shutil
+
             backup = f"{p}.corrupt.{int(time.time())}"
             shutil.copy2(p, backup)
             logger.warning(
-                "conversation_state: corrupt history backed up to %s: %s",
-                backup, exc)
+                "conversation_state: corrupt history backed up to %s: %s", backup, exc
+            )
         except OSError:
             pass  # backup failure shouldn't mask the original error
         raise ValueError(
@@ -178,8 +183,7 @@ def _load_file(p: str) -> list[dict[str, Any]]:
             f"({type(data).__name__}): {p}"
         )
     # Defensive: each entry must be a dict with a role.
-    return [m for m in data
-            if isinstance(m, dict) and m.get("role")]
+    return [m for m in data if isinstance(m, dict) and m.get("role")]
 
 
 def _save_file(history: list[dict[str, Any]], p: str) -> None:
@@ -208,9 +212,11 @@ def _save_file(history: list[dict[str, Any]], p: str) -> None:
         logger.warning("conversation_state save failed: %s", exc)
 
 
-def save_history(history: list[dict[str, Any]],
-                 path: str | None = None,
-                 session_id: str | None = None) -> None:
+def save_history(
+    history: list[dict[str, Any]],
+    path: str | None = None,
+    session_id: str | None = None,
+) -> None:
     """Persist the conversation history to disk (atomic, bounded, locked).
 
     Best-effort: never raises. Truncates to the last ``MAX_TURNS`` messages
@@ -226,9 +232,11 @@ def save_history(history: list[dict[str, Any]],
     # messages' content until the total fits. This guarantees the disk
     # file never exceeds ~MAX_DISK_CHARS, so a restart after a days-long
     # session loads instantly instead of deserializing a multi-MB blob.
-    total_chars = sum(len(str(m.get("content", "") or "")) +
-                      len(str(m.get("thinking", "") or ""))
-                      for m in bounded if isinstance(m, dict))
+    total_chars = sum(
+        len(str(m.get("content", "") or "")) + len(str(m.get("thinking", "") or ""))
+        for m in bounded
+        if isinstance(m, dict)
+    )
     if total_chars > MAX_DISK_CHARS:
         bounded = list(bounded)  # copy so we can mutate
         # Truncate from the oldest message forward.
@@ -242,12 +250,11 @@ def save_history(history: list[dict[str, Any]],
                     if val and len(str(val)) > 200:
                         old_len = len(str(val))
                         m[key] = str(val)[:200] + "\n[...truncated on persist...]"
-                        total_chars -= (old_len - len(str(m[key])))
+                        total_chars -= old_len - len(str(m[key]))
     _save_file(bounded, p)
 
 
-def clear_history(path: str | None = None,
-                   session_id: str | None = None) -> None:
+def clear_history(path: str | None = None, session_id: str | None = None) -> None:
     """Wipe the persisted history (called on ``/new``). Best-effort."""
     p = _resolve_path(path, session_id)
     try:
@@ -255,6 +262,7 @@ def clear_history(path: str | None = None,
             os.remove(p)
     except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.warning("conversation_state clear failed: %s", exc)
+
 
 def clear_trail_tracker(vault_path: str | None = None) -> None:
     """Wipe the conversation trail tracker (called on ``/new``).

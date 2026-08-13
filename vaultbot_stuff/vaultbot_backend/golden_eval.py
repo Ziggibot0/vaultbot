@@ -37,6 +37,7 @@ regression from silently shipping.
 
 Pure stdlib + rag_eval normalization. No LLM calls, no network, no FAISS.
 """
+
 from __future__ import annotations
 
 import json
@@ -79,11 +80,13 @@ def load_golden_set(path: str | Path | None = None) -> list[dict[str, Any]]:
         q = (e.get("query") or "").strip()
         exp = e.get("expected_notes") or []
         if q and exp:
-            out.append({
-                "query": q,
-                "expected_notes": list(exp),
-                "note": e.get("note", ""),
-            })
+            out.append(
+                {
+                    "query": q,
+                    "expected_notes": list(exp),
+                    "note": e.get("note", ""),
+                }
+            )
     return out
 
 
@@ -140,10 +143,12 @@ def _retrieved_identifiers(results: list[dict[str, Any]]) -> list[str]:
     return out
 
 
-def run_golden_eval(retriever: Any,
-                    golden_set: list[dict[str, Any]] | None = None,
-                    k: int = 5,
-                    golden_path: str | Path | None = None) -> dict[str, Any]:
+def run_golden_eval(
+    retriever: Any,
+    golden_set: list[dict[str, Any]] | None = None,
+    k: int = 5,
+    golden_path: str | Path | None = None,
+) -> dict[str, Any]:
     """Score a retriever against the golden set.
 
     Args:
@@ -195,15 +200,17 @@ def run_golden_eval(retriever: Any,
         # Which expected notes did NOT surface? (the actionable part)
         got = {_norm(x) for x in retrieved}
         missing = [x for x in expected if _norm(x) not in got]
-        per_query.append({
-            "query": query,
-            "recall_at_k": round(r, 4),
-            "precision_at_k": round(p, 4),
-            "ndcg_at_k": round(n, 4),
-            "mrr": round(m, 4),
-            "retrieved_count": len(retrieved),
-            "missing": missing,
-        })
+        per_query.append(
+            {
+                "query": query,
+                "recall_at_k": round(r, 4),
+                "precision_at_k": round(p, 4),
+                "ndcg_at_k": round(n, 4),
+                "mrr": round(m, 4),
+                "retrieved_count": len(retrieved),
+                "missing": missing,
+            }
+        )
 
     def _avg(xs: list[float]) -> float:
         return round(sum(xs) / len(xs), 4) if xs else 0.0
@@ -222,9 +229,9 @@ def run_golden_eval(retriever: Any,
     }
 
 
-def check_regression(report: dict[str, Any],
-                     min_recall: float = 0.5,
-                     min_ndcg: float = 0.0) -> dict[str, Any]:
+def check_regression(
+    report: dict[str, Any], min_recall: float = 0.5, min_ndcg: float = 0.0
+) -> dict[str, Any]:
     """Pass/fail verdict for the CI gate.
 
     Args:
@@ -243,10 +250,12 @@ def check_regression(report: dict[str, Any],
         reasons.append("golden set is empty — nothing to gate on")
     if recall < min_recall:
         reasons.append(
-            f"aggregate recall@{report.get('k')} {recall:.3f} < floor {min_recall:.3f}")
+            f"aggregate recall@{report.get('k')} {recall:.3f} < floor {min_recall:.3f}"
+        )
     if min_ndcg > 0.0 and ndcg < min_ndcg:
         reasons.append(
-            f"aggregate ndcg@{report.get('k')} {ndcg:.3f} < floor {min_ndcg:.3f}")
+            f"aggregate ndcg@{report.get('k')} {ndcg:.3f} < floor {min_ndcg:.3f}"
+        )
     return {
         "passed": not reasons,
         "reasons": reasons,

@@ -80,6 +80,7 @@ See:
   - ``step_gate_runtime.py`` — the execution half
   - ``procedure_tracker.py`` — pass/fail logging
 """
+
 from __future__ import annotations
 
 import json
@@ -95,6 +96,7 @@ logger = logging.getLogger(__name__)
 # If missing, dispatch sections are silently skipped (no DSL).
 try:
     import yaml
+
     _HAS_YAML = True
 except ImportError:
     _HAS_YAML = False
@@ -102,6 +104,7 @@ except ImportError:
 
 
 # ── Data structures ───────────────────────────────────────────────────────
+
 
 @dataclass
 class Step:
@@ -124,6 +127,7 @@ class Step:
         branch_target: Step number to jump to, parsed from
             ``[branch: step N]``.  None if no branch annotation.
     """
+
     number: float
     instruction: str
     step_type: str = "text"
@@ -156,6 +160,7 @@ class Procedure:
             call (v2). Empty list if not present. The step-gate runtime
             injects only these tools into the subprocess namespace.
     """
+
     name: str
     file_path: str
     version: str
@@ -172,18 +177,19 @@ class Procedure:
 # ── Regex patterns ────────────────────────────────────────────────────────
 
 # Inline annotations in square brackets (v1, still used in v2 text steps)
-_VALIDATE_RE = re.compile(r'\[validate:\s*(.+?)\]', re.IGNORECASE)
-_CONDITION_RE = re.compile(r'\[condition:\s*(.+?)\]', re.IGNORECASE)
-_BRANCH_RE = re.compile(r'\[branch:\s*step\s+(\d+(?:\.\d+)?)\]', re.IGNORECASE)
+_VALIDATE_RE = re.compile(r"\[validate:\s*(.+?)\]", re.IGNORECASE)
+_CONDITION_RE = re.compile(r"\[condition:\s*(.+?)\]", re.IGNORECASE)
+_BRANCH_RE = re.compile(r"\[branch:\s*step\s+(\d+(?:\.\d+)?)\]", re.IGNORECASE)
 
 # "## Steps" section header
-_STEPS_HEADER_RE = re.compile(r'^##\s+Steps\s*$', re.MULTILINE | re.IGNORECASE)
+_STEPS_HEADER_RE = re.compile(r"^##\s+Steps\s*$", re.MULTILINE | re.IGNORECASE)
 
 # [llm: ...] tag (single-line form)
-_LLM_RE = re.compile(r'\[llm:\s*(.+?)\]\s*$')
+_LLM_RE = re.compile(r"\[llm:\s*(.+?)\]\s*$")
 
 
 # ── Frontmatter parser (simple, no PyYAML dependency) ───────────────────
+
 
 def _parse_frontmatter(text: str) -> tuple[dict, str, str]:
     """Parse YAML frontmatter from markdown text.
@@ -192,27 +198,27 @@ def _parse_frontmatter(text: str) -> tuple[dict, str, str]:
     Handles flat key-value pairs and simple list values (``- item``).
     Does not support nested mappings — procedures don't need them.
     """
-    if not text.startswith('---'):
-        return {}, '', text
+    if not text.startswith("---"):
+        return {}, "", text
 
-    end = text.find('\n---', 3)
+    end = text.find("\n---", 3)
     if end == -1:
-        return {}, '', text
+        return {}, "", text
 
     fm_str = text[3:end].strip()
-    body = text[end + 4:].lstrip()  # skip past closing ---
+    body = text[end + 4 :].lstrip()  # skip past closing ---
 
     fm: dict = {}
     current_key: str | None = None
     current_list: list | None = None
 
-    for line in fm_str.split('\n'):
+    for line in fm_str.split("\n"):
         line = line.rstrip()
         if not line:
             continue
 
         # List item: "  - value"
-        if line.startswith('  - ') and current_key:
+        if line.startswith("  - ") and current_key:
             value = line[4:].strip().strip('"').strip("'")
             if current_list is None:
                 current_list = []
@@ -221,12 +227,14 @@ def _parse_frontmatter(text: str) -> tuple[dict, str, str]:
             continue
 
         # Key-value pair: "key: value"
-        if ':' in line:
+        if ":" in line:
             current_list = None
-            key, _, value = line.partition(':')
+            key, _, value = line.partition(":")
             key = key.strip()
             value = value.strip()
-            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
                 value = value[1:-1]
             if value:
                 fm[key] = value
@@ -240,6 +248,7 @@ def _parse_frontmatter(text: str) -> tuple[dict, str, str]:
 
 
 # ── Annotation extraction (for text steps) ──────────────────────────────
+
 
 def _extract_annotations(
     text: str,
@@ -268,13 +277,14 @@ def _extract_annotations(
     # Strip annotations from instruction
     clean = text
     for pattern in (_VALIDATE_RE, _CONDITION_RE, _BRANCH_RE):
-        clean = pattern.sub('', clean)
-    clean = re.sub(r'\s+', ' ', clean).strip()
+        clean = pattern.sub("", clean)
+    clean = re.sub(r"\s+", " ", clean).strip()
 
     return clean, validation, condition, branch_target
 
 
 # ── Step parser (handles v1 text + v2 code/llm) ─────────────────────────
+
 
 def _parse_steps(body: str) -> list[Step]:
     """Parse numbered steps from the body of a procedure note.
@@ -305,7 +315,7 @@ def _parse_steps(body: str) -> list[Step]:
         steps_text = body[steps_start:]
 
     steps: list[Step] = []
-    lines = steps_text.split('\n')
+    lines = steps_text.split("\n")
     in_code_block = False
     code_lines: list[str] = []
     current_step: Step | None = None
@@ -320,10 +330,10 @@ def _parse_steps(body: str) -> list[Step]:
 
         # Inside a code block — collect until closing ```
         if in_code_block:
-            if line.strip() == '```':
+            if line.strip() == "```":
                 in_code_block = False
                 if current_step is not None:
-                    current_step.code = textwrap.dedent('\n'.join(code_lines))
+                    current_step.code = textwrap.dedent("\n".join(code_lines))
             else:
                 code_lines.append(line)
             i += 1
@@ -332,10 +342,10 @@ def _parse_steps(body: str) -> list[Step]:
         # Collecting multi-line [llm: ...] text
         if collecting_llm:
             llm_lines.append(line.strip())
-            joined = ' '.join(llm_lines)
-            if ']' in joined:
+            joined = " ".join(llm_lines)
+            if "]" in joined:
                 # Extract up to the closing ]
-                close_idx = joined.index(']')
+                close_idx = joined.index("]")
                 llm_text = joined[:close_idx].strip()
                 if current_step is not None:
                     current_step.llm_instruction = llm_text
@@ -349,27 +359,29 @@ def _parse_steps(body: str) -> list[Step]:
         # handled above) marks the end of the Steps section. This replaces
         # the old pre-truncation that broke multi-line LLM steps containing
         # ## headers in their instruction text.
-        if seen_steps and re.match(r'^##\s+', line):
+        if seen_steps and re.match(r"^##\s+", line):
             break
 
         # Check for numbered step start (supports decimals: 1, 1.5, 2.5, etc.)
-        step_match = re.match(r'^(\d+(?:\.\d+)?)\.\s+(.+)', line)
+        step_match = re.match(r"^(\d+(?:\.\d+)?)\.\s+(.+)", line)
 
         # Bare ```python fence on the line(s) after a "### Step N:" header
         # (or after the header's instruction text) -> code step. This is the
         # dominant format across ~107 procedures.
-        if (not step_match
-                and line.strip().startswith('```python')
-                and current_step is not None
-                and current_from_header
-                and not in_code_block):
+        if (
+            not step_match
+            and line.strip().startswith("```python")
+            and current_step is not None
+            and current_from_header
+            and not in_code_block
+        ):
             in_code_block = True
             code_lines = []
-            after_fence = line.strip()[len('```python'):].strip()
+            after_fence = line.strip()[len("```python") :].strip()
             if after_fence:
                 code_lines.append(after_fence)
-            current_step.step_type = 'code'
-            current_step.instruction = current_step.instruction or ''
+            current_step.step_type = "code"
+            current_step.instruction = current_step.instruction or ""
             i += 1
             continue
 
@@ -379,15 +391,17 @@ def _parse_steps(body: str) -> list[Step]:
         # LLM instruction below it:
         #   ### Step 1: Classify the results
         #   [llm: Classify each result as relevant or not.]
-        if (not step_match
-                and current_step is not None
-                and current_from_header
-                and not collecting_llm
-                and line.strip().startswith('[llm:')):
+        if (
+            not step_match
+            and current_step is not None
+            and current_from_header
+            and not collecting_llm
+            and line.strip().startswith("[llm:")
+        ):
             llm_match = _LLM_RE.match(line.strip())
             if llm_match:
                 # Single-line [llm: ...]
-                current_step.step_type = 'llm'
+                current_step.step_type = "llm"
                 current_step.llm_instruction = llm_match.group(1).strip()
                 seen_steps = True
                 i += 1
@@ -396,7 +410,7 @@ def _parse_steps(body: str) -> list[Step]:
                 # Multi-line [llm: ... — collect until closing ]
                 collecting_llm = True
                 llm_lines = [line.strip()[5:]]  # skip "[llm:"
-                current_step.step_type = 'llm'
+                current_step.step_type = "llm"
                 seen_steps = True
                 i += 1
                 continue
@@ -407,7 +421,11 @@ def _parse_steps(body: str) -> list[Step]:
         # makes it a code step.
         header_match = None
         if not step_match:
-            header_match = re.match(r'^#{2,4}\s+Step\s+(\d+(?:\.\d+)?)[:\.\)]?\s*(.*)$', line.strip(), re.IGNORECASE)
+            header_match = re.match(
+                r"^#{2,4}\s+Step\s+(\d+(?:\.\d+)?)[:\.\)]?\s*(.*)$",
+                line.strip(),
+                re.IGNORECASE,
+            )
             if header_match:
                 num_h = float(header_match.group(1))
                 rest_h = header_match.group(2).strip()
@@ -415,14 +433,14 @@ def _parse_steps(body: str) -> list[Step]:
                     steps.append(current_step)
                 # Check for [llm: ...] tag in the header's instruction text
                 # (e.g. "### Step 1: [llm: You are a classifier...]")
-                if rest_h.startswith('[llm:'):
+                if rest_h.startswith("[llm:"):
                     llm_match = _LLM_RE.match(rest_h)
                     if llm_match:
                         # Single-line [llm: ...] on the header
                         current_step = Step(
                             number=num_h,
-                            instruction='',
-                            step_type='llm',
+                            instruction="",
+                            step_type="llm",
                             llm_instruction=llm_match.group(1).strip(),
                         )
                     else:
@@ -431,14 +449,14 @@ def _parse_steps(body: str) -> list[Step]:
                         llm_lines = [rest_h[5:]]  # skip "[llm:"
                         current_step = Step(
                             number=num_h,
-                            instruction='',
-                            step_type='llm',
+                            instruction="",
+                            step_type="llm",
                         )
                 else:
                     current_step = Step(
                         number=num_h,
-                        instruction=re.sub(r'\*\*(.+?)\*\*', r'\1', rest_h),
-                        step_type='text',
+                        instruction=re.sub(r"\*\*(.+?)\*\*", r"\1", rest_h),
+                        step_type="text",
                     )
                 current_from_header = True
                 seen_steps = True
@@ -457,24 +475,26 @@ def _parse_steps(body: str) -> list[Step]:
             # Without this, the compiler creates two steps with the same
             # number (a text step from the header + a code step from the
             # numbered block), and only the text step executes.
-            if (current_step is not None
-                    and current_from_header
-                    and current_step.number == num):
-                if rest.startswith('```python'):
+            if (
+                current_step is not None
+                and current_from_header
+                and current_step.number == num
+            ):
+                if rest.startswith("```python"):
                     in_code_block = True
                     code_lines = []
-                    after_fence = rest[len('```python'):].strip()
+                    after_fence = rest[len("```python") :].strip()
                     if after_fence:
                         code_lines.append(after_fence)
-                    current_step.step_type = 'code'
-                    current_step.instruction = current_step.instruction or ''
+                    current_step.step_type = "code"
+                    current_step.instruction = current_step.instruction or ""
                     seen_steps = True
                     i += 1
                     continue
-                elif rest.startswith('[llm:'):
+                elif rest.startswith("[llm:"):
                     llm_match = _LLM_RE.match(rest)
                     if llm_match:
-                        current_step.step_type = 'llm'
+                        current_step.step_type = "llm"
                         current_step.llm_instruction = llm_match.group(1).strip()
                         seen_steps = True
                         i += 1
@@ -482,7 +502,7 @@ def _parse_steps(body: str) -> list[Step]:
                     else:
                         collecting_llm = True
                         llm_lines = [rest[5:]]
-                        current_step.step_type = 'llm'
+                        current_step.step_type = "llm"
                         seen_steps = True
                         i += 1
                         continue
@@ -501,28 +521,28 @@ def _parse_steps(body: str) -> list[Step]:
             current_from_header = False
 
             # Check for code block: "1. ```python"
-            if rest.startswith('```python'):
+            if rest.startswith("```python"):
                 in_code_block = True
                 code_lines = []
                 # Capture any code on the same line after ```python
-                after_fence = rest[len('```python'):].strip()
+                after_fence = rest[len("```python") :].strip()
                 if after_fence:
                     code_lines.append(after_fence)
                 current_step = Step(
                     number=num,
-                    instruction='',
-                    step_type='code',
+                    instruction="",
+                    step_type="code",
                 )
                 seen_steps = True
             # Check for LLM tag: "1. [llm: ...]"
-            elif rest.startswith('[llm:'):
+            elif rest.startswith("[llm:"):
                 llm_match = _LLM_RE.match(rest)
                 if llm_match:
                     # Single-line [llm: ...]
                     current_step = Step(
                         number=num,
-                        instruction='',
-                        step_type='llm',
+                        instruction="",
+                        step_type="llm",
                         llm_instruction=llm_match.group(1).strip(),
                     )
                     seen_steps = True
@@ -532,20 +552,20 @@ def _parse_steps(body: str) -> list[Step]:
                     llm_lines = [rest[5:]]  # skip "[llm:"
                     current_step = Step(
                         number=num,
-                        instruction='',
-                        step_type='llm',
+                        instruction="",
+                        step_type="llm",
                     )
                     seen_steps = True
             else:
                 # Text step (v1 format) — may have annotations
-                instruction = re.sub(r'\*\*(.+?)\*\*', r'\1', rest)
-                clean, validation, condition, branch_target = (
-                    _extract_annotations(instruction)
+                instruction = re.sub(r"\*\*(.+?)\*\*", r"\1", rest)
+                clean, validation, condition, branch_target = _extract_annotations(
+                    instruction
                 )
                 current_step = Step(
                     number=num,
                     instruction=clean,
-                    step_type='text',
+                    step_type="text",
                     validation=validation,
                     condition=condition,
                     branch_target=branch_target,
@@ -564,15 +584,13 @@ def _parse_steps(body: str) -> list[Step]:
 # ── Dispatch DSL parser (YAML-based parent procedure orchestration) ──────
 
 # Regex to find the ## Dispatch section in a procedure note.
-_DISPATCH_HEADER_RE = re.compile(
-    r'^##\s+Dispatch\s*$', re.MULTILINE | re.IGNORECASE)
+_DISPATCH_HEADER_RE = re.compile(r"^##\s+Dispatch\s*$", re.MULTILINE | re.IGNORECASE)
 
 # Template variable pattern: {{ variable_name }}
-_TEMPLATE_RE = re.compile(r'\{\{\s*(\w+)\s*\}\}')
+_TEMPLATE_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 
 # Jinja2-style filter: {{ var | filter_name }}
-_TEMPLATE_FILTER_RE = re.compile(
-    r'\{\{\s*(\w+)\s*\|\s*(\w+)\s*\}\}')
+_TEMPLATE_FILTER_RE = re.compile(r"\{\{\s*(\w+)\s*\|\s*(\w+)\s*\}\}")
 
 
 def _resolve_template(template: str, namespace: dict) -> str:
@@ -582,6 +600,7 @@ def _resolve_template(template: str, namespace: dict) -> str:
     are supported.  No loops, no conditionals — this is a template, not
     a programming language.
     """
+
     def _replacer(match: re.Match) -> str:
         var = match.group(1)
         val = namespace.get(var, "")
@@ -605,8 +624,7 @@ def _resolve_template(template: str, namespace: dict) -> str:
     return result
 
 
-def _compile_classify(entry: dict, step_num: int,
-                      allowed_tools: list[str]) -> Step:
+def _compile_classify(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     """Compile a ``classify`` dispatch entry into a code Step.
 
     Generates Python that calls ``llm_generate`` with the classification
@@ -617,11 +635,11 @@ def _compile_classify(entry: dict, step_num: int,
     output_as = entry.get("output_as", "classification")
 
     code = (
-        f'# Dispatch: classify (model={model})\n'
-        f'_prompt = {json.dumps(prompt)}\n'
-        f'_prompt = _resolve_template(_prompt, _dispatch_ns)\n'
-        f'_response = llm_generate(_prompt)\n'
-        f'_category = _response.strip().lower()\n'
+        f"# Dispatch: classify (model={model})\n"
+        f"_prompt = {json.dumps(prompt)}\n"
+        f"_prompt = _resolve_template(_prompt, _dispatch_ns)\n"
+        f"_response = llm_generate(_prompt)\n"
+        f"_category = _response.strip().lower()\n"
         f'_dispatch_ns["{output_as}"] = _category\n'
         f'result = {{"category": _category, "raw": _response}}\n'
     )
@@ -633,8 +651,7 @@ def _compile_classify(entry: dict, step_num: int,
     )
 
 
-def _compile_call(entry: dict, step_num: int,
-                  allowed_tools: list[str]) -> Step:
+def _compile_call(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     """Compile a ``call`` dispatch entry into a code Step.
 
     Generates Python that calls the named tool and stores the result.
@@ -655,60 +672,60 @@ def _compile_call(entry: dict, step_num: int,
     if args:
         args_json = json.dumps(args)
         code = (
-            f'# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n'
-            f'_args = json.loads({json.dumps(args_json)})\n'
-            f'# Resolve template variables in string args (e.g. {{{{ intent }}}})\n'
-            f'for _k, _v in _args.items():\n'
-            f'    if isinstance(_v, str):\n'
-            f'        _args[_k] = _resolve_template(_v, _dispatch_ns)\n'
-            f'_max_retries = {retry}\n'
-            f'_last_error = None\n'
-            f'for _attempt in range(_max_retries):\n'
-            f'    try:\n'
-            f'        _result = {tool}(**_args)\n'
+            f"# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n"
+            f"_args = json.loads({json.dumps(args_json)})\n"
+            f"# Resolve template variables in string args (e.g. {{{{ intent }}}})\n"
+            f"for _k, _v in _args.items():\n"
+            f"    if isinstance(_v, str):\n"
+            f"        _args[_k] = _resolve_template(_v, _dispatch_ns)\n"
+            f"_max_retries = {retry}\n"
+            f"_last_error = None\n"
+            f"for _attempt in range(_max_retries):\n"
+            f"    try:\n"
+            f"        _result = {tool}(**_args)\n"
             f'        if isinstance(_result, dict) and _result.get("error"):\n'
             f'            _last_error = _result["error"]\n'
-            f'            if _attempt < _max_retries - 1:\n'
-            f'                continue\n'
-            f'        break\n'
-            f'    except Exception as _e:\n'
-            f'        _last_error = str(_e)\n'
-            f'        if _attempt < _max_retries - 1:\n'
-            f'            continue\n'
+            f"            if _attempt < _max_retries - 1:\n"
+            f"                continue\n"
+            f"        break\n"
+            f"    except Exception as _e:\n"
+            f"        _last_error = str(_e)\n"
+            f"        if _attempt < _max_retries - 1:\n"
+            f"            continue\n"
             f'        _result = {{"error": str(_e)}}\n'
             f'_dispatch_ns["{output_as}"] = _result\n'
-            f'result = _result\n'
+            f"result = _result\n"
         )
     else:
         code = (
-            f'# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n'
-            f'_max_retries = {retry}\n'
-            f'_last_error = None\n'
-            f'for _attempt in range(_max_retries):\n'
-            f'    try:\n'
-            f'        _result = {tool}()\n'
+            f"# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n"
+            f"_max_retries = {retry}\n"
+            f"_last_error = None\n"
+            f"for _attempt in range(_max_retries):\n"
+            f"    try:\n"
+            f"        _result = {tool}()\n"
             f'        if isinstance(_result, dict) and _result.get("error"):\n'
             f'            _last_error = _result["error"]\n'
-            f'            if _attempt < _max_retries - 1:\n'
-            f'                continue\n'
-            f'        break\n'
-            f'    except Exception as _e:\n'
-            f'        _last_error = str(_e)\n'
-            f'        if _attempt < _max_retries - 1:\n'
-            f'            continue\n'
+            f"            if _attempt < _max_retries - 1:\n"
+            f"                continue\n"
+            f"        break\n"
+            f"    except Exception as _e:\n"
+            f"        _last_error = str(_e)\n"
+            f"        if _attempt < _max_retries - 1:\n"
+            f"            continue\n"
             f'        _result = {{"error": str(_e)}}\n'
             f'_dispatch_ns["{output_as}"] = _result\n'
-            f'result = _result\n'
+            f"result = _result\n"
         )
 
     # If on_error is specified, append fallback logic after the retry loop
     if on_error:
         on_error_json = json.dumps(on_error)
         code += (
-            f'# on_error fallback chain\n'
+            f"# on_error fallback chain\n"
             f'if isinstance(result, dict) and result.get("error"):\n'
-            f'    _fallback_chain = json.loads({json.dumps(on_error_json)})\n'
-            f'    _dispatch_ns["{output_as}_error\"] = result.get("error")\n'
+            f"    _fallback_chain = json.loads({json.dumps(on_error_json)})\n"
+            f'    _dispatch_ns["{output_as}_error"] = result.get("error")\n'
             f'    _dispatch_ns["{output_as}_fallback_chain"] = _fallback_chain\n'
             f'    result["fallback_chain"] = _fallback_chain\n'
             f'    result["on_error_triggered"] = True\n'
@@ -716,14 +733,14 @@ def _compile_call(entry: dict, step_num: int,
 
     return Step(
         number=step_num,
-        instruction=f"Call {tool} → {output_as}" + (f" (retry={retry})" if retry > 1 else ""),
+        instruction=f"Call {tool} → {output_as}"
+        + (f" (retry={retry})" if retry > 1 else ""),
         step_type="code",
         code=code,
     )
 
 
-def _compile_run(entry: dict, step_num: int,
-                 allowed_tools: list[str]) -> Step:
+def _compile_run(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     """Compile a ``run`` dispatch entry into a code Step.
 
     Calls ``run_procedure`` to execute another procedure as a subprocess,
@@ -741,47 +758,50 @@ def _compile_run(entry: dict, step_num: int,
     """
     procedure_name = entry.get("procedure", "")
     proc_args = entry.get("args", {})
-    output_as = entry.get("output_as", procedure_name.replace("-", "_").lower() if procedure_name else "sub_result")
+    output_as = entry.get(
+        "output_as",
+        procedure_name.replace("-", "_").lower() if procedure_name else "sub_result",
+    )
 
     proc_args_json = json.dumps(proc_args)
 
     code = (
-        f'# Dispatch: run procedure {procedure_name}\n'
-        f'_proc_name = {json.dumps(procedure_name)}\n'
-        f'_proc_args = json.loads({json.dumps(proc_args_json)})\n'
-        f'# Resolve template variables in string args (e.g. {{{{ intent }}}})\n'
-        f'for _k, _v in _proc_args.items():\n'
-        f'    if isinstance(_v, str):\n'
-        f'        _proc_args[_k] = _resolve_template(_v, _dispatch_ns)\n'
-        f'try:\n'
-        f'    _raw = run_procedure(_proc_name, args=_proc_args)\n'
+        f"# Dispatch: run procedure {procedure_name}\n"
+        f"_proc_name = {json.dumps(procedure_name)}\n"
+        f"_proc_args = json.loads({json.dumps(proc_args_json)})\n"
+        f"# Resolve template variables in string args (e.g. {{{{ intent }}}})\n"
+        f"for _k, _v in _proc_args.items():\n"
+        f"    if isinstance(_v, str):\n"
+        f"        _proc_args[_k] = _resolve_template(_v, _dispatch_ns)\n"
+        f"try:\n"
+        f"    _raw = run_procedure(_proc_name, args=_proc_args)\n"
         f'    if isinstance(_raw, dict) and _raw.get("error"):\n'
         f'        _dispatch_ns["{output_as}"] = _raw\n'
-        f'        result = _raw\n'
-        f'    else:\n'
-        f'        # run_procedure returns ExecutionResult dict: '
-        f'{{procedure, overall_passed, final_output, ...}}\n'
+        f"        result = _raw\n"
+        f"    else:\n"
+        f"        # run_procedure returns ExecutionResult dict: "
+        f"{{procedure, overall_passed, final_output, ...}}\n"
         f'        _result = dict(_raw) if isinstance(_raw, dict) else {{"final_output": str(_raw)}}\n'
         f'        _fo = _result.get("final_output", "")\n'
-        f'        # Try to parse final_output as JSON and merge fields\n'
-        f'        _parsed = {{}}\n'
-        f'        if isinstance(_fo, str) and _fo.strip():\n'
-        f'            try:\n'
-        f'                _parsed = json.loads(_fo.strip())\n'
-        f'                if isinstance(_parsed, dict):\n'
+        f"        # Try to parse final_output as JSON and merge fields\n"
+        f"        _parsed = {{}}\n"
+        f"        if isinstance(_fo, str) and _fo.strip():\n"
+        f"            try:\n"
+        f"                _parsed = json.loads(_fo.strip())\n"
+        f"                if isinstance(_parsed, dict):\n"
         f'                    _result["parsed"] = _parsed\n'
-        f'                    # Merge parsed fields so conditions can dot-walk\n'
-        f'                    for _k, _v in _parsed.items():\n'
-        f'                        if _k not in _result:\n'
-        f'                            _result[_k] = _v\n'
-        f'            except (json.JSONDecodeError, ValueError):\n'
+        f"                    # Merge parsed fields so conditions can dot-walk\n"
+        f"                    for _k, _v in _parsed.items():\n"
+        f"                        if _k not in _result:\n"
+        f"                            _result[_k] = _v\n"
+        f"            except (json.JSONDecodeError, ValueError):\n"
         f'                _result["parsed"] = {{}}\n'
         f'        _dispatch_ns["{output_as}"] = _result\n'
-        f'        result = _result\n'
-        f'except Exception as _e:\n'
+        f"        result = _result\n"
+        f"except Exception as _e:\n"
         f'    _err = {{"error": str(_e), "procedure": _proc_name}}\n'
         f'    _dispatch_ns["{output_as}"] = _err\n'
-        f'    result = _err\n'
+        f"    result = _err\n"
     )
     return Step(
         number=step_num,
@@ -791,8 +811,7 @@ def _compile_run(entry: dict, step_num: int,
     )
 
 
-def _compile_extract(entry: dict, step_num: int,
-                     allowed_tools: list[str]) -> Step:
+def _compile_extract(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     """Compile an ``extract`` dispatch entry into a code Step.
 
     Generates Python that filters and maps data from a prior result.
@@ -809,8 +828,7 @@ def _compile_extract(entry: dict, step_num: int,
         equals = where.get("equals", "")
         if field and equals is not None:
             filter_code = (
-                f'    if _item.get({json.dumps(field)}) '
-                f'== {json.dumps(equals)}:\n'
+                f"    if _item.get({json.dumps(field)}) == {json.dumps(equals)}:\n"
             )
 
     # Build the field mapping
@@ -818,35 +836,34 @@ def _compile_extract(entry: dict, step_num: int,
     if fields:
         for target, source in fields.items():
             map_lines.append(
-                f'        {json.dumps(target)}: '
-                f'_item.get({json.dumps(source)}, "")'
+                f'        {json.dumps(target)}: _item.get({json.dumps(source)}, "")'
             )
     map_block = ",\n".join(map_lines) if map_lines else ""
 
     # Resolve the source path (e.g. "gaps_data.gaps" → namespace["gaps_data"]["gaps"])
     parts = from_path.split(".")
     source_var = parts[0]
-    source_path = "".join(f'[{json.dumps(p)}]' for p in parts[1:])
+    source_path = "".join(f"[{json.dumps(p)}]" for p in parts[1:])
 
     code = (
-        f'# Dispatch: extract from {from_path}\n'
-        f'_source = _dispatch_ns.get({json.dumps(source_var)}, {{}})\n'
-        f'_items = _source{source_path} if isinstance(_source, dict) else []\n'
-        f'_items = _items if isinstance(_items, list) else []\n'
-        f'_extracted = []\n'
-        f'for _item in _items:\n'
+        f"# Dispatch: extract from {from_path}\n"
+        f"_source = _dispatch_ns.get({json.dumps(source_var)}, {{}})\n"
+        f"_items = _source{source_path} if isinstance(_source, dict) else []\n"
+        f"_items = _items if isinstance(_items, list) else []\n"
+        f"_extracted = []\n"
+        f"for _item in _items:\n"
     )
     if filter_code:
         code += filter_code
-        code += '        _extracted.append({\n'
+        code += "        _extracted.append({\n"
     else:
-        code += '    _extracted.append({\n'
+        code += "    _extracted.append({\n"
     if map_block:
-        code += map_block + '\n'
+        code += map_block + "\n"
     else:
-        code += '        **_item\n'
+        code += "        **_item\n"
     code += (
-        '    })\n'
+        "    })\n"
         f'_dispatch_ns["{output_as}"] = _extracted\n'
         f'result = {{"{output_as}": _extracted, '
         f'"count": len(_extracted)}}\n'
@@ -859,8 +876,7 @@ def _compile_extract(entry: dict, step_num: int,
     )
 
 
-def _compile_dispatch(entry: dict, step_num: int,
-                      allowed_tools: list[str]) -> Step:
+def _compile_dispatch(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     """Compile a ``dispatch`` entry into a code Step.
 
     Generates Python that looks up a value in a branch table and returns
@@ -879,11 +895,11 @@ def _compile_dispatch(entry: dict, step_num: int,
     default_json = json.dumps(default)
 
     code = (
-        f'# Dispatch: route based on {on_var_name}\n'
+        f"# Dispatch: route based on {on_var_name}\n"
         f'_key = _dispatch_ns.get({json.dumps(on_var_name)}, "").strip().lower()\n'
-        f'_branches = json.loads({json.dumps(branches_json)})\n'
-        f'_default = json.loads({json.dumps(default_json)})\n'
-        f'_chain = _branches.get(_key, _default)\n'
+        f"_branches = json.loads({json.dumps(branches_json)})\n"
+        f"_default = json.loads({json.dumps(default_json)})\n"
+        f"_chain = _branches.get(_key, _default)\n"
         f'_dispatch_ns["{output_as}"] = _chain\n'
         f'result = {{"chain": _chain, "key": _key}}\n'
     )
@@ -895,8 +911,7 @@ def _compile_dispatch(entry: dict, step_num: int,
     )
 
 
-def _compile_condition(entry: dict, step_num: int,
-                       allowed_tools: list[str]) -> Step:
+def _compile_condition(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     """Compile a ``condition`` entry into a code Step.
 
     Generates Python that evaluates a condition and sets a branch target.
@@ -913,8 +928,8 @@ def _compile_condition(entry: dict, step_num: int,
     # Pattern: {{ var.sub.field | filter op value }}
     # The variable name can be dotted (e.g. gaps_data.count, _prev.status).
     _FULL_COND_RE = re.compile(
-        r'\{\{\s*(\w+(?:\.\w+)*)\s*(?:\|\s*(\w+)\s*)?\s*'
-        r'(>|<|>=|<=|==|!=)\s*(\S+)\s*\}\}'
+        r"\{\{\s*(\w+(?:\.\w+)*)\s*(?:\|\s*(\w+)\s*)?\s*"
+        r"(>|<|>=|<=|==|!=)\s*(\S+)\s*\}\}"
     )
 
     m = _FULL_COND_RE.search(if_expr)
@@ -926,8 +941,9 @@ def _compile_condition(entry: dict, step_num: int,
         # Re-quote string values so generated code uses proper Python
         # literals.  "USER_DIRECTIVE_WINS" (bare) would be a NameError;
         # '"USER_DIRECTIVE_WINS"' (json.dumps) is a valid string.
-        if (val_raw.startswith("'") and val_raw.endswith("'")) or \
-           (val_raw.startswith('"') and val_raw.endswith('"')):
+        if (val_raw.startswith("'") and val_raw.endswith("'")) or (
+            val_raw.startswith('"') and val_raw.endswith('"')
+        ):
             val = json.dumps(val_raw[1:-1])
         elif val_raw in ("True", "False", "None"):
             val = val_raw  # Python literal
@@ -952,32 +968,30 @@ def _compile_condition(entry: dict, step_num: int,
     else_json = json.dumps(else_chain)
 
     # Use _resolve_dotted for dotted paths, direct lookup for simple vars
-    if '.' in var_path:
+    if "." in var_path:
         code = (
-            f'# Dispatch: condition on {var_path}\n'
-            f'_val = _resolve_dotted(_dispatch_ns, {json.dumps(var_path)})\n'
+            f"# Dispatch: condition on {var_path}\n"
+            f"_val = _resolve_dotted(_dispatch_ns, {json.dumps(var_path)})\n"
         )
     else:
         code = (
-            f'# Dispatch: condition on {var_path}\n'
-            f'_val = _dispatch_ns.get({json.dumps(var_path)}, None)\n'
+            f"# Dispatch: condition on {var_path}\n"
+            f"_val = _dispatch_ns.get({json.dumps(var_path)}, None)\n"
         )
     if filt == "length":
-        code += (
-            '_check = len(_val) if isinstance(_val, (list, dict, str)) else 0\n'
-        )
+        code += "_check = len(_val) if isinstance(_val, (list, dict, str)) else 0\n"
     elif filt == "truthy":
-        code += '_check = bool(_val)\n'
+        code += "_check = bool(_val)\n"
     elif filt:
         # Unknown filter — treat as identity
-        code += '_check = _val\n'
+        code += "_check = _val\n"
     else:
-        code += '_check = _val\n'
+        code += "_check = _val\n"
 
     code += (
-        f'_then = json.loads({json.dumps(then_json)})\n'
-        f'_else = json.loads({json.dumps(else_json)})\n'
-        f'_chain = _then if (_check {op} {val}) else _else\n'
+        f"_then = json.loads({json.dumps(then_json)})\n"
+        f"_else = json.loads({json.dumps(else_json)})\n"
+        f"_chain = _then if (_check {op} {val}) else _else\n"
         f'_dispatch_ns["{output_as}"] = _chain\n'
         f'result = {{"chain": _chain, "condition_met": _check {op} {val}}}\n'
     )
@@ -1000,8 +1014,7 @@ _DISPATCH_COMPILERS = {
 }
 
 
-def _parse_dispatch_section(body: str,
-                            allowed_tools: list[str]) -> list[Step]:
+def _parse_dispatch_section(body: str, allowed_tools: list[str]) -> list[Step]:
     """Parse a ``## Dispatch`` YAML section into a SINGLE code Step.
 
     All dispatch entries are compiled into one Python script that runs in
@@ -1026,9 +1039,9 @@ def _parse_dispatch_section(body: str,
     dispatch_text = body[dispatch_start:]
 
     # Find the next ## header (but not inside a code block)
-    next_header = re.search(r'\n##\s+', dispatch_text)
+    next_header = re.search(r"\n##\s+", dispatch_text)
     if next_header:
-        dispatch_text = dispatch_text[:next_header.start()]
+        dispatch_text = dispatch_text[: next_header.start()]
 
     dispatch_text = dispatch_text.strip()
     if not dispatch_text:
@@ -1041,72 +1054,73 @@ def _parse_dispatch_section(body: str,
         return []
 
     if not isinstance(entries, list):
-        logger.warning("dispatch_not_list: expected a YAML list, got %s",
-                       type(entries).__name__)
+        logger.warning(
+            "dispatch_not_list: expected a YAML list, got %s", type(entries).__name__
+        )
         return []
 
     # Compile each entry into a Python snippet, then join them all into
     # one code block that runs sequentially in a single subprocess.
     snippets: list[str] = []
     snippets.append(
-        '# === Dispatch pipeline (auto-generated from ## Dispatch YAML) ===\n'
-        'import json\n'
-        'import re as _re\n'
-        '# _dispatch_ns is the shared data dict between dispatch entries.\n'
-        '# It is NOT the same as the runtime exec namespace (which contains\n'
-        '# tools like llm_generate, vault_gaps, etc.).\n'
-        '# Seed it with args so template variables like {{ intent }} resolve.\n'
-        '_dispatch_ns = dict(args) if isinstance(args, dict) else {}\n'
-        '\n'
+        "# === Dispatch pipeline (auto-generated from ## Dispatch YAML) ===\n"
+        "import json\n"
+        "import re as _re\n"
+        "# _dispatch_ns is the shared data dict between dispatch entries.\n"
+        "# It is NOT the same as the runtime exec namespace (which contains\n"
+        "# tools like llm_generate, vault_gaps, etc.).\n"
+        "# Seed it with args so template variables like {{ intent }} resolve.\n"
+        "_dispatch_ns = dict(args) if isinstance(args, dict) else {}\n"
+        "\n"
         '# Dotted field resolver: walks nested dicts for "gaps_data.count"\n'
-        'def _resolve_dotted(ns, path):\n'
+        "def _resolve_dotted(ns, path):\n"
         '    """Resolve a dotted path like "gaps_data.count" against a dict.\n'
-        '    Returns the value at the path, or None if any key is missing.\n'
+        "    Returns the value at the path, or None if any key is missing.\n"
         '    Handles dicts and lists (list index must be an integer)."""\n'
         '    parts = path.split(".")\n'
-        '    val = ns\n'
-        '    for part in parts:\n'
-        '        if isinstance(val, dict):\n'
-        '            val = val.get(part)\n'
-        '            if val is None:\n'
-        '                return None\n'
-        '        elif isinstance(val, list):\n'
-        '            try:\n'
-        '                idx = int(part)\n'
-        '                val = val[idx]\n'
-        '            except (ValueError, IndexError):\n'
-        '                return None\n'
-        '        else:\n'
-        '            return None\n'
-        '    return val\n'
-        '\n'
-        '# _prev: always points to the last entry\'s result (convenience for\n'
-        '# conditions that want to branch on the prior step\'s output without\n'
-        '# knowing its output_as name).\n'
+        "    val = ns\n"
+        "    for part in parts:\n"
+        "        if isinstance(val, dict):\n"
+        "            val = val.get(part)\n"
+        "            if val is None:\n"
+        "                return None\n"
+        "        elif isinstance(val, list):\n"
+        "            try:\n"
+        "                idx = int(part)\n"
+        "                val = val[idx]\n"
+        "            except (ValueError, IndexError):\n"
+        "                return None\n"
+        "        else:\n"
+        "            return None\n"
+        "    return val\n"
+        "\n"
+        "# _prev: always points to the last entry's result (convenience for\n"
+        "# conditions that want to branch on the prior step's output without\n"
+        "# knowing its output_as name).\n"
         '_dispatch_ns["_prev"] = None\n'
-        '\n'
-        '# Template resolver: {{ var }} and {{ var | filter }}\n'
+        "\n"
+        "# Template resolver: {{ var }} and {{ var | filter }}\n"
         '_TEMPLATE_RE = _re.compile(r"\\{\\{\\s*(\\w+)\\s*\\}\\}")\n'
-        '_TEMPLATE_FILTER_RE = _re.compile(\n'
+        "_TEMPLATE_FILTER_RE = _re.compile(\n"
         '    r"\\{\\{\\s*(\\w+)\\s*\\|\\s*(\\w+)\\s*\\}\\}")\n'
-        'def _resolve_template(template, ns):\n'
-        '    def _replacer(m):\n'
+        "def _resolve_template(template, ns):\n"
+        "    def _replacer(m):\n"
         '        v = ns.get(m.group(1), "")\n'
-        '        if isinstance(v, (dict, list)):\n'
-        '            v = json.dumps(v, default=str)\n'
-        '        return str(v)\n'
-        '    def _filter_replacer(m):\n'
+        "        if isinstance(v, (dict, list)):\n"
+        "            v = json.dumps(v, default=str)\n"
+        "        return str(v)\n"
+        "    def _filter_replacer(m):\n"
         '        v = ns.get(m.group(1), "")\n'
-        '        f = m.group(2).strip()\n'
+        "        f = m.group(2).strip()\n"
         '        if f == "length":\n'
-        '            if isinstance(v, (list, dict, str)):\n'
-        '                return str(len(v))\n'
+        "            if isinstance(v, (list, dict, str)):\n"
+        "                return str(len(v))\n"
         '            return "0"\n'
-        '        return str(v)\n'
-        '    result = _TEMPLATE_FILTER_RE.sub(_filter_replacer, template)\n'
-        '    result = _TEMPLATE_RE.sub(_replacer, result)\n'
-        '    return result\n'
-        '\n'
+        "        return str(v)\n"
+        "    result = _TEMPLATE_FILTER_RE.sub(_filter_replacer, template)\n"
+        "    result = _TEMPLATE_RE.sub(_replacer, result)\n"
+        "    return result\n"
+        "\n"
     )
 
     for i, entry in enumerate(entries):
@@ -1127,8 +1141,8 @@ def _parse_dispatch_section(body: str,
             # Strip the '# Dispatch: ...' comment and use the raw code
             code = step.code or ""
             # Remove the comment line
-            code = re.sub(r'^# Dispatch:.*\n', '', code, count=1)
-            snippets.append(f'# --- Entry {i+1}: {entry_type} ---')
+            code = re.sub(r"^# Dispatch:.*\n", "", code, count=1)
+            snippets.append(f"# --- Entry {i + 1}: {entry_type} ---")
             snippets.append(code)
             # Track _prev: after each entry, store its full result dict so
             # the next condition can reference {{ _prev.field }} without
@@ -1144,21 +1158,23 @@ def _parse_dispatch_section(body: str,
     # Export the full dispatch namespace as the final result so subsequent
     # steps can access dispatch outputs via prior_results.
     snippets.append(
-        '# --- Export dispatch namespace as result ---\n'
-        'result = dict(_dispatch_ns)\n'
+        "# --- Export dispatch namespace as result ---\nresult = dict(_dispatch_ns)\n"
     )
 
-    combined_code = '\n'.join(snippets)
+    combined_code = "\n".join(snippets)
 
-    return [Step(
-        number=1,
-        instruction="Run dispatch pipeline (YAML DSL)",
-        step_type="code",
-        code=combined_code,
-    )]
+    return [
+        Step(
+            number=1,
+            instruction="Run dispatch pipeline (YAML DSL)",
+            step_type="code",
+            code=combined_code,
+        )
+    ]
 
 
 # ── Public API ────────────────────────────────────────────────────────────
+
 
 def compile_procedure(file_path: str) -> Procedure | None:
     """Compile a markdown procedure note from disk.
@@ -1170,7 +1186,7 @@ def compile_procedure(file_path: str) -> Procedure | None:
     if not path.exists():
         return None
 
-    text = path.read_text(encoding='utf-8', errors='replace')
+    text = path.read_text(encoding="utf-8", errors="replace")
     proc = compile_from_text(path.stem, text)
     if proc is not None:
         proc.file_path = str(path)
@@ -1186,16 +1202,16 @@ def compile_from_text(note_name: str, text: str) -> Procedure | None:
     fm, _fm_str, body = _parse_frontmatter(text)
 
     is_procedure = (
-        str(fm.get('type', '')).lower() == 'procedure'
-        or str(fm.get('exemplar_procedure', '')).lower() == 'true'
-        or fm.get('exemplar_procedure') is True
+        str(fm.get("type", "")).lower() == "procedure"
+        or str(fm.get("exemplar_procedure", "")).lower() == "true"
+        or fm.get("exemplar_procedure") is True
     )
     if not is_procedure:
         return None
 
     # Parse allowed_tools (may be a list or absent) — needed BEFORE dispatch
     # parsing so dispatch compilers can validate tool references.
-    allowed = fm.get('allowed_tools', [])
+    allowed = fm.get("allowed_tools", [])
     if isinstance(allowed, str):
         allowed = [allowed]
 
@@ -1215,27 +1231,29 @@ def compile_from_text(note_name: str, text: str) -> Procedure | None:
     # is almost always a format mismatch (e.g. plain prose with no step
     # markers at all). Log it so the issue is visible without guessing.
     if not steps and body.strip():
-        _h3_steps = len(re.findall(r'^###\s+Step', body, re.MULTILINE))
-        _num_steps = len(re.findall(r'^\d+\.\s+', body, re.MULTILINE))
+        _h3_steps = len(re.findall(r"^###\s+Step", body, re.MULTILINE))
+        _num_steps = len(re.findall(r"^\d+\.\s+", body, re.MULTILINE))
         logger.warning(
             "compile_zero_steps: procedure '%s' has body content but "
             "parsed 0 steps. Found %d ### Step headers and %d numbered "
             "list items. The compiler recognizes '### Step N:' headers "
             "and 'N.' numbered lists inside a ## Steps section — check "
             "that steps use one of these formats.",
-            note_name, _h3_steps, _num_steps,
+            note_name,
+            _h3_steps,
+            _num_steps,
         )
 
     return Procedure(
         name=note_name,
-        file_path='',  # no file when compiling from text
-        version=fm.get('version', '1.0.0'),
-        activation=fm.get('activation', 'always'),
-        spec_version=str(fm.get('spec_version', '1')),
+        file_path="",  # no file when compiling from text
+        version=fm.get("version", "1.0.0"),
+        activation=fm.get("activation", "always"),
+        spec_version=str(fm.get("spec_version", "1")),
         steps=steps,
         raw_text=text,
         frontmatter=fm,
-        description=fm.get('description', ''),
+        description=fm.get("description", ""),
         allowed_tools=allowed,
-        model_cartridge=str(fm.get('model_cartridge', 'big')).strip().lower(),
+        model_cartridge=str(fm.get("model_cartridge", "big")).strip().lower(),
     )

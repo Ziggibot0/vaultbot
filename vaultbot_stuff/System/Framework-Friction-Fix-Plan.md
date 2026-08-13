@@ -1,6 +1,7 @@
 ---
 type: plan
 status: complete
+baseline: true
 created: 2026-07-30
 completed: 2026-07-30
 updated: 2026-08-03

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 created: 2026-08-02
 updated: 2026-08-03
 model_cartridge: small

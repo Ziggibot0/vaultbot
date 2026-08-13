@@ -1,6 +1,7 @@
 ---
 type: system-design
 status: complete
+baseline: true
 created: 2026-07-31
 title: Token Efficiency Audit
 tags:

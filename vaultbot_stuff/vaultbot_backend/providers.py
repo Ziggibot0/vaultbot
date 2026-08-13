@@ -91,21 +91,41 @@ PROVIDER_TYPES: tuple[str, ...] = ("ollama", "openai")
 # Well-known base URLs so the UI can offer one-click provider presets.
 # The user can always type a custom base_url — these are just conveniences.
 KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
-    "ollama-local": {"type": "ollama", "base_url": "http://localhost:11434",
-                     "label": "Ollama (this machine)"},
-    "ollama-cloud": {"type": "ollama", "base_url": "https://ollama.com",
-                     "label": "Ollama Cloud"},
-    "openai": {"type": "openai", "base_url": "https://api.openai.com",
-               "label": "OpenAI"},
-    "openrouter": {"type": "openai", "base_url": "https://openrouter.ai/api",
-                   "label": "OpenRouter"},
-    "gemini": {"type": "openai",
-               "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-               "label": "Google Gemini"},
-    "groq": {"type": "openai", "base_url": "https://api.groq.com/openai",
-             "label": "Groq"},
-    "lm-studio": {"type": "openai", "base_url": "http://localhost:1234",
-                  "label": "LM Studio (local)"},
+    "ollama-local": {
+        "type": "ollama",
+        "base_url": "http://localhost:11434",
+        "label": "Ollama (this machine)",
+    },
+    "ollama-cloud": {
+        "type": "ollama",
+        "base_url": "https://ollama.com",
+        "label": "Ollama Cloud",
+    },
+    "openai": {
+        "type": "openai",
+        "base_url": "https://api.openai.com",
+        "label": "OpenAI",
+    },
+    "openrouter": {
+        "type": "openai",
+        "base_url": "https://openrouter.ai/api",
+        "label": "OpenRouter",
+    },
+    "gemini": {
+        "type": "openai",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "label": "Google Gemini",
+    },
+    "groq": {
+        "type": "openai",
+        "base_url": "https://api.groq.com/openai",
+        "label": "Groq",
+    },
+    "lm-studio": {
+        "type": "openai",
+        "base_url": "http://localhost:1234",
+        "label": "LM Studio (local)",
+    },
 }
 
 
@@ -117,11 +137,12 @@ class Provider:
     OpenAI-compatible providers it is the bearer token. Stored in
     providers.json (gitignored).
     """
+
     id: str
-    type: str                # "ollama" | "openai"
+    type: str  # "ollama" | "openai"
     base_url: str
     api_key: str = ""
-    label: str = ""          # human-facing name for the UI
+    label: str = ""  # human-facing name for the UI
 
     def to_public(self) -> dict[str, Any]:
         """Secret-free view for the settings UI (has_key bool instead of key)."""
@@ -153,7 +174,7 @@ def normalize_base_url(url: str, type_: str) -> str:
     low = u.lower()
     for suf in sorted(_V1_SUFFIXES, key=len, reverse=True):
         if low.endswith(suf):
-            u = u[: -len(suf)].rstrip("/")   # strip once
+            u = u[: -len(suf)].rstrip("/")  # strip once
             break
     if not u:
         raise ValueError(f"base_url {url!r} reduced to nothing after normalization")
@@ -177,12 +198,13 @@ def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
     t0 = time.time()
     try:
         if prov.type == "openai":
-            r = requests.get(f"{base}/v1/models", headers=headers,
-                             timeout=timeout)
+            r = requests.get(f"{base}/v1/models", headers=headers, timeout=timeout)
             if r.status_code in (401, 403):
                 return _probe_fail(t0, "auth rejected (check the API key)")
             if r.status_code == 404:
-                return _probe_fail(t0, "no /v1/models — is this really an OpenAI-compatible endpoint?")
+                return _probe_fail(
+                    t0, "no /v1/models — is this really an OpenAI-compatible endpoint?"
+                )
             r.raise_for_status()
             data = r.json().get("data", [])
             names = [m.get("id", "") for m in data if m.get("id")]
@@ -190,7 +212,9 @@ def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
         # ollama native
         r = requests.get(f"{base}/api/tags", headers=headers, timeout=timeout)
         if r.status_code == 404:
-            return _probe_fail(t0, "no /api/tags — is an Ollama daemon at this URL? (strip any /v1)")
+            return _probe_fail(
+                t0, "no /api/tags — is an Ollama daemon at this URL? (strip any /v1)"
+            )
         r.raise_for_status()
         models = r.json().get("models", [])
         names = [m.get("name", "") for m in models if m.get("name")]
@@ -204,13 +228,23 @@ def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
 
 
 def _probe_ok(t0: float, models: list[str]) -> dict[str, Any]:
-    return {"ok": True, "models": models, "count": len(models),
-            "latency_ms": round((time.time() - t0) * 1000, 1), "error": None}
+    return {
+        "ok": True,
+        "models": models,
+        "count": len(models),
+        "latency_ms": round((time.time() - t0) * 1000, 1),
+        "error": None,
+    }
 
 
 def _probe_fail(t0: float, error: str) -> dict[str, Any]:
-    return {"ok": False, "models": [], "count": 0,
-            "latency_ms": round((time.time() - t0) * 1000, 1), "error": error}
+    return {
+        "ok": False,
+        "models": [],
+        "count": 0,
+        "latency_ms": round((time.time() - t0) * 1000, 1),
+        "error": error,
+    }
 
 
 @dataclass
@@ -224,9 +258,10 @@ class ModelEntry:
     model as free-tier (OpenRouter ":free" suffix, Ollama local) so the UI can
     warn before assigning a PAID model to a money-spending role.
     """
-    id: str                  # unique registry id, e.g. "openrouter:qwen/qwen-2.5-vl"
-    model: str               # the provider's model id, e.g. "qwen/qwen-2.5-vl"
-    provider: str            # provider id
+
+    id: str  # unique registry id, e.g. "openrouter:qwen/qwen-2.5-vl"
+    model: str  # the provider's model id, e.g. "qwen/qwen-2.5-vl"
+    provider: str  # provider id
     vision: bool = False
     instruct: bool = True
     free: bool = False
@@ -236,8 +271,7 @@ class ModelEntry:
         return asdict(self)
 
 
-def _is_free_model(model_name: str, provider_type: str,
-                    base_url: str = "") -> bool:
+def _is_free_model(model_name: str, provider_type: str, base_url: str = "") -> bool:
     """Best-effort free-tier detection so the UI can flag paid models.
 
     - Ollama (local daemon): always free (runs on your own hardware).
@@ -263,6 +297,7 @@ def _is_local_base_url(url: str) -> bool:
     hardware, so it's always free regardless of the provider type.
     """
     from urllib.parse import urlparse
+
     host = (urlparse(url or "").hostname or "").lower()
     return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1")
 
@@ -280,7 +315,7 @@ class ProviderRegistry:
         self._lock = threading.RLock()
         self._providers: dict[str, Provider] = {}
         self._models: dict[str, ModelEntry] = {}
-        self._roles: dict[str, str] = {}        # role -> model id
+        self._roles: dict[str, str] = {}  # role -> model id
         self.load()
         # load() heals any stale base_urls (strips stray /v1) in memory; persist
         # the heal so the file on disk matches and the next boot is a no-op.
@@ -319,9 +354,11 @@ class ProviderRegistry:
                     # a stale False) are corrected on load. This is a heal,
                     # persisted on the next save() (the __init__ save-on-load).
                     prov = self._providers.get(entry.provider)
-                    entry.free = _is_free_model(entry.model,
-                                                 prov.type if prov else "openai",
-                                                 prov.base_url if prov else "")
+                    entry.free = _is_free_model(
+                        entry.model,
+                        prov.type if prov else "openai",
+                        prov.base_url if prov else "",
+                    )
                     self._models[entry.id] = entry
                 for role, mid in (data.get("roles") or {}).items():
                     if role in ROLES and isinstance(mid, str):
@@ -355,14 +392,25 @@ class ProviderRegistry:
         with self._lock:
             return self._providers.get(provider_id)
 
-    def add_provider(self, provider_id: str, type_: str, base_url: str,
-                     api_key: str = "", label: str = "") -> Provider:
+    def add_provider(
+        self,
+        provider_id: str,
+        type_: str,
+        base_url: str,
+        api_key: str = "",
+        label: str = "",
+    ) -> Provider:
         if type_ not in PROVIDER_TYPES:
             raise ValueError(f"type must be one of {PROVIDER_TYPES}")
-        base_url = normalize_base_url(base_url, type_)   # strips /v1 + trailing /
+        base_url = normalize_base_url(base_url, type_)  # strips /v1 + trailing /
         with self._lock:
-            prov = Provider(id=provider_id, type=type_, base_url=base_url,
-                            api_key=api_key, label=label)
+            prov = Provider(
+                id=provider_id,
+                type=type_,
+                base_url=base_url,
+                api_key=api_key,
+                label=label,
+            )
             self._providers[provider_id] = prov
             self.save()
             return prov
@@ -374,8 +422,9 @@ class ProviderRegistry:
             del self._providers[provider_id]
             # Drop models that pointed at the removed provider, and any role
             # that referenced those models.
-            dead_models = [mid for mid, m in self._models.items()
-                           if m.provider == provider_id]
+            dead_models = [
+                mid for mid, m in self._models.items() if m.provider == provider_id
+            ]
             for mid in dead_models:
                 del self._models[mid]
             for role, mid in list(self._roles.items()):
@@ -395,15 +444,28 @@ class ProviderRegistry:
         with self._lock:
             return self._models.get(model_id)
 
-    def add_model(self, model_id: str, model: str, provider_id: str,
-                  vision: bool = False, instruct: bool = True,
-                  free: bool = False, label: str = "") -> ModelEntry:
+    def add_model(
+        self,
+        model_id: str,
+        model: str,
+        provider_id: str,
+        vision: bool = False,
+        instruct: bool = True,
+        free: bool = False,
+        label: str = "",
+    ) -> ModelEntry:
         if provider_id not in self._providers:
             raise ValueError(f"unknown provider {provider_id!r}")
         with self._lock:
-            entry = ModelEntry(id=model_id, model=model, provider=provider_id,
-                               vision=vision, instruct=instruct, free=free,
-                               label=label)
+            entry = ModelEntry(
+                id=model_id,
+                model=model,
+                provider=provider_id,
+                vision=vision,
+                instruct=instruct,
+                free=free,
+                label=label,
+            )
             self._models[model_id] = entry
             self.save()
             return entry
@@ -484,40 +546,66 @@ class ProviderRegistry:
             except ValueError:
                 host = "http://localhost:11434"
             reg._providers["ollama-local"] = Provider(
-                id="ollama-local", type="ollama", base_url=host,
-                label="Ollama (this machine)")
+                id="ollama-local",
+                type="ollama",
+                base_url=host,
+                label="Ollama (this machine)",
+            )
 
             big_model = (os.getenv("OLLAMA_LLM_MODEL") or "").strip()
             if big_model:
                 mid = f"ollama-local:{big_model}"
                 reg._models[mid] = ModelEntry(
-                    id=mid, model=big_model, provider="ollama-local",
-                    vision=_guess_vision(big_model), instruct=True)
+                    id=mid,
+                    model=big_model,
+                    provider="ollama-local",
+                    vision=_guess_vision(big_model),
+                    instruct=True,
+                )
                 reg._roles["big"] = mid
 
             vision_model = (os.getenv("VISION_MODEL") or "").strip()
             if vision_model:
-                backend = (os.getenv("VISION_BACKEND") or
-                           os.getenv("LLM_BACKEND") or "ollama").strip().lower()
+                backend = (
+                    (
+                        os.getenv("VISION_BACKEND")
+                        or os.getenv("LLM_BACKEND")
+                        or "ollama"
+                    )
+                    .strip()
+                    .lower()
+                )
                 if backend == "openai":
                     prov_id = reg._ensure_openai_provider()
                     mid = f"{prov_id}:{vision_model}"
                     reg._models[mid] = ModelEntry(
-                        id=mid, model=vision_model, provider=prov_id,
-                        vision=True, instruct=True)
+                        id=mid,
+                        model=vision_model,
+                        provider=prov_id,
+                        vision=True,
+                        instruct=True,
+                    )
                 else:
                     mid = f"ollama-local:{vision_model}"
                     reg._models[mid] = ModelEntry(
-                        id=mid, model=vision_model, provider="ollama-local",
-                        vision=True, instruct=True)
+                        id=mid,
+                        model=vision_model,
+                        provider="ollama-local",
+                        vision=True,
+                        instruct=True,
+                    )
                 reg._roles["vision"] = mid
 
             small_model = (os.getenv("SMALL_MODEL") or "").strip()
             if small_model:
                 mid = f"ollama-local:{small_model}"
                 reg._models[mid] = ModelEntry(
-                    id=mid, model=small_model, provider="ollama-local",
-                    vision=False, instruct=True)
+                    id=mid,
+                    model=small_model,
+                    provider="ollama-local",
+                    vision=False,
+                    instruct=True,
+                )
                 reg._roles["small"] = mid
 
             # A legacy cloud chat backend becomes the big role.
@@ -527,8 +615,12 @@ class ProviderRegistry:
                     prov_id = reg._ensure_openai_provider()
                     mid = f"{prov_id}:{cloud_model}"
                     reg._models[mid] = ModelEntry(
-                        id=mid, model=cloud_model, provider=prov_id,
-                        vision=_guess_vision(cloud_model), instruct=True)
+                        id=mid,
+                        model=cloud_model,
+                        provider=prov_id,
+                        vision=_guess_vision(cloud_model),
+                        instruct=True,
+                    )
                     reg._roles["big"] = mid
 
             reg.save()
@@ -546,8 +638,12 @@ class ProviderRegistry:
         except ValueError:
             base_url = "https://api.openai.com"
         self._providers[prov_id] = Provider(
-            id=prov_id, type="openai", base_url=base_url, api_key=api_key,
-            label="OpenAI")
+            id=prov_id,
+            type="openai",
+            base_url=base_url,
+            api_key=api_key,
+            label="OpenAI",
+        )
         return prov_id
 
 
@@ -559,6 +655,17 @@ def _guess_vision(model: str) -> bool:
     land in the vision picker.
     """
     m = model.lower()
-    needles = ("vl", "vision", "llava", "minicpm-v", "-v:", "-v-", "gpt-4o",
-               "gpt-4-vision", "gemini", "claude", "qwen-vl")
+    needles = (
+        "vl",
+        "vision",
+        "llava",
+        "minicpm-v",
+        "-v:",
+        "-v-",
+        "gpt-4o",
+        "gpt-4-vision",
+        "gemini",
+        "claude",
+        "qwen-vl",
+    )
     return any(n in m for n in needles)

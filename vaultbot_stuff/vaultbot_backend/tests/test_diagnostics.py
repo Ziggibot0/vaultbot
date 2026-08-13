@@ -9,6 +9,7 @@ asserts:
 
 Run: pytest tests/test_diagnostics.py -v
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +19,7 @@ from error_types import Diagnosis, ProblemCategory, Severity
 # ─────────────────────────────────────────────────────────────────────────
 # Predicates — each gets one representative exception + a negative case
 # ─────────────────────────────────────────────────────────────────────────
+
 
 class TestOllamaDown:
     """ConnectionRefusedError / requests.ConnectionError → ollama_down."""
@@ -36,8 +38,10 @@ class TestOllamaDown:
 
     def test_requests_connection_error_phrasing(self):
         # requests.ConnectionError carries "Max retries exceeded".
-        exc = Exception("requests.exceptions.ConnectionError: "
-                        "Max retries exceeded with url: /api/generate")
+        exc = Exception(
+            "requests.exceptions.ConnectionError: "
+            "Max retries exceeded with url: /api/generate"
+        )
         d = classify_error(exc, {"stage": "chat"})
         assert d.category is ProblemCategory.OLLAMA_DOWN
         assert "Max retries" not in d.user_message  # no library jargon
@@ -55,12 +59,13 @@ class TestModelMissing:
     """HTTPError 404 'model not found' → model_not_pulled (by default)."""
 
     def test_ollama_model_not_found(self):
-        exc = Exception("HTTPError 404: model 'qwen3.6:latest' not found, "
-                        "try pulling it first")
+        exc = Exception(
+            "HTTPError 404: model 'qwen3.6:latest' not found, try pulling it first"
+        )
         d = classify_error(exc, {"model": "qwen3.6:latest"})
         assert d.category is ProblemCategory.MODEL_NOT_PULLED
         assert "qwen3.6:latest" in d.user_message  # model name is OK to show
-        assert "404" not in d.user_message          # no status code jargon
+        assert "404" not in d.user_message  # no status code jargon
         assert d.action == "pull_model"
 
     def test_openai_model_does_not_exist(self):
@@ -91,8 +96,7 @@ class TestFaissAbi:
     """numpy/FAISS ABI mismatch → faiss_abi with a repair remedy."""
 
     def test_faiss_import_error(self):
-        exc = ImportError("numpy.core.multiarray failed to import "
-                          "(faiss._swigfaiss)")
+        exc = ImportError("numpy.core.multiarray failed to import (faiss._swigfaiss)")
         d = classify_error(exc)
         assert d.category is ProblemCategory.FAISS_ABI
         assert "FAISS" in d.user_message or "math library" in d.user_message
@@ -109,11 +113,14 @@ class TestFaissAbi:
 class TestSyncedFolder:
     """Vault in OneDrive/Dropbox/iCloud → synced_folder (data risk)."""
 
-    @pytest.mark.parametrize("marker", [
-        "C:/Users/testuser/VaultBot",
-        "/home/s/Dropbox/vault",
-        "/Users/s/Library/Mobile Documents/iCloud~Drive/vault",
-    ])
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            "C:/Users/testuser/VaultBot",
+            "/home/s/Dropbox/vault",
+            "/Users/s/Library/Mobile Documents/iCloud~Drive/vault",
+        ],
+    )
     def test_detects_sync_folders(self, marker):
         d = diagnose_from_message("synced folder detected", path=marker)
         assert d.category is ProblemCategory.SYNCED_FOLDER
@@ -122,8 +129,9 @@ class TestSyncedFolder:
         assert d.action == "move_vault"
 
     def test_does_not_flag_plain_paths(self):
-        d = diagnose_from_message("synced folder detected",
-                                  path="C:/Users/testuser/Documents/VaultBot")
+        d = diagnose_from_message(
+            "synced folder detected", path="C:/Users/testuser/Documents/VaultBot"
+        )
         # The message says "synced folder" so it WILL classify — this is a
         # reminder that /preflight only emits the message when the marker
         # check passes. Here we just assert the category is right given the
@@ -141,7 +149,7 @@ class TestGeneric:
         assert d.category is ProblemCategory.GENERIC
         assert d.severity is Severity.BROKEN
         assert "novel blew up" not in d.user_message  # no leak
-        assert "novel blew up" in d.raw_for_log        # captured for log
+        assert "novel blew up" in d.raw_for_log  # captured for log
 
     def test_buggy_predicate_does_not_crash(self):
         # A predicate that itself raises must fall through to generic.
@@ -205,15 +213,18 @@ class TestSubsystemCategories:
     ``context={"category": "retrieval_broken"}`` and the classification
     is unambiguous."""
 
-    @pytest.mark.parametrize("tag,expected_category", [
-        ("retrieval_broken",   ProblemCategory.RETRIEVAL_BROKEN),
-        ("compaction_broken",  ProblemCategory.COMPACTION_BROKEN),
-        ("drift_lost",         ProblemCategory.DRIFT_LOST),
-        ("history_lost",       ProblemCategory.HISTORY_LOST),
-        ("research_degraded",  ProblemCategory.RESEARCH_DEGRADED),
-        ("verification_broken", ProblemCategory.VERIFICATION_BROKEN),
-        ("maintenance_broken", ProblemCategory.MAINTENANCE_BROKEN),
-    ])
+    @pytest.mark.parametrize(
+        "tag,expected_category",
+        [
+            ("retrieval_broken", ProblemCategory.RETRIEVAL_BROKEN),
+            ("compaction_broken", ProblemCategory.COMPACTION_BROKEN),
+            ("drift_lost", ProblemCategory.DRIFT_LOST),
+            ("history_lost", ProblemCategory.HISTORY_LOST),
+            ("research_degraded", ProblemCategory.RESEARCH_DEGRADED),
+            ("verification_broken", ProblemCategory.VERIFICATION_BROKEN),
+            ("maintenance_broken", ProblemCategory.MAINTENANCE_BROKEN),
+        ],
+    )
     def test_context_tag_classifies_correctly(self, tag, expected_category):
         """Each tag maps to the right ProblemCategory."""
         exc = RuntimeError("something broke")

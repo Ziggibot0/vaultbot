@@ -50,6 +50,7 @@ _BLOCKED_DOMAINS = {
     "simple.wikipedia.org",
 }
 
+
 def _is_blocked_source(url: str) -> bool:
     """Check if a URL should be blocked.
 
@@ -71,8 +72,10 @@ _BROWSER_UA = (
 )
 _DEFAULT_HEADERS = {
     "User-Agent": _BROWSER_UA,
-    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
-               "application/atom+xml,*/*;q=0.8"),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "application/atom+xml,*/*;q=0.8"
+    ),
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
     "Sec-Fetch-Dest": "document",
@@ -94,10 +97,11 @@ class _Backend:
     throttling, and exception isolation is handled here so subclasses stay
     tiny and focused on parsing one engine's response.
     """
+
     name = "base"
-    min_interval = 1.0          # polite throttle between requests
-    cooldown_seconds = 60.0     # how long to back off after a ban/error burst
-    ban_threshold = 2           # consecutive failures before cooldown kicks in
+    min_interval = 1.0  # polite throttle between requests
+    cooldown_seconds = 60.0  # how long to back off after a ban/error burst
+    ban_threshold = 2  # consecutive failures before cooldown kicks in
 
     def __init__(self, session_logger=None, timeout: int = 20):
         self.session_logger = session_logger
@@ -108,14 +112,20 @@ class _Backend:
         self._consecutive_failures: int = 0
 
     # -- logging ----------------------------------------------------------
-    def _log(self, method: str, inputs=None, outputs=None,
-             duration_ms=None, error=None):
+    def _log(
+        self, method: str, inputs=None, outputs=None, duration_ms=None, error=None
+    ):
         if self.session_logger is None:
             return
         try:
             self.session_logger.log_tool_call(
-                tool=self.name, method=method, inputs=inputs, outputs=outputs,
-                duration_ms=duration_ms, error=error)
+                tool=self.name,
+                method=method,
+                inputs=inputs,
+                outputs=outputs,
+                duration_ms=duration_ms,
+                error=error,
+            )
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
@@ -139,15 +149,18 @@ class _Backend:
             self._consecutive_failures += 1
             if self._consecutive_failures >= self.ban_threshold:
                 self._cooldown_until = time.time() + self.cooldown_seconds
-                self._log("cooldown", {"reason": reason,
-                                       "seconds": self.cooldown_seconds})
+                self._log(
+                    "cooldown", {"reason": reason, "seconds": self.cooldown_seconds}
+                )
 
     def _mark_success(self) -> None:
         with self._lock:
             self._consecutive_failures = 0
 
     # -- public search ----------------------------------------------------
-    def search(self, query: str, max_results: int = 5) -> tuple[list[dict[str, Any]], str | None]:
+    def search(
+        self, query: str, max_results: int = 5
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """Return (results, error_or_None). Handles cooldown + throttle."""
         if self._in_cooldown():
             return [], f"cooldown:{int(self._cooldown_remaining())}s"
@@ -158,9 +171,12 @@ class _Backend:
             # Filter blocked domains defense-in-depth.
             clean = [r for r in raw if not _is_blocked_source(r.get("url", ""))]
             self._mark_success()
-            self._log("search", {"query": query, "max": max_results},
-                      outputs={"count": len(clean)},
-                      duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "search",
+                {"query": query, "max": max_results},
+                outputs={"count": len(clean)},
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return clean, None
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else 0
@@ -170,13 +186,21 @@ class _Backend:
                 self._mark_failure(reason)
             else:
                 self._mark_failure("http_error")
-            self._log("search", {"query": query}, error=reason,
-                      duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "search",
+                {"query": query},
+                error=reason,
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return [], reason
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._mark_failure("exception")
-            self._log("search", {"query": query}, error=str(e),
-                      duration_ms=(time.time() - t0) * 1000)
+            self._log(
+                "search",
+                {"query": query},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return [], str(e)
 
     # -- subclass hook -----------------------------------------------------
@@ -195,7 +219,7 @@ class _Backend:
 class DuckDuckGoLite(_Backend):
     name = "duckduckgo"
     min_interval = 1.2
-    cooldown_seconds = 90.0   # DDG ban windows are long
+    cooldown_seconds = 90.0  # DDG ban windows are long
 
     SEARCH_URL = "https://lite.duckduckgo.com/lite/"
 
@@ -235,10 +259,14 @@ class DuckDuckGoLite(_Backend):
                     snip = sib.find("td", class_="result-snippet")
                     if snip:
                         snippet = snip.get_text(" ", strip=True)
-            results.append({
-                "url": url, "title": title,
-                "content": snippet, "raw_content": "",
-            })
+            results.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "content": snippet,
+                    "raw_content": "",
+                }
+            )
         # Fallback: older lite markup uses .result__a anchors.
         if not results:
             for a in soup.select("a.result__a"):
@@ -257,10 +285,14 @@ class DuckDuckGoLite(_Backend):
                         s = snip.find("td", class_="result__snippet")
                         if s:
                             snippet = s.get_text(" ", strip=True)
-                results.append({
-                    "url": url, "title": title,
-                    "content": snippet, "raw_content": "",
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "title": title,
+                        "content": snippet,
+                        "raw_content": "",
+                    }
+                )
         return results
 
     @staticmethod
@@ -290,9 +322,22 @@ class MarginaliaBackend(_Backend):
     # Internal marginalia paths that are NOT search results (nav, crawler
     # info, submission, API docs). Any link pointing into these is junk.
     _JUNK_SUBSTRINGS = (
-        "/crawler-ips", "/submit", "/api", "/about", "/login", "/search",
-        "/explore", "/site/", "/profile/", "/tools", "/docs", "/help",
-        ".txt", ".json", ".xml", ".rss",
+        "/crawler-ips",
+        "/submit",
+        "/api",
+        "/about",
+        "/login",
+        "/search",
+        "/explore",
+        "/site/",
+        "/profile/",
+        "/tools",
+        "/docs",
+        "/help",
+        ".txt",
+        ".json",
+        ".xml",
+        ".rss",
     )
     # External boilerplate URLs that appear in the page chrome/footer of the
     # results page (license links, etc.) and are never real search hits.
@@ -300,8 +345,12 @@ class MarginaliaBackend(_Backend):
     # chat.marginalia.nu ("project discord"), marginalia-search.com, and any
     # other subdomain — they are the search engine's own chrome, not results.
     _JUNK_DOMAINS = (
-        "creativecommons.org", "gnu.org", "w3.org", "github.com/marginalia",
-        "marginalia.nu", "marginalia-search.com",
+        "creativecommons.org",
+        "gnu.org",
+        "w3.org",
+        "github.com/marginalia",
+        "marginalia.nu",
+        "marginalia-search.com",
     )
 
     def _raw_search(self, query: str, max_results: int) -> list[dict[str, Any]]:
@@ -355,10 +404,14 @@ class MarginaliaBackend(_Backend):
                 if title in snippet:
                     snippet = snippet.replace(title, "", 1).strip()
                 snippet = snippet[:300]
-            results.append({
-                "url": href, "title": title,
-                "content": snippet, "raw_content": "",
-            })
+            results.append(
+                {
+                    "url": href,
+                    "title": title,
+                    "content": snippet,
+                    "raw_content": "",
+                }
+            )
         return results
 
 
@@ -367,7 +420,7 @@ class MarginaliaBackend(_Backend):
 # ---------------------------------------------------------------------------
 class ArxivBackend(_Backend):
     name = "arxiv"
-    min_interval = 3.0          # arXiv ToU asks for >=3s between requests
+    min_interval = 3.0  # arXiv ToU asks for >=3s between requests
     cooldown_seconds = 60.0
     ban_threshold = 3
 
@@ -385,10 +438,12 @@ class ArxivBackend(_Backend):
             "sortBy": "relevance",
             "sortOrder": "descending",
         }
-        resp = requests.get(self.API_URL, params=params,
-                            headers={"User-Agent": _BROWSER_UA,
-                                      "Accept": "application/atom+xml"},
-                            timeout=self.timeout)
+        resp = requests.get(
+            self.API_URL,
+            params=params,
+            headers={"User-Agent": _BROWSER_UA, "Accept": "application/atom+xml"},
+            timeout=self.timeout,
+        )
         resp.raise_for_status()
         # Atom feed. Parse with BeautifulSoup in xml mode if available, else
         # fall back to html.parser (the feed is well-formed enough).
@@ -413,11 +468,14 @@ class ArxivBackend(_Backend):
                 continue
             t = title.get_text(" ", strip=True) if title else ""
             s = summary.get_text(" ", strip=True) if summary else ""
-            results.append({
-                "url": url, "title": t,
-                "content": s[:400],       # snippet
-                "raw_content": s,         # full abstract — no scrape needed
-            })
+            results.append(
+                {
+                    "url": url,
+                    "title": t,
+                    "content": s[:400],  # snippet
+                    "raw_content": s,  # full abstract — no scrape needed
+                }
+            )
         return results
 
 
@@ -438,12 +496,11 @@ class ArxivBackend(_Backend):
 # they trip, the cooldown self-heals and the keyless engines carry on.
 class SearxngBackend(_Backend):
     name = "searxng"
-    min_interval = 0.5            # local container, no need to be slow
-    cooldown_seconds = 30.0       # short — container is local, just retry
+    min_interval = 0.5  # local container, no need to be slow
+    cooldown_seconds = 30.0  # short — container is local, just retry
     ban_threshold = 3
 
-    def __init__(self, searxng_manager=None, session_logger=None,
-                 timeout: int = 20):
+    def __init__(self, searxng_manager=None, session_logger=None, timeout: int = 20):
         # searxng_manager: a SearxngManager instance (which manages the
         # Docker container + exposes search/scrape). If None, this backend
         # is disabled and always reports "no_manager" so the aggregator
@@ -471,14 +528,16 @@ class SearxngBackend(_Backend):
             url = r.get("url", "")
             if not url or _is_blocked_source(url):
                 continue
-            results.append({
-                "url": url,
-                "title": r.get("title", ""),
-                "content": r.get("content", ""),
-                # SearXNG returns snippets, not full article text — leave
-                # raw_content empty so the research engine scrapes it.
-                "raw_content": "",
-            })
+            results.append(
+                {
+                    "url": url,
+                    "title": r.get("title", ""),
+                    "content": r.get("content", ""),
+                    # SearXNG returns snippets, not full article text — leave
+                    # raw_content empty so the research engine scrapes it.
+                    "raw_content": "",
+                }
+            )
         return results
 
 
@@ -498,9 +557,13 @@ class FreeSearch:
     expected from Tavily/SearXNG: search() + scrape() + is_configured.
     """
 
-    def __init__(self, session_logger=None, timeout: int = 20,
-                 backends: list[_Backend] | None = None,
-                 searxng_manager: Any = None):
+    def __init__(
+        self,
+        session_logger=None,
+        timeout: int = 20,
+        backends: list[_Backend] | None = None,
+        searxng_manager: Any = None,
+    ):
         self.session_logger = session_logger
         self.timeout = timeout
         if backends is None:
@@ -517,9 +580,13 @@ class FreeSearch:
             # available it self-disables and the pool keeps the 3 keyless
             # engines. See the "limitless SearXNG" notes in searxng_settings.yml.
             if searxng_manager is not None:
-                fleet.append(SearxngBackend(
-                    searxng_manager=searxng_manager,
-                    session_logger=session_logger, timeout=timeout))
+                fleet.append(
+                    SearxngBackend(
+                        searxng_manager=searxng_manager,
+                        session_logger=session_logger,
+                        timeout=timeout,
+                    )
+                )
             self._backends = fleet
         else:
             self._backends = backends
@@ -535,8 +602,9 @@ class FreeSearch:
         pass
 
     # -- search -----------------------------------------------------------
-    def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> dict[str, Any]:
+    def search(
+        self, query: str, max_results: int = 5, search_depth: str = "advanced"
+    ) -> dict[str, Any]:
         """Fan out to all backends in parallel, merge + dedupe.
 
         Returns {"results": [...], "unresponsive_engines": [["name","reason"],...]}.
@@ -597,12 +665,16 @@ class FreeSearch:
         if self.session_logger is not None:
             try:
                 self.session_logger.log_tool_call(
-                    tool="freesearch", method="search",
+                    tool="freesearch",
+                    method="search",
                     inputs={"query": query, "max": max_results},
-                    outputs={"count": len(out),
-                             "engines_up": len(results_by_backend) - len(unresponsive),
-                             "engines_down": len(unresponsive)},
-                    duration_ms=(time.time() - t0) * 1000)
+                    outputs={
+                        "count": len(out),
+                        "engines_up": len(results_by_backend) - len(unresponsive),
+                        "engines_down": len(unresponsive),
+                    },
+                    duration_ms=(time.time() - t0) * 1000,
+                )
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         return {"results": out, "unresponsive_engines": unresponsive}
@@ -620,12 +692,24 @@ class FreeSearch:
             return ""
         headers = dict(_DEFAULT_HEADERS)
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout,
-                                allow_redirects=True)
+            resp = requests.get(
+                url, headers=headers, timeout=timeout, allow_redirects=True
+            )
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
-            for tag in soup(["script", "style", "nav", "footer", "header",
-                             "aside", "form", "noscript", "svg"]):
+            for tag in soup(
+                [
+                    "script",
+                    "style",
+                    "nav",
+                    "footer",
+                    "header",
+                    "aside",
+                    "form",
+                    "noscript",
+                    "svg",
+                ]
+            ):
                 tag.decompose()
             # Strip Stack Exchange "Related" / "Hot Network Questions" sidebars
             # and inline related-question blocks BEFORE extracting text.
@@ -634,34 +718,51 @@ class FreeSearch:
             # body, where the synthesis then ranks them high because they
             # contain generic terms ("remove", "python", "vector") from the
             # query. They are navigation, not content.
-            for sel in ("div.related", "div.module", "div.sidebar",
-                        "aside.related", "div.hot-network-questions",
-                        "div.js-related-questions", "div[data-tracker]",
-                        "div[id^='hot-network']", "div[id^='related']",
-                        "section.related",
-                        # SO inline "Related questions" card under answers.
-                        "div.related-questions",
-                        # Generic: any element whose class/id screams sidebar.
-                        "[class*='related']", "[id*='related']",
-                        "[class*='sidebar']", "[id*='sidebar']",
-                        "[class*='hot-network']", "[id*='hot-network']"):
+            for sel in (
+                "div.related",
+                "div.module",
+                "div.sidebar",
+                "aside.related",
+                "div.hot-network-questions",
+                "div.js-related-questions",
+                "div[data-tracker]",
+                "div[id^='hot-network']",
+                "div[id^='related']",
+                "section.related",
+                # SO inline "Related questions" card under answers.
+                "div.related-questions",
+                # Generic: any element whose class/id screams sidebar.
+                "[class*='related']",
+                "[id*='related']",
+                "[class*='sidebar']",
+                "[id*='sidebar']",
+                "[class*='hot-network']",
+                "[id*='hot-network']",
+            ):
                 for el in soup.select(sel):
                     el.decompose()
             # Also drop elements whose visible text is a "Related"/"Hot Network"
             # heading — catches variants the selectors miss.
             for heading in soup.find_all(
-                    ["h2", "h3", "h4", "div", "span"],
-                    string=re.compile(
-                        r"\s*(Related|Hot Network Questions|Linked)\s*",
-                        re.I)):
+                ["h2", "h3", "h4", "div", "span"],
+                string=re.compile(
+                    r"\s*(Related|Hot Network Questions|Linked)\s*", re.I
+                ),
+            ):
                 parent = heading.parent
                 if parent is not None and parent.name in (
-                        "div", "section", "aside", "li"):
+                    "div",
+                    "section",
+                    "aside",
+                    "li",
+                ):
                     parent.decompose()
-            main = (soup.find("article") or soup.find("main")
-                    or soup.find("body"))
-            text = (main.get_text(separator="\n", strip=True) if main
-                    else soup.get_text(separator="\n", strip=True))
+            main = soup.find("article") or soup.find("main") or soup.find("body")
+            text = (
+                main.get_text(separator="\n", strip=True)
+                if main
+                else soup.get_text(separator="\n", strip=True)
+            )
             # Collapse runs of blank lines.
             text = re.sub(r"\n{3,}", "\n\n", text)
             return text[:20000]

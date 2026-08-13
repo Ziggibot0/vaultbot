@@ -12,6 +12,7 @@ These verify that:
 
 Run: pytest tests/test_notify_helpers.py -v
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,6 +42,7 @@ _WS = object()
 def _clear_dedup():
     """Clear the rate-limit dedup dict between tests."""
     from chat_helpers import _notify_dedup
+
     _notify_dedup.clear()
     yield
     _notify_dedup.clear()
@@ -60,8 +62,11 @@ def test_notify_problem_with_raw_exception():
     svc = _mock_svc(manager=manager)
 
     exc = RuntimeError("connection refused")
-    asyncio.run(notify_problem(svc, websocket=_WS, exc_or_diagnosis=exc,
-                               context={"stage": "test"}))
+    asyncio.run(
+        notify_problem(
+            svc, websocket=_WS, exc_or_diagnosis=exc, context={"stage": "test"}
+        )
+    )
 
     msg = _capture_sent(manager)
     assert msg["type"] == "problem"
@@ -96,10 +101,15 @@ def test_notify_problem_user_message_override():
     manager.send_personal_message = AsyncMock()
     svc = _mock_svc(manager=manager)
 
-    asyncio.run(notify_problem(svc, websocket=_WS,
-                               exc_or_diagnosis=RuntimeError("oops"),
-                               context={"stage": "test"},
-                               user_message="overridden message"))
+    asyncio.run(
+        notify_problem(
+            svc,
+            websocket=_WS,
+            exc_or_diagnosis=RuntimeError("oops"),
+            context={"stage": "test"},
+            user_message="overridden message",
+        )
+    )
 
     msg = _capture_sent(manager)
     assert msg["diagnosis"]["user_message"] == "overridden message"
@@ -140,8 +150,9 @@ def test_notify_problem_dead_websocket_never_raises():
     svc = _mock_svc(manager=manager)
 
     # Should not raise.
-    asyncio.run(notify_problem(svc, websocket=None,
-                               exc_or_diagnosis=RuntimeError("test")))
+    asyncio.run(
+        notify_problem(svc, websocket=None, exc_or_diagnosis=RuntimeError("test"))
+    )
 
 
 def test_notify_problem_missing_manager_never_raises():
@@ -151,8 +162,9 @@ def test_notify_problem_missing_manager_never_raises():
     svc.session_logger = MagicMock()
 
     # Should not raise.
-    asyncio.run(notify_problem(svc, websocket=None,
-                               exc_or_diagnosis=RuntimeError("test")))
+    asyncio.run(
+        notify_problem(svc, websocket=None, exc_or_diagnosis=RuntimeError("test"))
+    )
 
 
 def test_notify_problem_logs_to_session_logger():
@@ -162,9 +174,14 @@ def test_notify_problem_logs_to_session_logger():
     manager.send_personal_message = AsyncMock(side_effect=ConnectionError("dead"))
     svc = _mock_svc(manager=manager, session_logger=slog)
 
-    asyncio.run(notify_problem(svc, websocket=None,
-                               exc_or_diagnosis=RuntimeError("test"),
-                               context={"stage": "test"}))
+    asyncio.run(
+        notify_problem(
+            svc,
+            websocket=None,
+            exc_or_diagnosis=RuntimeError("test"),
+            context={"stage": "test"},
+        )
+    )
 
     slog.log.assert_called()
     call_args = slog.log.call_args

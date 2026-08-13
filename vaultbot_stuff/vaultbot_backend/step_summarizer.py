@@ -35,6 +35,7 @@ the cloud model focused on the actual reasoning work and delegates the
 bounded-output summarization to the cheap local model — same pattern as the
 procedure cartridge system.
 """
+
 from __future__ import annotations
 
 import json
@@ -88,8 +89,14 @@ def _build_raw_material(
     """
     parts: list[str] = []
     for i, (call, result) in enumerate(zip(tool_calls, tool_results)):
-        name = call.get("function", {}).get("name", "?") if isinstance(call, dict) else "?"
-        args = call.get("function", {}).get("arguments", {}) if isinstance(call, dict) else {}
+        name = (
+            call.get("function", {}).get("name", "?") if isinstance(call, dict) else "?"
+        )
+        args = (
+            call.get("function", {}).get("arguments", {})
+            if isinstance(call, dict)
+            else {}
+        )
         try:
             args_str = json.dumps(args, default=str)[:400]
         except Exception:  # noqa: BLE001 — args may be non-serializable
@@ -98,7 +105,7 @@ def _build_raw_material(
             result_str = json.dumps(result, default=str)[:1200]
         except Exception:  # noqa: BLE001
             result_str = str(result)[:1200]
-        parts.append(f"[{i+1}] {name}({args_str}) -> {result_str}")
+        parts.append(f"[{i + 1}] {name}({args_str}) -> {result_str}")
     if thinking.strip():
         parts.append("THINKING: " + thinking.strip()[:1500])
     raw = "\n".join(parts)
@@ -150,10 +157,13 @@ def summarize_step(
     except Exception as e:  # noqa: BLE001 — degraded continuation, not a mechanism swap
         if session_logger is not None:
             try:
-                session_logger.log("step_summary_failed", {
-                    "step": step_content[:80],
-                    "error": str(e),
-                })
+                session_logger.log(
+                    "step_summary_failed",
+                    {
+                        "step": step_content[:80],
+                        "error": str(e),
+                    },
+                )
             except Exception:  # noqa: BLE001 — logging must not raise
                 _log.warning("step_summary log failed: %s", e)
         return f"Step completed: {step_content[:120]}"

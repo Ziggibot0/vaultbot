@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Lens procedure for evaluating a problem from multiple conflicting viewpoints to find synthesis. Based on dialectical reasoning (thesis-antithesis-synthesis), hermeneutic circle theory, and metacognitive perspective-taking research. Hardened with triple-try consistency and bite-sized steps."
 tags: [procedure, thinking, lens, multi-perspective, dialectical, hermeneutics, metacognition]

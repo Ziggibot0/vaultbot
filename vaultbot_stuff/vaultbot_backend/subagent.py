@@ -32,7 +32,12 @@ def subagent_enabled() -> bool:
 
     Set VAULTBOT_SUBAGENT=off to disable (falls back to in-process path).
     """
-    return os.environ.get("VAULTBOT_SUBAGENT", "on").lower() in ("on", "1", "yes", "true")
+    return os.environ.get("VAULTBOT_SUBAGENT", "on").lower() in (
+        "on",
+        "1",
+        "yes",
+        "true",
+    )
 
 
 def build_subagent_code(topic: str, depth: str = "deep") -> str:
@@ -125,7 +130,7 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "                          'source_count': 0, 'error': 'no sources found'}))\n"
         "        sys.exit(0)\n"
         "\n"
-        "    _log(f'[subagent] {report[\"source_count\"]} sources, {report.get(\"fact_count\", 0)} facts')\n"
+        '    _log(f\'[subagent] {report["source_count"]} sources, {report.get("fact_count", 0)} facts\')\n'
         "\n"
         "    # --- Create the linked note ---\n"
         "    from vault_indexer import VaultIndexer\n"
@@ -220,10 +225,12 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
 _build_research_wrapper = build_subagent_code
 
 
-def _run_subprocess(wrapper_code: str,
-                    session_logger: Any = None,
-                    timeout: int = 180,
-                    log_tag: str = "subagent") -> dict:
+def _run_subprocess(
+    wrapper_code: str,
+    session_logger: Any = None,
+    timeout: int = 180,
+    log_tag: str = "subagent",
+) -> dict:
     """Generic subprocess runner — executes ``wrapper_code`` in a child
     process and returns a JSON brief dict.
 
@@ -255,7 +262,9 @@ def _run_subprocess(wrapper_code: str,
             env["VAULT_PATH"] = os.path.dirname(_backend_dir())
         backend = _backend_dir()
         existing_path = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = backend + (os.pathsep + existing_path if existing_path else "")
+        env["PYTHONPATH"] = backend + (
+            os.pathsep + existing_path if existing_path else ""
+        )
 
         result = _subprocess_run(
             [sys.executable, script_path],
@@ -274,50 +283,70 @@ def _run_subprocess(wrapper_code: str,
 
         if not stdout:
             if session_logger:
-                session_logger.log(f"{log_tag}_no_output", {
-                    "returncode": result.returncode,
-                    "stderr_tail": stderr[-300:] if stderr else "",
-                })
-            return {"status": "error",
-                    "error": f"no stdout from subagent (rc={result.returncode})",
-                    "subagent": True}
+                session_logger.log(
+                    f"{log_tag}_no_output",
+                    {
+                        "returncode": result.returncode,
+                        "stderr_tail": stderr[-300:] if stderr else "",
+                    },
+                )
+            return {
+                "status": "error",
+                "error": f"no stdout from subagent (rc={result.returncode})",
+                "subagent": True,
+            }
 
         try:
             brief = json.loads(stdout)
         except json.JSONDecodeError:
             if session_logger:
-                session_logger.log(f"{log_tag}_json_parse_failed", {
-                    "stdout_tail": stdout[-300:],
-                })
-            return {"status": "error",
-                    "error": "subagent output was not valid JSON",
-                    "subagent": True}
+                session_logger.log(
+                    f"{log_tag}_json_parse_failed",
+                    {
+                        "stdout_tail": stdout[-300:],
+                    },
+                )
+            return {
+                "status": "error",
+                "error": "subagent output was not valid JSON",
+                "subagent": True,
+            }
 
         # The brief must be a dict to be useful.  A JSON string / number /
         # list is technically valid JSON but not a usable brief — treat it
         # as a parse failure so the caller gets a clean error.
         if not isinstance(brief, dict):
             if session_logger:
-                session_logger.log(f"{log_tag}_non_dict_brief", {
-                    "type": type(brief).__name__,
-                })
-            return {"status": "error",
-                    "error": "subagent output was not a JSON object",
-                    "subagent": True}
+                session_logger.log(
+                    f"{log_tag}_non_dict_brief",
+                    {
+                        "type": type(brief).__name__,
+                    },
+                )
+            return {
+                "status": "error",
+                "error": "subagent output was not a JSON object",
+                "subagent": True,
+            }
 
         if session_logger:
-            session_logger.log(f"{log_tag}_done", {
-                "status": brief.get("status"),
-            })
+            session_logger.log(
+                f"{log_tag}_done",
+                {
+                    "status": brief.get("status"),
+                },
+            )
 
         return brief
 
     except subprocess.TimeoutExpired:
         if session_logger:
             session_logger.log(f"{log_tag}_timeout", {})
-        return {"status": "error",
-                "error": f"subagent timed out after {timeout}s",
-                "subagent": True}
+        return {
+            "status": "error",
+            "error": f"subagent timed out after {timeout}s",
+            "subagent": True,
+        }
     finally:
         try:
             os.unlink(script_path)
@@ -329,9 +358,12 @@ def _run_subprocess(wrapper_code: str,
 _DEFAULT_TIMEOUT = 180
 
 
-def run_subagent(task_type: str, payload: dict,
-                 session_logger: Any = None,
-                 timeout: int | None = None) -> dict:
+def run_subagent(
+    task_type: str,
+    payload: dict,
+    session_logger: Any = None,
+    timeout: int | None = None,
+) -> dict:
     """Dispatch a subagent task by type.
 
     Currently only ``task_type="research"`` is supported.  Unknown types
@@ -344,17 +376,22 @@ def run_subagent(task_type: str, payload: dict,
         depth = payload.get("depth", "deep")
         wrapper = build_subagent_code(topic, depth)
         return _run_subprocess(
-            wrapper, session_logger=session_logger,
+            wrapper,
+            session_logger=session_logger,
             timeout=timeout or _DEFAULT_TIMEOUT,
-            log_tag="subagent_research")
+            log_tag="subagent_research",
+        )
 
-    return {"status": "error",
-            "error": f"unknown subagent task_type: {task_type!r}",
-            "subagent": True}
+    return {
+        "status": "error",
+        "error": f"unknown subagent task_type: {task_type!r}",
+        "subagent": True,
+    }
 
 
-def run_research_subagent(topic: str, depth: str = "deep",
-                          session_logger: Any = None) -> dict:
+def run_research_subagent(
+    topic: str, depth: str = "deep", session_logger: Any = None
+) -> dict:
     """Run a research subagent for the given topic.
 
     Returns a compact JSON brief dict with keys:
@@ -367,5 +404,5 @@ def run_research_subagent(topic: str, depth: str = "deep",
     """
     code = build_subagent_code(topic, depth)
     return _run_subprocess(
-        code, session_logger=session_logger,
-        timeout=300, log_tag="subagent")
+        code, session_logger=session_logger, timeout=300, log_tag="subagent"
+    )

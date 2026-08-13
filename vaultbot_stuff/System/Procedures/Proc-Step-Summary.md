@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Verify a self-modification edit didn't break imports. Given a file path that was just edited, attempts to import it in a subprocess and reports any import errors. Does NOT restart the backend — just checks if the file is syntactically and import-valid. Use after every Safe-Write edit to catch breakages immediately.

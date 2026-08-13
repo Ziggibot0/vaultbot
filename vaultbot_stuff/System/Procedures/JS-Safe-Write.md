@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: big
 created: 2026-07-31
 description: Safely edit JavaScript files with node syntax validation before writing.

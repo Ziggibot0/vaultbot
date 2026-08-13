@@ -14,12 +14,20 @@ try:
     # one of two interchangeable backends (the other is OpenAICompatibleClient).
     # Importing the base is optional so ollama_client stays usable standalone.
     from llm_client import LLMClient
+
     _BASE = LLMClient
 except Exception:  # pragma: no cover - circular-import safety
     _BASE = object
 
+
 class OllamaClient(_BASE):
-    def __init__(self, base_url: str = "http://localhost:11434", llm_model: str = "", embed_model: str = "nomic-embed-text", session_logger=None):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        llm_model: str = "",
+        embed_model: str = "nomic-embed-text",
+        session_logger=None,
+    ):
         self.base_url = base_url
         self.llm_model = llm_model
         self.embed_model = embed_model
@@ -86,7 +94,9 @@ class OllamaClient(_BASE):
                 self.session_logger.log("ollama_is_loaded_error", {"model": model})
             return False
 
-    def preload_model(self, model: str | None = None, keep_alive: str | None = None) -> bool:
+    def preload_model(
+        self, model: str | None = None, keep_alive: str | None = None
+    ) -> bool:
         """Force-load the model into Ollama's memory so the next chat request
         doesn't pay the cold-load latency (up to 5 min for large models).
 
@@ -104,7 +114,10 @@ class OllamaClient(_BASE):
         # Already resident? Skip the round-trip.
         if self.is_model_loaded(model):
             if self.session_logger is not None:
-                self.session_logger.log("model_preload_skipped", {"model": model, "reason": "already_loaded"})
+                self.session_logger.log(
+                    "model_preload_skipped",
+                    {"model": model, "reason": "already_loaded"},
+                )
             return True
         ka = keep_alive or self._keep_alive
         # Pass num_ctx so the model is loaded with the full context window
@@ -133,19 +146,26 @@ class OllamaClient(_BASE):
             resp.raise_for_status()
             loaded = self.is_model_loaded(model)
             if self.session_logger is not None:
-                self.session_logger.log("model_preloaded", {
-                    "model": model,
-                    "keep_alive": ka,
-                    "already_loaded": loaded,
-                    "duration_ms": (time.time() - t0) * 1000,
-                })
+                self.session_logger.log(
+                    "model_preloaded",
+                    {
+                        "model": model,
+                        "keep_alive": ka,
+                        "already_loaded": loaded,
+                        "duration_ms": (time.time() - t0) * 1000,
+                    },
+                )
             return True
         except Exception as e:
             if self.session_logger is not None:
-                self.session_logger.log("model_preload_failed", {
-                    "model": model, "error": str(e),
-                    "duration_ms": (time.time() - t0) * 1000,
-                })
+                self.session_logger.log(
+                    "model_preload_failed",
+                    {
+                        "model": model,
+                        "error": str(e),
+                        "duration_ms": (time.time() - t0) * 1000,
+                    },
+                )
             return False
 
     def list_local_models(self) -> list[str]:
@@ -194,13 +214,15 @@ class OllamaClient(_BASE):
         """
         model = model or self.llm_model
         if not model:
-            raise ValueError("context_window: no model specified and no default model set")
+            raise ValueError(
+                "context_window: no model specified and no default model set"
+            )
         if model in self._ctx_win_cache:
             return self._ctx_win_cache[model]
         try:
             resp = self._session.post(
-                f"{self.base_url}/api/show",
-                json={"model": model}, timeout=15)
+                f"{self.base_url}/api/show", json={"model": model}, timeout=15
+            )
             resp.raise_for_status()
             data = resp.json()
             info = data.get("model_info") or {}
@@ -221,7 +243,9 @@ class OllamaClient(_BASE):
                             result = int(tok.split(":")[-1])
                             self._ctx_win_cache[model] = result
                             return result
-            raise RuntimeError(f"context_window: /api/show returned no context_length for model {model!r}")
+            raise RuntimeError(
+                f"context_window: /api/show returned no context_length for model {model!r}"
+            )
         except Exception as e:
             self._log_tool("context_window", {"model": model}, error=str(e))
             raise
@@ -253,8 +277,8 @@ class OllamaClient(_BASE):
             return {"vision": False, "instruct": True}
         try:
             resp = self._session.post(
-                f"{self.base_url}/api/show",
-                json={"model": model}, timeout=15)
+                f"{self.base_url}/api/show", json={"model": model}, timeout=15
+            )
             resp.raise_for_status()
             data = resp.json()
             # Vision: Ollama includes projector_info only when a vision
@@ -296,10 +320,24 @@ class OllamaClient(_BASE):
             self._log_tool("get_model_capabilities", {"model": model}, error=str(e))
             raise
 
-    def _log_tool(self, method: str, inputs: dict[str, Any], outputs: Any = None, duration_ms: float | None = None, error: str | None = None):
+    def _log_tool(
+        self,
+        method: str,
+        inputs: dict[str, Any],
+        outputs: Any = None,
+        duration_ms: float | None = None,
+        error: str | None = None,
+    ):
         if self.session_logger is None:
             return
-        self.session_logger.log_tool_call(tool="ollama", method=method, inputs=inputs, outputs=outputs, duration_ms=duration_ms, error=error)
+        self.session_logger.log_tool_call(
+            tool="ollama",
+            method=method,
+            inputs=inputs,
+            outputs=outputs,
+            duration_ms=duration_ms,
+            error=error,
+        )
 
     def _chat_log_summary(self, payload: dict, stream: bool) -> dict:
         """Build a compact log summary of the chat payload.
@@ -312,11 +350,14 @@ class OllamaClient(_BASE):
         """
         msgs = payload.get("messages", [])
         msg_summary = [
-            {"role": m.get("role", "?"),
-             "chars": len(str(m.get("content", "") or "")),
-             "thinking_chars": len(str(m.get("thinking", "") or "")),
-             "has_tool_calls": bool(m.get("tool_calls"))}
-            for m in msgs if isinstance(m, dict)
+            {
+                "role": m.get("role", "?"),
+                "chars": len(str(m.get("content", "") or "")),
+                "thinking_chars": len(str(m.get("thinking", "") or "")),
+                "has_tool_calls": bool(m.get("tool_calls")),
+            }
+            for m in msgs
+            if isinstance(m, dict)
         ]
         return {
             "model": payload.get("model", ""),
@@ -327,7 +368,15 @@ class OllamaClient(_BASE):
             "has_tools": bool(payload.get("tools")),
         }
 
-    def generate(self, prompt: str, system: str | None = None, temperature: float = 0.7, max_tokens: int | None = None, stream: bool = False, think: bool | None = None) -> dict | Generator:
+    def generate(
+        self,
+        prompt: str,
+        system: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        stream: bool = False,
+        think: bool | None = None,
+    ) -> dict | Generator:
         """
         Generate text from the LLM.
         If stream=True, returns a generator that yields chunks.
@@ -368,13 +417,24 @@ class OllamaClient(_BASE):
 
         t0 = time.time()
         try:
-            response = self._session.post(f"{self.base_url}/api/generate", json=payload, stream=stream, timeout=300)
+            response = self._session.post(
+                f"{self.base_url}/api/generate",
+                json=payload,
+                stream=stream,
+                timeout=300,
+            )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log_tool("generate", {"payload": payload, "stream": stream}, error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "generate",
+                {"payload": payload, "stream": stream},
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
 
         if stream:
+
             def generate_chunks():
                 chunk_count = 0
                 try:
@@ -383,25 +443,41 @@ class OllamaClient(_BASE):
                             data = json.loads(line)
                             chunk = {
                                 "response": data.get("response", ""),
-                                "thinking": data.get("thinking", "")
+                                "thinking": data.get("thinking", ""),
                             }
                             yield chunk
                             chunk_count += 1
                             if data.get("done", False):
                                 break
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    self._log_tool("generate", {"payload": payload, "stream": stream}, error=str(e), duration_ms=(time.time() - t0) * 1000)
+                    self._log_tool(
+                        "generate",
+                        {"payload": payload, "stream": stream},
+                        error=str(e),
+                        duration_ms=(time.time() - t0) * 1000,
+                    )
                     raise
                 finally:
-                    self._log_tool("generate", {"payload": payload, "stream": stream}, outputs={"chunks": chunk_count}, duration_ms=(time.time() - t0) * 1000)
+                    self._log_tool(
+                        "generate",
+                        {"payload": payload, "stream": stream},
+                        outputs={"chunks": chunk_count},
+                        duration_ms=(time.time() - t0) * 1000,
+                    )
+
             return generate_chunks()
         else:
             data = response.json()
             result = {
                 "response": data.get("response", ""),
-                "thinking": data.get("thinking", "")
+                "thinking": data.get("thinking", ""),
             }
-            self._log_tool("generate", {"payload": payload, "stream": stream}, outputs=result, duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "generate",
+                {"payload": payload, "stream": stream},
+                outputs=result,
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return result
 
     def embeddings(self, text: str) -> list[float]:
@@ -414,23 +490,42 @@ class OllamaClient(_BASE):
         truncated = len(text) > 4000
         if truncated:
             text = text[:4000]
-        payload = {
-            "model": self.embed_model,
-            "prompt": text
-        }
+        payload = {"model": self.embed_model, "prompt": text}
         t0 = time.time()
         try:
-            response = self._session.post(f"{self.base_url}/api/embeddings", json=payload)
+            response = self._session.post(
+                f"{self.base_url}/api/embeddings", json=payload
+            )
             response.raise_for_status()
             data = response.json()
             embedding = data["embedding"]
-            self._log_tool("embeddings", {"model": self.embed_model, "truncated": truncated, "text_length": len(payload["prompt"])}, outputs={"embedding_length": len(embedding)}, duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "embeddings",
+                {
+                    "model": self.embed_model,
+                    "truncated": truncated,
+                    "text_length": len(payload["prompt"]),
+                },
+                outputs={"embedding_length": len(embedding)},
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return embedding
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log_tool("embeddings", {"model": self.embed_model, "truncated": truncated, "text_length": len(payload["prompt"])}, error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "embeddings",
+                {
+                    "model": self.embed_model,
+                    "truncated": truncated,
+                    "text_length": len(payload["prompt"]),
+                },
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
 
-    def batch_embeddings(self, texts: list[str], max_workers: int = 8) -> list[list[float] | None]:
+    def batch_embeddings(
+        self, texts: list[str], max_workers: int = 8
+    ) -> list[list[float] | None]:
         """Get embeddings for multiple texts in parallel via ThreadPoolExecutor.
 
         Ollama's embedding endpoint is stateless and thread-safe — concurrent
@@ -442,7 +537,9 @@ class OllamaClient(_BASE):
 
         results: list[list[float] | None] = [None] * len(texts)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(self.embeddings, t): i for i, t in enumerate(texts)}
+            futures = {
+                executor.submit(self.embeddings, t): i for i, t in enumerate(texts)
+            }
             for future in as_completed(futures):
                 i = futures[future]
                 try:
@@ -483,13 +580,15 @@ class OllamaClient(_BASE):
             if resp.status_code == 200:
                 stats["running"] = True
                 for m in resp.json().get("models", []):
-                    stats["models"].append({
-                        "name": m.get("name", ""),
-                        "size_vram": m.get("size_vram", 0),
-                        "size_total": m.get("size", 0),
-                        "context_length": m.get("context_length", 0),
-                        "expires_at": m.get("expires_at", ""),
-                    })
+                    stats["models"].append(
+                        {
+                            "name": m.get("name", ""),
+                            "size_vram": m.get("size_vram", 0),
+                            "size_total": m.get("size", 0),
+                            "context_length": m.get("context_length", 0),
+                            "expires_at": m.get("expires_at", ""),
+                        }
+                    )
         except Exception:  # noqa: BLE001 — best-effort stats
             pass
         return stats
@@ -514,21 +613,25 @@ class OllamaClient(_BASE):
         its reasoning even if the final content got truncated.
         """
         from llm_client import _test_image_base64
+
         img_b64 = _test_image_base64()
         payload = {
             "model": self.llm_model,
-            "messages": [{
-                "role": "user",
-                "content": "What color is the square in this image? Reply with one word.",
-                "images": [img_b64],
-            }],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What color is the square in this image? Reply with one word.",
+                    "images": [img_b64],
+                }
+            ],
             "stream": False,
             "think": False,
             "options": {"temperature": 0.0, "num_predict": 64},
         }
         try:
-            r = self._session.post(f"{self.base_url}/api/chat",
-                              json=payload, timeout=60)
+            r = self._session.post(
+                f"{self.base_url}/api/chat", json=payload, timeout=60
+            )
             if r.status_code != 200:
                 return False
             msg = r.json().get("message", {}) or {}
@@ -538,7 +641,9 @@ class OllamaClient(_BASE):
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 
-    def _chat_native_no_think(self, payload: dict[str, Any], t0: float) -> dict[str, Any]:
+    def _chat_native_no_think(
+        self, payload: dict[str, Any], t0: float
+    ) -> dict[str, Any]:
         """Fast path for bounded small-model calls (think=False, no tools).
 
         Ollama's OpenAI-compatible /v1/chat/completions endpoint IGNORES the
@@ -558,8 +663,7 @@ class OllamaClient(_BASE):
         Returns the same dict shape as chat() non-stream: {response,
         thinking, tool_calls, finish_reason}.
         """
-        _timeout = float(os.environ.get(
-            "VAULTBOT_SMALL_TIMEOUT_SECONDS", "20"))
+        _timeout = float(os.environ.get("VAULTBOT_SMALL_TIMEOUT_SECONDS", "20"))
         # /api/chat takes think + options at the top level (not under
         # options like /v1). payload already has think=False set by chat().
         # Strip /v1-only keys that /api/chat doesn't understand.
@@ -572,12 +676,17 @@ class OllamaClient(_BASE):
             "keep_alive": payload.get("keep_alive", self._keep_alive),
         }
         try:
-            r = self._session.post(f"{self.base_url}/api/chat",
-                                   json=native, timeout=_timeout)
+            r = self._session.post(
+                f"{self.base_url}/api/chat", json=native, timeout=_timeout
+            )
             r.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, raises to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log_tool("chat", self._chat_log_summary(native, False),
-                           error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "chat",
+                self._chat_log_summary(native, False),
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
         data = r.json()
         msg = data.get("message", {}) or {}
@@ -587,18 +696,30 @@ class OllamaClient(_BASE):
             "tool_calls": [],
             "finish_reason": "stop" if data.get("done") else "length",
         }
-        self._log_tool("chat", self._chat_log_summary(native, False),
-                       outputs={"response_len": len(result["response"]),
-                                "thinking_len": len(result["thinking"]),
-                                "tool_calls": 0,
-                                "finish_reason": result["finish_reason"],
-                                "endpoint": "/api/chat", "think": False},
-                       duration_ms=(time.time() - t0) * 1000)
+        self._log_tool(
+            "chat",
+            self._chat_log_summary(native, False),
+            outputs={
+                "response_len": len(result["response"]),
+                "thinking_len": len(result["thinking"]),
+                "tool_calls": 0,
+                "finish_reason": result["finish_reason"],
+                "endpoint": "/api/chat",
+                "think": False,
+            },
+            duration_ms=(time.time() - t0) * 1000,
+        )
         return result
 
-    def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
-             temperature: float = 0.7, stream: bool = False,
-             think: bool | None = None, max_predict: int | None = None) -> dict | Generator:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.7,
+        stream: bool = False,
+        think: bool | None = None,
+        max_predict: int | None = None,
+    ) -> dict | Generator:
         """
         Multi-turn chat completion via Ollama's OpenAI-compatible /v1/chat/completions
         endpoint, with optional tool-calling.
@@ -691,11 +812,15 @@ class OllamaClient(_BASE):
             return self._chat_native_no_think(payload, t0)
         try:
             if stream:
-                _read_timeout = float(os.environ.get(
-                    "VAULTBOT_OLLAMA_READ_TIMEOUT_SECONDS", "600"))
+                _read_timeout = float(
+                    os.environ.get("VAULTBOT_OLLAMA_READ_TIMEOUT_SECONDS", "600")
+                )
                 response = self._session.post(
-                    f"{self.base_url}/v1/chat/completions", json=payload,
-                    stream=True, timeout=(5, _read_timeout))
+                    f"{self.base_url}/v1/chat/completions",
+                    json=payload,
+                    stream=True,
+                    timeout=(5, _read_timeout),
+                )
             else:
                 # Bounded small-model tasks (think=False) should answer in
                 # well under a second; cap the timeout so a stuck 0.8b model
@@ -703,19 +828,29 @@ class OllamaClient(_BASE):
                 # cold load; lower via VAULTBOT_SMALL_TIMEOUT_SECONDS.
                 _chat_timeout = 20.0 if think is False else 60.0
                 if think is False:
-                    _chat_timeout = float(os.environ.get(
-                        "VAULTBOT_SMALL_TIMEOUT_SECONDS",
-                        str(_chat_timeout)))
+                    _chat_timeout = float(
+                        os.environ.get(
+                            "VAULTBOT_SMALL_TIMEOUT_SECONDS", str(_chat_timeout)
+                        )
+                    )
                 response = self._session.post(
-                    f"{self.base_url}/v1/chat/completions", json=payload,
-                    stream=False, timeout=_chat_timeout)
+                    f"{self.base_url}/v1/chat/completions",
+                    json=payload,
+                    stream=False,
+                    timeout=_chat_timeout,
+                )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log_tool("chat", self._chat_log_summary(payload, stream),
-                            error=str(e), duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "chat",
+                self._chat_log_summary(payload, stream),
+                error=str(e),
+                duration_ms=(time.time() - t0) * 1000,
+            )
             raise
 
         if stream:
+
             def chat_chunks():
                 chunk_count = 0
                 # Per-index accumulator for fragmented tool-call arguments.
@@ -730,10 +865,14 @@ class OllamaClient(_BASE):
                     for raw in response.iter_lines():
                         if not raw:
                             continue
-                        line = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else raw
+                        line = (
+                            raw.decode("utf-8", "replace")
+                            if isinstance(raw, (bytes, bytearray))
+                            else raw
+                        )
                         if not line.startswith("data:"):
                             continue
-                        body = line[len("data:"):].strip()
+                        body = line[len("data:") :].strip()
                         if body == "[DONE]":
                             break
                         try:
@@ -747,7 +886,9 @@ class OllamaClient(_BASE):
                         # Accumulate tool-call fragments.
                         for tc in delta.get("tool_calls") or []:
                             idx = tc.get("index", 0)
-                            slot = tc_acc.setdefault(idx, {"id": "", "name": "", "arguments_str": ""})
+                            slot = tc_acc.setdefault(
+                                idx, {"id": "", "name": "", "arguments_str": ""}
+                            )
                             if tc.get("id"):
                                 slot["id"] = tc["id"]
                             fn = tc.get("function", {}) or {}
@@ -769,8 +910,12 @@ class OllamaClient(_BASE):
                         if fr in ("tool_calls", "stop", "length"):
                             break
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    self._log_tool("chat", self._chat_log_summary(payload, stream),
-                                    error=str(e), duration_ms=(time.time() - t0) * 1000)
+                    self._log_tool(
+                        "chat",
+                        self._chat_log_summary(payload, stream),
+                        error=str(e),
+                        duration_ms=(time.time() - t0) * 1000,
+                    )
                     raise
                 # Emit accumulated tool calls as one chunk (Ollama-style
                 # one-shot), so the chat handler sees the same shape it
@@ -779,25 +924,33 @@ class OllamaClient(_BASE):
                     assembled = []
                     for idx in sorted(tc_acc):
                         slot = tc_acc[idx]
-                        assembled.append({
-                            "id": slot["id"] or f"call_{idx}",
-                            "function": {
-                                "name": slot["name"],
-                                "arguments": slot["arguments_str"] or "{}",
-                            },
-                        })
+                        assembled.append(
+                            {
+                                "id": slot["id"] or f"call_{idx}",
+                                "function": {
+                                    "name": slot["name"],
+                                    "arguments": slot["arguments_str"] or "{}",
+                                },
+                            }
+                        )
                     yield {"response": "", "thinking": "", "tool_calls": assembled}
                     chunk_count += 1
                 # Terminal chunk: signal done + carry finish_reason so the
                 # chat handler can distinguish "model finished naturally"
                 # (stop) from "model called tools" (tool_calls) from
                 # "model was truncated" (length).
-                self._log_tool("chat", self._chat_log_summary(payload, stream),
-                                outputs={"chunks": chunk_count,
-                                         "tool_calls": len(tc_acc),
-                                         "finish_reason": finish_reason},
-                                duration_ms=(time.time() - t0) * 1000)
+                self._log_tool(
+                    "chat",
+                    self._chat_log_summary(payload, stream),
+                    outputs={
+                        "chunks": chunk_count,
+                        "tool_calls": len(tc_acc),
+                        "finish_reason": finish_reason,
+                    },
+                    duration_ms=(time.time() - t0) * 1000,
+                )
                 yield {"done": True, "finish_reason": finish_reason or "stop"}
+
             return chat_chunks()
         else:
             data = response.json()
@@ -810,13 +963,15 @@ class OllamaClient(_BASE):
             normalized_tc = []
             for i, tc in enumerate(tool_calls):
                 fn = tc.get("function", {}) or {}
-                normalized_tc.append({
-                    "id": tc.get("id") or f"call_{i}",
-                    "function": {
-                        "name": fn.get("name", ""),
-                        "arguments": fn.get("arguments", "{}"),
-                    },
-                })
+                normalized_tc.append(
+                    {
+                        "id": tc.get("id") or f"call_{i}",
+                        "function": {
+                            "name": fn.get("name", ""),
+                            "arguments": fn.get("arguments", "{}"),
+                        },
+                    }
+                )
             finish_reason = choice.get("finish_reason") or "stop"
             result = {
                 "response": msg.get("content") or "",
@@ -824,10 +979,15 @@ class OllamaClient(_BASE):
                 "tool_calls": normalized_tc,
                 "finish_reason": finish_reason,
             }
-            self._log_tool("chat", self._chat_log_summary(payload, stream),
-                            outputs={"response_len": len(result["response"]),
-                                     "thinking_len": len(result["thinking"]),
-                                     "tool_calls": len(result["tool_calls"]),
-                                     "finish_reason": finish_reason},
-                            duration_ms=(time.time() - t0) * 1000)
+            self._log_tool(
+                "chat",
+                self._chat_log_summary(payload, stream),
+                outputs={
+                    "response_len": len(result["response"]),
+                    "thinking_len": len(result["thinking"]),
+                    "tool_calls": len(result["tool_calls"]),
+                    "finish_reason": finish_reason,
+                },
+                duration_ms=(time.time() - t0) * 1000,
+            )
             return result

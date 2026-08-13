@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-04
 description: "Granular probe: walks every .md note in the vault and computes ONLY independent per-note signals (path, stem, dir, chars, has_frontmatter, type, links_out, links_out_count, age_days). No vault-wide knowledge needed — this is the first pass of Pattern-Scan extracted into its own reusable procedure. Returns raw per-note data as JSON for consumption by signal probes and the Pattern-Scan orchestrator."

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: big
 created: 2026-08-02
 description: Consolidate vault patterns and gaps into semantic knowledge notes. Reads journal themes from Dream-Scan, graph gaps from Dream-Analyze, and existing semantic notes for dedup. Uses LLM to synthesize new semantic notes. The most complex dream sub-procedure.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: "Find open tasks/checkboxes (- [ ]) scattered across notes, oldest first. Imports the Pattern-Scan engine, filters to notes with todo_count > 0, and surfaces which notes carry the most unfinished tasks. Use when asked what's left to do or what tasks are lingering."

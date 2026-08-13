@@ -62,21 +62,23 @@ import os
 # Tools that are BLOCKED in Safe Mode. These can modify the backend,
 # execute arbitrary code, delete data, or interact with external services
 # in ways that could be destructive.
-_DANGEROUS_TOOLS: frozenset[str] = frozenset({
-    "code_write",
-    "safe_write",
-    "js_safe_write",
-    "code_run",
-    "tool_create",
-    "git_rollback",
-    "backend_restart",
-    "plugin_reload",
-    "vault_delete",
-    "apply_ungating_fix",
-    "submit_contribution",
-    "review_contributions",
-    "torture_test",
-})
+_DANGEROUS_TOOLS: frozenset[str] = frozenset(
+    {
+        "code_write",
+        "safe_write",
+        "js_safe_write",
+        "code_run",
+        "tool_create",
+        "git_rollback",
+        "backend_restart",
+        "plugin_reload",
+        "vault_delete",
+        "apply_ungating_fix",
+        "submit_contribution",
+        "review_contributions",
+        "torture_test",
+    }
+)
 
 
 def is_safe_mode() -> bool:

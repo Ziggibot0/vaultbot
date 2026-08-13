@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: big
 created: 2026-07-31
 description: Execute Python code in a sandbox to test or run scripts.

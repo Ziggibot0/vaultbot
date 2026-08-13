@@ -3,6 +3,7 @@
 These were thin shims in main.py that deferred-imported identity_api.* and
 injected svc. The router calls the extracted functions directly.
 """
+
 from __future__ import annotations
 
 from typing import Annotated

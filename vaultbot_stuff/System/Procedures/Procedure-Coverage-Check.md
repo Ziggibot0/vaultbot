@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Check whether a task already has a procedure (single-task mode), or audit the entire procedure library for coverage gaps (full_audit mode). In single-task mode, searches the procedure library by intent and returns whether a procedure exists. In full_audit mode, lists all procedures with their coverage scope and flags gaps where no procedure exists for a known recurring task. Replaces the former Procedure-Library-Audit.

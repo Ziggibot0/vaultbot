@@ -39,6 +39,7 @@ See:
   - [[Procedure-Subprocess-Architecture]]
   - [[Deterministic-Scaffolding-for-Small-Models]]
 """
+
 from __future__ import annotations
 
 import json
@@ -58,6 +59,7 @@ from procedure_compiler import Procedure, Step
 
 # ── Data structures ───────────────────────────────────────────────────────
 
+
 @dataclass
 class StepResult:
     """Outcome of executing a single step.
@@ -73,6 +75,7 @@ class StepResult:
             message. None if the step succeeded.
         traceback: Full traceback if the step crashed. None on success.
     """
+
     step_number: float
     step_type: str
     passed: bool
@@ -95,35 +98,136 @@ class ExecutionResult:
         failed_step: Step number that caused the procedure to stop,
             or None if all steps completed.
     """
+
     procedure_name: str
     steps: list[StepResult]
     overall_passed: bool
     final_output: str
     failed_step: float | None = None
     child_procedures: list[dict] = field(default_factory=list)
-        # Each entry: {"name": str, "overall_passed": bool,
-        # "steps_executed": int}. Populated when a step invokes
-        # ``run_procedure`` to run another procedure recursively.
+    # Each entry: {"name": str, "overall_passed": bool,
+    # "steps_executed": int}. Populated when a step invokes
+    # ``run_procedure`` to run another procedure recursively.
 
 
 # ── Stop words for validation (text steps) ──────────────────────────────
 
-_STOP_WORDS = frozenset({
-    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
-    'could', 'may', 'might', 'must', 'can', 'shall', 'to', 'of', 'in',
-    'on', 'at', 'by', 'for', 'with', 'about', 'as', 'into', 'through',
-    'during', 'before', 'after', 'above', 'below', 'from', 'up', 'down',
-    'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once',
-    'and', 'or', 'but', 'if', 'than', 'that', 'this', 'these', 'those',
-    'it', 'its', 'your', 'our', 'their', 'his', 'her', 'my', 'me', 'you',
-    'he', 'she', 'they', 'we', 'them', 'us', 'i', 'him',
-    'output', 'contain', 'include', 'mention',
-    'least', 'more', 'most', 'some', 'any', 'all', 'each', 'every',
-    'not', 'no', 'nor', 'so', 'too', 'very', 'just', 'only', 'also',
-    'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
-    'own', 'words',
-})
+_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "should",
+        "could",
+        "may",
+        "might",
+        "must",
+        "can",
+        "shall",
+        "to",
+        "of",
+        "in",
+        "on",
+        "at",
+        "by",
+        "for",
+        "with",
+        "about",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "from",
+        "up",
+        "down",
+        "out",
+        "off",
+        "over",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "and",
+        "or",
+        "but",
+        "if",
+        "than",
+        "that",
+        "this",
+        "these",
+        "those",
+        "it",
+        "its",
+        "your",
+        "our",
+        "their",
+        "his",
+        "her",
+        "my",
+        "me",
+        "you",
+        "he",
+        "she",
+        "they",
+        "we",
+        "them",
+        "us",
+        "i",
+        "him",
+        "output",
+        "contain",
+        "include",
+        "mention",
+        "least",
+        "more",
+        "most",
+        "some",
+        "any",
+        "all",
+        "each",
+        "every",
+        "not",
+        "no",
+        "nor",
+        "so",
+        "too",
+        "very",
+        "just",
+        "only",
+        "also",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "when",
+        "where",
+        "why",
+        "how",
+        "own",
+        "words",
+    }
+)
 
 
 # ── Validation (for text steps) ──────────────────────────────────────────
@@ -139,12 +243,9 @@ _STOP_WORDS = frozenset({
 # Units mirror ``_count_thing`` in the condition evaluator: notes/titles
 # (wikilinks), sources/urls/links (http(s)), items/lines (bullets), or
 # generic tokens for anything else.
-_AT_LEAST_RE = re.compile(
-    r'at_least\s+(\d+)\s*(?P<unit>\w+)?', re.IGNORECASE)
-_VCONTAINS_RE = re.compile(
-    r'contains\s+(?P<q>["\'])(?P<lit>.*?)(?P=q)', re.IGNORECASE)
-_VMATCHES_RE = re.compile(
-    r'matches\s+/(?P<pattern>.*)/', re.IGNORECASE)
+_AT_LEAST_RE = re.compile(r"at_least\s+(\d+)\s*(?P<unit>\w+)?", re.IGNORECASE)
+_VCONTAINS_RE = re.compile(r'contains\s+(?P<q>["\'])(?P<lit>.*?)(?P=q)', re.IGNORECASE)
+_VMATCHES_RE = re.compile(r"matches\s+/(?P<pattern>.*)/", re.IGNORECASE)
 
 
 def _parse_validation(text: str) -> dict | None:
@@ -159,8 +260,7 @@ def _parse_validation(text: str) -> dict | None:
     t = text.strip()
     m = _AT_LEAST_RE.search(t)
     if m:
-        return {"form": "at_least", "n": int(m.group(1)),
-                "unit": m.group("unit")}
+        return {"form": "at_least", "n": int(m.group(1)), "unit": m.group("unit")}
     m = _VCONTAINS_RE.search(t)
     if m:
         return {"form": "contains", "literal": m.group("lit")}
@@ -170,7 +270,9 @@ def _parse_validation(text: str) -> dict | None:
     return None
 
 
-def _validate_word_overlap(output: str, validation: str | None) -> tuple[bool, str | None]:
+def _validate_word_overlap(
+    output: str, validation: str | None
+) -> tuple[bool, str | None]:
     """Deterministic validation using word-overlap heuristic.
 
     Extracts content words from the validation criteria (filtering
@@ -181,7 +283,7 @@ def _validate_word_overlap(output: str, validation: str | None) -> tuple[bool, s
     if validation is None:
         return True, None
 
-    words = re.findall(r'[a-zA-Z]+', validation.lower())
+    words = re.findall(r"[a-zA-Z]+", validation.lower())
     content_words = [w for w in words if w not in _STOP_WORDS and len(w) > 1]
 
     if not content_words:
@@ -213,7 +315,10 @@ def _validate_structured(output: str, validation: str) -> tuple[bool, str | None
         got = _count_thing(output, pred.get("unit") or "")
         if got >= pred["n"]:
             return True, None
-        return False, f"at_least {pred['n']} {pred.get('unit') or ''}: found {got}".strip()
+        return (
+            False,
+            f"at_least {pred['n']} {pred.get('unit') or ''}: found {got}".strip(),
+        )
     if form == "contains":
         lit = pred["literal"]
         if lit in output:
@@ -239,8 +344,14 @@ def _validate_step(output: str, validation: str | None) -> tuple[bool, str | Non
 # ── Tool registry for code steps ─────────────────────────────────────────
 
 _IGNORED_DIRS = {
-    ".git", ".obsidian", ".venv", "vaultbot_venv", "vaultbot_index",
-    "sessions", "partials", "__pycache__",
+    ".git",
+    ".obsidian",
+    ".venv",
+    "vaultbot_venv",
+    "vaultbot_index",
+    "sessions",
+    "partials",
+    "__pycache__",
 }
 
 
@@ -265,37 +376,37 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     #   ``output`` after an [llm:] step to post-process the model's text.
     snippets.append(
         'args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
-        'if not isinstance(args, dict):\n'
-        '    args = {}\n'
+        "if not isinstance(args, dict):\n"
+        "    args = {}\n"
         'namespace["args"] = args\n'
         'output = list(prior_results.values())[-1] if prior_results else ""\n'
-        'if not isinstance(output, str):\n'
-        '    try:\n'
-        '        output = json.dumps(output, default=str)\n'
-        '    except Exception:\n'
-        '        output = str(output)\n'
+        "if not isinstance(output, str):\n"
+        "    try:\n"
+        "        output = json.dumps(output, default=str)\n"
+        "    except Exception:\n"
+        "        output = str(output)\n"
         'namespace["output"] = output\n'
     )
 
     if "llm_generate" in allowed_tools:
         snippets.append(
             'if "llm_generate" in allowed:\n'
-            '    from llm_client import get_llm_client, get_small_client, get_vision_client\n'
+            "    from llm_client import get_llm_client, get_small_client, get_vision_client\n"
             '    _cartridge = os.environ.get("PROCEDURE_MODEL_CARTRIDGE", "big")\n'
             '    if _cartridge == "small":\n'
-            '        _client = get_small_client() or get_llm_client()\n'
+            "        _client = get_small_client() or get_llm_client()\n"
             '    elif _cartridge == "vision":\n'
-            '        _client = get_vision_client() or get_llm_client()\n'
-            '    else:\n'
-            '        _client = get_llm_client()\n'
-            '    # Small-cartridge procedures are bounded tasks (rerank, filter,\n'
-            '    # summarize) — disable reasoning so a 0.8b model does not spend\n'
-            '    # 60s thinking on a one-line judgment. Big-cartridge procedures\n'
-            '    # keep reasoning (synthesis needs it).\n'
+            "        _client = get_vision_client() or get_llm_client()\n"
+            "    else:\n"
+            "        _client = get_llm_client()\n"
+            "    # Small-cartridge procedures are bounded tasks (rerank, filter,\n"
+            "    # summarize) — disable reasoning so a 0.8b model does not spend\n"
+            "    # 60s thinking on a one-line judgment. Big-cartridge procedures\n"
+            "    # keep reasoning (synthesis needs it).\n"
             '    _think = False if _cartridge == "small" else None\n'
             '    def llm_generate(prompt, system="You are a procedure executor. Follow the instruction. Output only the result."):\n'
             '        messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]\n'
-            '        result = _client.chat(messages=messages, stream=False, think=_think)\n'
+            "        result = _client.chat(messages=messages, stream=False, think=_think)\n"
             '        return result.get("response", "")\n'
             '    namespace["llm_generate"] = llm_generate\n'
         )
@@ -303,107 +414,107 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_search" in allowed_tools:
         snippets.append(
             'if "vault_search" in allowed:\n'
-            '    def vault_search(query, k=5):\n'
-            '        import faiss, numpy as np, requests, pickle\n'
+            "    def vault_search(query, k=5):\n"
+            "        import faiss, numpy as np, requests, pickle\n"
             '        _vs = {"index": None, "metadata": {}, "loaded": False}\n'
             '        if not _vs["loaded"]:\n'
             '            _vs["loaded"] = True\n'
             '            idx_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / "vaultbot_index"\n'
             '            idx_file = idx_dir / "index.faiss"\n'
             '            meta_file = idx_dir / "metadata.pkl"\n'
-            '            if idx_file.exists() and meta_file.exists():\n'
-            '                try:\n'
+            "            if idx_file.exists() and meta_file.exists():\n"
+            "                try:\n"
             '                    _vs["index"] = faiss.read_index(str(idx_file))\n'
             '                    with open(meta_file, "rb") as f:\n'
-            '                        raw = pickle.load(f)\n'
-            '                    if isinstance(raw, tuple) and len(raw) >= 3:\n'
+            "                        raw = pickle.load(f)\n"
+            "                    if isinstance(raw, tuple) and len(raw) >= 3:\n"
             '                        _vs["metadata"] = raw[0]\n'
-            '                    elif isinstance(raw, list):\n'
+            "                    elif isinstance(raw, list):\n"
             '                        _vs["metadata"] = {i: m for i, m in enumerate(raw)}\n'
-            '                except Exception:\n'
-            '                    pass\n'
+            "                except Exception:\n"
+            "                    pass\n"
             '        if _vs["index"] is not None and _vs["metadata"]:\n'
-            '            try:\n'
-            '                resp = requests.post(\n'
+            "            try:\n"
+            "                resp = requests.post(\n"
             '                    "http://localhost:11434/api/embeddings",\n'
             '                    json={"model": "nomic-embed-text", "prompt": query},\n'
-            '                    timeout=10\n'
-            '                )\n'
-            '                resp.raise_for_status()\n'
+            "                    timeout=10\n"
+            "                )\n"
+            "                resp.raise_for_status()\n"
             '                emb = np.array(resp.json()["embedding"], dtype=np.float32).reshape(1, -1)\n                faiss.normalize_L2(emb)\n'
             '                distances, indices = _vs["index"].search(emb, k * 2)\n'
-            '                results = []\n'
-            '                for dist, idx in zip(distances[0], indices[0]):\n'
+            "                results = []\n"
+            "                for dist, idx in zip(distances[0], indices[0]):\n"
             '                    if idx < 0 or idx not in _vs["metadata"]:\n'
-            '                        continue\n'
+            "                        continue\n"
             '                    meta = _vs["metadata"][idx]\n'
             '                    fp = meta.get("file_path", "")\n'
             '                    results.append({"file_path": fp, "name": Path(fp).stem, "score": 1.0 / (1.0 + float(dist))})\n'
-            '                return results[:k]\n'
-            '            except Exception:\n'
-            '                pass\n'
-            '        vault = Path(vault_path)\n'
-            '        query_terms = [t.lower() for t in query.split() if len(t) > 2]\n'
-            '        results = []\n'
-            '        for root, dirs, files in os.walk(str(vault)):\n'
-            '            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]\n'
-            '            for f in files:\n'
+            "                return results[:k]\n"
+            "            except Exception:\n"
+            "                pass\n"
+            "        vault = Path(vault_path)\n"
+            "        query_terms = [t.lower() for t in query.split() if len(t) > 2]\n"
+            "        results = []\n"
+            "        for root, dirs, files in os.walk(str(vault)):\n"
+            "            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]\n"
+            "            for f in files:\n"
             '                if not f.endswith(".md"):\n'
-            '                    continue\n'
-            '                try:\n'
+            "                    continue\n"
+            "                try:\n"
             '                    text = Path(root, f).read_text(encoding="utf-8", errors="replace")\n'
-            '                    text_lower = text.lower()\n'
-            '                    matches = sum(1 for t in query_terms if t in text_lower)\n'
-            '                    if matches > 0:\n'
+            "                    text_lower = text.lower()\n"
+            "                    matches = sum(1 for t in query_terms if t in text_lower)\n"
+            "                    if matches > 0:\n"
             '                        results.append({"file_path": str(Path(root, f)), "name": f[:-3], "score": matches / max(len(query_terms), 1)})\n'
-            '                except Exception:\n'
-            '                    continue\n'
+            "                except Exception:\n"
+            "                    continue\n"
             '        results.sort(key=lambda r: r["score"], reverse=True)\n'
-            '        return results[:k]\n'
+            "        return results[:k]\n"
             '    namespace["vault_search"] = vault_search\n'
         )
 
     if "web_read_source" in allowed_tools:
         snippets.append(
             'if "web_read_source" in allowed:\n'
-            '    def web_read_source(url=None, file=None):\n'
+            "    def web_read_source(url=None, file=None):\n"
             '        web_dir = Path(vault_path) / "vaultbot_stuff/learningMaterial" / "web"\n'
-            '        if file:\n'
-            '            p = web_dir / file\n'
-            '        elif url:\n'
-            '            import hashlib\n'
-            '            h = hashlib.md5(url.encode()).hexdigest()[:8]\n'
+            "        if file:\n"
+            "            p = web_dir / file\n"
+            "        elif url:\n"
+            "            import hashlib\n"
+            "            h = hashlib.md5(url.encode()).hexdigest()[:8]\n"
             '            candidates = list(web_dir.glob(f"*{h}*"))\n'
-            '            p = candidates[0] if candidates else None\n'
-            '        else:\n'
-            '            return None\n'
-            '        if p and p.exists():\n'
+            "            p = candidates[0] if candidates else None\n"
+            "        else:\n"
+            "            return None\n"
+            "        if p and p.exists():\n"
             '            return p.read_text(encoding="utf-8", errors="replace")\n'
-            '        return None\n'
+            "        return None\n"
             '    namespace["web_read_source"] = web_read_source\n'
         )
 
     if "vault_lint" in allowed_tools:
         snippets.append(
             'if "vault_lint" in allowed:\n'
-            '    def vault_lint(file_path):\n'
-            '        p = Path(file_path)\n'
-            '        if not p.exists():\n'
+            "    def vault_lint(file_path):\n"
+            "        p = Path(file_path)\n"
+            "        if not p.exists():\n"
             '            return {"error": "file not found"}\n'
             '        text = p.read_text(encoding="utf-8", errors="replace")\n'
-            '        issues = []\n'
+            "        issues = []\n"
             '        has_fm = text.startswith("---")\n'
-            '        if not has_fm:\n'
+            "        if not has_fm:\n"
             '            issues.append("missing frontmatter")\n'
-            '        import re as _re\n'
+            "        import re as _re\n"
             '        links = _re.findall(r"\\[\\[([^\\]]+)\\]\\]", text)\n'
-            '        broken = []\n'
-            '        vault = Path(vault_path)\n'
-            '        for link in links:\n'
+            "        broken = []\n"
+            "        vault = Path(vault_path)\n"
+            "        for link in links:\n"
             '            found = list(vault.rglob(f"{link.split(chr(124))[0]}.md"))\n'
-            '            if not found:\n'
-            '                broken.append(link)\n'
-            '        if broken:\n'
+            "            if not found:\n"
+            "                broken.append(link)\n"
+            "        if broken:\n"
             '            issues.append(f"{len(broken)} broken wikilinks: {broken[:5]}")\n'
             '        return {"has_frontmatter": has_fm, "broken_wikilinks": broken, "issues": issues}\n'
             '    namespace["vault_lint"] = vault_lint\n'
@@ -412,9 +523,9 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_append" in allowed_tools:
         snippets.append(
             'if "vault_append" in allowed:\n'
-            '    def vault_append(file_path, content):\n'
-            '        p = Path(file_path)\n'
-            '        if not p.exists():\n'
+            "    def vault_append(file_path, content):\n"
+            "        p = Path(file_path)\n"
+            "        if not p.exists():\n"
             '            return {"error": "file not found"}\n'
             '        existing = p.read_text(encoding="utf-8")\n'
             '        p.write_text(existing + "\\n" + content, encoding="utf-8")\n'
@@ -425,32 +536,32 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_list" in allowed_tools:
         snippets.append(
             'if "vault_list" in allowed:\n'
-            '    def vault_list(directory=None, tag=None):\n'
-            '        vault = Path(vault_path)\n'
-            '        if directory:\n'
-            '            vault = vault / directory\n'
-            '        results = []\n'
-            '        for root, dirs, files in os.walk(str(vault)):\n'
-            '            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]\n'
-            '            for f in files:\n'
+            "    def vault_list(directory=None, tag=None):\n"
+            "        vault = Path(vault_path)\n"
+            "        if directory:\n"
+            "            vault = vault / directory\n"
+            "        results = []\n"
+            "        for root, dirs, files in os.walk(str(vault)):\n"
+            "            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]\n"
+            "            for f in files:\n"
             '                if f.endswith(".md"):\n'
-            '                    results.append(str(Path(root, f)))\n'
-            '        return results\n'
+            "                    results.append(str(Path(root, f)))\n"
+            "        return results\n"
             '    namespace["vault_list"] = vault_list\n'
         )
 
     if "code_read" in allowed_tools:
         snippets.append(
             'if "code_read" in allowed:\n'
-            '    def code_read(file_path, start_line=None, end_line=None):\n'
-            '        p = Path(file_path)\n'
-            '        if not p.exists():\n'
+            "    def code_read(file_path, start_line=None, end_line=None):\n"
+            "        p = Path(file_path)\n"
+            "        if not p.exists():\n"
             '            return {"error": "file not found"}\n'
             '        text = p.read_text(encoding="utf-8", errors="replace")\n'
             '        lines = text.split("\\n")\n'
-            '        start_idx = (start_line or 1) - 1\n'
-            '        end_idx = end_line if end_line is not None else None\n'
-            '        lines = lines[start_idx:end_idx]\n'
+            "        start_idx = (start_line or 1) - 1\n"
+            "        end_idx = end_line if end_line is not None else None\n"
+            "        lines = lines[start_idx:end_idx]\n"
             '        return "\\n".join(lines)\n'
             '    namespace["code_read"] = code_read\n'
         )
@@ -463,54 +574,54 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
         # [[Procedure-Subprocess-Architecture]] and run_procedure.py.
         snippets.append(
             'if "run_procedure" in allowed:\n'
-            '    from subprocess_utils import run as _sp_run\n'
-            '    import json as _json\n'
+            "    from subprocess_utils import run as _sp_run\n"
+            "    import json as _json\n"
             '    _backend_dir = Path(os.environ.get("PYTHONPATH", ".").split(os.pathsep)[0])\n'
             '    _venv_py = _backend_dir.parent.parent / ".venv" / "Scripts" / "python.exe"\n'
-            '    if not _venv_py.exists():\n'
-            '        _venv_py = Path(sys.executable)\n'
+            "    if not _venv_py.exists():\n"
+            "        _venv_py = Path(sys.executable)\n"
             '    _proc_self = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
             '    _call_stack = _json.loads(os.environ.get("PROCEDURE_CALL_STACK", "[]"))\n'
-            '    if _proc_self and _proc_self not in _call_stack:\n'
-            '        _call_stack = _call_stack + [_proc_self]\n'
-            '    def run_procedure(procedure_name, args=None):\n'
+            "    if _proc_self and _proc_self not in _call_stack:\n"
+            "        _call_stack = _call_stack + [_proc_self]\n"
+            "    def run_procedure(procedure_name, args=None):\n"
             '        """Run another procedure by note stem. Optionally pass a dict\n'
-            '        of call-time arguments that the child reads via the injected\n'
-            '        ``args`` variable. Returns a dict with {procedure,\n'
-            '        overall_passed, steps_executed, final_output, child_procedures,\n'
-            '        step_details}. Raises RuntimeError on cycle or depth exceeded\n'
+            "        of call-time arguments that the child reads via the injected\n"
+            "        ``args`` variable. Returns a dict with {procedure,\n"
+            "        overall_passed, steps_executed, final_output, child_procedures,\n"
+            "        step_details}. Raises RuntimeError on cycle or depth exceeded\n"
             '        so the parent step fails loudly."""\n'
             '        cmd = [str(_venv_py), str(_backend_dir / "run_procedure.py"),\n'
             '               "--procedure-name", str(procedure_name),\n'
             '               "--vault-path", os.environ.get("VAULT_PATH", "."),\n'
             '               "--call-stack", _json.dumps(_call_stack),\n'
             '               "--procedure-args", _json.dumps(args or {}, default=str)]\n'
-            '        # Forward the tracker log path so the child subprocess\n'
-            '        # logs its own pass/fail + step results to the SAME log\n'
-            '        # file (sub-procedure grading). See PROCEDURE_FIRST.\n'
-            '        _child_env = dict(os.environ)\n'
+            "        # Forward the tracker log path so the child subprocess\n"
+            "        # logs its own pass/fail + step results to the SAME log\n"
+            "        # file (sub-procedure grading). See PROCEDURE_FIRST.\n"
+            "        _child_env = dict(os.environ)\n"
             '        _tracker_log = os.environ.get("PROCEDURE_TRACKER_LOG", "")\n'
-            '        if _tracker_log:\n'
+            "        if _tracker_log:\n"
             '            _child_env["PROCEDURE_TRACKER_LOG"] = _tracker_log\n'
-            '        r = _sp_run(cmd, capture_output=True, text=True, timeout=300,\n'
-            '                    env=_child_env)\n'
-            '        if not r.stdout.strip():\n'
+            "        r = _sp_run(cmd, capture_output=True, text=True, timeout=300,\n"
+            "                    env=_child_env)\n"
+            "        if not r.stdout.strip():\n"
             '            raise RuntimeError("run_procedure produced no output; "\n'
             '                               "stderr: " + r.stderr[:500])\n'
-            '        out = _json.loads(r.stdout)\n'
+            "        out = _json.loads(r.stdout)\n"
             '        if out.get("cycle_detected") or out.get("depth_exceeded"):\n'
             '            raise RuntimeError(out.get("error", "recursion error"))\n'
             '        if "error" in out and "overall_passed" not in out:\n'
             '            raise RuntimeError(out["error"])\n'
-            '        return out\n'
+            "        return out\n"
             '    namespace["run_procedure"] = run_procedure\n'
         )
 
     if "vault_graph_analyzer" in allowed_tools:
         snippets.append(
             'if "vault_graph_analyzer" in allowed:\n'
-            '    from custom_tools.vault_graph_analyzer import analyze_graph\n'
-            '    def vault_graph_analyzer(exclude_patterns=None, max_hops=6):\n'
+            "    from custom_tools.vault_graph_analyzer import analyze_graph\n"
+            "    def vault_graph_analyzer(exclude_patterns=None, max_hops=6):\n"
             '        result = analyze_graph(vault_path, exclude_patterns or ["LICENSE.md"], max_hops)\n'
             '        return {"status": "success", "analysis": result}\n'
             '    namespace["vault_graph_analyzer"] = vault_graph_analyzer\n'
@@ -519,8 +630,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_delete" in allowed_tools:
         snippets.append(
             'if "vault_delete" in allowed:\n'
-            '    from custom_tools.vault_delete import run as _vault_delete_run\n'
-            '    def vault_delete(file_path):\n'
+            "    from custom_tools.vault_delete import run as _vault_delete_run\n"
+            "    def vault_delete(file_path):\n"
             '        return _vault_delete_run({"file_path": file_path})\n'
             '    namespace["vault_delete"] = vault_delete\n'
         )
@@ -528,8 +639,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_safe_write" in allowed_tools:
         snippets.append(
             'if "vault_safe_write" in allowed:\n'
-            '    from custom_tools.vault_safe_write import run as _vault_safe_write_run\n'
-            '    def vault_safe_write(file_path, content):\n'
+            "    from custom_tools.vault_safe_write import run as _vault_safe_write_run\n"
+            "    def vault_safe_write(file_path, content):\n"
             '        return _vault_safe_write_run({"file_path": file_path, "content": content})\n'
             '    namespace["vault_safe_write"] = vault_safe_write\n'
         )
@@ -537,15 +648,15 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_gaps" in allowed_tools:
         snippets.append(
             'if "vault_gaps" in allowed:\n'
-            '    from knowledge_curriculum import KnowledgeCurriculum\n'
-            '    from vault_graph import VaultGraph\n'
-            '    _graph = VaultGraph(vault_path)\n'
-            '    _curriculum = KnowledgeCurriculum(\n'
-            '        vault_graph=_graph,\n'
-            '        session_logger=None,\n'
-            '    )\n'
-            '    def vault_gaps():\n'
-            '        gaps = _curriculum.propose_next_gaps(n=20)\n'
+            "    from knowledge_curriculum import KnowledgeCurriculum\n"
+            "    from vault_graph import VaultGraph\n"
+            "    _graph = VaultGraph(vault_path)\n"
+            "    _curriculum = KnowledgeCurriculum(\n"
+            "        vault_graph=_graph,\n"
+            "        session_logger=None,\n"
+            "    )\n"
+            "    def vault_gaps():\n"
+            "        gaps = _curriculum.propose_next_gaps(n=20)\n"
             '        return {"gaps": gaps, "count": len(gaps)}\n'
             '    namespace["vault_gaps"] = vault_gaps\n'
         )
@@ -553,30 +664,30 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "machine_spec" in allowed_tools:
         snippets.append(
             'if "machine_spec" in allowed:\n'
-            '    import platform, psutil\n'
-            '    def machine_spec(args=None):\n'
-            '        try:\n'
-            '            cpu = psutil.cpu_count(logical=True)\n'
-            '            phys = psutil.cpu_count(logical=False)\n'
-            '            ram = psutil.virtual_memory()\n'
-            '            ram_gb = round(ram.total / (1024**3), 1)\n'
+            "    import platform, psutil\n"
+            "    def machine_spec(args=None):\n"
+            "        try:\n"
+            "            cpu = psutil.cpu_count(logical=True)\n"
+            "            phys = psutil.cpu_count(logical=False)\n"
+            "            ram = psutil.virtual_memory()\n"
+            "            ram_gb = round(ram.total / (1024**3), 1)\n"
             '            gpu_info = "unknown"\n'
-            '            try:\n'
-            '                import subprocess as _sp\n'
+            "            try:\n"
+            "                import subprocess as _sp\n"
             '                nvidia = _sp.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],\n'
-            '                                 capture_output=True, text=True, timeout=5)\n'
-            '                if nvidia.returncode == 0 and nvidia.stdout.strip():\n'
-            '                    gpu_info = nvidia.stdout.strip()\n'
-            '            except Exception:\n'
-            '                pass\n'
-            '            return {\n'
+            "                                 capture_output=True, text=True, timeout=5)\n"
+            "                if nvidia.returncode == 0 and nvidia.stdout.strip():\n"
+            "                    gpu_info = nvidia.stdout.strip()\n"
+            "            except Exception:\n"
+            "                pass\n"
+            "            return {\n"
             '                "cpu_cores": cpu,\n'
             '                "cpu_physical": phys,\n'
             '                "ram_gb": ram_gb,\n'
             '                "gpu": gpu_info,\n'
             '                "platform": platform.platform(),\n'
-            '            }\n'
-            '        except Exception as _e:\n'
+            "            }\n"
+            "        except Exception as _e:\n"
             '            return {"error": str(_e)}\n'
             '    namespace["machine_spec"] = machine_spec\n'
         )
@@ -584,21 +695,21 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "ollama_model_search" in allowed_tools:
         snippets.append(
             'if "ollama_model_search" in allowed:\n'
-            '    import subprocess as _sp\n'
-            '    def ollama_model_search(args=None):\n'
+            "    import subprocess as _sp\n"
+            "    def ollama_model_search(args=None):\n"
             '        action = (args or {}).get("action", "installed")\n'
-            '        try:\n'
+            "        try:\n"
             '            r = _sp.run(["ollama", "list"], capture_output=True, text=True, timeout=10)\n'
-            '            if r.returncode == 0:\n'
+            "            if r.returncode == 0:\n"
             '                lines = r.stdout.strip().split("\\n")[1:]  # skip header\n'
-            '                models = []\n'
-            '                for line in lines:\n'
-            '                    parts = line.split()\n'
-            '                    if parts:\n'
-            '                        models.append(parts[0])\n'
+            "                models = []\n"
+            "                for line in lines:\n"
+            "                    parts = line.split()\n"
+            "                    if parts:\n"
+            "                        models.append(parts[0])\n"
             '                return {"action": action, "models": models, "count": len(models)}\n'
             '            return {"error": r.stderr.strip()}\n'
-            '        except Exception as _e:\n'
+            "        except Exception as _e:\n"
             '            return {"error": str(_e)}\n'
             '    namespace["ollama_model_search"] = ollama_model_search\n'
         )
@@ -606,17 +717,17 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vaultbot_status" in allowed_tools:
         snippets.append(
             'if "vaultbot_status" in allowed:\n'
-            '    def vaultbot_status(args=None):\n'
-            '        try:\n'
+            "    def vaultbot_status(args=None):\n"
+            "        try:\n"
             '            status = {"background_researcher": "unknown"}\n'
-            '            # Check for researcher lock file\n'
+            "            # Check for researcher lock file\n"
             '            lock = Path(vault_path) / "vaultbot_stuff" / "Memory" / ".researcher_lock"\n'
-            '            if lock.exists():\n'
+            "            if lock.exists():\n"
             '                status["background_researcher"] = "running"\n'
-            '            else:\n'
+            "            else:\n"
             '                status["background_researcher"] = "idle"\n'
-            '            return status\n'
-            '        except Exception as _e:\n'
+            "            return status\n"
+            "        except Exception as _e:\n"
             '            return {"error": str(_e)}\n'
             '    namespace["vaultbot_status"] = vaultbot_status\n'
         )
@@ -624,23 +735,23 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_research" in allowed_tools:
         snippets.append(
             'if "vault_research" in allowed:\n'
-            '    import requests as _requests\n'
+            "    import requests as _requests\n"
             '    def vault_research(topic, depth="deep"):\n'
             '        """Research a topic via the backend research engine.\n'
-            '        Calls the /research_tool HTTP endpoint so the procedure\n'
-            '        subprocess does not need to import the full engine.\n'
-            '        Returns a dict with synthesis, sources, and note_path.\n'
+            "        Calls the /research_tool HTTP endpoint so the procedure\n"
+            "        subprocess does not need to import the full engine.\n"
+            "        Returns a dict with synthesis, sources, and note_path.\n"
             '        On failure, returns {"error": ...} for graceful degradation.\n'
             '        """\n'
-            '        try:\n'
-            '            resp = _requests.post(\n'
+            "        try:\n"
+            "            resp = _requests.post(\n"
             '                "http://localhost:8000/research_tool",\n'
             '                json={"topic": topic, "depth": depth},\n'
-            '                timeout=120\n'
-            '            )\n'
-            '            resp.raise_for_status()\n'
-            '            return resp.json()\n'
-            '        except Exception as _e:\n'
+            "                timeout=120\n"
+            "            )\n"
+            "            resp.raise_for_status()\n"
+            "            return resp.json()\n"
+            "        except Exception as _e:\n"
             '            return {"error": str(_e), "topic": topic}\n'
             '    namespace["vault_research"] = vault_research\n'
         )
@@ -649,6 +760,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
 
 
 # ── Subprocess wrapper for code steps ───────────────────────────────────
+
 
 def _run_code_step(
     step: Step,
@@ -680,17 +792,17 @@ def _run_code_step(
     # Build the wrapper script using string replacement (not .format()
     # to avoid conflicts with { and } in Python code).
     wrapper = (
-        'import sys, json, os, traceback\n'
-        'from pathlib import Path\n'
-        '\n'
+        "import sys, json, os, traceback\n"
+        "from pathlib import Path\n"
+        "\n"
         'vault_path = os.environ.get("VAULT_PATH", ".")\n'
         'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "{}"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
         'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
         'procedure_name = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
         '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials", "__pycache__"}\n'
-        '\n'
-        'namespace = {\n'
+        "\n"
+        "namespace = {\n"
         '    "__builtins__": __builtins__,\n'
         '    "prior_results": prior_results,\n'
         '    "procedure_args": procedure_args,\n'
@@ -701,35 +813,33 @@ def _run_code_step(
         '    "os": os,\n'
         '    "vault_path": vault_path,\n'
         '    "_IGNORED_DIRS": _IGNORED_DIRS,\n'
-        '}\n'
-        '\n'
-        '# --- Tool injection ---\n'
-        + tool_preamble +
-        '\n'
-        '# --- Step code ---\n'
-        'step_code = ' + repr(step.code) + '\n'
-        '\n'
-        'try:\n'
-        '    exec(step_code, namespace)\n'
+        "}\n"
+        "\n"
+        "# --- Tool injection ---\n" + tool_preamble + "\n"
+        "# --- Step code ---\n"
+        "step_code = " + repr(step.code) + "\n"
+        "\n"
+        "try:\n"
+        "    exec(step_code, namespace)\n"
         '    result = namespace.get("result")\n'
         '    if result is None and "result" not in namespace:\n'
         '        result = ""\n'
-        '    try:\n'
-        '        json.dumps(result)\n'
-        '    except (TypeError, ValueError):\n'
-        '        result = str(result)\n'
-        '    # Return prior_results so the runtime can merge step-added keys\n'
+        "    try:\n"
+        "        json.dumps(result)\n"
+        "    except (TypeError, ValueError):\n"
+        "        result = str(result)\n"
+        "    # Return prior_results so the runtime can merge step-added keys\n"
         '    # (e.g. "scan", "analyze", "telemetry") back into the shared dict.\n'
         '    _pr = namespace.get("prior_results", {})\n'
-        '    if not isinstance(_pr, dict):\n'
-        '        _pr = {}\n'
+        "    if not isinstance(_pr, dict):\n"
+        "        _pr = {}\n"
         '    print(json.dumps({"status": "ok", "result": result, "prior_results": _pr}))\n'
-        'except Exception as e:  # noqa: BLE001 — best-effort, returns error to caller\n'
-        '    print(json.dumps({\n'
+        "except Exception as e:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        "    print(json.dumps({\n"
         '        "status": "error",\n'
         '        "error": str(e),\n'
         '        "traceback": traceback.format_exc(),\n'
-        '    }))\n'
+        "    }))\n"
     )
 
     # Find the venv python
@@ -766,7 +876,9 @@ def _run_code_step(
     try:
         proc = _subprocess_run(
             [venv_python, "-c", wrapper],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
             cwd=str(Path(vault_path).resolve()),
             env=env,
             # Resource limits (POSIX): mem/CPU/fork caps. None on Windows.
@@ -793,10 +905,22 @@ def _run_code_step(
     try:
         result = json.loads(envelope_line)
     except json.JSONDecodeError:
-        return False, stdout[:2000], f"invalid JSON from subprocess: {envelope_line[:200]}", "", {}
+        return (
+            False,
+            stdout[:2000],
+            f"invalid JSON from subprocess: {envelope_line[:200]}",
+            "",
+            {},
+        )
 
     if result.get("status") == "error":
-        return False, "", result.get("error", "unknown error"), result.get("traceback", ""), {}
+        return (
+            False,
+            "",
+            result.get("error", "unknown error"),
+            result.get("traceback", ""),
+            {},
+        )
 
     output = result.get("result", "")
     if not isinstance(output, str):
@@ -813,6 +937,7 @@ def _run_code_step(
 
 
 # ── LLM step execution ──────────────────────────────────────────────────
+
 
 def _run_llm_step(
     step: Step,
@@ -865,6 +990,7 @@ def _run_llm_step(
         client = llm_client
         if client is None:
             from llm_client import get_llm_client
+
             client = get_llm_client()
         # Use chat() — the unified LLM client contract (see llm_client.py).
         # Both OllamaClient and OpenAICompatibleClient expose chat(), not generate().
@@ -886,6 +1012,7 @@ def _run_llm_step(
 
 
 # ── Active frame builder (for v1 text steps) ─────────────────────────────
+
 
 def _build_active_frame(
     step: Step,
@@ -937,7 +1064,9 @@ def _build_active_frame(
         prompt_parts.append(context)
         prompt_parts.append("")
 
-    prompt_parts.append("Execute the current step. Output only the result of this step.")
+    prompt_parts.append(
+        "Execute the current step. Output only the result of this step."
+    )
 
     user_content = "\n".join(prompt_parts)
 
@@ -969,15 +1098,16 @@ MAX_PROC_DEPTH = 3
 
 # Count comparisons: "< 3 notes", ">= 2 titles", "!= 0 errors"
 _COUNT_RE = re.compile(
-    r'(?P<op><=|>=|==|!=|<|>)\s*(?P<n>\d+)\s*(?P<unit>\w+)?',
+    r"(?P<op><=|>=|==|!=|<|>)\s*(?P<n>\d+)\s*(?P<unit>\w+)?",
     re.IGNORECASE,
 )
 # Presence: 'contains "literal"' / "contains 'literal'"
 _CONTAINS_RE = re.compile(
-    r'contains\s+(?P<q>["\'])(?P<lit>.*?)(?P=q)', re.IGNORECASE,
+    r'contains\s+(?P<q>["\'])(?P<lit>.*?)(?P=q)',
+    re.IGNORECASE,
 )
 # Boolean status: "passed" / "failed"
-_BOOL_RE = re.compile(r'^(passed|failed)$', re.IGNORECASE)
+_BOOL_RE = re.compile(r"^(passed|failed)$", re.IGNORECASE)
 
 
 def _count_thing(output: str, unit: str) -> int:
@@ -994,12 +1124,15 @@ def _count_thing(output: str, unit: str) -> int:
     """
     u = (unit or "").lower().rstrip("s")  # normalise plural
     if u in {"note", "title"}:
-        return len(re.findall(r'\[\[([^\]]+)\]\]', output))
+        return len(re.findall(r"\[\[([^\]]+)\]\]", output))
     if u in {"source", "url", "link"}:
-        return len(re.findall(r'https?://\S+', output))
+        return len(re.findall(r"https?://\S+", output))
     if u in {"item", "line"}:
-        return sum(1 for ln in output.split("\n")
-                   if ln.strip() and re.match(r'\s*([-*]|\d+[.)])\s+', ln))
+        return sum(
+            1
+            for ln in output.split("\n")
+            if ln.strip() and re.match(r"\s*([-*]|\d+[.)])\s+", ln)
+        )
     # Fallback: count non-empty whitespace tokens.
     return len([t for t in output.split() if t])
 
@@ -1034,15 +1167,23 @@ def _evaluate_condition(
     if cond.startswith("if "):
         cond = cond[3:].strip()
 
-    joined = "\n".join(str(o) for _, o in step_outputs) + "\n" + json.dumps(prior_results, default=str)
+    joined = (
+        "\n".join(str(o) for _, o in step_outputs)
+        + "\n"
+        + json.dumps(prior_results, default=str)
+    )
 
     m = _COUNT_RE.search(cond)
     if m:
         op, n, unit = m.group("op"), int(m.group("n")), m.group("unit")
         got = _count_thing(joined, unit or "")
         checks = {
-            "<": got < n, "<=": got <= n, ">": got > n,
-            ">=": got >= n, "==": got == n, "!=": got != n,
+            "<": got < n,
+            "<=": got <= n,
+            ">": got > n,
+            ">=": got >= n,
+            "==": got == n,
+            "!=": got != n,
         }
         ok = checks.get(op, False)
         return ok, f"count {got} {op} {n} {unit or ''}".strip()
@@ -1122,13 +1263,16 @@ async def execute_procedure(
         if _body.startswith("---"):
             _fm_end = _body.find("\n---", 3)
             if _fm_end > 0:
-                _body = _body[_fm_end + 4:].strip()
+                _body = _body[_fm_end + 4 :].strip()
         # Strip the ## Steps header line itself — what matters is whether
         # there's content UNDER it, not the header itself.
         import re as _re
-        _steps_match = _re.search(r'^##\s+Steps\s*$', _body, _re.MULTILINE | _re.IGNORECASE)
+
+        _steps_match = _re.search(
+            r"^##\s+Steps\s*$", _body, _re.MULTILINE | _re.IGNORECASE
+        )
         if _steps_match:
-            _body = _body[_steps_match.end():].strip()
+            _body = _body[_steps_match.end() :].strip()
         if not _body:
             # Empty body — legitimately 0 steps.
             return ExecutionResult(
@@ -1158,11 +1302,14 @@ async def execute_procedure(
         )
         _body_snippet = (procedure.raw_text or "")[:200]
         if session_logger:
-            session_logger.log("procedure_zero_steps", {
-                "procedure": procedure.name,
-                "diagnosis": _diagnosis,
-                "body_snippet": _body_snippet,
-            })
+            session_logger.log(
+                "procedure_zero_steps",
+                {
+                    "procedure": procedure.name,
+                    "diagnosis": _diagnosis,
+                    "body_snippet": _body_snippet,
+                },
+            )
         return ExecutionResult(
             procedure_name=procedure.name,
             steps=[],
@@ -1199,8 +1346,12 @@ async def execute_procedure(
 
         if progress_callback:
             await progress_callback(
-                step.number, len(procedure.steps), "",
-                step.instruction[:120], step.step_type, "running",
+                step.number,
+                len(procedure.steps),
+                "",
+                step.instruction[:120],
+                step.step_type,
+                "running",
             )
 
         # --- Condition gate: skip the step if its precondition fails ---
@@ -1208,7 +1359,8 @@ async def execute_procedure(
         # step whose precondition we cannot verify).  Logged loudly.
         if step.condition is not None:
             should_run, reason = _evaluate_condition(
-                step.condition, prior_results, step_outputs)
+                step.condition, prior_results, step_outputs
+            )
             if not should_run:
                 sr = StepResult(
                     step_number=step.number,
@@ -1219,12 +1371,15 @@ async def execute_procedure(
                 step_results.append(sr)
                 step_outputs.append((step.number, sr.output))
                 if session_logger:
-                    session_logger.log("step_gate_condition_skip", {
-                        "procedure": procedure.name,
-                        "step": step.number,
-                        "condition": step.condition,
-                        "reason": reason,
-                    })
+                    session_logger.log(
+                        "step_gate_condition_skip",
+                        {
+                            "procedure": procedure.name,
+                            "step": step.number,
+                            "condition": step.condition,
+                            "reason": reason,
+                        },
+                    )
                 # Skip to next step without executing.
                 step_numbers = sorted(step_map.keys())
                 idx = step_numbers.index(current_step_num)
@@ -1239,7 +1394,10 @@ async def execute_procedure(
             # Use 300s timeout for steps that may call llm_generate (synthesis can be slow)
             _step_timeout = 300 if "llm_generate" in procedure.allowed_tools else 120
             success, output, error, tb, sub_prior = _run_code_step(
-                step, procedure.allowed_tools, vault_path, prior_results,
+                step,
+                procedure.allowed_tools,
+                vault_path,
+                prior_results,
                 timeout=_step_timeout,
                 procedure_name=procedure.name,
                 call_stack=call_stack,
@@ -1256,7 +1414,9 @@ async def execute_procedure(
                 # injected run_procedure tool returns a dict with a
                 # ``child_procedures`` field when it recurses).
                 try:
-                    parsed = json.loads(output) if output.strip().startswith("{") else None
+                    parsed = (
+                        json.loads(output) if output.strip().startswith("{") else None
+                    )
                     if isinstance(parsed, dict):
                         for child in parsed.get("child_procedures", []):
                             if isinstance(child, dict) and child.get("name"):
@@ -1281,12 +1441,15 @@ async def execute_procedure(
                 step_results.append(sr)
                 failed_step = step.number
                 if session_logger:
-                    session_logger.log("step_gate_code_error", {
-                        "procedure": procedure.name,
-                        "step": step.number,
-                        "error": error,
-                        "traceback": tb[:500] if tb else "",
-                    })
+                    session_logger.log(
+                        "step_gate_code_error",
+                        {
+                            "procedure": procedure.name,
+                            "step": step.number,
+                            "error": error,
+                            "traceback": tb[:500] if tb else "",
+                        },
+                    )
                 break
 
         elif step.step_type == "llm":
@@ -1309,17 +1472,22 @@ async def execute_procedure(
                 step_results.append(sr)
                 failed_step = step.number
                 if session_logger:
-                    session_logger.log("step_gate_llm_error", {
-                        "procedure": procedure.name,
-                        "step": step.number,
-                        "error": error,
-                    })
+                    session_logger.log(
+                        "step_gate_llm_error",
+                        {
+                            "procedure": procedure.name,
+                            "step": step.number,
+                            "error": error,
+                        },
+                    )
                 break
 
         else:  # text step (v1)
             messages = _build_active_frame(step, procedure, context, step_outputs)
             try:
-                result = llm_client.chat(messages, temperature=0.3, stream=False, think=False)
+                result = llm_client.chat(
+                    messages, temperature=0.3, stream=False, think=False
+                )
                 output = result.get("response", "")
                 passed, val_error = _validate_step(output, step.validation)
                 sr = StepResult(
@@ -1334,11 +1502,14 @@ async def execute_procedure(
                     step_results.append(sr)
                     failed_step = step.number
                     if session_logger:
-                        session_logger.log("step_gate_validation_fail", {
-                            "procedure": procedure.name,
-                            "step": step.number,
-                            "validation_error": val_error,
-                        })
+                        session_logger.log(
+                            "step_gate_validation_fail",
+                            {
+                                "procedure": procedure.name,
+                                "step": step.number,
+                                "validation_error": val_error,
+                            },
+                        )
                     break
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 sr = StepResult(
@@ -1351,11 +1522,14 @@ async def execute_procedure(
                 step_results.append(sr)
                 failed_step = step.number
                 if session_logger:
-                    session_logger.log("step_gate_llm_error", {
-                        "procedure": procedure.name,
-                        "step": step.number,
-                        "error": str(e),
-                    })
+                    session_logger.log(
+                        "step_gate_llm_error",
+                        {
+                            "procedure": procedure.name,
+                            "step": step.number,
+                            "error": str(e),
+                        },
+                    )
                 break
 
         step_results.append(sr)
@@ -1382,26 +1556,34 @@ async def execute_procedure(
                         _tb = "\n".join(_tb_lines[-40:])
                     _step_err = (_step_err + "\n" + _tb).strip() if _step_err else _tb
                 procedure_tracker.log_step_result(
-                    procedure.name, step.number, sr.passed,
+                    procedure.name,
+                    step.number,
+                    sr.passed,
                     _step_err,
                 )
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
 
         if session_logger:
-            session_logger.log("step_gate_result", {
-                "procedure": procedure.name,
-                "step": step.number,
-                "step_type": sr.step_type,
-                "passed": sr.passed,
-                "error": sr.error or "",
-                "output_length": len(sr.output),
-            })
+            session_logger.log(
+                "step_gate_result",
+                {
+                    "procedure": procedure.name,
+                    "step": step.number,
+                    "step_type": sr.step_type,
+                    "passed": sr.passed,
+                    "error": sr.error or "",
+                    "output_length": len(sr.output),
+                },
+            )
 
         if progress_callback:
             await progress_callback(
-                step.number, len(procedure.steps), sr.output,
-                step.instruction[:120], step.step_type,
+                step.number,
+                len(procedure.steps),
+                sr.output,
+                step.instruction[:120],
+                step.step_type,
                 "passed" if sr.passed else "failed",
             )
 
@@ -1413,20 +1595,26 @@ async def execute_procedure(
             target = step.branch_target
             if target in step_map:
                 if session_logger:
-                    session_logger.log("step_gate_branch", {
-                        "procedure": procedure.name,
-                        "from_step": step.number,
-                        "to_step": target,
-                    })
+                    session_logger.log(
+                        "step_gate_branch",
+                        {
+                            "procedure": procedure.name,
+                            "from_step": step.number,
+                            "to_step": target,
+                        },
+                    )
                 current_step_num = target
                 continue
             # Branch target doesn't exist — log loudly and fall through.
             if session_logger:
-                session_logger.log("step_gate_branch_missing", {
-                    "procedure": procedure.name,
-                    "from_step": step.number,
-                    "to_step": target,
-                })
+                session_logger.log(
+                    "step_gate_branch_missing",
+                    {
+                        "procedure": procedure.name,
+                        "from_step": step.number,
+                        "to_step": target,
+                    },
+                )
 
         # Advance to next step
         step_numbers = sorted(step_map.keys())
@@ -1440,13 +1628,16 @@ async def execute_procedure(
     final_output = "\n\n".join(all_outputs)
 
     if session_logger:
-        session_logger.log("step_gate_complete", {
-            "procedure": procedure.name,
-            "steps_executed": len(step_results),
-            "overall_passed": overall_passed,
-            "failed_step": failed_step,
-            "final_output_length": len(final_output),
-        })
+        session_logger.log(
+            "step_gate_complete",
+            {
+                "procedure": procedure.name,
+                "steps_executed": len(step_results),
+                "overall_passed": overall_passed,
+                "failed_step": failed_step,
+                "final_output_length": len(final_output),
+            },
+        )
 
     # Procedure-level logging
     if procedure_tracker:
@@ -1460,8 +1651,8 @@ async def execute_procedure(
             if failed_step:
                 _proc_error_details = f"failed at step {failed_step}"
                 _failed_sr = next(
-                    (r for r in step_results if r.step_number == failed_step),
-                    None)
+                    (r for r in step_results if r.step_number == failed_step), None
+                )
                 if _failed_sr is not None:
                     _sr_err = _failed_sr.error or _failed_sr.validation_error or ""
                     if _sr_err:

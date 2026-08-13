@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find notes that cover the same topic but use different words. Scans a directory for notes, has the small model classify each by topic, and groups notes that are about the same thing. Also produces a topic-level overview map showing what the vault covers and where knowledge is concentrated or thin. Replaces the former Vault-Topic-Map procedure.

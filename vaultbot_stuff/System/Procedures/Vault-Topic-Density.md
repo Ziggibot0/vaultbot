@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find notes that mention a topic but don't have it in their title, frontmatter, or tags — the topic is buried in the content. Given a topic, finds all notes that discuss it in their body without any metadata indication. Use when looking for notes that are secretly about a topic but wouldn't be found by title or tag search.

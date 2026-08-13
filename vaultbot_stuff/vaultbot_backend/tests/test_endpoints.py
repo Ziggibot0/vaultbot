@@ -56,6 +56,7 @@ def client():
       — that's fine, the test checks structure not dependency status.
     """
     from main import app
+
     return TestClient(app)
 
 
@@ -93,9 +94,14 @@ def test_task_rejects_missing_goal(client):
     resp = client.post("/task", json={})
     # The task_api.create_task shim returns {"error": "missing goal"} or
     # a 400 tuple. Either way, it should NOT be a successful plan.
-    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+    data = (
+        resp.json()
+        if resp.headers.get("content-type", "").startswith("application/json")
+        else {}
+    )
     # Accept either a 400 status or a 200 with an error field.
     assert resp.status_code in (200, 400)
     if resp.status_code == 200:
-        assert "error" in data or "plan_id" not in data, \
+        assert "error" in data or "plan_id" not in data, (
             "POST /task with empty body should not return a plan"
+        )

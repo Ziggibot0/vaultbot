@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Diff a single vault note against the actual code it describes. Given a note path, extract its claims about backend behavior, read the referenced .py file(s), and produce a line-by-line diff of what the note says vs what the code does. More precise than Find-Contradictions — use this when you already know which note to check.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-11
 summary: "Introspection procedure that lets VaultBot ask and answer ANY question about its own code, procedures, and architecture. Deterministic code reading + vault search for locating and tracing dependencies, with the big LLM only for optional final synthesis. Every finding includes provenance (file path + line numbers)."
 description: "Classify question -> locate target files -> read source -> trace dependencies -> extract relevant sections -> optional big-LLM synthesis with provenance. The meta-reasoning layer."

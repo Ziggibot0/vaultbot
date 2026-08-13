@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Summarize a conversation transcript concisely, preserving the user's goal, key decisions, important facts, and open questions. Returns a brief summary (max 500 tokens). Uses the small model — summarization is simple condensation.

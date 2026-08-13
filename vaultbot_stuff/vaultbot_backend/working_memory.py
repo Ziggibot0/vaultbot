@@ -41,6 +41,7 @@ and ``render_for_prompt()`` (injected into the system prompt every round).
 The model never needs the full snapshot in the tool result — it's already
 in the system prompt.
 """
+
 from __future__ import annotations
 
 import json
@@ -91,8 +92,9 @@ class TaskList:
     Owned by the websocket session (one per chat connection). Thread-safe
     because the chat loop and any background heartbeat thread may read it.
     """
+
     tasks: list[Task] = field(default_factory=list)
-    goal: str = ""            # the high-level goal this task list serves
+    goal: str = ""  # the high-level goal this task list serves
     # Per-step consolidated summaries (the memory-consolidation layer).
     # Keyed by task id. When a step is marked completed, the chat loop asks
     # the small model to write a gist of what happened during that step,
@@ -124,11 +126,13 @@ class TaskList:
             self.goal = goal[:500]
             self.tasks = []
             for i, item in enumerate(items[:MAX_TASKS]):
-                self.tasks.append(Task(
-                    id=str(i + 1),
-                    content=item[:300],
-                    status="pending",
-                ))
+                self.tasks.append(
+                    Task(
+                        id=str(i + 1),
+                        content=item[:300],
+                        status="pending",
+                    )
+                )
             return {
                 "status": "ok",
                 "action": "plan_set",
@@ -136,8 +140,9 @@ class TaskList:
                 "total": len(self.tasks),
             }
 
-    def update_task(self, task_id: str, status: str = "",
-                    notes: str = "") -> dict[str, Any]:
+    def update_task(
+        self, task_id: str, status: str = "", notes: str = ""
+    ) -> dict[str, Any]:
         """Update a single task's status and/or notes.
 
         The model calls this after each tool round to mark progress.
@@ -157,14 +162,19 @@ class TaskList:
                         "task_id": task_id,
                         "task_status": t.status,
                         "total": len(self.tasks),
-                        "completed": sum(1 for x in self.tasks if x.status == "completed"),
+                        "completed": sum(
+                            1 for x in self.tasks if x.status == "completed"
+                        ),
                         "pending": sum(1 for x in self.tasks if x.status == "pending"),
-                        "in_progress": sum(1 for x in self.tasks if x.status == "in_progress"),
+                        "in_progress": sum(
+                            1 for x in self.tasks if x.status == "in_progress"
+                        ),
                     }
             return {"error": f"task {task_id} not found"}
 
-    def add_task(self, content: str, status: str = "pending",
-                 notes: str = "") -> dict[str, Any]:
+    def add_task(
+        self, content: str, status: str = "pending", notes: str = ""
+    ) -> dict[str, Any]:
         """Append a single task to the list (mid-plan discovery).
 
         Lets the model add a step it discovered mid-task without re-planning
@@ -177,12 +187,16 @@ class TaskList:
             if len(self.tasks) >= MAX_TASKS:
                 return {"error": f"max tasks ({MAX_TASKS}) reached"}
             new_id = str(len(self.tasks) + 1)
-            self.tasks.append(Task(
-                id=new_id,
-                content=content[:300],
-                status=status if status in ("pending", "in_progress", "completed") else "pending",
-                notes=notes[:500],
-            ))
+            self.tasks.append(
+                Task(
+                    id=new_id,
+                    content=content[:300],
+                    status=status
+                    if status in ("pending", "in_progress", "completed")
+                    else "pending",
+                    notes=notes[:500],
+                )
+            )
             return {
                 "status": "ok",
                 "action": "add",
@@ -215,8 +229,12 @@ class TaskList:
             return {
                 "goal": self.goal,
                 "tasks": [
-                    {"id": t.id, "content": t.content,
-                     "status": t.status, "notes": t.notes}
+                    {
+                        "id": t.id,
+                        "content": t.content,
+                        "status": t.status,
+                        "notes": t.notes,
+                    }
                     for t in self.tasks
                 ],
                 "step_summaries": dict(self.step_summaries),
@@ -241,8 +259,9 @@ class TaskList:
             if self.goal:
                 lines.append(f"Goal: {self.goal}")
             for t in self.tasks:
-                mark = {"completed": "[x]", "in_progress": "[~]",
-                        "pending": "[ ]"}.get(t.status, "[ ]")
+                mark = {"completed": "[x]", "in_progress": "[~]", "pending": "[ ]"}.get(
+                    t.status, "[ ]"
+                )
                 line = f"{mark} {t.id}. {t.content}"
                 if t.notes:
                     line += f" — {t.notes}"
@@ -286,8 +305,7 @@ class TaskList:
     def all_done(self) -> bool:
         """True if every task is completed."""
         with self.lock:
-            return bool(self.tasks) and all(
-                t.status == "completed" for t in self.tasks)
+            return bool(self.tasks) and all(t.status == "completed" for t in self.tasks)
 
     def restore_snapshot(self, snap: dict[str, Any]) -> None:
         """Restore a prior state from a snapshot (used by checkpoint/resume
@@ -313,20 +331,27 @@ class TaskList:
                 # a corrupt or unknown status is coerced to "pending"
                 # rather than propagating garbage into the task list.
                 raw_status = t.get("status", "pending")
-                valid = raw_status if raw_status in ("pending", "in_progress", "completed") else "pending"
-                self.tasks.append(Task(
-                    id=str(t.get("id", "")),
-                    content=(t.get("content") or "")[:300],
-                    status=valid,
-                    notes=(t.get("notes") or "")[:500],
-                ))
+                valid = (
+                    raw_status
+                    if raw_status in ("pending", "in_progress", "completed")
+                    else "pending"
+                )
+                self.tasks.append(
+                    Task(
+                        id=str(t.get("id", "")),
+                        content=(t.get("content") or "")[:300],
+                        status=valid,
+                        notes=(t.get("notes") or "")[:500],
+                    )
+                )
 
     # ------------------------------------------------------------------ #
     # Disk persistence (survives backend restarts)
     # ------------------------------------------------------------------ #
 
-    def save_to_disk(self, path: str | None = None,
-                     session_id: str | None = None) -> None:
+    def save_to_disk(
+        self, path: str | None = None, session_id: str | None = None
+    ) -> None:
         """Persist the working-memory state to disk (atomic, best-effort).
 
         Called after each turn so the plan survives a backend restart.
@@ -356,8 +381,9 @@ class TaskList:
             logger.debug("working_memory save_to_disk failed: %s", e)
 
     @classmethod
-    def load_from_disk(cls, path: str | None = None,
-                       session_id: str | None = None) -> "TaskList | None":
+    def load_from_disk(
+        cls, path: str | None = None, session_id: str | None = None
+    ) -> "TaskList | None":
         """Load a persisted working-memory state from disk.
 
         Returns a TaskList with the restored plan, or None when the file
@@ -368,8 +394,12 @@ class TaskList:
         """
         p = _resolve_disk_path(path, session_id)
         # One-shot legacy migration.
-        if session_id and not path and not os.path.exists(p) \
-                and os.path.exists(_DEFAULT_DISK_PATH):
+        if (
+            session_id
+            and not path
+            and not os.path.exists(p)
+            and os.path.exists(_DEFAULT_DISK_PATH)
+        ):
             try:
                 with open(_DEFAULT_DISK_PATH, encoding="utf-8") as fh:
                     data = json.load(fh)
@@ -404,8 +434,7 @@ class TaskList:
             return None
 
     @staticmethod
-    def clear_disk(path: str | None = None,
-                   session_id: str | None = None) -> None:
+    def clear_disk(path: str | None = None, session_id: str | None = None) -> None:
         """Wipe the persisted working-memory state (called on /new).
         Best-effort."""
         p = _resolve_disk_path(path, session_id)

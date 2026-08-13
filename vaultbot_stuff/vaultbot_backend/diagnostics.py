@@ -16,12 +16,19 @@ match wins (order matters — put the most specific predicates first). If
 nothing matches, the ``generic`` fallback produces a BROKEN diagnosis
 with the raw repr tucked into ``raw_for_log`` only.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
 
-from error_types import AgentSilentError, Diagnosis, ProblemCategory, Severity, make_diagnosis
+from error_types import (
+    AgentSilentError,
+    Diagnosis,
+    ProblemCategory,
+    Severity,
+    make_diagnosis,
+)
 
 # ─────────────────────────────────────────────────────────────────────────
 # Context keys understood by predicates
@@ -74,8 +81,8 @@ def _is_conn_refused(exc: BaseException, ctx: dict[str, Any]) -> bool:
     return (
         "connectionrefusederror" in text
         or "connectionerror" in text
-        or "max retries exceeded" in text   # requests' phrasing
-        or "connecterror" in text           # httpx
+        or "max retries exceeded" in text  # requests' phrasing
+        or "connecterror" in text  # httpx
         or "connection refused" in text
         or "connection aborted" in text
     )
@@ -201,9 +208,7 @@ def _f_model_not_found(exc, ctx) -> Diagnosis:
     # renamed config, etc.).
     return make_diagnosis(
         ProblemCategory.MODEL_NOT_PULLED,
-        user_message=(
-            f"The AI model VaultBot needs{model_part} isn't downloaded yet."
-        ),
+        user_message=(f"The AI model VaultBot needs{model_part} isn't downloaded yet."),
         remedy_hint=(
             "Click Download model below — VaultBot will pull it for you. "
             "This is a one-time download (~1-4 GB)."
@@ -217,9 +222,7 @@ def _f_port_in_use(exc, ctx) -> Diagnosis:
     port = ctx.get("port", 8000)
     return make_diagnosis(
         ProblemCategory.PORT_IN_USE,
-        user_message=(
-            f"VaultBot's port ({port}) is already taken by another program."
-        ),
+        user_message=(f"VaultBot's port ({port}) is already taken by another program."),
         remedy_hint=(
             "Click Restart below — VaultBot will stop the stale process "
             "and start fresh."
@@ -268,9 +271,7 @@ def _f_setup_incomplete(exc, ctx) -> Diagnosis:
     missing = ctx.get("missing", "the backend")
     return make_diagnosis(
         ProblemCategory.SETUP_INCOMPLETE,
-        user_message=(
-            f"VaultBot isn't fully set up yet — {missing} is missing."
-        ),
+        user_message=(f"VaultBot isn't fully set up yet — {missing} is missing."),
         remedy_hint=(
             "Click Finish setup below. It opens the installer, which "
             "picks up where it left off."
@@ -408,8 +409,7 @@ def _f_generic(exc, ctx) -> Diagnosis:
     return make_diagnosis(
         ProblemCategory.GENERIC,
         user_message=(
-            f"Something went wrong{stage_part}. VaultBot kept your notes "
-            "and chat safe."
+            f"Something went wrong{stage_part}. VaultBot kept your notes and chat safe."
         ),
         remedy_hint=(
             "Try Restart below. If it keeps happening, use Copy for "
@@ -430,23 +430,23 @@ def _f_generic(exc, ctx) -> Diagnosis:
 _REGISTRY: list[tuple[Predicate, Factory]] = [
     # Environmental / setup failures are unambiguous — match them first so
     # a faiss import error isn't misread as a generic startup crash.
-    (_is_faiss_abi,        _f_faiss_abi),
-    (_is_port_in_use,      _f_port_in_use),
-    (_is_synced_folder,     _f_synced_folder),
+    (_is_faiss_abi, _f_faiss_abi),
+    (_is_port_in_use, _f_port_in_use),
+    (_is_synced_folder, _f_synced_folder),
     (_is_setup_incomplete, _f_setup_incomplete),
     # Context-tagged subsystem failures: callers pass
     # context={"category": "retrieval_broken"} etc. Match early so the
     # tag takes priority over generic exception-type matching.
-    (_is_context_category,  _f_subsystem),
+    (_is_context_category, _f_subsystem),
     # Agent-silent: the loop ended with no user-facing text. Match before
     # the generic fallback so the user sees the agent_silent card, not a
     # generic "something went wrong".
-    (_is_agent_silent,       _f_agent_silent),
+    (_is_agent_silent, _f_agent_silent),
     # Model problems before ollama-down: a 404 model-not-found is a
     # ConnectionError-shaped HTTPError sometimes, and the model message
     # is more actionable than "Ollama is down" (which would be wrong).
-    (_is_model_not_found,  _f_model_not_found),
-    (_is_conn_refused,     _f_ollama_down),
+    (_is_model_not_found, _f_model_not_found),
+    (_is_conn_refused, _f_ollama_down),
 ]
 
 

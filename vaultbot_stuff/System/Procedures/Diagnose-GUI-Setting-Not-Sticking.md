@@ -8,6 +8,7 @@ tags:
   - silent-failure
 covers: GUI setting (dropdown/toggle) appears to 'flip back' or not stick after the user changes it
 status: raw
+baseline: true
 created: 2026-08-06
 summary: Diagnose GUI Setting Not Sticking (Optimistic-Update / Silent-Failure Mask)
 ---

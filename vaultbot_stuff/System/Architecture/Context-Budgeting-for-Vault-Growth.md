@@ -10,6 +10,7 @@ tags:
   - hermeneutics
 type: architecture
 status: verified
+baseline: true
 ---
 
 # Context Budgeting for Vault Growth

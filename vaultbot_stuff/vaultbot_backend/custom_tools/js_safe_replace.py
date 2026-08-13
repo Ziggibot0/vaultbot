@@ -2,7 +2,23 @@
 Agent-authored tool: js_safe_replace
 """
 
-SCHEMA = {"name": "js_safe_replace", "description": "Safely replace a string in a JavaScript file. Reads the file, replaces old_str with new_str, validates with node --check, and writes atomically.", "parameters": {"properties": {"file_path": {"description": "Path to the .js file, relative to vault root", "type": "string"}, "new_str": {"description": "The replacement string", "type": "string"}, "old_str": {"description": "The exact string to find", "type": "string"}}, "required": ["file_path", "old_str", "new_str"], "type": "object"}}
+SCHEMA = {
+    "name": "js_safe_replace",
+    "description": "Safely replace a string in a JavaScript file. Reads the file, replaces old_str with new_str, validates with node --check, and writes atomically.",
+    "parameters": {
+        "properties": {
+            "file_path": {
+                "description": "Path to the .js file, relative to vault root",
+                "type": "string",
+            },
+            "new_str": {"description": "The replacement string", "type": "string"},
+            "old_str": {"description": "The exact string to find", "type": "string"},
+        },
+        "required": ["file_path", "old_str", "new_str"],
+        "type": "object",
+    },
+}
+
 
 def run(args: dict) -> dict:
     import os
@@ -35,16 +51,19 @@ def run(args: dict) -> dict:
     new_content = content.replace(old_str, new_str)
 
     # Validate JS syntax with node --check
-    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False, encoding='utf-8')
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".js", delete=False, encoding="utf-8"
+    )
     tmp.write(new_content)
     tmp.close()
     try:
         result = subprocess.run(
-            ['node', '--check', tmp.name],
-            capture_output=True, timeout=10
+            ["node", "--check", tmp.name], capture_output=True, timeout=10
         )
         if result.returncode != 0:
-            return {"error": f"node --check failed: {result.stderr.decode('utf-8', errors='replace')}"}
+            return {
+                "error": f"node --check failed: {result.stderr.decode('utf-8', errors='replace')}"
+            }
     except FileNotFoundError:
         # node not available — skip validation
         pass
@@ -60,8 +79,12 @@ def run(args: dict) -> dict:
     shutil.copy2(full_path, trash_dir / backup_name)
 
     # Write atomically
-    tmp_write = str(full_path) + '.tmp'
-    Path(tmp_write).write_text(new_content, encoding='utf-8')
+    tmp_write = str(full_path) + ".tmp"
+    Path(tmp_write).write_text(new_content, encoding="utf-8")
     os.replace(tmp_write, str(full_path))
 
-    return {"status": "ok", "file_path": str(full_path), "bytes": len(new_content.encode('utf-8'))}
+    return {
+        "status": "ok",
+        "file_path": str(full_path),
+        "bytes": len(new_content.encode("utf-8")),
+    }

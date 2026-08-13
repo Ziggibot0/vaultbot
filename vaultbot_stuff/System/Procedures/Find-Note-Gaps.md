@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find vault notes that a concept or procedure depends on but that don't exist yet. Given a note path, reads its wikilinks and depends_on frontmatter, checks which targets are missing, and returns the list of missing notes with a one-sentence description of what each should contain. Use when checking if a note's dependencies are met before relying on it.

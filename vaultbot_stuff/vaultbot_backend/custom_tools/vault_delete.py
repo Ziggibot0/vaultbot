@@ -2,21 +2,48 @@
 Agent-authored tool: vault_delete
 """
 
-SCHEMA = {"name": "vault_delete", "description": "Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals (except empty past-day journals), LOCKED notes, and core identity files. Reports incoming wikilinks that will become broken after deletion. Use this to clean up junk files without risk.", "parameters": {"properties": {"file_path": {"description": "Path to the note to delete, relative to vault root (e.g. 'Other post.md')", "type": "string"}}, "required": ["file_path"], "type": "object"}}
+SCHEMA = {
+    "name": "vault_delete",
+    "description": "Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals (except empty past-day journals), LOCKED notes, and core identity files. Reports incoming wikilinks that will become broken after deletion. Use this to clean up junk files without risk.",
+    "parameters": {
+        "properties": {
+            "file_path": {
+                "description": "Path to the note to delete, relative to vault root (e.g. 'Other post.md')",
+                "type": "string",
+            }
+        },
+        "required": ["file_path"],
+        "type": "object",
+    },
+}
 
 import os
 import re
 from datetime import datetime, date
 from pathlib import Path
 
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
-EXCLUDE_DIRS = {".git", "node_modules", ".obsidian", "vaultbot_venv", "__pycache__", "checkpoints", ".venv"}
+VAULT_ROOT = Path(
+    __file__
+).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+EXCLUDE_DIRS = {
+    ".git",
+    "node_modules",
+    ".obsidian",
+    "vaultbot_venv",
+    "__pycache__",
+    "checkpoints",
+    ".venv",
+}
 BACKEND_DIR = Path(__file__).parent.parent.resolve()  # vaultbot_stuff/vaultbot_backend/
 TRASH_DIR = BACKEND_DIR / "trash"
 IDENTITY_FILES = {"IDENTITY"}
 
+
 def _is_sacred(stem: str) -> bool:
-    return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem) or re.match(r"^\d{2}-\d{2}-\d{4}$", stem))
+    return bool(
+        re.match(r"^\d{4}-\d{2}-\d{2}$", stem) or re.match(r"^\d{2}-\d{2}-\d{4}$", stem)
+    )
+
 
 def _is_empty_past_journal(stem: str, full_path: str) -> bool:
     """Check if this is an empty journal from a past day (deletable).
@@ -47,11 +74,12 @@ def _is_empty_past_journal(stem: str, full_path: str) -> bool:
         return False  # Today or future — never delete
 
     try:
-        with open(full_path, encoding='utf-8') as f:
+        with open(full_path, encoding="utf-8") as f:
             content = f.read().strip()
         return len(content) == 0
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
+
 
 def _is_locked(content: str) -> bool:
     lines = content.split("\n")
@@ -62,14 +90,15 @@ def _is_locked(content: str) -> bool:
             in_frontmatter = not in_frontmatter
             continue
         if in_frontmatter:
-            if re.match(r'^[\w-]+:\s*LOCKED\s*$', stripped, re.IGNORECASE):
+            if re.match(r"^[\w-]+:\s*LOCKED\s*$", stripped, re.IGNORECASE):
                 return True
-            if re.match(r'^locked:\s*true\s*$', stripped, re.IGNORECASE):
+            if re.match(r"^locked:\s*true\s*$", stripped, re.IGNORECASE):
                 return True
         else:
             if stripped == "LOCKED":
                 return True
     return False
+
 
 def _find_incoming_links(target_stem: str) -> list:
     """Find all notes that wikilink to the target."""
@@ -87,12 +116,13 @@ def _find_incoming_links(target_stem: str) -> list:
                 content = full.read_text(encoding="utf-8")
             except:
                 continue
-            wikilinks = re.findall(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', content)
+            wikilinks = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", content)
             for link in wikilinks:
                 if link.strip() == target_stem:
                     incoming.append(rel)
                     break
     return incoming
+
 
 def run(args: dict) -> dict:
     file_path = args.get("file_path", "")
@@ -126,10 +156,12 @@ def run(args: dict) -> dict:
                 "incoming_links": [],
                 "incoming_link_count": 0,
                 "warning": None,
-                "note": "empty past-day journal deleted (no content to back up)"
+                "note": "empty past-day journal deleted (no content to back up)",
             }
         else:
-            return {"error": f"BLOCKED: '{stem}' is a sacred journal file — never deletable"}
+            return {
+                "error": f"BLOCKED: '{stem}' is a sacred journal file — never deletable"
+            }
 
     if stem in IDENTITY_FILES:
         return {"error": f"BLOCKED: '{stem}' is a core identity file — never deletable"}
@@ -142,7 +174,9 @@ def run(args: dict) -> dict:
     incoming_links = _find_incoming_links(stem)
 
     # Check if file is already in trash — skip re-backup
-    is_in_trash = "vaultbot_stuff/vaultbot_backend" in file_path and "trash" in file_path
+    is_in_trash = (
+        "vaultbot_stuff/vaultbot_backend" in file_path and "trash" in file_path
+    )
 
     if is_in_trash:
         # Already a backup — delete permanently without re-backing-up
@@ -153,8 +187,10 @@ def run(args: dict) -> dict:
             "bytes_deleted": len(content),
             "incoming_links": incoming_links,
             "incoming_link_count": len(incoming_links),
-            "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]" if incoming_links else None,
-            "note": "file was already in trash — deleted permanently without re-backup"
+            "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]"
+            if incoming_links
+            else None,
+            "note": "file was already in trash — deleted permanently without re-backup",
         }
 
     # Backup to trash before deleting
@@ -173,5 +209,7 @@ def run(args: dict) -> dict:
         "bytes_deleted": len(content),
         "incoming_links": incoming_links,
         "incoming_link_count": len(incoming_links),
-        "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]" if incoming_links else None
+        "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]"
+        if incoming_links
+        else None,
     }

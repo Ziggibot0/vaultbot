@@ -63,8 +63,8 @@ MOC_PREFIX = "moc-"
 # with an absolute floor to skip degenerate far-apart clusters.
 CLUSTER_DISTANCE_RATIO = 1.6
 CLUSTER_MAX_ABS_DISTANCE = 140.0
-CLUSTER_MIN_SIZE = 3      # don't make a MOC for 1-2 stray cards
-CLUSTER_MAX_CARDS = 40    # split huge clusters later if needed
+CLUSTER_MIN_SIZE = 3  # don't make a MOC for 1-2 stray cards
+CLUSTER_MAX_CARDS = 40  # split huge clusters later if needed
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -77,8 +77,10 @@ def _atomic_write(path: Path, text: str) -> None:
 # Clustering (greedy connected components at a relative threshold)
 # ---------------------------------------------------------------------------
 
-def cluster_cards(card_paths: list[str],
-                  emb_by_path: dict[str, Any]) -> list[list[str]]:
+
+def cluster_cards(
+    card_paths: list[str], emb_by_path: dict[str, Any]
+) -> list[list[str]]:
     """Cluster L1 cards by embedding similarity.
 
     `emb_by_path` maps card abs-path (str) -> embedding (list or ndarray).
@@ -148,6 +150,7 @@ def cluster_cards(card_paths: list[str],
 # Cluster label (extractive, LLM-free)
 # ---------------------------------------------------------------------------
 
+
 def _card_terms(text: str) -> set[str]:
     """Extract meaningful terms from a concept card for cluster labeling.
 
@@ -156,32 +159,135 @@ def _card_terms(text: str) -> set[str]:
     """
     # Strip the header line, pointer lines, markers, and the Links block.
     body = text
-    body = re.sub(r'^# .*\n', '', body, flags=re.MULTILINE)
-    body = re.sub(r'^> .*\n', '', body, flags=re.MULTILINE)
-    body = re.sub(r'<!-- vaultbot:.*?-->\n?', '', body)
-    body = re.sub(r'^## Links out\n.*', '', body, flags=re.MULTILINE | re.DOTALL)
-    body = re.sub(r'^Key terms:\s*[^\n]+\n', '', body, flags=re.MULTILINE)
+    body = re.sub(r"^# .*\n", "", body, flags=re.MULTILINE)
+    body = re.sub(r"^> .*\n", "", body, flags=re.MULTILINE)
+    body = re.sub(r"<!-- vaultbot:.*?-->\n?", "", body)
+    body = re.sub(r"^## Links out\n.*", "", body, flags=re.MULTILINE | re.DOTALL)
+    body = re.sub(r"^Key terms:\s*[^\n]+\n", "", body, flags=re.MULTILINE)
     # Also strip wikilink brackets but keep the inner text (concept names).
-    body = re.sub(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', r'\1', body)
+    body = re.sub(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", r"\1", body)
     # Tokenize.
     STOP = {
-        "the", "and", "for", "are", "was", "were", "but", "not", "you", "that",
-        "this", "with", "from", "they", "have", "has", "had", "its", "it", "is",
-        "be", "been", "being", "as", "at", "by", "an", "or", "if", "so", "do",
-        "does", "did", "about", "into", "upon", "such", "very", "more", "most",
-        "some", "any", "all", "both", "each", "other", "than", "then", "when",
-        "where", "why", "how", "will", "would", "could", "should", "may", "might",
-        "must", "can", "also", "between", "through", "during", "after", "before",
-        "these", "those", "there", "their", "his", "her", "your", "our", "we",
-        "us", "them", "him", "she", "he", "one", "two", "three", "first", "second",
+        "the",
+        "and",
+        "for",
+        "are",
+        "was",
+        "were",
+        "but",
+        "not",
+        "you",
+        "that",
+        "this",
+        "with",
+        "from",
+        "they",
+        "have",
+        "has",
+        "had",
+        "its",
+        "it",
+        "is",
+        "be",
+        "been",
+        "being",
+        "as",
+        "at",
+        "by",
+        "an",
+        "or",
+        "if",
+        "so",
+        "do",
+        "does",
+        "did",
+        "about",
+        "into",
+        "upon",
+        "such",
+        "very",
+        "more",
+        "most",
+        "some",
+        "any",
+        "all",
+        "both",
+        "each",
+        "other",
+        "than",
+        "then",
+        "when",
+        "where",
+        "why",
+        "how",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "also",
+        "between",
+        "through",
+        "during",
+        "after",
+        "before",
+        "these",
+        "those",
+        "there",
+        "their",
+        "his",
+        "her",
+        "your",
+        "our",
+        "we",
+        "us",
+        "them",
+        "him",
+        "she",
+        "he",
+        "one",
+        "two",
+        "three",
+        "first",
+        "second",
         # card/vault boilerplate (should never appear after stripping, but guard)
-        "card", "concept", "source", "cluster", "links", "vaultbot", "note",
-        "section", "chapter", "figure", "table", "example", "exercise", "see",
-        "shown", "shows", "using", "use", "used", "answer", "able", "domain",
-        "problem", "problems", "solution", "solutions", "find", "given",
+        "card",
+        "concept",
+        "source",
+        "cluster",
+        "links",
+        "vaultbot",
+        "note",
+        "section",
+        "chapter",
+        "figure",
+        "table",
+        "example",
+        "exercise",
+        "see",
+        "shown",
+        "shows",
+        "using",
+        "use",
+        "used",
+        "answer",
+        "able",
+        "domain",
+        "problem",
+        "problems",
+        "solution",
+        "solutions",
+        "find",
+        "given",
     }
-    return {w.lower() for w in re.findall(r"\b[a-z][a-z0-9-]{3,}\b", body)
-            if w.lower() not in STOP}
+    return {
+        w.lower()
+        for w in re.findall(r"\b[a-z][a-z0-9-]{3,}\b", body)
+        if w.lower() not in STOP
+    }
 
 
 def _cluster_label(card_paths: list[str]) -> str:
@@ -199,8 +305,7 @@ def _cluster_label(card_paths: list[str]) -> str:
             for t in ts:
                 freq[t] = freq.get(t, 0) + 1
         # score = cards-containing / total, tiebreak by shortest term
-        ranked = sorted(freq.items(),
-                        key=lambda kv: (-kv[1], len(kv[0])))
+        ranked = sorted(freq.items(), key=lambda kv: (-kv[1], len(kv[0])))
         if not ranked:
             return "cluster"
         # take the top 1-2 terms as the label
@@ -214,6 +319,7 @@ def _cluster_label(card_paths: list[str]) -> str:
 # MOC note construction
 # ---------------------------------------------------------------------------
 
+
 def _cluster_id(card_paths: list[str]) -> str:
     h = hashlib.sha1()
     for p in sorted(card_paths):
@@ -221,11 +327,13 @@ def _cluster_id(card_paths: list[str]) -> str:
     return h.hexdigest()[:8]
 
 
-def build_moc_note(cluster_id: str,
-                   label: str,
-                   card_paths: list[str],
-                   textbooks_dir: Path,
-                   related_clusters: list[str] | None = None) -> Path:
+def build_moc_note(
+    cluster_id: str,
+    label: str,
+    card_paths: list[str],
+    textbooks_dir: Path,
+    related_clusters: list[str] | None = None,
+) -> Path:
     """Write a MOC note for a cluster.  Returns the MOC path."""
     moc_path = textbooks_dir / f"{MOC_PREFIX}{cluster_id}.md"
     lines = [
@@ -248,10 +356,12 @@ def build_moc_note(cluster_id: str,
     return moc_path
 
 
-def build_mocs(card_paths: list[str],
-               emb_by_path: dict[str, Any],
-               textbooks_dir: str | Path,
-               progress_callback: Any = None) -> dict[str, Any]:
+def build_mocs(
+    card_paths: list[str],
+    emb_by_path: dict[str, Any],
+    textbooks_dir: str | Path,
+    progress_callback: Any = None,
+) -> dict[str, Any]:
     """Cluster L1 cards and write a MOC per cluster.  LLM-free.
 
     Also writes the cluster-id back into each card's `> cluster:` line so
@@ -272,9 +382,13 @@ def build_mocs(card_paths: list[str],
         clusters = cluster_cards(card_paths, emb_by_path)
         if progress_callback is not None:
             try:
-                progress_callback("moc_build", {
-                    "clusters": len(clusters),
-                    "message": f"Building {len(clusters)} maps of content..."})
+                progress_callback(
+                    "moc_build",
+                    {
+                        "clusters": len(clusters),
+                        "message": f"Building {len(clusters)} maps of content...",
+                    },
+                )
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
         moc_paths: list[str] = []
@@ -283,8 +397,11 @@ def build_mocs(card_paths: list[str],
         centroids: dict[str, np.ndarray] = {}
         for cl in clusters:
             cid = _cluster_id(cl)
-            vecs = [np.asarray(emb_by_path[p], dtype=np.float32) for p in cl
-                    if p in emb_by_path]
+            vecs = [
+                np.asarray(emb_by_path[p], dtype=np.float32)
+                for p in cl
+                if p in emb_by_path
+            ]
             if vecs:
                 centroids[cid] = np.mean(vecs, axis=0)
         for cl in clusters:
@@ -310,20 +427,27 @@ def build_mocs(card_paths: list[str],
                     _stamp_card_cluster(cp, cid)
                 except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     logger.debug("swallowed: %s", e)
-        return {"mocs_built": len(moc_paths), "clusters": cluster_meta,
-                "moc_paths": moc_paths}
+        return {
+            "mocs_built": len(moc_paths),
+            "clusters": cluster_meta,
+            "moc_paths": moc_paths,
+        }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        return {"mocs_built": 0, "clusters": [], "moc_paths": [],
-                "error": f"{type(e).__name__}: {e}"}
+        return {
+            "mocs_built": 0,
+            "clusters": [],
+            "moc_paths": [],
+            "error": f"{type(e).__name__}: {e}",
+        }
 
 
 def _stamp_card_cluster(card_path: str | Path, cluster_id: str) -> None:
     """Write the cluster id into a card's `> cluster: [[...]]` line."""
     p = Path(card_path)
     text = p.read_text(encoding="utf-8", errors="replace")
-    new = re.sub(r"> cluster: \[\[TODO\]\]",
-                 f"> cluster: [[{MOC_PREFIX}{cluster_id}]]",
-                 text)
+    new = re.sub(
+        r"> cluster: \[\[TODO\]\]", f"> cluster: [[{MOC_PREFIX}{cluster_id}]]", text
+    )
     if new != text:
         _atomic_write(p, new)
 
@@ -339,6 +463,7 @@ def _stamp_card_cluster(card_path: str | Path, cluster_id: str) -> None:
 # and only rewrites the MOC notes for AFFECTED clusters.
 # ---------------------------------------------------------------------------
 
+
 def _read_card_cluster(card_path: str | Path) -> str | None:
     """Read a card's existing cluster id from its `> cluster:` line.
 
@@ -346,25 +471,30 @@ def _read_card_cluster(card_path: str | Path) -> str | None:
     Filesystem errors (permissions, IO) propagate.
     """
     text = Path(card_path).read_text(encoding="utf-8", errors="replace")
-    m = re.search(r"> cluster: \[\[" + re.escape(MOC_PREFIX) +
-                  r"([^\]]+)\]\]", text)
+    m = re.search(r"> cluster: \[\[" + re.escape(MOC_PREFIX) + r"([^\]]+)\]\]", text)
     return m.group(1).strip() if m else None
 
 
-def _cluster_centroid(card_paths: list[str],
-                      emb_by_path: dict[str, Any]) -> np.ndarray | None:
-    vecs = [np.asarray(emb_by_path[p], dtype=np.float32) for p in card_paths
-            if p in emb_by_path]
+def _cluster_centroid(
+    card_paths: list[str], emb_by_path: dict[str, Any]
+) -> np.ndarray | None:
+    vecs = [
+        np.asarray(emb_by_path[p], dtype=np.float32)
+        for p in card_paths
+        if p in emb_by_path
+    ]
     if not vecs:
         return None
     return np.mean(vecs, axis=0)
 
 
-def build_mocs_incremental(card_paths: list[str],
-                           emb_by_path: dict[str, Any],
-                           textbooks_dir: str | Path,
-                           new_card_paths: list[str] | None = None,
-                           progress_callback: Any = None) -> dict[str, Any]:
+def build_mocs_incremental(
+    card_paths: list[str],
+    emb_by_path: dict[str, Any],
+    textbooks_dir: str | Path,
+    new_card_paths: list[str] | None = None,
+    progress_callback: Any = None,
+) -> dict[str, Any]:
     """Incremental MOC build: preserve existing cluster assignments for
     unchanged cards, only assign new/changed cards.
 
@@ -383,8 +513,7 @@ def build_mocs_incremental(card_paths: list[str],
     try:
         tdir = Path(textbooks_dir)
         tdir.mkdir(parents=True, exist_ok=True)
-        new_set = set(new_card_paths) if new_card_paths is not None else \
-                  set(card_paths)
+        new_set = set(new_card_paths) if new_card_paths is not None else set(card_paths)
 
         # 1. Read existing cluster assignments for ALL cards.
         #    cluster_members: cluster_id -> [card_paths]
@@ -471,12 +600,18 @@ def build_mocs_incremental(card_paths: list[str],
 
         if progress_callback is not None:
             try:
-                progress_callback("moc_build_incremental", {
-                    "clusters": len(cluster_members),
-                    "affected": len(affected_cids),
-                    "new_seeded": new_clusters_seeded,
-                    "message": (f"Updating {len(affected_cids)} of "
-                                f"{len(cluster_members)} MOCs...")})
+                progress_callback(
+                    "moc_build_incremental",
+                    {
+                        "clusters": len(cluster_members),
+                        "affected": len(affected_cids),
+                        "new_seeded": new_clusters_seeded,
+                        "message": (
+                            f"Updating {len(affected_cids)} of "
+                            f"{len(cluster_members)} MOCs..."
+                        ),
+                    },
+                )
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
 
@@ -537,17 +672,25 @@ def build_mocs_incremental(card_paths: list[str],
         #    removed).  Compare on-disk MOCs to the current cluster set.
         current_cids = set(cluster_members.keys())
         for old_moc in tdir.glob(f"{MOC_PREFIX}*.md"):
-            old_cid = old_moc.stem[len(MOC_PREFIX):]
+            old_cid = old_moc.stem[len(MOC_PREFIX) :]
             if old_cid not in current_cids:
                 try:
                     old_moc.unlink()
                 except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                     logger.debug("swallowed: %s", e)
 
-        return {"mocs_built": len(moc_paths), "mocs_updated": mocs_updated,
-                "mocs_unchanged": mocs_unchanged,
-                "new_clusters": new_clusters_seeded,
-                "clusters": cluster_meta, "moc_paths": moc_paths}
+        return {
+            "mocs_built": len(moc_paths),
+            "mocs_updated": mocs_updated,
+            "mocs_unchanged": mocs_unchanged,
+            "new_clusters": new_clusters_seeded,
+            "clusters": cluster_meta,
+            "moc_paths": moc_paths,
+        }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        return {"mocs_built": 0, "clusters": [], "moc_paths": [],
-                "error": f"{type(e).__name__}: {e}"}
+        return {
+            "mocs_built": 0,
+            "clusters": [],
+            "moc_paths": [],
+            "error": f"{type(e).__name__}: {e}",
+        }

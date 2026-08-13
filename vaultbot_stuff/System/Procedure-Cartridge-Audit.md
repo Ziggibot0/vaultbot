@@ -1,6 +1,7 @@
 ---
 type: audit
 status: verified
+baseline: true
 created: 2026-07-31
 summary: "Audit of all 13 procedure notes in System/Procedures/ — classified each by LLM step complexity and set model_cartridge accordingly. 4 already small, 1 already big, 7 flipped to small, 1 flipped to big."
 tags: [audit, procedures, model-cartridge, token-efficiency, small-llm]

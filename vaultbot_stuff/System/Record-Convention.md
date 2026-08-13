@@ -1,6 +1,7 @@
 ---
 type: convention
 status: active
+baseline: true
 created: 2026-08-03
 tags:
   - convention

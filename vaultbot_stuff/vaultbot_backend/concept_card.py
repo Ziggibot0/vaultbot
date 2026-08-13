@@ -93,18 +93,67 @@ _CARD_SCAFFOLDING_RE = re.compile(
 
 # Card refine stopwords (subset of the sketch stopwords).
 _CARD_REFINE_STOPWORDS = {
-    "the", "and", "for", "are", "was", "were", "but", "not", "you", "that",
-    "this", "with", "from", "they", "have", "has", "had", "its", "it",
-    "is", "be", "been", "being", "as", "at", "by", "an", "or", "if", "so",
-    "do", "does", "did", "about", "chapter", "section", "figure", "table",
-    "example", "exercise", "note", "see", "shown", "shows", "using", "use",
-    "used", "one", "two", "three", "first", "second", "third", "also",
+    "the",
+    "and",
+    "for",
+    "are",
+    "was",
+    "were",
+    "but",
+    "not",
+    "you",
+    "that",
+    "this",
+    "with",
+    "from",
+    "they",
+    "have",
+    "has",
+    "had",
+    "its",
+    "it",
+    "is",
+    "be",
+    "been",
+    "being",
+    "as",
+    "at",
+    "by",
+    "an",
+    "or",
+    "if",
+    "so",
+    "do",
+    "does",
+    "did",
+    "about",
+    "chapter",
+    "section",
+    "figure",
+    "table",
+    "example",
+    "exercise",
+    "note",
+    "see",
+    "shown",
+    "shows",
+    "using",
+    "use",
+    "used",
+    "one",
+    "two",
+    "three",
+    "first",
+    "second",
+    "third",
+    "also",
 }
 
 
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
+
 
 def card_path_for(l0_abs_path: str | Path) -> Path:
     """The L1 card path for a given L0 section path.
@@ -160,6 +209,7 @@ def is_card(path: str | Path) -> bool:
 # Extractive sketch (zero LLM)
 # ---------------------------------------------------------------------------
 
+
 def _split_sentences(text: str) -> list[str]:
     # Strip markdown headers / lists / blockquotes first; keep prose paragraphs.
     prose_lines = []
@@ -174,33 +224,137 @@ def _split_sentences(text: str) -> list[str]:
         prose_lines.append(s)
     prose = " ".join(prose_lines)
     # Sentence split on . ! ? followed by space + capital.
-    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9])', prose)
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", prose)
     return [p.strip() for p in parts if len(p.strip()) >= MIN_SENTENCE_LEN]
 
 
 def _tokenize(text: str) -> list[str]:
-    return [w for w in re.findall(r"\b[a-z][a-z0-9-]{2,}\b", text.lower())
-            if len(w) > 2]
+    return [
+        w for w in re.findall(r"\b[a-z][a-z0-9-]{2,}\b", text.lower()) if len(w) > 2
+    ]
 
 
 def _top_tfidf_terms(sentences: list[str], top_n: int = SKETCH_TOP_TERMS) -> list[str]:
     """Cheap, corpus-local TF (no IDF corpus handy — use length-normalized TF
     with a stopword list).  Good enough for an extractive sketch."""
     STOP = {
-        "the", "and", "for", "are", "was", "were", "but", "not", "you", "that",
-        "this", "with", "from", "they", "have", "has", "had", "his", "her",
-        "their", "there", "then", "than", "which", "who", "whom", "whose",
-        "what", "when", "where", "why", "how", "will", "would", "could",
-        "should", "may", "might", "must", "can", "into", "upon", "such",
-        "very", "more", "most", "some", "any", "all", "both", "each", "other",
-        "its", "it", "is", "be", "been", "being", "as", "at", "by", "an",
-        "or", "if", "so", "do", "does", "did", "about", "above", "below",
-        "between", "through", "during", "after", "before", "off", "over",
-        "under", "again", "further", "once", "here", "your", "our", "we",
-        "us", "them", "him", "she", "he", "i", "me", "my", "mine", "ours",
-        "chapter", "section", "figure", "table", "example", "exercise",
-        "note", "notes", "see", "shown", "shows", "using", "use", "used",
-        "one", "two", "three", "first", "second", "third", "also",
+        "the",
+        "and",
+        "for",
+        "are",
+        "was",
+        "were",
+        "but",
+        "not",
+        "you",
+        "that",
+        "this",
+        "with",
+        "from",
+        "they",
+        "have",
+        "has",
+        "had",
+        "his",
+        "her",
+        "their",
+        "there",
+        "then",
+        "than",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "what",
+        "when",
+        "where",
+        "why",
+        "how",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "can",
+        "into",
+        "upon",
+        "such",
+        "very",
+        "more",
+        "most",
+        "some",
+        "any",
+        "all",
+        "both",
+        "each",
+        "other",
+        "its",
+        "it",
+        "is",
+        "be",
+        "been",
+        "being",
+        "as",
+        "at",
+        "by",
+        "an",
+        "or",
+        "if",
+        "so",
+        "do",
+        "does",
+        "did",
+        "about",
+        "above",
+        "below",
+        "between",
+        "through",
+        "during",
+        "after",
+        "before",
+        "off",
+        "over",
+        "under",
+        "again",
+        "further",
+        "once",
+        "here",
+        "your",
+        "our",
+        "we",
+        "us",
+        "them",
+        "him",
+        "she",
+        "he",
+        "i",
+        "me",
+        "my",
+        "mine",
+        "ours",
+        "chapter",
+        "section",
+        "figure",
+        "table",
+        "example",
+        "exercise",
+        "note",
+        "notes",
+        "see",
+        "shown",
+        "shows",
+        "using",
+        "use",
+        "used",
+        "one",
+        "two",
+        "three",
+        "first",
+        "second",
+        "third",
+        "also",
     }
     tf: dict[str, int] = {}
     for s in sentences:
@@ -223,19 +377,20 @@ def _extractive_sketch(l0_text: str, heading: str = "") -> str:
     sentences = _split_sentences(l0_text)
     if not sentences:
         # fallback: first 400 chars of stripped body
-        body = re.sub(r'[\s\n]+', ' ', l0_text).strip()
+        body = re.sub(r"[\s\n]+", " ", l0_text).strip()
         sketch = body[:SKETCH_MAX_CHARS]
     else:
         terms = _top_tfidf_terms(sentences)
         # rank sentences by sum of term-weights they contain
         term_set = set(terms)
+
         def sent_score(s: str) -> int:
             toks = set(_tokenize(s))
             return len(toks & term_set) + min(len(s), 200) / 200.0
+
         ranked = sorted(sentences, key=sent_score, reverse=True)
         # keep document order for the top picks (readability)
-        top = sorted(ranked[:SKETCH_TOP_SENTENCES],
-                     key=lambda s: sentences.index(s))
+        top = sorted(ranked[:SKETCH_TOP_SENTENCES], key=lambda s: sentences.index(s))
         sketch = " ".join(top)
         if terms:
             sketch += "\n\nKey terms: " + ", ".join(terms) + "."
@@ -248,6 +403,7 @@ def _extractive_sketch(l0_text: str, heading: str = "") -> str:
 # Card construction (LLM-free)
 # ---------------------------------------------------------------------------
 
+
 def build_card_text(l0_path: Path, l0_text: str, outgoing_links: list[str]) -> str:
     """Compose the full markdown body of an L1 concept card.
 
@@ -257,7 +413,7 @@ def build_card_text(l0_path: Path, l0_text: str, outgoing_links: list[str]) -> s
     """
     heading = l0_path.stem.replace("-", " ").replace("L1", "").strip()
     # Try to lift a better heading from the L0 body's first H1/H2.
-    m = re.search(r'^#{1,2}\s+(.+)$', l0_text, flags=re.MULTILINE)
+    m = re.search(r"^#{1,2}\s+(.+)$", l0_text, flags=re.MULTILINE)
     if m:
         heading = m.group(1).strip()
     sketch = _extractive_sketch(l0_text, heading=heading)
@@ -286,10 +442,12 @@ def _atomic_write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def build_card_for(l0_abs_path: str | Path,
-                   l0_text: str | None = None,
-                   outgoing_links: list[str] | None = None,
-                   vault_graph: Any = None) -> Path | None:
+def build_card_for(
+    l0_abs_path: str | Path,
+    l0_text: str | None = None,
+    outgoing_links: list[str] | None = None,
+    vault_graph: Any = None,
+) -> Path | None:
     """Create or refresh the L1 card for an L0 section.  Returns the card
     path, or None on failure.  Idempotent: re-running overwrites in place.
 
@@ -308,9 +466,11 @@ def build_card_for(l0_abs_path: str | Path,
         elif outgoing_links is None:
             outgoing_links = sorted({m for m in WIKILINK_RE.findall(l0_text)})
         # Don't recursively link to our own card / source.
-        outgoing_links = [t for t in outgoing_links
-                          if not t.lower().endswith("-l1")
-                          and t.lower() != p.stem.lower()]
+        outgoing_links = [
+            t
+            for t in outgoing_links
+            if not t.lower().endswith("-l1") and t.lower() != p.stem.lower()
+        ]
         card = card_path_for(p)
         text = build_card_text(p, l0_text, outgoing_links)
         # Preserve a refined marker if the card was already LLM-refined —
@@ -331,9 +491,9 @@ def build_card_for(l0_abs_path: str | Path,
         return None
 
 
-def build_cards_batch(l0_abs_paths: list[str],
-                      vault_graph: Any = None,
-                      progress_callback: Any = None) -> dict[str, Any]:
+def build_cards_batch(
+    l0_abs_paths: list[str], vault_graph: Any = None, progress_callback: Any = None
+) -> dict[str, Any]:
     """Build L1 cards for many L0 sections.  LLM-free.
 
     Returns {"cards_built": int, "cards_skipped": int, "cards_failed": int, "card_paths": [...]}.
@@ -355,8 +515,9 @@ def build_cards_batch(l0_abs_paths: list[str],
                 node = vault_graph.get_note(p.stem)
                 if node:
                     links = list(node.get("links", set()))
-            card = build_card_for(fp, l0_text=text, outgoing_links=links,
-                                  vault_graph=vault_graph)
+            card = build_card_for(
+                fp, l0_text=text, outgoing_links=links, vault_graph=vault_graph
+            )
             if card is not None:
                 built += 1
                 out_paths.append(str(card))
@@ -367,18 +528,28 @@ def build_cards_batch(l0_abs_paths: list[str],
             logger.warning("card build failed for %s: %s", fp, e)
         if progress_callback is not None and (i % 10 == 0 or i == n - 1):
             try:
-                progress_callback("concept_card", {
-                    "note": i + 1, "total": n,
-                    "message": f"Abstracting note {i+1}/{n}..."})
+                progress_callback(
+                    "concept_card",
+                    {
+                        "note": i + 1,
+                        "total": n,
+                        "message": f"Abstracting note {i + 1}/{n}...",
+                    },
+                )
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 logger.debug("swallowed: %s", e)
-    return {"cards_built": built, "cards_skipped": skipped,
-            "cards_failed": failed, "card_paths": out_paths}
+    return {
+        "cards_built": built,
+        "cards_skipped": skipped,
+        "cards_failed": failed,
+        "card_paths": out_paths,
+    }
 
 
 # ---------------------------------------------------------------------------
 # Lazy LLM refine (rehearsal-gated, like the condenser)
 # ---------------------------------------------------------------------------
+
 
 def needs_refine(card_path: str | Path, touch_count: int) -> bool:
     """True when a card has earned an LLM refine: rehearsed enough AND
@@ -396,9 +567,9 @@ def needs_refine(card_path: str | Path, touch_count: int) -> bool:
     return True
 
 
-def refine_card(card_path: str | Path,
-                ollama_client: Any,
-                l0_text: str | None = None) -> dict[str, Any]:
+def refine_card(
+    card_path: str | Path, ollama_client: Any, l0_text: str | None = None
+) -> dict[str, Any]:
     """One-shot rewrite of an extractive card into a tight semantic
     summary.  Preserves the header, the `> source:` pointer, the links,
     and the markers — only the sketch body is rewritten.  Idempotent.
@@ -431,12 +602,14 @@ def refine_card(card_path: str | Path,
             if ollama_client is None:
                 raise ValueError(
                     "refine_card: VAULTBOT_CARD_REFINE_MODE=llm but "
-                    "ollama_client is None")
+                    "ollama_client is None"
+                )
             summary = _llm_refine(ollama_client, l0_excerpt)
         else:
             raise ValueError(
                 f"refine_card: unknown VAULTBOT_CARD_REFINE_MODE={mode!r} "
-                f"(use 'llm' or 'extractive')")
+                f"(use 'llm' or 'extractive')"
+            )
 
         summary = (summary or "").strip()
         if len(summary) < 80:
@@ -449,15 +622,22 @@ def refine_card(card_path: str | Path,
             links_block = m.group(1)
         header_end = text.find(CARD_MARKER)
         header = text[:header_end] if header_end != -1 else ""
-        new_body = (header + CARD_MARKER + "\n\n" + summary + "\n\n"
-                    + REFINED_MARKER + "\n")
+        new_body = (
+            header + CARD_MARKER + "\n\n" + summary + "\n\n" + REFINED_MARKER + "\n"
+        )
         if links_block:
             new_body += links_block.rstrip() + "\n"
         before = len(text)
         after = len(new_body)
         _atomic_write(p, new_body)
-        return {"refined": True, "before_chars": before, "after_chars": after,
-                "method": mode if mode != "auto" else ("llm" if ollama_client else "extractive")}
+        return {
+            "refined": True,
+            "before_chars": before,
+            "after_chars": after,
+            "method": mode
+            if mode != "auto"
+            else ("llm" if ollama_client else "extractive"),
+        }
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"refined": False, "reason": f"error:{type(e).__name__}"}
 
@@ -472,7 +652,7 @@ def _extractive_refine(l0_text: str) -> str:
     sentences = _split_sentences(l0_text)
     if not sentences:
         # Fallback: first 400 chars of stripped body.
-        body = re.sub(r'[\s\n]+', ' ', l0_text).strip()
+        body = re.sub(r"[\s\n]+", " ", l0_text).strip()
         return body[:SKETCH_MAX_CHARS]
     terms = _top_tfidf_terms(sentences)
     term_set = set(terms)
@@ -481,7 +661,7 @@ def _extractive_refine(l0_text: str) -> str:
         toks = set(_tokenize(s))
         base = len(toks & term_set)
         # Bonus for sentences with wikilinks or formulas (must-keep).
-        if WIKILINK_RE.search(s) or '$' in s:
+        if WIKILINK_RE.search(s) or "$" in s:
             base += 2.0
         # Penalty for scaffolding sentences.
         if _CARD_SCAFFOLDING_RE.match(s):
@@ -505,6 +685,7 @@ def _llm_refine(ollama_client: Any, l0_excerpt: str) -> str:
     model's reasoning power. Saves cloud tokens.
     """
     from llm_client import get_small_client_or_big
+
     _card_client = get_small_client_or_big()
     prompt = (
         "Rewrite the following textbook section as a tight concept-card "
@@ -512,13 +693,21 @@ def _llm_refine(ollama_client: Any, l0_excerpt: str) -> str:
         "and key formulas. Preserve every [[wikilink]] target verbatim. "
         "Do NOT include the heading, source pointer, or link list — only "
         "the summary prose. Drop pedagogical scaffolding and worked "
-        "examples.\n\nSECTION:\n" + l0_excerpt)
+        "examples.\n\nSECTION:\n" + l0_excerpt
+    )
     resp = _card_client.chat(
-        [{"role": "system",
-          "content": "You are a concept-card writer. Be terse and dense."},
-         {"role": "user", "content": prompt}],
-        stream=False)
+        [
+            {
+                "role": "system",
+                "content": "You are a concept-card writer. Be terse and dense.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        stream=False,
+    )
     summary = ""
     if isinstance(resp, dict):
-        summary = (resp.get("message") or {}).get("content", "") or resp.get("content", "")
+        summary = (resp.get("message") or {}).get("content", "") or resp.get(
+            "content", ""
+        )
     return summary

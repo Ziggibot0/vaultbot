@@ -121,7 +121,7 @@ def test_procedure_with_only_when(tmp_path, monkeypatch):
     """A procedure with `when` but no `description` still embeds the surface."""
     idx = _make_indexer(tmp_path, monkeypatch)
     body = (
-        "---\ntype: procedure\nwhen: \"when auditing capabilities\"\n"
+        '---\ntype: procedure\nwhen: "when auditing capabilities"\n'
         "allowed_tools: []\n---\n## Steps\n1. do thing"
     )
     proc = tmp_path / "Cap.md"

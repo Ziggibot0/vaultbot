@@ -54,15 +54,33 @@ _MIN_GOOD_SUMMARY_LEN = 25
 _WEAK_SUMMARY_PREFIXES = ("Chat:",)
 
 # Tags are "weak" if they only contain type + directory name generics.
-_GENERIC_TAGS = frozenset({
-    "research", "chat", "semantic", "claim", "architecture", "procedure",
-    "exemplar", "pattern", "concept", "diagnostic", "synthesis", "roadmap",
-    "plan", "audit", "bridge", "pattern-highway", "system-design",
-    "architecture-plan", "research-note",
-})
+_GENERIC_TAGS = frozenset(
+    {
+        "research",
+        "chat",
+        "semantic",
+        "claim",
+        "architecture",
+        "procedure",
+        "exemplar",
+        "pattern",
+        "concept",
+        "diagnostic",
+        "synthesis",
+        "roadmap",
+        "plan",
+        "audit",
+        "bridge",
+        "pattern-highway",
+        "system-design",
+        "architecture-plan",
+        "research-note",
+    }
+)
 
 
 # ── Interrupt signal ─────────────────────────────────────────────────
+
 
 class QAInterrupt:
     """Thread-safe interrupt signal for the QA worker.
@@ -99,6 +117,7 @@ def get_qa_interrupt() -> QAInterrupt:
 
 # ── Queue management ─────────────────────────────────────────────────
 
+
 def _touch_counts_path() -> Path:
     """Path to the lazy_condenser's touch_counts.json."""
     return Path(__file__).parent / "touch_counts.json"
@@ -119,9 +138,20 @@ def _load_touch_counts() -> dict[str, int]:
 def _scan_vault_notes(vault_root: Path) -> list[str]:
     """Walk the vault and return all .md file paths (relative to vault root)."""
     IGNORED = {
-        ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials",
-        ".git", ".obsidian", "node_modules", "__pycache__", "vaultbot_backend",
-        ".vscode", "trash", ".github", "learningMaterial",
+        ".venv",
+        "vaultbot_venv",
+        "vaultbot_index",
+        "sessions",
+        "partials",
+        ".git",
+        ".obsidian",
+        "node_modules",
+        "__pycache__",
+        "vaultbot_backend",
+        ".vscode",
+        "trash",
+        ".github",
+        "learningMaterial",
     }
     ALLOWED = ("vaultbot_stuff/", "User/")
     notes: list[str] = []
@@ -164,9 +194,7 @@ def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
 def save_qa_queue(queue: list[dict[str, Any]]) -> None:
     """Persist the QA queue to disk."""
     try:
-        _QUEUE_FILE.write_text(
-            json.dumps(queue, indent=2), encoding="utf-8"
-        )
+        _QUEUE_FILE.write_text(json.dumps(queue, indent=2), encoding="utf-8")
     except Exception:  # noqa: BLE001
         pass
 
@@ -183,10 +211,12 @@ def load_qa_queue() -> list[dict[str, Any]]:
 
 # ── QA checks (deterministic, no LLM) ────────────────────────────────
 
+
 def _parse_fm(text: str) -> dict[str, Any]:
     """Parse frontmatter (reuses note_schema if available)."""
     try:
         from note_schema import parse_frontmatter
+
         return parse_frontmatter(text)
     except ImportError:
         return {}
@@ -247,10 +277,12 @@ def qa_check_note(
     lint_report: dict[str, Any] = {}
     try:
         import sys as _sys
+
         backend_dir = Path(__file__).parent
         if str(backend_dir) not in _sys.path:
             _sys.path.insert(0, str(backend_dir))
         from custom_tools.vault_lint import run as lint_run
+
         lint_report = lint_run({"file_path": file_path})
         for issue in lint_report.get("issues", []):
             itype = issue.get("type", "")
@@ -271,6 +303,7 @@ def qa_check_note(
     except Exception:  # noqa: BLE001
         # vault_lint unavailable — fall back to inline checks
         from note_schema import REQUIRED_FIELDS
+
         for field in REQUIRED_FIELDS:
             if field not in fm:
                 issues.append(f"missing {field}")
@@ -297,6 +330,7 @@ def qa_check_note(
 
 # ── LLM-assisted summary/tag generation ──────────────────────────────
 
+
 def _run_procedure_sync(
     procedure_name: str,
     args: dict[str, Any],
@@ -317,16 +351,24 @@ def _run_procedure_sync(
 
     try:
         cmd = [
-            str(venv_py), str(run_proc),
-            "--procedure-name", procedure_name,
-            "--vault-path", str(vault_root),
-            "--procedure-args", json.dumps(args),
+            str(venv_py),
+            str(run_proc),
+            "--procedure-name",
+            procedure_name,
+            "--vault-path",
+            str(vault_root),
+            "--procedure-args",
+            json.dumps(args),
         ]
         # Scrubbed env: run_procedure.py executes LLM-authored procedure code
         # and must not inherit API keys/tokens/passwords.
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60,
-            cwd=str(Path(__file__).parent), env=scrubbed_env(),
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=str(Path(__file__).parent),
+            env=scrubbed_env(),
         )
         if result.returncode == 0:
             try:
@@ -404,6 +446,7 @@ def _generate_summary_and_tags(
 
 # ── Worker ───────────────────────────────────────────────────────────
 
+
 def _fix_note(
     content: str,
     file_path: str,
@@ -416,7 +459,12 @@ def _fix_note(
     2. If summary is weak and ollama_client is available, generate one.
     3. If tags are weak and ollama_client is available, generate them.
     """
-    from note_schema import inject_schema, parse_frontmatter, _split_frontmatter, _format_frontmatter
+    from note_schema import (
+        inject_schema,
+        parse_frontmatter,
+        _split_frontmatter,
+        _format_frontmatter,
+    )
 
     changes: list[str] = []
 
@@ -433,7 +481,9 @@ def _fix_note(
     needs_llm = _is_summary_weak(fm, body) or _are_tags_weak(fm)
 
     if needs_llm and ollama_client is not None:
-        result = _generate_summary_and_tags(content, file_path, ollama_client, vault_root)
+        result = _generate_summary_and_tags(
+            content, file_path, ollama_client, vault_root
+        )
         if result:
             new_summary, new_tags = result
             # Re-inject with the new summary and tags
@@ -446,12 +496,9 @@ def _fix_note(
                 if isinstance(existing_tags, str):
                     existing_tags = [existing_tags]
                 existing_non_generic = [
-                    t for t in existing_tags
-                    if t.lower() not in _GENERIC_TAGS
+                    t for t in existing_tags if t.lower() not in _GENERIC_TAGS
                 ]
-                fm["tags"] = list(dict.fromkeys(
-                    existing_non_generic + new_tags
-                ))[:8]
+                fm["tags"] = list(dict.fromkeys(existing_non_generic + new_tags))[:8]
                 changes.append("generated_tags")
 
             # Rebuild the note
@@ -496,7 +543,9 @@ async def run_qa_idle_window(
         if interrupt.is_triggered():
             remaining = queue[idx:]  # unprocessed stay in queue
             if logger:
-                logger(f"QA interrupted: stopping after {processed} notes, {len(remaining)} remaining")
+                logger(
+                    f"QA interrupted: stopping after {processed} notes, {len(remaining)} remaining"
+                )
             break
 
         if processed >= max_notes:
@@ -524,14 +573,19 @@ async def run_qa_idle_window(
             skipped += 1
             processed += 1
             if logger and processed % 10 == 0:
-                logger(f"QA progress: {processed} checked, {fixed} fixed, {skipped} skipped")
+                logger(
+                    f"QA progress: {processed} checked, {fixed} fixed, {skipped} skipped"
+                )
             continue
 
         # Fix the note
         try:
             needs_llm = qa["needs_llm"]
             new_content, changes = await asyncio.get_event_loop().run_in_executor(
-                None, _fix_note, content, rel_path,
+                None,
+                _fix_note,
+                content,
+                rel_path,
                 ollama_client if needs_llm else None,
                 vault,
             )

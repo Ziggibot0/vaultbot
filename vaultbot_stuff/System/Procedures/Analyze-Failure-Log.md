@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Read the procedure failure log and identify patterns — which procedures fail most, what types of failures are most common, and which procedures need fixing. Returns a summary of failure patterns with specific procedure names and failure reasons. Use when diagnosing why procedures fail or when improving procedure reliability.

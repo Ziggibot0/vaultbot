@@ -1,6 +1,7 @@
 ---
 type: playbook
 status: active
+baseline: true
 created: 2026-07-29
 python_version: "3.11.15"
 summary: "Python 3.11 playbook for VaultBot: practical reference covering data structures, control flow, classes, modules, error handling, I/O, and standard library modules most relevant to vaultbot development. Sourced from official Python 3.11 docs."

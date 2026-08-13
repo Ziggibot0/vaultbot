@@ -43,7 +43,8 @@ def test_env_path_main_reads_and_llm_writes_the_same_file():
         f".env path mismatch: main.py loads {MAIN_DOTENV_PATH} at boot, "
         f"but routers/llm.py writes to {llm._ENV_PATH}. A setting saved by "
         f"the plugin (/set_model) would be silently ignored on restart. "
-        f"Both must resolve to the vault-root .env.")
+        f"Both must resolve to the vault-root .env."
+    )
 
 
 def test_env_path_is_under_vault_root_not_backend_dir():
@@ -55,4 +56,5 @@ def test_env_path_is_under_vault_root_not_backend_dir():
     """
     assert llm._ENV_PATH.parent == BACKEND_DIR.parent, (
         f".env should be at the vault root ({BACKEND_DIR.parent}), not "
-        f"inside vaultbot_backend/. Got {llm._ENV_PATH}")
+        f"inside vaultbot_backend/. Got {llm._ENV_PATH}"
+    )

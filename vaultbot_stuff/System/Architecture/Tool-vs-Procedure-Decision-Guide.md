@@ -1,6 +1,7 @@
 ---
 type: guide
 status: active
+baseline: true
 created: 2026-07-30
 summary: "When to create a tool vs a procedure. Tools are general capabilities used across many tasks. Procedures are bespoke step sequences for specific workflows."
 tags: [meta, decision-guide, tools, procedures]

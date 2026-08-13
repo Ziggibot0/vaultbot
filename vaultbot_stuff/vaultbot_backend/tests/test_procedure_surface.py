@@ -6,6 +6,7 @@ FUSED results; the boost is checked via the FusedRetriever rerank constants.
 
 Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 """
+
 from __future__ import annotations
 
 import sys
@@ -57,37 +58,54 @@ def test_gate_blocks_flagged():
 # procedure_surface_line — compact one-line rendering
 # ---------------------------------------------------------------------------
 def test_surface_line_includes_description_and_status():
-    line = procedure_surface_line("Verify-Claims", {
-        "type": "procedure",
-        "description": "check a note's claims against its sources",
-        "status": "verified",
-    })
+    line = procedure_surface_line(
+        "Verify-Claims",
+        {
+            "type": "procedure",
+            "description": "check a note's claims against its sources",
+            "status": "verified",
+        },
+    )
     assert "Verify-Claims" in line
     assert "check a note's claims" in line
     assert "[verified]" in line
 
 
 def test_surface_line_marks_experimental():
-    line = procedure_surface_line("Dream-Pass", {
-        "type": "procedure", "description": "consolidate logs", "status": "experimental",
-    })
+    line = procedure_surface_line(
+        "Dream-Pass",
+        {
+            "type": "procedure",
+            "description": "consolidate logs",
+            "status": "experimental",
+        },
+    )
     assert "⚠ experimental" in line
 
 
 def test_surface_line_marks_flagged_do_not_use():
-    line = procedure_surface_line("Stale-Proc", {
-        "type": "procedure", "description": "old", "status": "flagged",
-    })
+    line = procedure_surface_line(
+        "Stale-Proc",
+        {
+            "type": "procedure",
+            "description": "old",
+            "status": "flagged",
+        },
+    )
     assert "⛔ FLAGGED" in line
     assert "do not use" in line
 
 
 def test_surface_line_includes_when_to_use():
-    line = procedure_surface_line("Ingest", {
-        "type": "procedure", "description": "ingest a PDF",
-        "when_to_use": "a new textbook is dropped in learningMaterial",
-        "status": "verified",
-    })
+    line = procedure_surface_line(
+        "Ingest",
+        {
+            "type": "procedure",
+            "description": "ingest a PDF",
+            "when_to_use": "a new textbook is dropped in learningMaterial",
+            "status": "verified",
+        },
+    )
     assert "use when:" in line
 
 
@@ -99,7 +117,12 @@ def _proc_result(path, text):
 
 
 def test_surface_empty_when_no_procedures():
-    results = [{"file_path": "07-Research/some-note.md", "content": "# Just a note\nNo frontmatter."}]
+    results = [
+        {
+            "file_path": "07-Research/some-note.md",
+            "content": "# Just a note\nNo frontmatter.",
+        }
+    ]
     assert build_procedure_surface(results) == ""
 
 

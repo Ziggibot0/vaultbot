@@ -9,6 +9,7 @@ Globals previously read as free variables in main.py are now accessed via
 `svc.<name>`. Pure helpers (`extract_json`, `write_partial`) take no
 `Services` because they reference no module-level singletons.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -57,41 +58,51 @@ async def create_task(svc: Services, payload: dict) -> Any:
     # Lazy import: graph_ops pulls faiss (broken under numpy 2.5.1); only
     # load it when actually building a plan.
     from graph_ops import SCHEMAS as GRAPH_OP_SCHEMAS
+
     op_names = list(svc.graph_op_registry.ops.keys())
     op_descriptions = "\n".join(
         f"  - {name}: {s['function']['description'][:120]}"
-        for name, s in zip(op_names, GRAPH_OP_SCHEMAS))
+        for name, s in zip(op_names, GRAPH_OP_SCHEMAS)
+    )
     decompose_prompt = (
         "You are a task planner for VaultBot, a self-improving research agent "
         "in an Obsidian vault. Decompose the user's goal into a sequence of "
         "atomic, verifiable subtasks using ONLY these graph operations:\n"
         f"{op_descriptions}\n\n"
-        "Return a JSON object: {\"subtasks\": [{\"op\": \"...\", "
-        "\"intent\": \"...\", \"args\": {...}, \"verifier\": \"result.get('count',0) > 0\"}]}.\n"
+        'Return a JSON object: {"subtasks": [{"op": "...", '
+        '"intent": "...", "args": {...}, "verifier": "result.get(\'count\',0) > 0"}]}.\n'
         "Each verifier is a Python expression over `result`. Make every subtask "
         "idempotent and independently verifiable. Be specific.\n\n"
-        f"User goal: {goal}\n\nReturn ONLY valid JSON, no prose.")
+        f"User goal: {goal}\n\nReturn ONLY valid JSON, no prose."
+    )
     # Use the SMALL model for decomposition — the output is rigid JSON with a
     # fixed op vocabulary, so a small model can fill it given the schema in the
     # prompt. The framework validates the result (rejects unknown ops, fills
     # default verifier templates) so hallucinated ops/verifiers are caught. The
     # big model's reasoning isn't needed for schema-grounded generation.
     from llm_client import get_small_client_or_big
+
     try:
         _decompose_client = get_small_client_or_big(svc.session_logger)
         plan_response = await loop.run_in_executor(
-            None, lambda: _decompose_client.chat(
+            None,
+            lambda: _decompose_client.chat(
                 [{"role": "user", "content": decompose_prompt}],
-                temperature=0.3, stream=False))
+                temperature=0.3,
+                stream=False,
+            ),
+        )
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="task_decompose")
         return {"error": f"decomposition failed: {e}"}, 500
 
     raw = ""
     if isinstance(plan_response, dict):
-        raw = (plan_response.get("message") or {}).get("content", "") \
-            if isinstance(plan_response.get("message"), dict) \
+        raw = (
+            (plan_response.get("message") or {}).get("content", "")
+            if isinstance(plan_response.get("message"), dict)
             else plan_response.get("response", "") or plan_response.get("content", "")
+        )
     else:
         raw = str(plan_response)
     # Parse the JSON plan (tolerate code fences / preamble).
@@ -112,32 +123,44 @@ async def create_task(svc: Services, payload: dict) -> Any:
     valid_op_names = set(op_names)
     filtered = [sd for sd in subtask_dicts if sd.get("op", "") in valid_op_names]
     if not filtered:
-        svc.session_logger.log("task_decompose_all_ops_hallucinated", {
+        svc.session_logger.log(
+            "task_decompose_all_ops_hallucinated",
+            {
+                "raw_ops": [sd.get("op", "") for sd in subtask_dicts],
+                "valid_ops": list(valid_op_names),
+            },
+        )
+        return {
+            "error": "decomposition produced no valid ops",
             "raw_ops": [sd.get("op", "") for sd in subtask_dicts],
             "valid_ops": list(valid_op_names),
-        })
-        return {"error": "decomposition produced no valid ops",
-                "raw_ops": [sd.get("op", "") for sd in subtask_dicts],
-                "valid_ops": list(valid_op_names)}, 500
+        }, 500
     if len(filtered) < len(subtask_dicts):
-        svc.session_logger.log("task_decompose_filtered_hallucinated_ops", {
-            "dropped": len(subtask_dicts) - len(filtered),
-            "kept": len(filtered),
-        })
+        svc.session_logger.log(
+            "task_decompose_filtered_hallucinated_ops",
+            {
+                "dropped": len(subtask_dicts) - len(filtered),
+                "kept": len(filtered),
+            },
+        )
     subtask_dicts = filtered
 
     # Build the Plan object.
     import time as _time
+
     plan_id = f"task_{int(_time.time())}"
     subtasks = []
     for i, sd in enumerate(subtask_dicts):
-        subtasks.append(Subtask(
-            id=f"S{i+1}",
-            op=sd.get("op", ""),
-            intent=sd.get("intent", ""),
-            args=sd.get("args", {}),
-            verifier=sd.get("verifier", "True"),
-            max_attempts=int(sd.get("max_attempts", 5))))
+        subtasks.append(
+            Subtask(
+                id=f"S{i + 1}",
+                op=sd.get("op", ""),
+                intent=sd.get("intent", ""),
+                args=sd.get("args", {}),
+                verifier=sd.get("verifier", "True"),
+                max_attempts=int(sd.get("max_attempts", 5)),
+            )
+        )
     plan = Plan(id=plan_id, goal=goal, subtasks=subtasks)
 
     # Persist the plan so it survives crashes and model swaps.
@@ -147,8 +170,11 @@ async def create_task(svc: Services, payload: dict) -> Any:
     svc.plan_executor.save_plan(plan, str(plan_path))
 
     if not execute_now:
-        return {"plan_id": plan_id, "plan": svc.plan_executor.plan_to_json(plan),
-                "executed": False}
+        return {
+            "plan_id": plan_id,
+            "plan": svc.plan_executor.plan_to_json(plan),
+            "executed": False,
+        }
 
     # Execute the plan (graph ops are idempotent; verifier gates each step).
     try:
@@ -162,8 +188,12 @@ async def create_task(svc: Services, payload: dict) -> Any:
     # judge path is intentionally not used, as the deterministic verifier is
     # the whole point of the plan executor's design).
     judgment = svc.plan_executor.judge(plan)
-    return {"plan_id": plan_id, "plan": svc.plan_executor.plan_to_json(plan),
-            "judgment": judgment, "executed": True}
+    return {
+        "plan_id": plan_id,
+        "plan": svc.plan_executor.plan_to_json(plan),
+        "judgment": judgment,
+        "executed": True,
+    }
 
 
 def write_partial(path: Path, user_message: str, answer: str, thinking: str) -> None:
@@ -173,6 +203,7 @@ def write_partial(path: Path, user_message: str, answer: str, thinking: str) -> 
     """
     try:
         from datetime import datetime
+
         path.parent.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(UTC).isoformat()
         content = (
@@ -203,7 +234,7 @@ def extract_json(text: str) -> str:
             elif text[i] == "}":
                 depth -= 1
                 if depth == 0:
-                    return text[start:i+1]
+                    return text[start : i + 1]
     return text.strip()
 
 
@@ -214,8 +245,10 @@ async def get_task(svc: Services, plan_id: str) -> Any:
         return {"error": "plan not found"}, 404
     try:
         plan = svc.plan_executor.load_plan(str(plan_path))
-        return {"plan": svc.plan_executor.plan_to_json(plan),
-                "judgment": svc.plan_executor.judge(plan)}
+        return {
+            "plan": svc.plan_executor.plan_to_json(plan),
+            "judgment": svc.plan_executor.judge(plan),
+        }
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
 
@@ -227,9 +260,13 @@ async def resume_task(svc: Services, plan_id: str) -> Any:
         return {"error": "plan not found"}, 404
     loop = asyncio.get_event_loop()
     try:
-        plan = await loop.run_in_executor(None, svc.plan_executor.resume, str(plan_path))
+        plan = await loop.run_in_executor(
+            None, svc.plan_executor.resume, str(plan_path)
+        )
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
     svc.plan_executor.save_plan(plan, str(plan_path))
-    return {"plan": svc.plan_executor.plan_to_json(plan),
-            "judgment": svc.plan_executor.judge(plan)}
+    return {
+        "plan": svc.plan_executor.plan_to_json(plan),
+        "judgment": svc.plan_executor.judge(plan),
+    }

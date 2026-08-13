@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Trace a concept through the vault: find the note that defines it, all notes that link to it, all notes that mention it by name but don't link it, and identify the chain of notes that build on the concept. Returns a concept dependency graph. Use when you need to understand how a concept evolved or what depends on it."

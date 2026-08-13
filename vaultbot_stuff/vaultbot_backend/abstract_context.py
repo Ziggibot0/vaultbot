@@ -36,6 +36,7 @@ If L1 cards don't exist yet (pre-hierarchy vault, or a non-textbook
 note), falls back to the old `build_graph_context` behavior so the
 chat loop never breaks.
 """
+
 from __future__ import annotations
 
 import re
@@ -50,18 +51,61 @@ from vault_graph import VaultGraph, build_graph_context
 # Simple stop words for keyword extraction — same set as
 # small_model_filters._STOP_WORDS, duplicated here to keep this
 # leaf module decoupled.
-_STOP_WORDS = frozenset({
-    "the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "in",
-    "on", "at", "and", "or", "it", "this", "that", "for", "with", "as", "by",
-    "its", "has", "have", "from", "which", "not", "but", "can", "will", "do",
-    "does", "did", "you", "your", "we", "our", "they", "their", "he", "she",
-})
+_STOP_WORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "to",
+        "of",
+        "in",
+        "on",
+        "at",
+        "and",
+        "or",
+        "it",
+        "this",
+        "that",
+        "for",
+        "with",
+        "as",
+        "by",
+        "its",
+        "has",
+        "have",
+        "from",
+        "which",
+        "not",
+        "but",
+        "can",
+        "will",
+        "do",
+        "does",
+        "did",
+        "you",
+        "your",
+        "we",
+        "our",
+        "they",
+        "their",
+        "he",
+        "she",
+    }
+)
 
 
 def _content_words(text: str) -> set[str]:
     """Extract content words (non-stop-words, >2 chars) for keyword overlap."""
-    return {w.lower() for w in re.split(r"\s+", text)
-            if w.lower() not in _STOP_WORDS and len(w) > 2}
+    return {
+        w.lower()
+        for w in re.split(r"\s+", text)
+        if w.lower() not in _STOP_WORDS and len(w) > 2
+    }
 
 
 def _read(path: str | Path) -> str:
@@ -89,8 +133,9 @@ def _moc_for_cluster(textbooks_dir: Path, cluster_id: str) -> Path | None:
 
 def _extract_cluster_id(card_text: str) -> str | None:
     """Pull the `> cluster: [[moc-<id>]]` cluster id out of a card's text."""
-    m = re.search("> cluster: \\[\\[" + re.escape(MOC_PREFIX) + "([^\\]]+)\\]\\]",
-                  card_text)
+    m = re.search(
+        "> cluster: \\[\\[" + re.escape(MOC_PREFIX) + "([^\\]]+)\\]\\]", card_text
+    )
     if m:
         return m.group(1).strip()
     return None
@@ -174,26 +219,30 @@ def build_abstract_context(
         l0_notes.append(node)
         card = card_path_for(fp)
         if card.exists():
-            l1_cards.append({
-                "name": card.stem,
-                "file_path": str(card),
-                "content": _read(card),
-                "outgoing_links": node.get("outgoing_links", []),
-                "backlinks": node.get("backlinks", []),
-            })
+            l1_cards.append(
+                {
+                    "name": card.stem,
+                    "file_path": str(card),
+                    "content": _read(card),
+                    "outgoing_links": node.get("outgoing_links", []),
+                    "backlinks": node.get("backlinks", []),
+                }
+            )
 
     # ---- Make sure the top seed's card is in the highway ----
     seen_card_names = {c["name"] for c in l1_cards}
     for l0p in seed_l0_paths:
         card = card_path_for(l0p)
         if card.exists() and card.stem not in seen_card_names:
-            l1_cards.append({
-                "name": card.stem,
-                "file_path": str(card),
-                "content": _read(card),
-                "outgoing_links": [],
-                "backlinks": [],
-            })
+            l1_cards.append(
+                {
+                    "name": card.stem,
+                    "file_path": str(card),
+                    "content": _read(card),
+                    "outgoing_links": [],
+                    "backlinks": [],
+                }
+            )
             seen_card_names.add(card.stem)
 
     if not l1_cards:

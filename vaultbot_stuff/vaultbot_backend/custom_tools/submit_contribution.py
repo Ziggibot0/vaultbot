@@ -61,7 +61,9 @@ def run(args: dict) -> dict:
 
     def run_git(git_args, cwd):
         try:
-            r = _subprocess_run(["git"] + git_args, capture_output=True, text=True, timeout=60, cwd=cwd)
+            r = _subprocess_run(
+                ["git"] + git_args, capture_output=True, text=True, timeout=60, cwd=cwd
+            )
             return r.returncode == 0, r.stdout.strip(), r.stderr.strip()
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             return False, "", str(e)
@@ -89,7 +91,9 @@ def run(args: dict) -> dict:
         }
 
     # 1b. Check if contributions are allowed (opt-in)
-    allow_contributions = os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
+    allow_contributions = (
+        os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
+    )
     if allow_contributions != "true":
         return {
             "error": "Contributions are not enabled.",
@@ -112,7 +116,9 @@ def run(args: dict) -> dict:
 
     match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
     if not match:
-        return {"error": f"Could not parse GitHub owner/repo from remote URL: {remote_url}"}
+        return {
+            "error": f"Could not parse GitHub owner/repo from remote URL: {remote_url}"
+        }
     upstream_owner, upstream_repo = match.group(1), match.group(2)
 
     # 3. Get the authenticated user's GitHub username
@@ -142,31 +148,106 @@ def run(args: dict) -> dict:
 
     # 5. Safety scan — never commit sensitive files
     ok, staged_preview, _ = run_git(["add", "-A", "--dry-run"], vault_root)
-    danger_patterns = ["'.env'", "'.venv/", "'vaultbot_venv/", "sessions/", "vaultbot_index/",
-                        "data.json'", "mcp.json'", "workspace.json"]
+    danger_patterns = [
+        "'.env'",
+        "'.venv/",
+        "'vaultbot_venv/",
+        "sessions/",
+        "vaultbot_index/",
+        "data.json'",
+        "mcp.json'",
+        "workspace.json",
+    ]
     for pat in danger_patterns:
         if pat in staged_preview:
-            for line in staged_preview.split('\n'):
+            for line in staged_preview.split("\n"):
                 if pat.strip("'") in line and not line.startswith("remove"):
                     return {
                         "error": f"Refusing to commit: sensitive file would be staged: {pat}",
                         "hint": "Check your .gitignore. This file should not be committed.",
                     }
 
-    # 6. Stage changes
+    # 5b. Baseline-marker filter — exclude non-baseline System/ .md files.
+    # Only .md files under vaultbot_stuff/System/ are checked; .py files
+    # and root-level files pass through. Files without "baseline: true" in
+    # their YAML frontmatter are personal/bespoke and must not ship.
+    from procedure_compiler import _parse_frontmatter as _parse_fm
+
+    # Determine which files would be committed.
     if specific_files:
-        for f in specific_files:
-            ok, _, err = run_git(["add", f], vault_root)
-            if not ok:
-                return {"error": f"Could not stage file {f}: {err}"}
+        _changed = list(specific_files)
     else:
-        ok, _, err = run_git(["add", "-A"], vault_root)
+        _ok, _changed_raw, _err = run_git(["diff", "--name-only", "HEAD"], vault_root)
+        # Also include untracked files.
+        _ok2, _untracked, _err2 = run_git(
+            ["ls-files", "--others", "--exclude-standard"], vault_root
+        )
+        _changed = [p.strip() for p in _changed_raw.split("\n") if p.strip()] + [
+            p.strip() for p in _untracked.split("\n") if p.strip()
+        ]
+
+    _SYSTEM_PREFIX = "vaultbot_stuff/System/"
+    _excluded: list[str] = []
+    _filtered_files: list[str] = []
+    for _fp in _changed:
+        # Only check .md files under System/.
+        if not (_fp.startswith(_SYSTEM_PREFIX) and _fp.endswith(".md")):
+            _filtered_files.append(_fp)
+            continue
+        _abs = os.path.join(vault_root, _fp)
+        if not os.path.isfile(_abs):
+            _filtered_files.append(_fp)  # deleted file — let it through
+            continue
+        try:
+            with open(_abs, encoding="utf-8", errors="replace") as _fh:
+                _text = _fh.read()
+        except Exception:
+            _excluded.append(_fp)
+            continue
+        _fm, _fm_str, _body = _parse_fm(_text)
+        _baseline = str(_fm.get("baseline", "")).strip().lower()
+        if _baseline == "true":
+            _filtered_files.append(_fp)
+        else:
+            _excluded.append(_fp)
+
+    if _excluded:
+        _excluded_list = "\n".join(f"  - {f}" for f in _excluded)
+        print(
+            f"[submit_contribution] Excluded {len(_excluded)} non-baseline "
+            f"file(s) from the PR:\n{_excluded_list}\n"
+            f"Add 'baseline: true' to the frontmatter of any file you want "
+            f"to share. See CONTRIBUTING.md → Baseline markers.",
+            file=sys.stderr,
+        )
+
+    if not _filtered_files:
+        return {
+            "error": (
+                "No baseline-marked changes to submit. "
+                "All changed files are either non-baseline System/ .md files "
+                "or were excluded by the safety scan."
+            ),
+            "hint": (
+                "Add 'baseline: true' to the YAML frontmatter of any "
+                "vaultbot_stuff/System/ .md file you want to share. "
+                "Backend .py files are always baseline and don't need a marker. "
+                "See CONTRIBUTING.md → Baseline markers for the full policy."
+            ),
+            "excluded_files": _excluded,
+        }
+
+    # 6. Stage changes (only the baseline-filtered set)
+    for f in _filtered_files:
+        ok, _, err = run_git(["add", f], vault_root)
         if not ok:
-            return {"error": f"Could not stage changes: {err}"}
+            return {"error": f"Could not stage file {f}: {err}"}
 
     ok, diff_stat, _ = run_git(["diff", "--cached", "--stat"], vault_root)
     if not diff_stat.strip():
-        return {"error": "No staged changes to submit. Make your changes first, then run this tool."}
+        return {
+            "error": "No staged changes to submit. Make your changes first, then run this tool."
+        }
 
     # 7. Create a contribution branch
     branch_name = f"contribution-{int(time.time())}"
@@ -185,7 +266,9 @@ def run(args: dict) -> dict:
     # 9. Push — fork-based or direct
     if has_push_access:
         # === DIRECT PUSH FLOW (user has write access) ===
-        ok, push_out, push_err = run_git(["push", "-u", "origin", branch_name], vault_root)
+        ok, push_out, push_err = run_git(
+            ["push", "-u", "origin", branch_name], vault_root
+        )
         if not ok:
             run_git(["checkout", "main"], vault_root)
             run_git(["branch", "-D", branch_name], vault_root)
@@ -207,7 +290,9 @@ def run(args: dict) -> dict:
             if resp.status_code not in (200, 202):
                 run_git(["checkout", "main"], vault_root)
                 run_git(["branch", "-D", branch_name], vault_root)
-                return {"error": f"Could not fork repo: {resp.status_code} {resp.text[:200]}"}
+                return {
+                    "error": f"Could not fork repo: {resp.status_code} {resp.text[:200]}"
+                }
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             run_git(["checkout", "main"], vault_root)
             run_git(["branch", "-D", branch_name], vault_root)
@@ -226,10 +311,14 @@ def run(args: dict) -> dict:
             run_git(["remote", "add", "fork", fork_url], vault_root)
 
         # 9d. Push to fork
-        ok, push_out, push_err = run_git(["push", "-u", "fork", branch_name], vault_root)
+        ok, push_out, push_err = run_git(
+            ["push", "-u", "fork", branch_name], vault_root
+        )
         if not ok:
             time.sleep(10)
-            ok, push_out, push_err = run_git(["push", "-u", "fork", branch_name], vault_root)
+            ok, push_out, push_err = run_git(
+                ["push", "-u", "fork", branch_name], vault_root
+            )
         if not ok:
             run_git(["checkout", "main"], vault_root)
             run_git(["branch", "-D", branch_name], vault_root)
@@ -243,7 +332,7 @@ def run(args: dict) -> dict:
     # 10. Create PR via GitHub API
     pr_body = f"""## Community Contribution
 
-{description or 'No description provided.'}
+{description or "No description provided."}
 
 ### Changed files
 ```

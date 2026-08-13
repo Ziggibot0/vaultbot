@@ -18,6 +18,7 @@ constructs the singletons, builds the ``Services`` dataclass, and calls
 ``app.dependency_overrides[get_services] = fake_services`` is how tests
 inject fakes (see test_endpoints.py).
 """
+
 from __future__ import annotations
 
 

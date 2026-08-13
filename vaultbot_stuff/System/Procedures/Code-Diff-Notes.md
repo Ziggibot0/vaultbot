@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Diff two files (vault note vs vault note, or code vs code) and summarize what changed. Given two file paths, reads both, computes a line-level diff, and has the small model summarize the meaningful changes (not whitespace). Use when comparing two versions of a note, checking what a procedure changed, or verifying a code edit.

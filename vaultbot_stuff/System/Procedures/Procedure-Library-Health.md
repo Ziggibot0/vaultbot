@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-09
 description: Orchestrator that runs a suite of library-maintenance probes and produces a unified procedure-library health report. Aggregates redundancy, underuse, staleness, failure patterns, coverage gaps, and drift into a single JSON report.

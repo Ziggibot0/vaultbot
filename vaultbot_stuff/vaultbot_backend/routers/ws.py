@@ -6,6 +6,7 @@ chat_handler.handle_chat / research_handler.handle_research directly with
 svc. Uses Depends(get_services) (FastAPI supports Depends in websocket
 endpoints — verified against the docs).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,9 @@ _RESTART_CONTEXT_PATH = (
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket,
-                             svc: Annotated[Services, Depends(get_services)]):
+async def websocket_endpoint(
+    websocket: WebSocket, svc: Annotated[Services, Depends(get_services)]
+):
     """The chat/research dispatch loop.
 
     Per-connection conversation history lives on the websocket; the
@@ -62,11 +64,17 @@ async def websocket_endpoint(websocket: WebSocket,
     websocket.session_id = session_logger.session_id
     await svc.manager.connect(websocket)
     # Send session info (id + title) so the frontend can display it.
-    await svc.manager.send_personal_message(json.dumps({
-        "type": "session_info",
-        "session_id": session_logger.session_id,
-        "title": session_logger.title,
-    }), websocket, session_logger=session_logger)
+    await svc.manager.send_personal_message(
+        json.dumps(
+            {
+                "type": "session_info",
+                "session_id": session_logger.session_id,
+                "title": session_logger.title,
+            }
+        ),
+        websocket,
+        session_logger=session_logger,
+    )
 
     # ── Model preload on connect ────────────────────────────────────
     # When the user opens a new chat tab (or reconnects after the model was
@@ -78,8 +86,10 @@ async def websocket_endpoint(websocket: WebSocket,
     # if the backend is cloud (OpenAICompatibleClient.preload_model is a
     # no-op).  Skip if disabled via VAULTBOT_PRELOAD_ON_CONNECT=0.
     if os.environ.get("VAULTBOT_PRELOAD_ON_CONNECT", "1") != "0":
+
         def _preload_on_connect():
             import time as _time
+
             _max_wait = int(os.environ.get("VAULTBOT_PRELOAD_MAX_WAIT_S", "300"))
             _elapsed = 0
             while _elapsed < _max_wait:
@@ -87,16 +97,23 @@ async def websocket_endpoint(websocket: WebSocket,
                     if svc.ollama_client.is_model_loaded():
                         return
                     if svc.ollama_client.preload_model():
-                        session_logger.log("model_preloaded_on_connect", {
-                            "model": svc.ollama_client.llm_model})
+                        session_logger.log(
+                            "model_preloaded_on_connect",
+                            {"model": svc.ollama_client.llm_model},
+                        )
                         return
                 except Exception as e:  # noqa: BLE001
-                    session_logger.log("model_preload_on_connect_retry", {
-                        "error": str(e), "elapsed_s": _elapsed})
+                    session_logger.log(
+                        "model_preload_on_connect_retry",
+                        {"error": str(e), "elapsed_s": _elapsed},
+                    )
                 _time.sleep(10)
                 _elapsed += 10
-            session_logger.log("model_preload_on_connect_timeout", {
-                "model": svc.ollama_client.llm_model, "waited_s": _elapsed})
+            session_logger.log(
+                "model_preload_on_connect_timeout",
+                {"model": svc.ollama_client.llm_model, "waited_s": _elapsed},
+            )
+
         # Run in a DEDICATED thread (not the default ThreadPoolExecutor)
         # so a long preload (up to 300s for a cold large model) can't
         # starve the executor pool that endpoints rely on.  Each WS
@@ -105,8 +122,10 @@ async def websocket_endpoint(websocket: WebSocket,
         # run_in_executor-based endpoint (including /models and
         # /llm/providers/.../live_models that the settings tab needs).
         import threading as _threading
+
         _preload_thread = _threading.Thread(
-            target=_preload_on_connect, name="ws-preload", daemon=True)
+            target=_preload_on_connect, name="ws-preload", daemon=True
+        )
         _preload_thread.start()
 
     # ── Startup reindex failure check ────────────────────────────────
@@ -122,13 +141,15 @@ async def websocket_endpoint(websocket: WebSocket,
         _reindex_err = get_startup_reindex_failed()  # reads + clears (one-shot)
         if _reindex_err:
             from chat_helpers import notify_problem
+
             _diag = classify_error(
-                RuntimeError(_reindex_err),
-                {"stage": "indexing the vault on startup"})
+                RuntimeError(_reindex_err), {"stage": "indexing the vault on startup"}
+            )
             # Override with a more specific user message.
             _diag.user_message = (
                 "VaultBot couldn't finish indexing your vault on startup. "
-                "Some notes might not appear in search until you restart.")
+                "Some notes might not appear in search until you restart."
+            )
             _diag.remedy_hint = "Click Restart to re-index your vault."
             await notify_problem(svc, websocket, _diag)
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -145,7 +166,9 @@ async def websocket_endpoint(websocket: WebSocket,
     # vaultbot should get back its context from the current session." History
     # only clears on explicit /new. This is the Hermes Agent shape: session
     # persists across restarts, user controls when to reset.
-    _is_restart_resume = _RESTART_CONTEXT_PATH.exists()  # only used for auto-resume nudge
+    _is_restart_resume = (
+        _RESTART_CONTEXT_PATH.exists()
+    )  # only used for auto-resume nudge
     # ── Restart-resume: adopt the most recent per-session state ──────
     # When the backend restarts, the new WebSocket gets a NEW session_id.
     # The per-session state files (conversation_state_*.json,
@@ -159,11 +182,14 @@ async def websocket_endpoint(websocket: WebSocket,
     if _is_restart_resume:
         try:
             import glob as _glob
+
             _ss_dir = Path(__file__).resolve().parent.parent / "session_state"
             # Find the most recent working_memory_state_*.json
             _wm_candidates = sorted(
                 _glob.glob(str(_ss_dir / "working_memory_state_*.json")),
-                key=lambda f: Path(f).stat().st_mtime, reverse=True)
+                key=lambda f: Path(f).stat().st_mtime,
+                reverse=True,
+            )
             if _wm_candidates:
                 _old_stem = Path(_wm_candidates[0]).stem
                 # Extract the old session_id: "working_memory_state_<uuid>"
@@ -173,25 +199,30 @@ async def websocket_endpoint(websocket: WebSocket,
                     # Adopt the working memory under the new session_id.
                     _old_wm = TaskList.load_from_disk(session_id=_old_sid)
                     if _old_wm is not None and _old_wm.has_plan():
-                        _old_wm.save_to_disk(
-                            session_id=session_logger.session_id)
-                        session_logger.log("wm_adopted_from_old_session", {
-                            "old_session_id": _old_sid,
-                            "new_session_id": session_logger.session_id,
-                            "goal": _old_wm.goal[:100],
-                            "tasks": len(_old_wm.tasks),
-                        })
+                        _old_wm.save_to_disk(session_id=session_logger.session_id)
+                        session_logger.log(
+                            "wm_adopted_from_old_session",
+                            {
+                                "old_session_id": _old_sid,
+                                "new_session_id": session_logger.session_id,
+                                "goal": _old_wm.goal[:100],
+                                "tasks": len(_old_wm.tasks),
+                            },
+                        )
                     # Adopt the conversation history under the new session_id.
                     _old_conv = load_history(session_id=_old_sid)
                     if _old_conv:
                         from conversation_state import save_history
-                        save_history(_old_conv,
-                                     session_id=session_logger.session_id)
-                        session_logger.log("conv_adopted_from_old_session", {
-                            "old_session_id": _old_sid,
-                            "new_session_id": session_logger.session_id,
-                            "turns": len(_old_conv),
-                        })
+
+                        save_history(_old_conv, session_id=session_logger.session_id)
+                        session_logger.log(
+                            "conv_adopted_from_old_session",
+                            {
+                                "old_session_id": _old_sid,
+                                "new_session_id": session_logger.session_id,
+                                "turns": len(_old_conv),
+                            },
+                        )
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("restart_adopt_failed", {"error": str(_e)})
     try:
@@ -204,7 +235,8 @@ async def websocket_endpoint(websocket: WebSocket,
                 _conv_idx = getattr(svc, "conversation_index", None)
                 if _conv_idx is not None:
                     _conv_idx.rebuild_from_history(
-                        restored, session_id=session_logger.session_id)
+                        restored, session_id=session_logger.session_id
+                    )
             except Exception:  # noqa: BLE001 — best-effort, index rebuild is optional
                 pass
     except ValueError as _hist_err:
@@ -213,31 +245,40 @@ async def websocket_endpoint(websocket: WebSocket,
         # was lost, rather than silently amnesia-ing.
         websocket.conversation_history = []
         _hist_diag = classify_error(
-            _hist_err, {"category": "history_lost", "stage": "reconnecting"})
+            _hist_err, {"category": "history_lost", "stage": "reconnecting"}
+        )
         await notify_problem(svc, websocket, _hist_diag)
-        session_logger.log("conversation_history_corrupt", {
-            "error": str(_hist_err),
-        })
+        session_logger.log(
+            "conversation_history_corrupt",
+            {
+                "error": str(_hist_err),
+            },
+        )
     # Working memory (the Copilot/Claude Code TodoList pattern). Restored on
     # EVERY reconnect if a persisted plan exists — same rationale as
     # conversation history: a crash/reload shouldn't wipe the plan. Cleared
     # only on explicit /new.
-    _saved_wm = TaskList.load_from_disk(
-        session_id=session_logger.session_id)
+    _saved_wm = TaskList.load_from_disk(session_id=session_logger.session_id)
     if _saved_wm is not None and _saved_wm.has_plan():
         websocket.working_memory = _saved_wm
-        session_logger.log("working_memory_restored", {
-            "goal": _saved_wm.goal[:100],
-            "tasks": len(_saved_wm.tasks),
-        })
+        session_logger.log(
+            "working_memory_restored",
+            {
+                "goal": _saved_wm.goal[:100],
+                "tasks": len(_saved_wm.tasks),
+            },
+        )
     else:
         websocket.working_memory = TaskList()
     _restored = websocket.conversation_history
     if _restored:
-        session_logger.log("conversation_history_restored", {
-            "turns": len(_restored),
-            "history_chars": sum(len(str(m.get("content", ""))) for m in _restored),
-        })
+        session_logger.log(
+            "conversation_history_restored",
+            {
+                "turns": len(_restored),
+                "history_chars": sum(len(str(m.get("content", ""))) for m in _restored),
+            },
+        )
 
     # ---- AUTO-RESUME ---------------------------------------------------
     # If RESTART_CONTEXT.md exists, the backend was restarted mid-session.
@@ -246,16 +287,23 @@ async def websocket_endpoint(websocket: WebSocket,
     # call. Here we proactively trigger that call so the agent resumes
     # without the operator having to send a wake-up message.
     if _RESTART_CONTEXT_PATH.exists():
-        session_logger.log("auto_resume_triggered", {
-            "restart_context": str(_RESTART_CONTEXT_PATH),
-        })
+        session_logger.log(
+            "auto_resume_triggered",
+            {
+                "restart_context": str(_RESTART_CONTEXT_PATH),
+            },
+        )
         # Send a proactive heads-up to the operator so he sees something happening.
         await svc.manager.send_personal_message(
-            json.dumps({
-                "type": "chat",
-                "content": "Backend restarted. Picking up where I left off...",
-            }),
-            websocket, session_logger=session_logger)
+            json.dumps(
+                {
+                    "type": "chat",
+                    "content": "Backend restarted. Picking up where I left off...",
+                }
+            ),
+            websocket,
+            session_logger=session_logger,
+        )
 
         # Spawn handle_chat with a synthetic continue message. The LLM will
         # see the restart context in its system prompt (via boot_context)
@@ -265,13 +313,15 @@ async def websocket_endpoint(websocket: WebSocket,
         async def _auto_resume():
             try:
                 await handle_chat(
-                    svc, websocket,
+                    svc,
+                    websocket,
                     "You were just restarted mid-session. Your restart context "
                     "(recent chat history) has been injected into your system "
                     "prompt. Check your working memory (the plan_task task list) "
                     "and continue where you left off. Don't ask the operator "
                     "to re-explain anything. Just do it.",
-                    session_logger)
+                    session_logger,
+                )
             except asyncio.CancelledError:
                 session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -281,7 +331,9 @@ async def websocket_endpoint(websocket: WebSocket,
                 diag = classify_error(e, {"stage": "resuming after restart"})
                 await svc.manager.send_personal_message(
                     json.dumps({"type": "problem", "diagnosis": diag.to_dict()}),
-                    websocket, session_logger=session_logger)
+                    websocket,
+                    session_logger=session_logger,
+                )
             finally:
                 try:
                     svc.autonomous_researcher.resume_after_chat()
@@ -298,8 +350,8 @@ async def websocket_endpoint(websocket: WebSocket,
             except json.JSONDecodeError as e:
                 session_logger.log_exception(e, context="websocket_receive_json")
                 await svc.manager.send_personal_message(
-                    json.dumps({"type": "error", "content": "Invalid JSON"}),
-                    websocket)
+                    json.dumps({"type": "error", "content": "Invalid JSON"}), websocket
+                )
                 continue
 
             session_logger.log_message("in", payload)
@@ -315,8 +367,8 @@ async def websocket_endpoint(websocket: WebSocket,
                     task._stopped_by_user = True
                     task.cancel()
                 await svc.manager.send_personal_message(
-                    json.dumps({"type": "stopped", "content": "Interrupted"}),
-                    websocket)
+                    json.dumps({"type": "stopped", "content": "Interrupted"}), websocket
+                )
                 continue
 
             # "/new" starts a FRESH session: clears history + rolls a new log.
@@ -337,6 +389,7 @@ async def websocket_endpoint(websocket: WebSocket,
                     # old session only.
                     try:
                         from working_memory import TaskList as _TL
+
                         _TL.clear_disk(session_id=_old_sid)
                     except Exception:  # noqa: BLE001
                         pass
@@ -357,19 +410,33 @@ async def websocket_endpoint(websocket: WebSocket,
                 # Update the websocket's session_id to the new session so
                 # subsequent save/load calls target the new session's files.
                 websocket.session_id = session_logger.session_id
-                session_logger.log("session_reset", {
-                    "trigger": "/new", "previous_session_id": old_session_id})
+                session_logger.log(
+                    "session_reset",
+                    {"trigger": "/new", "previous_session_id": old_session_id},
+                )
                 session_logger.log("websocket_connect", {"client_host": client_host})
-                await svc.manager.send_personal_message(json.dumps({
-                    "type": "session_reset",
-                    "content": "New session started. I've cleared our conversation history — what would you like to work on?"
-                }), websocket, session_logger=session_logger)
+                await svc.manager.send_personal_message(
+                    json.dumps(
+                        {
+                            "type": "session_reset",
+                            "content": "New session started. I've cleared our conversation history — what would you like to work on?",
+                        }
+                    ),
+                    websocket,
+                    session_logger=session_logger,
+                )
                 # Send updated session info for the new session.
-                await svc.manager.send_personal_message(json.dumps({
-                    "type": "session_info",
-                    "session_id": session_logger.session_id,
-                    "title": session_logger.title,
-                }), websocket, session_logger=session_logger)
+                await svc.manager.send_personal_message(
+                    json.dumps(
+                        {
+                            "type": "session_info",
+                            "session_id": session_logger.session_id,
+                            "title": session_logger.title,
+                        }
+                    ),
+                    websocket,
+                    session_logger=session_logger,
+                )
                 continue
 
             # ── Slash-command surface ──────────────────────────────────
@@ -383,26 +450,38 @@ async def websocket_endpoint(websocket: WebSocket,
             if msg_type == "chat":
                 cmd = user_message.strip().lower()
                 if cmd == "/help":
-                    await svc.manager.send_personal_message(json.dumps({
-                        "type": "system_info",
-                        "content": (
-                            "Commands you can type here:\n"
-                            "  /new     — start a fresh conversation\n"
-                            "  /clear   — clear the chat window (keeps history)\n"
-                            "  /stop    — stop what I'm doing (same as the Stop button)\n"
-                            "  /diagnose — run a health check and show any problems\n"
-                            "  /help    — show this list"
+                    await svc.manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "system_info",
+                                "content": (
+                                    "Commands you can type here:\n"
+                                    "  /new     — start a fresh conversation\n"
+                                    "  /clear   — clear the chat window (keeps history)\n"
+                                    "  /stop    — stop what I'm doing (same as the Stop button)\n"
+                                    "  /diagnose — run a health check and show any problems\n"
+                                    "  /help    — show this list"
+                                ),
+                            }
                         ),
-                    }), websocket, session_logger=session_logger)
+                        websocket,
+                        session_logger=session_logger,
+                    )
                     continue
                 if cmd == "/clear":
                     # Clear the on-screen chat only (history persists). The
                     # frontend handles the visual wipe; this ack keeps the
                     # channel in sync.
-                    await svc.manager.send_personal_message(json.dumps({
-                        "type": "session_reset",
-                        "content": "Chat cleared. Your history is saved — I still remember our conversation.",
-                    }), websocket, session_logger=session_logger)
+                    await svc.manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "session_reset",
+                                "content": "Chat cleared. Your history is saved — I still remember our conversation.",
+                            }
+                        ),
+                        websocket,
+                        session_logger=session_logger,
+                    )
                     continue
                 if cmd == "/stop":
                     task = getattr(websocket, "_current_task", None)
@@ -411,7 +490,8 @@ async def websocket_endpoint(websocket: WebSocket,
                         task.cancel()
                     await svc.manager.send_personal_message(
                         json.dumps({"type": "stopped", "content": "Interrupted"}),
-                        websocket)
+                        websocket,
+                    )
                     continue
                 if cmd == "/diagnose":
                     # Run the proactive battery + stream results as problem
@@ -419,37 +499,58 @@ async def websocket_endpoint(websocket: WebSocket,
                     # endpoint so there's one path for button + command.
                     try:
                         from routers.system import _run_diagnose_checks
-                        problems = [d.to_dict()
-                                    for d in _run_diagnose_checks(svc)]
+
+                        problems = [d.to_dict() for d in _run_diagnose_checks(svc)]
                         if not problems:
                             await svc.manager.send_personal_message(
-                                json.dumps({"type": "system_info",
-                                            "content": "Everything looks healthy. No problems found."}),
-                                websocket, session_logger=session_logger)
+                                json.dumps(
+                                    {
+                                        "type": "system_info",
+                                        "content": "Everything looks healthy. No problems found.",
+                                    }
+                                ),
+                                websocket,
+                                session_logger=session_logger,
+                            )
                         else:
                             for p in problems:
                                 await svc.manager.send_personal_message(
                                     json.dumps({"type": "problem", "diagnosis": p}),
-                                    websocket, session_logger=session_logger)
+                                    websocket,
+                                    session_logger=session_logger,
+                                )
                     except Exception as diag_err:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log_exception(
-                            diag_err, context="/diagnose command")
+                            diag_err, context="/diagnose command"
+                        )
                         await svc.manager.send_personal_message(
-                            json.dumps({"type": "problem",
-                                        "diagnosis": classify_error(
-                                            diag_err, {"stage": "diagnose"}
-                                        ).to_dict()}),
-                            websocket, session_logger=session_logger)
+                            json.dumps(
+                                {
+                                    "type": "problem",
+                                    "diagnosis": classify_error(
+                                        diag_err, {"stage": "diagnose"}
+                                    ).to_dict(),
+                                }
+                            ),
+                            websocket,
+                            session_logger=session_logger,
+                        )
                     continue
                 if cmd.startswith("/") and cmd not in ("/new",):
                     # Unknown slash command: nudge, don't hallucinate.
-                    await svc.manager.send_personal_message(json.dumps({
-                        "type": "system_info",
-                        "content": (
-                            f"Unknown command \"{cmd}\". Type /help to see "
-                            "what's available."
+                    await svc.manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "system_info",
+                                "content": (
+                                    f'Unknown command "{cmd}". Type /help to see '
+                                    "what's available."
+                                ),
+                            }
                         ),
-                    }), websocket, session_logger=session_logger)
+                        websocket,
+                        session_logger=session_logger,
+                    )
                     continue
 
             # Allow the frontend to submit questionnaire answers via the
@@ -459,24 +560,36 @@ async def websocket_endpoint(websocket: WebSocket,
                 request_id = payload.get("request_id", "")
                 if not request_id:
                     await svc.manager.send_personal_message(
-                        json.dumps({"type": "error",
-                                    "content": "Missing request_id in user_response"}),
-                        websocket)
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "content": "Missing request_id in user_response",
+                            }
+                        ),
+                        websocket,
+                    )
                     continue
                 try:
                     from custom_tools.ask_user import _pending_requests
                 except ImportError:
                     await svc.manager.send_personal_message(
-                        json.dumps({"type": "error",
-                                    "content": "ask_user tool not loaded"}),
-                        websocket)
+                        json.dumps(
+                            {"type": "error", "content": "ask_user tool not loaded"}
+                        ),
+                        websocket,
+                    )
                     continue
                 entry = _pending_requests.get(request_id)
                 if entry is None:
                     await svc.manager.send_personal_message(
-                        json.dumps({"type": "error",
-                                    "content": f"No pending request with id {request_id}"}),
-                        websocket)
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "content": f"No pending request with id {request_id}",
+                            }
+                        ),
+                        websocket,
+                    )
                     continue
                 event, response_holder = entry[0], entry[1]
                 answers = payload.get("answers", {})
@@ -486,10 +599,13 @@ async def websocket_endpoint(websocket: WebSocket,
                 if comments:
                     response_holder["_comments"] = comments
                 event.set()
-                session_logger.log("user_response_received", {
-                    "request_id": request_id,
-                    "answer_count": len(answers),
-                })
+                session_logger.log(
+                    "user_response_received",
+                    {
+                        "request_id": request_id,
+                        "answer_count": len(answers),
+                    },
+                )
                 continue
 
             # Allow the frontend to update the session title inline.
@@ -497,11 +613,17 @@ async def websocket_endpoint(websocket: WebSocket,
                 new_title = payload.get("title", "").strip()
                 if new_title:
                     session_logger.set_title(new_title)
-                    await svc.manager.send_personal_message(json.dumps({
-                        "type": "session_info",
-                        "session_id": session_logger.session_id,
-                        "title": session_logger.title,
-                    }), websocket, session_logger=session_logger)
+                    await svc.manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "session_info",
+                                "session_id": session_logger.session_id,
+                                "title": session_logger.title,
+                            }
+                        ),
+                        websocket,
+                        session_logger=session_logger,
+                    )
                 continue
 
             if not user_message:
@@ -518,6 +640,7 @@ async def websocket_endpoint(websocket: WebSocket,
             # current note so the user's message gets full hardware.
             try:
                 from qa_worker import get_qa_interrupt
+
                 get_qa_interrupt().trigger()
             except Exception:  # noqa: BLE001
                 pass
@@ -527,11 +650,17 @@ async def websocket_endpoint(websocket: WebSocket,
             if session_logger.title == "New Session" and user_message.strip():
                 _auto_title = user_message.strip()[:80]
                 session_logger.set_title(_auto_title)
-                await svc.manager.send_personal_message(json.dumps({
-                    "type": "session_info",
-                    "session_id": session_logger.session_id,
-                    "title": session_logger.title,
-                }), websocket, session_logger=session_logger)
+                await svc.manager.send_personal_message(
+                    json.dumps(
+                        {
+                            "type": "session_info",
+                            "session_id": session_logger.session_id,
+                            "title": session_logger.title,
+                        }
+                    ),
+                    websocket,
+                    session_logger=session_logger,
+                )
 
             # Spawn the handler fire-and-forget so the receive loop stays
             # responsive to stop/new messages.
@@ -539,15 +668,24 @@ async def websocket_endpoint(websocket: WebSocket,
                 async def _run():
                     try:
                         if msg_type == "research":
-                            await handle_research(svc, websocket, user_message, session_logger)
+                            await handle_research(
+                                svc, websocket, user_message, session_logger
+                            )
                         else:
-                            await handle_chat(svc, websocket, user_message, session_logger)
+                            await handle_chat(
+                                svc, websocket, user_message, session_logger
+                            )
                     except asyncio.CancelledError:
                         session_logger.log("chat_cancelled", {"reason": "interrupted"})
-                        if not getattr(asyncio.current_task(), "_stopped_by_user", False):
+                        if not getattr(
+                            asyncio.current_task(), "_stopped_by_user", False
+                        ):
                             await svc.manager.send_personal_message(
-                                json.dumps({"type": "stopped", "content": "Interrupted"}),
-                                websocket)
+                                json.dumps(
+                                    {"type": "stopped", "content": "Interrupted"}
+                                ),
+                                websocket,
+                            )
                     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log_exception(e, context=f"handle_{msg_type}")
                         # Translate the raw exception into a typed, user-
@@ -557,15 +695,18 @@ async def websocket_endpoint(websocket: WebSocket,
                         # edge" rule: no stack trace reaches the chat UI.
                         diag = classify_error(e, {"stage": msg_type})
                         await svc.manager.send_personal_message(
-                            json.dumps({"type": "problem",
-                                        "diagnosis": diag.to_dict()}),
-                            websocket)
+                            json.dumps(
+                                {"type": "problem", "diagnosis": diag.to_dict()}
+                            ),
+                            websocket,
+                        )
                     finally:
                         # Chat-priority: always release the researcher pause.
                         try:
                             svc.autonomous_researcher.resume_after_chat()
                         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             logger.debug("swallowed: %s", e)
+
                 return asyncio.create_task(_run())
 
             websocket._current_task = _spawn_handler()

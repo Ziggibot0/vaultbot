@@ -41,21 +41,25 @@ from pathlib import Path
 _TOKEN_FILE = Path(__file__).resolve().parent / ".vaultbot_auth_token"
 
 # Endpoints that don't require auth (health checks, preflight for setup wizard).
-_AUTH_EXEMPT_PATHS: frozenset[str] = frozenset({
-    "/health",
-    "/preflight",
-    "/",
-    "/shutdown",  # sendBeacon can't set custom headers; PID lock prevents abuse
-})
+_AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/preflight",
+        "/",
+        "/shutdown",  # sendBeacon can't set custom headers; PID lock prevents abuse
+    }
+)
 
 # Endpoints that ALWAYS require auth, even from localhost. These are the
 # destructive/sensitive operations that a malicious local process could abuse.
 # Everything else is trusted when the request comes from localhost (127.0.0.1
 # or ::1) — the Obsidian plugin and local browser are trusted clients.
-_AUTH_REQUIRED_PATHS: frozenset[str] = frozenset({
-    "/custom_tools/call",
-    "/ws",
-})
+_AUTH_REQUIRED_PATHS: frozenset[str] = frozenset(
+    {
+        "/custom_tools/call",
+        "/ws",
+    }
+)
 
 
 def _generate_token() -> str:

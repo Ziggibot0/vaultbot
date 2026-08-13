@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Extract entities (proper nouns, named concepts) and 3-5 key facts from text. Returns JSON with entities and key_facts arrays. Uses the small model — entity extraction is simple structured parsing.

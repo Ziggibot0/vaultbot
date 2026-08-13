@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Scan recent journal entries (date-only filenames) for new content. Extract themes and flag empty journals. Saves themes to a temp file for downstream dream sub-procedures.

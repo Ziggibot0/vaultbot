@@ -4,6 +4,7 @@ Migrated from main.py as the first Phase 3 router (simplest — no service
 mutation, no websocket state). Handlers read singletons via
 ``svc: Services = Depends(get_services)`` instead of as free variables.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -67,8 +68,12 @@ def _check_synced_folder(vault_path: str) -> Diagnosis | None:
     p = vault_path.lower().replace("\\", "/")
     # Match on path segments to avoid false positives like "OneDriveBackup".
     sync_markers = (
-        "/onedrive/", "/dropbox/", "/icloud~", "/icloud drive/",
-        "/google drive/", "/googledrive/",
+        "/onedrive/",
+        "/dropbox/",
+        "/icloud~",
+        "/icloud drive/",
+        "/google drive/",
+        "/googledrive/",
     )
     if any(marker in p for marker in sync_markers):
         return diagnose_from_message(
@@ -88,6 +93,7 @@ def _check_port_free(port: int) -> Diagnosis | None:
     conservative: only flags a clear bind conflict.
     """
     import socket
+
     try:
         # Try to bind: if it fails, the port is taken.
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -177,11 +183,13 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
                 backend = "the LLM backend"
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
-        problems.append(diagnose_from_message(
-            "connection refused",
-            stage="starting",
-            endpoint=backend,
-        ))
+        problems.append(
+            diagnose_from_message(
+                "connection refused",
+                stage="starting",
+                endpoint=backend,
+            )
+        )
 
     # 2) Configured model actually available?
     model_diag = _check_model_present(svc)
@@ -192,7 +200,9 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     vault_path = ""
     try:
         # The vault root is 4 levels up from routers/ (vaultbot_stuff/vaultbot_backend/routers/ -> vault root)
-        vault_path = str(Path(__file__).resolve().parent.parent.parent)  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
+        vault_path = str(
+            Path(__file__).resolve().parent.parent.parent
+        )  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
     sync_diag = _check_synced_folder(vault_path)
@@ -205,9 +215,11 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     try:
         _ = svc.vault_indexer.index.ntotal
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-        problems.append(diagnose_from_message(
-            f"faiss error: {e}",
-        ))
+        problems.append(
+            diagnose_from_message(
+                f"faiss error: {e}",
+            )
+        )
 
     # 5) LLM backend misconfigured? If the user set LLM_BACKEND=openai but
     #    didn't provide an API key/model, the backend fell back to Ollama
@@ -216,6 +228,7 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     #    "backend starts but chat uses the wrong model" silent failure.
     try:
         import os as _os
+
         _configured = (_os.getenv("LLM_BACKEND") or "").strip().lower()
         _api_key = (_os.getenv("LLM_API_KEY") or "").strip()
         _model = (_os.getenv("LLM_MODEL") or "").strip()
@@ -223,23 +236,25 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
         # If configured for openai but the client is actually Ollama
         # (base_url points at localhost:11434), the fallback fired.
         if _configured == "openai" and "11434" in _actual_url:
-            problems.append(make_diagnosis(
-                ProblemCategory.CONFIG_CONFLICT,
-                user_message=(
-                    "You set LLM_BACKEND=openai in .env but didn't provide "
-                    "an API key or model. VaultBot fell back to local Ollama "
-                    "so it could still start. Add your LLM_API_KEY and "
-                    "LLM_MODEL to .env (or set LLM_BACKEND=ollama to stop "
-                    "this message)."
-                ),
-                remedy_hint=(
-                    "Edit .env: set LLM_API_KEY=sk-... and "
-                    "LLM_MODEL=gpt-4o-mini (or your provider's model id). "
-                    "Then click Restart."
-                ),
-                action="open_settings",
-                severity=Severity.INFO,
-            ))
+            problems.append(
+                make_diagnosis(
+                    ProblemCategory.CONFIG_CONFLICT,
+                    user_message=(
+                        "You set LLM_BACKEND=openai in .env but didn't provide "
+                        "an API key or model. VaultBot fell back to local Ollama "
+                        "so it could still start. Add your LLM_API_KEY and "
+                        "LLM_MODEL to .env (or set LLM_BACKEND=ollama to stop "
+                        "this message)."
+                    ),
+                    remedy_hint=(
+                        "Edit .env: set LLM_API_KEY=sk-... and "
+                        "LLM_MODEL=gpt-4o-mini (or your provider's model id). "
+                        "Then click Restart."
+                    ),
+                    action="open_settings",
+                    severity=Severity.INFO,
+                )
+            )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
 
@@ -270,6 +285,7 @@ def _extract_session_preview(path: Path) -> dict[str, Any] | None:
     if not lines:
         return None
     import json as _json
+
     session_id = path.stem
     started_at = ""
     preview = ""
@@ -297,7 +313,7 @@ def _extract_session_preview(path: Path) -> dict[str, Any] | None:
                     if msg:
                         preview = msg[:120]
             elif evt.get("event") == "chat_begin":
-                msg = (data.get("user_message") or "")
+                msg = data.get("user_message") or ""
                 if msg:
                     preview = msg[:120]
     # Also look for a session_title event (set by the user or auto-generated).
@@ -369,12 +385,14 @@ async def get_session(session_id: str) -> dict[str, Any]:
     # Validate: only allow UUID-like characters so a crafted id can't
     # escape the sessions/ directory (e.g. "../../etc/passwd").
     import re as _re
+
     if not _re.fullmatch(r"[0-9a-fA-F-]{36}", session_id):
         return {"turns": [], "error": "invalid session id"}
     path = _SESSIONS_DIR / f"{session_id}.jsonl"
     if not path.exists():
         return {"turns": [], "error": "session not found"}
     import json as _json
+
     turns: list[dict[str, str]] = []
     # Accumulate outgoing answer_chunk events into the current assistant
     # turn; a new incoming message starts a new user turn. This mirrors the
@@ -405,7 +423,9 @@ async def get_session(session_id: str) -> dict[str, Any]:
                     current_assistant += payload.get("content") or ""
                 elif ptype == "answer_done":
                     if current_assistant:
-                        turns.append({"role": "assistant", "content": current_assistant})
+                        turns.append(
+                            {"role": "assistant", "content": current_assistant}
+                        )
                         current_assistant = ""
         # Flush trailing assistant text if the session ended mid-stream.
         if current_assistant:
@@ -428,7 +448,9 @@ async def preflight(request: Request) -> dict[str, Any]:
     problems: list[Diagnosis] = []
 
     # Vault root = 4 levels up from routers/ (vaultbot_stuff/vaultbot_backend/routers/ -> vault root)
-    vault_path = str(Path(__file__).resolve().parent.parent.parent)  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
+    vault_path = str(
+        Path(__file__).resolve().parent.parent.parent
+    )  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
     sync_diag = _check_synced_folder(vault_path)
     if sync_diag is not None:
         problems.append(sync_diag)
@@ -436,22 +458,27 @@ async def preflight(request: Request) -> dict[str, Any]:
     # Python + Ollama presence: shell out to --version. Missing either is
     # a setup_incomplete diagnosis so the wizard offers download buttons.
     from subprocess_utils import run as _subprocess_run
+
     for tool, label in (("python", "Python"), ("ollama", "Ollama")):
         present = False
         try:
             result = _subprocess_run(
                 [tool, "--version"],
-                capture_output=True, timeout=5,
-                encoding="utf-8", errors="replace",
+                capture_output=True,
+                timeout=5,
+                encoding="utf-8",
+                errors="replace",
             )
             present = result.returncode == 0
         except (FileNotFoundError, OSError):
             present = False
         if not present:
-            problems.append(diagnose_from_message(
-                "setup incomplete",
-                missing=label,
-            ))
+            problems.append(
+                diagnose_from_message(
+                    "setup incomplete",
+                    missing=label,
+                )
+            )
 
     # Port 8000 free? (Only flag if *something else* holds it — we can't
     # be holding it during preflight since the backend isn't up yet.)
@@ -479,6 +506,7 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
     Ollama (loading a model during preload) never freezes the event loop.
     """
     import asyncio as _asyncio
+
     loop = _asyncio.get_event_loop()
     try:
         ollama_ok = await _asyncio.wait_for(
@@ -492,9 +520,13 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
     extra = {
         "ollama": ollama_ok,
         "autonomous_enabled": svc.autonomous_researcher.enabled,
-        "autonomous_running": bool(svc.autonomous_researcher._thread and
-                                   svc.autonomous_researcher._thread.is_alive()),
-        "index_vectors": svc.vault_indexer.index.ntotal if svc.vault_indexer.index else 0,
+        "autonomous_running": bool(
+            svc.autonomous_researcher._thread
+            and svc.autonomous_researcher._thread.is_alive()
+        ),
+        "index_vectors": svc.vault_indexer.index.ntotal
+        if svc.vault_indexer.index
+        else 0,
         "graph_nodes": len(svc.vault_graph.nodes),
     }
     result = svc.health_monitor.health(extra=extra)
@@ -508,12 +540,15 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
             result["researcher_stuck"] = True
             result["researcher_stuck_reason"] = (
                 f"heartbeat stale for {result['last_heartbeat_age_s']}s "
-                f"(cycle interval: {interval}s)")
+                f"(cycle interval: {interval}s)"
+            )
     return result
 
 
 @router.get("/ollama/stats")
-async def ollama_stats(svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
+async def ollama_stats(
+    svc: Annotated[Services, Depends(get_services)],
+) -> dict[str, Any]:
     """Return Ollama runtime stats for the plugin's status bar.
 
     Combines /api/ps (loaded models, VRAM, context length, expiry) and
@@ -527,6 +562,7 @@ async def ollama_stats(svc: Annotated[Services, Depends(get_services)]) -> dict[
     Ollama (loading a model during preload) would freeze the event loop.
     """
     import asyncio as _asyncio
+
     try:
         loop = _asyncio.get_event_loop()
         return await _asyncio.wait_for(
@@ -534,8 +570,12 @@ async def ollama_stats(svc: Annotated[Services, Depends(get_services)]) -> dict[
             timeout=5.0,
         )
     except _asyncio.TimeoutError:
-        return {"running": False, "version": None, "models": [],
-                "error": "Ollama busy (timed out)"}
+        return {
+            "running": False,
+            "version": None,
+            "models": [],
+            "error": "Ollama busy (timed out)",
+        }
     except Exception as e:  # noqa: BLE001 — best-effort
         return {"running": False, "version": None, "models": [], "error": str(e)}
 
@@ -551,10 +591,15 @@ def _cpu_stats() -> dict[str, Any]:
     """CPU utilization via psutil."""
     try:
         import psutil
+
         return {
             "percent": round(psutil.cpu_percent(interval=None), 1),
             "cores": psutil.cpu_count(logical=True) or 0,
-            "per_core": [round(p, 1) for p in psutil.cpu_percent(interval=None, percpu=True)] if psutil.cpu_count() else [],
+            "per_core": [
+                round(p, 1) for p in psutil.cpu_percent(interval=None, percpu=True)
+            ]
+            if psutil.cpu_count()
+            else [],
         }
     except Exception:  # noqa: BLE001
         return {"percent": 0, "cores": 0, "per_core": []}
@@ -564,6 +609,7 @@ def _ram_stats() -> dict[str, Any]:
     """Memory usage via psutil."""
     try:
         import psutil
+
         vm = psutil.virtual_memory()
         return {
             "used_gb": round(vm.used / 1_073_741_824, 1),
@@ -596,6 +642,7 @@ def _gpu_stats() -> dict[str, Any] | None:
     # polling from the frontend spawns 3 PowerShell windows every 3
     # seconds, making Obsidian unusable.
     import sys
+
     _no_window = 0
     if sys.platform == "win32":
         _no_window = 0x08000000  # CREATE_NO_WINDOW
@@ -604,12 +651,20 @@ def _gpu_stats() -> dict[str, Any] | None:
     try:
         import subprocess
         import json as _json
+
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-CimInstance Win32_VideoController | "
-             "Where-Object { $_.Name -and $_.Name -notmatch 'Microsoft Basic' } | "
-             "Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json"],
-            capture_output=True, timeout=5, encoding="utf-8", errors="replace",
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_VideoController | "
+                "Where-Object { $_.Name -and $_.Name -notmatch 'Microsoft Basic' } | "
+                "Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json",
+            ],
+            capture_output=True,
+            timeout=5,
+            encoding="utf-8",
+            errors="replace",
             creationflags=_no_window,
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -628,6 +683,7 @@ def _gpu_stats() -> dict[str, Any] | None:
     # any vendor-specific library. It's the same data Task Manager uses.
     try:
         import subprocess as _sp
+
         # GPU utilization: sum all active engine utilizations.
         # Each engine reports its own percentage; the total GPU usage is
         # the max across all engines (not the sum — one engine at 50% +
@@ -640,7 +696,10 @@ def _gpu_stats() -> dict[str, Any] | None:
         )
         result = _sp.run(
             ["powershell", "-NoProfile", "-Command", util_cmd],
-            capture_output=True, timeout=5, encoding="utf-8", errors="replace",
+            capture_output=True,
+            timeout=5,
+            encoding="utf-8",
+            errors="replace",
             creationflags=_no_window,
         )
         gpu_util = None
@@ -664,7 +723,10 @@ def _gpu_stats() -> dict[str, Any] | None:
         )
         result = _sp.run(
             ["powershell", "-NoProfile", "-Command", vram_cmd],
-            capture_output=True, timeout=5, encoding="utf-8", errors="replace",
+            capture_output=True,
+            timeout=5,
+            encoding="utf-8",
+            errors="replace",
             creationflags=_no_window,
         )
         gpu_vram_used = None
@@ -680,18 +742,31 @@ def _gpu_stats() -> dict[str, Any] | None:
             # the small dedicated segment. Use system RAM total as the
             # "pool" if the GPU name suggests an integrated GPU.
             vram_total = gpu_vram_total
-            if gpu_name and any(kw in gpu_name.lower() for kw in
-                               ("radeon", "iris", "uhd", "hd graphics",
-                                "integrated", "amd radeon(tm)")):
+            if gpu_name and any(
+                kw in gpu_name.lower()
+                for kw in (
+                    "radeon",
+                    "iris",
+                    "uhd",
+                    "hd graphics",
+                    "integrated",
+                    "amd radeon(tm)",
+                )
+            ):
                 try:
                     import psutil as _ps
+
                     vram_total = round(_ps.virtual_memory().total / 1_073_741_824, 1)
                 except Exception:  # noqa: BLE001
                     pass
                 # For iGPUs, vram_used can exceed vram_total (shared mem
                 # is allocated dynamically from system RAM). Cap the
                 # reported used at the total so the meter doesn't break.
-                if gpu_vram_used is not None and vram_total and gpu_vram_used > vram_total:
+                if (
+                    gpu_vram_used is not None
+                    and vram_total
+                    and gpu_vram_used > vram_total
+                ):
                     gpu_vram_used = vram_total
             return {
                 "name": gpu_name or "GPU",
@@ -706,6 +781,7 @@ def _gpu_stats() -> dict[str, Any] | None:
     # ── NVIDIA via pynvml (fallback if perf counters failed)
     try:
         import pynvml  # noqa: TRY1 — optional dependency
+
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
@@ -759,6 +835,7 @@ def _disk_io() -> dict[str, Any]:
     try:
         import psutil
         import time as _time
+
         counters = psutil.disk_io_counters()
         if not counters:
             return {"read_mb_s": 0, "write_mb_s": 0}
@@ -770,7 +847,9 @@ def _disk_io() -> dict[str, Any]:
         if dt < 0.1:
             dt = 0.1
         read_rate = round((counters.read_bytes - _disk_io._prev[1]) / 1_048_576 / dt, 1)
-        write_rate = round((counters.write_bytes - _disk_io._prev[2]) / 1_048_576 / dt, 1)
+        write_rate = round(
+            (counters.write_bytes - _disk_io._prev[2]) / 1_048_576 / dt, 1
+        )
         _disk_io._prev = (now, counters.read_bytes, counters.write_bytes)
         return {"read_mb_s": max(0, read_rate), "write_mb_s": max(0, write_rate)}
     except Exception:  # noqa: BLE001
@@ -782,6 +861,7 @@ def _net_io() -> dict[str, Any]:
     try:
         import psutil
         import time as _time
+
         counters = psutil.net_io_counters()
         if not counters:
             return {"send_kb_s": 0, "recv_kb_s": 0}
@@ -815,6 +895,7 @@ async def system_stats() -> dict[str, Any]:
     """
     try:
         import psutil
+
         # Seed cpu_percent so the first poll has a real value.
         if not hasattr(system_stats, "_cpu_seeded"):
             psutil.cpu_percent(interval=0.1)
@@ -852,15 +933,24 @@ async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
     generate a final message, and send it to the user before the backend
     gets killed.
     """
+
     async def _delayed_broadcast():
         await asyncio.sleep(3)
-        await svc.manager.broadcast(json.dumps({
-            "type": "restart",
-            "content": "Backend is restarting. This is the same code path as the restart button."
-        }), session_logger=svc.session_logger)
+        await svc.manager.broadcast(
+            json.dumps(
+                {
+                    "type": "restart",
+                    "content": "Backend is restarting. This is the same code path as the restart button.",
+                }
+            ),
+            session_logger=svc.session_logger,
+        )
 
     asyncio.ensure_future(_delayed_broadcast())
-    return {"status": "restart_requested", "message": "Restart scheduled in 3 seconds. Chat loop will finish first, then plugin will restart the backend."}
+    return {
+        "status": "restart_requested",
+        "message": "Restart scheduled in 3 seconds. Chat loop will finish first, then plugin will restart the backend.",
+    }
 
 
 @router.post("/reload-plugin")
@@ -879,20 +969,28 @@ async def reload_plugin_endpoint(svc: Annotated[Services, Depends(get_services)]
     This lets the agent pick up changes to ``main.js`` / ``styles.css``
     without the operator having to manually toggle the plugin in Settings.
     """
-    await svc.manager.broadcast(json.dumps({
-        "type": "reload_plugin",
-        "content": "Plugin reload requested. The plugin will disable and re-enable itself."
-    }), session_logger=svc.session_logger)
+    await svc.manager.broadcast(
+        json.dumps(
+            {
+                "type": "reload_plugin",
+                "content": "Plugin reload requested. The plugin will disable and re-enable itself.",
+            }
+        ),
+        session_logger=svc.session_logger,
+    )
     return {
         "status": "reload_requested",
-        "message": "WebSocket broadcast sent. Plugin will reload itself (disable + re-enable). Backend stays running."
+        "message": "WebSocket broadcast sent. Plugin will reload itself (disable + re-enable). Backend stays running.",
     }
 
 
 # --- /checkpoints: crash-recovery status --------------------------------
 
+
 @router.get("/checkpoints")
-async def checkpoint_status(svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
+async def checkpoint_status(
+    svc: Annotated[Services, Depends(get_services)],
+) -> dict[str, Any]:
     """Return the autonomous researcher's checkpoint state so the UI can
     show whether there's interrupted work to resume after a crash.
     """
@@ -905,7 +1003,8 @@ async def recover_checkpoints(svc: Annotated[Services, Depends(get_services)]):
     try:
         loop = asyncio.get_event_loop()
         recovery = await loop.run_in_executor(
-            None, svc.checkpointer.recover, svc.autonomous_researcher)
+            None, svc.checkpointer.recover, svc.autonomous_researcher
+        )
         return recovery
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return {"error": str(e)}, 500
@@ -934,6 +1033,7 @@ async def nssm_install_script():
 
 
 # --- /broadcast_questionnaire: ask_user tool -> plugin bridge -----------
+
 
 @router.post("/broadcast_questionnaire")
 async def broadcast_questionnaire(
@@ -970,8 +1070,8 @@ async def broadcast_questionnaire(
     if ws_ref is not None:
         # Send to the owning tab only.
         await svc.manager.send_personal_message(
-            json.dumps(payload), ws_ref,
-            session_logger=svc.session_logger)
+            json.dumps(payload), ws_ref, session_logger=svc.session_logger
+        )
     else:
         # Fallback: broadcast to all tabs (legacy behavior).
         await svc.manager.broadcast(
@@ -983,6 +1083,7 @@ async def broadcast_questionnaire(
 
 # --- /user_response: plugin -> ask_user tool bridge ---------------------
 
+
 @router.post("/user_response")
 async def user_response_endpoint(request: Request):
     """Receive the user's answers from the plugin and unblock the waiting
@@ -990,10 +1091,13 @@ async def user_response_endpoint(request: Request):
     endpoint finds the waiting thread and signals it.
     """
     import time as _time
+
     _debug_log = Path(__file__).resolve().parent / "ask_user_debug.log"
+
     def _dbg(msg):
         with open(_debug_log, "a", encoding="utf-8") as _f:
             _f.write(f"{_time.strftime('%H:%M:%S')} {msg}\n")
+
     _dbg("POST /user_response received")
     try:
         payload = await request.json()
@@ -1018,7 +1122,10 @@ async def user_response_endpoint(request: Request):
     entry = _pending_requests.get(request_id)
     if entry is None:
         _dbg(f"request_id {request_id} NOT in pending_requests")
-        return {"status": "error", "message": f"No pending request with id {request_id}"}
+        return {
+            "status": "error",
+            "message": f"No pending request with id {request_id}",
+        }
 
     event, response_holder = entry[0], entry[1]
     # Copy the user's answers into the response holder.

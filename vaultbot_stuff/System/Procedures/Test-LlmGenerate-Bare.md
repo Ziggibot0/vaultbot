@@ -7,6 +7,7 @@ model_cartridge: small
 version: 1.0.0
 activation: manual
 status: raw
+baseline: true
 created: 2026-08-06
 summary: Steps
 tags:

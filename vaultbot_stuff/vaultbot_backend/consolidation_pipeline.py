@@ -39,8 +39,12 @@ class ConsolidationPipeline:
     def __init__(self, vault_path: str = None, backend_path: str = None):
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
         self.backend_path = backend_path or os.path.dirname(os.path.abspath(__file__))
-        self.chat_dir = os.path.join(self.vault_path, "vaultbot_stuff", "Memory", "Chat")
-        self.semantic_dir = os.path.join(self.vault_path, "vaultbot_stuff", "Memory", "Build-Log")
+        self.chat_dir = os.path.join(
+            self.vault_path, "vaultbot_stuff", "Memory", "Chat"
+        )
+        self.semantic_dir = os.path.join(
+            self.vault_path, "vaultbot_stuff", "Memory", "Build-Log"
+        )
         self.log_path = os.path.join(self.backend_path, "consolidation_log.json")
         self._pattern_extractor = None
 
@@ -48,6 +52,7 @@ class ConsolidationPipeline:
     def pattern_extractor(self):
         if self._pattern_extractor is None:
             from pattern_extractor import PatternExtractor
+
             self._pattern_extractor = PatternExtractor(vault_path=self.vault_path)
         return self._pattern_extractor
 
@@ -76,42 +81,49 @@ class ConsolidationPipeline:
             for t in topics:
                 evidence_sources.update(t.get("sessions", []))
                 evidence_count += t.get("total_mentions", 0)
-            clusters.append({
-                "theme": theme,
-                "kind": "recurring_topic",
-                "patterns": topics,
-                "evidence_count": evidence_count,
-                "evidence_sources": sorted(evidence_sources)[:10],
-                "priority": min(100, evidence_count * 5),
-            })
+            clusters.append(
+                {
+                    "theme": theme,
+                    "kind": "recurring_topic",
+                    "patterns": topics,
+                    "evidence_count": evidence_count,
+                    "evidence_sources": sorted(evidence_sources)[:10],
+                    "priority": min(100, evidence_count * 5),
+                }
+            )
 
         # Cluster 2: Sentiment / correction patterns
         sentiment = patterns.get("sentiment", {})
         if sentiment.get("negative_rate", 0) > 0.15:
             neg_exchanges = sentiment.get("negative_exchanges", [])
-            clusters.append({
-                "theme": "operator-correction-patterns",
-                "kind": "correction_pattern",
-                "patterns": neg_exchanges[:10],
-                "evidence_count": len(neg_exchanges),
-                "evidence_sources": [e.get("file", "") for e in neg_exchanges[:10]],
-                "priority": min(80, len(neg_exchanges) * 3),
-                "negative_rate": sentiment.get("negative_rate", 0),
-            })
+            clusters.append(
+                {
+                    "theme": "operator-correction-patterns",
+                    "kind": "correction_pattern",
+                    "patterns": neg_exchanges[:10],
+                    "evidence_count": len(neg_exchanges),
+                    "evidence_sources": [e.get("file", "") for e in neg_exchanges[:10]],
+                    "priority": min(80, len(neg_exchanges) * 3),
+                    "negative_rate": sentiment.get("negative_rate", 0),
+                }
+            )
 
         # Cluster 3: Over-reporting
         over_reporting = patterns.get("over_reporting", {})
         if over_reporting.get("count", 0) >= 3:
-            clusters.append({
-                "theme": "communication-brevity",
-                "kind": "over_reporting",
-                "patterns": over_reporting.get("exchanges", [])[:5],
-                "evidence_count": over_reporting.get("count", 0),
-                "evidence_sources": [
-                    e.get("file", "") for e in over_reporting.get("exchanges", [])[:5]
-                ],
-                "priority": 40,
-            })
+            clusters.append(
+                {
+                    "theme": "communication-brevity",
+                    "kind": "over_reporting",
+                    "patterns": over_reporting.get("exchanges", [])[:5],
+                    "evidence_count": over_reporting.get("count", 0),
+                    "evidence_sources": [
+                        e.get("file", "")
+                        for e in over_reporting.get("exchanges", [])[:5]
+                    ],
+                    "priority": 40,
+                }
+            )
 
         # Cluster 4: Tool workflow patterns
         tool_patterns = patterns.get("tool_patterns", {})
@@ -119,14 +131,16 @@ class ConsolidationPipeline:
         if top_workflows:
             significant = [w for w in top_workflows if w.get("count", 0) >= 10]
             if significant:
-                clusters.append({
-                    "theme": "tool-workflow-patterns",
-                    "kind": "workflow_pattern",
-                    "patterns": significant,
-                    "evidence_count": sum(w.get("count", 0) for w in significant),
-                    "evidence_sources": [],
-                    "priority": 30,
-                })
+                clusters.append(
+                    {
+                        "theme": "tool-workflow-patterns",
+                        "kind": "workflow_pattern",
+                        "patterns": significant,
+                        "evidence_count": sum(w.get("count", 0) for w in significant),
+                        "evidence_sources": [],
+                        "priority": 30,
+                    }
+                )
 
         clusters.sort(key=lambda c: -c.get("priority", 0))
         return clusters
@@ -154,7 +168,7 @@ class ConsolidationPipeline:
         )
         for _session, topics in session_topics.items():
             for i, t1 in enumerate(topics):
-                for t2 in topics[i + 1:]:
+                for t2 in topics[i + 1 :]:
                     topic_co_occurrence[t1][t2] += 1
                     topic_co_occurrence[t2][t1] += 1
 
@@ -253,8 +267,12 @@ class ConsolidationPipeline:
         for p in patterns[:10]:
             desc = ""
             if isinstance(p, dict):
-                desc = (p.get("topic") or p.get("description")
-                        or p.get("name") or json.dumps(p, default=str)[:200])
+                desc = (
+                    p.get("topic")
+                    or p.get("description")
+                    or p.get("name")
+                    or json.dumps(p, default=str)[:200]
+                )
                 mentions = p.get("total_mentions") or p.get("count") or ""
                 if mentions:
                     desc += f" ({mentions} mentions)"
@@ -269,7 +287,7 @@ class ConsolidationPipeline:
         implication = self._TEMPLATE_IMPLICATIONS.get(
             kind,
             "This pattern recurs across sessions and may warrant dedicated "
-            "knowledge structure (a note or a Map of Content)."
+            "knowledge structure (a note or a Map of Content).",
         )
         lines.append(implication)
         lines.append("")
@@ -348,14 +366,18 @@ class ConsolidationPipeline:
         # Check 2: Has wikilinks
         wikilinks = re.findall(r"\[\[([^\]]+)\]\]", note_content)
         if len(wikilinks) < 2:
-            warnings.append(
-                f"Only {len(wikilinks)} wikilinks — should have at least 2"
-            )
+            warnings.append(f"Only {len(wikilinks)} wikilinks — should have at least 2")
 
         # Check 3: Has reasoning language
         reasoning_markers = [
-            "because", "therefore", "which means", "this suggests",
-            "however", "contradicts", "implies", "as a result",
+            "because",
+            "therefore",
+            "which means",
+            "this suggests",
+            "however",
+            "contradicts",
+            "implies",
+            "as a result",
         ]
         has_reasoning = any(
             marker in note_content.lower() for marker in reasoning_markers
@@ -402,9 +424,7 @@ class ConsolidationPipeline:
         status = "verified" if evidence_count >= 3 else "tentative"
         evidence_sources = cluster.get("evidence_sources", [])[:10]
 
-        evidence_links = "\n".join(
-            f'  - "[[{src}]]"' for src in evidence_sources
-        )
+        evidence_links = "\n".join(f'  - "[[{src}]]"' for src in evidence_sources)
 
         frontmatter = (
             f"---\n"
@@ -430,7 +450,10 @@ class ConsolidationPipeline:
         # Pass through inject_schema to fill any missing universal fields
         try:
             from note_schema import inject_schema
-            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "-", cluster.get("theme", "unknown"))[:60]
+
+            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "-", cluster.get("theme", "unknown"))[
+                :60
+            ]
             full_note = inject_schema(
                 full_note,
                 f"vaultbot_stuff/Memory/Build-Log/Semantic-{safe_name}.md",
@@ -481,10 +504,12 @@ class ConsolidationPipeline:
         synthesis_prompts = []
         for cluster in clusters[:5]:  # Top 5 clusters per run
             prompt = self.build_synthesis_prompt(cluster)
-            synthesis_prompts.append({
-                "cluster": cluster,
-                "prompt": prompt,
-            })
+            synthesis_prompts.append(
+                {
+                    "cluster": cluster,
+                    "prompt": prompt,
+                }
+            )
 
         # Log this consolidation run
         self._log_consolidation(patterns, clusters)
@@ -537,13 +562,15 @@ class ConsolidationPipeline:
                 with open(self.log_path, encoding="utf-8") as f:
                     log = json.load(f)
 
-            log["consolidations"].append({
-                "timestamp": datetime.now(UTC).isoformat(),
-                "total_sessions": patterns.get("total_sessions", 0),
-                "total_exchanges": patterns.get("total_exchanges", 0),
-                "clusters_found": len(clusters),
-                "top_clusters": [c["theme"] for c in clusters[:5]],
-            })
+            log["consolidations"].append(
+                {
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "total_sessions": patterns.get("total_sessions", 0),
+                    "total_exchanges": patterns.get("total_exchanges", 0),
+                    "clusters_found": len(clusters),
+                    "top_clusters": [c["theme"] for c in clusters[:5]],
+                }
+            )
             log["last_consolidation"] = datetime.now(UTC).isoformat()
 
             # Keep bounded

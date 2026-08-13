@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-09
 description: "Minimal smoke test for the Dispatch DSL — condition + extract with correct YAML format."

@@ -29,6 +29,7 @@ No real network, no Ollama, no Docker, no vault. Time is controlled by
 monkeypatching free_search.time.time / free_search.time.sleep so cooldown
 windows can be advanced deterministically.
 """
+
 import free_search as fs
 
 
@@ -64,8 +65,14 @@ class _CountingBackend(fs._Backend):
 
     def _raw_search(self, query, max_results):
         self.calls += 1
-        return [{"url": "http://fake/result", "title": "Fake",
-                 "content": "c", "raw_content": ""}]
+        return [
+            {
+                "url": "http://fake/result",
+                "title": "Fake",
+                "content": "c",
+                "raw_content": "",
+            }
+        ]
 
 
 class _BoomBackend(fs._Backend):
@@ -85,8 +92,9 @@ class _GoodBackend(fs._Backend):
     min_interval = 0.0
 
     def _raw_search(self, query, max_results):
-        return [{"url": "http://b", "title": "B",
-                 "content": "content", "raw_content": ""}]
+        return [
+            {"url": "http://b", "title": "B", "content": "content", "raw_content": ""}
+        ]
 
 
 # ---------------------------------------------------------------------------

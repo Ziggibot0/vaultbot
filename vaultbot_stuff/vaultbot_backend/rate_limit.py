@@ -36,7 +36,7 @@ class TokenBucket:
     """A single token bucket with refill rate and burst capacity."""
 
     def __init__(self, rate: float, capacity: int):
-        self.rate = rate          # tokens per second
+        self.rate = rate  # tokens per second
         self.capacity = capacity  # max tokens (burst)
         self.tokens = float(capacity)
         self.last_refill = time.monotonic()
@@ -68,9 +68,9 @@ class RateLimiter:
         self._lock = threading.Lock()
         # Per-path overrides: (rate, capacity)
         self._path_limits: dict[str, tuple[float, int]] = {
-            "/custom_tools/call": (0.167, 10),   # 10/min
-            "/shutdown": (0.083, 5),              # 5/min
-            "/ws": (0.167, 10),                   # 10/min
+            "/custom_tools/call": (0.167, 10),  # 10/min
+            "/shutdown": (0.083, 5),  # 5/min
+            "/ws": (0.167, 10),  # 10/min
         }
         # Last cleanup time.
         self._last_cleanup = time.monotonic()
@@ -100,7 +100,8 @@ class RateLimiter:
 
             # Determine rate/capacity for this path.
             rate, capacity = self._path_limits.get(
-                path, (self.default_rate, self.default_capacity))
+                path, (self.default_rate, self.default_capacity)
+            )
 
             key = self._get_bucket_key(path, client)
             bucket = self._buckets.get(key)

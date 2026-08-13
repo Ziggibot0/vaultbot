@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Diff the working tree against the last commit and summarize what's uncommitted. Runs git diff deterministically, then the small model summarizes the meaningful changes (not whitespace). Use before a commit to verify what will be committed, or to check what's been changed since the last commit.

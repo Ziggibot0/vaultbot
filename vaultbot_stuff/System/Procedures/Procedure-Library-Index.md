@@ -1,6 +1,7 @@
 ---
 type: index
 status: active
+baseline: true
 created: 2026-08-01
 summary: "Catalog of the procedure library, organized by when the big model should reach for each. The compounding design: ONE importable pattern-recognition engine (Pattern-Scan) recognizes patterns across LOTS of notes deterministically; every simple checking procedure just imports Pattern-Scan output (or is a thin filter over it) with a specific domain lens. The 30B big model never reasons over raw notes — it calls a procedure and reads the filtered result."
 tags: [procedures, index, pattern-recognition, 30b, cartridge, compounding]

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find pairs of vault notes that explicitly contradict each other — one says X is true, another says X is false. Scans notes for assertive statements, then the small model checks pairs for direct contradictions. Returns the contradicting pairs with the specific conflicting claims. Use when the vault has grown organically and may contain conflicting information.

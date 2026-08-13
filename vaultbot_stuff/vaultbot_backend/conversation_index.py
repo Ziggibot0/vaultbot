@@ -30,6 +30,7 @@ DESIGN
   keyword matching (simple token overlap) so conversation recall works
   even without a model.
 """
+
 from __future__ import annotations
 
 import logging
@@ -59,7 +60,8 @@ MIN_SCORE = 0.10
 @dataclass
 class _ConvTurn:
     """One indexed conversation turn."""
-    turn_id: int           # sequential, monotonically increasing
+
+    turn_id: int  # sequential, monotonically increasing
     user_message: str
     assistant_answer: str
     timestamp: float
@@ -125,7 +127,10 @@ class ConversationIndex:
                 j = i + 1
                 while j < len(history):
                     next_msg = history[j]
-                    if isinstance(next_msg, dict) and next_msg.get("role") == "assistant":
+                    if (
+                        isinstance(next_msg, dict)
+                        and next_msg.get("role") == "assistant"
+                    ):
                         assistant_text = str(next_msg.get("content", "") or "")
                         break
                     if isinstance(next_msg, dict) and next_msg.get("role") == "user":
@@ -145,9 +150,13 @@ class ConversationIndex:
     # Adding turns
     # ------------------------------------------------------------------ #
 
-    def add_turn(self, user_message: str, assistant_answer: str,
-                 timestamp: float | None = None,
-                 _skip_lock: bool = False) -> None:
+    def add_turn(
+        self,
+        user_message: str,
+        assistant_answer: str,
+        timestamp: float | None = None,
+        _skip_lock: bool = False,
+    ) -> None:
         """Add a completed conversation turn to the index.
 
         Best-effort: embedding failures result in a turn with embedding=None
@@ -203,6 +212,7 @@ class ConversationIndex:
             return
         try:
             import faiss
+
             if self._faiss_index is None:
                 dim = len(turn.embedding)
                 self._faiss_index = faiss.IndexFlatL2(dim)
@@ -223,6 +233,7 @@ class ConversationIndex:
         """Rebuild the FAISS index from the current turns (caller holds lock)."""
         try:
             import faiss
+
             embedded = [t for t in self._turns if t.embedding is not None]
             if not embedded:
                 self._faiss_index = None
@@ -288,15 +299,19 @@ class ConversationIndex:
                     if turn is None:
                         continue
                     # Convert L2 distance to similarity [0,1]
-                    score = max(0.0, 1.0 - float(dist) / 2.0)  # L2 of normalized vectors ∈ [0, 2]
+                    score = max(
+                        0.0, 1.0 - float(dist) / 2.0
+                    )  # L2 of normalized vectors ∈ [0, 2]
                     if score >= MIN_SCORE:
-                        results.append({
-                            "turn_id": turn.turn_id,
-                            "user_message": turn.user_message,
-                            "assistant_answer": turn.assistant_answer,
-                            "score": round(score, 4),
-                            "timestamp": turn.timestamp,
-                        })
+                        results.append(
+                            {
+                                "turn_id": turn.turn_id,
+                                "user_message": turn.user_message,
+                                "assistant_answer": turn.assistant_answer,
+                                "score": round(score, 4),
+                                "timestamp": turn.timestamp,
+                            }
+                        )
             except Exception as e:  # noqa: BLE001
                 self._log.debug("conversation_index vector search failed: %s", e)
                 results = []
@@ -338,8 +353,9 @@ class ConversationIndex:
         results.sort(key=lambda r: r["score"], reverse=True)
         return results[:k]
 
-    def _entity_search(self, query: str,
-                       turns: list[_ConvTurn]) -> list[dict[str, Any]]:
+    def _entity_search(
+        self, query: str, turns: list[_ConvTurn]
+    ) -> list[dict[str, Any]]:
         """Boost turns containing exact [[wikilink]] entities from the query.
 
         Extracts [[entity]] targets from the query (handling | aliases) and
@@ -349,7 +365,7 @@ class ConversationIndex:
         is low. Returns [] when the query has no wikilink entities.
         """
         # Extract [[entity]] targets, strip aliases after |.
-        entities = re.findall(r'\[\[([^\]]+)\]\]', query)
+        entities = re.findall(r"\[\[([^\]]+)\]\]", query)
         if not entities:
             return []
         # Normalize: lowercase, strip whitespace, split on | for alias.
@@ -362,25 +378,28 @@ class ConversationIndex:
         for turn in turns:
             text = (turn.user_message + " " + turn.assistant_answer).lower()
             if any(ent in text for ent in entities):
-                scored.append({
-                    "turn_id": turn.turn_id,
-                    "user_message": turn.user_message,
-                    "assistant_answer": turn.assistant_answer,
-                    "score": ENTITY_BOOST_SCORE,
-                    "timestamp": turn.timestamp,
-                })
+                scored.append(
+                    {
+                        "turn_id": turn.turn_id,
+                        "user_message": turn.user_message,
+                        "assistant_answer": turn.assistant_answer,
+                        "score": ENTITY_BOOST_SCORE,
+                        "timestamp": turn.timestamp,
+                    }
+                )
         return scored
 
-    def _keyword_search(self, query: str, turns: list[_ConvTurn],
-                        k: int) -> list[dict[str, Any]]:
+    def _keyword_search(
+        self, query: str, turns: list[_ConvTurn], k: int
+    ) -> list[dict[str, Any]]:
         """Simple keyword-overlap matching as a fallback / supplement."""
-        query_words = set(re.findall(r'\b\w{3,}\b', query.lower()))
+        query_words = set(re.findall(r"\b\w{3,}\b", query.lower()))
         if not query_words:
             return []
         scored: list[dict[str, Any]] = []
         for turn in turns:
             text = (turn.user_message + " " + turn.assistant_answer).lower()
-            turn_words = set(re.findall(r'\b\w{3,}\b', text))
+            turn_words = set(re.findall(r"\b\w{3,}\b", text))
             if not turn_words:
                 continue
             overlap = len(query_words & turn_words)
@@ -388,13 +407,15 @@ class ConversationIndex:
                 continue
             score = overlap / len(query_words)  # fraction of query words found
             if score >= MIN_SCORE:
-                scored.append({
-                    "turn_id": turn.turn_id,
-                    "user_message": turn.user_message,
-                    "assistant_answer": turn.assistant_answer,
-                    "score": round(score, 4),
-                    "timestamp": turn.timestamp,
-                })
+                scored.append(
+                    {
+                        "turn_id": turn.turn_id,
+                        "user_message": turn.user_message,
+                        "assistant_answer": turn.assistant_answer,
+                        "score": round(score, 4),
+                        "timestamp": turn.timestamp,
+                    }
+                )
         scored.sort(key=lambda r: r["score"], reverse=True)
         return scored[:k]
 
@@ -417,8 +438,9 @@ class ConversationIndex:
             return len(self._turns)
 
 
-def build_conversation_context(results: list[dict[str, Any]],
-                                max_chars: int = 3000) -> str:
+def build_conversation_context(
+    results: list[dict[str, Any]], max_chars: int = 3000
+) -> str:
     """Format conversation search results into a context string for injection.
 
     Returns a ``# PRIOR CONVERSATION`` block suitable for appending to the
@@ -515,8 +537,9 @@ class ConversationIndexRegistry:
     # Back-compat: proxy the legacy ``size`` property and ``rebuild_from_history``
     # to the first index so existing callers that use ``svc.conversation_index``
     # directly still work.  New callers should use ``get(session_id)``.
-    def rebuild_from_history(self, history: list[dict[str, Any]],
-                             session_id: str | None = None) -> None:
+    def rebuild_from_history(
+        self, history: list[dict[str, Any]], session_id: str | None = None
+    ) -> None:
         """Rebuild the index for ``session_id`` from history."""
         idx = self.get(session_id)
         idx.rebuild_from_history(history)

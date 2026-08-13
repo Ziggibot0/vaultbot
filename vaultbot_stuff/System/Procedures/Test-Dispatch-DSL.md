@@ -8,6 +8,7 @@ model_cartridge: small
 version: 1.1.0
 activation: manual
 status: raw
+baseline: true
 created: 2026-08-06
 summary: "YAML DSL smoke test: classify → dispatch → call tool → condition on result (dotted field + _prev)"
 tags:

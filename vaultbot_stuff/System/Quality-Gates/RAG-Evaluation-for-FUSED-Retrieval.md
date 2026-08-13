@@ -9,6 +9,7 @@ tags:
   - metrics
 type: semantic
 status: raw
+baseline: true
 ---
 
 # RAG Evaluation for FUSED Retrieval

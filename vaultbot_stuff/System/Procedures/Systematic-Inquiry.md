@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Lens procedure for exploring open questions through structured Socratic questioning. Based on the Socratic method's six operations and dialectical reasoning. Used for research/exploration problems where the question is more important than the answer."
 tags: [procedure, think, lens, systematic-inquiry, socratic, research, exploration]

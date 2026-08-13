@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-05
 description: "Scan a Python file for complexity anti-patterns: functions that are too long (>50 lines), excessive nesting depth (>4 levels), too many branches (if/elif/else chains). Returns structured report with severity and fix suggestions."

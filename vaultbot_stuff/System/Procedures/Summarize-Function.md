@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Read a Python function and produce a concise summary of what it does, its inputs, outputs, and side effects. Given a file path and function name, extracts the function body and has the small model summarize it. Use when you need to understand a function before editing it, or when documenting code.

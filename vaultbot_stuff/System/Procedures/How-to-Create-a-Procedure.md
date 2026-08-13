@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: A step-by-step guide to creating a new, valid procedure note. Covers decision-making (tool vs proc), frontmatter structure, step types, and final validation.

@@ -39,11 +39,11 @@ except Exception:  # pragma: no cover - ollama_client is optional at import time
 
 # --- Regex extractors for `extract` (pure stdlib, no LLM required) --------
 _QUOTED_PHRASE_RE = re.compile(r'\"([^"]{2,80})\"')
-_TITLECASE_RE = re.compile(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b')
+_TITLECASE_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b")
 # A "key fact" heuristic: sentences containing a digit or a definition cue.
 _FACT_CUE_RE = re.compile(
-    r'([A-Z][^.!?\n]{15,220}?(?:\b(?:is|are|was|were|means|defined as)\b'
-    r'|\d+)[^.!?\n]{0,180}[.!?])'
+    r"([A-Z][^.!?\n]{15,220}?(?:\b(?:is|are|was|were|means|defined as)\b"
+    r"|\d+)[^.!?\n]{0,180}[.!?])"
 )
 
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
@@ -164,12 +164,14 @@ class GraphOpRegistry:
             for r in raw:
                 fp = r.get("file_path", "")
                 content = r.get("content", "")
-                results.append({
-                    "title": Path(fp).stem if fp else "",
-                    "path": fp,
-                    "snippet": self._make_snippet(content),
-                    "score": r.get("score", 0.0),
-                })
+                results.append(
+                    {
+                        "title": Path(fp).stem if fp else "",
+                        "path": fp,
+                        "snippet": self._make_snippet(content),
+                        "score": r.get("score", 0.0),
+                    }
+                )
             out = {"results": results, "count": len(results)}
             self._log("search", {"query": query, "k": k}, out)
             return out
@@ -206,11 +208,23 @@ class GraphOpRegistry:
             for m in _TITLECASE_RE.findall(text):
                 entities_set.add(m.strip())
             # Filter common single-word false positives.
-            stop_single = {"The", "This", "That", "These", "Those", "It",
-                           "They", "We", "You", "He", "She", "There", "Here"}
+            stop_single = {
+                "The",
+                "This",
+                "That",
+                "These",
+                "Those",
+                "It",
+                "They",
+                "We",
+                "You",
+                "He",
+                "She",
+                "There",
+                "Here",
+            }
             entities = sorted(
-                e for e in entities_set
-                if e not in stop_single and len(e) >= 2
+                e for e in entities_set if e not in stop_single and len(e) >= 2
             )
 
             key_facts: list[str] = []
@@ -225,7 +239,11 @@ class GraphOpRegistry:
             # cases, and the LLM enrichment is a polish step, not a knowledge
             # step). Enable with VAULTBOT_EXTRACT_LLM_ENRICH=on.
             _ENRICH = os.getenv("VAULTBOT_EXTRACT_LLM_ENRICH", "off").lower() in (
-                "on", "true", "1", "yes")
+                "on",
+                "true",
+                "1",
+                "yes",
+            )
             if _ENRICH and self.ollama_client is not None:
                 try:
                     prompt = (
@@ -238,6 +256,7 @@ class GraphOpRegistry:
                     # structured task (return JSON) that doesn't need the
                     # big model's reasoning power. Saves cloud tokens.
                     from llm_client import get_small_client_or_big
+
                     _extract_client = get_small_client_or_big()
                     resp = _extract_client.generate(
                         prompt, temperature=0.2, max_tokens=600
@@ -249,7 +268,8 @@ class GraphOpRegistry:
                         end = raw_llm.rfind("}")
                         if start != -1 and end != -1 and end > start:
                             import json
-                            parsed = json.loads(raw_llm[start:end + 1])
+
+                            parsed = json.loads(raw_llm[start : end + 1])
                             llm_ents = parsed.get("entities", [])
                             llm_facts = parsed.get("key_facts", [])
                             if isinstance(llm_ents, list):
@@ -284,6 +304,7 @@ class GraphOpRegistry:
         the graph AFTER notes exist.
         """
         from vault_guard import VaultWriteForbidden, assert_writable
+
         try:
             source = args.get("source_note")
             target = args.get("target_note")
@@ -292,30 +313,41 @@ class GraphOpRegistry:
 
             src_path = self._resolve_note(source)
             if src_path is None:
-                return {"linked": False, "reason": "source does not exist",
-                        "source_path": source}
+                return {
+                    "linked": False,
+                    "reason": "source does not exist",
+                    "source_path": source,
+                }
             # Sacred/locked guard: never let the LLM rewrite a date-only
             # journal file or a LOCKED note (link appends to the source).
             try:
                 assert_writable(src_path)
             except VaultWriteForbidden as e:
-                return {"linked": False, "reason": "write blocked: " + e.reason,
-                        "source_path": str(src_path)}
+                return {
+                    "linked": False,
+                    "reason": "write blocked: " + e.reason,
+                    "source_path": str(src_path),
+                }
             tgt_path = self._resolve_note(target)
             if tgt_path is None:
-                return {"linked": False, "reason": "target does not exist",
-                        "source_path": str(src_path),
-                        "target_exists": False}
+                return {
+                    "linked": False,
+                    "reason": "target does not exist",
+                    "source_path": str(src_path),
+                    "target_exists": False,
+                }
 
             target_stem = tgt_path.stem
             content = src_path.read_text(encoding="utf-8", errors="replace")
             link_token = f"[[{target_stem}]]"
             # Idempotent: any existing link to the target stem means no-op.
-            if re.search(rf"\[\[{re.escape(target_stem)}(?:\|[^\]]+)?\]\]",
-                         content):
-                return {"linked": False, "reason": "already linked",
-                        "source_path": str(src_path),
-                        "target_exists": True}
+            if re.search(rf"\[\[{re.escape(target_stem)}(?:\|[^\]]+)?\]\]", content):
+                return {
+                    "linked": False,
+                    "reason": "already linked",
+                    "source_path": str(src_path),
+                    "target_exists": True,
+                }
 
             new_content = content.rstrip() + f"\n\n- {link_token}\n"
             src_path.write_text(new_content, encoding="utf-8")
@@ -324,8 +356,7 @@ class GraphOpRegistry:
                 self.vault_graph.refresh()
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
-            out = {"linked": True, "source_path": str(src_path),
-                   "target_exists": True}
+            out = {"linked": True, "source_path": str(src_path), "target_exists": True}
             self._log("link", args, out)
             return out
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -357,7 +388,7 @@ class GraphOpRegistry:
                     "source_count": source_count,
                     "facts": report.get("synthesis_facts", 0),
                     "warning": f"only {source_count} sources "
-                               f"(min_sources={min_sources})",
+                    f"(min_sources={min_sources})",
                 }
             out = {
                 "synthesis": report.get("synthesis", ""),
@@ -403,11 +434,14 @@ class GraphOpRegistry:
             # Sacred/locked guard: never let the LLM create or append to a
             # date-only journal file or a LOCKED note.
             from vault_guard import VaultWriteForbidden, assert_writable
+
             try:
                 assert_writable(note_path)
             except VaultWriteForbidden as e:
-                return {"error": "write blocked: " + e.reason,
-                        "note_path": str(note_path)}
+                return {
+                    "error": "write blocked: " + e.reason,
+                    "note_path": str(note_path),
+                }
 
             section_header = f"## {title}"
             section_body = body.strip()
@@ -423,8 +457,10 @@ class GraphOpRegistry:
                 # Inject universal schema frontmatter
                 try:
                     from note_schema import inject_schema
-                    rel = str(note_path.relative_to(
-                        self.vault_graph.vault_path)).replace("\\", "/")
+
+                    rel = str(
+                        note_path.relative_to(self.vault_graph.vault_path)
+                    ).replace("\\", "/")
                     content = inject_schema(content, rel)
                 except ImportError:
                     pass
@@ -434,9 +470,12 @@ class GraphOpRegistry:
                 existing = note_path.read_text(encoding="utf-8", errors="replace")
                 # Idempotency: skip if an identical section already present.
                 if new_section.strip() in existing:
-                    out = {"note_path": str(note_path),
-                           "created": False, "appended": False,
-                           "reason": "identical section already present"}
+                    out = {
+                        "note_path": str(note_path),
+                        "created": False,
+                        "appended": False,
+                        "reason": "identical section already present",
+                    }
                     self._log("create_note", args, out)
                     return out
                 updated = existing.rstrip() + "\n\n" + new_section
@@ -453,8 +492,11 @@ class GraphOpRegistry:
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
 
-            out = {"note_path": str(note_path), "created": created,
-                   "appended": appended}
+            out = {
+                "note_path": str(note_path),
+                "created": created,
+                "appended": appended,
+            }
             self._log("create_note", args, out)
             return out
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -491,20 +533,27 @@ class GraphOpRegistry:
             new_content = header + desc_line + proc_line
 
             if skill_path.exists():
-                existing = skill_path.read_text(encoding="utf-8",
-                                                 errors="replace")
+                existing = skill_path.read_text(encoding="utf-8", errors="replace")
                 # Idempotent on name + description match.
-                if (f"**Description:** {description}" in existing
-                        and f"# Skill: {name}" in existing):
-                    out = {"skill_path": str(skill_path), "created": False,
-                           "reason": "skill already registered"}
+                if (
+                    f"**Description:** {description}" in existing
+                    and f"# Skill: {name}" in existing
+                ):
+                    out = {
+                        "skill_path": str(skill_path),
+                        "created": False,
+                        "reason": "skill already registered",
+                    }
                     self._log("learn_skill", args, out)
                     return out
                 # Update procedure body if description matches but procedure
                 # differs (still safe — last write wins, deterministic).
                 skill_path.write_text(new_content, encoding="utf-8")
-                out = {"skill_path": str(skill_path), "created": False,
-                       "reason": "updated existing skill"}
+                out = {
+                    "skill_path": str(skill_path),
+                    "created": False,
+                    "reason": "updated existing skill",
+                }
                 self._log("learn_skill", args, out)
                 return out
 
@@ -534,8 +583,11 @@ class GraphOpRegistry:
 
             resolved = self._resolve_note(note_path)
             if resolved is None:
-                return {"passed": False, "check": check,
-                        "details": f"note not found: {note_path}"}
+                return {
+                    "passed": False,
+                    "check": check,
+                    "details": f"note not found: {note_path}",
+                }
 
             content = resolved.read_text(encoding="utf-8", errors="replace")
             word_count = len(content.split())
@@ -552,8 +604,11 @@ class GraphOpRegistry:
                 try:
                     n = int(check.split(":", 1)[1])
                 except ValueError:
-                    return {"passed": False, "check": check,
-                            "details": "invalid min_words value"}
+                    return {
+                        "passed": False,
+                        "check": check,
+                        "details": "invalid min_words value",
+                    }
                 passed = word_count >= n
                 details = f"word_count={word_count} (min {n})"
             elif check == "has_links":
@@ -563,8 +618,11 @@ class GraphOpRegistry:
                 passed = len(source_markers) > 0
                 details = f"source_count={len(source_markers)}"
             else:
-                return {"passed": False, "check": check,
-                        "details": f"unknown check: {check}"}
+                return {
+                    "passed": False,
+                    "check": check,
+                    "details": f"unknown check: {check}",
+                }
 
             out = {"passed": passed, "check": check, "details": details}
             self._log("verify", args, out)
@@ -678,8 +736,7 @@ SCHEMAS: list[dict[str, Any]] = [
                     "min_sources": {
                         "type": "integer",
                         "description": (
-                            "Minimum source count for a trustworthy result "
-                            "(default 3)."
+                            "Minimum source count for a trustworthy result (default 3)."
                         ),
                     },
                 },

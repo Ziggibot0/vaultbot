@@ -24,6 +24,7 @@ If you need a runtime override for a value here, keep the existing
 ``os.environ.get(NAME, str(TUNABLES.x))`` pattern so the default is
 discoverable from this file.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -40,18 +41,59 @@ class Tunables:
     # ── Trivial-turn classifier (chat_handler._classify_trivial) ──────────
     # Short greetings / confirmations routed to the small model directly.
     trivial_max_len: int = 80  # max chars for a message to be "trivial"
-    trivial_exact: frozenset[str] = field(default_factory=lambda: frozenset({
-        "hi", "hello", "hey", "yo", "sup", "howdy", "greetings",
-        "thanks", "thank you", "thx", "ty", "cool", "nice", "great", "awesome",
-        "ok", "okay", "sure", "got it", "understood", "makes sense", "perfect",
-        "bye", "goodbye", "see ya", "later", "good night",
-        "yes", "no", "yep", "nope", "maybe",
-        "lol", "haha", "hmm", "huh",
-    }))
+    trivial_exact: frozenset[str] = field(
+        default_factory=lambda: frozenset(
+            {
+                "hi",
+                "hello",
+                "hey",
+                "yo",
+                "sup",
+                "howdy",
+                "greetings",
+                "thanks",
+                "thank you",
+                "thx",
+                "ty",
+                "cool",
+                "nice",
+                "great",
+                "awesome",
+                "ok",
+                "okay",
+                "sure",
+                "got it",
+                "understood",
+                "makes sense",
+                "perfect",
+                "bye",
+                "goodbye",
+                "see ya",
+                "later",
+                "good night",
+                "yes",
+                "no",
+                "yep",
+                "nope",
+                "maybe",
+                "lol",
+                "haha",
+                "hmm",
+                "huh",
+            }
+        )
+    )
     trivial_prefixes: tuple[str, ...] = (
-        "what can you do", "who are you", "what are you", "introduce yourself",
-        "help", "what's your name", "what is your name",
-        "good morning", "good afternoon", "good evening",
+        "what can you do",
+        "who are you",
+        "what are you",
+        "introduce yourself",
+        "help",
+        "what's your name",
+        "what is your name",
+        "good morning",
+        "good afternoon",
+        "good evening",
     )
 
     # ── Proactive tool-result aging (chat_handler._age_old_tool_results) ──
@@ -99,9 +141,9 @@ class Tunables:
     # ── Token estimation ─────────────────────────────────────────────────
     # Hard caps on the subprocess stdout/stderr read back into backend RAM,
     # so a verbose child cannot OOM the single backend process.
-    code_run_cap_bytes: int = 65536      # per-stream write cap on disk (64KB)
-    code_run_stdout_tail: int = 4000     # bytes of stdout read back
-    code_run_stderr_tail: int = 2000     # bytes of stderr read back
+    code_run_cap_bytes: int = 65536  # per-stream write cap on disk (64KB)
+    code_run_stdout_tail: int = 4000  # bytes of stdout read back
+    code_run_stderr_tail: int = 2000  # bytes of stderr read back
 
     # ── Vault context file count cap ──────────────────────────────────────
     # Maximum number of files (L1 cards + MOC + L0 drill-down in the abstract
@@ -125,8 +167,8 @@ class Tunables:
 
     # ── Session log retention (session_logger.sweep_old_sessions) ────────
     session_log_retention_count: int = 200  # keep newest N files
-    session_log_retention_days: int = 30    # delete files older than N days
-    session_log_max_file_mb: int = 5        # truncate a single file over this
+    session_log_retention_days: int = 30  # delete files older than N days
+    session_log_max_file_mb: int = 5  # truncate a single file over this
 
 
 # The single importable instance. Frozen — do not mutate.

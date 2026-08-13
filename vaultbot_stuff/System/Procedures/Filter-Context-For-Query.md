@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Filter vault context sections by relevance to a query. Given a user query and a list of context sections (each with an id, title, and preview), the small model picks which sections to keep and which to drop. Returns a JSON array of section IDs to keep. Used by the chat pipeline to reduce what the big model sees.

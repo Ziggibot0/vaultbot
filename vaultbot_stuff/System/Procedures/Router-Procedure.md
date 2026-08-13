@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: draft
+baseline: true
 created: 2026-08-10
 summary: "Router procedure for the VaultBot loop – orchestrates procedure selection based on intent and context."
 description: |

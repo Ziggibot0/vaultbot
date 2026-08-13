@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find notes that cover a specific topic but are written from different angles or for different audiences. Given a topic, finds all notes about it and the small model classifies each by perspective (overview, how-to, reference, analysis, record). Can also diff two specific notes about the same concept to highlight what each covers that the other doesn't. Replaces the former Note-Content-Diff procedure.

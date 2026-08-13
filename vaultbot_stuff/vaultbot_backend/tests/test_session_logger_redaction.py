@@ -7,6 +7,7 @@ Covers two signals:
 Over-redacts rather than under-redacts. A false positive only replaces a log
 field with [REDACTED], never breaks the app.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,7 +58,9 @@ def test_logger_writes_redacted_to_disk(tmp_path: Path):
     s = SessionLogger(log_dir=str(tmp_path))
     s.log("test", {"api_key": "sk-secret-1234567890abcdef", "model": "qwen3.6:27b"})
     s.close()
-    line = s._file_path.read_text(encoding="utf-8").splitlines()[1]  # [0] is session_start
+    line = s._file_path.read_text(encoding="utf-8").splitlines()[
+        1
+    ]  # [0] is session_start
     record = json.loads(line)
     assert record["data"]["api_key"] == "[REDACTED]"
     assert record["data"]["model"] == "qwen3.6:27b"

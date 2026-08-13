@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Judge whether a plan has been completed. Given a plan's goal and subtask results, returns whether the plan is complete, reasoning, and any missing subtasks. Uses the small model — judging completion is simple verification.

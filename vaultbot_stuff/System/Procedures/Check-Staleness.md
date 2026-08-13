@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-04
 description: "Granular probe: filters Vault-Walk output to identify stale notes (age_days > 30). A ~10-line filter — no vault walk needed. Returns JSON list of stale note records."

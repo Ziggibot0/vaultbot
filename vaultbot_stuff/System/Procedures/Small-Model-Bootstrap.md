@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: Session-start orientation for small models. Outputs the operating contract — which tools you may call, which you must never call raw, and the one rule that matters (procedures first). Deterministic, zero LLM cost. Run this at the start of every small-model session or whenever the model seems lost.

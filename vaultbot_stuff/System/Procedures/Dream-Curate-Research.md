@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-09
 description: "Curate raw research notes: evaluate quality, upgrade status, add missing wikilinks, flag thin/duplicate notes for merge or deletion. Called by Dream-Pass to convert the backlog of raw research notes into connected knowledge."

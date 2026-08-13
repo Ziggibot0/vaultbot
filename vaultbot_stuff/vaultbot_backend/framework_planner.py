@@ -30,6 +30,7 @@ The model still calls ``update_task`` to mark steps in_progress → completed
 during the loop; the framework doesn't drive step transitions. Only the
 initial plan is framework-driven.
 """
+
 from __future__ import annotations
 
 import json
@@ -50,8 +51,8 @@ _PLAN_SYSTEM = (
     "Rules:\n"
     "- Even a trivial message gets a 1-step plan (e.g. greeting → "
     '["respond to the user"]).\n'
-    "- Each step is a short imperative (\"search the vault for X\", "
-    "\"write a note about Y\").\n"
+    '- Each step is a short imperative ("search the vault for X", '
+    '"write a note about Y").\n'
     "- 1-7 steps. More than 7 means the steps are too granular — merge them.\n"
     "- Output ONLY the JSON. No prose, no markdown fences, no explanation.\n"
 )
@@ -147,9 +148,12 @@ def framework_plan(
     if plan is None:
         if session_logger is not None:
             try:
-                session_logger.log("framework_plan_parse_failed", {
-                    "response_preview": text[:200],
-                })
+                session_logger.log(
+                    "framework_plan_parse_failed",
+                    {
+                        "response_preview": text[:200],
+                    },
+                )
             except Exception:  # noqa: BLE001
                 pass
         return None
@@ -168,10 +172,13 @@ def framework_plan(
 
     if session_logger is not None:
         try:
-            session_logger.log("framework_plan_built", {
-                "goal": goal[:100],
-                "steps": len(steps),
-            })
+            session_logger.log(
+                "framework_plan_built",
+                {
+                    "goal": goal[:100],
+                    "steps": len(steps),
+                },
+            )
         except Exception:  # noqa: BLE001
             pass
     return goal, steps

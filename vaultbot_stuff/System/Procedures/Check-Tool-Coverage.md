@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Check if the vaultbot has the tools it needs for a task. Given a task description, lists all available tools (injected + custom), and the small model assesses whether the toolset covers the task. Returns missing capabilities and suggests which to create. Use when the vaultbot hits a wall or before starting a complex task.

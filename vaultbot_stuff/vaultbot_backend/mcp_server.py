@@ -92,9 +92,11 @@ def _backend_custom_tools() -> dict[str, Any]:
 
 def _backend_call_custom_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     try:
-        resp = requests.post(f"{BACKEND_URL}/custom_tools/call",
-                              json={"name": name, "args": args},
-                              timeout=RESEARCH_TIMEOUT)
+        resp = requests.post(
+            f"{BACKEND_URL}/custom_tools/call",
+            json={"name": name, "args": args},
+            timeout=RESEARCH_TIMEOUT,
+        )
         resp.raise_for_status()
         return resp.json()
     except requests.RequestException as e:
@@ -171,15 +173,15 @@ def _dispatch_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"isError": False, "text": _format_gaps(result)}
     if name == "vaultbot_status":
         result = _backend_status()
-        return {"isError": False,
-                "text": json.dumps(result, indent=2, default=str)}
+        return {"isError": False, "text": json.dumps(result, indent=2, default=str)}
     # Custom (agent-authored) tools: dispatch via the backend.
     result = _backend_call_custom_tool(name, args)
     if isinstance(result, dict) and result.get("error"):
-        return {"isError": True,
-                "text": f"Custom tool '{name}' error: {result['error']}"}
-    return {"isError": False,
-            "text": json.dumps(result, indent=2, default=str)}
+        return {
+            "isError": True,
+            "text": f"Custom tool '{name}' error: {result['error']}",
+        }
+    return {"isError": False, "text": json.dumps(result, indent=2, default=str)}
 
 
 # Minimal MCP stdio server (JSON-RPC 2.0) — no external deps -------------
@@ -194,8 +196,9 @@ def _make_response(msg_id: Any, result: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": msg_id, "result": result}
 
 
-def _make_error(msg_id: Any, code: int, message: str,
-                data: Any = None) -> dict[str, Any]:
+def _make_error(
+    msg_id: Any, code: int, message: str, data: Any = None
+) -> dict[str, Any]:
     err = {"code": code, "message": message}
     if data is not None:
         err["data"] = data
@@ -211,11 +214,14 @@ def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
         return None
     params = msg.get("params") or {}
     if method == "initialize":
-        return _make_response(msg_id, {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": CAPABILITIES,
-            "serverInfo": SERVER_INFO,
-        })
+        return _make_response(
+            msg_id,
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": CAPABILITIES,
+                "serverInfo": SERVER_INFO,
+            },
+        )
     if method == "tools/list":
         # Fetch agent-authored custom tools from the backend and merge them
         # with the built-in tools so external clients see everything.
@@ -225,12 +231,15 @@ def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
             for t in ct.get("tools", []):
                 fn = t.get("function", {})
                 if fn.get("name"):
-                    tools.append({
-                        "name": fn["name"],
-                        "description": fn.get("description", ""),
-                        "inputSchema": fn.get("parameters",
-                                                {"type": "object", "properties": {}}),
-                    })
+                    tools.append(
+                        {
+                            "name": fn["name"],
+                            "description": fn.get("description", ""),
+                            "inputSchema": fn.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        }
+                    )
         return _make_response(msg_id, {"tools": tools})
     if method == "tools/call":
         tool_name = params.get("name", "")
@@ -298,12 +307,17 @@ def _format_research_result(result: dict[str, Any]) -> str:
     if result.get("note_path"):
         lines += ["## Note written", f"[[{Path(result['note_path']).stem}]]", ""]
     if result.get("gaps_filled"):
-        lines += ["## Gap-fill queries",
-                  "\n".join(f"- {g}" for g in result["gaps_filled"]), ""]
+        lines += [
+            "## Gap-fill queries",
+            "\n".join(f"- {g}" for g in result["gaps_filled"]),
+            "",
+        ]
     if result.get("sources"):
         lines += ["## Sources"]
-        lines += [f"- [{s.get('title') or s.get('url')}]({s.get('url')})"
-                  for s in result["sources"][:12]]
+        lines += [
+            f"- [{s.get('title') or s.get('url')}]({s.get('url')})"
+            for s in result["sources"][:12]
+        ]
     return "\n".join(lines)
 
 

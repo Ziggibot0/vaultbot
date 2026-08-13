@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Refine a concept card from an extractive sketch to a tight 2-4 sentence semantic summary. Preserves wikilinks. Uses the small model — it's a simple summarization of existing content.

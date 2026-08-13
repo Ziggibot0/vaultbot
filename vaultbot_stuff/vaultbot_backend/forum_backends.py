@@ -38,6 +38,7 @@ class _ForumBackend:
     Mirrors free_search._Backend's interface but is self-contained to avoid
     circular imports. Subclasses implement _raw_search().
     """
+
     name = "base"
     min_interval = 1.0
     cooldown_seconds = 60.0
@@ -83,8 +84,9 @@ class _ForumBackend:
     def is_configured(self) -> bool:
         return True
 
-    def search(self, query: str, max_results: int = 5
-               ) -> tuple[list[dict[str, Any]], str | None]:
+    def search(
+        self, query: str, max_results: int = 5
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """Return (results, error_or_None). Handles cooldown + throttle."""
         if self._in_cooldown():
             return [], f"cooldown:{int(self._cooldown_until - time.time())}s"
@@ -118,7 +120,7 @@ def _strip_site_operators(query: str) -> str:
 # ---------------------------------------------------------------------------
 class GitHubIssuesBackend(_ForumBackend):
     name = "github_issues"
-    min_interval = 6.5          # ~9 req/min to stay under the 10/min limit
+    min_interval = 6.5  # ~9 req/min to stay under the 10/min limit
     cooldown_seconds = 120.0
     ban_threshold = 3
 
@@ -130,10 +132,16 @@ class GitHubIssuesBackend(_ForumBackend):
             return []
         resp = requests.get(
             self.API_URL,
-            params={"q": q, "per_page": min(max_results, 10),
-                    "sort": "relevance", "order": "desc"},
-            headers={"Accept": "application/vnd.github.v3+json",
-                     "User-Agent": "VaultBot-Research"},
+            params={
+                "q": q,
+                "per_page": min(max_results, 10),
+                "sort": "relevance",
+                "order": "desc",
+            },
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "VaultBot-Research",
+            },
             timeout=self.timeout,
         )
         resp.raise_for_status()
@@ -146,12 +154,14 @@ class GitHubIssuesBackend(_ForumBackend):
             title = item.get("title", "")
             body = (item.get("body") or "")[:3000]
             snippet = body[:400] if body else title
-            results.append({
-                "url": url,
-                "title": title,
-                "content": snippet,
-                "raw_content": body,  # full issue/PR body — no scrape needed
-            })
+            results.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "content": snippet,
+                    "raw_content": body,  # full issue/PR body — no scrape needed
+                }
+            )
         return results
 
 
@@ -191,15 +201,19 @@ class StackOverflowBackend(_ForumBackend):
                 continue
             title = item.get("title", "")
             tags = item.get("tags", [])
-            snippet = (f"Score: {item.get('score', 0)}, "
-                       f"Answers: {item.get('answer_count', 0)}, "
-                       f"Tags: {', '.join(tags[:5])}")
-            results.append({
-                "url": url,
-                "title": title,
-                "content": snippet,
-                "raw_content": "",  # SO API doesn't return body — scrape later
-            })
+            snippet = (
+                f"Score: {item.get('score', 0)}, "
+                f"Answers: {item.get('answer_count', 0)}, "
+                f"Tags: {', '.join(tags[:5])}"
+            )
+            results.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "content": snippet,
+                    "raw_content": "",  # SO API doesn't return body — scrape later
+                }
+            )
         return results
 
 
@@ -212,22 +226,83 @@ class StackOverflowBackend(_ForumBackend):
 # should be skipped (arXiv returns garbage for programming questions).
 _TECHNICAL_SIGNALS = {
     # Languages
-    "python", "javascript", "typescript", "rust", "golang", "kotlin",
-    "swift", "ruby", "php", "c++", "c#", "scala", "julia", "perl", "lua",
+    "python",
+    "javascript",
+    "typescript",
+    "rust",
+    "golang",
+    "kotlin",
+    "swift",
+    "ruby",
+    "php",
+    "c++",
+    "c#",
+    "scala",
+    "julia",
+    "perl",
+    "lua",
     # Dev tools & platforms
-    "github", "stackoverflow", "reddit", "gitlab", "bitbucket", "jenkins",
-    "docker", "kubernetes", "npm", "yarn", "cargo", "maven", "gradle",
-    "pip", "pypi", "webpack", "babel", "vscode", "intellij",
+    "github",
+    "stackoverflow",
+    "reddit",
+    "gitlab",
+    "bitbucket",
+    "jenkins",
+    "docker",
+    "kubernetes",
+    "npm",
+    "yarn",
+    "cargo",
+    "maven",
+    "gradle",
+    "pip",
+    "pypi",
+    "webpack",
+    "babel",
+    "vscode",
+    "intellij",
     # Libraries / frameworks
-    "faiss", "pytorch", "tensorflow", "numpy", "pandas", "opencv", "scikit",
-    "react", "vue", "angular", "django", "flask", "fastapi", "sqlalchemy",
-    "langchain", "llama", "huggingface", "transformers", "ollama",
-    "onnx", "onnxruntime", "beautifulsoup", "scrapy", "celery", "redis",
-    "elasticsearch", "postgresql", "mysql", "sqlite", "mongodb",
+    "faiss",
+    "pytorch",
+    "tensorflow",
+    "numpy",
+    "pandas",
+    "opencv",
+    "scikit",
+    "react",
+    "vue",
+    "angular",
+    "django",
+    "flask",
+    "fastapi",
+    "sqlalchemy",
+    "langchain",
+    "llama",
+    "huggingface",
+    "transformers",
+    "ollama",
+    "onnx",
+    "onnxruntime",
+    "beautifulsoup",
+    "scrapy",
+    "celery",
+    "redis",
+    "elasticsearch",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "mongodb",
     # Error / debug terms (high confidence for programming)
-    "segfault", "traceback", "stacktrace", "compiler", "debugger",
+    "segfault",
+    "traceback",
+    "stacktrace",
+    "compiler",
+    "debugger",
     # FAISS-specific (our current use case)
-    "indexidmap", "indexflat", "remove_ids", "add_with_ids",
+    "indexidmap",
+    "indexflat",
+    "remove_ids",
+    "add_with_ids",
 }
 
 
@@ -265,32 +340,97 @@ def is_technical_query(query: str) -> bool:
 # any of these is likely to have relevant arXiv results.
 _ACADEMIC_SIGNALS = {
     # Scientific fields
-    "physics", "mathematics", "biology", "chemistry", "neuroscience",
-    "linguistics", "philosophy", "economics", "sociology", "psychology",
-    "astronomy", "geology", "ecology", "genetics", "immunology",
+    "physics",
+    "mathematics",
+    "biology",
+    "chemistry",
+    "neuroscience",
+    "linguistics",
+    "philosophy",
+    "economics",
+    "sociology",
+    "psychology",
+    "astronomy",
+    "geology",
+    "ecology",
+    "genetics",
+    "immunology",
     # Research-paper vocabulary
-    "theorem", "lemma", "proof", "corollary", "algorithm", "complexity",
-    "polynomial", "asymptotic", "convergence", "optimal", "bounds",
-    "estimation", "inference", "regression", "classification", "embedding",
-    "regularization", "optimization", "gradient", "stochastic",
+    "theorem",
+    "lemma",
+    "proof",
+    "corollary",
+    "algorithm",
+    "complexity",
+    "polynomial",
+    "asymptotic",
+    "convergence",
+    "optimal",
+    "bounds",
+    "estimation",
+    "inference",
+    "regression",
+    "classification",
+    "embedding",
+    "regularization",
+    "optimization",
+    "gradient",
+    "stochastic",
     # ML / AI research terms
-    "neural", "transformer", "attention", "reinforcement", "supervised",
-    "unsupervised", "representation", "generative", "discriminative",
-    "encoder", "decoder", "backpropagation", "convolutional",
-    "recurrent", "graph", "bayesian", "probabilistic", "statistical",
+    "neural",
+    "transformer",
+    "attention",
+    "reinforcement",
+    "supervised",
+    "unsupervised",
+    "representation",
+    "generative",
+    "discriminative",
+    "encoder",
+    "decoder",
+    "backpropagation",
+    "convolutional",
+    "recurrent",
+    "graph",
+    "bayesian",
+    "probabilistic",
+    "statistical",
     # Quantum / physics technical
-    "quantum", "entanglement", "hamiltonian", "eigenvalue", "tensor",
-    "manifold", "topology", "differential", "integral",
+    "quantum",
+    "entanglement",
+    "hamiltonian",
+    "eigenvalue",
+    "tensor",
+    "manifold",
+    "topology",
+    "differential",
+    "integral",
     # arXiv section names that appear in real academic queries
-    "cs.ai", "cs.cl", "cs.lg", "stat.ml", "cond-mat", "hep",
+    "cs.ai",
+    "cs.cl",
+    "cs.lg",
+    "stat.ml",
+    "cond-mat",
+    "hep",
 }
 
 # Procedural / how-to / tooling prefixes that strongly indicate NON-academic
 # intent. arXiv never helps with these.
 _NON_ACADEMIC_PREFIXES = (
-    "how to", "how-to", "best practices", "best-practices",
-    "tutorial", "guide", "setup", "install", "configure", "deploy",
-    "fix", "debug", "troubleshoot", "migrate",
+    "how to",
+    "how-to",
+    "best practices",
+    "best-practices",
+    "tutorial",
+    "guide",
+    "setup",
+    "install",
+    "configure",
+    "deploy",
+    "fix",
+    "debug",
+    "troubleshoot",
+    "migrate",
 )
 
 
@@ -318,9 +458,12 @@ def is_academic_query(query: str) -> bool:
 # This ensures GitHub issues and SO answers appear at the top of results
 # instead of being buried by arxiv papers or DDG's generic hits.
 _MERGE_PRIORITY = [
-    "github_issues", "stackoverflow",    # forums first
-    "duckduckgo", "searxng", "marginalia",  # general web
-    "arxiv",                              # academic last
+    "github_issues",
+    "stackoverflow",  # forums first
+    "duckduckgo",
+    "searxng",
+    "marginalia",  # general web
+    "arxiv",  # academic last
 ]
 
 
@@ -333,21 +476,32 @@ class ForumEnhancedFreeSearch(FreeSearch):
     results with forum backends first.
     """
 
-    def __init__(self, session_logger=None, timeout: int = 20,
-                 backends: list[Any] | None = None,
-                 searxng_manager: Any = None):
-        super().__init__(session_logger=session_logger, timeout=timeout,
-                         backends=backends, searxng_manager=searxng_manager)
+    def __init__(
+        self,
+        session_logger=None,
+        timeout: int = 20,
+        backends: list[Any] | None = None,
+        searxng_manager: Any = None,
+    ):
+        super().__init__(
+            session_logger=session_logger,
+            timeout=timeout,
+            backends=backends,
+            searxng_manager=searxng_manager,
+        )
         # If caller provided custom backends, don't add forum backends — they
         # know what they want. Only augment the default fleet.
         if backends is None:
-            self._backends.append(GitHubIssuesBackend(
-                session_logger=session_logger, timeout=timeout))
-            self._backends.append(StackOverflowBackend(
-                session_logger=session_logger, timeout=timeout))
+            self._backends.append(
+                GitHubIssuesBackend(session_logger=session_logger, timeout=timeout)
+            )
+            self._backends.append(
+                StackOverflowBackend(session_logger=session_logger, timeout=timeout)
+            )
 
-    def search(self, query: str, max_results: int = 5,
-               search_depth: str = "advanced") -> dict[str, Any]:
+    def search(
+        self, query: str, max_results: int = 5, search_depth: str = "advanced"
+    ) -> dict[str, Any]:
         """Fan out to all backends in parallel, merge + dedupe.
 
         Overrides FreeSearch.search() to:
@@ -418,13 +572,20 @@ class ForumEnhancedFreeSearch(FreeSearch):
         if self.session_logger is not None:
             try:
                 self.session_logger.log_tool_call(
-                    tool="freesearch", method="search",
-                    inputs={"query": query, "max": max_results,
-                            "backends": len(self._backends)},
-                    outputs={"count": len(out),
-                             "engines_up": len(results_by_backend) - len(unresponsive),
-                             "engines_down": len(unresponsive)},
-                    duration_ms=(time.time() - t0) * 1000)
+                    tool="freesearch",
+                    method="search",
+                    inputs={
+                        "query": query,
+                        "max": max_results,
+                        "backends": len(self._backends),
+                    },
+                    outputs={
+                        "count": len(out),
+                        "engines_up": len(results_by_backend) - len(unresponsive),
+                        "engines_down": len(unresponsive),
+                    },
+                    duration_ms=(time.time() - t0) * 1000,
+                )
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 pass
         return {"results": out, "unresponsive_engines": unresponsive}

@@ -17,6 +17,7 @@ Documentation grounding:
   separate process to avoid import side effects. This is the same
   pattern safe_write's _verify_import_in_subprocess uses.
 """
+
 from subprocess_utils import run as _subprocess_run
 import sys
 from pathlib import Path
@@ -62,13 +63,17 @@ def test_main_imports_without_name_error():
     }
     # Inherit PATH so the venv Python can find its DLLs on Windows.
     import os
+
     env["PATH"] = os.environ.get("PATH", "")
     env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", "")
     env["PYTHONPATH"] = str(backend_dir)
 
     result = _subprocess_run(
         [sys.executable, "-c", code],
-        capture_output=True, text=True, timeout=30, env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
     )
     assert result.returncode == 0, (
         f"import main failed (exit {result.returncode}):\n"

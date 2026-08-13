@@ -64,8 +64,7 @@ class CalibrationTracker:
 
     def __init__(self, log_path: str = None):
         self.log_path = log_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "calibration_log.json"
+            os.path.dirname(os.path.abspath(__file__)), "calibration_log.json"
         )
         self._ensure_log()
 
@@ -114,8 +113,12 @@ class CalibrationTracker:
 
         return False
 
-    def classify_failure(self, user_message: str, prev_answer: str = None,
-                        retrieved_notes: list[str] = None) -> str:
+    def classify_failure(
+        self,
+        user_message: str,
+        prev_answer: str = None,
+        retrieved_notes: list[str] = None,
+    ) -> str:
         """Classify the type of failure based on the correction message.
 
         Returns one of: 'retrieval', 'synthesis', 'verification', 'unknown'
@@ -123,45 +126,82 @@ class CalibrationTracker:
         msg_lower = user_message.lower()
 
         # Retrieval failure: user says we missed something or didn't answer the question
-        if any(kw in msg_lower for kw in [
-            "you missed", "you forgot", "didn't mention", "left out",
-            "not what i asked", "not what i meant", "not what i wanted",
-            "where's", "where is", "you didn't include", "you didn't find",
-            "missing", "didn't find"
-        ]):
+        if any(
+            kw in msg_lower
+            for kw in [
+                "you missed",
+                "you forgot",
+                "didn't mention",
+                "left out",
+                "not what i asked",
+                "not what i meant",
+                "not what i wanted",
+                "where's",
+                "where is",
+                "you didn't include",
+                "you didn't find",
+                "missing",
+                "didn't find",
+            ]
+        ):
             return "retrieval"
 
         # Verification failure: user says something is factually wrong
-        if any(kw in msg_lower for kw in [
-            "that's wrong", "that's not right", "incorrect", "not true",
-            "false", "made up", "hallucinat", "that's not correct", "factually",
-            "that's incorrect"
-        ]):
+        if any(
+            kw in msg_lower
+            for kw in [
+                "that's wrong",
+                "that's not right",
+                "incorrect",
+                "not true",
+                "false",
+                "made up",
+                "hallucinat",
+                "that's not correct",
+                "factually",
+                "that's incorrect",
+            ]
+        ):
             return "verification"
 
         # Synthesis failure: user says the answer is wrong but not about specific facts
-        if any(kw in msg_lower for kw in [
-            "wrong", "not right", "try again", "not quite", "that's not",
-            "fix this", "fix that", "fix it"
-        ]):
+        if any(
+            kw in msg_lower
+            for kw in [
+                "wrong",
+                "not right",
+                "try again",
+                "not quite",
+                "that's not",
+                "fix this",
+                "fix that",
+                "fix it",
+            ]
+        ):
             return "synthesis"
 
         return "unknown"
 
     # --- Logging ---
 
-    def log_correction(self, user_message: str, prev_answer: str,
-                      procedures_in_context: list[str] = None,
-                      validation_results: list[dict] = None,
-                      retrieved_notes: list[str] = None,
-                      failure_type: str = None) -> dict:
+    def log_correction(
+        self,
+        user_message: str,
+        prev_answer: str,
+        procedures_in_context: list[str] = None,
+        validation_results: list[dict] = None,
+        retrieved_notes: list[str] = None,
+        failure_type: str = None,
+    ) -> dict:
         """Log a correction event with full context.
 
         This is the core data point: the operator corrected an output, and we capture
         everything about the context so we can later compute calibration metrics.
         """
         if failure_type is None:
-            failure_type = self.classify_failure(user_message, prev_answer, retrieved_notes)
+            failure_type = self.classify_failure(
+                user_message, prev_answer, retrieved_notes
+            )
 
         entry = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -179,8 +219,9 @@ class CalibrationTracker:
 
         return entry
 
-    def log_gate_decision(self, gate_name: str, note_path: str,
-                         decision: str, details: dict = None):
+    def log_gate_decision(
+        self, gate_name: str, note_path: str, decision: str, details: dict = None
+    ):
         """Log a quality gate decision (pass/fail) for a note.
 
         This lets us later compute: of the notes the operator corrected,
@@ -274,19 +315,23 @@ class CalibrationTracker:
                 continue  # not enough data to draw conclusions
 
             if pass_rate > 0.95 and corrections_count > 0:
-                gaps.append({
-                    "gate": gate_name,
-                    "issue": "potential_false_positives",
-                    "pass_rate": pass_rate,
-                    "corrections": corrections_count,
-                    "suggestion": "Gate passes almost everything but the operator has corrected outputs. Consider tightening thresholds.",
-                })
+                gaps.append(
+                    {
+                        "gate": gate_name,
+                        "issue": "potential_false_positives",
+                        "pass_rate": pass_rate,
+                        "corrections": corrections_count,
+                        "suggestion": "Gate passes almost everything but the operator has corrected outputs. Consider tightening thresholds.",
+                    }
+                )
             elif pass_rate < 0.20:
-                gaps.append({
-                    "gate": gate_name,
-                    "issue": "potential_false_negatives",
-                    "pass_rate": pass_rate,
-                    "suggestion": "Gate fails almost everything. Consider loosening thresholds.",
-                })
+                gaps.append(
+                    {
+                        "gate": gate_name,
+                        "issue": "potential_false_negatives",
+                        "pass_rate": pass_rate,
+                        "suggestion": "Gate fails almost everything. Consider loosening thresholds.",
+                    }
+                )
 
         return gaps

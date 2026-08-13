@@ -2,7 +2,12 @@
 Agent-authored tool: plugin_reload
 """
 
-SCHEMA = {"name": "plugin_reload", "description": "Reload the Obsidian plugin (disable + re-enable) without killing the backend. Sends a WebSocket message to the plugin which calls reloadSelf() \u2014 Obsidian's plugin API handles the disable/re-enable cycle. The backend stays running throughout. Use this after editing main.js or styles.css to pick up changes without the operator having to manually toggle the plugin in Settings.", "parameters": {"properties": {}, "required": [], "type": "object"}}
+SCHEMA = {
+    "name": "plugin_reload",
+    "description": "Reload the Obsidian plugin (disable + re-enable) without killing the backend. Sends a WebSocket message to the plugin which calls reloadSelf() \u2014 Obsidian's plugin API handles the disable/re-enable cycle. The backend stays running throughout. Use this after editing main.js or styles.css to pick up changes without the operator having to manually toggle the plugin in Settings.",
+    "parameters": {"properties": {}, "required": [], "type": "object"},
+}
+
 
 def run(args: dict) -> dict:
     """Reload the Obsidian plugin (disable + re-enable) without killing the backend.

@@ -31,39 +31,91 @@ from pathlib import Path
 # Only match actual timestamp headers, not markdown ## section headers
 # inside assistant responses. Timestamps look like "2026-07-25 20:53 UTC".
 _TIMESTAMP_RE = re.compile(
-    r'^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:\s*UTC)?)\s*$',
-    re.MULTILINE
+    r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:\s*UTC)?)\s*$", re.MULTILINE
 )
 
 # Tool names to detect in chat log text
 _TOOL_NAMES = {
-    'vault_research', 'vault_search', 'vault_lint', 'vault_list',
-    'vault_append', 'vault_delete', 'code_run', 'code_read',
-    'tool_create', 'safe_write', 'textbook_ingest', 'textbook_read_page',
-    'vault_gaps', 'vault_graph_analyzer', 'self_reflect',
-    'capability_audit', 'preflight_safety_check', 'git_rollback',
-    'web_read_source', 'vaultbot_status'
+    "vault_research",
+    "vault_search",
+    "vault_lint",
+    "vault_list",
+    "vault_append",
+    "vault_delete",
+    "code_run",
+    "code_read",
+    "tool_create",
+    "safe_write",
+    "textbook_ingest",
+    "textbook_read_page",
+    "vault_gaps",
+    "vault_graph_analyzer",
+    "self_reflect",
+    "capability_audit",
+    "preflight_safety_check",
+    "git_rollback",
+    "web_read_source",
+    "vaultbot_status",
 }
 
 # Sentiment keywords for detecting the operator's response sentiment
 _POSITIVE_KW = {
-    'yes', 'go ahead', 'cool', 'nice', 'good', 'great', 'like', 'love',
-    'proceed', 'begin', 'please do', 'definitely', 'yeah', 'yea', 'beans',
-    'go for it', 'please', 'exactly', 'perfect', 'awesome', 'sweet',
-    'agree', 'right', 'correct',
+    "yes",
+    "go ahead",
+    "cool",
+    "nice",
+    "good",
+    "great",
+    "like",
+    "love",
+    "proceed",
+    "begin",
+    "please do",
+    "definitely",
+    "yeah",
+    "yea",
+    "beans",
+    "go for it",
+    "please",
+    "exactly",
+    "perfect",
+    "awesome",
+    "sweet",
+    "agree",
+    "right",
+    "correct",
 }
 _NEGATIVE_KW = {
-    'no', 'wrong', 'fix', "didn't", "didnt", 'lagging', 'junk', 'stale',
-    'break', 'broke', "not convinced", "don't trust", 'huge',
-    "didn't read", 'too much', "i thought you already", 'sync yourself',
-    'dinosaur', 'empty files', "haven't", "not what i",
-    'are you sure', 'double check', 'make sure',
+    "no",
+    "wrong",
+    "fix",
+    "didn't",
+    "didnt",
+    "lagging",
+    "junk",
+    "stale",
+    "break",
+    "broke",
+    "not convinced",
+    "don't trust",
+    "huge",
+    "didn't read",
+    "too much",
+    "i thought you already",
+    "sync yourself",
+    "dinosaur",
+    "empty files",
+    "haven't",
+    "not what i",
+    "are you sure",
+    "double check",
+    "make sure",
 }
 
 # Thresholds
-_MIN_SESSIONS_FOR_PATTERN = 3   # wikilink must appear in 3+ sessions
-_OVER_REPORT_THRESHOLD = 2000   # assistant message > 2000 chars = over-reporting
-_MAX_LOG_ENTRIES = 100          # keep consolidation log bounded
+_MIN_SESSIONS_FOR_PATTERN = 3  # wikilink must appear in 3+ sessions
+_OVER_REPORT_THRESHOLD = 2000  # assistant message > 2000 chars = over-reporting
+_MAX_LOG_ENTRIES = 100  # keep consolidation log bounded
 
 
 class PatternExtractor:
@@ -85,8 +137,7 @@ class PatternExtractor:
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
         self.chat_dir = os.path.join(self.vault_path, "vaultbot_stuff/Memory/Chat")
         self.log_path = log_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "consolidation_log.json"
+            os.path.dirname(os.path.abspath(__file__)), "consolidation_log.json"
         )
         self._ensure_log()
 
@@ -94,7 +145,9 @@ class PatternExtractor:
         """Create the consolidation log file if it doesn't exist."""
         if not os.path.exists(self.log_path):
             with open(self.log_path, "w", encoding="utf-8") as f:
-                json.dump({"consolidations": [], "last_consolidation": None}, f, indent=2)
+                json.dump(
+                    {"consolidations": [], "last_consolidation": None}, f, indent=2
+                )
 
     def _load(self) -> dict:
         with open(self.log_path, encoding="utf-8") as f:
@@ -126,16 +179,17 @@ class PatternExtractor:
             }
         """
         try:
-            with open(filepath, encoding='utf-8') as f:
+            with open(filepath, encoding="utf-8") as f:
                 content = f.read()
         except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-            return {'title': '', 'file': os.path.basename(filepath), 'exchanges': []}
+            return {"title": "", "file": os.path.basename(filepath), "exchanges": []}
 
-        title_match = re.match(r'^# Chat:\s*(.+)$', content, re.MULTILINE)
+        title_match = re.match(r"^# Chat:\s*(.+)$", content, re.MULTILINE)
         title = title_match.group(1).strip() if title_match else Path(filepath).stem
 
-        timestamps = [(m.start(), m.group(1).strip())
-                      for m in _TIMESTAMP_RE.finditer(content)]
+        timestamps = [
+            (m.start(), m.group(1).strip()) for m in _TIMESTAMP_RE.finditer(content)
+        ]
 
         exchanges = []
         for i, (start, ts) in enumerate(timestamps):
@@ -144,55 +198,61 @@ class PatternExtractor:
 
             # Extract user message
             user_match = re.search(
-                r'\*\*User:\*\*\s*(.+?)(?:\n\n\*\*Assistant|\Z)',
-                section, re.DOTALL)
+                r"\*\*User:\*\*\s*(.+?)(?:\n\n\*\*Assistant|\Z)", section, re.DOTALL
+            )
             user_msg = user_match.group(1).strip() if user_match else ""
 
             # Extract assistant message (up to thinking block or end)
             asst_match = re.search(
-                r'\*\*Assistant:\*\*\s*(.+?)(?:<details>|\Z)',
-                section, re.DOTALL)
+                r"\*\*Assistant:\*\*\s*(.+?)(?:<details>|\Z)", section, re.DOTALL
+            )
             asst_msg = asst_match.group(1).strip() if asst_match else ""
 
             # Extract thinking
             think_match = re.search(
-                r'<summary>Thinking process</summary>\s*(.+?)(?:</details>|\Z)',
-                section, re.DOTALL)
+                r"<summary>Thinking process</summary>\s*(.+?)(?:</details>|\Z)",
+                section,
+                re.DOTALL,
+            )
             thinking = think_match.group(1).strip() if think_match else ""
 
             # Wikilinks from the full section
-            wikilinks = re.findall(r'\[\[([^\]]+)\]\]', section)
-            wikilinks = [l.split('|')[0].split('#')[0].strip() for l in wikilinks]
+            wikilinks = re.findall(r"\[\[([^\]]+)\]\]", section)
+            wikilinks = [l.split("|")[0].split("#")[0].strip() for l in wikilinks]
 
             # Tool mentions from full exchange text
             all_text = asst_msg + " " + thinking
-            tools_mentioned = sorted(
-                tool for tool in _TOOL_NAMES if tool in all_text)
+            tools_mentioned = sorted(tool for tool in _TOOL_NAMES if tool in all_text)
 
             # Sentiment detection from user message
             user_lower = user_msg.lower()
-            sentiment = 'neutral'
+            sentiment = "neutral"
             for kw in _POSITIVE_KW:
                 if kw in user_lower:
-                    sentiment = 'positive'
+                    sentiment = "positive"
                     break
-            if sentiment == 'neutral':
+            if sentiment == "neutral":
                 for kw in _NEGATIVE_KW:
                     if kw in user_lower:
-                        sentiment = 'negative'
+                        sentiment = "negative"
                         break
 
-            exchanges.append({
-                'timestamp': ts,
-                'user_message': user_msg[:500],
-                'assistant_length': len(asst_msg),
-                'wikilinks': wikilinks,
-                'tools_mentioned': tools_mentioned,
-                'sentiment': sentiment,
-            })
+            exchanges.append(
+                {
+                    "timestamp": ts,
+                    "user_message": user_msg[:500],
+                    "assistant_length": len(asst_msg),
+                    "wikilinks": wikilinks,
+                    "tools_mentioned": tools_mentioned,
+                    "sentiment": sentiment,
+                }
+            )
 
-        return {'title': title, 'file': os.path.basename(filepath),
-                'exchanges': exchanges}
+        return {
+            "title": title,
+            "file": os.path.basename(filepath),
+            "exchanges": exchanges,
+        }
 
     def scan_chat_logs(self, since_timestamp: str = None) -> list[dict]:
         """Scan all chat logs and return structured sessions.
@@ -207,23 +267,22 @@ class PatternExtractor:
         if not os.path.isdir(self.chat_dir):
             return []
 
-        chat_files = sorted(
-            f for f in os.listdir(self.chat_dir) if f.endswith('.md'))
+        chat_files = sorted(f for f in os.listdir(self.chat_dir) if f.endswith(".md"))
 
         sessions = []
         for cf in chat_files:
-            session = self._parse_chat_log(
-                os.path.join(self.chat_dir, cf))
+            session = self._parse_chat_log(os.path.join(self.chat_dir, cf))
 
             # Filter by timestamp if requested
-            if since_timestamp and session['exchanges']:
+            if since_timestamp and session["exchanges"]:
                 filtered = [
-                    ex for ex in session['exchanges']
-                    if ex['timestamp'] > since_timestamp
+                    ex
+                    for ex in session["exchanges"]
+                    if ex["timestamp"] > since_timestamp
                 ]
                 if not filtered:
                     continue
-                session['exchanges'] = filtered
+                session["exchanges"] = filtered
 
             sessions.append(session)
 
@@ -241,10 +300,10 @@ class PatternExtractor:
         wikilink_counts = Counter()
 
         for session in sessions:
-            file_name = session['file']
+            file_name = session["file"]
             session_links = set()
-            for ex in session['exchanges']:
-                for link in ex['wikilinks']:
+            for ex in session["exchanges"]:
+                for link in ex["wikilinks"]:
                     session_links.add(link)
                     wikilink_counts[link] += 1
             for link in session_links:
@@ -253,14 +312,16 @@ class PatternExtractor:
         recurring = []
         for link, sess_set in wikilink_sessions.items():
             if len(sess_set) >= _MIN_SESSIONS_FOR_PATTERN:
-                recurring.append({
-                    'topic': link,
-                    'session_count': len(sess_set),
-                    'total_mentions': wikilink_counts[link],
-                    'sessions': sorted(sess_set),
-                })
+                recurring.append(
+                    {
+                        "topic": link,
+                        "session_count": len(sess_set),
+                        "total_mentions": wikilink_counts[link],
+                        "sessions": sorted(sess_set),
+                    }
+                )
 
-        recurring.sort(key=lambda x: -x['session_count'])
+        recurring.sort(key=lambda x: -x["session_count"])
         return recurring
 
     def extract_sentiment_patterns(self, sessions: list[dict]) -> dict:
@@ -269,28 +330,28 @@ class PatternExtractor:
         The negative rate is a key calibration metric: if it's not trending
         down over time, the consolidation system isn't working.
         """
-        all_exchanges = [ex for s in sessions for ex in s['exchanges']]
-        sentiment_counts = Counter(ex['sentiment'] for ex in all_exchanges)
+        all_exchanges = [ex for s in sessions for ex in s["exchanges"]]
+        sentiment_counts = Counter(ex["sentiment"] for ex in all_exchanges)
         total = len(all_exchanges)
 
         negative_exchanges = [
             {
-                'timestamp': ex['timestamp'],
-                'user_message': ex['user_message'][:150],
-                'file': s['file'],
+                "timestamp": ex["timestamp"],
+                "user_message": ex["user_message"][:150],
+                "file": s["file"],
             }
             for s in sessions
-            for ex in s['exchanges']
-            if ex['sentiment'] == 'negative'
+            for ex in s["exchanges"]
+            if ex["sentiment"] == "negative"
         ]
 
         return {
-            'total_exchanges': total,
-            'distribution': dict(sentiment_counts),
-            'negative_rate': round(
-                sentiment_counts.get('negative', 0) / total, 4
-            ) if total > 0 else 0,
-            'negative_exchanges': negative_exchanges,
+            "total_exchanges": total,
+            "distribution": dict(sentiment_counts),
+            "negative_rate": round(sentiment_counts.get("negative", 0) / total, 4)
+            if total > 0
+            else 0,
+            "negative_exchanges": negative_exchanges,
         }
 
     def extract_tool_patterns(self, sessions: list[dict]) -> dict:
@@ -303,26 +364,25 @@ class PatternExtractor:
         tool_cooccurrence = defaultdict(int)
 
         for session in sessions:
-            for ex in session['exchanges']:
-                tools = ex['tools_mentioned']
+            for ex in session["exchanges"]:
+                tools = ex["tools_mentioned"]
                 for tool in tools:
                     tool_counter[tool] += 1
                 # Co-occurrence: pairs of tools in the same exchange
                 for i, t1 in enumerate(tools):
-                    for t2 in tools[i + 1:]:
+                    for t2 in tools[i + 1 :]:
                         pair = tuple(sorted([t1, t2]))
                         tool_cooccurrence[pair] += 1
 
         # Top co-occurring tool pairs (workflow indicators)
         top_workflows = [
-            {'tools': f"{k[0]} + {k[1]}", 'count': v}
-            for k, v in sorted(tool_cooccurrence.items(),
-                               key=lambda x: -x[1])[:10]
+            {"tools": f"{k[0]} + {k[1]}", "count": v}
+            for k, v in sorted(tool_cooccurrence.items(), key=lambda x: -x[1])[:10]
         ]
 
         return {
-            'tool_frequency': dict(tool_counter.most_common()),
-            'top_workflows': top_workflows,
+            "tool_frequency": dict(tool_counter.most_common()),
+            "top_workflows": top_workflows,
         }
 
     def extract_over_reporting(self, sessions: list[dict]) -> dict:
@@ -333,19 +393,21 @@ class PatternExtractor:
         """
         long_exchanges = []
         for session in sessions:
-            for ex in session['exchanges']:
-                if ex['assistant_length'] > _OVER_REPORT_THRESHOLD:
-                    long_exchanges.append({
-                        'timestamp': ex['timestamp'],
-                        'file': session['file'],
-                        'assistant_length': ex['assistant_length'],
-                        'user_message': ex['user_message'][:100],
-                    })
+            for ex in session["exchanges"]:
+                if ex["assistant_length"] > _OVER_REPORT_THRESHOLD:
+                    long_exchanges.append(
+                        {
+                            "timestamp": ex["timestamp"],
+                            "file": session["file"],
+                            "assistant_length": ex["assistant_length"],
+                            "user_message": ex["user_message"][:100],
+                        }
+                    )
 
         return {
-            'count': len(long_exchanges),
-            'threshold_chars': _OVER_REPORT_THRESHOLD,
-            'exchanges': long_exchanges,
+            "count": len(long_exchanges),
+            "threshold_chars": _OVER_REPORT_THRESHOLD,
+            "exchanges": long_exchanges,
         }
 
     def extract_all(self, since_timestamp: str = None) -> dict:
@@ -371,16 +433,16 @@ class PatternExtractor:
             }
         """
         sessions = self.scan_chat_logs(since_timestamp)
-        all_exchanges = [ex for s in sessions for ex in s['exchanges']]
+        all_exchanges = [ex for s in sessions for ex in s["exchanges"]]
 
         return {
-            'timestamp': datetime.now(UTC).isoformat(),
-            'total_sessions': len(sessions),
-            'total_exchanges': len(all_exchanges),
-            'recurring_topics': self.extract_recurring_topics(sessions),
-            'sentiment': self.extract_sentiment_patterns(sessions),
-            'tool_patterns': self.extract_tool_patterns(sessions),
-            'over_reporting': self.extract_over_reporting(sessions),
+            "timestamp": datetime.now(UTC).isoformat(),
+            "total_sessions": len(sessions),
+            "total_exchanges": len(all_exchanges),
+            "recurring_topics": self.extract_recurring_topics(sessions),
+            "sentiment": self.extract_sentiment_patterns(sessions),
+            "tool_patterns": self.extract_tool_patterns(sessions),
+            "over_reporting": self.extract_over_reporting(sessions),
         }
 
     # --- Logging ---
@@ -396,22 +458,23 @@ class PatternExtractor:
             The log entry that was written.
         """
         entry = {
-            'timestamp': datetime.now(UTC).isoformat(),
-            'sessions_scanned': patterns.get('total_sessions', 0),
-            'exchanges_scanned': patterns.get('total_exchanges', 0),
-            'recurring_topics_found': len(patterns.get('recurring_topics', [])),
-            'negative_exchanges': patterns.get('sentiment', {}).get(
-                'distribution', {}).get('negative', 0),
-            'note_written': note_path,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "sessions_scanned": patterns.get("total_sessions", 0),
+            "exchanges_scanned": patterns.get("total_exchanges", 0),
+            "recurring_topics_found": len(patterns.get("recurring_topics", [])),
+            "negative_exchanges": patterns.get("sentiment", {})
+            .get("distribution", {})
+            .get("negative", 0),
+            "note_written": note_path,
         }
 
         data = self._load()
-        data['consolidations'].append(entry)
-        data['last_consolidation'] = entry['timestamp']
+        data["consolidations"].append(entry)
+        data["last_consolidation"] = entry["timestamp"]
 
         # Bound the log
-        if len(data['consolidations']) > _MAX_LOG_ENTRIES:
-            data['consolidations'] = data['consolidations'][-_MAX_LOG_ENTRIES:]
+        if len(data["consolidations"]) > _MAX_LOG_ENTRIES:
+            data["consolidations"] = data["consolidations"][-_MAX_LOG_ENTRIES:]
 
         self._save(data)
         return entry
@@ -419,27 +482,28 @@ class PatternExtractor:
     def get_last_consolidation_time(self) -> str | None:
         """Return the timestamp of the last consolidation run, or None."""
         data = self._load()
-        return data.get('last_consolidation')
+        return data.get("last_consolidation")
 
     # --- Reporting ---
 
     def consolidation_report(self) -> dict:
         """Return a summary of consolidation history."""
         data = self._load()
-        consolidations = data.get('consolidations', [])
+        consolidations = data.get("consolidations", [])
 
         if not consolidations:
-            return {"status": "no_data",
-                    "message": "No consolidation runs logged yet."}
+            return {"status": "no_data", "message": "No consolidation runs logged yet."}
 
         return {
-            'total_runs': len(consolidations),
-            'last_run': consolidations[-1]['timestamp'],
-            'total_sessions_scanned': sum(
-                c.get('sessions_scanned', 0) for c in consolidations),
-            'total_notes_written': sum(
-                1 for c in consolidations if c.get('note_written')),
-            'recent_runs': consolidations[-5:],
+            "total_runs": len(consolidations),
+            "last_run": consolidations[-1]["timestamp"],
+            "total_sessions_scanned": sum(
+                c.get("sessions_scanned", 0) for c in consolidations
+            ),
+            "total_notes_written": sum(
+                1 for c in consolidations if c.get("note_written")
+            ),
+            "recent_runs": consolidations[-5:],
         }
 
     def get_consolidation_gaps(self) -> list[dict]:
@@ -455,48 +519,54 @@ class PatternExtractor:
         gaps = []
 
         # Gap 1: New recurring topics since last consolidation
-        for topic in patterns.get('recurring_topics', []):
-            gaps.append({
-                'kind': 'recurring_topic',
-                'topic': topic['topic'],
-                'priority': topic['session_count'] * 10,
-                'session_count': topic['session_count'],
-                'total_mentions': topic['total_mentions'],
-                'evidence': topic['sessions'],
-                'description': f"Topic '{topic['topic']}' appears in "
-                               f"{topic['session_count']} sessions "
-                               f"({topic['total_mentions']} mentions). "
-                               f"Ready for semantic consolidation.",
-            })
+        for topic in patterns.get("recurring_topics", []):
+            gaps.append(
+                {
+                    "kind": "recurring_topic",
+                    "topic": topic["topic"],
+                    "priority": topic["session_count"] * 10,
+                    "session_count": topic["session_count"],
+                    "total_mentions": topic["total_mentions"],
+                    "evidence": topic["sessions"],
+                    "description": f"Topic '{topic['topic']}' appears in "
+                    f"{topic['session_count']} sessions "
+                    f"({topic['total_mentions']} mentions). "
+                    f"Ready for semantic consolidation.",
+                }
+            )
 
         # Gap 2: High negative sentiment rate
-        sentiment = patterns.get('sentiment', {})
-        if sentiment.get('negative_rate', 0) > 0.25:
-            gaps.append({
-                'kind': 'high_correction_rate',
-                'topic': 'operator-correction-patterns',
-                'priority': int(sentiment['negative_rate'] * 100),
-                'negative_rate': sentiment['negative_rate'],
-                'negative_count': len(sentiment.get('negative_exchanges', [])),
-                'description': f"Negative sentiment rate is "
-                               f"{sentiment['negative_rate']:.0%}. "
-                               f"Consolidate correction patterns into "
-                               f"semantic knowledge to reduce repeat failures.",
-            })
+        sentiment = patterns.get("sentiment", {})
+        if sentiment.get("negative_rate", 0) > 0.25:
+            gaps.append(
+                {
+                    "kind": "high_correction_rate",
+                    "topic": "operator-correction-patterns",
+                    "priority": int(sentiment["negative_rate"] * 100),
+                    "negative_rate": sentiment["negative_rate"],
+                    "negative_count": len(sentiment.get("negative_exchanges", [])),
+                    "description": f"Negative sentiment rate is "
+                    f"{sentiment['negative_rate']:.0%}. "
+                    f"Consolidate correction patterns into "
+                    f"semantic knowledge to reduce repeat failures.",
+                }
+            )
 
         # Gap 3: Over-reporting pattern
-        over_reporting = patterns.get('over_reporting', {})
-        if over_reporting.get('count', 0) >= 3:
-            gaps.append({
-                'kind': 'over_reporting',
-                'topic': 'communication-brevity',
-                'priority': 40,
-                'count': over_reporting['count'],
-                'description': f"{over_reporting['count']} exchanges exceeded "
-                               f"{over_reporting['threshold_chars']} chars. "
-                               f"Consolidate into a 'keep it short' rule.",
-            })
+        over_reporting = patterns.get("over_reporting", {})
+        if over_reporting.get("count", 0) >= 3:
+            gaps.append(
+                {
+                    "kind": "over_reporting",
+                    "topic": "communication-brevity",
+                    "priority": 40,
+                    "count": over_reporting["count"],
+                    "description": f"{over_reporting['count']} exchanges exceeded "
+                    f"{over_reporting['threshold_chars']} chars. "
+                    f"Consolidate into a 'keep it short' rule.",
+                }
+            )
 
         # Sort by priority (highest first)
-        gaps.sort(key=lambda x: -x.get('priority', 0))
+        gaps.sort(key=lambda x: -x.get("priority", 0))
         return gaps

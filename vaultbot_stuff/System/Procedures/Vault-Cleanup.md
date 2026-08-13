@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: "Meta cleanup audit. Runs the Pattern-Scan engine ONCE, then reads its table to produce a single prioritized cleanup queue: orphans to link, broken links to fix, duplicates to merge, stubs to expand, load-bearing stale notes to refresh. One report, zero big-model reasoning over raw notes — all filtering is deterministic."

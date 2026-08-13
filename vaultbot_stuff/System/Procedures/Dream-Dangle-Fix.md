@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-09
 description: "Fix dangling wikilinks by fuzzy-matching them to existing vault notes and repairing the broken references. For genuinely missing notes, flags them for gap-fill. Called by Dream-Pass after Dream-Analyze surfaces dangling links."

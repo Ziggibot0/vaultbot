@@ -67,9 +67,12 @@ MIN_FEEDBACK = 1
 class EmbeddingDrift:
     """Per-note relevance-feedback drift, persisted to disk."""
 
-    def __init__(self, state_path: str | Path,
-                 embedding_dim: int = 768,
-                 session_logger: Any = None) -> None:
+    def __init__(
+        self,
+        state_path: str | Path,
+        embedding_dim: int = 768,
+        session_logger: Any = None,
+    ) -> None:
         self.state_path = Path(state_path)
         self.embedding_dim = embedding_dim
         self.session_logger = session_logger
@@ -80,9 +83,13 @@ class EmbeddingDrift:
             self.drift = self._load()
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             if self.session_logger:
-                self.session_logger.log("drift_state_lost", {
-                    "error": str(e), "category": "drift_lost",
-                })
+                self.session_logger.log(
+                    "drift_state_lost",
+                    {
+                        "error": str(e),
+                        "category": "drift_lost",
+                    },
+                )
             logger.warning("drift state lost, starting fresh: %s", e)
             self.drift = {}
 
@@ -119,10 +126,13 @@ class EmbeddingDrift:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def record_feedback(self, file_path: str,
-                        query_embedding: Any,
-                        helpful: bool,
-                        magnitude: float = DRIFT_STEP) -> None:
+    def record_feedback(
+        self,
+        file_path: str,
+        query_embedding: Any,
+        helpful: bool,
+        magnitude: float = DRIFT_STEP,
+    ) -> None:
         """Record one feedback signal for a note.
 
         `helpful=True` nudges the note's drift toward the query embedding
@@ -137,13 +147,16 @@ class EmbeddingDrift:
             if q.ndim != 1 or q.size == 0:
                 return
             key = str(Path(file_path).resolve())
-            entry = self.drift.get(key, {
-                "drift_vector": None,
-                "feedback_count": 0,
-                "helpful_count": 0,
-                "unhelpful_count": 0,
-                "last_query_time": 0,
-            })
+            entry = self.drift.get(
+                key,
+                {
+                    "drift_vector": None,
+                    "feedback_count": 0,
+                    "helpful_count": 0,
+                    "unhelpful_count": 0,
+                    "last_query_time": 0,
+                },
+            )
             # lazy-init the drift vector
             if entry.get("drift_vector") is None:
                 entry["drift_vector"] = np.zeros_like(q).tolist()
@@ -170,11 +183,11 @@ class EmbeddingDrift:
             # Log loudly — feedback was lost. The caller (chat_handler) also
             # has a try/except that logs this. No nested "swallowed" logging.
             if self.session_logger:
-                self.session_logger.log("drift_record_failed",
-                                       {"error": str(e), "file": file_path})
+                self.session_logger.log(
+                    "drift_record_failed", {"error": str(e), "file": file_path}
+                )
 
-    def apply_drift(self, file_path: str,
-                    content_embedding: Any) -> np.ndarray:
+    def apply_drift(self, file_path: str, content_embedding: Any) -> np.ndarray:
         """Return the drifted embedding for a note: content + drift vector.
 
         If no drift is recorded (or the note was reset), returns the content
@@ -212,8 +225,9 @@ class EmbeddingDrift:
     def status(self) -> dict[str, Any]:
         """Summary for /health or diagnostics."""
         total = len(self.drift)
-        with_feedback = sum(1 for e in self.drift.values()
-                            if e.get("feedback_count", 0) > 0)
+        with_feedback = sum(
+            1 for e in self.drift.values() if e.get("feedback_count", 0) > 0
+        )
         return {
             "notes_with_drift": total,
             "notes_with_feedback": with_feedback,

@@ -5,6 +5,7 @@ and the gate-lift condition.
 
 Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 """
+
 from __future__ import annotations
 
 from plan_gate import (

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: "Fast vault health snapshot. Runs Pattern-Scan plus the graph analyzer, then formats a concise health report: connectivity, orphan islands, sparse zones, cluster breakdown, and the top bridge suggestions. Small cartridge — the LLM only formats structured graph data into prose, no reasoning over raw notes."

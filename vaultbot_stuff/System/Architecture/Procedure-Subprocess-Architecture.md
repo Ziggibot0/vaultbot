@@ -1,6 +1,7 @@
 ---
 type: architecture
 status: design-spec
+baseline: true
 created: 2026-07-27
 summary: "Design spec for procedure execution as blocking subprocesses with embedded code blocks (zero LLM cost) and minimal-context LLM calls (only when semantic reasoning is needed). Procedures are vault docs found via FUSED search, with a description field for retrieval efficiency."
 tags: [architecture, procedures, deterministic, cost-optimization, subprocess, design-spec]

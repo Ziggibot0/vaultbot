@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-05
 description: "Diagnose and fix the general class of problem where a vault note or procedure is in the vault but doesn't surface in RAG results when a user says something relevant to it. Runs the retriever with a test query, inspects whether the target note appears in the FAISS index, the vector top-k, the fused merged pool, and whether the procedure-boost rerank is being applied. Reports the root cause: (a) note not in FAISS index, (b) note in index but below the k cutoff, (c) note in merged pool but outranked by non-procedure notes, or (d) procedure boost not applied due to name-resolution mismatch. Use when a note 'should be found' but isn't, when retrieval results seem wrong, or when a procedure isn't being used despite existing."

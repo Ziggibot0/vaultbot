@@ -7,6 +7,7 @@ wrapper or exercise the error/timeout paths.
 
 See [[Procedure-Subprocess-Architecture]] and subagent.py docstring.
 """
+
 import json
 
 
@@ -38,27 +39,17 @@ class _FakeLogger:
 
 def _wrapper_that_prints(brief: dict) -> str:
     """A minimal wrapper that prints a fixed JSON brief to stdout."""
-    return (
-        "import json, sys\n"
-        "print(json.dumps(" + json.dumps(brief) + "))\n"
-    )
+    return "import json, sys\nprint(json.dumps(" + json.dumps(brief) + "))\n"
 
 
 def _wrapper_that_sleeps(seconds: float) -> str:
     """A wrapper that sleeps — used for the timeout test."""
-    return (
-        "import time, sys\n"
-        "time.sleep(" + repr(seconds) + ")\n"
-        "print('{}')\n"
-    )
+    return "import time, sys\ntime.sleep(" + repr(seconds) + ")\nprint('{}')\n"
 
 
 def _wrapper_that_prints_to_stderr_only() -> str:
     """A wrapper that logs to stderr but prints nothing to stdout."""
-    return (
-        "import sys\n"
-        "print('diagnostic noise', file=sys.stderr, flush=True)\n"
-    )
+    return "import sys\nprint('diagnostic noise', file=sys.stderr, flush=True)\n"
 
 
 def _wrapper_that_raises(message: str) -> str:
@@ -82,8 +73,9 @@ def test_research_wrapper_prints_bounded_brief(monkeypatch, tmp_path):
     # Stub the subprocess runner so we don't launch a real research dig.
     captured = {}
 
-    def fake_run_subprocess(wrapper, session_logger=None, timeout=180,
-                            log_tag="subagent"):
+    def fake_run_subprocess(
+        wrapper, session_logger=None, timeout=180, log_tag="subagent"
+    ):
         captured["wrapper"] = wrapper
         return {
             "status": "ok",
@@ -137,8 +129,8 @@ def test_subprocess_timeout_returns_error_dict(monkeypatch):
     monkeypatch.setattr(_subagent_mod, "_DEFAULT_TIMEOUT", 1)
     # _run_subprocess reads the timeout param; pass a tiny one directly.
     result = _run_subprocess(
-        _wrapper_that_sleeps(5), session_logger=None, timeout=1,
-        log_tag="test_timeout")
+        _wrapper_that_sleeps(5), session_logger=None, timeout=1, log_tag="test_timeout"
+    )
     assert result["status"] == "error"
     assert "timed out" in result["error"].lower()
     assert result["subagent"] is True
@@ -150,8 +142,11 @@ def test_subprocess_timeout_returns_error_dict(monkeypatch):
 def test_subprocess_no_stdout_returns_error_dict():
     """A child that prints nothing to stdout returns a clean error dict."""
     result = _run_subprocess(
-        _wrapper_that_prints_to_stderr_only(), session_logger=None,
-        timeout=10, log_tag="test_no_stdout")
+        _wrapper_that_prints_to_stderr_only(),
+        session_logger=None,
+        timeout=10,
+        log_tag="test_no_stdout",
+    )
     assert result["status"] == "error"
     assert "no stdout" in result["error"].lower()
     assert result["subagent"] is True
@@ -161,8 +156,11 @@ def test_subprocess_child_error_brief_is_returned():
     """A child that raises + prints its own error brief returns that brief
     (the child's error handling is preserved, not swallowed)."""
     result = _run_subprocess(
-        _wrapper_that_raises("boom"), session_logger=None, timeout=10,
-        log_tag="test_child_error")
+        _wrapper_that_raises("boom"),
+        session_logger=None,
+        timeout=10,
+        log_tag="test_child_error",
+    )
     assert result["status"] == "error"
     assert "boom" in result["error"]
 
@@ -215,8 +213,11 @@ def test_run_subagent_invalid_payload_returns_error(monkeypatch):
     """A research task missing its topic still produces a wrapper (the
     builder uses '' as a default) — the subprocess path never raises on
     bad input; it surfaces errors via the brief."""
-    monkeypatch.setattr(_subagent_mod, "_run_subprocess",
-                        lambda *a, **k: {"status": "ok", "subagent": True})
+    monkeypatch.setattr(
+        _subagent_mod,
+        "_run_subprocess",
+        lambda *a, **k: {"status": "ok", "subagent": True},
+    )
     result = run_subagent("research", {})  # no topic
     assert result["status"] == "ok"
 
@@ -229,7 +230,10 @@ def test_subprocess_emits_start_and_done_events():
     logger = _FakeLogger()
     _run_subprocess(
         _wrapper_that_prints({"status": "ok", "source_count": 2}),
-        session_logger=logger, timeout=10, log_tag="test_logged")
+        session_logger=logger,
+        timeout=10,
+        log_tag="test_logged",
+    )
     event_names = [e for e, _ in logger.events]
     assert "test_logged_start" in event_names
     assert "test_logged_done" in event_names

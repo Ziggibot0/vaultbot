@@ -8,6 +8,7 @@ model_cartridge: small
 version: 1.0.0
 activation: manual
 status: experimental
+baseline: true
 created: 2026-08-06
 tags:
   - procedure

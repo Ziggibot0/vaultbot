@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-07-31
 description: Remove all turn caps, read-only loop detectors, and force-synthesize nudges from chat_handler.py so VaultBot runs to completion without dying mid-task.
 when_to_use: when VaultBot is dying mid-task due to turn caps or loop detectors cutting it off before completion

@@ -16,6 +16,7 @@ function which needs the full Services stack to run, so the architecture
 tests are source inspections. The planner, summarizer, and working-memory
 tests are real unit tests.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,6 +36,7 @@ def _src() -> str:
 
 
 # ── 1. "Model drives" architecture (no framework babysitting) ──────────────
+
 
 def test_no_framework_planner_in_chat_handler():
     """chat_handler does NOT import or call framework_plan — the model plans."""
@@ -95,6 +97,7 @@ def test_no_exec_tool_gate():
 
 # ── 2. plan_continuation_nudge REMOVED (model decides when done) ────────────
 
+
 def test_plan_continuation_nudge_removed():
     """The plan-continuation nudge is GONE — the model decides when it's done."""
     src = _src()
@@ -116,13 +119,17 @@ def test_no_framework_intervention_on_unfinished_plan():
 
 # ── 3. System prompt documents the architecture ────────────────────────────
 
+
 def test_prompt_says_model_drives():
     """The system prompt tells the model it drives the process."""
     src = _AGENT_TOOLS.read_text(encoding="utf-8")
     assert "YOUR PLAN" in src, "system prompt must show the plan to the model"
     if "model drives" not in src.lower() and "The model drives" not in src:
         import pytest
-        pytest.skip("agent_tools.py still needs 'model drives' language — needs prompt cleanup")
+
+        pytest.skip(
+            "agent_tools.py still needs 'model drives' language — needs prompt cleanup"
+        )
 
 
 def test_prompt_no_consolidation_language():
@@ -134,6 +141,7 @@ def test_prompt_no_consolidation_language():
     # TODO: Remove this skip once agent_tools.py system prompt is updated.
     if "CONSOLIDATION" in src:
         import pytest
+
         pytest.skip("agent_tools.py still has CONSOLIDATION — needs prompt cleanup")
 
 
@@ -142,10 +150,12 @@ def test_prompt_no_phase_state_machine_language():
     src = _AGENT_TOOLS.read_text(encoding="utf-8")
     if "PHASE STATE MACHINE" in src or "PLAN phase" in src:
         import pytest
+
         pytest.skip("agent_tools.py still has phase language — needs prompt cleanup")
 
 
 # ── 4. working_memory step summaries (real unit tests) ─────────────────────
+
 
 def test_tasklist_records_and_renders_step_summary():
     wm = TaskList()
@@ -198,22 +208,32 @@ def test_tasklist_clear_resets_summaries():
 
 # ── 5. step_summarizer (real unit tests — module still exists) ──────────────
 
+
 class _FakeClient:
     """Minimal LLM client double — returns a canned response dict."""
+
     def __init__(self, response="Step done. Key fact: the value is 42."):
         self._response = response
         self.calls = []
 
     def chat(self, messages, tools=None, temperature=0.7, stream=False):
-        self.calls.append({"messages": messages, "tools": tools,
-                           "temperature": temperature, "stream": stream})
+        self.calls.append(
+            {
+                "messages": messages,
+                "tools": tools,
+                "temperature": temperature,
+                "stream": stream,
+            }
+        )
         return {"response": self._response}
 
 
 def test_summarize_step_returns_summary():
     client = _FakeClient("Accomplished X. Lesson: Y. Key fact: Z=1.")
     summary = summarize_step(
-        client, goal="g", step_content="do X",
+        client,
+        goal="g",
+        step_content="do X",
         tool_calls=[{"function": {"name": "vault_search", "arguments": {"q": "x"}}}],
         tool_results=[{"results": [{"content": "blah"}]}],
         thinking="hmm let me think",
@@ -228,8 +248,12 @@ def test_summarize_step_trivial_no_tools():
     """A step with no tools and no thinking returns a bare status line."""
     client = _FakeClient()
     summary = summarize_step(
-        client, goal="g", step_content="think about it",
-        tool_calls=[], tool_results=[], thinking="",
+        client,
+        goal="g",
+        step_content="think about it",
+        tool_calls=[],
+        tool_results=[],
+        thinking="",
     )
     assert "Step completed" in summary or "Step done" in summary
     # No LLM call for a trivial step
@@ -240,8 +264,12 @@ def test_summarize_step_trivial_only_thinking():
     """A step with thinking but no tool calls goes through the LLM path."""
     client = _FakeClient()
     summary = summarize_step(
-        client, goal="g", step_content="think about it",
-        tool_calls=[], tool_results=[], thinking="I believe the answer is 42",
+        client,
+        goal="g",
+        step_content="think about it",
+        tool_calls=[],
+        tool_results=[],
+        thinking="I believe the answer is 42",
     )
     # Non-empty thinking means the step is NOT trivial — LLM is called
     assert len(client.calls) == 1
@@ -250,11 +278,15 @@ def test_summarize_step_trivial_only_thinking():
 
 def test_summarize_step_handles_llm_error():
     """If the LLM call raises, summarize_step returns a fallback string."""
+
     class _BoomClient:
         def chat(self, **kw):
             raise RuntimeError("LLM down")
+
     summary = summarize_step(
-        _BoomClient(), goal="g", step_content="do X",
+        _BoomClient(),
+        goal="g",
+        step_content="do X",
         tool_calls=[{"function": {"name": "code_run", "arguments": {}}}],
         tool_results=[{"ok": True}],
     )
@@ -266,7 +298,9 @@ def test_summarize_step_caps_long_output():
     long = "x" * 2000
     client = _FakeClient(long)
     summary = summarize_step(
-        client, goal="g", step_content="do X",
+        client,
+        goal="g",
+        step_content="do X",
         tool_calls=[{"function": {"name": "t", "arguments": {}}}],
         tool_results=[{}],
     )
@@ -286,8 +320,10 @@ def test_build_raw_material_caps():
 
 # ── 6. framework_planner (real unit tests — module still exists) ────────────
 
+
 class _FakePlanClient:
     """Minimal LLM client double for planning calls."""
+
     def __init__(self, response='{"goal":"greet","steps":["say hi"]}'):
         self._response = response
         self.calls = []
@@ -341,9 +377,11 @@ def test_framework_plan_returns_none_on_garbage():
 
 def test_framework_plan_returns_none_on_exception():
     """LLM call failure → None (caller falls back)."""
+
     class _Boom:
         def chat(self, **kw):
             raise RuntimeError("boom")
+
     result = framework_plan(_Boom(), "hi")
     assert result is None
 
@@ -360,6 +398,7 @@ def test_framework_plan_caps_steps():
     steps = [f"step {i}" for i in range(50)]
     client = _FakePlanClient(json.dumps({"goal": "g", "steps": steps}))
     import framework_planner as fp
+
     result = framework_plan(client, "do a lot")
     assert result is not None
     assert len(result[1]) <= fp._MAX_PLAN_STEPS
@@ -370,7 +409,10 @@ def test_extract_json_pure_json():
 
 
 def test_extract_json_with_fences():
-    assert _extract_json('```{"goal":"a","steps":["b"]}```') == {"goal": "a", "steps": ["b"]}
+    assert _extract_json('```{"goal":"a","steps":["b"]}```') == {
+        "goal": "a",
+        "steps": ["b"],
+    }
 
 
 def test_extract_json_none_on_no_json():

@@ -22,6 +22,7 @@ from vault_graph import VaultGraph
 # Test 1 — legacy fallback when no L1 cards exist
 # ---------------------------------------------------------------------------
 
+
 def test_falls_back_to_legacy_when_no_cards(tmp_path):
     """Arrange → Act → Assert.
 
@@ -76,6 +77,7 @@ def test_falls_back_to_legacy_when_no_cards(tmp_path):
 # ---------------------------------------------------------------------------
 # Test 2 — L0 drill-down includes the FULL L0 content (no 2000-char cut)
 # ---------------------------------------------------------------------------
+
 
 def test_l1_drill_down_includes_full_l0(tmp_path):
     """Arrange → Act → Assert.
@@ -147,8 +149,7 @@ def test_l1_drill_down_includes_full_l0(tmp_path):
     # The L0 drill section must contain the full body, not a 2000-char
     # truncation. Repeated prose means any truncation < len(long_body).
     assert long_body in ctx, (
-        "L0 drill-down must include the full L0 body; "
-        "got a truncated version"
+        "L0 drill-down must include the full L0 body; got a truncated version"
     )
     # The drill-down marker must be present in the context.
     assert "--- L0: DRILL-DOWN" in ctx, (

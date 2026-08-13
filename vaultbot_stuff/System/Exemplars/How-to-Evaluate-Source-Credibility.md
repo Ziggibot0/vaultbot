@@ -3,6 +3,7 @@ type: exemplar
 exemplar: procedural-note
 exemplar_procedure: true
 status: experimental
+baseline: true
 created: 2026-07-26
 last_reviewed: 2026-07-26
 review_interval_days: 90

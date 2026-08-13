@@ -189,44 +189,121 @@ class _VerifierError(Exception):
 
 # Builtins the verifier can call — deliberately tiny, all pure functions.
 _SAFE_BUILTINS = {
-    "len": len, "all": all, "any": any, "min": min, "max": max, "sum": sum,
-    "bool": bool, "int": int, "str": str, "float": float, "list": list,
-    "dict": dict, "tuple": tuple, "set": set, "round": round, "sorted": sorted,
-    "enumerate": enumerate, "zip": zip, "range": range, "abs": abs,
-    "True": True, "False": False, "None": None,
+    "len": len,
+    "all": all,
+    "any": any,
+    "min": min,
+    "max": max,
+    "sum": sum,
+    "bool": bool,
+    "int": int,
+    "str": str,
+    "float": float,
+    "list": list,
+    "dict": dict,
+    "tuple": tuple,
+    "set": set,
+    "round": round,
+    "sorted": sorted,
+    "enumerate": enumerate,
+    "zip": zip,
+    "range": range,
+    "abs": abs,
+    "True": True,
+    "False": False,
+    "None": None,
 }
 
 # Attribute names the verifier can access on objects — read-only methods
 # that can't be used to escape the sandbox.  No __dunder__ except __len__
 # (used by len()).  Crucially, __class__, __bases__, __subclasses__,
 # __globals__, __builtins__, __dict__ are NOT here.
-_SAFE_ATTRS = frozenset({
-    "get", "keys", "values", "items",
-    "lower", "upper", "strip", "lstrip", "rstrip",
-    "startswith", "endswith", "split", "rsplit", "join",
-    "find", "rfind", "count", "replace", "isdigit", "isalpha",
-    "append", "extend", "__len__",
-})
+_SAFE_ATTRS = frozenset(
+    {
+        "get",
+        "keys",
+        "values",
+        "items",
+        "lower",
+        "upper",
+        "strip",
+        "lstrip",
+        "rstrip",
+        "startswith",
+        "endswith",
+        "split",
+        "rsplit",
+        "join",
+        "find",
+        "rfind",
+        "count",
+        "replace",
+        "isdigit",
+        "isalpha",
+        "append",
+        "extend",
+        "__len__",
+    }
+)
 
 # AST node types the evaluator allows.  Anything not in this set is rejected.
 # Includes operator nodes (And, Or, Eq, Add, etc.) and Load/Store contexts
 # that ast.walk visits but are harmless.
 _ALLOWED_NODES = (
-    ast.Expression, ast.BoolOp, ast.BinOp, ast.UnaryOp, ast.Compare,
-    ast.Constant, ast.Name, ast.Subscript, ast.Attribute,
-    ast.List, ast.Tuple, ast.Dict, ast.Set, ast.Call, ast.IfExp,
-    ast.ListComp, ast.SetComp, ast.DictComp,  # comprehensions (read-only)
+    ast.Expression,
+    ast.BoolOp,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Compare,
+    ast.Constant,
+    ast.Name,
+    ast.Subscript,
+    ast.Attribute,
+    ast.List,
+    ast.Tuple,
+    ast.Dict,
+    ast.Set,
+    ast.Call,
+    ast.IfExp,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,  # comprehensions (read-only)
     ast.comprehension,
     # Boolean + comparison operators
-    ast.And, ast.Or, ast.Not, ast.Eq, ast.NotEq, ast.Gt, ast.GtE,
-    ast.Lt, ast.LtE, ast.In, ast.NotIn, ast.Is, ast.IsNot,
+    ast.And,
+    ast.Or,
+    ast.Not,
+    ast.Eq,
+    ast.NotEq,
+    ast.Gt,
+    ast.GtE,
+    ast.Lt,
+    ast.LtE,
+    ast.In,
+    ast.NotIn,
+    ast.Is,
+    ast.IsNot,
     # Binary arithmetic operators
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow,
-    ast.FloorDiv, ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Mod,
+    ast.Pow,
+    ast.FloorDiv,
+    ast.LShift,
+    ast.RShift,
+    ast.BitOr,
+    ast.BitAnd,
+    ast.BitXor,
     # Unary operators
-    ast.USub, ast.UAdd, ast.Invert,
+    ast.USub,
+    ast.UAdd,
+    ast.Invert,
     # Load/Store contexts (harmless — just reference modes)
-    ast.Load, ast.Store, ast.Del,
+    ast.Load,
+    ast.Store,
+    ast.Del,
 )
 
 
@@ -248,7 +325,8 @@ def _safe_eval_verifier(expr: str, result: Any) -> Any:
             raise _VerifierError(
                 f"disallowed AST node: {type(node).__name__} — "
                 f"verifiers may only use comparisons, subscripts, "
-                f"attribute access, and function calls")
+                f"attribute access, and function calls"
+            )
 
         # Reject dangerous attribute access FIRST — before the Call check,
         # so __class__/__subclasses__ etc. are caught regardless of whether
@@ -258,7 +336,8 @@ def _safe_eval_verifier(expr: str, result: Any) -> Any:
             if attr not in _SAFE_ATTRS:
                 raise _VerifierError(
                     f"disallowed attribute access: .{attr} — "
-                    f"only read-only methods are permitted")
+                    f"only read-only methods are permitted"
+                )
 
         # Calls: allow (a) top-level builtin names (len, any, etc.) and
         # (b) method calls on whitelisted attributes (result.get(...),
@@ -278,7 +357,8 @@ def _safe_eval_verifier(expr: str, result: Any) -> Any:
             else:
                 raise _VerifierError(
                     "only built-in function calls and method calls "
-                    "on safe attributes are permitted")
+                    "on safe attributes are permitted"
+                )
 
     # Compile the vetted AST and eval with restricted globals.
     code = compile(tree, "<verifier>", "eval")
@@ -571,6 +651,7 @@ class PlanExecutor:
         # the big model's reasoning power. Saves cloud tokens.
         try:
             from llm_client import get_small_client_or_big
+
             _judge_client = get_small_client_or_big()
             prompt = self._build_judge_prompt(plan)
             # Prefer a .chat/.generate style method if present.

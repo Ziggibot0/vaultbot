@@ -37,6 +37,7 @@ DESIGN
 
 Pure stdlib. No LLM calls.
 """
+
 from __future__ import annotations
 
 import json
@@ -76,14 +77,18 @@ class ChatLoopCheckpointer:
     # Directory for per-session checkpoint files.
     _SESSIONS_DIR = Path(__file__).with_name("session_state")
 
-    def __init__(self, state_path: str | Path | None = None,
-                 session_logger: Any = None,
-                 session_id: str | None = None):
+    def __init__(
+        self,
+        state_path: str | Path | None = None,
+        session_logger: Any = None,
+        session_id: str | None = None,
+    ):
         if state_path is None:
             if session_id:
                 self._SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-                state_path = self._SESSIONS_DIR / \
-                    f"chat_loop_checkpoint_{session_id}.json"
+                state_path = (
+                    self._SESSIONS_DIR / f"chat_loop_checkpoint_{session_id}.json"
+                )
             else:
                 state_path = Path(__file__).with_name("chat_loop_checkpoint.json")
         self.state_path = Path(state_path)
@@ -91,11 +96,13 @@ class ChatLoopCheckpointer:
         self.session_id = session_id
 
     @classmethod
-    def for_session(cls, session_id: str,
-                    session_logger: Any = None) -> ChatLoopCheckpointer:
+    def for_session(
+        cls, session_id: str, session_logger: Any = None
+    ) -> ChatLoopCheckpointer:
         """Create a per-session checkpointer."""
-        return cls(state_path=None, session_logger=session_logger,
-                   session_id=session_id)
+        return cls(
+            state_path=None, session_logger=session_logger, session_id=session_id
+        )
 
     # ------------------------------------------------------------------
     def _log(self, event: str, data: dict[str, Any]) -> None:
@@ -141,7 +148,8 @@ class ChatLoopCheckpointer:
             state["updated_at"] = _now_iso()
             state["_ts"] = time.time()
             self._atomic_write(
-                self.state_path, json.dumps(state, ensure_ascii=False, default=str))
+                self.state_path, json.dumps(state, ensure_ascii=False, default=str)
+            )
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log("chat_checkpoint_save_failed", {"error": str(e)})
             logger.warning("ChatLoopCheckpointer: save failed (non-fatal): %s", e)

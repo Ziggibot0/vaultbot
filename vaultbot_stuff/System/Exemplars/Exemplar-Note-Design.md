@@ -9,6 +9,7 @@ tags:
   - ontology
 type: exemplar
 status: raw
+baseline: true
 ---
 
 # Exemplar Note Design

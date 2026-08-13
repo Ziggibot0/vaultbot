@@ -15,6 +15,7 @@ The new ``_safe_eval_verifier`` walks the AST and rejects:
 
 These tests verify both valid verifiers pass AND attack strings are rejected.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -28,7 +29,9 @@ from plan_executor import PlanExecutor, Subtask, _safe_eval_verifier, _VerifierE
 def test_valid_verifier_subscript_and_len():
     """A typical verifier: result["sources"] has >= 3 items."""
     result = {"sources": ["a", "b", "c"], "ok": True}
-    assert _safe_eval_verifier("result['sources'] and len(result['sources']) >= 3", result)
+    assert _safe_eval_verifier(
+        "result['sources'] and len(result['sources']) >= 3", result
+    )
 
 
 def test_valid_verifier_get_method():
@@ -40,7 +43,9 @@ def test_valid_verifier_get_method():
 def test_valid_verifier_bool_and_any():
     """Boolean ops + any() work."""
     result = {"items": [True, False, True]}
-    assert _safe_eval_verifier("any(result['items']) and len(result['items']) > 0", result)
+    assert _safe_eval_verifier(
+        "any(result['items']) and len(result['items']) > 0", result
+    )
 
 
 def test_valid_verifier_string_methods():
@@ -63,8 +68,7 @@ def test_no_verifier_accepts_dict_result():
 def test_attack_class_subclasses_rejected():
     """The classic escape: ().__class__.__bases__[0].__subclasses__()."""
     with pytest.raises(_VerifierError, match="disallowed attribute"):
-        _safe_eval_verifier(
-            "().__class__.__bases__[0].__subclasses__()", {})
+        _safe_eval_verifier("().__class__.__bases__[0].__subclasses__()", {})
 
 
 def test_attack_class_attribute_rejected():
@@ -90,8 +94,12 @@ def test_attack_import_rejected():
     which counts as a failed verification."""
     executor = PlanExecutor(op_registry={}, session_logger=None)
     subtask = Subtask(
-        id="t1", op="noop", intent="", args={},
-        verifier="__import__('os').system('rm -rf /')")
+        id="t1",
+        op="noop",
+        intent="",
+        args={},
+        verifier="__import__('os').system('rm -rf /')",
+    )
     assert executor.verify(subtask, {}) is False
     assert subtask.error is not None
 
@@ -124,6 +132,6 @@ def test_verifier_false_returns_false():
     """A verifier that evaluates to falsy returns False (not an error)."""
     executor = PlanExecutor(op_registry={}, session_logger=None)
     subtask = Subtask(
-        id="t1", op="noop", intent="", args={},
-        verifier="result.get('count', 0) >= 5")
+        id="t1", op="noop", intent="", args={}, verifier="result.get('count', 0) >= 5"
+    )
     assert executor.verify(subtask, {"count": 2}) is False

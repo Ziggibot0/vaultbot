@@ -14,6 +14,7 @@ This is the automated enforcement of the project's fail-loud law:
 
 Run: pytest tests/test_no_silent_swallow.py -v
 """
+
 from __future__ import annotations
 
 import ast
@@ -56,7 +57,18 @@ _SURFACING_PATTERNS = {
 }
 
 # Literal empty returns that indicate silent swallowing.
-_EMPTY_RETURNS = {"[]", "{}", '""', "None", "False", "return []", "return {}", 'return ""', "return None", "return False"}
+_EMPTY_RETURNS = {
+    "[]",
+    "{}",
+    '""',
+    "None",
+    "False",
+    "return []",
+    "return {}",
+    'return ""',
+    "return None",
+    "return False",
+}
 
 
 def _except_body_is_silent_swallower(handler_body: list[ast.stmt]) -> bool:
@@ -124,10 +136,12 @@ def _scan_file(filepath: Path) -> list[tuple[int, str]]:
                     continue  # explicitly justified
 
             if _except_body_is_silent_swallower(node.body):
-                violations.append((
-                    node.lineno,
-                    "silent swallow: except Exception returns empty without logging/raising",
-                ))
+                violations.append(
+                    (
+                        node.lineno,
+                        "silent swallow: except Exception returns empty without logging/raising",
+                    )
+                )
 
     return violations
 
@@ -147,6 +161,7 @@ def _iter_backend_files() -> list[Path]:
 # ─────────────────────────────────────────────────────────────────────────
 # Test
 # ─────────────────────────────────────────────────────────────────────────
+
 
 class TestNoSilentSwallow:
     """Ensure no new silent-swallow except blocks have been introduced.

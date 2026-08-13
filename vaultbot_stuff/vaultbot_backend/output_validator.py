@@ -31,6 +31,7 @@ turns a non-empty list into a corrective tool-result and skips execution.
 
 Pure stdlib. No LLM calls. No I/O.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -38,7 +39,7 @@ from typing import Any
 _TYPE_CHECKS = {
     "string": lambda v: isinstance(v, str),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
-    "number": lambda v: (isinstance(v, (int, float)) and not isinstance(v, bool)),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "boolean": lambda v: isinstance(v, bool),
     "array": lambda v: isinstance(v, list),
     "object": lambda v: isinstance(v, dict),
@@ -56,9 +57,9 @@ def _schema_for(tool_name: str, schemas: list[dict[str, Any]]) -> dict[str, Any]
     return None
 
 
-def validate_tool_call(tool_name: str,
-                       args: dict[str, Any],
-                       schemas: list[dict[str, Any]]) -> list[str]:
+def validate_tool_call(
+    tool_name: str, args: dict[str, Any], schemas: list[dict[str, Any]]
+) -> list[str]:
     """Validate a tool call's arguments against its declared schema.
 
     Args:
@@ -99,8 +100,7 @@ def validate_tool_call(tool_name: str,
         for key in args:
             if key not in props:
                 known = ", ".join(sorted(props))
-                problems.append(
-                    f"unknown parameter '{key}' (valid: {known or 'none'})")
+                problems.append(f"unknown parameter '{key}' (valid: {known or 'none'})")
 
     # 3. types + enums for provided args
     for key, value in args.items():
@@ -108,15 +108,17 @@ def validate_tool_call(tool_name: str,
         if not isinstance(spec, dict):
             continue
         expected = spec.get("type")
-        if (expected in _TYPE_CHECKS and value is not None
-                and not _TYPE_CHECKS[expected](value)):
+        if (
+            expected in _TYPE_CHECKS
+            and value is not None
+            and not _TYPE_CHECKS[expected](value)
+        ):
             problems.append(
-                f"parameter '{key}' must be type {expected}, "
-                f"got {type(value).__name__}")
+                f"parameter '{key}' must be type {expected}, got {type(value).__name__}"
+            )
         enum = spec.get("enum")
         if enum and value is not None and value not in enum:
-            problems.append(
-                f"parameter '{key}' must be one of {enum}, got {value!r}")
+            problems.append(f"parameter '{key}' must be one of {enum}, got {value!r}")
 
     return problems
 
@@ -135,5 +137,6 @@ def corrective_message(tool_name: str, problems: list[str]) -> dict[str, Any]:
         "action_required": (
             "Fix the listed problems and re-issue the tool call with "
             "corrected arguments. Do not change the tool name — only the "
-            "argument values/structure."),
+            "argument values/structure."
+        ),
     }

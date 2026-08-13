@@ -8,6 +8,7 @@ timestamp directory in .vaultbot-update-backup/, reversing a failed or
 unwanted self-update. The backup is created by the plugin's copyCodeTree
 during performSelfUpdate — this endpoint just reverses it.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -34,11 +35,13 @@ async def get_config(svc: Annotated[Services, Depends(get_services)]) -> dict[st
     for b in getattr(svc.search_client, "_backends", []):
         in_cd = b._in_cooldown() if hasattr(b, "_in_cooldown") else False
         rem = b._cooldown_remaining() if hasattr(b, "_cooldown_remaining") else 0.0
-        engines.append({
-            "name": b.name,
-            "in_cooldown": in_cd,
-            "cooldown_remaining_s": int(rem),
-        })
+        engines.append(
+            {
+                "name": b.name,
+                "in_cooldown": in_cd,
+                "cooldown_remaining_s": int(rem),
+            }
+        )
     return {
         "research_backend": "freesearch",
         "search_configured": svc.search_client.is_configured,
@@ -47,7 +50,9 @@ async def get_config(svc: Annotated[Services, Depends(get_services)]) -> dict[st
 
 
 @router.post("/config")
-async def set_config(payload: dict, svc: Annotated[Services, Depends(get_services)]) -> dict[str, Any]:
+async def set_config(
+    payload: dict, svc: Annotated[Services, Depends(get_services)]
+) -> dict[str, Any]:
     """Update research-backend settings at runtime.
 
     FreeSearch is keyless, so tavily_api_key / research_backend are accepted
@@ -157,8 +162,12 @@ async def rollback_update(
             shutil.copy2(backup_file, dest)
             restored += 1
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        return {"status": "error", "error": str(e),
-                "restored": restored, "backup": latest.name}
+        return {
+            "status": "error",
+            "error": str(e),
+            "restored": restored,
+            "backup": latest.name,
+        }
 
     return {
         "status": "ok",

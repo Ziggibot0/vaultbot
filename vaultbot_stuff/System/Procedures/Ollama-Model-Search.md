@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-01
 description: Search Ollama's model library, check available tags, list installed models, and pull new models. Uses the ollama_model_search tool.

@@ -14,6 +14,7 @@ Design principle (for contributors):
 
 See: diagnostics.py for the ``classify_error`` translation chokepoint.
 """
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -176,9 +177,7 @@ class Diagnosis:
         # one. Done in __post_init__ so the dataclass stays cheap to build
         # and the default lives in one place (_DEFAULT_SEVERITY).
         if self.severity is None:
-            self.severity = _DEFAULT_SEVERITY.get(
-                self.category, Severity.BROKEN
-            )
+            self.severity = _DEFAULT_SEVERITY.get(self.category, Severity.BROKEN)
 
     def to_dict(self, include_raw: bool = False) -> dict[str, Any]:
         """JSON-serializable form for WS / HTTP / tests.
@@ -191,7 +190,8 @@ class Diagnosis:
         d = asdict(self)
         d["category"] = self.category.value
         d["severity"] = (
-            self.severity.value if self.severity is not None
+            self.severity.value
+            if self.severity is not None
             else _DEFAULT_SEVERITY.get(self.category, Severity.BROKEN).value
         )
         if not include_raw:

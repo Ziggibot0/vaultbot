@@ -28,6 +28,7 @@ forced gate — the old inline behavior, which the briefing still encourages.
 
 Pure stdlib. No LLM calls. No I/O.
 """
+
 from __future__ import annotations
 
 
@@ -35,11 +36,19 @@ from __future__ import annotations
 # gather information without changing anything, so they're safe before a plan
 # exists. Everything NOT in this set is an "execution" tool that the gate
 # defers until a plan exists.
-EXPLORE_TOOLS = frozenset({
-    "vault_search", "vault_list", "code_read", "capability_audit",
-    "web_read_source", "textbook_read_page", "vault_gaps", "vaultbot_status",
-    "plan_task",  # the planning tool itself — always allowed
-})
+EXPLORE_TOOLS = frozenset(
+    {
+        "vault_search",
+        "vault_list",
+        "code_read",
+        "capability_audit",
+        "web_read_source",
+        "textbook_read_page",
+        "vault_gaps",
+        "vaultbot_status",
+        "plan_task",  # the planning tool itself — always allowed
+    }
+)
 
 # Signal-word heuristics (_MULTistep_SIGNALS, _QUESTION_OPENERS) were REMOVED.
 # The plan gate is now triggered by a simple round counter in chat_handler

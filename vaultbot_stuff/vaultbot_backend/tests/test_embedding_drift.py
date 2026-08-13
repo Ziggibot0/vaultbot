@@ -11,13 +11,17 @@ Documentation grounding:
 - Anatomy of a test (arrange/act/assert)
   https://docs.pytest.org/en/stable/explanation/anatomy.html
 """
+
 import numpy as np
 from embedding_drift import DRIFT_MAX_RATIO, EmbeddingDrift
 
 
 def _dist(a, b):
-    return float(np.linalg.norm(np.asarray(a, dtype=np.float32)
-                                - np.asarray(b, dtype=np.float32)))
+    return float(
+        np.linalg.norm(
+            np.asarray(a, dtype=np.float32) - np.asarray(b, dtype=np.float32)
+        )
+    )
 
 
 def test_helpful_signal_reduces_query_distance(tmp_path):

@@ -4,6 +4,7 @@ tags:
   - design-principle
 type: architecture-note
 status: raw
+baseline: true
 created: 2026-08-03
 summary: Sovereignty means visible user work and hidden AI infrastructure, prioritizing structure over specific file types for folder organization. |workspace sovereignty|vault architecture|content visibility|
 ---

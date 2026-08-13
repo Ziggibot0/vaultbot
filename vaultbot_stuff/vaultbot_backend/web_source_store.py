@@ -34,7 +34,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    VAULT_DIR = Path(__file__).resolve().parent.parent  # vaultbot_stuff/ (framework root, 2 levels up from vaultbot_stuff/vaultbot_backend/)
+    VAULT_DIR = (
+        Path(__file__).resolve().parent.parent
+    )  # vaultbot_stuff/ (framework root, 2 levels up from vaultbot_stuff/vaultbot_backend/)
 except NameError:
     VAULT_DIR = Path(".").resolve()
 WEB_DIR = VAULT_DIR / "learningMaterial" / "web"
@@ -77,8 +79,10 @@ def _load_index() -> list[dict[str, Any]]:
         # Index is corrupt — rebuild from disk so archived sources
         # aren't lost. This is a notified recovery, not a silent reset.
         import logging
+
         logging.getLogger(__name__).error(
-            "web_source_store: index corrupt (%s), rebuilding from disk", e)
+            "web_source_store: index corrupt (%s), rebuilding from disk", e
+        )
         return _rebuild_index_from_disk()
     return []
 
@@ -97,6 +101,7 @@ def _rebuild_index_from_disk() -> list[dict[str, Any]]:
         try:
             content = html_file.read_text(encoding="utf-8", errors="replace")
             import re
+
             m = re.search(r'<meta\s+name="source-url"\s+content="([^"]+)"', content)
             if m:
                 url = m.group(1)
@@ -105,13 +110,15 @@ def _rebuild_index_from_disk() -> list[dict[str, Any]]:
                 title = m2.group(1).strip()
         except OSError:
             pass
-        entries.append({
-            "url": url or f"unknown:{slug}",
-            "file": html_file.name,
-            "title": title or slug,
-            "date": "",
-            "topics": [],
-        })
+        entries.append(
+            {
+                "url": url or f"unknown:{slug}",
+                "file": html_file.name,
+                "title": title or slug,
+                "date": "",
+                "topics": [],
+            }
+        )
     _save_index(entries)
     return entries
 
@@ -119,8 +126,7 @@ def _rebuild_index_from_disk() -> list[dict[str, Any]]:
 def _save_index(entries: list[dict[str, Any]]) -> None:
     _ensure_dirs()
     tmp = INDEX_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False),
-                   encoding="utf-8")
+    tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, INDEX_PATH)
 
 
@@ -131,8 +137,9 @@ def _find_by_url(entries: list[dict[str, Any]], url: str) -> dict[str, Any] | No
     return None
 
 
-def save_source(url: str, html: str, title: str = "",
-                topic: str = "") -> dict[str, Any] | None:
+def save_source(
+    url: str, html: str, title: str = "", topic: str = ""
+) -> dict[str, Any] | None:
     """Save a raw HTML page to learningMaterial/web/ and index it.
 
     Returns the index entry {url, file, title, date, topic}, or None on
@@ -170,8 +177,9 @@ def save_source(url: str, html: str, title: str = "",
     return entry
 
 
-def fetch_and_save(url: str, title: str = "", topic: str = "",
-                   timeout: int = 15) -> dict[str, Any] | None:
+def fetch_and_save(
+    url: str, title: str = "", topic: str = "", timeout: int = 15
+) -> dict[str, Any] | None:
     """Fetch the raw HTML for a URL and save it.
 
     Used when we have a URL but not yet the HTML (e.g. a search hit that
@@ -179,15 +187,17 @@ def fetch_and_save(url: str, title: str = "", topic: str = "",
     URL is empty/short. Raises on fetch or save failure.
     """
     import requests
+
     headers = {
-        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                       "AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/125.0.0.0 Safari/537.36"),
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        ),
         "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
     }
-    resp = requests.get(url, headers=headers, timeout=timeout,
-                        allow_redirects=True)
+    resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
     resp.raise_for_status()
     html = resp.text
     return save_source(url, html, title=title, topic=topic)
@@ -224,14 +234,28 @@ def read_source_text(filename: str) -> str:
         return ""
     try:
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(path.read_text(encoding="utf-8", errors="replace"),
-                             "lxml")
-        for tag in soup(["script", "style", "nav", "footer", "header",
-                         "aside", "form", "noscript", "svg"]):
+
+        soup = BeautifulSoup(path.read_text(encoding="utf-8", errors="replace"), "lxml")
+        for tag in soup(
+            [
+                "script",
+                "style",
+                "nav",
+                "footer",
+                "header",
+                "aside",
+                "form",
+                "noscript",
+                "svg",
+            ]
+        ):
             tag.decompose()
-        main = (soup.find("article") or soup.find("main") or soup.find("body"))
-        text = (main.get_text(separator="\n", strip=True) if main
-                else soup.get_text(separator="\n", strip=True))
+        main = soup.find("article") or soup.find("main") or soup.find("body")
+        text = (
+            main.get_text(separator="\n", strip=True)
+            if main
+            else soup.get_text(separator="\n", strip=True)
+        )
         return re.sub(r"\n{3,}", "\n\n", text)[:50000]
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return ""

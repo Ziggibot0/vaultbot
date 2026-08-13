@@ -9,6 +9,7 @@ Each function receives the ``Services`` instance as its first parameter and
 accesses the identity singleton via ``svc.identity`` instead of reading
 main.py's module-level globals as free variables.
 """
+
 from __future__ import annotations
 
 from services import Services

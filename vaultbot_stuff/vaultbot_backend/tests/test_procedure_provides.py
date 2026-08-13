@@ -12,6 +12,7 @@ Covers:
 
 Offline: no FAISS, no Ollama, no network.
 """
+
 from __future__ import annotations
 
 import sys
@@ -36,43 +37,64 @@ from vault_indexer import VaultIndexer
 # procedure_surface_line — provides rendering
 # ---------------------------------------------------------------------------
 
+
 def test_surface_line_no_provides_when_field_absent():
     """No provides field → no composes section."""
-    line = procedure_surface_line("Standalone", {
-        "type": "procedure",
-        "description": "does one thing",
-        "status": "verified",
-    })
+    line = procedure_surface_line(
+        "Standalone",
+        {
+            "type": "procedure",
+            "description": "does one thing",
+            "status": "verified",
+        },
+    )
     assert "composes" not in line
 
 
 def test_surface_line_no_provides_without_proc_index():
     """provides present but no proc_index → can't resolve, omit composes."""
-    line = procedure_surface_line("Orchestrator", {
-        "type": "procedure",
-        "description": "orchestrates things",
-        "status": "verified",
-        "provides": ["Child-A", "Child-B"],
-    })
+    line = procedure_surface_line(
+        "Orchestrator",
+        {
+            "type": "procedure",
+            "description": "orchestrates things",
+            "status": "verified",
+            "provides": ["Child-A", "Child-B"],
+        },
+    )
     assert "composes" not in line
 
 
 def test_surface_line_resolves_provides_one_level():
     """provides + proc_index → composes line with child descriptions."""
     proc_index = {
-        "Child-A": {"path": "x", "frontmatter": {
-            "type": "procedure", "description": "scans for orphans",
-            "status": "verified"}},
-        "Child-B": {"path": "y", "frontmatter": {
-            "type": "procedure", "description": "analyzes links",
-            "status": "verified"}},
+        "Child-A": {
+            "path": "x",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "scans for orphans",
+                "status": "verified",
+            },
+        },
+        "Child-B": {
+            "path": "y",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "analyzes links",
+                "status": "verified",
+            },
+        },
     }
-    line = procedure_surface_line("Dream-Pass", {
-        "type": "procedure",
-        "description": "orchestrator",
-        "status": "verified",
-        "provides": ["Child-A", "Child-B"],
-    }, proc_index)
+    line = procedure_surface_line(
+        "Dream-Pass",
+        {
+            "type": "procedure",
+            "description": "orchestrator",
+            "status": "verified",
+            "provides": ["Child-A", "Child-B"],
+        },
+        proc_index,
+    )
     assert "composes:" in line
     assert "Child-A — scans for orphans" in line
     assert "Child-B — analyzes links" in line
@@ -81,16 +103,25 @@ def test_surface_line_resolves_provides_one_level():
 def test_surface_line_skips_missing_sub_procedures():
     """A provides name not in proc_index is silently skipped."""
     proc_index = {
-        "Child-A": {"path": "x", "frontmatter": {
-            "type": "procedure", "description": "scans for orphans",
-            "status": "verified"}},
+        "Child-A": {
+            "path": "x",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "scans for orphans",
+                "status": "verified",
+            },
+        },
     }
-    line = procedure_surface_line("Orchestrator", {
-        "type": "procedure",
-        "description": "does stuff",
-        "status": "verified",
-        "provides": ["Child-A", "Nonexistent"],
-    }, proc_index)
+    line = procedure_surface_line(
+        "Orchestrator",
+        {
+            "type": "procedure",
+            "description": "does stuff",
+            "status": "verified",
+            "provides": ["Child-A", "Nonexistent"],
+        },
+        proc_index,
+    )
     assert "Child-A" in line
     assert "Nonexistent" not in line
 
@@ -98,19 +129,33 @@ def test_surface_line_skips_missing_sub_procedures():
 def test_surface_line_skips_flagged_sub_procedures():
     """Flagged children are skipped — they can't run and would add noise."""
     proc_index = {
-        "Child-A": {"path": "x", "frontmatter": {
-            "type": "procedure", "description": "works",
-            "status": "verified"}},
-        "Child-B": {"path": "y", "frontmatter": {
-            "type": "procedure", "description": "broken",
-            "status": "flagged"}},
+        "Child-A": {
+            "path": "x",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "works",
+                "status": "verified",
+            },
+        },
+        "Child-B": {
+            "path": "y",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "broken",
+                "status": "flagged",
+            },
+        },
     }
-    line = procedure_surface_line("Orchestrator", {
-        "type": "procedure",
-        "description": "does stuff",
-        "status": "verified",
-        "provides": ["Child-A", "Child-B"],
-    }, proc_index)
+    line = procedure_surface_line(
+        "Orchestrator",
+        {
+            "type": "procedure",
+            "description": "does stuff",
+            "status": "verified",
+            "provides": ["Child-A", "Child-B"],
+        },
+        proc_index,
+    )
     assert "Child-A" in line
     assert "Child-B" not in line
 
@@ -118,15 +163,21 @@ def test_surface_line_skips_flagged_sub_procedures():
 def test_surface_line_provides_child_without_description():
     """A child with no description still shows its name."""
     proc_index = {
-        "Child-A": {"path": "x", "frontmatter": {
-            "type": "procedure", "status": "verified"}},
+        "Child-A": {
+            "path": "x",
+            "frontmatter": {"type": "procedure", "status": "verified"},
+        },
     }
-    line = procedure_surface_line("Orchestrator", {
-        "type": "procedure",
-        "description": "does stuff",
-        "status": "verified",
-        "provides": ["Child-A"],
-    }, proc_index)
+    line = procedure_surface_line(
+        "Orchestrator",
+        {
+            "type": "procedure",
+            "description": "does stuff",
+            "status": "verified",
+            "provides": ["Child-A"],
+        },
+        proc_index,
+    )
     assert "Child-A" in line
 
 
@@ -134,23 +185,37 @@ def test_surface_line_provides_child_without_description():
 # build_procedure_surface — integration with proc_index
 # ---------------------------------------------------------------------------
 
+
 def test_build_surface_resolves_provides_via_index():
     """build_procedure_surface passes proc_index to surface_line so
     provides is resolved."""
     results = [{"file_path": "Procedures/Dream-Pass.md", "content": ""}]
     proc_index = {
-        "Dream-Pass": {"path": "Procedures/Dream-Pass.md", "frontmatter": {
-            "type": "procedure",
-            "description": "orchestrator",
-            "status": "verified",
-            "provides": ["Dream-Scan", "Dream-Analyze"],
-        }},
-        "Dream-Scan": {"path": "Procedures/Dream-Scan.md", "frontmatter": {
-            "type": "procedure", "description": "scans for orphans",
-            "status": "verified"}},
-        "Dream-Analyze": {"path": "Procedures/Dream-Analyze.md", "frontmatter": {
-            "type": "procedure", "description": "analyzes links",
-            "status": "experimental"}},
+        "Dream-Pass": {
+            "path": "Procedures/Dream-Pass.md",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "orchestrator",
+                "status": "verified",
+                "provides": ["Dream-Scan", "Dream-Analyze"],
+            },
+        },
+        "Dream-Scan": {
+            "path": "Procedures/Dream-Scan.md",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "scans for orphans",
+                "status": "verified",
+            },
+        },
+        "Dream-Analyze": {
+            "path": "Procedures/Dream-Analyze.md",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "analyzes links",
+                "status": "experimental",
+            },
+        },
     }
     surface = build_procedure_surface(results, proc_index)
     assert "Dream-Pass" in surface
@@ -163,14 +228,21 @@ def test_build_surface_resolves_provides_via_index():
 # build_procedure_tree — recursive graph walk
 # ---------------------------------------------------------------------------
 
+
 def test_tree_returns_none_for_missing_stem():
     assert build_procedure_tree("Nonexistent", {}) is None
 
 
 def test_tree_flat_procedure_has_empty_provides():
     proc_index = {
-        "Standalone": {"path": "x", "frontmatter": {
-            "type": "procedure", "description": "solo", "status": "verified"}},
+        "Standalone": {
+            "path": "x",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "solo",
+                "status": "verified",
+            },
+        },
     }
     tree = build_procedure_tree("Standalone", proc_index)
     assert tree is not None
@@ -180,12 +252,23 @@ def test_tree_flat_procedure_has_empty_provides():
 
 def test_tree_resolves_one_level():
     proc_index = {
-        "Parent": {"path": "x", "frontmatter": {
-            "type": "procedure", "description": "parent",
-            "status": "verified", "provides": ["Child"]}},
-        "Child": {"path": "y", "frontmatter": {
-            "type": "procedure", "description": "child",
-            "status": "verified"}},
+        "Parent": {
+            "path": "x",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "parent",
+                "status": "verified",
+                "provides": ["Child"],
+            },
+        },
+        "Child": {
+            "path": "y",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "child",
+                "status": "verified",
+            },
+        },
     }
     tree = build_procedure_tree("Parent", proc_index)
     assert tree["name"] == "Parent"
@@ -197,15 +280,32 @@ def test_tree_resolves_one_level():
 def test_tree_resolves_recursively():
     """Grandparent → Parent → Child chain resolves to depth."""
     proc_index = {
-        "Grandparent": {"path": "a", "frontmatter": {
-            "type": "procedure", "description": "gp",
-            "status": "verified", "provides": ["Parent"]}},
-        "Parent": {"path": "b", "frontmatter": {
-            "type": "procedure", "description": "p",
-            "status": "verified", "provides": ["Child"]}},
-        "Child": {"path": "c", "frontmatter": {
-            "type": "procedure", "description": "c",
-            "status": "verified"}},
+        "Grandparent": {
+            "path": "a",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "gp",
+                "status": "verified",
+                "provides": ["Parent"],
+            },
+        },
+        "Parent": {
+            "path": "b",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "p",
+                "status": "verified",
+                "provides": ["Child"],
+            },
+        },
+        "Child": {
+            "path": "c",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "c",
+                "status": "verified",
+            },
+        },
     }
     tree = build_procedure_tree("Grandparent", proc_index, max_depth=3)
     assert tree["provides"][0]["name"] == "Parent"
@@ -215,12 +315,24 @@ def test_tree_resolves_recursively():
 def test_tree_cycle_detection():
     """A → B → A cycle is detected and doesn't recurse infinitely."""
     proc_index = {
-        "A": {"path": "a", "frontmatter": {
-            "type": "procedure", "description": "a",
-            "status": "verified", "provides": ["B"]}},
-        "B": {"path": "b", "frontmatter": {
-            "type": "procedure", "description": "b",
-            "status": "verified", "provides": ["A"]}},
+        "A": {
+            "path": "a",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "a",
+                "status": "verified",
+                "provides": ["B"],
+            },
+        },
+        "B": {
+            "path": "b",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "b",
+                "status": "verified",
+                "provides": ["A"],
+            },
+        },
     }
     tree = build_procedure_tree("A", proc_index, max_depth=5)
     assert tree["name"] == "A"
@@ -235,9 +347,15 @@ def test_tree_cycle_detection():
 def test_tree_marks_missing_sub_procedures():
     """A provides name that doesn't exist is marked as missing."""
     proc_index = {
-        "Parent": {"path": "x", "frontmatter": {
-            "type": "procedure", "description": "p",
-            "status": "verified", "provides": ["Ghost"]}},
+        "Parent": {
+            "path": "x",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "p",
+                "status": "verified",
+                "provides": ["Ghost"],
+            },
+        },
     }
     tree = build_procedure_tree("Parent", proc_index)
     assert tree["provides"][0]["name"] == "Ghost"
@@ -247,14 +365,32 @@ def test_tree_marks_missing_sub_procedures():
 def test_tree_respects_max_depth():
     """max_depth=1 resolves children but not grandchildren."""
     proc_index = {
-        "GP": {"path": "a", "frontmatter": {
-            "type": "procedure", "description": "gp",
-            "status": "verified", "provides": ["P"]}},
-        "P": {"path": "b", "frontmatter": {
-            "type": "procedure", "description": "p",
-            "status": "verified", "provides": ["C"]}},
-        "C": {"path": "c", "frontmatter": {
-            "type": "procedure", "description": "c", "status": "verified"}},
+        "GP": {
+            "path": "a",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "gp",
+                "status": "verified",
+                "provides": ["P"],
+            },
+        },
+        "P": {
+            "path": "b",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "p",
+                "status": "verified",
+                "provides": ["C"],
+            },
+        },
+        "C": {
+            "path": "c",
+            "frontmatter": {
+                "type": "procedure",
+                "description": "c",
+                "status": "verified",
+            },
+        },
     }
     tree = build_procedure_tree("GP", proc_index, max_depth=1)
     assert tree["provides"][0]["name"] == "P"
@@ -265,6 +401,7 @@ def test_tree_respects_max_depth():
 # ---------------------------------------------------------------------------
 # vault_indexer — embedding surface includes provides
 # ---------------------------------------------------------------------------
+
 
 class _StubOllama:
     def __init__(self):
@@ -325,8 +462,7 @@ def test_orchestrator_embedding_includes_provides_names(tmp_path):
     surface so the orchestrator is discoverable by its children's
     capabilities."""
     idx = _make_indexer(tmp_path)
-    text = idx._embedding_text_for_note(tmp_path / "Dream-Pass.md",
-                                        ORCHESTRATOR_NOTE)
+    text = idx._embedding_text_for_note(tmp_path / "Dream-Pass.md", ORCHESTRATOR_NOTE)
     assert "Dream-Pass" in text
     assert "Biomimetic dream pass orchestrator" in text
     assert "Dream-Scan" in text
@@ -377,8 +513,7 @@ _VALID_PROC_WITH_PROVIDES = (
     "provides:\n"
     "  - Dream-Scan\n"
     "  - Dream-Analyze\n"
-    "---\n"
-    + _VALID_PROC_BODY
+    "---\n" + _VALID_PROC_BODY
 )
 
 
@@ -394,8 +529,9 @@ def test_validator_warns_missing_sub_procedure():
     the validator warns."""
     proc_index = {"Other-Proc": {"path": "x", "frontmatter": {}}}
     result = validate_procedure_text(_VALID_PROC_WITH_PROVIDES, proc_index)
-    provides_warnings = [w for w in result["warnings"]
-                         if "provides" in w.lower() and "Dream-Scan" in w]
+    provides_warnings = [
+        w for w in result["warnings"] if "provides" in w.lower() and "Dream-Scan" in w
+    ]
     assert provides_warnings, "Expected warning about missing Dream-Scan"
 
 
@@ -406,8 +542,9 @@ def test_validator_no_warning_when_sub_procedure_exists():
         "Dream-Analyze": {"path": "y", "frontmatter": {}},
     }
     result = validate_procedure_text(_VALID_PROC_WITH_PROVIDES, proc_index)
-    provides_warnings = [w for w in result["warnings"]
-                         if "provides" in w.lower() and "Dream-Scan" in w]
+    provides_warnings = [
+        w for w in result["warnings"] if "provides" in w.lower() and "Dream-Scan" in w
+    ]
     assert provides_warnings == []
 
 
@@ -416,8 +553,7 @@ def test_validator_no_provides_no_warning():
     note = (
         "---\ntype: procedure\nstatus: experimental\n"
         'description: "test"\nwhen_to_use: testing\n'
-        "falsifiable_if: fail\nallowed_tools:\n  - code_read\n---\n"
-        + _VALID_PROC_BODY
+        "falsifiable_if: fail\nallowed_tools:\n  - code_read\n---\n" + _VALID_PROC_BODY
     )
     result = validate_procedure_text(note)
     provides_warnings = [w for w in result["warnings"] if "provides" in w.lower()]
@@ -457,8 +593,9 @@ def test_tracker_index_parses_provides_list(tmp_path):
     index = tracker.get_procedure_index(str(tmp_path))
     assert "Dream-Pass" in index
     fm = index["Dream-Pass"]["frontmatter"]
-    assert fm.get("provides") == ["Dream-Scan", "Dream-Analyze"], \
+    assert fm.get("provides") == ["Dream-Scan", "Dream-Analyze"], (
         f"provides was mis-parsed as {fm.get('provides')!r}"
+    )
     # The previous scalar key should NOT have swallowed the list items.
     assert fm.get("allowed_tools") == ["run_procedure"]
     assert fm.get("description") == "orchestrator"

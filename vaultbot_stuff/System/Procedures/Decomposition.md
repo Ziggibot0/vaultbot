@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Lens procedure for breaking complex problems into manageable sub-problems. Based on means-ends analysis and decomposition research from cognitive psychology. Updated with triple-try consistency and bite-sized steps."
 description: "Break complex problems into sub-problems using means-ends analysis"

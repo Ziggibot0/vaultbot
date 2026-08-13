@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Find dead code in the backend: functions and classes that are defined but never called or imported anywhere. Scans all .py files for def/class definitions, then checks if each is referenced anywhere else. Returns a list of unreferenced symbols with their locations. Use before refactoring or when cleaning up."

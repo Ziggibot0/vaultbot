@@ -102,25 +102,106 @@ _MUST_KEEP_PATTERNS = re.compile(
 
 # TF-IDF stopword set for extractive condense sentence scoring.
 _CONDENSE_STOPWORDS = {
-    "the", "and", "for", "are", "was", "were", "but", "not", "you", "that",
-    "this", "with", "from", "they", "have", "has", "had", "its", "it",
-    "is", "be", "been", "being", "as", "at", "by", "an", "or", "if", "so",
-    "do", "does", "did", "about", "we", "us", "our", "chapter", "section",
-    "figure", "table", "example", "exercise", "note", "see", "shown",
-    "shows", "using", "use", "used", "one", "two", "three", "first",
-    "second", "third", "also", "these", "those", "which", "who", "whom",
-    "what", "when", "where", "why", "how", "will", "would", "could",
-    "should", "may", "might", "must", "can", "into", "upon", "such",
-    "very", "more", "most", "some", "any", "all", "both", "each", "other",
+    "the",
+    "and",
+    "for",
+    "are",
+    "was",
+    "were",
+    "but",
+    "not",
+    "you",
+    "that",
+    "this",
+    "with",
+    "from",
+    "they",
+    "have",
+    "has",
+    "had",
+    "its",
+    "it",
+    "is",
+    "be",
+    "been",
+    "being",
+    "as",
+    "at",
+    "by",
+    "an",
+    "or",
+    "if",
+    "so",
+    "do",
+    "does",
+    "did",
+    "about",
+    "we",
+    "us",
+    "our",
+    "chapter",
+    "section",
+    "figure",
+    "table",
+    "example",
+    "exercise",
+    "note",
+    "see",
+    "shown",
+    "shows",
+    "using",
+    "use",
+    "used",
+    "one",
+    "two",
+    "three",
+    "first",
+    "second",
+    "third",
+    "also",
+    "these",
+    "those",
+    "which",
+    "who",
+    "whom",
+    "what",
+    "when",
+    "where",
+    "why",
+    "how",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
+    "can",
+    "into",
+    "upon",
+    "such",
+    "very",
+    "more",
+    "most",
+    "some",
+    "any",
+    "all",
+    "both",
+    "each",
+    "other",
 }
 
 
 class LazyCondenser:
     """Lazy de-fluff: condense notes only after they're queried repeatedly."""
 
-    def __init__(self, vault_path: str, ollama_client=None,
-                 session_logger=None,
-                 state_path: str | None = None) -> None:
+    def __init__(
+        self,
+        vault_path: str,
+        ollama_client=None,
+        session_logger=None,
+        state_path: str | None = None,
+    ) -> None:
         self.vault_path = Path(vault_path).resolve()
         self.ollama_client = ollama_client
         self.session_logger = session_logger
@@ -204,8 +285,13 @@ class LazyCondenser:
         marker so the change is auditable; the note keeps its heading,
         source line, navigation, and tags.
         """
-        out: dict = {"condensed": False, "note_path": note_path,
-                     "orig_chars": 0, "new_chars": 0, "error": None}
+        out: dict = {
+            "condensed": False,
+            "note_path": note_path,
+            "orig_chars": 0,
+            "new_chars": 0,
+            "error": None,
+        }
         try:
             if self.ollama_client is None:
                 out["error"] = "no_llm"
@@ -256,13 +342,17 @@ class LazyCondenser:
             if key:
                 self.touch_counts[key] = 0
                 self._save_touch_counts()
-            self._log_event("note_condensed", {
-                "note_path": note_path,
-                "orig_chars": out["orig_chars"],
-                "new_chars": out["new_chars"],
-                "reduction_pct": round(
-                    (1 - out["new_chars"] / max(out["orig_chars"], 1)) * 100, 1),
-            })
+            self._log_event(
+                "note_condensed",
+                {
+                    "note_path": note_path,
+                    "orig_chars": out["orig_chars"],
+                    "new_chars": out["new_chars"],
+                    "reduction_pct": round(
+                        (1 - out["new_chars"] / max(out["orig_chars"], 1)) * 100, 1
+                    ),
+                },
+            )
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             out["error"] = str(e)
             self._log_error("condense_note_failed", e, {"path": note_path})
@@ -284,13 +374,18 @@ class LazyCondenser:
             res = self.condense_note(path)
             if res.get("condensed"):
                 summary["condensed"] += 1
-                summary["details"].append({
-                    "note": Path(path).stem,
-                    "orig": res["orig_chars"],
-                    "new": res["new_chars"],
-                })
+                summary["details"].append(
+                    {
+                        "note": Path(path).stem,
+                        "orig": res["orig_chars"],
+                        "new": res["new_chars"],
+                    }
+                )
             elif res.get("error") and res["error"] not in (
-                    "too_short", "already_condensed", "no_llm"):
+                "too_short",
+                "already_condensed",
+                "no_llm",
+            ):
                 summary["errors"] += 1
         if summary["condensed"]:
             self._log_event("batch_condensed", summary)
@@ -312,11 +407,13 @@ class LazyCondenser:
             if self.ollama_client is None:
                 raise ValueError(
                     "_condense_body: VAULTBOT_CONDENSE_MODE=llm but "
-                    "ollama_client is None")
+                    "ollama_client is None"
+                )
             return self._llm_condense(body, note_title)
         raise ValueError(
             f"_condense_body: unknown VAULTBOT_CONDENSE_MODE={mode!r} "
-            f"(use 'llm' or 'extractive')")
+            f"(use 'llm' or 'extractive')"
+        )
 
     # ------------------------------------------------------------------ #
     # Extractive condense (zero LLM)
@@ -435,6 +532,7 @@ class LazyCondenser:
         # precise (preserve wikilinks, drop scaffolding) and a small model
         # can follow them. Saves cloud tokens on every condense.
         from llm_client import get_small_client_or_big
+
         _condense_client = get_small_client_or_big()
         resp = _condense_client.chat(messages, temperature=0.2, stream=False)
         # LLMClient.chat() returns {"response": str, "thinking": str,
@@ -544,8 +642,7 @@ class LazyCondenser:
         try:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.state_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.touch_counts, indent=2),
-                           encoding="utf-8")
+            tmp.write_text(json.dumps(self.touch_counts, indent=2), encoding="utf-8")
             os.replace(tmp, self.state_path)
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("save_touch_counts_failed", e)
@@ -578,11 +675,9 @@ class LazyCondenser:
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass
 
-    def _log_error(self, event: str, err: Exception,
-                   extra: dict | None = None) -> None:
+    def _log_error(self, event: str, err: Exception, extra: dict | None = None) -> None:
         try:
             if self.session_logger is not None and hasattr(self.session_logger, "log"):
-                self.session_logger.log(event, {"error": str(err),
-                                                **(extra or {})})
+                self.session_logger.log(event, {"error": str(err), **(extra or {})})
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass

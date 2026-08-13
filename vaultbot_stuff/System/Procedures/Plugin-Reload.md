@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Reload the Obsidian plugin without killing the backend.

@@ -17,6 +17,7 @@ run before shipping a retrieval-affecting change, and the job CI runs on a box
 with the index present. Exit code 0 = pass, 1 = fail, 2 = could not build the
 retriever (index/Ollama unavailable).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -73,23 +74,36 @@ def _build_retriever(vault_path: str):
         drift = None  # drift is optional; retrieval works without it
 
     retriever = FusedRetriever(
-        vault_graph=graph, vault_indexer=indexer, embedding_drift=drift)
+        vault_graph=graph, vault_indexer=indexer, embedding_drift=drift
+    )
     return retriever, None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live golden-set retrieval gate")
-    ap.add_argument("--vault", default=os.getenv("VAULT_PATH", "."),
-                    help="Path to the vault root (default: VAULT_PATH or .)")
+    ap.add_argument(
+        "--vault",
+        default=os.getenv("VAULT_PATH", "."),
+        help="Path to the vault root (default: VAULT_PATH or .)",
+    )
     ap.add_argument("--k", type=int, default=5, help="retrieval cutoff")
-    ap.add_argument("--min-recall", type=float, default=0.5,
-                    help="minimum aggregate recall@k to pass")
-    ap.add_argument("--min-ndcg", type=float, default=0.0,
-                    help="optional minimum aggregate NDCG@k")
-    ap.add_argument("--golden", default=None,
-                    help="path to golden_set.json (default: alongside this script)")
-    ap.add_argument("--report", default=None,
-                    help="write the full JSON report to this path")
+    ap.add_argument(
+        "--min-recall",
+        type=float,
+        default=0.5,
+        help="minimum aggregate recall@k to pass",
+    )
+    ap.add_argument(
+        "--min-ndcg", type=float, default=0.0, help="optional minimum aggregate NDCG@k"
+    )
+    ap.add_argument(
+        "--golden",
+        default=None,
+        help="path to golden_set.json (default: alongside this script)",
+    )
+    ap.add_argument(
+        "--report", default=None, help="write the full JSON report to this path"
+    )
     args = ap.parse_args()
 
     golden = load_golden_set(args.golden)
@@ -104,11 +118,14 @@ def main() -> int:
 
     report = run_golden_eval(retriever, golden_set=golden, k=args.k)
     verdict = check_regression(
-        report, min_recall=args.min_recall, min_ndcg=args.min_ndcg)
+        report, min_recall=args.min_recall, min_ndcg=args.min_ndcg
+    )
 
     agg = report["aggregate"]
     print(f"Golden-set gate: {report['query_count']} queries, k={args.k}")
-    print(f"  recall@{args.k}   = {agg['recall_at_k']:.3f}  (floor {args.min_recall:.3f})")
+    print(
+        f"  recall@{args.k}   = {agg['recall_at_k']:.3f}  (floor {args.min_recall:.3f})"
+    )
     print(f"  precision@{args.k}= {agg['precision_at_k']:.3f}")
     print(f"  ndcg@{args.k}     = {agg['ndcg_at_k']:.3f}")
     print(f"  mrr          = {agg['mrr']:.3f}")
@@ -123,7 +140,8 @@ def main() -> int:
         try:
             Path(args.report).write_text(
                 json.dumps({"report": report, "verdict": verdict}, indent=2),
-                encoding="utf-8")
+                encoding="utf-8",
+            )
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             print(f"  (could not write report: {e})")
 

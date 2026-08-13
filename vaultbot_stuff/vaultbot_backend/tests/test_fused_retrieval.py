@@ -16,6 +16,7 @@ Documentation grounding:
 Leaf-module imports only — `import main` is hard-fenced by conftest.py
 (main.py calls acquire_lock() → sys.exit + loads the live FAISS index).
 """
+
 import sys
 import types
 
@@ -120,7 +121,7 @@ def test_merge_dedups_by_file_path(tmp_path):
     # score stays at the vector max and the entry is deduped to one row.
     dup_path = "dup.md"
     vector_hits = [
-        {"file_path": dup_path, "score": 0.3},   # closer → higher norm score
+        {"file_path": dup_path, "score": 0.3},  # closer → higher norm score
         {"file_path": "other.md", "score": 0.6},
     ]
 
@@ -143,9 +144,7 @@ def test_merge_dedups_by_file_path(tmp_path):
         def search(self, query, k=10):
             return list(vector_hits)
 
-    fused = FusedRetriever(
-        vault_graph=_OverlapGraph(), vault_indexer=_OverlapIndexer()
-    )
+    fused = FusedRetriever(vault_graph=_OverlapGraph(), vault_indexer=_OverlapIndexer())
 
     # Act
     out = fused.retrieve("q", k=5)
@@ -185,8 +184,8 @@ def test_drift_rerank_promotes_helpful_note(tmp_path, monkeypatch):
     #   baseline distances:  best 0.106 < mid 0.128 < helped 0.150
     #   drifted  distance:  helped 0.100  (< best 0.106) → rank 0
     c_helped = np.array([0.85, 0.01, 0.0, 0.0], dtype=np.float32)  # dist≈0.150
-    c_mid = np.array([0.92, 0.10, 0.0, 0.0], dtype=np.float32)      # dist≈0.128
-    c_best = np.array([0.93, 0.08, 0.0, 0.0], dtype=np.float32)     # dist≈0.106
+    c_mid = np.array([0.92, 0.10, 0.0, 0.0], dtype=np.float32)  # dist≈0.128
+    c_best = np.array([0.93, 0.08, 0.0, 0.0], dtype=np.float32)  # dist≈0.106
     helped_path = str(tmp_path / "helped.md")
     mid_path = str(tmp_path / "mid.md")
     best_path = str(tmp_path / "best.md")
@@ -197,7 +196,10 @@ def test_drift_rerank_promotes_helpful_note(tmp_path, monkeypatch):
     vector_hits = [
         {"file_path": best_path, "score": float(np.linalg.norm(c_best - query_emb))},
         {"file_path": mid_path, "score": float(np.linalg.norm(c_mid - query_emb))},
-        {"file_path": helped_path, "score": float(np.linalg.norm(c_helped - query_emb))},
+        {
+            "file_path": helped_path,
+            "score": float(np.linalg.norm(c_helped - query_emb)),
+        },
     ]
 
     class _DriftIndexer:
@@ -253,6 +255,7 @@ def test_drift_rerank_promotes_helpful_note(tmp_path, monkeypatch):
 class _NoEdgeGraph:
     """Graph stub with no edges — isolates the vector/drift channel so the
     test only observes drift re-ranking, not graph boosts."""
+
     nodes = {}
     backlinks = {}
 

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Verify a vault note's factual claims against the rest of the vault. Given a note path, extracts claims and searches the vault for supporting or contradicting evidence in other notes. Returns claims that are unsupported or contradicted by other vault notes. Use when validating a note before relying on it.

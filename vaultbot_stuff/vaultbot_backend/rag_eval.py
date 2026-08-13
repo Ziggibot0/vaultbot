@@ -30,8 +30,12 @@ class RAGEvaluator:
     - Future: calibration tracker integration (automatic from corrections)
     """
 
-    def __init__(self, log_path: str = None, regression_window: int = 10,
-                 regression_threshold: float = 0.1):
+    def __init__(
+        self,
+        log_path: str = None,
+        regression_window: int = 10,
+        regression_threshold: float = 0.1,
+    ):
         """Initialize the RAG evaluator.
 
         Args:
@@ -43,8 +47,7 @@ class RAGEvaluator:
                                   alert (0.1 = 10% drop).
         """
         self.log_path = log_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "rag_eval_log.json"
+            os.path.dirname(os.path.abspath(__file__)), "rag_eval_log.json"
         )
         self.regression_window = regression_window
         self.regression_threshold = regression_threshold
@@ -54,11 +57,11 @@ class RAGEvaluator:
         """Create the log file if it doesn't exist."""
         if not os.path.exists(self.log_path):
             with open(self.log_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "retrieval_logs": [],
-                    "ground_truth": {},
-                    "metric_history": []
-                }, f, indent=2)
+                json.dump(
+                    {"retrieval_logs": [], "ground_truth": {}, "metric_history": []},
+                    f,
+                    indent=2,
+                )
 
     def _load(self) -> dict:
         with open(self.log_path, encoding="utf-8") as f:
@@ -70,8 +73,9 @@ class RAGEvaluator:
 
     # ─── Logging (always on, cheap) ───
 
-    def log_retrieval(self, query: str, retrieved: list[dict],
-                      k: int = 5, timestamp: str = None) -> None:
+    def log_retrieval(
+        self, query: str, retrieved: list[dict], k: int = 5, timestamp: str = None
+    ) -> None:
         """Log a retrieval event. Called after every FUSED retrieve.
 
         Args:
@@ -88,20 +92,24 @@ class RAGEvaluator:
         for r in retrieved:
             if isinstance(r, dict):
                 identifier = r.get("file_path") or r.get("title") or str(r)
-                retrieved_notes.append({
-                    "note": identifier,
-                    "score": r.get("score", 0),
-                    "vector_score": r.get("vector_score", 0),
-                    "graph_score": r.get("graph_score", 0),
-                    "backlink_score": r.get("backlink_score", 0),
-                })
+                retrieved_notes.append(
+                    {
+                        "note": identifier,
+                        "score": r.get("score", 0),
+                        "vector_score": r.get("vector_score", 0),
+                        "graph_score": r.get("graph_score", 0),
+                        "backlink_score": r.get("backlink_score", 0),
+                    }
+                )
 
-        data["retrieval_logs"].append({
-            "timestamp": ts,
-            "query": query,
-            "k": k,
-            "retrieved": retrieved_notes,
-        })
+        data["retrieval_logs"].append(
+            {
+                "timestamp": ts,
+                "query": query,
+                "k": k,
+                "retrieved": retrieved_notes,
+            }
+        )
         self._save(data)
 
     # ─── Ground truth management ───
@@ -171,7 +179,9 @@ class RAGEvaluator:
 
     # ─── Metric computation ───
 
-    def _compute_recall_at_k(self, retrieved: list[str], relevant: list[str], k: int) -> float:
+    def _compute_recall_at_k(
+        self, retrieved: list[str], relevant: list[str], k: int
+    ) -> float:
         """Recall@k: fraction of relevant notes in top-k results."""
         if not relevant:
             return 0.0
@@ -181,7 +191,9 @@ class RAGEvaluator:
         hits = len(retrieved_set & relevant_set)
         return hits / len(relevant_set)
 
-    def _compute_precision_at_k(self, retrieved: list[str], relevant: list[str], k: int) -> float:
+    def _compute_precision_at_k(
+        self, retrieved: list[str], relevant: list[str], k: int
+    ) -> float:
         """Precision@k: fraction of top-k results that are relevant."""
         top_k = retrieved[:k]
         if not top_k:
@@ -191,7 +203,9 @@ class RAGEvaluator:
         hits = len(retrieved_set & relevant_set)
         return hits / len(retrieved_set)
 
-    def _compute_ndcg_at_k(self, retrieved: list[str], relevant: list[str], k: int) -> float:
+    def _compute_ndcg_at_k(
+        self, retrieved: list[str], relevant: list[str], k: int
+    ) -> float:
         """NDCG@k: normalized discounted cumulative gain.
 
         Uses binary relevance (1 if relevant, 0 if not).
@@ -227,8 +241,9 @@ class RAGEvaluator:
                 return 1.0 / (i + 1)
         return 0.0
 
-    def evaluate_retrieval(self, query: str, retrieved: list[dict],
-                           relevant: list[str] = None, k: int = 5) -> dict:
+    def evaluate_retrieval(
+        self, query: str, retrieved: list[dict], relevant: list[str] = None, k: int = 5
+    ) -> dict:
         """Compute retrieval metrics for a single query.
 
         Args:
@@ -319,8 +334,8 @@ class RAGEvaluator:
             }
 
         # Split into baseline and recent
-        recent = history[-self.regression_window:]
-        baseline = history[:-self.regression_window]
+        recent = history[-self.regression_window :]
+        baseline = history[: -self.regression_window]
 
         metrics = ["recall_at_k", "precision_at_k", "ndcg_at_k", "mrr"]
         regressions = {}
@@ -378,7 +393,7 @@ class RAGEvaluator:
                 "total_queries_logged": len(data.get("retrieval_logs", [])),
                 "total_evaluated": 0,
                 "ground_truth_count": len(data.get("ground_truth", {})),
-                "message": "No metrics computed yet (no ground truth available)"
+                "message": "No metrics computed yet (no ground truth available)",
             }
 
         metrics = ["recall_at_k", "precision_at_k", "ndcg_at_k", "mrr"]
@@ -429,14 +444,16 @@ class RAGEvaluator:
                 query_gaps.append(f"low_mrr ({mrr})")
 
             if query_gaps:
-                gaps.append({
-                    "query": h.get("query"),
-                    "gaps": query_gaps,
-                    "recall": recall,
-                    "precision": precision,
-                    "ndcg": h.get("ndcg_at_k"),
-                    "mrr": mrr,
-                    "timestamp": h.get("timestamp"),
-                })
+                gaps.append(
+                    {
+                        "query": h.get("query"),
+                        "gaps": query_gaps,
+                        "recall": recall,
+                        "precision": precision,
+                        "ndcg": h.get("ndcg_at_k"),
+                        "mrr": mrr,
+                        "timestamp": h.get("timestamp"),
+                    }
+                )
 
         return gaps

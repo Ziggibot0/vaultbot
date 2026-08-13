@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: "Detect when the vault's embedding index has drifted from the actual file state — files added/modified/deleted since last indexing, stale embeddings, or index size mismatch. Fully deterministic: compares the embedding index metadata against the actual vault file listing. No LLM reasoning needed — the small model only formats the report."

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-06
 description: "JSON array of model names to test (e.g. ['qwen3:1.7b', 'qwen3.5:0.8b', 'gemma3:1b']). If empty, tests all installed models under 4GB."

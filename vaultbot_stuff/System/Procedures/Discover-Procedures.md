@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-07-31
 description: Scan chat history for recurring tool-call patterns and multi-step workflows that happen 3+ times, then draft candidate procedure specs for each. Use to automate what you do manually. Run periodically or when asked to find what to proceduralize next.

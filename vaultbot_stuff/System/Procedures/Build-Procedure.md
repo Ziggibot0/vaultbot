@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 model_cartridge: big
 created: 2026-08-06
 description: "Build a complete, tested, verified procedure from a task description. This is the one-shot procedure factory: give it a task, get back a working procedure on disk. It composes drafting (LLM step), big-model quality review (code step with llm_generate), vault_safe_write (disk), Verify-Procedure-Args (static checks), vault_lint (link/frontmatter quality), and Test-Procedure-Until-Pass (dynamic test→fix→retest loop). The result is a procedure that has been drafted, reviewed, written, statically verified, dynamically tested, auto-fixed if broken, and linted. Use this whenever you need a new procedure — it replaces the manual draft→review→write→test→fix→lint workflow with a single call."

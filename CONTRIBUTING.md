@@ -93,6 +93,52 @@ follow the same safety protocol the agent uses:
 - `vaultbot_stuff/vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
 - `vaultbot_stuff/learningMaterial/` (user's PDFs)
 
+## Baseline markers
+
+VaultBot lives in a single repo that serves two purposes: it's the public
+baseline that anyone can download, AND it's your personal vault that grows
+with you. The `.gitignore` keeps personal data (chat logs, identity, notes)
+out of git. But there's a gray zone: **procedures and System notes** under
+`vaultbot_stuff/System/`. Some are general-purpose (every VaultBot user
+wants them), some are bespoke to your vault.
+
+The `baseline` frontmatter field draws the line:
+
+```yaml
+---
+type: procedure
+status: verified
+baseline: true   # ← this ships to everyone
+---
+```
+
+**Rules:**
+
+| File type | Needs `baseline: true`? |
+|-----------|------------------------|
+| `vaultbot_backend/*.py` | No — all backend code is baseline |
+| `vaultbot_stuff/System/**/*.md` | **Yes** — must have `baseline: true` to commit |
+| Root `.md` files (directives, README) | No — gitignored separately if personal |
+| `vaultbot_stuff/baseline/` templates | No — always baseline |
+
+**What happens if you forget:**
+
+- **Pre-commit hook** — blocks the commit with a message telling you which
+  files need the marker. Run `pre-commit install` once to activate it.
+- **`submit_contribution` tool** — excludes non-baseline files from the PR
+  automatically. You'll see a warning listing what was excluded.
+- **`review_contributions` tool** — flags new System/ files without the
+  marker as a high-severity issue during PR review.
+
+**To mark a procedure as shippable:** add `baseline: true` to its YAML
+frontmatter. That's it. The file will pass the pre-commit hook and be
+included in community PRs.
+
+**To keep a procedure personal:** don't add the marker (or set
+`baseline: false`). It won't be committed and won't appear in PRs.
+If it's already tracked by git, move it outside `vaultbot_stuff/System/`
+or add it to `.gitignore`.
+
 ## Coding style
 
 - UTF-8 everywhere. The agent's `code_write` once corrupted every Unicode

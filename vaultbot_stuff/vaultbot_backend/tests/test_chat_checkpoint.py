@@ -5,6 +5,7 @@ Offline: no FAISS, no Ollama, no network. Uses tmp_path for the state file.
 
 Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 """
+
 from __future__ import annotations
 
 import time
@@ -18,12 +19,16 @@ from working_memory import TaskList
 # ---------------------------------------------------------------------------
 def test_save_then_load_roundtrip(tmp_path):
     cp = ChatLoopCheckpointer(state_path=tmp_path / "cp.json")
-    cp.save({
-        "user_message": "research X",
-        "round_idx": 3,
-        "tool_history": [{"round": 0, "tool": "vault_search", "result_summary": "5 hits"}],
-        "working_memory": {"goal": "g", "tasks": []},
-    })
+    cp.save(
+        {
+            "user_message": "research X",
+            "round_idx": 3,
+            "tool_history": [
+                {"round": 0, "tool": "vault_search", "result_summary": "5 hits"}
+            ],
+            "working_memory": {"goal": "g", "tasks": []},
+        }
+    )
     loaded = cp.load()
     assert loaded is not None
     assert loaded["user_message"] == "research X"
@@ -41,6 +46,7 @@ def test_load_ignores_stale_checkpoint(tmp_path):
     cp.save({"user_message": "old turn", "round_idx": 1})
     # Force the stored timestamp into the past so it's stale.
     import json
+
     data = json.loads((tmp_path / "cp.json").read_text(encoding="utf-8"))
     data["_ts"] = time.time() - 100000
     (tmp_path / "cp.json").write_text(json.dumps(data), encoding="utf-8")
@@ -83,7 +89,9 @@ def test_restore_snapshot_roundtrip():
 
 def test_restore_snapshot_skips_malformed():
     wm = TaskList()
-    wm.restore_snapshot({"goal": "g", "tasks": [{"content": "ok", "status": "bogus"}, "not-a-dict"]})
+    wm.restore_snapshot(
+        {"goal": "g", "tasks": [{"content": "ok", "status": "bogus"}, "not-a-dict"]}
+    )
     # bogus status coerced to pending; non-dict skipped
     assert len(wm.tasks) == 1
     assert wm.tasks[0].status == "pending"

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: verified
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: "Search the vault for notes matching a query, then rank and deduplicate results by reading the actual note content. Given a query, runs vault_search, reads the top results, and the small model re-ranks them by true relevance (not just keyword overlap). Supports iterative deepening: if the first pass is thin, it runs follow-up searches on subtopics. Replaces the former Deep-Vault-Search and Smart-Vault-Dig procedures."

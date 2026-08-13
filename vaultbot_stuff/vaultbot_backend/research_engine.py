@@ -49,15 +49,35 @@ _BLOCKED_DOMAINS = {
 
 # Academic/authoritative domains get a relevance boost.
 _ACADEMIC_DOMAINS = {
-    "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "pmc.ncbi.nlm.nih.gov",
-    "nature.com", "science.org", "sciencedirect.com", "springer.com",
-    "wiley.com", "oxfordacademic.com", "plos.org", "frontiersin.org",
-    "mdpi.com", "biomedcentral.com", "royalsocietypublishing.org",
-    "cell.com", "elifesciences.org", "ncbi.nlm.nih.gov",
-    "openstax.org", "khanacademy.org", "britannica.com",
-    "sciencedaily.com", "phys.org", "eurekalert.org",
-    "annualreviews.org", "jstor.org", "doi.org", "bmglabtech.com",
+    "arxiv.org",
+    "pubmed.ncbi.nlm.nih.gov",
+    "pmc.ncbi.nlm.nih.gov",
+    "nature.com",
+    "science.org",
+    "sciencedirect.com",
+    "springer.com",
+    "wiley.com",
+    "oxfordacademic.com",
+    "plos.org",
+    "frontiersin.org",
+    "mdpi.com",
+    "biomedcentral.com",
+    "royalsocietypublishing.org",
+    "cell.com",
+    "elifesciences.org",
+    "ncbi.nlm.nih.gov",
+    "openstax.org",
+    "khanacademy.org",
+    "britannica.com",
+    "sciencedaily.com",
+    "phys.org",
+    "eurekalert.org",
+    "annualreviews.org",
+    "jstor.org",
+    "doi.org",
+    "bmglabtech.com",
 }
+
 
 def _is_blocked_source(url: str) -> bool:
     if not url:
@@ -66,6 +86,7 @@ def _is_blocked_source(url: str) -> bool:
     if any(domain in url_lower for domain in _BLOCKED_DOMAINS):
         return True
     return False
+
 
 def _is_academic_source(url: str) -> bool:
     """Check if a URL is from an academic/authoritative domain."""
@@ -86,40 +107,186 @@ def _normalize_url(url: str) -> str:
     if not url:
         return ""
     u = url.lower().strip()
-    u = re.sub(r'^https?://', '', u)
-    u = re.sub(r'^www\.', '', u)
-    u = u.split('#')[0]
-    u = u.rstrip('/')
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    u = u.split("#")[0]
+    u = u.rstrip("/")
     return u
+
 
 # --- Stopwords for keyterm extraction (no external dep) -------------------
 _STOPWORDS = {
-    "the", "a", "an", "and", "or", "but", "if", "then", "else", "when", "of",
-    "in", "on", "at", "to", "for", "with", "without", "into", "from", "by",
-    "as", "is", "are", "was", "were", "be", "been", "being", "this", "that",
-    "these", "those", "it", "its", "they", "them", "their", "we", "you",
-    "your", "our", "i", "me", "my", "he", "she", "his", "her", "him", "who",
-    "whom", "which", "what", "why", "how", "where", "there", "here", "about",
-    "than", "so", "do", "does", "did", "doing", "have", "has", "had", "not",
-    "no", "yes", "can", "could", "should", "would", "may", "might", "will",
-    "shall", "must", "between", "within", "among", "through", "during",
-    "before", "after", "above", "below", "over", "under", "up", "down",
-    "out", "off", "again", "further", "once", "such", "also", "only", "own",
-    "same", "other", "some", "any", "all", "both", "each", "few", "more",
-    "most", "many", "much", "little", "less", "least", "vs", "versus",
-    "via", "per", "etc", "ie", "eg", "upon", "because", "while", "since",
-    "however", "therefore", "thus", "hence", "whether", "either", "neither",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "if",
+    "then",
+    "else",
+    "when",
+    "of",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "with",
+    "without",
+    "into",
+    "from",
+    "by",
+    "as",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "they",
+    "them",
+    "their",
+    "we",
+    "you",
+    "your",
+    "our",
+    "i",
+    "me",
+    "my",
+    "he",
+    "she",
+    "his",
+    "her",
+    "him",
+    "who",
+    "whom",
+    "which",
+    "what",
+    "why",
+    "how",
+    "where",
+    "there",
+    "here",
+    "about",
+    "than",
+    "so",
+    "do",
+    "does",
+    "did",
+    "doing",
+    "have",
+    "has",
+    "had",
+    "not",
+    "no",
+    "yes",
+    "can",
+    "could",
+    "should",
+    "would",
+    "may",
+    "might",
+    "will",
+    "shall",
+    "must",
+    "between",
+    "within",
+    "among",
+    "through",
+    "during",
+    "before",
+    "after",
+    "above",
+    "below",
+    "over",
+    "under",
+    "up",
+    "down",
+    "out",
+    "off",
+    "again",
+    "further",
+    "once",
+    "such",
+    "also",
+    "only",
+    "own",
+    "same",
+    "other",
+    "some",
+    "any",
+    "all",
+    "both",
+    "each",
+    "few",
+    "more",
+    "most",
+    "many",
+    "much",
+    "little",
+    "less",
+    "least",
+    "vs",
+    "versus",
+    "via",
+    "per",
+    "etc",
+    "ie",
+    "eg",
+    "upon",
+    "because",
+    "while",
+    "since",
+    "however",
+    "therefore",
+    "thus",
+    "hence",
+    "whether",
+    "either",
+    "neither",
 }
 
 # Facets are the kinds of questions a "deep" answer should cover. The engine
 # detects which facets a topic implies and then checks coverage of each.
 _FACET_PATTERNS = [
-    ("definition", re.compile(r"\b(what (is|are)|define|definition|meaning of)\b", re.I)),
-    ("history", re.compile(r"\b(history|origin|when (did|was)|who (discovered|invented|founded))\b", re.I)),
-    ("mechanism", re.compile(r"\b(how (does|do|can)|mechanism|process|works?|algorithm)\b", re.I)),
-    ("examples", re.compile(r"\b(examples?|instances?|cases?|kinds?|types?|categories)\b", re.I)),
-    ("comparison", re.compile(r"\b(vs|versus|compare|difference|better|alternatives?)\b", re.I)),
-    ("pros_cons", re.compile(r"\b(pros?|cons?|advantages?|disadvantages?|benefits?|drawbacks?|risks?)\b", re.I)),
+    (
+        "definition",
+        re.compile(r"\b(what (is|are)|define|definition|meaning of)\b", re.I),
+    ),
+    (
+        "history",
+        re.compile(
+            r"\b(history|origin|when (did|was)|who (discovered|invented|founded))\b",
+            re.I,
+        ),
+    ),
+    (
+        "mechanism",
+        re.compile(r"\b(how (does|do|can)|mechanism|process|works?|algorithm)\b", re.I),
+    ),
+    (
+        "examples",
+        re.compile(r"\b(examples?|instances?|cases?|kinds?|types?|categories)\b", re.I),
+    ),
+    (
+        "comparison",
+        re.compile(r"\b(vs|versus|compare|difference|better|alternatives?)\b", re.I),
+    ),
+    (
+        "pros_cons",
+        re.compile(
+            r"\b(pros?|cons?|advantages?|disadvantages?|benefits?|drawbacks?|risks?)\b",
+            re.I,
+        ),
+    ),
     ("recent", re.compile(r"\b(recent|latest|current|2024|2025|2026|new)\b", re.I)),
 ]
 
@@ -152,7 +319,9 @@ def _keyterms(text: str, max_terms: int = 6) -> list[str]:
     # matched nothing and proper nouns like "FAISS IndexIDMap2" were never
     # extracted — generic tokens ("python", "vectors") then dominated and
     # arXiv returned any paper mentioning "Python".
-    phrases = re.findall(r"\b([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+){0,3})\b", original)
+    phrases = re.findall(
+        r"\b([A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+){0,3})\b", original
+    )
     # Pull quoted phrases (the user often telegraphs the topic).
     quoted = re.findall(r"[\"']([^\"']+)[\"']", original)
     work = token_source.replace("?", " ").replace("!", " ").strip().lower()
@@ -214,12 +383,14 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _tokenize_light(text: str) -> list[str]:
-    return [w for w in re.findall(r"[a-z0-9][a-z0-9\-]+", text.lower())
-            if w not in _STOPWORDS and len(w) > 2]
+    return [
+        w
+        for w in re.findall(r"[a-z0-9][a-z0-9\-]+", text.lower())
+        if w not in _STOPWORDS and len(w) > 2
+    ]
 
 
-def _score_sentence(sentence: str, keyterms: list[str],
-                    source_count: int) -> float:
+def _score_sentence(sentence: str, keyterms: list[str], source_count: int) -> float:
     """Extractive score: keyword density * corroboration boost.
 
     Signal terms (proper nouns, API names, multi-word phrases — the terms
@@ -273,6 +444,7 @@ def _score_sentence(sentence: str, keyterms: list[str],
 # Generic single words ("python", "vectors", "how", "delete") are NOT signal
 # — millions of pages contain them and they carry no topical information.
 
+
 def _signal_terms(keyterms: list[str]) -> list[str]:
     """Return the high-specificity subset of keyterms.
 
@@ -301,7 +473,9 @@ def _signal_terms(keyterms: list[str]) -> list[str]:
         # chars that aren't in a broad generic-tech stoplist are treated as
         # signal. Short common words ("python", "index", "vector") are NOT
         # signal alone — they need a signal partner.
-        if (len(low) >= 5 and low not in _GENERIC_TERMS) or (len(low) >= 2 and low == low.upper() and low.isalpha()):
+        if (len(low) >= 5 and low not in _GENERIC_TERMS) or (
+            len(low) >= 2 and low == low.upper() and low.isalpha()
+        ):
             sig.append(low)
     # Dedup preserving order.
     seen: set[str] = set()
@@ -318,26 +492,115 @@ def _signal_terms(keyterms: list[str]) -> list[str]:
 # "index" tells you nothing about whether it's about FAISS. A source must pair
 # them with a real signal term (FAISS, IndexIDMap2, remove_ids, …) to pass.
 _GENERIC_TERMS = {
-    "python", "index", "vector", "vectors", "array", "arrays", "data",
-    "code", "function", "method", "class", "object", "value", "values",
-    "list", "dict", "string", "file", "files", "system", "server", "client",
-    "model", "models", "training", "learning", "search", "query", "database",
-    "api", "config", "build", "run", "test", "error", "bug",
-    "issue", "problem", "solution", "example", "tutorial", "guide",
-    "library", "package", "module", "import", "install", "version",
-    "performance", "memory", "time", "size", "type", "name", "key", "keys",
-    "add", "delete", "remove", "update", "create", "read", "write", "load",
-    "save", "open", "close", "start", "stop", "set", "get", "new",
-    "old", "best", "good", "bad", "how", "what", "why", "when", "where",
-    "without", "with", "from", "into", "using", "use", "used", "uses",
-    "research", "study", "paper", "analysis", "results", "through", "group", "groups",
-    "approach", "based", "proposed", "novel", "recent", "current",
+    "python",
+    "index",
+    "vector",
+    "vectors",
+    "array",
+    "arrays",
+    "data",
+    "code",
+    "function",
+    "method",
+    "class",
+    "object",
+    "value",
+    "values",
+    "list",
+    "dict",
+    "string",
+    "file",
+    "files",
+    "system",
+    "server",
+    "client",
+    "model",
+    "models",
+    "training",
+    "learning",
+    "search",
+    "query",
+    "database",
+    "api",
+    "config",
+    "build",
+    "run",
+    "test",
+    "error",
+    "bug",
+    "issue",
+    "problem",
+    "solution",
+    "example",
+    "tutorial",
+    "guide",
+    "library",
+    "package",
+    "module",
+    "import",
+    "install",
+    "version",
+    "performance",
+    "memory",
+    "time",
+    "size",
+    "type",
+    "name",
+    "key",
+    "keys",
+    "add",
+    "delete",
+    "remove",
+    "update",
+    "create",
+    "read",
+    "write",
+    "load",
+    "save",
+    "open",
+    "close",
+    "start",
+    "stop",
+    "set",
+    "get",
+    "new",
+    "old",
+    "best",
+    "good",
+    "bad",
+    "how",
+    "what",
+    "why",
+    "when",
+    "where",
+    "without",
+    "with",
+    "from",
+    "into",
+    "using",
+    "use",
+    "used",
+    "uses",
+    "research",
+    "study",
+    "paper",
+    "analysis",
+    "results",
+    "through",
+    "group",
+    "groups",
+    "approach",
+    "based",
+    "proposed",
+    "novel",
+    "recent",
+    "current",
 }
 
 
-def _source_relevance(title: str, text: str, signal: list[str],
-                       all_keyterms: list[str],
-                       url: str = "") -> tuple[float, str]:
+def _source_relevance(
+    title: str, text: str, signal: list[str], all_keyterms: list[str], url: str = ""
+) -> tuple[float, str]:
     """Score how on-topic a source is. Returns (score, reason).
 
     score >= 1.0 means the source passes the relevance gate.
@@ -372,6 +635,7 @@ def _source_relevance(title: str, text: str, signal: list[str],
     text_low = (text or "").lower()[:8000]
     score = 0.0
     matched: list[str] = []
+
     def _sig_match(s: str, text: str) -> bool:
         """Check if signal term s appears in text, allowing morphological variants.
         For terms >= 7 chars, match on a stem of max(7, len(s)-3) chars so
@@ -384,7 +648,7 @@ def _source_relevance(title: str, text: str, signal: list[str],
             stem_len = max(7, len(s) - 3)
             stem = s[:stem_len]
             # Word-boundary match on the stem.
-            if re.search(r'\b' + re.escape(stem), text):
+            if re.search(r"\b" + re.escape(stem), text):
                 return True
         return False
 
@@ -417,8 +681,14 @@ def _source_relevance(title: str, text: str, signal: list[str],
     if not is_academic:
         min_matches = max(2, min_matches)  # non-academic needs at least 2
     if len(matched) < min_matches:
-        return 0.5, f"insufficient_signal:{len(matched)}/{min_matches}{' (non-academic)' if not is_academic else ''}"
-    return score, f"signal:{','.join(matched[:4])}{' [academic]' if is_academic else ''}"
+        return (
+            0.5,
+            f"insufficient_signal:{len(matched)}/{min_matches}{' (non-academic)' if not is_academic else ''}",
+        )
+    return (
+        score,
+        f"signal:{','.join(matched[:4])}{' [academic]' if is_academic else ''}",
+    )
 
 
 def _detect_facets(topic: str) -> list[str]:
@@ -435,18 +705,61 @@ def _detect_facets(topic: str) -> list[str]:
 def _facet_keywords(facet: str) -> list[str]:
     return {
         "definition": ["definition", "means", "refers to", "is a", "are a"],
-        "history": ["history", "origin", "introduced", "founded", "invented",
-                    "first described", "etymology"],
-        "mechanism": ["works", "mechanism", "process", "algorithm", "how",
-                      "steps", "procedure", "method"],
-        "examples": ["example", "such as", "including", "instance", "case",
-                      "types of", "kinds of"],
-        "comparison": ["versus", "compared to", "difference", "alternative",
-                        "whereas", "unlike"],
-        "pros_cons": ["advantage", "disadvantage", "benefit", "drawback",
-                       "risk", "limitation", "downside"],
-        "recent": ["recent", "latest", "current", "2024", "2025", "2026",
-                   "new study", "recently"],
+        "history": [
+            "history",
+            "origin",
+            "introduced",
+            "founded",
+            "invented",
+            "first described",
+            "etymology",
+        ],
+        "mechanism": [
+            "works",
+            "mechanism",
+            "process",
+            "algorithm",
+            "how",
+            "steps",
+            "procedure",
+            "method",
+        ],
+        "examples": [
+            "example",
+            "such as",
+            "including",
+            "instance",
+            "case",
+            "types of",
+            "kinds of",
+        ],
+        "comparison": [
+            "versus",
+            "compared to",
+            "difference",
+            "alternative",
+            "whereas",
+            "unlike",
+        ],
+        "pros_cons": [
+            "advantage",
+            "disadvantage",
+            "benefit",
+            "drawback",
+            "risk",
+            "limitation",
+            "downside",
+        ],
+        "recent": [
+            "recent",
+            "latest",
+            "current",
+            "2024",
+            "2025",
+            "2026",
+            "new study",
+            "recently",
+        ],
     }.get(facet, [])
 
 
@@ -490,9 +803,9 @@ def _focus_topic(topic: str) -> str:
     # high-specificity biology/chemistry terms that get dropped by the >4
     # char filter but are critical for finding the right sources.
     first_low = first_clause.lower()
-    all_words = re.findall(r'[a-zA-Z][a-zA-Z0-9_-]+', topic.lower())
+    all_words = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]+", topic.lower())
     # Find all-caps acronyms from the ORIGINAL text (case-sensitive).
-    acronyms = re.findall(r'\b([A-Z]{2,5}[0-9]?)\b', topic)
+    acronyms = re.findall(r"\b([A-Z]{2,5}[0-9]?)\b", topic)
     _FOCUS_STOP = _STOPWORDS | _GENERIC_TERMS
     extras = []
     seen = set(first_low.split())
@@ -531,12 +844,17 @@ class ResearchEngine:
     default). Pass it via `search_client=`.
     """
 
-    def __init__(self, session_logger=None,
-                 max_rounds: int = 4, max_sources_per_round: int = 5,
-                 scrape_timeout: float = 12.0, max_follow_ups: int = 3,
-                 search_client: Any = None,
-                 tavily: Optional["TavilyClient"] = None,
-                 progress_callback=None):
+    def __init__(
+        self,
+        session_logger=None,
+        max_rounds: int = 4,
+        max_sources_per_round: int = 5,
+        scrape_timeout: float = 12.0,
+        max_follow_ups: int = 3,
+        search_client: Any = None,
+        tavily: Optional["TavilyClient"] = None,
+        progress_callback=None,
+    ):
         # `tavily=` is kept for backward compat; `search_client=` is the
         # canonical param. Whatever is set wins.
         self.search_client = search_client or tavily
@@ -565,8 +883,9 @@ class ResearchEngine:
             # A UI callback failure must never break research.
             pass
 
-    def _search_round(self, query: str, round_idx: int,
-                      topic: str = "") -> list[dict[str, Any]]:
+    def _search_round(
+        self, query: str, round_idx: int, topic: str = ""
+    ) -> list[dict[str, Any]]:
         """Run one search query and return fetched, cleaned sources.
 
         Tavily is the sole search backend. If Tavily is unset or returns
@@ -578,29 +897,42 @@ class ResearchEngine:
         results: dict[str, Any] = {}
 
         if not (self.search_client and self.search_client.is_configured):
-            self._log("research_search_unconfigured",
-                      {"round": round_idx, "query": query})
+            self._log(
+                "research_search_unconfigured", {"round": round_idx, "query": query}
+            )
             return []
 
         try:
             results = self.search_client.search(
-                query, max_results=self.max_sources_per_round)
+                query, max_results=self.max_sources_per_round
+            )
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log("research_search_failed",
-                      {"round": round_idx, "query": query,
-                       "backend": getattr(self.search_client, "name",
-                                          "search_client"),
-                       "error": str(e)})
-            results = {"results": [],
-                      "unresponsive_engines": [
-                          [getattr(self.search_client, "name", "search_client"),
-                           str(e)]]}
+            self._log(
+                "research_search_failed",
+                {
+                    "round": round_idx,
+                    "query": query,
+                    "backend": getattr(self.search_client, "name", "search_client"),
+                    "error": str(e),
+                },
+            )
+            results = {
+                "results": [],
+                "unresponsive_engines": [
+                    [getattr(self.search_client, "name", "search_client"), str(e)]
+                ],
+            }
         hits = results.get("results", [])[: self.max_sources_per_round]
-        self._log("research_search", {
-            "round": round_idx, "query": query,
-            "backend": getattr(self.search_client, "name", "search_client"),
-            "hits": len(hits), "duration_ms": (time.time() - t0) * 1000,
-        })
+        self._log(
+            "research_search",
+            {
+                "round": round_idx,
+                "query": query,
+                "backend": getattr(self.search_client, "name", "search_client"),
+                "hits": len(hits),
+                "duration_ms": (time.time() - t0) * 1000,
+            },
+        )
         # Compute the topic's signal terms ONCE for the relevance gate.
         # The gate drops sources that don't carry the topic's
         # high-specificity terms (proper nouns, API names) — this is the
@@ -617,8 +949,7 @@ class ResearchEngine:
                 continue
             # Defense-in-depth: skip blocked sources (Wikipedia per the operator's directive)
             if _is_blocked_source(url):
-                self._log("research_source_blocked",
-                          {"round": round_idx, "url": url})
+                self._log("research_source_blocked", {"round": round_idx, "url": url})
                 continue
             text = hit.get("raw_content", "") or ""
             snippet = hit.get("content", "")
@@ -630,28 +961,28 @@ class ResearchEngine:
             # it enter the graph, with provenance to the saved file.
             try:
                 from web_source_store import fetch_and_save, save_source
+
                 # If the search backend already gave us raw_content, save it
                 # directly; otherwise fetch the raw HTML now.
                 if text and len(text) >= 80:
-                    save_source(url, text, title=hit.get("title", ""),
-                                topic=topic)
+                    save_source(url, text, title=hit.get("title", ""), topic=topic)
                 else:
-                    fetch_and_save(url, title=hit.get("title", ""),
-                                   topic=topic)
+                    fetch_and_save(url, title=hit.get("title", ""), topic=topic)
             except Exception as e:
-                self._log("research_archive_failed",
-                          {"url": url, "error": str(e)})
+                self._log("research_archive_failed", {"url": url, "error": str(e)})
             # Tavily often returns raw_content inline; use it directly and
             # skip scraping. Only fetch when raw_content is missing/short.
             if not text or len(text) < 80:
-                self._progress("scraping", {
-                    "round": round_idx, "url": url, "title": hit.get("title", "")})
+                self._progress(
+                    "scraping",
+                    {"round": round_idx, "url": url, "title": hit.get("title", "")},
+                )
                 try:
                     text = self.search_client.scrape(
-                        url, timeout=int(self.scrape_timeout))
+                        url, timeout=int(self.scrape_timeout)
+                    )
                 except Exception as e:
-                    self._log("research_scrape_failed",
-                              {"url": url, "error": str(e)})
+                    self._log("research_scrape_failed", {"url": url, "error": str(e)})
                     text = ""
             if not text or len(text) < 30:
                 # Scrape failed or returned nothing useful — skip this
@@ -664,29 +995,34 @@ class ResearchEngine:
             # snippet/title for the gate when text is short so a source
             # that scraped to almost nothing still gets judged on its
             # search-result snippet (which the engine ranked relevant).
-            gate_text = text if len(text) >= 200 else (
-                f"{snippet}\n{text}")
+            gate_text = text if len(text) >= 200 else (f"{snippet}\n{text}")
             rel_score, rel_reason = _source_relevance(
-                hit.get("title", ""), gate_text, signal, topic_terms,
-                url=url)
+                hit.get("title", ""), gate_text, signal, topic_terms, url=url
+            )
             if rel_score < 1.0:
-                self._log("research_source_rejected",
-                          {"round": round_idx, "url": url,
-                           "title": hit.get("title", "")[:80],
-                           "score": round(rel_score, 2),
-                           "reason": rel_reason})
+                self._log(
+                    "research_source_rejected",
+                    {
+                        "round": round_idx,
+                        "url": url,
+                        "title": hit.get("title", "")[:80],
+                        "score": round(rel_score, 2),
+                        "reason": rel_reason,
+                    },
+                )
                 continue
-            sources.append({
-                "url": url,
-                "title": hit.get("title", ""),
-                "snippet": snippet,
-                "text": text,
-                "_relevance": rel_score,
-            })
+            sources.append(
+                {
+                    "url": url,
+                    "title": hit.get("title", ""),
+                    "snippet": snippet,
+                    "text": text,
+                    "_relevance": rel_score,
+                }
+            )
         return sources
 
-    def _expand_query(self, base_terms: list[str],
-                      discovered_terms: list[str]) -> str:
+    def _expand_query(self, base_terms: list[str], discovered_terms: list[str]) -> str:
         """Build a refined query that adds newly-discovered salient terms."""
         # Prefer the base terms plus any discovered terms not already present.
         base_low = {t.lower() for t in base_terms}
@@ -701,8 +1037,9 @@ class ResearchEngine:
         query_terms = terms[:max_regular] + site_ops
         return " ".join(query_terms)
 
-    def _corroborated_facts(self, sentences: list[tuple[str, dict[str, Any]]],
-                            keyterms: list[str]) -> list[dict[str, Any]]:
+    def _corroborated_facts(
+        self, sentences: list[tuple[str, dict[str, Any]]], keyterms: list[str]
+    ) -> list[dict[str, Any]]:
         """Score, dedup, and return the strongest corroborated sentences."""
         # Group near-duplicate sentences (same tokens, different sources).
         fact_buckets: dict[str, dict[str, Any]] = {}
@@ -712,24 +1049,35 @@ class ResearchEngine:
                 continue
             # Use a hashable signature of the most salient 6 tokens.
             sig = tuple(toks[:6])
-            bucket = fact_buckets.setdefault(sig, {
-                "sentence": sentence,
-                "sources": [],
-                "score": 0.0,
-            })
-            bucket["sources"].append({
-                "url": src["url"], "title": src["title"],
-            })
+            bucket = fact_buckets.setdefault(
+                sig,
+                {
+                    "sentence": sentence,
+                    "sources": [],
+                    "score": 0.0,
+                },
+            )
+            bucket["sources"].append(
+                {
+                    "url": src["url"],
+                    "title": src["title"],
+                }
+            )
             bucket["score"] += _score_sentence(
-                sentence, keyterms, len(bucket["sources"]))
+                sentence, keyterms, len(bucket["sources"])
+            )
 
         facts = list(fact_buckets.values())
         facts.sort(key=lambda f: f["score"], reverse=True)
         return facts
 
-    def _identify_gaps(self, topic: str, facets: list[str],
-                       all_sources: list[dict[str, Any]],
-                       keyterms: list[str]) -> list[str]:
+    def _identify_gaps(
+        self,
+        topic: str,
+        facets: list[str],
+        all_sources: list[dict[str, Any]],
+        keyterms: list[str],
+    ) -> list[str]:
         """Detect facets that remain under-covered and emit follow-up queries.
 
         Follow-up queries are built from the topic's SIGNAL terms (proper
@@ -758,9 +1106,13 @@ class ResearchEngine:
                 gaps.append(f"{base_query} {kt}")
         return gaps[: self.max_follow_ups]
 
-    def _llm_synthesize(self, topic: str, sources: list[dict[str, Any]],
-                        llm_client: Any,
-                        vault_note_titles: list[str] | None = None) -> str | None:
+    def _llm_synthesize(
+        self,
+        topic: str,
+        sources: list[dict[str, Any]],
+        llm_client: Any,
+        vault_note_titles: list[str] | None = None,
+    ) -> str | None:
         """One LLM call to synthesize a structured research note from source texts.
 
         Produces YAML frontmatter + H2 prose sections with inline
@@ -774,9 +1126,9 @@ class ResearchEngine:
         total_chars = 0
         max_chars = 12000  # Leave room for the prompt itself
         for i, src in enumerate(sources):
-            title = src.get("title") or src.get("url", f"Source {i+1}")
+            title = src.get("title") or src.get("url", f"Source {i + 1}")
             text = src.get("text", "")[:3000]  # Cap each source
-            block = f"### Source {i+1}: {title}\n{text}"
+            block = f"### Source {i + 1}: {title}\n{text}"
             if total_chars + len(block) > max_chars:
                 break
             source_blocks.append(block)
@@ -800,7 +1152,7 @@ class ResearchEngine:
             "vault. You take multiple source texts on a topic and produce a "
             "structured research note. You MUST follow ALL of these rules:\n"
             "1. START with YAML frontmatter (--- ... ---) containing: type: "
-            "research, status: raw, created: today\'s date, summary: one-line "
+            "research, status: raw, created: today's date, summary: one-line "
             "description, tags: [research, <topic-keywords>], source_count, "
             "fact_count. The frontmatter is MANDATORY.\n"
             "2. Write 2-4 ## H2 section headings that organize the content "
@@ -811,9 +1163,9 @@ class ResearchEngine:
             "4. SKIP any source that is not relevant to the topic.\n"
             "5. Insert [[wikilinks]] to existing vault notes ONLY where "
             "topically relevant (use the EXISTING VAULT NOTES list). Never "
-            "invent note titles that aren\'t in that list. Link to at least "
+            "invent note titles that aren't in that list. Link to at least "
             "2 relevant existing notes if any are topically related.\n"
-            "6. Keep ALL the factual content -- don\'t drop facts, just "
+            "6. Keep ALL the factual content -- don't drop facts, just "
             "weave them into readable prose.\n"
             "7. End with a ## Sources section listing each source as a "
             "markdown link: - [Title](URL)\n"
@@ -824,8 +1176,7 @@ class ResearchEngine:
 
         # Build source list for the Sources section
         source_list = "\n".join(
-            f"- [{s.get('title', s.get('url', f'Source {i+1}'))}]"
-            f"({s.get('url', '')})"
+            f"- [{s.get('title', s.get('url', f'Source {i + 1}'))}]({s.get('url', '')})"
             for i, s in enumerate(sources)
         )
 
@@ -865,13 +1216,12 @@ class ResearchEngine:
         except Exception as e:
             # Log the error and re-raise — no silent extractive fallback.
             # The caller will see the LLM synthesis failed.
-            self._log("llm_synthesis_exception",
-                      f"{type(e).__name__}: {e}")
+            self._log("llm_synthesis_exception", f"{type(e).__name__}: {e}")
             raise
 
-
-    def _extractive_synthesis(self, all_sources: list[dict[str, Any]],
-                              base_terms: list[str]) -> tuple[str, set]:
+    def _extractive_synthesis(
+        self, all_sources: list[dict[str, Any]], base_terms: list[str]
+    ) -> tuple[str, set]:
         """Deterministic extractive synthesis (fallback when no LLM available).
 
         Scores sentences by keyword density + source agreement, dedups
@@ -901,8 +1251,12 @@ class ResearchEngine:
             total_len += len(line)
         return "\n".join(synthesis_lines), used
 
-    def research(self, topic: str, llm_client: Any = None,
-                  vault_note_titles: list[str] | None = None) -> dict[str, Any]:
+    def research(
+        self,
+        topic: str,
+        llm_client: Any = None,
+        vault_note_titles: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Run a full multi-round research dig. Returns a structured report.
 
         If llm_client is provided, uses one LLM call for the final synthesis
@@ -921,10 +1275,15 @@ class ResearchEngine:
         search_topic = _focus_topic(topic)
         base_terms = _keyterms(search_topic)
         facets = _detect_facets(search_topic)
-        self._log("research_begin", {
-            "topic": topic, "search_topic": search_topic,
-            "keyterms": base_terms, "facets": facets,
-        })
+        self._log(
+            "research_begin",
+            {
+                "topic": topic,
+                "search_topic": search_topic,
+                "keyterms": base_terms,
+                "facets": facets,
+            },
+        )
 
         all_sources: list[dict[str, Any]] = []
         seen_urls: set = set()
@@ -932,9 +1291,10 @@ class ResearchEngine:
         rounds_log: list[dict[str, Any]] = []
 
         # --- Main multi-round loop -------------------------------------------
-        self._progress("research_start", {
-            "max_rounds": self.max_rounds, "keyterms": base_terms,
-            "facets": facets})
+        self._progress(
+            "research_start",
+            {"max_rounds": self.max_rounds, "keyterms": base_terms, "facets": facets},
+        )
         for round_idx in range(self.max_rounds):
             # FIRST ROUND: use the natural-language topic string directly as
             # the search query. Search engines (Tavily, SearXNG) understand
@@ -947,9 +1307,15 @@ class ResearchEngine:
             else:
                 query = self._expand_query(base_terms, discovered_terms)
             round_t0 = time.time()
-            self._progress("search_round", {
-                "round": round_idx + 1, "max_rounds": self.max_rounds,
-                "query": query, "total_sources_so_far": len(all_sources)})
+            self._progress(
+                "search_round",
+                {
+                    "round": round_idx + 1,
+                    "max_rounds": self.max_rounds,
+                    "query": query,
+                    "total_sources_so_far": len(all_sources),
+                },
+            )
             sources = self._search_round(query, round_idx, topic=search_topic)
             # Dedup against already-collected sources (normalized URLs
             # catch http vs https duplicates of the same page).
@@ -962,17 +1328,24 @@ class ResearchEngine:
                     seen_urls.add(norm)
                     new_sources.append(s)
             all_sources.extend(new_sources)
-            rounds_log.append({
-                "round": round_idx,
-                "query": query,
-                "new_sources": len(new_sources),
-                "total_sources": len(all_sources),
-                "duration_ms": (time.time() - round_t0) * 1000,
-            })
-            self._progress("search_round_done", {
-                "round": round_idx + 1, "max_rounds": self.max_rounds,
-                "new_sources": len(new_sources),
-                "total_sources": len(all_sources)})
+            rounds_log.append(
+                {
+                    "round": round_idx,
+                    "query": query,
+                    "new_sources": len(new_sources),
+                    "total_sources": len(all_sources),
+                    "duration_ms": (time.time() - round_t0) * 1000,
+                }
+            )
+            self._progress(
+                "search_round_done",
+                {
+                    "round": round_idx + 1,
+                    "max_rounds": self.max_rounds,
+                    "new_sources": len(new_sources),
+                    "total_sources": len(all_sources),
+                },
+            )
             # Extract newly-salient terms from this round's corpus to refine
             # the next query — this is the "dig deeper" signal.
             if new_sources:
@@ -992,8 +1365,9 @@ class ResearchEngine:
             # far, keep going — the engines were likely temporarily banned
             # and a later round (or the gap-fill follow-ups) may recover.
             if not new_sources and all_sources:
-                self._log("research_plateau",
-                          {"round": round_idx, "reason": "no_new_sources"})
+                self._log(
+                    "research_plateau", {"round": round_idx, "reason": "no_new_sources"}
+                )
                 break
 
         # --- Gap fill: targeted follow-ups for under-covered facets ----------
@@ -1007,16 +1381,21 @@ class ResearchEngine:
             self._log("research_gap_fill", {"gaps": gaps})
             self._progress("gap_fill", {"queries": len(gaps), "gaps": gaps})
             for gq_idx, gq in enumerate(gaps):
-                gsrc = self._search_round(gq, round_idx=self.max_rounds,
-                                            topic=search_topic)
+                gsrc = self._search_round(
+                    gq, round_idx=self.max_rounds, topic=search_topic
+                )
                 for s in gsrc:
                     if _normalize_url(s["url"]) not in seen_urls:
                         seen_urls.add(_normalize_url(s["url"]))
                         follow_up_sources.append(s)
                         all_sources.append(s)
-            self._progress("gap_fill_done", {
-                "follow_up_sources": len(follow_up_sources),
-                "total_sources": len(all_sources)})
+            self._progress(
+                "gap_fill_done",
+                {
+                    "follow_up_sources": len(follow_up_sources),
+                    "total_sources": len(all_sources),
+                },
+            )
 
         # --- Synthesis -----------------------------------------------------
         # PRIMARY PATH: when an LLM client is provided, use ONE LLM call to
@@ -1034,26 +1413,34 @@ class ResearchEngine:
         llm_synthesized = False
         if llm_client is not None:
             self._progress("llm_synthesizing", {"sources": len(all_sources)})
-            llm_synth = self._llm_synthesize(topic, all_sources, llm_client,
-                                         vault_note_titles=vault_note_titles)
+            llm_synth = self._llm_synthesize(
+                topic, all_sources, llm_client, vault_note_titles=vault_note_titles
+            )
             if llm_synth and len(llm_synth) >= 100:
                 synthesis = llm_synth
                 llm_synthesized = True
-                used = set(range(len([
-                    l for l in llm_synth.split('\n')
-                    if l.strip().startswith('-')
-                ])))
+                used = set(
+                    range(
+                        len(
+                            [
+                                l
+                                for l in llm_synth.split("\n")
+                                if l.strip().startswith("-")
+                            ]
+                        )
+                    )
+                )
             else:
                 # LLM returned too-short output — raise, don't fall back.
                 raise RuntimeError(
                     f"LLM synthesis produced insufficient output "
-                    f"({len(llm_synth) if llm_synth else 0} chars, need >=100)")
+                    f"({len(llm_synth) if llm_synth else 0} chars, need >=100)"
+                )
         else:
             # No LLM client — extractive synthesis is the explicit path,
             # not a fallback. The caller chose to run without an LLM.
             self._progress("synthesizing", {"sources": len(all_sources)})
-            synthesis, used = self._extractive_synthesis(
-                all_sources, base_terms)
+            synthesis, used = self._extractive_synthesis(all_sources, base_terms)
 
         report = {
             "topic": topic,
@@ -1062,33 +1449,41 @@ class ResearchEngine:
             "llm_synthesized": llm_synthesized,
             "rounds": rounds_log,
             "gaps_filled": gaps,
-            "sources": [{"url": s["url"], "title": s["title"]}
-                        for s in all_sources],
+            "sources": [{"url": s["url"], "title": s["title"]} for s in all_sources],
             "source_count": len(all_sources),
             "synthesis": synthesis,
             "synthesis_facts": len(used),
             "duration_ms": (time.time() - t0) * 1000,
         }
-        self._log("research_complete", {
-            "topic": topic,
-            "source_count": report["source_count"],
-            "facts": report["synthesis_facts"],
-            "duration_ms": report["duration_ms"],
-        })
-        self._progress("research_complete", {
-            "source_count": report["source_count"],
-            "facts": report["synthesis_facts"],
-            "duration_ms": report["duration_ms"]})
+        self._log(
+            "research_complete",
+            {
+                "topic": topic,
+                "source_count": report["source_count"],
+                "facts": report["synthesis_facts"],
+                "duration_ms": report["duration_ms"],
+            },
+        )
+        self._progress(
+            "research_complete",
+            {
+                "source_count": report["source_count"],
+                "facts": report["synthesis_facts"],
+                "duration_ms": report["duration_ms"],
+            },
+        )
         return report
 
-    def synthesize_note_markdown(self, report: dict[str, Any],
-                                 summary: str | None = None) -> str:
+    def synthesize_note_markdown(
+        self, report: dict[str, Any], summary: str | None = None
+    ) -> str:
         """Render a research report as Obsidian markdown (no LLM).
 
         This is the deterministic fallback when LLM synthesis is unavailable.
         Includes YAML frontmatter so even the fallback has metadata.
         """
         from datetime import date
+
         _topic = report.get("topic", "Research Note")
         _src_count = report.get("source_count", 0)
         _facts = report.get("synthesis_facts", 0)
@@ -1105,6 +1500,7 @@ class ResearchEngine:
         for s in report["sources"]:
             try:
                 from web_source_store import find_source
+
                 archived = find_source(s["url"])
             except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 archived = None
@@ -1114,17 +1510,23 @@ class ResearchEngine:
             else:
                 lines.append(f"- [{s['title'] or s['url']}]({s['url']})")
         if report.get("gaps_filled"):
-            lines += ["", "## Follow-up Queries (gap fill)",
-                      "\n".join(f"- {g}" for g in report["gaps_filled"])]
-        lines += ["",
-                  f"<!-- research: {report['source_count']} sources, "
-                  f"{report['synthesis_facts']} facts, "
-                  f"{len(report.get('rounds', []))} rounds -->"]
+            lines += [
+                "",
+                "## Follow-up Queries (gap fill)",
+                "\n".join(f"- {g}" for g in report["gaps_filled"]),
+            ]
+        lines += [
+            "",
+            f"<!-- research: {report['source_count']} sources, "
+            f"{report['synthesis_facts']} facts, "
+            f"{len(report.get('rounds', []))} rounds -->",
+        ]
         body = "\n".join(lines)
 
         # Inject universal schema frontmatter
         try:
             from note_schema import inject_schema
+
             return inject_schema(
                 body,
                 f"vaultbot_stuff/Knowledge/Research/{_topic}.md",
@@ -1172,6 +1574,7 @@ class ResearchEngine:
         This scans disk for real .md filenames.
         """
         import glob, os as _os
+
         titles = []
         for f in glob.glob(_os.path.join(vault_path, "**", "*.md"), recursive=True):
             title = _os.path.splitext(_os.path.basename(f))[0]
@@ -1222,7 +1625,6 @@ class ResearchEngine:
             parts[i] = re.sub(r"\[\[([^\]]+)\]\]", _fix_link, parts[i])
         return "```".join(parts)
 
-
     # Safety floor for LLM-structured notes (reject output shorter than this).
     _STRUCTURED_MIN_CHARS = 500
 
@@ -1246,12 +1648,14 @@ class ResearchEngine:
         if ollama_client is None:
             raise ValueError(
                 "synthesize_structured_note: ollama_client is required — "
-                "use synthesize_note_markdown() for the extractive format")
+                "use synthesize_note_markdown() for the extractive format"
+            )
         synth = str(report.get("synthesis", "") or "")
         if len(synth) < 80:
             raise ValueError(
                 f"synthesize_structured_note: synthesis too short "
-                f"({len(synth)} chars, need >=80)")
+                f"({len(synth)} chars, need >=80)"
+            )
 
         topic = report.get("topic", "Research Note")
         source_count = report.get("source_count", 0)
@@ -1332,17 +1736,18 @@ class ResearchEngine:
             else:
                 # A generator fallback — drain it (shouldn't happen with
                 # stream=False, but be safe).
-                note_md = "".join(
-                    c.get("response", "") for c in result)
+                note_md = "".join(c.get("response", "") for c in result)
         except Exception as e:
             raise RuntimeError(
-                f"synthesize_structured_note: LLM call failed: {e}") from e
+                f"synthesize_structured_note: LLM call failed: {e}"
+            ) from e
 
         note_md = (note_md or "").strip()
         if len(note_md) < self._STRUCTURED_MIN_CHARS:
             raise RuntimeError(
                 f"synthesize_structured_note: LLM output too short "
-                f"({len(note_md)} chars, need >= {self._STRUCTURED_MIN_CHARS})")
+                f"({len(note_md)} chars, need >= {self._STRUCTURED_MIN_CHARS})"
+            )
 
         # The LLM may have included a top-level # heading despite the
         # instruction not to. Strip it so the caller's own # heading is
@@ -1367,6 +1772,7 @@ class ResearchEngine:
         # Inject universal schema to fill any required fields the LLM forgot
         try:
             from note_schema import inject_schema
+
             note_md = inject_schema(
                 note_md,
                 f"vaultbot_stuff/Knowledge/Research/{topic}.md",

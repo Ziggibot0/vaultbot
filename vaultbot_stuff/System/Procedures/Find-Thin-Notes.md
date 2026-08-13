@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-02
 description: Find notes that are too thin — under 200 words, stubs, or placeholders with no real content. Imports the Pattern-Scan engine and filters for thin/stub notes, then the small model suggests what each thin note should be expanded with. Use when looking for notes that need expansion.

@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-10
 summary: "Lens procedure for evaluating claims by weighing evidence for and against. Based on epistemological justification theory and Bayesian reasoning. Called by Think when problem type is factual/empirical. Uses triple-try consistency and bite-sized steps for small model reliability."
 tags: [procedure, thinking, lens, evidence, epistemology, reasoning, v2]

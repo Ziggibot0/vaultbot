@@ -29,6 +29,7 @@ def _is_ignored_path(path: Path) -> bool:
             return True
     return False
 
+
 class VaultGraph:
     """
     Treats the Obsidian vault as a directed graph where notes are nodes and
@@ -36,13 +37,19 @@ class VaultGraph:
     trusting an LLM's weights.
     """
 
-    def __init__(self, vault_path: str, session_logger=None, max_note_size: int = 12_000):
+    def __init__(
+        self, vault_path: str, session_logger=None, max_note_size: int = 12_000
+    ):
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.max_note_size = max_note_size
         self.nodes: dict[str, dict[str, Any]] = {}  # normalized name -> metadata
-        self.edges: dict[str, set[str]] = {}        # normalized name -> set of normalized target names
-        self.backlinks: dict[str, set[str]] = {}    # normalized name -> set of normalized source names
+        self.edges: dict[
+            str, set[str]
+        ] = {}  # normalized name -> set of normalized target names
+        self.backlinks: dict[
+            str, set[str]
+        ] = {}  # normalized name -> set of normalized source names
         # Per-node file mtime (epoch seconds) for incremental refresh.
         self._mtimes: dict[str, float] = {}
         # Max mtime seen at the last refresh; cheap stat-only fast path checks
@@ -67,7 +74,8 @@ class VaultGraph:
         self._build_started = False
         self._build_done = False
         self._build_thread = threading.Thread(
-            target=self._deferred_build, name="vault_graph_build", daemon=True)
+            target=self._deferred_build, name="vault_graph_build", daemon=True
+        )
         self._build_started = True
         self._build_thread.start()
 
@@ -77,19 +85,31 @@ class VaultGraph:
         try:
             self._build_graph()
         except Exception as e:  # noqa: BLE001 — best-effort; log + surface
-            self._log_tool("deferred_build_failed", {"vault_path": str(self.vault_path)},
-                           error=str(e))
+            self._log_tool(
+                "deferred_build_failed",
+                {"vault_path": str(self.vault_path)},
+                error=str(e),
+            )
         finally:
             with self._lock:
                 self._build_done = True
 
-    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None,
-                  outputs: Any = None, error: str | None = None):
+    def _log_tool(
+        self,
+        method: str,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any = None,
+        error: str | None = None,
+    ):
         if self.session_logger is None:
             return
         self.session_logger.log_tool_call(
-            tool="vault_graph", method=method, inputs=inputs,
-            outputs=outputs, error=error, duration_ms=None
+            tool="vault_graph",
+            method=method,
+            inputs=inputs,
+            outputs=outputs,
+            error=error,
+            duration_ms=None,
         )
 
     def _normalize_name(self, name: str) -> str:
@@ -113,7 +133,7 @@ class VaultGraph:
         try:
             text = path.read_text(encoding="utf-8")
             if len(text) > self.max_note_size:
-                return text[:self.max_note_size] + "\n\n[truncated]"
+                return text[: self.max_note_size] + "\n\n[truncated]"
             return text
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             self._log_tool("read_note", {"file_path": str(path)}, error=str(e))
@@ -135,6 +155,7 @@ class VaultGraph:
         actually cheap on the warm path.
         """
         import os as _os
+
         out: list[Path] = []
         for root, dirs, files in _os.walk(self.vault_path):
             # Prune ignored dirs in-place so os.walk doesn't descend into them.
@@ -253,11 +274,14 @@ class VaultGraph:
             self.backlinks = backlinks
             self._mtimes = mtimes
             self._last_refresh_mtime = max_mtime
-        self._log_tool("build_graph", {
-            "vault_path": str(self.vault_path),
-            "note_count": len(nodes),
-            "edge_count": sum(len(v) for v in edges.values()),
-        })
+        self._log_tool(
+            "build_graph",
+            {
+                "vault_path": str(self.vault_path),
+                "note_count": len(nodes),
+                "edge_count": sum(len(v) for v in edges.values()),
+            },
+        )
 
     def _detect_changes(self) -> tuple[list[Path], list[str]]:
         """Stat-only scan for changed/new/deleted files since the last refresh.
@@ -279,8 +303,11 @@ class VaultGraph:
             if mtime > self._last_refresh_mtime or name not in self.nodes:
                 changed_or_new.append(path)
         # Deleted: previously-known paths no longer present on disk.
-        deleted = [name for name, node in self.nodes.items()
-                   if node.get("file_path") and node["file_path"] not in seen_paths]
+        deleted = [
+            name
+            for name, node in self.nodes.items()
+            if node.get("file_path") and node["file_path"] not in seen_paths
+        ]
         return changed_or_new, deleted
 
     def refresh_if_changed(self) -> bool:
@@ -304,12 +331,15 @@ class VaultGraph:
             for name in deleted:
                 self._remove_node(name)
             self._last_refresh_mtime = max_mtime
-            self._log_tool("incremental_refresh", {
-                "changed_count": len(changed),
-                "deleted_count": len(deleted),
-                "note_count": len(self.nodes),
-                "edge_count": sum(len(v) for v in self.edges.values()),
-            })
+            self._log_tool(
+                "incremental_refresh",
+                {
+                    "changed_count": len(changed),
+                    "deleted_count": len(deleted),
+                    "note_count": len(self.nodes),
+                    "edge_count": sum(len(v) for v in self.edges.values()),
+                },
+            )
             return True
 
     def refresh(self):
@@ -350,8 +380,9 @@ class VaultGraph:
                 result.update(self.backlinks.get(norm, set()))
             return sorted(result)
 
-    def walk(self, start_names: list[str], depth: int = 2,
-             min_backlinks: int = 1) -> dict[str, Any]:
+    def walk(
+        self, start_names: list[str], depth: int = 2, min_backlinks: int = 1
+    ) -> dict[str, Any]:
         """
         Breadth-first walk starting from a set of seed notes.
 
@@ -397,23 +428,28 @@ class VaultGraph:
         edges_out = []
         for name in selected:
             node = self.nodes[name]
-            nodes_out.append({
-                "name": node["name"],
-                "file_path": node["file_path"],
-                "content": node["content"],
-                "backlinks": sorted(self.backlinks.get(name, set())),
-                "outgoing_links": sorted(self.edges.get(name, set())),
-            })
+            nodes_out.append(
+                {
+                    "name": node["name"],
+                    "file_path": node["file_path"],
+                    "content": node["content"],
+                    "backlinks": sorted(self.backlinks.get(name, set())),
+                    "outgoing_links": sorted(self.edges.get(name, set())),
+                }
+            )
             for target in self.edges.get(name, set()):
                 if target in selected:
                     edges_out.append({"from": name, "to": target})
 
-        self._log_tool("graph_walk", {
-            "seeds": start_names,
-            "depth": depth,
-            "visited": len(visited),
-            "selected": len(selected),
-        })
+        self._log_tool(
+            "graph_walk",
+            {
+                "seeds": start_names,
+                "depth": depth,
+                "visited": len(visited),
+                "selected": len(selected),
+            },
+        )
 
         return {
             "nodes": nodes_out,
@@ -479,12 +515,14 @@ class VaultGraph:
                             break
                     if display != norm:
                         break
-                gaps.append({
-                    "name": display,
-                    "normalized_name": norm,
-                    "reference_count": count,
-                    "referenced_by": sorted(ref_sources.get(norm, set())),
-                })
+                gaps.append(
+                    {
+                        "name": display,
+                        "normalized_name": norm,
+                        "reference_count": count,
+                        "referenced_by": sorted(ref_sources.get(norm, set())),
+                    }
+                )
             gaps.sort(key=lambda g: g["reference_count"], reverse=True)
             return gaps
 
@@ -499,24 +537,34 @@ class VaultGraph:
             for name, node in self.nodes.items():
                 content = node.get("content", "") or ""
                 # Strip frontmatter and wikilinks for a truer body length.
-                body = re.sub(r"^\s*---.*?---\s*", "", content, count=1, flags=re.DOTALL)
+                body = re.sub(
+                    r"^\s*---.*?---\s*", "", content, count=1, flags=re.DOTALL
+                )
                 body = WIKILINK_RE.sub("", body)
                 body = re.sub(r"\s+", " ", body).strip()
                 if len(body) < min_content_length:
-                    thin.append({
-                        "name": node["name"],
-                        "normalized_name": name,
-                        "file_path": node["file_path"],
-                        "content_length": len(body),
-                    })
+                    thin.append(
+                        {
+                            "name": node["name"],
+                            "normalized_name": name,
+                            "file_path": node["file_path"],
+                            "content_length": len(body),
+                        }
+                    )
             thin.sort(key=lambda n: n["content_length"])
             return thin
 
 
-def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
-                        query: str, k: int = 5, depth: int = 2,
-                        max_notes: int = 0, per_note_cap: int = 900,
-                        total_cap: int = 20000) -> str:
+def build_graph_context(
+    graph: VaultGraph,
+    search_results: list[dict[str, Any]],
+    query: str,
+    k: int = 5,
+    depth: int = 2,
+    max_notes: int = 0,
+    per_note_cap: int = 900,
+    total_cap: int = 20000,
+) -> str:
     """
     Given flat search results, turn them into a rich graph context prompt.
 
@@ -562,9 +610,13 @@ def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
     for node in nodes:
         lines.append(f"\n### [[{node['name']}]]")
         if node["outgoing_links"]:
-            lines.append("Links out: " + ", ".join(f"[[{n}]]" for n in node["outgoing_links"]))
+            lines.append(
+                "Links out: " + ", ".join(f"[[{n}]]" for n in node["outgoing_links"])
+            )
         if node["backlinks"]:
-            lines.append("Linked from: " + ", ".join(f"[[{n}]]" for n in node["backlinks"]))
+            lines.append(
+                "Linked from: " + ", ".join(f"[[{n}]]" for n in node["backlinks"])
+            )
         lines.append("")
         snippet = node["content"][:per_note_cap]
         if len(node["content"]) > per_note_cap:
@@ -573,7 +625,8 @@ def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
     if subgraph["stats"]["selected"] > len(nodes):
         lines.append(
             f"\n*[... {subgraph['stats']['selected'] - len(nodes)} more connected "
-            "notes not shown — vault_search for specifics ...]*")
+            "notes not shown — vault_search for specifics ...]*"
+        )
 
     if subgraph["edges"]:
         lines.append("\n--- GRAPH EDGES ---")
@@ -584,5 +637,6 @@ def build_graph_context(graph: VaultGraph, search_results: list[dict[str, Any]],
     if len(out) > total_cap:
         out = out[:total_cap] + (
             "\n\n*[... context truncated to stay within budget; vault_search "
-            "for full note content ...]*")
+            "for full note content ...]*"
+        )
     return out

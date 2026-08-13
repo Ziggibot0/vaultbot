@@ -70,7 +70,9 @@ from pathlib import Path
 # -> parent.parent.parent = vaultbot_stuff/
 # -> parent.parent.parent.parent = Vault2/ (vault root)
 try:
-    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot_stuff/vaultbot_backend/
+    BACKEND_DIR = (
+        Path(__file__).resolve().parent.parent
+    )  # vaultbot_stuff/vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
@@ -80,22 +82,22 @@ TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_stuff/vaultbot_backend/trash/
 def _is_sacred_journal(file_path: Path) -> bool:
     """Check if the filename is a date-only filename (the operator's personal journal)."""
     stem = file_path.stem
-    return bool(re.match(r'^\d{4}-\d{2}-\d{2}$', stem))
+    return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem))
 
 
 def _is_locked(content: str) -> bool:
     """Check if existing content contains a LOCKED marker."""
-    lines = content.split('\n')
+    lines = content.split("\n")
     for line in lines:
-        if line.strip() == 'LOCKED':
+        if line.strip() == "LOCKED":
             return True
-        if line.strip().startswith('LOCKED:'):
+        if line.strip().startswith("LOCKED:"):
             return True
-    if content.strip().startswith('---'):
-        fm_end = content.find('---', 3)
+    if content.strip().startswith("---"):
+        fm_end = content.find("---", 3)
         if fm_end != -1:
             fm = content[3:fm_end]
-            if 'LOCKED' in fm:
+            if "LOCKED" in fm:
                 return True
     return False
 
@@ -132,7 +134,7 @@ def run(args: dict) -> dict:
         "backup_path": None,
         "bytes_written": 0,
         "checks": {},
-        "blocked_reason": None
+        "blocked_reason": None,
     }
 
     # --- Validation ---
@@ -143,7 +145,7 @@ def run(args: dict) -> dict:
         return result
 
     # 2. Must be a .md file
-    if not file_path_str.endswith('.md'):
+    if not file_path_str.endswith(".md"):
         result["blocked_reason"] = f"File must be a .md file (got: {file_path_str})"
         return result
 
@@ -154,7 +156,9 @@ def run(args: dict) -> dict:
 
     # 4. Path traversal check
     if _is_path_traversal(file_path_str, VAULT_ROOT):
-        result["blocked_reason"] = f"Path traversal detected: {file_path_str} resolves outside vault root"
+        result["blocked_reason"] = (
+            f"Path traversal detected: {file_path_str} resolves outside vault root"
+        )
         return result
 
     full_path = (VAULT_ROOT / file_path_str).resolve()
@@ -167,7 +171,7 @@ def run(args: dict) -> dict:
     result["checks"]["file_exists"] = True
 
     # 6. Read existing content
-    existing = full_path.read_text(encoding='utf-8')
+    existing = full_path.read_text(encoding="utf-8")
 
     # 7. Block LOCKED notes
     if _is_locked(existing):
@@ -191,7 +195,9 @@ def run(args: dict) -> dict:
     # 10. old_str must be unique (exactly one occurrence)
     count = existing.count(old_str)
     if count > 1:
-        result["blocked_reason"] = f"old_str found {count} times — must be unique (appears in multiple places)"
+        result["blocked_reason"] = (
+            f"old_str found {count} times — must be unique (appears in multiple places)"
+        )
         result["checks"]["old_str_count"] = count
         result["checks"]["old_str_preview"] = old_str[:200]
         return result
@@ -200,7 +206,9 @@ def run(args: dict) -> dict:
     # 11. No-op if old_str == new_str
     if old_str == new_str:
         result["status"] = "no_change"
-        result["blocked_reason"] = "old_str and new_str are identical — no replacement needed"
+        result["blocked_reason"] = (
+            "old_str and new_str are identical — no replacement needed"
+        )
         return result
 
     # --- Perform the replacement ---
@@ -210,13 +218,12 @@ def run(args: dict) -> dict:
     # --- Schema validation (same as vault_safe_write) ---
     try:
         from note_schema import validate_schema
+
         ok, errors, warnings = validate_schema(new_content)
         result["checks"]["schema_valid"] = ok
         result["checks"]["schema_warnings"] = warnings
         if not ok:
-            result["blocked_reason"] = (
-                f"Schema validation failed: {'; '.join(errors)}"
-            )
+            result["blocked_reason"] = f"Schema validation failed: {'; '.join(errors)}"
             return result
     except ImportError:
         result["checks"]["schema_validation_skipped"] = True
@@ -243,12 +250,10 @@ def run(args: dict) -> dict:
 
     # Atomic write: write to temp file, then rename
     fd, temp_path = tempfile.mkstemp(
-        dir=str(full_path.parent),
-        suffix='.tmp',
-        prefix=full_path.stem + '_'
+        dir=str(full_path.parent), suffix=".tmp", prefix=full_path.stem + "_"
     )
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(new_content)
         os.replace(temp_path, str(full_path))
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks

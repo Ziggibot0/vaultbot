@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-09
 description: "Scan the vault for TODO markers, group them by topic/note, and produce a prioritized action report. Called by Dream-Pass to surface unfinished work that's scattered across the vault."

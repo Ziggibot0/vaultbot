@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-05
 description: "Scan a Python file for dead-code anti-patterns: unused imports, unreachable code after return/break/continue/raise, and variables assigned but never used. Returns structured findings with line numbers and suggestions."

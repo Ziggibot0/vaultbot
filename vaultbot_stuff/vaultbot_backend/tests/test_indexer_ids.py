@@ -21,6 +21,7 @@ These tests verify the core claims of the Phase 1 migration:
 Uses real FAISS + a stub OllamaClient that counts embedding calls so we can
 assert the zero-embedding-on-delete invariant.
 """
+
 from __future__ import annotations
 
 import json
@@ -46,8 +47,11 @@ if "faiss" in sys.modules:
 
 try:
     import faiss
+
     if not hasattr(faiss, "IndexIDMap2"):
-        pytest.skip("faiss module has no IndexIDMap2 (stub loaded)", allow_module_level=True)
+        pytest.skip(
+            "faiss module has no IndexIDMap2 (stub loaded)", allow_module_level=True
+        )
 except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     pytest.skip("faiss not available in this env", allow_module_level=True)
 
@@ -70,6 +74,7 @@ class _CountingOllama:
         self.embeddings_call_count += 1
         # Deterministic 768-dim vector from a hash of the text.
         import hashlib
+
         h = hashlib.sha256(text.encode()).digest()
         # Repeat the 32-byte hash to fill 768 dims (768 / 4 = 192 ints).
         rng = np.random.RandomState(int.from_bytes(h[:4], "little"))
@@ -109,6 +114,7 @@ def _make_indexer(vault: Path, index_dir: Path):
     import importlib
 
     import vault_indexer
+
     # If vault_indexer captured the stub faiss (no IndexIDMap2), reload it
     # after removing the stub from sys.modules so it picks up the real faiss.
     if not hasattr(vault_indexer.faiss, "IndexIDMap2"):
@@ -130,6 +136,7 @@ def _write_note(vault: Path, name: str, content: str) -> Path:
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────
+
 
 def test_delete_triggers_zero_embedding_calls(tmp_vault):
     """Delete a note → assert NO Ollama embedding calls were made during the delete.
@@ -166,8 +173,12 @@ def test_delete_triggers_zero_embedding_calls(tmp_vault):
     )
 
     # ── Structural invariants ──
-    assert indexer.index.ntotal == 2, f"Expected 2 vectors after delete, got {indexer.index.ntotal}"
-    assert str(b) not in indexer._path_to_id, "Deleted path should be absent from _path_to_id"
+    assert indexer.index.ntotal == 2, (
+        f"Expected 2 vectors after delete, got {indexer.index.ntotal}"
+    )
+    assert str(b) not in indexer._path_to_id, (
+        "Deleted path should be absent from _path_to_id"
+    )
     # The other two should still be searchable.
     results = indexer.search("apples grapes", k=5)
     found_paths = {r["file_path"] for r in results}
@@ -266,7 +277,9 @@ def test_reconstruct_embedding_matches_stored_vector(tmp_vault):
     # The reconstructed vector should be normalized (L2 norm ≈ 1.0) because
     # we normalize_L2 before add_with_ids.
     norm = float(np.linalg.norm(recon))
-    assert abs(norm - 1.0) < 1e-5, f"Reconstructed vector should be unit-norm, got norm={norm}"
+    assert abs(norm - 1.0) < 1e-5, (
+        f"Reconstructed vector should be unit-norm, got norm={norm}"
+    )
 
 
 def test_reconstruct_embedding_returns_none_for_unknown(tmp_vault):
@@ -323,6 +336,7 @@ def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
     import importlib
 
     import vault_indexer
+
     if not hasattr(vault_indexer.faiss, "IndexIDMap2"):
         if "faiss" in sys.modules and not hasattr(sys.modules["faiss"], "IndexIDMap2"):
             del sys.modules["faiss"]

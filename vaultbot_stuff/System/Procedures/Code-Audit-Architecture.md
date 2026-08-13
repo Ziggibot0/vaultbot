@@ -1,6 +1,7 @@
 ---
 type: architecture-plan
 status: active
+baseline: true
 created: 2026-08-06
 summary: Architectural directive for building granular code-audit procedures with a three-step workflow, then an orchestrator, verified end-to-end on real backend files.
 tags:

@@ -36,6 +36,7 @@ WHAT THIS MODULE DOES
 Pure stdlib. No LLM calls. No I/O beyond reading frontmatter the caller
 already has.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -89,7 +90,8 @@ def status_allows_execution(status: str) -> tuple[bool, str]:
         return False, (
             "procedure is FLAGGED (repeatedly failed validation) — it is "
             "blocked from running and queued for re-research. Do not execute "
-            "it; find another approach or answer directly.")
+            "it; find another approach or answer directly."
+        )
     if s in _CAUTION:
         return True, "experimental"
     return True, "verified"
@@ -227,7 +229,9 @@ def _build_tree_inner(
         child_name = child_name.strip()
         if not child_name:
             continue
-        child = _build_tree_inner(child_name, proc_index, next_ancestors, depth_left - 1)
+        child = _build_tree_inner(
+            child_name, proc_index, next_ancestors, depth_left - 1
+        )
         if child is not None:
             children.append(child)
         else:
@@ -366,7 +370,9 @@ def build_procedure_surface(
 
     if not lines:
         return ""
-    header = ("# RELEVANT PROCEDURES (deterministic subagents — "
-              "call execute_procedure(name) to run one; do NOT re-derive "
-              "what a procedure already does)")
+    header = (
+        "# RELEVANT PROCEDURES (deterministic subagents — "
+        "call execute_procedure(name) to run one; do NOT re-derive "
+        "what a procedure already does)"
+    )
     return header + "\n" + "\n".join(lines)

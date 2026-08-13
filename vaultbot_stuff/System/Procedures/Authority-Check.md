@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-06
 description: "Resolve conflicts between the user's live directive and vault notes. The user's explicit words are the HIGHEST authority in the system — above any procedure, architecture doc, design note, or capability card. When a vault note says one thing and the user says another, the user wins. Always. Reads the conflicting note, compares it against the user's directive using the small model, and returns a binding ruling: USER_DIRECTIVE_WINS or NO_CONFLICT."
