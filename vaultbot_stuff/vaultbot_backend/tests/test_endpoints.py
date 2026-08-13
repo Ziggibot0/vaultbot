@@ -79,12 +79,12 @@ def test_models_returns_list(client):
 
 
 def test_identity_returns_fields(client):
-    """GET /identity returns 200 with identity + self_model."""
+    """GET /identity returns 200 with identity + summary."""
     resp = client.get("/identity")
     assert resp.status_code == 200
     data = resp.json()
     # The shim delegates to identity_api.get_identity(svc) which returns
-    # identity, self_model, summary fields.
+    # identity and summary fields.
     assert "identity" in data or "summary" in data or len(data) > 0
 
 

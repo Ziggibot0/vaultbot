@@ -596,7 +596,7 @@ autonomous_researcher = AutonomousResearcher(
 # by the chat LLM and external MCP clients.
 self_improver = SelfImprover(session_logger=default_session_logger)
 
-# Two-file identity layer (IDENTITY/SELF_MODEL): makes the agent feel like
+# Identity layer (IDENTITY.md): makes the agent feel like
 # the same agent across days regardless of which model is in the slot.
 identity = Identity(
     identity_dir=str(Path(__file__).with_name("identity")),

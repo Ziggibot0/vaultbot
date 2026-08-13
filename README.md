@@ -42,6 +42,26 @@ gets smarter the more you use it.
 - **Gets smarter over time** — four compounding loops: embedding drift
   (relevance feedback re-ranks retrieval), lazy condensing (notes de-fluff
   as you use them), concept-card refinement, and self-model regeneration.
+- **Provider/Model Registry** — a single interchangeable "pot" for all LLM
+  backends. Mix and match: Ollama for embeddings, OpenRouter for chat,
+  Gemini for vision — all through the same picker UI. No more scattered
+  env vars for each provider.
+- **Plan-first execution** — multi-step tasks are decomposed into concrete,
+  verifiable steps before execution. The plan is re-injected into working
+  memory each turn, keeping small local models on track across long tasks.
+- **Small model cartridge** — a tiny local model (~1 GB, auto-pulled by
+  the installer) handles cheap classification, tagging, and routing so the
+  big model only does the heavy reasoning. As more procedures use the small
+  cartridge, cloud token costs approach zero.
+- **Context budgeting** — token-aware context management keeps the vault
+  usable as it grows. Notes are compacted, truncated, and prioritized so
+  the model always sees the most relevant subgraph without context flood.
+- **MCP Server** — Model Context Protocol server for external tool
+  integration. Other MCP-compatible clients can query your vault's knowledge
+  graph through a standard protocol.
+- **Model preloading** — models are preloaded into GPU memory on startup
+  and on WebSocket connect, eliminating cold-start latency. First-chat
+  response time drops from minutes to seconds for large local models.
 
 ---
 
@@ -149,15 +169,21 @@ close and reopen Obsidian) for changes to take effect.
 | Variable | What it does | Default |
 |----------|-------------|---------|
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
-| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; the installer can pull it for you, or manually `ollama pull` it) | `qwen3.6:latest` |
+| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; the installer can pull it for you, or manually `ollama pull` it) | `qwen3:latest` |
 | `OLLAMA_EMBED_MODEL` | The embedding model (auto-pulled by the installer, ~270 MB) | `nomic-embed-text` |
 | `LLM_BACKEND` | `ollama` (local, free, **default — zero-config**) or `openai` (cloud, any OpenAI-compatible API — recommended for laptops) | `ollama` |
-| `LLM_API_KEY` | Cloud API key (leave blank for local-only; if `LLM_BACKEND=openai` but this is empty, the backend falls back to Ollama so it still starts) | (empty) |
+| `LLM_API_KEY` | Cloud API key (leave blank for local-only; if `LLM_BACKEND=openai` but this is empty, the backend fails with a clear error — set the key to use the cloud backend) | (empty) |
 | `LLM_BASE_URL` | Cloud API base URL (OpenAI, OpenRouter, LM Studio, vLLM, etc.) | `https://api.openai.com` |
 | `LLM_MODEL` | Cloud model name (only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
 | `VAULTBOT_RESEARCH_BACKEND` | `freesearch` (keyless) or `tavily` (API key) | `freesearch` |
 | `TAVILY_API_KEY` | Tavily search API key (only if using `tavily`) | (empty) |
 | `SEARXNG_PORT` | Port for the optional self-hosted SearXNG container | `8080` |
+| `OLLAMA_HOST` | Ollama server host (only used when `LLM_BACKEND=ollama`) | `http://localhost:11434` |
+| `VISION_MODEL` | Vision-capable model for textbook pages with figures/equations (can be local or cloud) | (empty — falls back to chat model) |
+| `SMALL_MODEL` | Tiny local-only Ollama model for cheap classification/routing (auto-pulled by installer, ~1 GB) | `qwen3.5:0.8b` |
+| `VAULTBOT_OLLAMA_KEEP_ALIVE` | How long Ollama keeps models resident after last request (`30m`, `2h`, `-1` forever, `0` evict) | `30m` |
+| `VAULTBOT_PRELOAD_ON_STARTUP` | Preload models when the backend starts to reduce first-chat latency (`1`/`0`) | `1` |
+| `VAULTBOT_PRELOAD_ON_CONNECT` | Preload when a chat WebSocket opens (`1`/`0`) | `1` |
 
 > **Want to use a cloud model (like GPT-4o) instead of local?** Set
 > `LLM_BACKEND=openai`, `LLM_API_KEY=your-key`, and `LLM_MODEL=gpt-4o-mini`
@@ -165,8 +191,7 @@ close and reopen Obsidian) for changes to take effect.
 > Ollama either way. You can also switch between cloud and local back and
 > forth live from the plugin settings panel without editing `.env` — the
 > changes persist for you. If you set `LLM_BACKEND=openai` but forget the
-> API key, the backend silently falls back to Ollama so it always starts —
-> you'll see a note in the Diagnose panel.
+> API key, the backend fails with a clear error — set the key to actually use the cloud backend.
 >
 > **Want to run a local LLM instead?** That's the default — just `ollama pull
 > qwen3:latest` (or any model you like). The installer can pull it for you
@@ -268,27 +293,38 @@ Wikipedia") and it will store that as a directive note itself.
 
 ## Project structure
 
+The backend (~95 modules) is organized into these key areas:
+
+| Module | Role |
+|--------|------|
+| `main.py` | FastAPI server + service wiring (lifespan, lock, startup) |
+| `chat_handler.py` | The agentic chat loop (plan gate, tool dispatch, synthesis) |
+| `identity.py` | Two-file identity layer (IDENTITY.md + SELF_MODEL.md) |
+| `providers.py` | Provider/Model Registry — the interchangeable "pot" for LLM backends |
+| `plan_gate.py` | Plan-first execution mode — decomposes multi-step work |
+| `procedure_compiler.py` | Procedure execution engine (code steps + LLM steps) |
+| `agent_tools.py` | Tool schemas + system prompt assembly |
+| `self_improver.py` | Safe self-edit with syntax + import-graph verification |
+| `fused_retrieval.py` | Vector + wikilink graph + backlink retrieval |
+| `research_engine.py` | LLM-free web research (DuckDuckGo + Marginalia + arXiv) |
+| `autonomous_researcher.py` | Background researcher — scans gaps, researches autonomously |
+| `vault_indexer.py` | FAISS index + chunked embeddings |
+| `vault_graph.py` | Wikilink graph + context builder |
+| `context_budgeter.py` | Token-aware context management for vault growth |
+| `calibration.py` | Retrieval quality tracking and improvement |
+| `mcp_server.py` | Model Context Protocol server |
+| `custom_tools/` | Agent-authored tools (grows itself) |
+| `identity/` | IDENTITY.md, SELF_MODEL.md (boot-injected each session) |
+
 ```
 .
 ├── .obsidian/plugins/vaultbot/   # The Obsidian plugin (chat UI)
 ├── vaultbot_stuff/
 │   ├── baseline/                  # Starter directive templates (not active)
-│   ├── vaultbot_backend/          # The Python backend
-│   │   ├── main.py                #   FastAPI server + chat loop
-│   │   ├── agent_tools.py         #   tool schemas + system prompt
-│   │   ├── self_improver.py       #   safe self-edit + capability audit
-│   │   ├── fused_retrieval.py     #   vector + graph + backlink retrieval
-│   │   ├── research_engine.py     #   LLM-free web research
-│   │   ├── vault_indexer.py       #   FAISS index + chunked embeddings
-│   │   ├── vault_graph.py         #   wikilink graph + context builder
-│   │   ├── custom_tools/          #   agent-authored tools (grows itself)
-│   │   ├── identity/              #   IDENTITY.md, SELF_MODEL.md
-│   │   └── ...
+│   ├── vaultbot_backend/          # The Python backend (~95 modules)
 │   ├── System/                    # Architecture docs, procedures, playbooks
 │   ├── .env.example                # Template for .env (API keys, model config)
-│   ├── CONTRIBUTING.md            # How to contribute
-│   ├── README.md                  # This file
-│   └── setup.ps1 / setup.sh       # One-click installers
+│   ├── setup.ps1 / setup.sh       # One-click installers
 ├── README.md                      # GitHub-facing README
 ├── CONTRIBUTING.md                # GitHub-facing contributing guide
 ├── SECURITY.md                    # Security policy

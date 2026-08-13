@@ -75,7 +75,7 @@ class PatternExtractor:
       - Tool usage frequency and co-occurrence
       - Workflow patterns (common tool sequences)
       - Over-reporting detection (excessively long assistant responses)
-      - Self-model drift (comparing SELF_MODEL.md claims vs vault reality)
+      - Self-model drift (historical — SELF_MODEL.md was removed 2026-08-13)
 
     All extraction is deterministic — no LLM calls. The output is structured
     JSON that the consolidation pipeline (clustering + LLM synthesis) consumes.
@@ -348,90 +348,6 @@ class PatternExtractor:
             'exchanges': long_exchanges,
         }
 
-    def detect_self_model_drift(self) -> dict | None:
-        """Compare SELF_MODEL.md claims against vault reality.
-
-        Scans SELF_MODEL.md for numeric claims (e.g., "20 tools", "8
-        procedures") and checks them against vault_list output. Any
-        discrepancy is a drift finding.
-
-        This is a best-effort heuristic — it looks for patterns like
-        "N tools", "N procedures", "N notes" and counts the actual.
-        """
-        self_model_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "identity", "SELF_MODEL.md")
-        if not os.path.exists(self_model_path):
-            return None
-
-        try:
-            with open(self_model_path, encoding='utf-8') as f:
-                self_model_text = f.read()
-        except (OSError, PermissionError):
-            return None  # file exists but can't be read — not a drift issue
-
-        drifts = []
-
-        # Check tool count claim
-        tool_match = re.search(r'(\d+)\s+tools?\b', self_model_text, re.IGNORECASE)
-        if tool_match:
-            claimed = int(tool_match.group(1))
-            # Count actual .py files in custom_tools/ + built-in tools
-            custom_tools_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "custom_tools")
-            actual_custom = 0
-            if os.path.isdir(custom_tools_dir):
-                actual_custom = len([
-                    f for f in os.listdir(custom_tools_dir)
-                    if f.endswith('.py') and not f.startswith('__')
-                ])
-            # Built-in tools are harder to count precisely; use the
-            # known set from agent_tools.py. We check if the claim
-            # mentions "built-in" + "custom" to parse the split.
-            # For now, just flag if the custom tool count doesn't match.
-            if actual_custom != claimed and 'custom' in self_model_text.lower():
-                # Only flag if the number seems to be about custom tools
-                pass  # Conservative: don't flag without more context
-
-        # Check procedure count claim
-        proc_match = re.search(r'(\d+)\s+procedures?\b', self_model_text, re.IGNORECASE)
-        if proc_match:
-            claimed = int(proc_match.group(1))
-            # Count actual procedural notes in the vault
-            actual = 0
-            for root, dirs, files in os.walk(self.vault_path):
-                # Skip ignored dirs
-                if any(ignored in root for ignored in
-                       ['.venv', 'vaultbot_venv', '.git', '.obsidian', 'vaultbot_index',
-                        'partials', 'sessions', 'trash']):
-                    continue
-                for fname in files:
-                    if not fname.endswith('.md'):
-                        continue
-                    fpath = os.path.join(root, fname)
-                    try:
-                        with open(fpath, encoding='utf-8') as f:
-                            head = f.read(500)
-                        if 'type: procedure' in head:
-                            actual += 1
-                    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                        continue
-            if actual != claimed:
-                drifts.append({
-                    'claim': f"{claimed} procedures",
-                    'reality': f"{actual} procedures",
-                    'delta': actual - claimed,
-                })
-
-        if not drifts:
-            return None
-
-        return {
-            'drifts': drifts,
-            'self_model_path': self_model_path,
-        }
-
     def extract_all(self, since_timestamp: str = None) -> dict:
         """Run all pattern extractors and return structured findings.
 
@@ -452,7 +368,6 @@ class PatternExtractor:
                 'sentiment': {...},
                 'tool_patterns': {...},
                 'over_reporting': {...},
-                'self_model_drift': {...} | None,
             }
         """
         sessions = self.scan_chat_logs(since_timestamp)
@@ -466,7 +381,6 @@ class PatternExtractor:
             'sentiment': self.extract_sentiment_patterns(sessions),
             'tool_patterns': self.extract_tool_patterns(sessions),
             'over_reporting': self.extract_over_reporting(sessions),
-            'self_model_drift': self.detect_self_model_drift(),
         }
 
     # --- Logging ---
@@ -570,23 +484,7 @@ class PatternExtractor:
                                f"semantic knowledge to reduce repeat failures.",
             })
 
-        # Gap 3: Self-model drift detected
-        drift = patterns.get('self_model_drift')
-        if drift:
-            for d in drift.get('drifts', []):
-                gaps.append({
-                    'kind': 'self_model_drift',
-                    'topic': 'self-model-staleness',
-                    'priority': 50,
-                    'claim': d['claim'],
-                    'reality': d['reality'],
-                    'delta': d['delta'],
-                    'description': f"Self-model claims {d['claim']} but "
-                                   f"reality is {d['reality']}. "
-                                   f"Consolidate into a 'check before claiming' rule.",
-                })
-
-        # Gap 4: Over-reporting pattern
+        # Gap 3: Over-reporting pattern
         over_reporting = patterns.get('over_reporting', {})
         if over_reporting.get('count', 0) >= 3:
             gaps.append({

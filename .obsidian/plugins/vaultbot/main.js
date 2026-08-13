@@ -397,6 +397,30 @@ class VaultBotPlugin extends Plugin {
 		} catch (e) { return {models: []}; }
 	}
 
+	// ── Tournament helpers ─────────────────────────────────────────────
+	async fetchTournamentModels() {
+		try {
+			const r = await fetch(this.settings.backendUrl + '/tournament/models');
+			if (!r.ok) return null;
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async fetchTournamentBenchmarks(role) {
+		try {
+			const r = await fetch(this.settings.backendUrl + '/tournament/benchmarks?role=' + encodeURIComponent(role));
+			if (!r.ok) return null;
+			return await r.json();
+		} catch (e) { return null; }
+	}
+	async runTournament(modelIds, role) {
+		try {
+			const r = await fetch(this.settings.backendUrl + '/tournament/run', {
+				method: 'POST', headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({model_ids: modelIds, role: role})});
+			return await r.json();
+		} catch (e) { return {status: 'error', detail: String(e)}; }
+	}
+
 	// Push research-backend settings (Tavily key + backend choice) to the
 	// running backend so they take effect immediately, no restart needed.
 	async pushResearchConfig() {
@@ -1797,6 +1821,15 @@ class VaultBotSettingTab extends PluginSettingTab {
 			provStatusEl.setText(providers.length
 				? `${providers.length} provider(s), ${models.length} model(s) in the pot.`
 				: 'Add a provider to begin.');
+			// ALSO refresh the tournament staging provider dropdown from the
+			// SAME providers list (no duplicate fetch). This keeps the staging
+			// section in sync with the main pot whenever providers change.
+			if (typeof stagingProvSel !== 'undefined') {
+				const stagingCur = stagingProvSel.value;
+				stagingProvSel.empty();
+				providers.forEach(p => stagingProvSel.createEl('option', {text: p.label || p.id, attr: {value: p.id}}));
+				if (stagingCur && providers.find(p => p.id === stagingCur)) stagingProvSel.value = stagingCur;
+			}
 		};
 
 		addProvBtn.addEventListener('click', async () => {
@@ -1837,6 +1870,286 @@ class VaultBotSettingTab extends PluginSettingTab {
 			}
 		});
 		refreshPotUI();
+		// ── Model Tournament ──────────────────────────────────────────
+		// A separate "staging pot" for models you want to evaluate BEFORE
+		// adding to the main pot. Add models by picking a provider (from
+		// the SAME provider list you already configured above) and typing
+		// the model name. Then run a tournament to see how they perform.
+		containerEl.createEl('h3', {text: 'Model Tournament'});
+		containerEl.createEl('div', {text:
+			'Add models to the tournament staging pot below — these are ' +
+			'separate from your main model pot. Test them against vaultbot-' +
+			'specific benchmarks, then promote the winners to your main pot.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:2px 0 10px 0;'}});
+
+		// ── Add to staging: reuses the SAME provider dropdown data as the
+		// main pot (no duplicate fetch). The provider list is already loaded
+		// by refreshPotUI() in the AI Models & Providers section above.
+		const stagingAddRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;'}});
+		stagingAddRow.createEl('span', {text: 'Add model:', attr: {style: 'font-weight:600;font-size:0.85em;'}});
+		const stagingProvSel = stagingAddRow.createEl('select');
+		stagingProvSel.style.minWidth = '140px';
+		// Live-model dropdown: populated from the provider's real /models list
+		// so the user picks without typing.
+		const stagingLiveSel = stagingAddRow.createEl('select');
+		stagingLiveSel.style.minWidth = '160px';
+		stagingLiveSel.createEl('option', {text: '(pick provider first)', attr: {disabled: true}});
+		const stagingModelInput = stagingAddRow.createEl('input', {type: 'text', attr: {placeholder: 'or type model name', style: 'flex:1;min-width:140px;'}});
+		const stagingAddBtn = stagingAddRow.createEl('button', {text: 'Add to staging', cls: 'mod-cta'});
+		const stagingStatusEl = stagingAddRow.createEl('span', {attr: {style: 'opacity:0.7;font-size:0.8em;'}});
+
+		// Load live models from the selected provider (same endpoint the
+		// main pot's live-model dropdown uses).
+		const loadStagingLiveModels = async () => {
+			const pid = stagingProvSel.value;
+			stagingLiveSel.empty();
+			if (!pid) {
+				stagingLiveSel.createEl('option', {text: '(pick provider first)', attr: {disabled: true}});
+				return;
+			}
+			stagingLiveSel.createEl('option', {text: 'loading...', attr: {disabled: true}});
+			const res = await this.plugin.fetchProviderLiveModels(pid);
+			stagingLiveSel.empty();
+			const models = (res && Array.isArray(res.models)) ? res.models : [];
+			if (!models.length) {
+				stagingLiveSel.createEl('option', {text: '(none found — type manually)', attr: {disabled: true}});
+				return;
+			}
+			models.forEach(m => {
+				const name = typeof m === 'string' ? m : m.name;
+				stagingLiveSel.createEl('option', {text: name, attr: {value: name}});
+			});
+		};
+		stagingProvSel.addEventListener('change', loadStagingLiveModels);
+
+		// Staging pot list — checkboxes for each entry
+		const stagingListEl = containerEl.createDiv({attr: {style: 'max-height:180px;overflow-y:auto;border:1px solid var(--background-modifier-border);border-radius:4px;padding:6px;margin-bottom:6px;'}});
+		const stagingBtnRow = containerEl.createDiv({attr: {style: 'display:flex;gap:8px;margin-bottom:8px;'}});
+		const stagingSelectAllBtn = stagingBtnRow.createEl('button', {text: 'Select all'});
+		const stagingDeselectAllBtn = stagingBtnRow.createEl('button', {text: 'Deselect all'});
+		const stagingClearBtn = stagingBtnRow.createEl('button', {text: 'Clear staging'});
+
+		// Role selector + run
+		const tourneyRoleRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
+		tourneyRoleRow.createEl('span', {text: 'Role:', attr: {style: 'font-weight:600;'}});
+		const tourneyRoleSel = tourneyRoleRow.createEl('select');
+		tourneyRoleSel.createEl('option', {text: 'Big (reasoning, synthesis, planning)', attr: {value: 'big'}});
+		tourneyRoleSel.createEl('option', {text: 'Small (classification, extraction, tagging)', attr: {value: 'small'}});
+
+		const tourneyRunRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;'}});
+		const tourneyRunBtn = tourneyRunRow.createEl('button', {text: 'Run Tournament', cls: 'mod-cta'});
+		const tourneyStatusEl = tourneyRunRow.createEl('span', {attr: {style: 'opacity:0.7;font-size:0.85em;'}});
+
+		// Results area
+		const tourneyResultsEl = containerEl.createDiv({attr: {style: 'margin-top:8px;'}});
+
+		// Refresh the staging list from the backend
+		const refreshStagingList = async () => {
+			stagingListEl.empty();
+			stagingListEl.createEl('div', {text: 'Loading...', attr: {style: 'opacity:0.5;font-size:0.85em;padding:4px;'}});
+			try {
+				const r = await fetch(this.plugin.settings.backendUrl + '/tournament/staging');
+				const data = await r.json();
+				const entries = (data && Array.isArray(data.entries)) ? data.entries : [];
+				stagingListEl.empty();
+				if (!entries.length) {
+					stagingListEl.createEl('div', {text: 'No models in staging. Add some above.', attr: {style: 'opacity:0.6;font-size:0.85em;padding:4px;'}});
+					return;
+				}
+				// Fetch sizes in parallel
+				let sizes = {};
+				try {
+					const sr = await fetch(this.plugin.settings.backendUrl + '/tournament/staging/sizes');
+					const sd = await sr.json();
+					sizes = sd.sizes || {};
+				} catch (e) { /* sizes unavailable — show without */ }
+
+				entries.forEach(e => {
+					const row = stagingListEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:6px;padding:2px 0;'}});
+					const cb = row.createEl('input', {type: 'checkbox', attr: {value: e.id, 'data-model': e.model, 'data-provider': e.provider}});
+					const sizeStr = sizes[e.id] ? ` (${sizes[e.id]})` : '';
+					row.createEl('label', {text: `${e.model}${sizeStr}`, attr: {style: 'font-size:0.85em;'}});
+					row.createEl('span', {text: e.provider_label || e.provider, attr: {style: 'font-size:0.7em;opacity:0.5;'}});
+					const rm = row.createEl('button', {text: '✕', attr: {style: 'font-size:0.7em;padding:0 4px;'}});
+					rm.addEventListener('click', async () => {
+						await fetch(this.plugin.settings.backendUrl + '/tournament/staging/' + encodeURIComponent(e.id), {method: 'DELETE'});
+						refreshStagingList();
+					});
+				});
+			} catch (e) {
+				stagingListEl.empty();
+				stagingListEl.createEl('div', {text: 'Backend offline — start the backend to manage staging.', attr: {style: 'opacity:0.5;font-size:0.85em;padding:4px;'}});
+			}
+		};
+
+		// Add to staging
+		stagingAddBtn.addEventListener('click', async () => {
+			const provider = stagingProvSel.value;
+			const model = stagingModelInput.value.trim() || stagingLiveSel.value;
+			if (!provider) { stagingStatusEl.setText('Pick a provider.'); return; }
+			if (!model) { stagingStatusEl.setText('Pick or type a model name.'); return; }
+			stagingStatusEl.setText('Adding...');
+			const r = await fetch(this.plugin.settings.backendUrl + '/tournament/staging', {
+				method: 'POST', headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({model, provider})});
+			const data = await r.json();
+			if (data.status === 'ok') {
+				stagingModelInput.value = '';
+				stagingStatusEl.setText('Added!');
+				new Notice(`Added ${model} to tournament staging.`);
+				refreshStagingList();
+			} else {
+				stagingStatusEl.setText('Failed: ' + (data.detail || 'error'));
+			}
+		});
+
+		stagingSelectAllBtn.addEventListener('click', () => {
+			stagingListEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true);
+		});
+		stagingDeselectAllBtn.addEventListener('click', () => {
+			stagingListEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+		});
+		stagingClearBtn.addEventListener('click', async () => {
+			await fetch(this.plugin.settings.backendUrl + '/tournament/staging/clear', {method: 'POST'});
+			refreshStagingList();
+			new Notice('Tournament staging cleared.');
+		});
+
+		let tourneyRunning = false;
+		tourneyRunBtn.addEventListener('click', async () => {
+			if (tourneyRunning) return;
+			const checked = stagingListEl.querySelectorAll('input[type=checkbox]:checked');
+			const contestants = Array.from(checked).map(cb => ({
+				model_id: cb.value,
+				model_name: cb.getAttribute('data-model'),
+				provider_id: cb.getAttribute('data-provider')
+			}));
+			if (!contestants.length) {
+				tourneyStatusEl.setText('Select at least one model from staging.');
+				return;
+			}
+			const role = tourneyRoleSel.value;
+			tourneyRunning = true;
+			tourneyRunBtn.setAttribute('disabled', 'disabled');
+			tourneyRunBtn.setText('Running...');
+			tourneyStatusEl.setText(`Testing ${contestants.length} model(s) on ${role} benchmarks...`);
+			tourneyResultsEl.empty();
+			tourneyResultsEl.createEl('div', {text: 'Running tournament — this may take a few minutes. Results will appear here when done.', attr: {style: 'opacity:0.7;font-size:0.85em;'}});
+
+			try {
+				const r = await fetch(this.plugin.settings.backendUrl + '/tournament/run', {
+					method: 'POST', headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({contestants, role})});
+				const result = await r.json();
+				tourneyResultsEl.empty();
+
+				if (result.status !== 'ok') {
+					tourneyResultsEl.createEl('div', {text: 'Tournament failed: ' + (result.detail || 'unknown error'), attr: {style: 'color:var(--text-error);'}});
+					tourneyStatusEl.setText('Failed.');
+					return;
+				}
+
+				tourneyStatusEl.setText(`Done in ${result.duration_s}s. Judge: ${result.judge_model}.`);
+
+				// ── Results: bar chart visualization ──────────────────
+				// Sort by combined score (accuracy 70% + speed 30%) descending
+				const sorted = (result.models || []).slice().sort((a, b) => b.combined_score - a.combined_score);
+				const maxCombined = sorted.length ? sorted[0].combined_score : 1;
+
+				// Summary line
+				const summaryRow = tourneyResultsEl.createDiv({attr: {style: 'display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8em;opacity:0.7;'}});
+				summaryRow.createEl('span', {text: `🏆 ${sorted[0]?.model_name || '—'} wins`});
+				summaryRow.createEl('span', {text: `📊 ${result.benchmarks?.length || 0} benchmarks`});
+				summaryRow.createEl('span', {text: `⚖️ Score = 70% accuracy + 30% speed`});
+
+				// Bar chart — one row per model
+				const chartEl = tourneyResultsEl.createDiv({attr: {style: 'margin-bottom:10px;'}});
+				sorted.forEach((m, i) => {
+					const row = chartEl.createDiv({attr: {style: 'margin-bottom:6px;'}});
+					// Model name + rank
+					const labelRow = row.createDiv({attr: {style: 'display:flex;align-items:baseline;gap:6px;margin-bottom:2px;'}});
+					const rank = labelRow.createEl('span', {text: `#${i + 1}`, attr: {style: 'font-weight:700;font-size:0.85em;color:var(--text-accent);min-width:24px;'}});
+					labelRow.createEl('span', {text: m.model_name, attr: {style: 'font-weight:600;font-size:0.9em;'}});
+					if (m.error) {
+						labelRow.createEl('span', {text: '⚠ ' + m.error, attr: {style: 'color:var(--text-error);font-size:0.75em;'}});
+					}
+					// Score numbers
+					const pct = (m.combined_score * 100).toFixed(0);
+					const accPct = (m.overall_score * 100).toFixed(0);
+					const timeStr = m.avg_latency_ms ? (m.avg_latency_ms / 1000).toFixed(1) + 's' : '—';
+					labelRow.createEl('span', {text: `${pct}%`, attr: {style: 'font-weight:700;font-size:0.9em;margin-left:auto;'}});
+					labelRow.createEl('span', {text: `acc ${accPct}% · ${timeStr}/q`, attr: {style: 'font-size:0.7em;opacity:0.6;'}});
+
+					// Combined bar (full width background, filled by score)
+					const barBg = row.createDiv({attr: {style: 'height:18px;background:var(--background-modifier-border);border-radius:3px;overflow:hidden;position:relative;'}});
+					const barW = Math.max(2, (m.combined_score / (maxCombined || 1)) * 100);
+					// Color: green for top, fading to yellow then red
+					const hue = i === 0 ? 120 : Math.max(0, 120 - (i / Math.max(sorted.length - 1, 1)) * 120);
+					const sat = i === 0 ? 70 : 50;
+					const light = i === 0 ? 35 : 45;
+					barBg.createDiv({attr: {style: `width:${barW}%;height:100%;background:hsl(${hue},${sat}%,${light}%);border-radius:3px;transition:width 0.3s;`}});
+
+					// Accuracy sub-bar (thin line inside)
+					const accW = Math.max(1, m.overall_score * 100);
+					barBg.createDiv({attr: {style: `position:absolute;top:0;left:0;width:${accW}%;height:3px;background:var(--text-success);border-radius:0 2px 2px 0;opacity:0.8;`}});
+				});
+
+				// ── Per-benchmark heatmap ──────────────────────────────
+				const detDisclosure = tourneyResultsEl.createEl('details', {attr: {style: 'margin-top:8px;'}});
+				detDisclosure.createEl('summary', {text: 'Per-benchmark breakdown'});
+				const detBody = detDisclosure.createEl('div', {attr: {style: 'margin-top:6px;overflow-x:auto;'}});
+
+				// Build a compact heatmap: rows = benchmarks, cols = models
+				const benchmarks = result.benchmarks || [];
+				if (benchmarks.length && sorted.length) {
+					const hmTable = detBody.createEl('table', {attr: {style: 'border-collapse:collapse;font-size:0.75em;width:100%;'}});
+					const hmThead = hmTable.createEl('thead');
+					const hmHr = hmThead.createEl('tr');
+					hmHr.createEl('th', {text: 'Benchmark', attr: {style: 'text-align:left;padding:3px 6px;border-bottom:1px solid var(--background-modifier-border);'}});
+					sorted.forEach(m => {
+						hmHr.createEl('th', {text: m.model_name.split(':').pop().substring(0, 12), attr: {style: 'text-align:center;padding:3px 4px;border-bottom:1px solid var(--background-modifier-border);font-size:0.85em;'}});
+					});
+					const hmTbody = hmTable.createEl('tbody');
+					benchmarks.forEach(b => {
+						const bRow = hmTbody.createEl('tr');
+						bRow.createEl('td', {text: b.name, attr: {style: 'padding:2px 6px;white-space:nowrap;'}});
+						sorted.forEach(m => {
+							const mb = (m.benchmarks || []).find(x => x.benchmark_id === b.id);
+							const cell = bRow.createEl('td', {attr: {style: 'text-align:center;padding:2px 4px;'}});
+							if (!mb) {
+								cell.setText('—');
+							} else if (mb.error) {
+								cell.createEl('span', {text: '⚠', attr: {style: 'color:var(--text-error);', title: mb.error}});
+							} else if (mb.passed) {
+								cell.createEl('span', {text: '✓', attr: {style: 'color:var(--text-success);font-weight:700;'}});
+							} else {
+								cell.createEl('span', {text: '✗', attr: {style: 'color:var(--text-error);'}});
+							}
+							// Show latency in tiny text
+							if (mb && !mb.error) {
+								cell.createEl('div', {text: (mb.latency_ms / 1000).toFixed(1) + 's', attr: {style: 'font-size:0.65em;opacity:0.5;'}});
+							}
+						});
+					});
+				}
+
+				new Notice(`Tournament complete: ${sorted.length} model(s) tested.`);
+			} catch (e) {
+				tourneyResultsEl.empty();
+				tourneyResultsEl.createEl('div', {text: 'Error: ' + (e.message || e), attr: {style: 'color:var(--text-error);'}});
+				tourneyStatusEl.setText('Error.');
+			} finally {
+				tourneyRunning = false;
+				tourneyRunBtn.removeAttribute('disabled');
+				tourneyRunBtn.setText('Run Tournament');
+			}
+		});
+
+		// Staging provider dropdown is populated by refreshPotUI() above —
+		// no standalone fetch needed (it would be a duplicate of the same
+		// /llm/providers call that refreshPotUI already makes).
+		refreshStagingList();
+
 		// ── Configuration status panel ────────────────────────────────
 		// Shows the effective value + source for each user-facing config key,
 		// so the user can see which config source is "winning" (plugin panel
@@ -3207,7 +3520,7 @@ class VaultBotSidebarView extends ItemView {
 			let text = '... ' + label + '  [' + fmtMs(elapsed) + ']';
 			if (detail) {
 				const parts = [];
-				for (const k of ['round', 'max_rounds', 'new_sources', 'total_sources', 'sources', 'follow_up_sources', 'url', 'title', 'note', 'total_notes', 'total', 'query', 'facts', 'source_count', 'outbound_links', 'amem_evolved', 'amem_links', 'silent_ms', 'chunks']) {
+				for (const k of ['instruction', 'status', 'step_type', 'output', 'round', 'max_rounds', 'new_sources', 'total_sources', 'sources', 'follow_up_sources', 'url', 'title', 'note', 'total_notes', 'total', 'query', 'facts', 'source_count', 'outbound_links', 'amem_evolved', 'amem_links', 'silent_ms', 'chunks', 'node_count', 'duration_ms', 'original_tokens', 'budgeted_tokens', 'chars', 'kept', 'count']) {
 					if (detail[k] !== undefined && detail[k] !== null) {
 						let v = detail[k];
 						if (typeof v === 'string' && v.length > 60) v = v.slice(0, 57) + '...';
@@ -3392,6 +3705,26 @@ class VaultBotSidebarView extends ItemView {
 					// Granular stage events from the backend (research rounds,
 					// scraping, synthesis, gap fill, note writing, A-MEM).
 					startActivity(msg.stage, msg.detail || {});
+				} else if (msg.type === 'procedure_step') {
+					// Live procedure step visibility — the user sees every
+					// step of every procedure running in preflight or during
+					// the agentic loop. Shows procedure name, step number,
+					// instruction, and status. Kills the black box.
+					const proc = msg.procedure || 'procedure';
+					const step = msg.step || '?';
+					const total = msg.total || '?';
+					const instruction = msg.instruction || '';
+					const status = msg.status || 'running';
+					const label = proc + ' step ' + step + '/' + total;
+					const detail = {
+						instruction: instruction,
+						status: status,
+						step_type: msg.step_type || '',
+					};
+					if (msg.output_preview) {
+						detail.output = msg.output_preview;
+					}
+					startActivity(label, detail);
 				} else if (msg.type === 'heartbeat') {
 					// Periodic "still alive" pulse during long silent waits.
 					// Carries elapsed_ms + how long since the last output.

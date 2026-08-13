@@ -232,11 +232,6 @@ async def websocket_endpoint(websocket: WebSocket,
         })
     else:
         websocket.working_memory = TaskList()
-    # Compression counters: track how many times compression has fired this
-    # session for the anti-thrash guard. Reset on /new.
-    websocket._compression_count = 0
-    websocket._last_compression_tokens_before = 0
-    websocket._last_compression_tokens_after = 0
     _restored = websocket.conversation_history
     if _restored:
         session_logger.log("conversation_history_restored", {
@@ -345,10 +340,6 @@ async def websocket_endpoint(websocket: WebSocket,
                         _TL.clear_disk(session_id=_old_sid)
                     except Exception:  # noqa: BLE001
                         pass
-                # Reset compression counters so anti-thrash starts fresh.
-                websocket._compression_count = 0
-                websocket._last_compression_tokens_before = 0
-                websocket._last_compression_tokens_after = 0
                 # Wipe the persisted copy too so a restart after /new doesn't
                 # resurrect the cleared thread.  Clear the OLD session's files
                 # only — other tabs' sessions are untouched.

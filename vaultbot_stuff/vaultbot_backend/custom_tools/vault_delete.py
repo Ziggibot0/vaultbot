@@ -13,7 +13,7 @@ VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()  # 4 levels up
 EXCLUDE_DIRS = {".git", "node_modules", ".obsidian", "vaultbot_venv", "__pycache__", "checkpoints", ".venv"}
 BACKEND_DIR = Path(__file__).parent.parent.resolve()  # vaultbot_stuff/vaultbot_backend/
 TRASH_DIR = BACKEND_DIR / "trash"
-IDENTITY_FILES = {"IDENTITY", "SELF_MODEL"}
+IDENTITY_FILES = {"IDENTITY"}
 
 def _is_sacred(stem: str) -> bool:
     return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem) or re.match(r"^\d{2}-\d{2}-\d{4}$", stem))

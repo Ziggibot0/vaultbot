@@ -54,23 +54,6 @@ class Tunables:
         "good morning", "good afternoon", "good evening",
     )
 
-    # ── Preflight compression (chat_handler._compress_conversation) ───────
-    # Hermes-style ratio-based compression. Fires when estimated tokens
-    # exceed threshold_ratio × context_window. All values have env overrides
-    # at the call site; these are the defaults.
-    # NOTE: the hard token cap (_enforce_token_cap) is the GUARANTEED
-    # ceiling; this compression is the first line of defense that fires
-    # before the cap enforcement needs to. With the cap at 60K, a 0.35
-    # ratio means compression fires at ~45K tokens on a 128K model,
-    # giving it room to compact before the hard cap has to prune.
-    compression_threshold_ratio: float = 0.35  # fraction of context window
-    compression_tail_budget_ratio: float = 0.20  # fraction of threshold for tail
-    compression_protect_last_n: int = 6  # min tail messages kept verbatim
-    compression_prune_tool_chars: int = 200  # tool results > this get pruned
-    compression_min_dropped_to_summarize: int = 3  # min dropped msgs to summarize
-    compression_antithrash_count: int = 2  # block after N ineffective passes
-    compression_antithrash_min_reduction: float = 0.05  # min token reduction ratio
-
     # ── Proactive tool-result aging (chat_handler._age_old_tool_results) ──
     # Age-based stubbing of old tool results, INDEPENDENT of the token cap.
     # The token cap only fires when total tokens exceed 60K; below that, old

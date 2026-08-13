@@ -496,7 +496,6 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
                                    svc.autonomous_researcher._thread.is_alive()),
         "index_vectors": svc.vault_indexer.index.ntotal if svc.vault_indexer.index else 0,
         "graph_nodes": len(svc.vault_graph.nodes),
-        "identity_self_model_chars": len(svc.identity.get_self_model()),
     }
     result = svc.health_monitor.health(extra=extra)
     # If the researcher thread is alive but the heartbeat is stale for

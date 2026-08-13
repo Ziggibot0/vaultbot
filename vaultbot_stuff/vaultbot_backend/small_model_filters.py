@@ -10,11 +10,10 @@ unfiltered data, never worse than now. Guards parse LLM output defensively;
 on any failure (bad JSON, exception, garbage) the function returns the
 input unchanged.
 
-Three of the five functions delegate to existing procedures via
+Two of the functions delegate to existing procedures via
 ``execute_procedure`` (the same dispatch path the big model uses):
   - ``rerank_results`` → calls ``Smart-Vault-Search``
   - ``filter_context`` → calls ``Filter-Context-For-Query``
-  - ``compress_window`` → calls ``Summarize-Conversation``
 
 This means the vaultbot can tune the prompts by editing the procedure notes
 — no code change or backend restart needed (procedures are recompiled on
@@ -52,7 +51,7 @@ _STOP_WORDS = frozenset({
 # helper costs zero latency after its first failure instead of 60s/turn.
 #
 # Per-helper keys: ("expand", 0), ("rerank", 0), ("filter", 0),
-# ("compress", 0), ("query", 0), ("digest", 0).  Value is the monotonic
+# ("query", 0), ("digest", 0).  Value is the monotonic
 # timestamp of the last failure; entries expire after the cooldown.
 _BREAKER_COOLDOWN_SECONDS = float(
     os.environ.get("VAULTBOT_SMALL_BREAKER_COOLDOWN", "1800"))  # 30 min
@@ -376,73 +375,6 @@ async def filter_context(svc: Any, query: str, context: str,
         if session_logger:
             session_logger.log("deterministic_filter_failed", {"error": str(e)})
         return context
-
-
-# ---------------------------------------------------------------------------
-# Phase 5: Conversation Compression — delegates to Summarize-Conversation
-# ---------------------------------------------------------------------------
-
-def compress_window(messages: list[dict],
-                    session_logger: Any = None) -> str | None:
-    """Summarize dropped conversation messages via the Summarize-Conversation
-    procedure so the big model retains context without re-reading raw noise.
-
-    Returns a summary string, or None on any failure (caller drops messages
-    as before — today's behavior).
-    """
-    if len(messages) <= 3:
-        return None
-    # Circuit breaker: skip summarization if it failed recently.
-    if _breaker_tripped("compress"):
-        return None
-
-    try:
-        from llm_client import get_small_client
-        client = get_small_client(session_logger)
-        if client is None:
-            return None
-
-        # Format the dropped messages as a transcript.
-        lines = []
-        for msg in messages:
-            role = msg.get("role", "?")
-            content = str(msg.get("content", "") or "")
-            if msg.get("tool_calls"):
-                tcs = msg["tool_calls"]
-                names = [tc.get("function", {}).get("name", "?") for tc in tcs]
-                content += f" [tool_calls: {', '.join(names)}]"
-            if len(content) > 500:
-                content = content[:500] + "..."
-            lines.append(f"[{role}] {content}")
-        transcript = "\n".join(lines)
-
-        prompt = (
-            "Summarize the following conversation history concisely. "
-            "Preserve: the user's original goal, key decisions made, "
-            "important tool results/facts learned, and any open questions. "
-            "Be specific and brief (max 500 tokens). Return only the summary.\n\n"
-            f"Transcript:\n{transcript}")
-        summary = _client_chat(client, prompt, temperature=0.2,
-                               max_predict=256, breaker_key="compress")
-        if not summary or len(summary) < 20:
-            return None
-
-        summary = summary[:_MAX_SUMMARY_CHARS]
-        if session_logger:
-            session_logger.log("small_model_compress", {
-                "messages_in": len(messages),
-                "summary_chars": len(summary),
-            })
-        _breaker_reset("compress")
-        return summary
-    except Exception as e:  # noqa: BLE001 — compression is best-effort; the caller must handle None, but the failure MUST be visible in the log
-        if session_logger:
-            session_logger.log("small_model_compress_failed", {
-                "error": str(e), "messages_in": len(messages)})
-        else:
-            print(f"[compress_window] failed ({len(messages)} msgs): {e}")
-        _breaker_trip("compress")
-        return None
 
 
 # ---------------------------------------------------------------------------

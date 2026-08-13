@@ -2139,3 +2139,62 @@
 .vaultbot-advanced-body {
 	margin-top: 8px;
 }
+
+/* ── Model Tournament ──────────────────────────────────────────────── */
+.vaultbot-tourney-model-list {
+	max-height: 200px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 6px;
+	margin-bottom: 8px;
+}
+.vaultbot-tourney-model-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0;
+}
+.vaultbot-tourney-model-label {
+	font-size: 0.85em;
+}
+.vaultbot-tourney-model-roles {
+	font-size: 0.7em;
+	opacity: 0.5;
+}
+.vaultbot-tourney-results-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.85em;
+}
+.vaultbot-tourney-results-table th {
+	text-align: left;
+	padding: 4px 8px;
+	border-bottom: 2px solid var(--background-modifier-border);
+}
+.vaultbot-tourney-results-table td {
+	padding: 4px 8px;
+}
+.vaultbot-tourney-winner {
+	background: var(--background-primary-alt);
+}
+.vaultbot-tourney-pass {
+	color: var(--text-success);
+}
+.vaultbot-tourney-fail {
+	color: var(--text-error);
+}
+.vaultbot-tourney-breakdown-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.8em;
+	margin-top: 2px;
+}
+.vaultbot-tourney-breakdown-table th {
+	text-align: left;
+	padding: 2px 6px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.vaultbot-tourney-breakdown-table td {
+	padding: 2px 6px;
+}

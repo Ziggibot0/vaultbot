@@ -89,7 +89,6 @@ async def consolidation_extract(svc: Annotated[Services, Depends(get_services)])
             "tool_frequency": dict(
                 list(patterns["tool_patterns"]["tool_frequency"].items())[:10]),
             "over_reporting": patterns["over_reporting"]["count"],
-            "self_model_drift": patterns["self_model_drift"],
         }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         svc.session_logger.log_exception(e, context="consolidation_extract")

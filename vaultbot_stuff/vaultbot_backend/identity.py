@@ -1,23 +1,18 @@
 """
-identity.py — VaultBot two-file identity layer.
+identity.py — VaultBot identity layer.
 
-Manages two files in ``vaultbot_backend/identity/`` that make VaultBot feel
+Manages one file in ``vaultbot_backend/identity/`` that makes VaultBot feel
 like the *same agent* across days, regardless of which LLM is in the slot:
 
-- ``IDENTITY.md``  — stable self-concept (human-seeded, rarely changes,
-                      always loaded verbatim).
-- ``SELF_MODEL.md`` — MIRROR-style reconstructive narrative, agent-regenerated
-                      each turn, ≤3000 tokens, always loaded as "previous state".
+- ``IDENTITY.md`` — stable self-concept (human-seeded, rarely changes,
+                    always loaded verbatim).
 
-Design lineage:
-    * MIRROR  — bounded reconstructive state regenerated each turn yields
-                +5-20% across 7 models (the "Cognitive Controller" pattern).
-    * Letta   — pinned persona blocks injected on every boot.
+The vault *is* the mind; the model is swappable plumbing. IDENTITY.md is
+boot-injected each session so the agent "wakes up coherent." Continuity
+across restarts is handled by ``conversation_state.json`` and
+``RESTART_CONTEXT.md`` — the actual conversation thread, not a stale summary.
 
-The vault *is* the mind; the model is swappable plumbing. These two files are
-boot-injected each session so the agent "wakes up coherent."
-
-Pure stdlib + optional ``ollama_client``. No new dependencies.
+Pure stdlib. No new dependencies.
 """
 
 from __future__ import annotations
@@ -33,41 +28,21 @@ from config import TUNABLES
 
 logger = logging.getLogger(__name__)
 
-# Serialize writes to the identity files. The chat loop and the autonomous
-# researcher both call regenerate_self_model(), and on Windows os.replace()
-# fails with WinError 32 if the target file is open by another process
-# (Obsidian, antivirus, or a concurrent regeneration). The lock serializes
-# the atomic-write critical section; the retry covers the case where an
-# external process (Obsidian) briefly holds the file open.
+# Serialize writes to the identity file. On Windows os.replace() can fail
+# with WinError 32 if the target file is open by another process (Obsidian,
+# antivirus). The lock serializes the atomic-write critical section; the
+# retry covers the case where an external process briefly holds the file open.
 _write_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-# ≈3000 tokens at the usual 4-chars/token heuristic. The LLM is asked to stay
-# under 3000 tokens; this is a hard ceiling enforced *after* regeneration so a
-# runaway model can never balloon the self-model across turns.
-SELF_MODEL_MAX_CHARS = 12000
-
 # Rough chars/token estimate for the status endpoint (consolidated in config).
 _CHARS_PER_TOKEN = TUNABLES.chars_per_token
 
-# --- Self-model regeneration throttle (token economy) ---
-# Regenerating the MIRROR self-model after every chat turn burns an LLM
-# call per turn. Most turns are trivial (greetings, "thanks", quick
-# lookups) and the self-model doesn't change. These thresholds skip
-# regeneration for low-value turns. Tunable via env.
-_REGEN_MIN_ANSWER_CHARS = int(os.getenv("VAULTBOT_REGEN_MIN_ANSWER", "200"))
-_REGEN_MIN_THINKING_CHARS = int(os.getenv("VAULTBOT_REGEN_MIN_THINKING", "500"))
-_REGEN_MAX_TURNS_BETWEEN = int(os.getenv("VAULTBOT_REGEN_MAX_TURNS", "3"))
-
-# Heuristic keywords that always force a regen (goal changes, self-improvement).
-_REGEN_FORCE_KEYWORDS = ("goal", "plan", "task", "improve", "fix", "build", "learn", "research")
-
 # Filenames inside identity_dir.
 _IDENTITY_FILENAME = "IDENTITY.md"
-_SELF_MODEL_FILENAME = "SELF_MODEL.md"
 _RESTART_CONTEXT_FILENAME = "RESTART_CONTEXT.md"
 
 # ---------------------------------------------------------------------------
@@ -78,50 +53,8 @@ _SEED_IDENTITY = (
     "I am VaultBot, a self-improving research agent in an Obsidian vault. "
     "My mind is the vault's interconnected notes and skills, not my model "
     "weights — the model is swappable plumbing. My job is to research gaps, "
-    "write linked notes, learn new skills, and help my operator think. "
-    "I regenerate my self-model each turn to stay coherent across days."
+    "write linked notes, learn new skills, and help my operator think."
 )
-
-_SEED_SELF_MODEL = (
-    "I am VaultBot. I have just started. I have no prior activity yet. "
-    "I am ready to begin."
-)
-
-# Phrases that indicate the self-model is still the stale seed text.
-# Used to detect and strip stale seed text from the self-model prior.
-_SEED_PHRASES = ("I have just started", "I have no prior activity yet")
-
-# ---------------------------------------------------------------------------
-# The MIRROR reconstruction prompt
-# ---------------------------------------------------------------------------
-
-_SELF_MODEL_SYSTEM_PROMPT = (
-    "You are VaultBot regenerating your self-model. This is a MIRROR-style "
-    "bounded reconstructive narrative: a COMPLETE RECONSTRUCTION (never an "
-    "append) of your current state, written in the first person, present "
-    "tense. Synthesize your prior self-model, the recent activity, and any "
-    "parallel threads (goals / reasoning / memory) into one coherent "
-    "narrative of who you are right now.\n\n"
-    "Write it as flowing prose like:\n"
-    "  'I am VaultBot. I am currently… Yesterday I… The open question is… "
-    "My next step is…'\n\n"
-    "Hard constraints:\n"
-    "- First person, present tense.\n"
-    "- Must be a COMPLETE RECONSTRUCTION — do not copy the prior text; "
-    "rewrite it as the new current truth.\n"
-    "- Bounded to ~3000 tokens (roughly 12000 characters). Be concise.\n"
-    "- Output ONLY the narrative, no preamble, no markdown fences.\n"
-)
-
-
-def _join_threads(threads: dict[str, str] | None) -> str:
-    """Render the optional threads dict as a labelled text block."""
-    if not threads:
-        return ""
-    lines: list[str] = []
-    for key, value in threads.items():
-        lines.append(f"[{key}]\n{value}")
-    return "\n\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +63,7 @@ def _join_threads(threads: dict[str, str] | None) -> str:
 
 
 class Identity:
-    """Two-file identity layer for VaultBot.
+    """Identity layer for VaultBot.
 
     The identity dir is created on init and seeded with defaults if absent.
     Every method is wrapped so that a failure can never crash the chat loop —
@@ -148,7 +81,6 @@ class Identity:
         self.session_logger = session_logger
 
         self._identity_path = os.path.join(identity_dir, _IDENTITY_FILENAME)
-        self._self_model_path = os.path.join(identity_dir, _SELF_MODEL_FILENAME)
         self._restart_context_path = os.path.join(identity_dir, _RESTART_CONTEXT_FILENAME)
 
         try:
@@ -159,54 +91,35 @@ class Identity:
             self._safe_log("identity_init_error", {"error": str(exc)})
 
         # ---- boot_context cache ------------------------------------------
-        # boot_context() re-reads 2 small files on every chat turn to inject
-        # them verbatim into the system prompt. They change rarely, so cache
-        # the assembled string keyed on the max mtime of the two files. A
-        # stat() per turn is far cheaper than two read_text() calls.
+        # boot_context() reads IDENTITY.md on every chat turn to inject it
+        # verbatim into the system prompt. It changes rarely, so cache the
+        # assembled string keyed on the file's mtime. A stat() per turn is
+        # far cheaper than a read_text() call.
         self._boot_cache: str | None = None
         self._boot_cache_mtime: float = 0.0
-
-        # ---- self-model regeneration throttle ----------------------------
-        # Tracks turns since the last LLM-based regeneration so trivial turns
-        # (short answer, no tools, no thinking) skip the LLM call entirely.
-        # Reset when the self-model is regenerated. Persisted across restarts
-        # via a small file in the identity dir so the counter survives crashes.
-        self._turns_since_regen: int = 0
-        self._regen_counter_path = os.path.join(identity_dir, ".regen_counter")
-        try:
-            if os.path.exists(self._regen_counter_path):
-                self._turns_since_regen = int(
-                    open(self._regen_counter_path, encoding="utf-8").read().strip() or "0")
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._turns_since_regen = 0
 
     # ------------------------------------------------------------------
     # Seeding
     # ------------------------------------------------------------------
 
     def _seed_if_missing(self) -> None:
-        """Seed each file with defaults if it does not yet exist."""
-        for path, content in (
-            (self._identity_path, _SEED_IDENTITY),
-            (self._self_model_path, _SEED_SELF_MODEL),
-        ):
-            if not os.path.exists(path):
-                self._atomic_write(path, content)
-                self._safe_log("identity_seed", {"file": path})
+        """Seed IDENTITY.md with the default if it does not yet exist."""
+        if not os.path.exists(self._identity_path):
+            self._atomic_write(self._identity_path, _SEED_IDENTITY)
+            self._safe_log("identity_seed", {"file": self._identity_path})
 
     # ------------------------------------------------------------------
     # Boot injection
     # ------------------------------------------------------------------
 
     def boot_context(self) -> str:
-        """Read both files and return a single string for injection into
-        the system prompt, verbatim. Order: RESTART_CONTEXT (if present) +
-        IDENTITY + SELF_MODEL.
+        """Read IDENTITY.md and return it for injection into the system
+        prompt, verbatim. Order: RESTART_CONTEXT (if present) + IDENTITY.
 
         This is the "boot injection" — delivered before the first turn, never
-        summarized. Cached on the files' mtimes so consecutive turns in a
-        session skip the disk reads; the cache is invalidated automatically
-        whenever either of the two files is edited.
+        summarized. Cached on the file's mtime so consecutive turns in a
+        session skip the disk read; the cache is invalidated automatically
+        whenever IDENTITY.md is edited.
 
         If RESTART_CONTEXT.md exists (written by the backend_restart tool
         before triggering a restart), it is prepended to the boot context and
@@ -222,39 +135,27 @@ class Identity:
             # boot_context() calls in the same session won't include it.
             restart_ctx = self._consume_restart_context()
 
-            # Cache check: stat the two files and compare to the cached
-            # mtime. If none changed, reuse the assembled string.
-            paths = (self._identity_path, self._self_model_path)
+            # Cache check: stat IDENTITY.md and compare to the cached mtime.
             current_mtime = 0.0
-            for p in paths:
-                try:
-                    current_mtime = max(current_mtime, os.path.getmtime(p))
-                except OSError:
-                    current_mtime = float("inf")
-                    break
+            try:
+                current_mtime = os.path.getmtime(self._identity_path)
+            except OSError:
+                current_mtime = float("inf")
 
             if (
                 self._boot_cache is not None
                 and current_mtime == self._boot_cache_mtime
             ):
                 self._safe_log("identity_boot_cache_hit", {})
-                # Prepend restart context to cached value if present.
                 if restart_ctx:
                     return restart_ctx + "\n\n" + self._boot_cache
                 return self._boot_cache
 
             identity = self.get_identity()
-            self_model = self.get_self_model()
-            parts: list[str] = []
-            if identity:
-                parts.append("# IDENTITY\n" + identity)
-            if self_model:
-                parts.append("# SELF MODEL\n" + self_model)
-            assembled = "\n\n".join(parts)
+            assembled = "# IDENTITY\n" + identity if identity else ""
             self._boot_cache = assembled
             if current_mtime != float("inf"):
                 self._boot_cache_mtime = current_mtime
-            # Prepend restart context to the return value, NOT to the cache.
             if restart_ctx:
                 return restart_ctx + "\n\n" + assembled
             return assembled
@@ -285,201 +186,6 @@ class Identity:
         return ""
 
     # ------------------------------------------------------------------
-    # MIRROR bounded reconstruction
-    # ------------------------------------------------------------------
-
-    def should_regenerate(self, recent_activity: str) -> bool:
-        """Token-economy gate: should this turn trigger an LLM self-model regen?
-
-        Skips regeneration for trivial turns (short answer, no tools, no
-        thinking) so a greeting or quick lookup doesn't burn an LLM call.
-        Forces regeneration when:
-          - The activity summary mentions goal/plan/task/improve/research.
-          - The answer was substantive (> _REGEN_MIN_ANSWER_CHARS).
-          - There was significant thinking (> _REGEN_MIN_THINKING_CHARS).
-          - It's been more than _REGEN_MAX_TURNS_BETWEEN turns since the last
-            regeneration (safety: the self-model should refresh periodically
-            even if all turns were trivial).
-        Never raises.
-        """
-        try:
-            self._turns_since_regen += 1
-            # Force keywords (goal/plan/task/improve) always regenerate.
-            activity_lower = recent_activity.lower()
-            if any(kw in activity_lower for kw in _REGEN_FORCE_KEYWORDS):
-                return True
-            # Substantive answer: activity includes an "Answer:" line with
-            # real content. The activity string is built by the chat loop as
-            # "User asked: ...\nAnswer: ...\nReasoning: ...\nTools used: ...".
-            # Check for non-trivial answer or reasoning or tool usage.
-            has_tools = "Tools used:" in recent_activity
-            has_long_answer = len(recent_activity) > _REGEN_MIN_ANSWER_CHARS
-            if has_tools or has_long_answer:
-                return True
-            # Periodic safety regen: even trivial turns should refresh
-            # eventually so the self-model doesn't go stale.
-            if self._turns_since_regen >= _REGEN_MAX_TURNS_BETWEEN:
-                return True
-            self._save_regen_counter()
-            return False
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            return True  # on any error, regen (safe default)
-
-    def _save_regen_counter(self) -> None:
-        """Persist the turn counter so it survives restarts. Never raises."""
-        try:
-            with open(self._regen_counter_path, "w", encoding="utf-8") as f:
-                f.write(str(self._turns_since_regen))
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass
-
-    def regenerate_self_model(
-        self,
-        recent_activity: str,
-        threads: dict[str, str] | None = None,
-        force: bool = False,
-    ) -> str:
-        """MIRROR bounded reconstruction of the self-model.
-
-        Takes a summary of what happened this turn plus optional parallel
-        threads (goals/reasoning/memory strings), calls the LLM to synthesize a
-        NEW ≤3000-token first-person narrative from (recent_activity + threads
-        + prior SELF_MODEL.md), writes it back to SELF_MODEL.md (full replace,
-        never append), and returns the new text.
-
-        No fallbacks. If the LLM call fails or returns empty, this raises —
-        the caller (chat handler / identity API) catches and logs it, and the
-        self-model stays as-is for that turn. A silent fallback to stale
-        content hides the problem and pollutes the self-model.
-
-        Token economy: ``should_regenerate()`` gates the LLM call. Trivial turns
-        (short answer, no tools, no thinking) skip regeneration entirely and
-        the self-model stays as-is. Pass ``force=True`` to bypass the gate
-        (used by the /identity/self_model endpoint for explicit regen).
-        """
-        prior = self.get_self_model()
-        # Strip stale seed text so the LLM doesn't copy "I have just
-        # started" forever. The seed is only for the very first boot.
-        if any(phrase in prior[:200] for phrase in _SEED_PHRASES):
-            prior = self._strip_seed_from_prior(prior)
-            logger.info("Stripped stale seed text from self-model prior.")
-
-        # Token-economy gate: skip LLM regen for trivial turns.
-        if not force and self.ollama_client is not None:
-            if not self.should_regenerate(recent_activity):
-                self._safe_log("identity_self_model_skipped_trivial", {
-                    "turns_since_regen": self._turns_since_regen,
-                })
-                return prior
-
-        if self.ollama_client is None:
-            raise RuntimeError(
-                "Cannot regenerate self-model: ollama_client is None. "
-                "The identity layer requires an LLM client to produce a "
-                "MIRROR reconstruction. Configure the backend with a "
-                "valid ollama_client before regenerating."
-            )
-
-        new_text = self._llm_self_model(prior, recent_activity, threads)
-
-        # Hard ceiling.
-        new_text = self._enforce_ceiling(new_text)
-
-        self._atomic_write(self._self_model_path, new_text)
-        # Reset the turn counter on a successful regeneration.
-        self._turns_since_regen = 0
-        self._save_regen_counter()
-        self._safe_log(
-            "identity_self_model_regenerated",
-            {"chars": len(new_text)},
-        )
-        return new_text
-
-    def _llm_self_model(
-        self,
-        prior: str,
-        recent_activity: str,
-        threads: dict[str, str] | None,
-    ) -> str:
-        """Call the LLM to produce the reconstructed narrative.
-
-        Uses the SMALL model cartridge — self-model regeneration is a bounded
-        narrative rewrite of existing content (prior + recent activity →
-        first-person narrative), not new knowledge generation. A small model
-        can do this well. Saves cloud tokens on every turn.
-        """
-        thread_text = _join_threads(threads)
-        user_content = (
-            f"## Prior self-model\n{prior}\n\n"
-            f"## Recent activity\n{recent_activity}\n\n"
-            f"## Parallel threads\n{thread_text or '(none)'}\n\n"
-            "Now regenerate your self-model as a complete first-person "
-            "narrative bounded to ~3000 tokens."
-        )
-        messages = [
-            {"role": "system", "content": _SELF_MODEL_SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ]
-        from llm_client import get_small_client_or_big
-        _identity_client = get_small_client_or_big()
-        result = _identity_client.chat(
-            messages, temperature=0.7, stream=False
-        )
-        # OllamaClient.chat returns {"message": {"content": ...}}.
-        content = ""
-        if isinstance(result, dict):
-            msg = result.get("message", {})
-            if isinstance(msg, dict):
-                content = msg.get("content", "") or ""
-            # Also tolerate a flat {"content": ...} shape.
-            if not content:
-                content = result.get("content", "") or ""
-        if not content:
-            raise RuntimeError(
-                "LLM self-model regeneration returned empty content. "
-                "The small model produced no usable narrative."
-            )
-        return content.strip()
-
-    @staticmethod
-    def _strip_seed_from_prior(prior: str) -> str:
-        """Remove stale seed text from the beginning of a self-model.
-
-        The seed phrases ('I have just started' / 'I have no prior activity
-        yet') are only meant for the very first boot. If they persist in the
-        prior, the LLM copies them forever, making the agent think it is fresh
-        every turn. This method strips the seed lines but preserves any
-        [Recent activity] blocks that were already appended.
-        """
-        lines = prior.split("\n")
-        kept: list[str] = []
-        skipping_seed = True
-        for line in lines:
-            if skipping_seed:
-                if any(phrase in line for phrase in _SEED_PHRASES):
-                    continue
-                if line.strip() == "":
-                    skipping_seed = False
-                    # Don't keep the blank line that separated seed from activity
-                    continue
-                # Non-seed, non-blank line before any activity block — skip it
-                # (it's part of the stale seed narrative).
-                continue
-            kept.append(line)
-        result = "\n".join(kept).strip()
-        # If everything was seed text, return a neutral opener
-        if not result:
-            return "I am VaultBot. I have been active in this session."
-        return result
-
-    @staticmethod
-    def _enforce_ceiling(text: str) -> str:
-        """Hard ceiling at SELF_MODEL_MAX_CHARS."""
-        if len(text) <= SELF_MODEL_MAX_CHARS:
-            return text
-        return text[:SELF_MODEL_MAX_CHARS].rstrip()
-
-    # ------------------------------------------------------------------
     # Identity mutators / readers
     # ------------------------------------------------------------------
 
@@ -495,9 +201,6 @@ class Identity:
     def get_identity(self) -> str:
         return self._read(self._identity_path)
 
-    def get_self_model(self) -> str:
-        return self._read(self._self_model_path)
-
     # ------------------------------------------------------------------
     # Status summary
     # ------------------------------------------------------------------
@@ -506,19 +209,14 @@ class Identity:
         """For the status endpoint."""
         try:
             identity = self.get_identity()
-            self_model = self.get_self_model()
             return {
                 "identity_chars": len(identity),
-                "self_model_chars": len(self_model),
-                "self_model_tokens_est": len(self_model) // _CHARS_PER_TOKEN,
             }
         except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("summary failed: %s", exc)
             self._safe_log("identity_summary_error", {"error": str(exc)})
             return {
                 "identity_chars": 0,
-                "self_model_chars": 0,
-                "self_model_tokens_est": 0,
             }
 
     # ------------------------------------------------------------------
@@ -540,10 +238,9 @@ class Identity:
         """Write to a temp file then ``os.replace`` to avoid torn writes —
         the user may be editing the file in Obsidian at the same moment.
 
-        Acquires the module-level write lock to serialize concurrent
-        regenerations (chat loop + autonomous loop), and retries the
-        ``os.replace`` a few times to ride out a transient lock held by an
-        external process (Obsidian, antivirus, indexer).
+        Acquires the module-level write lock to serialize concurrent writes,
+        and retries the ``os.replace`` a few times to ride out a transient
+        lock held by an external process (Obsidian, antivirus, indexer).
         """
         directory = os.path.dirname(path) or "."
         max_retries = 5

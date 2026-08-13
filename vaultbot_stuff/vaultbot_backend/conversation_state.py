@@ -6,7 +6,7 @@ THE PROBLEM THIS SOLVES
 on every new WebSocket connection (``routers/ws.py``). When the backend
 restarted (the operator asked VaultBot to restart itself, or a crash, or a code
 reload), the live conversation thread vanished. The agent woke up with
-only the slow identity files (IDENTITY/SELF_MODEL, which may point at
+only the slow identity file (IDENTITY.md, which may point at
 a goal from "a while ago") and zero recollection of the thread it was just
 working on. the operator's words: "you totally wiped yourself bro rookie mistake,
 change your restart backend tool to bring you back into the same session

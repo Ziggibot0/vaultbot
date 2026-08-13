@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+model_cartridge: small
 created: 2026-08-10
 summary: "Parent reasoning procedure: extracts premises, validates them against the vault (BS detector), classifies the problem, picks lenses, dispatches them, and synthesizes results. v3: fully v2 code-step format with bite-sized LLM calls designed for 0.8B models. Procedure terminology never appears in LLM prompts."
 description: "BS detector + problem classification + lens dispatch + synthesis. v3 code steps for small-model reliability."
@@ -594,9 +595,9 @@ print(result)
 
 ---
 
-### Step 8: Synthesize conclusion
+### Step 8: Synthesize conclusion (small-LLM synthesis)
 
-Pure code assembly — no LLM needed. Extract key findings from each lens output, list premise warnings, state what lenses were applied, and provide the raw lens outputs for the caller to use.
+Bite-sized small-LLM synthesis: extract key findings from each lens output (one call per lens), then synthesize from those key findings into a coherent answer (one final call). The small model only sees short, focused prompts — never the full lens outputs at once. This makes the entire Think pipeline run on the local model with zero cloud model usage.
 
 ```python
 # Parse all accumulated data
@@ -632,7 +633,7 @@ if premise_gate == 'BLOCKED':
     synth_lines = []
     synth_lines.append(f"## Think v4 Analysis: {problem}")
     synth_lines.append("")
-    synth_lines.append("### ⚠️ Premise Gate: BLOCKED")
+    synth_lines.append("### [!!] Premise Gate: BLOCKED")
     synth_lines.append("")
     synth_lines.append("All factual premises in this question could not be verified against the vault. "
                        "The question may be based on false assumptions. Rather than fabricating an answer "
@@ -661,11 +662,63 @@ if premise_gate == 'BLOCKED':
     synthesis = '\n'.join(synth_lines)
     print(synthesis)
 else:
-    # --- PREMISE GATE OPEN: normal synthesis ---
+    # --- PREMISE GATE OPEN: small-LLM synthesis ---
+    # Phase 1: Extract key findings from each lens output (one bite-sized call per lens)
+    key_findings = {}
+    for name in completed:
+        out = lens_data.get(name, 'No output')
+        # Take first 500 chars of lens output — enough for the small model to extract a finding
+        snippet = out[:500].replace('\n', ' ').strip()
+        if not snippet or snippet == 'No output':
+            key_findings[name] = f"No findings from {name}"
+            continue
+
+        # Triple-try extraction for consistency
+        from collections import Counter
+        finding_votes = []
+        for _ in range(3):
+            prompt = f"Read this analysis. What is the single most important finding? Answer in one sentence.\n\nAnalysis: {snippet}"
+            resp = llm_generate(prompt).strip()
+            if resp and len(resp) > 10:
+                finding_votes.append(resp)
+
+        if finding_votes:
+            # Use the most common response (majority vote)
+            best = Counter(finding_votes).most_common(1)[0][0]
+            key_findings[name] = best
+        else:
+            # Fallback: use first 150 chars of lens output
+            key_findings[name] = snippet[:150] + '...'
+
+    # Phase 2: Synthesize from key findings (one final bite-sized call)
+    findings_text = '\n'.join([f"{name}: {finding}" for name, finding in key_findings.items()])
+
+    # Build a short synthesis prompt — the small model only sees key findings, not full outputs
+    synth_prompt = f"Question: {problem}\n\nKey findings from analysis:\n{findings_text}\n\nSynthesize these into a short answer. Include:\n1. Summary (2-3 sentences)\n2. Key findings (bullet points)\n3. Confidence (HIGH/MEDIUM/LOW with reason)\n4. If relevant, one recommended action"
+
+    # Triple-try synthesis for consistency
+    synth_votes = []
+    for _ in range(3):
+        resp = llm_generate(synth_prompt).strip()
+        if resp and len(resp) > 30:
+            synth_votes.append(resp)
+
+    if synth_votes:
+        # Use the longest response (richest synthesis) among the majority
+        synthesis_body = Counter(synth_votes).most_common(1)[0][0]
+    else:
+        # Fallback: assemble from key findings manually
+        synthesis_body = f"Summary: Analysis of '{problem}' using {', '.join(completed)}.\n\nKey findings:\n"
+        for name, finding in key_findings.items():
+            synthesis_body += f"- [{name}] {finding}\n"
+        synthesis_body += "\nConfidence: MEDIUM (synthesis fallback — small model did not produce a coherent response)"
+
+    # Assemble final output
     synth_lines = []
     synth_lines.append(f"## Think v4 Analysis: {problem}")
     synth_lines.append("")
 
+    # BS Detector section
     if premise_warnings and premise_warnings != 'ALL_VERIFIED':
         if bs_detector_messages:
             synth_lines.append("### BS Detector: Unverified Claims")
@@ -680,20 +733,19 @@ else:
         synth_lines.append("### BS Detector: All premises verified against vault")
         synth_lines.append("")
 
-    synth_lines.append(f"### Analysis (lenses applied: {', '.join(completed)}")
+    # Synthesis section
+    synth_lines.append(f"### Synthesis (lenses: {', '.join(completed)})")
+    synth_lines.append("")
+    synth_lines.append(synthesis_body)
+    synth_lines.append("")
+
+    # Raw lens outputs (collapsed, for provenance)
+    synth_lines.append("### Raw Lens Outputs")
     synth_lines.append("")
     for name in completed:
         out = lens_data.get(name, 'No output')
-        synth_lines.append(f"#### {name}")
-        synth_lines.append(out)
+        synth_lines.append(f"<details><summary>{name}</summary>\n\n{out}\n</details>")
         synth_lines.append("")
-
-    if premise_warnings and premise_warnings != 'ALL_VERIFIED':
-        synth_lines.append("### Confidence: MEDIUM")
-        synth_lines.append("Some premises could not be verified against vault documents. Findings may rest on unverified assumptions.")
-    else:
-        synth_lines.append("### Confidence: HIGH")
-        synth_lines.append("All premises verified against vault documents.")
 
     synthesis = '\n'.join(synth_lines)
     print(synthesis)
@@ -701,6 +753,7 @@ else:
 
 [validate: contains "Think v4 Analysis"]
 [validate: contains "BS Detector"]
+[validate: contains "Synthesis"]
 
 ---
 

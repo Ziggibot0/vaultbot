@@ -9,9 +9,6 @@ convergence, no consolidation, no step summaries — just the one-rule plan
 gate plus the read-loop detector that observes actual tool results.
 
 What we keep:
-- Hermes-style preflight compression: ratio-based (50% of context window),
-  summarizes middle turns via small model, keeps head + tail. Never fires
-  inside the tool-call loop. Anti-thrash guard after 2 ineffective passes.
 - _sanitize_tool_history: convert tool-call rounds to model-safe format
 - double-silent failsafe: if the model emits nothing twice, fail loud
 - checkpointing: save progress so a crash resumes mid-turn
@@ -20,9 +17,10 @@ What we keep:
 - tool dispatch: execute_agent_tool unchanged (plan_task / update_task /
   custom tools / code tools / etc.)
 
-2026-08-08: replaced sliding window + history budget with Hermes-style
-preflight compression. One function, one trigger (50% of context window),
-same treatment for every model in the big cartridge.
+2026-08-13: removed Hermes-style preflight compression — the small-model
+summarization latency cost outweighed the token savings. The hard token cap
+(_enforce_token_cap) and proactive tool-result aging (_age_old_tool_results)
+remain as the primary context-bounding mechanisms.
 """
 from __future__ import annotations
 
@@ -54,7 +52,7 @@ from procedure_tracker import interpret_validation_result, parse_procedures_from
 from services import Services
 from conversation_index import build_conversation_context
 from small_model_filters import (
-    compress_window, dedup_results, expand_query, filter_context,
+    dedup_results, expand_query, filter_context,
     rerank_results, rewrite_query_with_history,
 )
 from task_api import write_partial
@@ -189,128 +187,6 @@ def _classify_trivial(
                     return False
 
     return True
-
-
-# ---------------------------------------------------------------------------
-# Stable system-prompt compression cache (Phase 5: cost reduction)
-# ---------------------------------------------------------------------------
-# The identity block (~3K tokens) + briefing (~2-5K tokens) are sent verbatim
-# every round of the agentic loop. Over a 15-round turn that's ~75K tokens of
-# stable text re-billed 15 times. This cache compresses the stable parts
-# once per session via the small model and reuses the compressed version for
-# all rounds. Keyed by hash of the input so identity file edits trigger
-# re-compression. Fail-safe: any error falls back to the original text.
-_stable_prompt_cache: dict[str, str] = {}
-
-
-def _compress_stable_prompt(
-    identity_context: str,
-    briefing: str,
-    session_logger: Any = None,
-) -> str:
-    """Compress the stable system-prompt components via the small model.
-
-    The identity block and the system prompt briefing change rarely within a
-    session but are sent to the big (cloud) model on every round of the
-    agentic loop. Running them through the small model once to produce a
-    condensed version (target ~40% reduction) saves ~4-6K tokens × every
-    round of cloud billing.
-
-    The compression is extractive — it must preserve ALL factual content
-    (identity facts, tool names, mission, goals, instructions) and remove
-    only redundancy and verbose phrasing. The small model (qwen3.5:0.8b) is
-    adequate for this with a strict "preserve all facts" prompt.
-
-    Caching: the result is cached by a hash of (identity + briefing) so if
-    the identity files change mid-session, a new hash triggers re-compression.
-
-    Fail-safe: if the small model is unavailable, the compression produces
-    something too short (<20% of original) or too long (>90%), or any error
-    occurs, the original uncompressed text is returned.
-    """
-    original = identity_context + "\n\n" + briefing
-    if not original.strip():
-        return original
-
-    import hashlib
-    _key = hashlib.blake2b(original.encode(), digest_size=16).hexdigest()
-
-    # Cache hit — reuse the compressed version.
-    if _key in _stable_prompt_cache:
-        if session_logger:
-            session_logger.log("system_prompt_compressed", {
-                "cached": True,
-                "original_chars": len(original),
-                "compressed_chars": len(_stable_prompt_cache[_key]),
-            })
-        return _stable_prompt_cache[_key]
-
-    # Try the small model for compression.
-    try:
-        from llm_client import get_small_client
-        from small_model_filters import _breaker_tripped, _breaker_trip, _breaker_reset
-        if _breaker_tripped("compress_prompt"):
-            return original
-        client = get_small_client(session_logger)
-        if client is None:
-            return original  # no small model → use original
-
-        prompt = (
-            "Compress the following system prompt to approximately 40% of "
-            "its length. Preserve ALL factual content: identity facts, tool "
-            "names, mission, goals, and instructions. Remove only redundancy "
-            "and verbose phrasing. Return only the compressed text, no "
-            "preamble.\n\n"
-            f"{original[:16000]}")
-        resp = client.chat(
-            [{"role": "user", "content": prompt}],
-            temperature=0.2, stream=False, think=False, max_predict=2048)
-        text = ""
-        if isinstance(resp, dict):
-            msg = resp.get("message", {})
-            if isinstance(msg, dict):
-                text = msg.get("content", "") or ""
-            if not text:
-                text = resp.get("response", "") or resp.get("content", "")
-        text = (text or "").strip()
-
-        if not text or len(text) < 20:
-            return original
-
-        # Guard: if compression didn't help enough (<20%) or was too aggressive
-        # (>90% of original), fall back to original.
-        _ratio = len(text) / len(original)
-        if _ratio < 0.20 or _ratio > 0.90:
-            if session_logger:
-                session_logger.log("system_prompt_compression_skipped", {
-                    "ratio": round(_ratio, 2),
-                    "original_chars": len(original),
-                    "compressed_chars": len(text),
-                })
-            return original
-
-        _breaker_reset("compress_prompt")
-        _stable_prompt_cache[_key] = text
-        if session_logger:
-            session_logger.log("system_prompt_compressed", {
-                "cached": False,
-                "original_chars": len(original),
-                "compressed_chars": len(text),
-                "ratio": round(_ratio, 2),
-            })
-        return text
-    except Exception as e:  # noqa: BLE001 — compression is best-effort; the original prompt passes through unchanged on failure
-        try:
-            from small_model_filters import _breaker_trip
-            _breaker_trip("compress_prompt")
-        except Exception as be:  # noqa: BLE001 — breaker trip is best-effort; log but don't mask the original error
-            if session_logger:
-                session_logger.log("breaker_trip_failed",
-                                   {"breaker": "compress_prompt", "error": str(be)})
-        if session_logger:
-            session_logger.log("system_prompt_compression_failed",
-                               {"error": str(e)})
-        return original
 
 
 def _deterministic_procedure_hint(
@@ -576,180 +452,6 @@ def _tool_actually_wrote(tool_name: str, result: Any) -> bool:
         return result.get("source_count", 0) > 0 or result.get("note_path")
     # Unknown write tool — be conservative: treat as write only if no error.
     return not result.get("error")
-
-
-def _compress_conversation(
-    conversation: list[dict[str, Any]],
-    context_window_tokens: int,
-    session_logger: Any = None,
-    compression_count: int = 0,
-    last_compression_tokens_before: int = 0,
-    last_compression_tokens_after: int = 0,
-) -> tuple[list[dict[str, Any]], bool, int, int]:
-    """Hermes-style preflight compression — ratio-based, model-relative.
-
-    Derives the compression threshold from the model's context window
-    (default 50%, configurable via VAULTBOT_COMPRESSION_THRESHOLD_RATIO).
-    Fires only when estimated tokens exceed the threshold. Summarizes middle
-    turns via the small model; keeps head (system prompt + vault context)
-    and tail (most recent messages) verbatim. Never splits tool-call pairs.
-    Compression is a preflight event — it runs once per turn, before the
-    first LLM call, never inside the tool-call loop.
-
-    Anti-thrash: after N compressions that don't reduce tokens by >M%,
-    compression is blocked and the caller should notify the user.
-
-    All tunables are in config.TUNABLES with env var overrides at the
-    call site. No hardcoded values.
-
-    Args:
-        conversation: The full conversation list.
-        context_window_tokens: The model's context window size.
-        session_logger: For logging.
-        compression_count: How many times compression has fired this session.
-        last_compression_tokens_before: Token estimate before last compression.
-        last_compression_tokens_after: Token estimate after last compression.
-
-    Returns:
-        (conversation, compressed, tokens_before, tokens_after) where
-        compressed is True if compression actually fired.
-    """
-    if context_window_tokens <= 0 or len(conversation) <= 3:
-        return conversation, False, 0, 0
-
-    # ── Tunables (env overrides at call site, defaults from config) ──
-    _threshold_ratio = float(os.getenv(
-        "VAULTBOT_COMPRESSION_THRESHOLD_RATIO",
-        str(TUNABLES.compression_threshold_ratio)))
-    _tail_budget_ratio = float(os.getenv(
-        "VAULTBOT_COMPRESSION_TAIL_BUDGET_RATIO",
-        str(TUNABLES.compression_tail_budget_ratio)))
-    _protect_last_n = int(os.getenv(
-        "VAULTBOT_COMPRESSION_PROTECT_LAST_N",
-        str(TUNABLES.compression_protect_last_n)))
-    _prune_tool_chars = int(os.getenv(
-        "VAULTBOT_COMPRESSION_PRUNE_TOOL_CHARS",
-        str(TUNABLES.compression_prune_tool_chars)))
-    _min_dropped = int(os.getenv(
-        "VAULTBOT_COMPRESSION_MIN_DROPPED_TO_SUMMARIZE",
-        str(TUNABLES.compression_min_dropped_to_summarize)))
-    _antithrash_count = int(os.getenv(
-        "VAULTBOT_COMPRESSION_ANTITHRASH_COUNT",
-        str(TUNABLES.compression_antithrash_count)))
-    _antithrash_min_reduction = float(os.getenv(
-        "VAULTBOT_COMPRESSION_ANTITHRASH_MIN_REDUCTION",
-        str(TUNABLES.compression_antithrash_min_reduction)))
-
-    # Estimate current tokens (rough: ~4 chars/token).
-    _est_tokens = sum(
-        len(str(m.get("content", "") or ""))
-        for m in conversation if isinstance(m, dict)
-    ) // TUNABLES.chars_per_token
-
-    # Threshold: ratio × context window.
-    _threshold = max(1, int(context_window_tokens * _threshold_ratio))
-
-    if _est_tokens < _threshold:
-        return conversation, False, _est_tokens, _est_tokens
-
-    # Anti-thrash: if N+ compressions didn't reduce tokens by >M%, block.
-    if compression_count >= _antithrash_count and last_compression_tokens_before > 0:
-        _reduction = 1.0 - (last_compression_tokens_after / max(1, last_compression_tokens_before))
-        if _reduction < _antithrash_min_reduction:
-            if session_logger:
-                session_logger.log("compression_blocked_antithrash", {
-                    "compression_count": compression_count,
-                    "last_reduction_pct": round(_reduction * 100, 1),
-                    "est_tokens": _est_tokens,
-                    "threshold": _threshold,
-                })
-            return conversation, False, _est_tokens, _est_tokens
-
-    # ── Phase 1: Prune old tool results (cheap, no LLM call) ──
-    # Tool results > prune_tool_chars outside the protected tail are
-    # replaced with a stub. This is the biggest token saver and costs nothing.
-    _tail_start = max(3, len(conversation) - _protect_last_n)
-    _pruned = 0
-    for _i in range(2, _tail_start):
-        _m = conversation[_i]
-        if isinstance(_m, dict) and _m.get("role") == "tool":
-            _c = _m.get("content", "")
-            if isinstance(_c, str) and len(_c) > _prune_tool_chars:
-                conversation[_i] = dict(_m)
-                conversation[_i]["content"] = "[Old tool output cleared to save context space]"
-                _pruned += 1
-    if _pruned > 0 and session_logger:
-        session_logger.log("compression_pruned_tool_results", {
-            "pruned_count": _pruned,
-        })
-
-    # Re-estimate after pruning.
-    _est_tokens = sum(
-        len(str(m.get("content", "") or ""))
-        for m in conversation if isinstance(m, dict)
-    ) // TUNABLES.chars_per_token
-    if _est_tokens < _threshold:
-        return conversation, True, _est_tokens, _est_tokens
-
-    # ── Phase 2: Determine boundaries ──
-    # head = conversation[0:2] (system prompt + vault context, always kept)
-    # tail = walk backward from end, accumulating tokens until budget
-    #        exhausted (tail budget = tail_budget_ratio × threshold)
-    # middle = everything between head and tail → summarized
-    _tail_budget = max(1, int(_threshold * _tail_budget_ratio))
-    head = conversation[:2]
-    history = conversation[2:]
-
-    # Walk backward from the end, keeping messages until tail budget exhausted.
-    kept: list[dict[str, Any]] = []
-    running_tokens = 0
-    for msg in reversed(history):
-        msg_tokens = len(str(msg.get("content", "") or "")) // TUNABLES.chars_per_token + 1
-        if running_tokens + msg_tokens > _tail_budget and len(kept) >= _protect_last_n:
-            break
-        kept.insert(0, msg)
-        running_tokens += msg_tokens
-
-    # Tool-call-pair safety: if the first kept message is a 'tool' message
-    # whose parent assistant (with tool_calls) was dropped, drop it too.
-    while kept and isinstance(kept[0], dict) and kept[0].get("role") == "tool":
-        kept.pop(0)
-
-    if len(kept) == len(history):
-        return conversation, False, _est_tokens, _est_tokens  # nothing to drop
-
-    dropped = history[:len(history) - len(kept)]
-
-    # ── Phase 3: Summarize middle via small model ──
-    summary_msg: list[dict[str, Any]] = []
-    if len(dropped) > _min_dropped:
-        summary = compress_window(dropped, session_logger=session_logger)
-        if summary:
-            summary_msg = [{"role": "system",
-                "content": f"[CONTEXT COMPACTION — earlier turns summarized]\n{summary}"}]
-
-    # ── Phase 4: Assemble ──
-    compressed = head + summary_msg + kept
-
-    # Re-estimate after compression.
-    _after_tokens = sum(
-        len(str(m.get("content", "") or ""))
-        for m in compressed if isinstance(m, dict)
-    ) // TUNABLES.chars_per_token
-
-    if session_logger:
-        session_logger.log("compression_fired", {
-            "messages_before": len(conversation),
-            "messages_after": len(compressed),
-            "dropped_msgs": len(dropped),
-            "est_tokens_before": _est_tokens,
-            "est_tokens_after": _after_tokens,
-            "threshold": _threshold,
-            "context_window": context_window_tokens,
-            "compression_count": compression_count + 1,
-        })
-
-    return compressed, True, _est_tokens, _after_tokens
 
 
 # ---------------------------------------------------------------------------
@@ -1191,6 +893,7 @@ async def _run_procedure_direct(
     proc_args: dict[str, Any] | None = None,
     session_logger: Any = None,
     user_message: str = "",
+    websocket: Any = None,
 ) -> dict[str, Any]:
     """Run a procedure directly from the framework (not from a model tool call).
 
@@ -1198,6 +901,11 @@ async def _run_procedure_direct(
     chain steps before the big model ever sees the conversation. Returns a
     dict with procedure, overall_passed, final_output, cartridge, etc.
     On any error, returns {"error": ...} — the caller handles fallback.
+
+    When ``websocket`` is provided, per-step progress events are streamed
+    to the UI so the user can see what the procedure is doing in real time
+    (instead of staring at a frozen "checking premises..." line with no
+    GPU activity indicator).
     """
     from procedure_compiler import compile_procedure as _compile_proc
     from step_gate_runtime import execute_procedure as _run_proc
@@ -1268,13 +976,37 @@ async def _run_procedure_direct(
     except Exception:  # noqa: BLE001 — best-effort; sub-procedure logging is a bonus
         pass
 
+    # Build a progress callback that streams per-step visibility to the UI.
+    # Without this, preflight procedures are a black box — the user sees
+    # "checking premises" and then 30-60s of silence with no GPU activity
+    # indicator, leaving them guessing whether the bot is working or hung.
+    async def _proc_progress(
+        step_num: int, total: int, output: str,
+        instruction: str, step_type: str, status: str,
+    ) -> None:
+        if websocket is None:
+            return
+        try:
+            await svc.manager.send_personal_message(json.dumps({
+                "type": "procedure_step",
+                "procedure": proc_name,
+                "step": step_num,
+                "total": total,
+                "instruction": instruction[:200],
+                "step_type": step_type,
+                "status": status,
+                "output_preview": (output or "")[:200],
+            }), websocket, session_logger=session_logger)
+        except Exception:  # noqa: BLE001 — best-effort UI; must not break procedure execution
+            pass
+
     result = await _run_proc(
         procedure=proc,
         context="",
         llm_client=_proc_llm_client,
         vault_path=str(vault_root),
         procedure_tracker=svc.procedure_tracker,
-        progress_callback=None,
+        progress_callback=_proc_progress if websocket else None,
         procedure_args=proc_args or {},
     )
 
@@ -1395,7 +1127,12 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # Keep the in-memory vault graph current with disk before retrieval.
         try:
             _t_graph = loop.time()
+            await send_progress(svc, websocket, "refreshing vault graph", {})
             await loop.run_in_executor(None, svc.vault_graph.refresh)
+            await send_progress(svc, websocket, "graph_refreshed", {
+                "node_count": len(svc.vault_graph.nodes),
+                "duration_ms": (loop.time() - _t_graph) * 1000,
+            })
             session_logger.log("graph_refreshed", {
                 "node_count": len(svc.vault_graph.nodes),
                 "duration_ms": (loop.time() - _t_graph) * 1000,
@@ -1419,11 +1156,13 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             # Conversation-aware query rewriting: resolve references to prior
             # conversation so retrieval finds the right notes.
             _history = getattr(websocket, "conversation_history", [])
+            await send_progress(svc, websocket, "rewriting query", {})
             _rewritten_query = await loop.run_in_executor(
                 None, rewrite_query_with_history,
                 user_message, _history, session_logger)
             queries = [_rewritten_query]
             if svc.small_client:
+                await send_progress(svc, websocket, "expanding query", {})
                 _expanded = expand_query(
                     svc.small_client, _rewritten_query, session_logger)
                 # Always include the original user message so retrieval is
@@ -1464,9 +1203,11 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             # No longer gated on svc.small_client — the reranker uses FAISS
             # vector reconstruction, not an LLM call.
             if len(results) > 5:
+                await send_progress(svc, websocket, "reranking results", {"count": len(results)})
                 results = await rerank_results(
                     svc, user_message, results, k=5,
                     session_logger=session_logger)
+                await send_progress(svc, websocket, "reranking_done", {"kept": len(results)})
             else:
                 results = results[:5]
         except Exception as e:  # noqa: BLE001
@@ -1554,10 +1295,15 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # Context budgeting: ensure the retrieved context fits within the
         # model's token budget.
         try:
+            await send_progress(svc, websocket, "budgeting context", {})
             _budgeted = svc.context_budgeter.budget(
                 context, getattr(websocket, "conversation_history", []))
             context = _budgeted["context"]
             if _budgeted["truncated"]:
+                await send_progress(svc, websocket, "context_budgeted", {
+                    "original_tokens": _budgeted["original_tokens"],
+                    "budgeted_tokens": _budgeted["budgeted_tokens"],
+                })
                 session_logger.log("context_budget", {
                     "original_tokens": _budgeted["original_tokens"],
                     "budgeted_tokens": _budgeted["budgeted_tokens"],
@@ -1578,8 +1324,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # context passes through unchanged.
         if len(context) > 3000:
             try:
+                await send_progress(svc, websocket, "filtering context", {"chars": len(context)})
                 context = await filter_context(
                     svc, user_message, context, session_logger)
+                await send_progress(svc, websocket, "context_filtered", {"chars": len(context)})
             except Exception as e:  # noqa: BLE001
                 session_logger.log("context_filter_failed", {"error": str(e)})
                 await notify_console_failure(
@@ -1626,18 +1374,10 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             autonomous_state, gaps_summary,
             custom_tools=custom_tools_desc,
             custom_tool_names=custom_tool_names)
-        # Phase 5: compress the stable parts (identity + briefing) via the
-        # small model once per session and cache. This saves ~4-6K tokens
-        # re-billed to the cloud every round. The dynamic parts (wm block,
-        # procedure surface, conversation recall) are added uncompressed below.
-        # Run in an executor — _compress_stable_prompt makes synchronous
-        # requests.post() calls to the small model, which would block the
-        # event loop and cause the "hangs after finding gaps done" bug.
-        _stable_prompt = await run_with_heartbeat(
-            svc, websocket, "compressing system prompt",
-            _compress_stable_prompt,
-            identity_context, _briefing, session_logger)
-        system_prompt = _stable_prompt
+        # Build the system prompt from identity + briefing verbatim.
+        # The dynamic parts (wm block, procedure surface, conversation
+        # recall) are added below.
+        system_prompt = identity_context + "\n\n" + _briefing
         # NOTE: the working-memory task list is injected by the in-loop
         # composer (see the "System prompt is FROZEN after preflight build"
         # block below), NOT here. The list can change mid-turn as the model
@@ -1691,92 +1431,162 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                 f"procedure surface build failed: {e}",
                 context="procedure_surface")
 
-        # --- Framework-forced Route-Task (preflight routing) --------------
-        # The framework runs Route-Task BEFORE the big model sees the
-        # conversation. Route-Task (small cartridge, cheap) classifies the
-        # intent and returns a procedure chain. The framework then auto-
-        # executes small-cartridge chain steps, collecting their results.
-        # The big model receives the pre-computed chain results and only
-        # handles big-cartridge procedures + final synthesis. This removes
-        # the "decide what to do" cognitive load — a local LLM can follow
-        # a chain much more reliably than it can self-route from a long
-        # system prompt.
+        # --- Think Premise Gate + Route-Task (PARALLEL preflight) ---------
+        # Think (BS detector) and Route-Task (intent classifier) are
+        # INDEPENDENT — they run concurrently via asyncio.gather. Think
+        # has a timeout (VAULTBOT_THINK_TIMEOUT_S, default 15s) because
+        # it can make 35+ sequential small-model LLM calls and was the #1
+        # cause of TTFT latency (6.5 minutes observed in session logs).
+        # If Think times out, the big model handles premise checking
+        # itself. Route-Task is cheap (1 LLM call) and doesn't need a
+        # timeout.
         #
-        # Skipped for: greetings/trivial messages, resumed turns (the model
-        # is mid-task), and when the small model is unavailable.
+        # Skipped for: trivial messages (uses _classify_trivial patterns),
+        # resumed turns (model is mid-task).
+        _think_system_msg = ""  # injected after the user message below
         _preflight_chain: list[str] = []
         _preflight_results: list[dict[str, Any]] = []
         _preflight_category = ""
-        _msg_lower_check = user_message.strip().lower()
-        _is_trivial = _msg_lower_check in {"hi", "hello", "hey", "yo", "sup",
-            "ok", "thanks", "thank you"} or len(_msg_lower_check) < 5
+        _is_trivial = _classify_trivial(
+            user_message, getattr(websocket, "conversation_history", []), wm)
         if not _is_trivial and not _resumed_tool_history:
-            try:
-                await send_progress(svc, websocket, "routing", {})
-                _route_result = await _run_procedure_direct(
-                    svc, "Route-Task",
-                    proc_args={"intent": user_message},
-                    session_logger=session_logger,
-                    user_message=user_message)
-                await send_progress(svc, websocket, "routing_done", {})
-                if not _route_result.get("error"):
-                    _route_output = _route_result.get("final_output", "")
-                    if _route_output:
-                        try:
-                            _parsed = json.loads(_route_output)
-                        except (json.JSONDecodeError, TypeError):
-                            _parsed = {}
-                        _preflight_category = _parsed.get("category", "")
-                        _preflight_chain = _parsed.get("procedure_chain", [])
-                        if isinstance(_preflight_chain, list) and _preflight_chain:
-                            session_logger.log("preflight_route", {
-                                "category": _preflight_category,
-                                "chain": _preflight_chain,
-                            })
-                            # Auto-execute small-cartridge chain steps.
-                            # Big-cartridge steps are left for the big model.
-                            for _chain_proc in _preflight_chain:
-                                # Check cartridge before running.
-                                _chain_cartridge = "big"
-                                try:
-                                    _idx = getattr(svc.procedure_tracker,
-                                        "_stem_index", None) or {}
-                                    _entry = _idx.get(_chain_proc) or {}
-                                    _fm = _entry.get("frontmatter") or {}
-                                    _chain_cartridge = str(
-                                        _fm.get("model_cartridge", "big")
-                                    ).strip().lower() or "big"
-                                except Exception:  # noqa: BLE001 — best-effort; default to big
-                                    pass
-                                if _chain_cartridge == "small":
-                                    await send_progress(
-                                        svc, websocket,
-                                        f"running {_chain_proc}", {})
-                                    _chain_result = await _run_procedure_direct(
-                                        svc, _chain_proc,
-                                        proc_args={"intent": user_message},
-                                        session_logger=session_logger,
-                                        user_message=user_message)
-                                    _preflight_results.append(_chain_result)
-                                    session_logger.log(
-                                        "preflight_chain_step", {
-                                        "procedure": _chain_proc,
-                                        "cartridge": _chain_cartridge,
-                                        "passed": _chain_result.get(
-                                            "overall_passed"),
-                                    })
-                                else:
-                                    # Big-cartridge: stop here, let the
-                                    # big model handle the rest.
-                                    _preflight_results.append({
-                                        "procedure": _chain_proc,
-                                        "cartridge": _chain_cartridge,
-                                        "pending": True,
-                                    })
-                                    break
-            except Exception as e:  # noqa: BLE001 — best-effort; fall through to big model
-                session_logger.log("preflight_route_failed", {"error": str(e)})
-                # Fall through — the big model handles everything.
+            _think_timeout = float(os.getenv("VAULTBOT_THINK_TIMEOUT_S", "15"))
+
+            async def _run_think() -> dict[str, Any]:
+                """Run Think with a timeout. Returns {"error": ...} on timeout/failure."""
+                try:
+                    await send_progress(svc, websocket, "checking premises", {})
+                    _result = await asyncio.wait_for(
+                        _run_procedure_direct(
+                            svc, "Think",
+                            proc_args={"problem": user_message},
+                            session_logger=session_logger,
+                            user_message=user_message,
+                            websocket=websocket),
+                        timeout=_think_timeout)
+                    await send_progress(svc, websocket, "premises_checked", {})
+                    return _result
+                except asyncio.TimeoutError:
+                    session_logger.log("premise_gate_timeout", {
+                        "timeout_s": _think_timeout,
+                        "user_message": user_message[:200],
+                    })
+                    await send_progress(svc, websocket, "premises_timed_out", {})
+                    return {"error": "timeout", "timeout_s": _think_timeout}
+                except Exception as e:  # noqa: BLE001
+                    session_logger.log("premise_gate_failed", {"error": str(e)})
+                    await notify_console_failure(
+                        svc, websocket,
+                        f"Think procedure failed: {e}",
+                        context="premise_gate")
+                    return {"error": str(e)}
+
+            async def _run_route() -> dict[str, Any]:
+                """Run Route-Task. Returns {"error": ...} on failure."""
+                try:
+                    await send_progress(svc, websocket, "routing", {})
+                    _result = await _run_procedure_direct(
+                        svc, "Route-Task",
+                        proc_args={"intent": user_message},
+                        session_logger=session_logger,
+                        user_message=user_message,
+                        websocket=websocket)
+                    await send_progress(svc, websocket, "routing_done", {})
+                    return _result
+                except Exception as e:  # noqa: BLE001
+                    session_logger.log("preflight_route_failed", {"error": str(e)})
+                    await notify_console_failure(
+                        svc, websocket,
+                        f"Route-Task procedure failed: {e}",
+                        context="preflight_route")
+                    return {"error": str(e)}
+
+            # Run Think and Route-Task in PARALLEL — they're independent.
+            _think_task = asyncio.create_task(_run_think())
+            _route_task = asyncio.create_task(_run_route())
+            _think_result, _route_result = await asyncio.gather(
+                _think_task, _route_task)
+
+            # --- Process Think result ---
+            if not _think_result.get("error"):
+                _think_output = _think_result.get("final_output", "")
+                if _think_output:
+                    _blocked = "PREMISE_GATE: BLOCKED" in _think_output
+                    session_logger.log(
+                        "premise_gate_blocked" if _blocked else "premise_gate_open",
+                        {"user_message": user_message[:200]})
+                    _think_system_msg = (
+                        "# THINK PREMISE ANALYSIS (preflight BS detector)\n"
+                        f"The Think procedure analyzed the user's question "
+                        f"for unverified premises. Results:\n\n"
+                        f"{_think_output}\n\n"
+                        f"# YOUR JOB: Use the premise analysis above to "
+                        f"inform your answer. If premises are unverified, "
+                        f"acknowledge the uncertainty but ALWAYS give a "
+                        f"real, helpful response. People learn through "
+                        f"engagement, not rejection. Flag caveats, then "
+                        f"answer the question as best you can using vault "
+                        f"knowledge and reasoning. Do NOT refuse to answer "
+                        f"— the user deserves a real response even if "
+                        f"their premises are shaky.")
+
+            # --- Process Route-Task result ---
+            if not _route_result.get("error"):
+                _route_output = _route_result.get("final_output", "")
+                if _route_output:
+                    try:
+                        _parsed = json.loads(_route_output)
+                    except (json.JSONDecodeError, TypeError):
+                        _parsed = {}
+                    _preflight_category = _parsed.get("category", "")
+                    _preflight_chain = _parsed.get("procedure_chain", [])
+                    if isinstance(_preflight_chain, list) and _preflight_chain:
+                        session_logger.log("preflight_route", {
+                            "category": _preflight_category,
+                            "chain": _preflight_chain,
+                        })
+                        # Auto-execute small-cartridge chain steps.
+                        # Big-cartridge steps are left for the big model.
+                        for _chain_proc in _preflight_chain:
+                            # Check cartridge before running.
+                            _chain_cartridge = "big"
+                            try:
+                                _idx = getattr(svc.procedure_tracker,
+                                    "_stem_index", None) or {}
+                                _entry = _idx.get(_chain_proc) or {}
+                                _fm = _entry.get("frontmatter") or {}
+                                _chain_cartridge = str(
+                                    _fm.get("model_cartridge", "big")
+                                ).strip().lower() or "big"
+                            except Exception:  # noqa: BLE001
+                                pass
+                            if _chain_cartridge == "small":
+                                await send_progress(
+                                    svc, websocket,
+                                    f"running {_chain_proc}", {})
+                                _chain_result = await _run_procedure_direct(
+                                    svc, _chain_proc,
+                                    proc_args={"intent": user_message},
+                                    session_logger=session_logger,
+                                    user_message=user_message,
+                                    websocket=websocket)
+                                _preflight_results.append(_chain_result)
+                                session_logger.log(
+                                    "preflight_chain_step", {
+                                    "procedure": _chain_proc,
+                                    "cartridge": _chain_cartridge,
+                                    "passed": _chain_result.get(
+                                        "overall_passed"),
+                                })
+                            else:
+                                # Big-cartridge: stop here, let the
+                                # big model handle the rest.
+                                _preflight_results.append({
+                                    "procedure": _chain_proc,
+                                    "cartridge": _chain_cartridge,
+                                    "pending": True,
+                                })
+                                break
 
         # If we're resuming an interrupted turn, tell the model what it already
         # did so it continues instead of re-running tools.
@@ -1825,6 +1635,17 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         ]
         conversation.extend(getattr(websocket, "conversation_history", []))
         conversation.append({"role": "user", "content": user_message})
+
+        # --- Think premise analysis injection -----------------------------
+        # If the Think procedure ran in preflight and produced premise
+        # analysis, inject it as a system message AFTER the user message.
+        # The big model sees the premise warnings but ALWAYS gives a real
+        # response — people learn through engagement, not rejection.
+        if _think_system_msg:
+            conversation.append({"role": "system", "content": _think_system_msg})
+            session_logger.log("think_analysis_injected", {
+                "user_message": user_message[:100],
+            })
 
         # --- Preflight chain results injection ----------------------------
         # If the framework already ran Route-Task and auto-executed small-
@@ -1942,37 +1763,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
                     "user_message": user_message[:80],
                     "last_assistant_chars": len(_last_assistant),
                 })
-
-        # Hermes-style preflight compression: ratio-based, model-relative.
-        # Fires when estimated tokens exceed 50% of the model's context window.
-        # Summarizes middle turns via the small model; keeps head + tail.
-        # Never fires inside the tool-call loop — preflight only.
-        _pre_compress_len = len(conversation)
-        _ctx_win = 0
-        try:
-            _ctx_win = svc.ollama_client.context_window(
-                svc.ollama_client.llm_model)
-        except Exception as e:  # noqa: BLE001 — probe failure is non-fatal; log + use 0 so compression is skipped
-            session_logger.log("context_window_probe_failed", {
-                "where": "pre_loop", "error": str(e)})
-        _comp_count = getattr(websocket, "_compression_count", 0)
-        _comp_tok_before = getattr(websocket, "_last_compression_tokens_before", 0)
-        _comp_tok_after = getattr(websocket, "_last_compression_tokens_after", 0)
-        conversation, _did_compress, _comp_tok_before, _comp_tok_after = \
-            _compress_conversation(
-                conversation, _ctx_win, session_logger=session_logger,
-                compression_count=_comp_count,
-                last_compression_tokens_before=_comp_tok_before,
-                last_compression_tokens_after=_comp_tok_after)
-        if _did_compress:
-            websocket._compression_count = _comp_count + 1
-            websocket._last_compression_tokens_before = _comp_tok_before
-            websocket._last_compression_tokens_after = _comp_tok_after
-        if len(conversation) < _pre_compress_len:
-            session_logger.log("compression_applied", {
-                "messages_before": _pre_compress_len,
-                "messages_after": len(conversation),
-            })
 
         # Token-usage meter: report how full the context window is.
         try:
@@ -2114,7 +1904,7 @@ async def handle_chat(svc: Services, websocket: WebSocket,
         # This survives history budget truncation because it lives in the
         # system prompt, not the conversation history. The model always sees
         # what it already did without re-reading dropped messages. Zero LLM
-        # cost (deterministic), never returns None (unlike compress_window).
+        # cost (deterministic).
         _findings: list[str] = []
         # Go-find-out escalation: counts consecutive vault_search calls
         # where ALL results were already seen. When this hits the threshold,
@@ -3398,33 +3188,6 @@ async def handle_chat(svc: Services, websocket: WebSocket,
             except Exception as e:  # noqa: BLE001
                 session_logger.log_exception(e, context="note_creator.create_note_from_chat")
                 print(f"Error creating chat note: {e}")
-
-        # Close the MIRROR loop: regenerate the bounded self-model from this
-        # turn's activity.
-        try:
-            activity_parts = [f"User asked: {user_message[:300]}"]
-            if final_answer:
-                activity_parts.append(f"Answer: {final_answer[:500]}")
-            else:
-                activity_parts.append("Answer: (empty — model produced no final text)")
-            _tool_summary = []
-            for m in conversation:
-                if m.get("role") == "assistant" and m.get("tool_calls"):
-                    for tc in m["tool_calls"]:
-                        fn = tc.get("function", {}) if isinstance(tc, dict) else {}
-                        _tool_summary.append(fn.get("name", "?"))
-            if _tool_summary:
-                activity_parts.append(
-                    "Tools used: " + ", ".join(_tool_summary[:10]))
-            activity = "\n".join(activity_parts)
-            _regen_result = await loop.run_in_executor(
-                None, lambda: svc.identity.regenerate_self_model(activity))
-            if _regen_result and not _regen_result.startswith("I am VaultBot"):
-                session_logger.log("self_model_regen_skipped_or_done", {
-                    "turns_since_regen": getattr(
-                        svc.identity, "_turns_since_regen", 0)})
-        except Exception as e:  # noqa: BLE001
-            session_logger.log("self_model_regenerate_failed", {"error": str(e)})
 
         # Pattern extraction: check for new consolidation gaps after each chat.
         try:

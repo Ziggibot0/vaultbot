@@ -1,8 +1,10 @@
 ---
 type: semantic
-status: verified
+status: obsolete
 created: 2026-07-27
-last_reviewed: 2026-07-27
+last_reviewed: 2026-08-13
+obsoleted: 2026-08-13
+obsoleted_reason: "SELF_MODEL.md was removed from the identity layer on 2026-08-13. The MIRROR self-model regeneration pipeline (LLM call per turn, drift detection, throttle machinery) was ripped out. Continuity is now handled by conversation_state.json + RESTART_CONTEXT.md. This note is kept as a historical record of the drift pattern that motivated the removal."
 review_interval_days: 60
 evidence_count: 4
 evidence_sources:

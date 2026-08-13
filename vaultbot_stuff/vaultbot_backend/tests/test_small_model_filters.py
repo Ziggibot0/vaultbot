@@ -23,7 +23,7 @@ if "faiss" not in sys.modules:
 
 
 from small_model_filters import (
-    compress_window, dedup_results, expand_query, filter_context,
+    dedup_results, expand_query, filter_context,
     _content_words, _parse_json_array, _split_context_sections,
 )
 
@@ -312,61 +312,6 @@ def test_split_context_sections_no_headers():
     ctx = "just plain text, no headers"
     sections = _split_context_sections(ctx)
     assert len(sections) == 1
-
-
-# ---------------------------------------------------------------------------
-# Phase 5: compress_window tests
-# ---------------------------------------------------------------------------
-
-def test_compress_trivial():
-    """Fewer than 4 messages → no compression (returns None)."""
-    msgs = [{"role": "user", "content": "hello"}]
-    out = compress_window(msgs, session_logger=_FakeSessionLogger())
-    assert out is None
-
-
-def test_compress_fallback_on_failure(monkeypatch):
-    """When the small model is unavailable, returns None (drop messages)."""
-    msgs = [
-        {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "hi"},
-        {"role": "user", "content": "do something"},
-        {"role": "assistant", "content": "done"},
-    ]
-
-    def fake_get_small_client(logger=None):
-        return None
-
-    monkeypatch.setattr("llm_client.get_small_client", fake_get_small_client)
-    out = compress_window(msgs, session_logger=_FakeSessionLogger())
-    assert out is None
-
-
-def test_compress_returns_summary(monkeypatch):
-    """Valid small-model output returns a summary string."""
-    msgs = [
-        {"role": "user", "content": "search for notes about biology"},
-        {"role": "assistant", "content": "found 3 notes"},
-        {"role": "user", "content": "summarize them"},
-        {"role": "assistant", "content": "here is the summary of biology notes"},
-    ]
-
-    fake_client = _FakeClient("User asked about biology. Found 3 notes and summarized them.")
-    monkeypatch.setattr("llm_client.get_small_client", lambda logger=None: fake_client)
-    out = compress_window(msgs, session_logger=_FakeSessionLogger())
-    assert out is not None
-    assert "biology" in out.lower()
-
-
-def test_compress_caps_at_600_chars(monkeypatch):
-    """Summary is truncated to _MAX_SUMMARY_CHARS."""
-    msgs = [{"role": "user", "content": f"msg {i}"} for i in range(10)]
-    long_summary = "x" * 2000
-    fake_client = _FakeClient(long_summary)
-    monkeypatch.setattr("llm_client.get_small_client", lambda logger=None: fake_client)
-    out = compress_window(msgs, session_logger=_FakeSessionLogger())
-    assert out is not None
-    assert len(out) <= 600
 
 
 # ---------------------------------------------------------------------------
