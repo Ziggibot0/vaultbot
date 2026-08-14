@@ -43,6 +43,29 @@ class OllamaClient(_BASE):
         # VAULTBOT_OLLAMA_KEEP_ALIVE (Ollama duration string: "30m", "2h", "-1"
         # for forever, "0" to unload immediately after each call).
         self._keep_alive = os.environ.get("VAULTBOT_OLLAMA_KEEP_ALIVE", "30m")
+        # Active streaming response — stored so the stop button can close the
+        # HTTP connection from another thread, unblocking response.iter_lines()
+        # which otherwise keeps the executor thread alive for minutes.
+        self._active_stream_response: requests.Response | None = None
+
+    def cancel_active_stream(self) -> None:
+        """Close the active streaming HTTP response to unblock the executor thread.
+
+        When the user presses Stop, the asyncio task is cancelled but the
+        executor thread is blocked in response.iter_lines() — CancelledError
+        doesn't propagate into threads. Closing the response from the main
+        thread causes iter_lines() to raise ConnectionError, unblocking the
+        thread immediately so the task can unwind.
+        """
+        resp = self._active_stream_response
+        if resp is not None:
+            try:
+                resp.close()
+                resp.raw.close()
+            except Exception:  # noqa: BLE001 — best-effort
+                pass
+            finally:
+                self._active_stream_response = None
 
     def set_model(self, model: str) -> None:
         """Switch the active LLM model at runtime."""
@@ -821,6 +844,8 @@ class OllamaClient(_BASE):
                     stream=True,
                     timeout=(5, _read_timeout),
                 )
+                # Store so the stop button can close this connection.
+                self._active_stream_response = response
             else:
                 # Bounded small-model tasks (think=False) should answer in
                 # well under a second; cap the timeout so a stuck 0.8b model
@@ -917,6 +942,8 @@ class OllamaClient(_BASE):
                         duration_ms=(time.time() - t0) * 1000,
                     )
                     raise
+                finally:
+                    self._active_stream_response = None
                 # Emit accumulated tool calls as one chunk (Ollama-style
                 # one-shot), so the chat handler sees the same shape it
                 # always has.
@@ -950,6 +977,7 @@ class OllamaClient(_BASE):
                     duration_ms=(time.time() - t0) * 1000,
                 )
                 yield {"done": True, "finish_reason": finish_reason or "stop"}
+                self._active_stream_response = None
 
             return chat_chunks()
         else:

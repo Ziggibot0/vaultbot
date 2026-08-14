@@ -365,6 +365,17 @@ async def websocket_endpoint(
                 task = getattr(websocket, "_current_task", None)
                 if task and not task.done():
                     task._stopped_by_user = True
+                    # Set the cancel flag FIRST so _check_cancelled() raises
+                    # CancelledError at every phase boundary in the agentic
+                    # loop — not just at await points.
+                    websocket._cancelled = True
+                    # Close the active HTTP streaming response so the
+                    # executor thread (blocked in response.iter_lines()) is
+                    # unblocked immediately.
+                    try:
+                        svc.ollama_client.cancel_active_stream()
+                    except Exception:  # noqa: BLE001 — best-effort
+                        pass
                     task.cancel()
                 await svc.manager.send_personal_message(
                     json.dumps({"type": "stopped", "content": "Interrupted"}), websocket
@@ -376,6 +387,11 @@ async def websocket_endpoint(
                 task = getattr(websocket, "_current_task", None)
                 if task and not task.done():
                     task._stopped_by_user = True
+                    websocket._cancelled = True
+                    try:
+                        svc.ollama_client.cancel_active_stream()
+                    except Exception:  # noqa: BLE001
+                        pass
                     task.cancel()
                 websocket.conversation_history = []
                 # Capture the old session_id before rolling a new one so we
@@ -487,6 +503,11 @@ async def websocket_endpoint(
                     task = getattr(websocket, "_current_task", None)
                     if task and not task.done():
                         task._stopped_by_user = True
+                        websocket._cancelled = True
+                        try:
+                            svc.ollama_client.cancel_active_stream()
+                        except Exception:  # noqa: BLE001
+                            pass
                         task.cancel()
                     await svc.manager.send_personal_message(
                         json.dumps({"type": "stopped", "content": "Interrupted"}),
@@ -633,6 +654,11 @@ async def websocket_endpoint(
             # Interrupt-on-send: cancel any in-flight turn.
             task = getattr(websocket, "_current_task", None)
             if task and not task.done():
+                websocket._cancelled = True
+                try:
+                    svc.ollama_client.cancel_active_stream()
+                except Exception:  # noqa: BLE001
+                    pass
                 task.cancel()
                 session_logger.log("chat_interrupted", {"reason": "new_message"})
 

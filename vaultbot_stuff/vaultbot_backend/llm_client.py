@@ -173,6 +173,17 @@ class LLMClient:
         """
         return {"running": True, "version": None, "models": []}
 
+    def cancel_active_stream(self) -> None:
+        """Close the active streaming HTTP response to unblock the executor thread.
+
+        When the user presses Stop, the asyncio task is cancelled but the
+        executor thread is blocked in response.iter_lines() — CancelledError
+        doesn't propagate into threads. Closing the response from the main
+        thread causes iter_lines() to raise ConnectionError, unblocking the
+        thread immediately so the task can unwind.
+        """
+        pass  # default: no-op (subclasses with streaming override)
+
 
 # ---------------------------------------------------------------------------
 # OpenAI-compatible client (OpenAI, OpenRouter, Gemini via proxy, vLLM, etc.)
@@ -205,6 +216,22 @@ class OpenAICompatibleClient(LLMClient):
         self.llm_model = llm_model
         self.session_logger = session_logger
         self.timeout = timeout
+        # Active streaming response — stored so the stop button can close the
+        # HTTP connection from another thread, unblocking response.iter_lines()
+        # which otherwise keeps the executor thread alive for minutes.
+        self._active_stream_response: requests.Response | None = None
+
+    def cancel_active_stream(self) -> None:
+        """Close the active streaming HTTP response to unblock the executor thread."""
+        resp = self._active_stream_response
+        if resp is not None:
+            try:
+                resp.close()
+                resp.raw.close()
+            except Exception:  # noqa: BLE001 — best-effort
+                pass
+            finally:
+                self._active_stream_response = None
 
     # -- internals ---------------------------------------------------------
     def _headers(self) -> dict[str, str]:
@@ -428,6 +455,7 @@ class OpenAICompatibleClient(LLMClient):
             raise
 
         if stream:
+            self._active_stream_response = response
             return self._stream_chat(response, payload, t0)
         return self._nonstream_chat(response, payload, t0)
 
@@ -533,6 +561,7 @@ class OpenAICompatibleClient(LLMClient):
             )
             raise
         finally:
+            self._active_stream_response = None
             self._log(
                 "chat",
                 inputs={"model": self.llm_model, "stream": True},

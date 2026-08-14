@@ -54,40 +54,27 @@ This procedure makes a small local model reason like a frontier model by followi
 
 ### Step 1: Extract factual premises (BS detector — part 1)
 
-Extract every factual claim the problem assumes is true. This is the BS detector's first pass — it identifies what the problem is asserting without evidence. The LLM gets ONE job: list the factual claims. Triple-try for consistency.
+Extract every factual claim the problem assumes is true. This is the BS detector's first pass — it identifies what the problem is asserting without evidence. The LLM gets ONE job: list the factual claims.
 
 ```python
 problem = args.get('problem', '')
 context = args.get('context', '')
 lens_override = args.get('lens_override', '')
 
-# Triple-try premise extraction — one focused question
-premises_all = []
-for _ in range(3):
-    prompt = f"List every factual claim this sentence assumes is true. One per line. If none, say NONE.\n\n\"{problem}\""
-    resp = llm_generate(prompt).strip()
-    premises_all.append(resp)
+# Single-call premise extraction
+prompt = f"List every factual claim this sentence assumes is true. One per line. If none, say NONE.\n\n\"{problem}\""
+resp = llm_generate(prompt).strip()
 
-# Parse premises from each response — take union of claims found in >=2 responses
-from collections import Counter
-premise_votes = Counter()
-for resp in premises_all:
-    for line in resp.split('\n'):
-        line = line.strip()
-        if line and line.upper() != 'NONE' and len(line) > 5:
-            premise_votes[line.lower()] += 1
-
-premises = [p for p, count in premise_votes.items() if count >= 2]
-if not premises:
-    # Fallback: take all unique from first response
-    seen = set()
-    for line in premises_all[0].split('\n'):
-        line = line.strip()
-        if line and line.upper() != 'NONE' and len(line) > 5:
-            key = line.lower()
-            if key not in seen:
-                seen.add(key)
-                premises.append(line)
+# Parse premises from the response
+premises = []
+seen = set()
+for line in resp.split('\n'):
+    line = line.strip()
+    if line and line.upper() != 'NONE' and len(line) > 5:
+        key = line.lower()
+        if key not in seen:
+            seen.add(key)
+            premises.append(line)
 
 result = f"PREMISES: {'|||'.join(premises) if premises else 'NONE'}\nPROBLEM: {problem}"
 if context:
@@ -104,7 +91,7 @@ print(result)
 
 ### Step 2: Extract causal claims (BS detector — part 2)
 
-Extract any causal claims the problem makes — "X leads to Y," "if X then Y," "X causes Y." These are structural claims about relationships, not factual claims about entities. The LLM gets ONE job: list the causal claims. Triple-try for consistency.
+Extract any causal claims the problem makes — "X leads to Y," "if X then Y," "X causes Y." These are structural claims about relationships, not factual claims about entities. The LLM gets ONE job: list the causal claims.
 
 ```python
 # Parse Step 1
@@ -123,32 +110,20 @@ for line in lines:
     elif line.startswith('LENS_OVERRIDE: '):
         lens_override = line.replace('LENS_OVERRIDE: ', '').strip()
 
-# Triple-try causal claim extraction
-causal_all = []
-for _ in range(3):
-    prompt = f"Does this sentence claim that one thing causes or leads to another? List any 'if X then Y' or 'X leads to Y' claims. One per line. If none, say NONE.\n\n\"{problem}\""
-    resp = llm_generate(prompt).strip()
-    causal_all.append(resp)
+# Single-call causal claim extraction
+prompt = f"Does this sentence claim that one thing causes or leads to another? List any 'if X then Y' or 'X leads to Y' claims. One per line. If none, say NONE.\n\n\"{problem}\""
+resp = llm_generate(prompt).strip()
 
-# Parse causal claims — take union found in >=2 responses
-from collections import Counter
-causal_votes = Counter()
-for resp in causal_all:
-    for line in resp.split('\n'):
-        line = line.strip()
-        if line and line.upper() != 'NONE' and len(line) > 5:
-            causal_votes[line.lower()] += 1
-
-causal_claims = [c for c, count in causal_votes.items() if count >= 2]
-if not causal_claims:
-    seen = set()
-    for line in causal_all[0].split('\n'):
-        line = line.strip()
-        if line and line.upper() != 'NONE' and len(line) > 5:
-            key = line.lower()
-            if key not in seen:
-                seen.add(key)
-                causal_claims.append(line)
+# Parse causal claims
+causal_claims = []
+seen = set()
+for line in resp.split('\n'):
+    line = line.strip()
+    if line and line.upper() != 'NONE' and len(line) > 5:
+        key = line.lower()
+        if key not in seen:
+            seen.add(key)
+            causal_claims.append(line)
 
 # Merge causal claims into premises for verification
 factual_premises = [p.strip() for p in premises_str.split('|||') if p.strip() and p.strip() != 'NONE']
@@ -224,22 +199,17 @@ for claim in all_claims:
     # Ask LLM to check claim against each full doc text
     # The LLM reads the vault note and checks if it supports the claim.
     # This is semantic MATCHING, not knowledge retrieval.
-    from collections import Counter
-    all_votes = []
+    verdict = 'NEUTRAL'
     for doc in full_docs[:3]:  # check against top 3 docs
-        for _ in range(3):  # triple-try per doc
-            prompt = f"Read this vault note. Does it support this claim? Answer YES, NO, or NEUTRAL.\n\nClaim: {claim}\n\nVault note:\n{doc['text'][:2000]}"
-            resp = llm_generate(prompt).strip().upper()
-            for word in resp.split():
-                word = word.rstrip('.,!;')
-                if word in ('YES', 'NO', 'NEUTRAL'):
-                    all_votes.append(word)
-                    break
-
-    if all_votes:
-        verdict = Counter(all_votes).most_common(1)[0][0]
-    else:
-        verdict = 'NEUTRAL'
+        prompt = f"Read this vault note. Does it support this claim? Answer YES, NO, or NEUTRAL.\n\nClaim: {claim}\n\nVault note:\n{doc['text'][:2000]}"
+        resp = llm_generate(prompt).strip().upper()
+        for word in resp.split():
+            word = word.rstrip('.,!;')
+            if word in ('YES', 'NO', 'NEUTRAL'):
+                verdict = word
+                break
+        if verdict == 'YES':
+            break  # verified — no need to check more docs
 
     doc_titles = ' | '.join([d['title'] for d in full_docs[:3]])
     if verdict in ('NO', 'NEUTRAL'):
@@ -308,7 +278,7 @@ print(result)
 
 ### Step 4: Classify the problem type
 
-Ask the LLM one simple question: what kind of problem is this? Single word output from a short list. Triple-try with majority vote.
+Ask the LLM one simple question: what kind of problem is this? Single word output from a short list.
 
 ```python
 # Parse Step 3
@@ -330,24 +300,16 @@ for line in lines:
     elif line.startswith('PREMISE_GATE: '):
         premise_gate = line.replace('PREMISE_GATE: ', '').strip()
 
-# Triple-try classification — one word from a short list
+# Single-call classification — one word from a short list
 valid_types = ['WHY', 'CHOOSE', 'EXPLAIN', 'BUILD', 'EVALUATE', 'VERIFY']
-from collections import Counter
-votes = []
-for _ in range(3):
-    prompt = f"What kind of question is this? Pick ONE word:\nWHY (something broken/failing)\nCHOOSE (pick between options)\nEXPLAIN (understand how something works)\nBUILD (design or plan steps)\nEVALUATE (multiple viewpoints)\nVERIFY (check if a claim is true)\n\nQuestion: {problem}"
-    resp = llm_generate(prompt).strip().upper()
-    # Extract first matching word
-    for word in resp.split():
-        word = word.rstrip('.,!;')
-        if word in valid_types:
-            votes.append(word)
-            break
-
-if votes:
-    problem_type = Counter(votes).most_common(1)[0][0]
-else:
-    problem_type = 'EXPLAIN'  # safe default
+prompt = f"What kind of question is this? Pick ONE word:\nWHY (something broken/failing)\nCHOOSE (pick between options)\nEXPLAIN (understand how something works)\nBUILD (design or plan steps)\nEVALUATE (multiple viewpoints)\nVERIFY (check if a claim is true)\n\nQuestion: {problem}"
+resp = llm_generate(prompt).strip().upper()
+problem_type = 'EXPLAIN'  # safe default
+for word in resp.split():
+    word = word.rstrip('.,!;')
+    if word in valid_types:
+        problem_type = word
+        break
 
 result = f"PROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}"
 if context:
@@ -674,19 +636,11 @@ else:
             key_findings[name] = f"No findings from {name}"
             continue
 
-        # Triple-try extraction for consistency
-        from collections import Counter
-        finding_votes = []
-        for _ in range(3):
-            prompt = f"Read this analysis. What is the single most important finding? Answer in one sentence.\n\nAnalysis: {snippet}"
-            resp = llm_generate(prompt).strip()
-            if resp and len(resp) > 10:
-                finding_votes.append(resp)
-
-        if finding_votes:
-            # Use the most common response (majority vote)
-            best = Counter(finding_votes).most_common(1)[0][0]
-            key_findings[name] = best
+        # Single-call key finding extraction
+        prompt = f"Read this analysis. What is the single most important finding? Answer in one sentence.\n\nAnalysis: {snippet}"
+        resp = llm_generate(prompt).strip()
+        if resp and len(resp) > 10:
+            key_findings[name] = resp
         else:
             # Fallback: use first 150 chars of lens output
             key_findings[name] = snippet[:150] + '...'
@@ -697,17 +651,9 @@ else:
     # Build a short synthesis prompt — the small model only sees key findings, not full outputs
     synth_prompt = f"Question: {problem}\n\nKey findings from analysis:\n{findings_text}\n\nSynthesize these into a short answer. Include:\n1. Summary (2-3 sentences)\n2. Key findings (bullet points)\n3. Confidence (HIGH/MEDIUM/LOW with reason)\n4. If relevant, one recommended action"
 
-    # Triple-try synthesis for consistency
-    synth_votes = []
-    for _ in range(3):
-        resp = llm_generate(synth_prompt).strip()
-        if resp and len(resp) > 30:
-            synth_votes.append(resp)
-
-    if synth_votes:
-        # Use the longest response (richest synthesis) among the majority
-        synthesis_body = Counter(synth_votes).most_common(1)[0][0]
-    else:
+    # Single-call synthesis
+    synthesis_body = llm_generate(synth_prompt).strip()
+    if not synthesis_body or len(synthesis_body) < 30:
         # Fallback: assemble from key findings manually
         synthesis_body = f"Summary: Analysis of '{problem}' using {', '.join(completed)}.\n\nKey findings:\n"
         for name, finding in key_findings.items():
@@ -760,11 +706,11 @@ else:
 
 ## Research Justification
 
-1. **Bite-sized prompts for small models**: Research shows small models (<3B parameters) perform dramatically better when each LLM call asks exactly one question with constrained output format. The v2 Think procedure asked the 0.8B model to process 400+ word prompts with 6 lens descriptions, triple-try formatting, and premise extraction all at once — the model couldn't hold it in working attention. v3 breaks every LLM call into 1-3 sentence prompts with single-word or short-list outputs.
+1. **Bite-sized prompts for small models**: Research shows small models (<3B parameters) perform dramatically better when each LLM call asks exactly one question with constrained output format. The v2 Think procedure asked the 0.8B model to process 400+ word prompts with 6 lens descriptions and premise extraction all at once — the model couldn't hold it in working attention. v3 breaks every LLM call into 1-3 sentence prompts with single-word or short-list outputs.
 
 2. **Procedure terminology isolation**: When the LLM sees its own procedure description in the prompt, it pattern-matches on that description rather than processing the actual problem. v3 ensures the LLM never sees words like "ontology," "epistemology," "hermeneutics," or "lens stack" — those are code-level concepts only.
 
-3. **Triple-try consistency** ([[Deterministic-Scaffolding-for-Small-Models]]): Critical LLM calls (premise extraction, classification, lens selection) run 3 times with majority vote. This catches the small model's inconsistency without complex heuristics.
+3. **Single-call consistency** ([[Deterministic-Scaffolding-for-Small-Models]]): Critical LLM calls (premise extraction, classification, lens selection) run once with deterministic fallbacks. This keeps latency low — the small model's inconsistency is handled by code-level defaults rather than 3× LLM round-trips.
 
 4. **Deterministic fallbacks**: Every LLM call has a code-level fallback. If the model produces garbage, the procedure continues with a safe default rather than hallucinating.
 

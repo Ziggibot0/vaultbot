@@ -76,6 +76,22 @@ from working_memory import TaskList
 
 
 # ---------------------------------------------------------------------------
+# Cancel check — called at every phase boundary so the stop button works
+# at ANY point in the agentic loop, not just at await points.
+# ---------------------------------------------------------------------------
+def _check_cancelled(websocket: WebSocket) -> None:
+    """Raise CancelledError if the user pressed Stop.
+
+    task.cancel() only raises CancelledError at await points. This function
+    is called at every phase boundary (before/after tool execution, between
+    rounds, etc.) so the stop button interrupts the loop immediately even
+    during long sync operations.
+    """
+    if getattr(websocket, "_cancelled", False):
+        raise asyncio.CancelledError("user stopped")
+
+
+# ---------------------------------------------------------------------------
 # Seen-content deduplication (breaks the "search anxiety" loop)
 # ---------------------------------------------------------------------------
 # When the model calls vault_search repeatedly with rephrased queries, it gets
@@ -1187,6 +1203,10 @@ async def handle_chat(
     """
     session_logger.log("chat_begin", {"user_message": user_message})
 
+    # Clear the cancel flag at the start of a new turn so a stale flag
+    # from a previous stop doesn't kill the new turn.
+    websocket._cancelled = False
+
     # Working memory: per-session structured task list. The model writes a
     # plan via plan_task and updates it via update_task; the harness re-injects
     # the list into the system prompt every round so the model always sees
@@ -1309,6 +1329,8 @@ async def handle_chat(
             )
         except Exception as e:  # noqa: BLE001
             session_logger.log_exception(e, context="graph_refresh")
+
+        _check_cancelled(websocket)
 
         # RAG: retrieve vault context relevant to the user's message.
         # Phase 3: conversation-aware query rewriting — rewrite the user's
@@ -2387,6 +2409,7 @@ async def handle_chat(
             )
             _turn_failed_write_count = 0
             while round_idx < _MAX_ROUNDS:
+                _check_cancelled(websocket)
                 # --- Only break condition: 3+ consecutive failed writes ---
                 # A model hammering a broken tool is genuine thrash. Everything
                 # else (reading, searching, planning, thinking) is the model's
@@ -2575,7 +2598,12 @@ async def handle_chat(
                                     session_logger=session_logger,
                                 )
                             except asyncio.CancelledError:
-                                gen.close()
+                                # Don't call gen.close() here — the generator is
+                                # running in an executor thread and close() from
+                                # the main thread is unsafe (can raise RuntimeError).
+                                # The HTTP response was already closed by
+                                # cancel_active_stream() in ws.py, so the generator
+                                # will exit on its own when iter_lines() raises.
                                 raise
                         if (
                             chunk.get("done")
@@ -2778,6 +2806,7 @@ async def handle_chat(
 
                 # Execute each tool call and feed results back as tool-role messages.
                 for tc in round_tool_calls:
+                    _check_cancelled(websocket)
                     fn = tc.get("function", {})
                     tool_name = fn.get("name", "")
                     tool_args_raw = fn.get("arguments", "{}")
@@ -2871,6 +2900,8 @@ async def handle_chat(
                             f"tool {tool_name} crashed: {e}",
                             context="tool_exec",
                         )
+
+                    _check_cancelled(websocket)
 
                     # --- Seen-content tracking for vault_search & code_read ----
                     # Track which files the model has seen this turn so we can
@@ -3298,6 +3329,7 @@ async def handle_chat(
 
                 # Loop back.
                 round_idx += 1
+                _check_cancelled(websocket)
 
                 # Chat-loop checkpoint: snapshot the in-flight turn.
                 # Includes the findings ledger so a restart mid-turn restores
@@ -4040,6 +4072,11 @@ async def execute_agent_tool(
             "t_ms": loop.time() * 1000,
         },
     )
+
+    # Check cancel flag before executing any tool — the user may have
+    # pressed stop while the loop was between rounds.
+    if websocket is not None:
+        _check_cancelled(websocket)
 
     # ── Safe Mode gate ─────────────────────────────────────────────────
     # In Safe Mode (default), dangerous tools (code_write, code_run,

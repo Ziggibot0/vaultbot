@@ -2303,57 +2303,125 @@
 	padding-left: 4px;
 }
 
-/* ── Procedure step items ────────────────────────────────────────── */
-.vaultbot-proc-step {
-	padding: 4px 0;
-	border-bottom: 1px solid var(--vb-sand-deep);
+/* ── Procedure section (non-collapsible, always visible) ──────────── */
+.vaultbot-proc-section {
+	margin: 10px 0;
+	border: 1px solid var(--vb-stone);
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--vb-bg-elev);
 }
 
-.vaultbot-proc-step:last-child {
-	border-bottom: none;
+.vaultbot-proc-banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: var(--vb-sand-deep);
+	border-bottom: 1px solid var(--vb-stone);
+}
+
+.vaultbot-proc-banner-icon {
+	font-size: 1.1em;
+}
+
+.vaultbot-proc-banner-label {
+	font-weight: 700;
+	font-size: 0.95em;
+	color: var(--vb-bark);
+	flex: 1;
+}
+
+.vaultbot-proc-banner-steps {
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+	color: var(--vb-ink-muted);
+	background: var(--vb-bg);
+	padding: 2px 8px;
+	border-radius: 10px;
+}
+
+.vaultbot-proc-body {
+	padding: 4px 0;
+}
+
+/* ── Procedure step cards ─────────────────────────────────────────── */
+.vaultbot-proc-step-card {
+	margin: 4px 8px;
+	padding: 8px 10px;
+	border-left: 3px solid var(--vb-stone);
+	border-radius: 0 6px 6px 0;
+	background: var(--vb-bg);
+	transition: border-left-color 0.3s ease;
+}
+
+.vaultbot-proc-step-card:last-child {
+	margin-bottom: 8px;
 }
 
 .vaultbot-proc-step-header {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	font-family: var(--font-monospace);
-	font-size: 0.9em;
+	gap: 6px;
+	margin-bottom: 4px;
 }
 
-.vaultbot-proc-step-status {
-	font-weight: 700;
+.vaultbot-proc-step-dot {
+	font-size: 0.7em;
 	flex: 0 0 auto;
 }
 
 .vaultbot-proc-step-num {
-	color: var(--vb-bark-soft);
-	font-weight: 500;
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(--vb-bark);
 }
 
 .vaultbot-proc-step-type {
+	font-family: var(--font-monospace);
+	font-size: 0.75em;
 	color: var(--vb-ink-muted);
-	opacity: 0.6;
-	font-size: 0.85em;
+	background: var(--vb-sand-deep);
+	padding: 1px 6px;
+	border-radius: 4px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
 }
 
 .vaultbot-proc-step-instruction {
-	font-size: 0.88em;
+	font-size: 0.9em;
 	color: var(--vb-ink);
-	margin-top: 2px;
-	padding-left: 16px;
 	line-height: 1.4;
+	margin-bottom: 4px;
 }
 
 .vaultbot-proc-step-output {
-	font-size: 0.82em;
-	color: var(--vb-ink-muted);
-	margin-top: 2px;
-	padding-left: 16px;
+	font-size: 0.8em;
+	color: var(--vb-moss);
 	line-height: 1.4;
 	font-family: var(--font-monospace);
 	white-space: pre-wrap;
 	word-break: break-word;
+	background: var(--vb-sand);
+	padding: 6px 8px;
+	border-radius: 4px;
+	margin-top: 4px;
+	max-height: 120px;
+	overflow-y: auto;
+}
+
+.vaultbot-proc-step-running {
+	font-size: 0.78em;
+	color: var(--vb-clay);
+	font-style: italic;
+	margin-top: 4px;
+	animation: vaultbot-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes vaultbot-pulse {
+	0%, 100% { opacity: 0.4; }
+	50% { opacity: 1; }
 }
 
 /* ── Stats items ─────────────────────────────────────────────────── */
