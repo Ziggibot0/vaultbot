@@ -1745,12 +1745,17 @@ async def handle_chat(
         # --- Think Premise Gate + Route-Task (PARALLEL preflight) ---------
         # Think (BS detector) and Route-Task (intent classifier) are
         # INDEPENDENT — they run concurrently via asyncio.gather. Think
-        # has a timeout (VAULTBOT_THINK_TIMEOUT_S, default 15s) because
-        # it can make 35+ sequential small-model LLM calls and was the #1
-        # cause of TTFT latency (6.5 minutes observed in session logs).
-        # If Think times out, the big model handles premise checking
-        # itself. Route-Task is cheap (1 LLM call) and doesn't need a
-        # timeout.
+        # has a timeout (VAULTBOT_THINK_TIMEOUT_S, default 180s) because
+        # it runs 8 steps with multiple small-model LLM calls + lens
+        # sub-procedure dispatches. Steps 6-7 (lens dispatch) shell out
+        # to run_procedure() for each lens, which can take 60-180s
+        # alone. The old 15s default was aspirational — it never
+        # actually fired because the event loop was blocked (fixed:
+        # asyncio.to_thread in step_gate_runtime.py). Now that the
+        # timeout works, 180s gives Think enough room to finish while
+        # still catching genuine hangs. If Think times out, the big
+        # model handles premise checking itself. Route-Task is cheap
+        # (1 LLM call) and doesn't need a timeout.
         #
         # Skipped for: trivial messages (uses _classify_trivial patterns),
         # resumed turns (model is mid-task).
@@ -1762,7 +1767,7 @@ async def handle_chat(
             user_message, getattr(websocket, "conversation_history", []), wm
         )
         if not _is_trivial and not _resumed_tool_history:
-            _think_timeout = float(os.getenv("VAULTBOT_THINK_TIMEOUT_S", "15"))
+            _think_timeout = float(os.getenv("VAULTBOT_THINK_TIMEOUT_S", "180"))
 
             async def _run_think() -> dict[str, Any]:
                 """Run Think with a timeout. Returns {"error": ...} on timeout/failure."""

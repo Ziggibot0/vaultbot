@@ -94,6 +94,18 @@ class Tunables:
         "good morning",
         "good afternoon",
         "good evening",
+        "sup ",
+        "hey ",
+        "hi ",
+        "hello ",
+        "yo ",
+        "howdy ",
+        "what's up",
+        "whats up",
+        "how's it goin",
+        "hows it goin",
+        "how are you",
+        "how's it going",
     )
 
     # ── Proactive tool-result aging (chat_handler._age_old_tool_results) ──
