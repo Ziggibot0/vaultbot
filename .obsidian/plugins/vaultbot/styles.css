@@ -2407,16 +2407,92 @@
 	padding: 6px 8px;
 	border-radius: 4px;
 	margin-top: 4px;
-	max-height: 120px;
+	max-height: 200px;
 	overflow-y: auto;
 }
 
+/* ── Procedure step input preview (collapsible) ──────────────────── */
+.vaultbot-proc-step-input-wrap {
+	margin-top: 4px;
+}
+
+.vaultbot-proc-step-input-header {
+	font-size: 0.75em;
+	color: var(--vb-ink-muted);
+	cursor: pointer;
+	user-select: none;
+	padding: 2px 0;
+}
+
+.vaultbot-proc-step-input-header:hover {
+	color: var(--vb-bark);
+}
+
+.vaultbot-proc-step-input-arrow {
+	display: inline-block;
+	width: 12px;
+}
+
+.vaultbot-proc-step-input {
+	font-size: 0.8em;
+	color: var(--vb-bark-soft);
+	line-height: 1.4;
+	font-family: var(--font-monospace);
+	white-space: pre-wrap;
+	word-break: break-word;
+	background: var(--vb-bg);
+	border: 1px solid var(--vb-stone);
+	padding: 6px 8px;
+	border-radius: 4px;
+	margin-top: 2px;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+/* ── Procedure step error text ────────────────────────────────────── */
+.vaultbot-proc-step-error {
+	font-size: 0.8em;
+	color: var(--vb-clay);
+	line-height: 1.4;
+	font-family: var(--font-monospace);
+	white-space: pre-wrap;
+	word-break: break-word;
+	background: rgba(192, 116, 74, 0.1);
+	border: 1px solid var(--vb-clay-soft);
+	padding: 6px 8px;
+	border-radius: 4px;
+	margin-top: 4px;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+/* ── Procedure step elapsed time ──────────────────────────────────── */
+.vaultbot-proc-step-elapsed {
+	font-size: 0.75em;
+	color: var(--vb-ink-muted);
+	font-family: var(--font-monospace);
+	margin-top: 4px;
+}
+
+/* ── Procedure step running indicator + live timer ────────────────── */
 .vaultbot-proc-step-running {
 	font-size: 0.78em;
 	color: var(--vb-clay);
-	font-style: italic;
 	margin-top: 4px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.vaultbot-proc-step-running-dots {
+	font-style: italic;
 	animation: vaultbot-pulse 1.5s ease-in-out infinite;
+}
+
+.vaultbot-proc-step-timer {
+	font-family: var(--font-monospace);
+	font-style: normal;
+	color: var(--vb-ink-muted);
 }
 
 @keyframes vaultbot-pulse {

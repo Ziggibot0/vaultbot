@@ -42,12 +42,14 @@ See:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import subprocess
 from subprocess_utils import run as _subprocess_run, scrubbed_env, preexec_fn
 import sys
+import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1344,14 +1346,31 @@ async def execute_procedure(
 
         executed_steps.add(current_step_num)
 
+        # Capture the start time for elapsed-time reporting.
+        _step_start_t = time.time()
+
+        # Build an input preview from prior step results so the UI can
+        # show what the step is working WITH, not just what it's doing.
+        _input_preview = ""
+        if prior_results:
+            _last_prior = list(prior_results.values())[-1] if prior_results else ""
+            if isinstance(_last_prior, str):
+                _input_preview = _last_prior[:500]
+            else:
+                try:
+                    _input_preview = json.dumps(_last_prior, default=str)[:500]
+                except Exception:  # noqa: BLE001
+                    _input_preview = str(_last_prior)[:500]
+
         if progress_callback:
             await progress_callback(
                 step.number,
                 len(procedure.steps),
                 "",
-                step.instruction[:120],
+                step.instruction[:200],
                 step.step_type,
                 "running",
+                input_preview=_input_preview,
             )
 
         # --- Condition gate: skip the step if its precondition fails ---
@@ -1393,7 +1412,13 @@ async def execute_procedure(
         if step.step_type == "code":
             # Use 300s timeout for steps that may call llm_generate (synthesis can be slow)
             _step_timeout = 300 if "llm_generate" in procedure.allowed_tools else 120
-            success, output, error, tb, sub_prior = _run_code_step(
+            # Run in a thread so the event loop stays unblocked — this is
+            # what lets asyncio.wait_for (e.g. the Think preflight timeout
+            # in chat_handler.py) actually fire. Without to_thread, the
+            # subprocess.run() inside _run_code_step blocks the event loop
+            # and the timeout callback never gets a chance to run.
+            success, output, error, tb, sub_prior = await asyncio.to_thread(
+                _run_code_step,
                 step,
                 procedure.allowed_tools,
                 vault_path,
@@ -1453,7 +1478,14 @@ async def execute_procedure(
                 break
 
         elif step.step_type == "llm":
-            success, output, error = _run_llm_step(step, prior_results, llm_client)
+            # Run in a thread so the event loop stays unblocked — same
+            # reason as code steps above. The LLM call inside
+            # _run_llm_step is a synchronous requests.post() that would
+            # otherwise block the event loop and prevent
+            # asyncio.wait_for timeouts from firing.
+            success, output, error = await asyncio.to_thread(
+                _run_llm_step, step, prior_results, llm_client
+            )
             if success:
                 sr = StepResult(
                     step_number=step.number,
@@ -1485,8 +1517,14 @@ async def execute_procedure(
         else:  # text step (v1)
             messages = _build_active_frame(step, procedure, context, step_outputs)
             try:
-                result = llm_client.chat(
-                    messages, temperature=0.3, stream=False, think=False
+                # Run in a thread so the event loop stays unblocked —
+                # same reason as code/llm steps above.
+                result = await asyncio.to_thread(
+                    llm_client.chat,
+                    messages,
+                    temperature=0.3,
+                    stream=False,
+                    think=False,
                 )
                 output = result.get("response", "")
                 passed, val_error = _validate_step(output, step.validation)
@@ -1577,14 +1615,19 @@ async def execute_procedure(
                 },
             )
 
+        _elapsed_s = round(time.time() - _step_start_t, 1)
+
         if progress_callback:
             await progress_callback(
                 step.number,
                 len(procedure.steps),
                 sr.output,
-                step.instruction[:120],
+                step.instruction[:200],
                 step.step_type,
                 "passed" if sr.passed else "failed",
+                input_preview=_input_preview,
+                elapsed_s=_elapsed_s,
+                error=sr.error or sr.validation_error or "",
             )
 
         # --- Branch jump: if the step has a branch_target and passed ---

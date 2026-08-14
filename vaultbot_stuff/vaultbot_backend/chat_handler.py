@@ -1137,23 +1137,33 @@ async def _run_procedure_direct(
         instruction: str,
         step_type: str,
         status: str,
+        input_preview: str = "",
+        elapsed_s: float | None = None,
+        error: str = "",
     ) -> None:
         if websocket is None:
             return
         try:
+            _payload: dict[str, Any] = {
+                "type": "procedure_step",
+                "procedure": proc_name,
+                "step": step_num,
+                "total": total,
+                "instruction": instruction[:200],
+                "step_type": step_type,
+                "status": status,
+                "timestamp": time.time(),
+            }
+            if output:
+                _payload["output_preview"] = output[:500]
+            if input_preview:
+                _payload["input_preview"] = input_preview[:500]
+            if elapsed_s is not None:
+                _payload["elapsed_s"] = elapsed_s
+            if error:
+                _payload["error"] = error[:500]
             await svc.manager.send_personal_message(
-                json.dumps(
-                    {
-                        "type": "procedure_step",
-                        "procedure": proc_name,
-                        "step": step_num,
-                        "total": total,
-                        "instruction": instruction[:200],
-                        "step_type": step_type,
-                        "status": status,
-                        "output_preview": (output or "")[:200],
-                    }
-                ),
+                json.dumps(_payload),
                 websocket,
                 session_logger=session_logger,
             )
@@ -4622,6 +4632,9 @@ async def execute_agent_tool(
             instruction="",
             step_type="text",
             status="running",
+            input_preview="",
+            elapsed_s=None,
+            error="",
         ):
             if websocket is None:
                 return
@@ -4635,9 +4648,16 @@ async def execute_agent_tool(
                 "instruction": instruction,
                 "phase": "done" if _is_done else "running",
                 "status": status,
+                "timestamp": time.time(),
             }
             if _is_done:
-                _payload["output_preview"] = output[:200]
+                _payload["output_preview"] = output[:500]
+            if input_preview:
+                _payload["input_preview"] = input_preview[:500]
+            if elapsed_s is not None:
+                _payload["elapsed_s"] = elapsed_s
+            if error:
+                _payload["error"] = error[:500]
             try:
                 await svc.manager.send_personal_message(
                     json.dumps(_payload), websocket, session_logger=svc.session_logger
