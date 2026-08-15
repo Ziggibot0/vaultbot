@@ -250,6 +250,20 @@ class ProcedureTracker:
             index[md.stem] = {"path": str(md), "frontmatter": fm}
         return index
 
+    def refresh_procedure_index(
+        self, vault_path: str = "."
+    ) -> dict[str, dict[str, Any]]:
+        """Rebuild and cache the stem index.
+
+        Call this when a procedure note may have been added/removed since
+        the index was last built (e.g. on a stem lookup miss).  Returns
+        the fresh index and updates ``self._stem_index`` so subsequent
+        calls hit O(1).
+        """
+        idx = self.get_procedure_index(vault_path)
+        self._stem_index = idx
+        return idx
+
     # --- Log I/O ---
 
     def _ensure_log(self):

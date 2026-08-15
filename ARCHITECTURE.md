@@ -88,13 +88,16 @@ chat_handler.handle_chat()
 - Researches gaps autonomously, writes notes, re-indexes
 - Checkpointed: survives crashes and resumes
 
-### Self-Improvement (`self_improver.py`)
+### Self-Improvement (`self_improver.py`, `safe_writer.py`, `code_verify.py`)
 - `code_read` / `code_write` / `code_run` — read, write, test code
-- `safe_write` — multi-stage verification before writing backend code:
+- `safe_write` (in `safe_writer.py`) — multi-stage verification before
+  writing backend code:
   1. AST syntax check
-  2. Subprocess import-graph verification (imports main.py with edit)
+  2. Subprocess import-graph verification (`code_verify.py`)
   3. Pytest gate
   4. Auto-rollback on failure
+- `js_safe_write` (in `safe_writer.py`) — same pattern for JS files
+  (node --check + require() load test)
 - `tool_create` — agent can write new tools in `custom_tools/`
 - `git_rollback` — restore from git HEAD
 
@@ -171,13 +174,21 @@ ambiguity between "general-purpose" and "personal" lives.
 ```
 vaultbot_backend/
 ├── main.py              # FastAPI app, lifespan, startup
-├── chat_handler.py      # Agentic chat loop (the core)
+├── chat_handler.py      # Agentic chat loop entry point (thin orchestrator)
+├── chat_context.py      # Token cap, tool-result aging, history sanitization
+├── chat_preflight.py    # Trivial-turn shortcut, procedure routing hints
+├── chat_tool_dispatch.py # Tool execution switch (vault_search, code_read, etc.)
+├── chat_helpers.py      # Progress events, notifications, heartbeat, truncation
 ├── agent_tools.py        # Tool definitions + system prompt
-├── self_improver.py      # Code read/write/run, safe_write, tool_create
+├── self_improver.py      # Code read/write/run, tool_create, git_rollback
+├── code_verify.py        # Subprocess import/pytest/startup verification
+├── safe_writer.py        # safe_write + js_safe_write with AST + import checks
 ├── vault_indexer.py      # FAISS index management
 ├── vault_graph.py        # Wikilink graph
 ├── fused_retrieval.py    # Combined vector + graph retrieval
-├── research_engine.py    # Multi-round web research
+├── research_engine.py    # Multi-round web research orchestration
+├── text_scoring.py       # Pure text scoring (keyterms, sentence scoring)
+├── source_classification.py # URL classification (blocked, academic, relevance)
 ├── autonomous_researcher.py  # Background gap-filling
 ├── identity.py           # IDENTITY.md + SELF_MODEL.md management
 ├── providers.py          # Provider/model registry
@@ -191,12 +202,35 @@ vaultbot_backend/
 ├── services.py           # Services dataclass for DI
 ├── app_state.py          # FastAPI dependency injection
 ├── custom_tools/         # Agent-authored tools (auto-loaded)
+│   └── parsers/          # HTML/PDF/markdown/text parsers (used by textbook_ingest)
 ├── routers/              # FastAPI route handlers
 ├── tests/                # pytest suite (40+ test files)
 ├── sessions/             # JSONL session logs (gitignored)
 ├── checkpoints/          # Research cycle checkpoints (gitignored)
 └── trash/                # Backups before overwrite/delete (gitignored)
 ```
+
+## Note on the Obsidian Plugin (`main.js`)
+
+The Obsidian plugin (`.obsidian/plugins/vaultbot/main.js`) is a single
+~4,000-line hand-written CommonJS file. It uses `require()` /
+`module.exports` with no bundler, no `package.json`, no build step —
+Obsidian loads it directly.
+
+**Why it hasn't been split:** Splitting it requires introducing a JS
+bundler (esbuild or rollup) and ideally TypeScript. This is a Python-first
+project with zero JS build tooling. Adding `node_modules/`, a build step,
+and a dev dependency chain to split one file is a build pipeline change,
+not a code organization change. The file is large but works and ships.
+
+**The path to splitting it** (for anyone who wants to take it on):
+1. Add `esbuild` + `tsconfig.json` + `package.json`
+2. Move `main.js` to `src/main.ts`, split into `src/ws.ts`, `src/ui.ts`,
+   `src/settings.ts`
+3. Compile to `main.js` via esbuild
+4. Add a build step to the release process
+
+This is a dedicated project, not a quick refactor.
 
 ## Design Principles
 

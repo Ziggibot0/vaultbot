@@ -3,9 +3,10 @@ type: procedure
 status: experimental
 baseline: true
 created: 2026-08-10
-summary: "Lens procedure for evaluating competing options by mapping trade-offs. Based on decision theory and dual-process theory research on preference construction. Hardened with triple-try consistency, bite-sized LLM calls, and deterministic fallbacks."
+summary: "Lens procedure for evaluating competing options by mapping trade-offs. v4: redesigned for qwen3.5:4b — killed triple-try, merged scoring+reasoning, merged tradeoff+pareto+recommendation. ~3 LLM calls (down from ~21). Already optimal — no v4.1 changes needed."
 description: "Lens for design/architecture problems — maps options against criteria, weights trade-offs, identifies Pareto-optimal choices."
-tags: [procedure, thinking, lens, trade-off, decision-theory, dual-process]
+when_to_use: "When choosing between competing options with different trade-offs. When evaluating design alternatives. When comparing approaches. When asked 'should I use X or Y?' or 'which option is better?' or 'compare these alternatives'. When making architecture decisions."
+tags: [procedure, thinking, lens, trade-off, decision-theory, v4, qwen3.5-4b, optimal]
 allowed_tools:
   - vault_search
   - llm_generate
@@ -18,13 +19,33 @@ research_sources:
   - "[[psychology-of-analytical-thinking-methods-when-to-use-root-cause-analysis-vs-fir]]"
 ---
 
-# Trade-off Analysis Lens
+# Trade-off Analysis Lens (v4)
 
 > **Source:** Dual-process theory (Kahneman & Tversky) shows that humans construct preferences on the fly rather than retrieving them from memory, making structured trade-off analysis essential for avoiding preference errors [[cognitive-psychology-of-reasoning-dual-process-theory-System-1-System-2-thinking]]. Decision theory research shows that multi-attribute utility analysis outperforms intuitive judgment for complex choices with 3+ competing criteria.
 
 ## When This Lens Is Called
 
 Called by [[Think]] when the problem type is **design/architecture** — choosing between competing options where each has advantages and disadvantages.
+
+## What Changed in v4
+
+| Problem in v3 | Fix in v4 |
+|---|---|
+| Triple-try on every step (3x LLM calls per step = 21 total) | Single calls — 4B is consistent enough without majority vote |
+| Scoring and reasoning were separate steps (2 calls) | Merged into one call — 4B can score AND explain in one pass |
+| Dominant trade-off, Pareto check, and recommendation were 3 steps | Merged into one step — Pareto is deterministic, trade-off + recommendation is one LLM call |
+| 7 steps, ~21 LLM calls | 3 steps, ~3 LLM calls |
+
+## v4.1 Audit Result: **Already Optimal**
+
+This lens was audited for further simplification opportunities. **No changes needed** — it's already at its optimal call count:
+
+- **Step 1**: Extract options and criteria (1 LLM call, JSON output)
+- **Step 2**: Score each option against each criterion WITH reasons (1 LLM call, JSON output)
+- **Step 3**: Identify dominant trade-off and recommend (1 LLM call) + Pareto check (deterministic, zero LLM cost)
+- **Total: 3 LLM calls**
+
+All three steps are necessary and cannot be further batched without losing the structured reasoning that makes this lens effective. The Pareto check being deterministic is a key architectural win.
 
 ## The Knowledge Triad Applied
 
@@ -34,44 +55,44 @@ Called by [[Think]] when the problem type is **design/architecture** — choosin
 
 ---
 
-### Step 1: List all distinct options (triple-try)
+### Step 1: Extract options and criteria
 
-Extract options from the problem statement. This is a bounded extraction task — the model identifies named options, not open-ended reasoning. Triple-try with majority vote for consistency.
+Single call: the 4B can extract both options and evaluation criteria from the problem in one pass. JSON output for structured parsing.
 
 ```python
 import json
 
 problem = args.get("problem", "")
 
-def try_extract_options():
-    raw = llm_generate(
-        f"List every distinct option mentioned or implied in this problem. "
-        f"Output ONLY a JSON array of option name strings, nothing else. "
-        f"Example: [\"option A\", \"option B\"].\n\nProblem: {problem}"
-    )
-    opts = json.loads(raw.strip())
-    if not isinstance(opts, list) or len(opts) < 2:
+prompt = f"""Analyze this problem and extract:
+1. All distinct options being compared
+2. All evaluation criteria (dimensions the options differ on)
+
+Output ONLY a JSON object with two keys:
+{{"options": ["option A", "option B"], "criteria": ["cost", "speed", "reliability"]}}
+
+Problem: {problem}"""
+
+try:
+    raw = llm_generate(prompt).strip()
+    # Try to extract JSON from the response
+    # Find first { and last }
+    start = raw.find('{')
+    end = raw.rfind('}')
+    if start >= 0 and end > start:
+        json_str = raw[start:end+1]
+        parsed = json.loads(json_str)
+        options = parsed.get('options', [])
+        criteria = parsed.get('criteria', [])
+    else:
+        raise ValueError("no JSON found")
+    
+    if not isinstance(options, list) or len(options) < 2:
         raise ValueError("not enough options")
-    return opts
-
-# Triple-try with majority vote
-results = []
-for i in range(3):
-    try:
-        results.append(try_extract_options())
-    except:
-        results.append(None)
-
-# Pick the result that appears most often (by JSON string comparison)
-valid = [r for r in results if r is not None]
-if valid:
-    from collections import Counter
-    serialized = [json.dumps(sorted(r)) for r in valid]
-    most_common = Counter(serialized).most_common(1)[0][0]
-    options = json.loads(most_common)
-else:
-    # DETERMINISTIC FALLBACK: structural split on common separators
-    # No regex on prose — use simple string operations for structural splitting
+    if not isinstance(criteria, list) or len(criteria) == 0:
+        raise ValueError("no criteria")
+except Exception:
+    # Deterministic fallback: structural split
     options = []
     for sep in [' vs ', ' vs. ', ' versus ', ' or ']:
         if sep in problem.lower():
@@ -82,7 +103,6 @@ else:
                 options = [left[:80], right[:80]]
                 break
     if len(options) < 2:
-        # Split on commas/semicolons as last resort
         for sep in [',', ';']:
             if sep in problem:
                 parts = problem.split(sep)
@@ -90,134 +110,70 @@ else:
                 break
     if len(options) < 2:
         options = ["Option A", "Option B"]
+    criteria = ["cost", "complexity", "reliability", "maintainability"]
 
-result = f"OPTIONS: {json.dumps(options)}"
+result = f"OPTIONS: {json.dumps(options)}\nCRITERIA: {json.dumps(criteria)}\nPROBLEM: {problem}"
 print(result)
 ```
 
 [validate: contains "OPTIONS:"]
-
----
-
-### Step 2: Extract evaluation criteria from the problem (triple-try)
-
-Criteria are the dimensions along which options differ. Bounded extraction — the model identifies dimensions, not reasoning. Triple-try for consistency.
-
-```python
-import json
-from collections import Counter
-
-# Parse options from Step 1
-lines = output.strip().split('\n')
-options_str = ''
-for line in lines:
-    if line.startswith('OPTIONS: '):
-        options_str = line.replace('OPTIONS: ', '').strip()
-try:
-    options = json.loads(options_str)
-except:
-    options = ["Option A", "Option B"]
-
-problem = args.get("problem", "")
-
-def try_extract_criteria():
-    raw = llm_generate(
-        f"What dimensions or criteria should be used to evaluate the options in this problem? "
-        f"Output ONLY a JSON array of criterion name strings (max 7). "
-        f'Example: ["cost", "speed", "reliability"].\n\nProblem: {problem}'
-    )
-    crits = json.loads(raw.strip())
-    if not isinstance(crits, list) or len(crits) == 0:
-        raise ValueError("no criteria")
-    return crits
-
-# Triple-try with majority vote
-results = []
-for i in range(3):
-    try:
-        results.append(try_extract_criteria())
-    except:
-        results.append(None)
-
-valid = [r for r in results if r is not None]
-if valid:
-    serialized = [json.dumps(sorted(r)) for r in valid]
-    most_common = Counter(serialized).most_common(1)[0][0]
-    criteria = json.loads(most_common)
-else:
-    criteria = ["cost", "complexity", "reliability", "maintainability"]
-
-result = f"CRITERIA: {json.dumps(criteria)}\nOPTIONS: {json.dumps(options)}\nPROBLEM: {problem}"
-print(result)
-```
-
 [validate: contains "CRITERIA:"]
 
 ---
 
-### Step 3: Score each option against each criterion — NUMBERS ONLY (triple-try)
+### Step 2: Score each option against each criterion WITH reasons
 
-The model assigns just a number (1-5) per option-criterion pair. No reasons yet — that's the next step. This keeps each call bite-sized. Triple-try for consistency on each batch.
+Single call: the 4B can assign scores AND explain why in one pass. JSON output with score + reason per pair.
 
 ```python
 import json
-from collections import Counter
 
-# Parse from Step 2
+# Parse Step 1
 lines = output.strip().split('\n')
-criteria_str = ''
 options_str = ''
+criteria_str = ''
 problem = ''
 for line in lines:
-    if line.startswith('CRITERIA: '):
-        criteria_str = line.replace('CRITERIA: ', '').strip()
-    elif line.startswith('OPTIONS: '):
+    if line.startswith('OPTIONS: '):
         options_str = line.replace('OPTIONS: ', '').strip()
+    elif line.startswith('CRITERIA: '):
+        criteria_str = line.replace('CRITERIA: ', '').strip()
     elif line.startswith('PROBLEM: '):
         problem = line.replace('PROBLEM: ', '').strip()
 
 try:
+    options = json.loads(options_str)
     criteria = json.loads(criteria_str)
 except:
-    criteria = ["cost", "complexity", "reliability", "maintainability"]
-try:
-    options = json.loads(options_str)
-except:
     options = ["Option A", "Option B"]
+    criteria = ["cost", "complexity", "reliability", "maintainability"]
 
-def try_score():
-    raw = llm_generate(
-        f"Score each option against each criterion on a 1-5 scale (5=best). "
-        f"Output ONLY a JSON array of objects with keys 'option', 'criterion', 'score'. "
-        f"No reasons. Example: [{{\"option\":\"A\",\"criterion\":\"cost\",\"score\":3}}]. "
-        f"One entry per combination.\n\nOptions: {json.dumps(options)}\nCriteria: {json.dumps(criteria)}\nProblem: {problem}"
-    )
-    scores = json.loads(raw.strip())
+prompt = f"""Score each option against each criterion on a 1-5 scale (5=best) and give ONE sentence explaining why.
+
+Output ONLY a JSON array of objects with keys "option", "criterion", "score", "reason".
+Example: [{{"option":"A","criterion":"cost","score":3,"reason":"Moderate cost because uses standard components"}}]
+
+Options: {json.dumps(options)}
+Criteria: {json.dumps(criteria)}
+Problem: {problem}"""
+
+try:
+    raw = llm_generate(prompt).strip()
+    start = raw.find('[')
+    end = raw.rfind(']')
+    if start >= 0 and end > start:
+        scores = json.loads(raw[start:end+1])
+    else:
+        raise ValueError("no JSON array found")
+    
     if not isinstance(scores, list) or len(scores) < len(options):
         raise ValueError("incomplete scores")
-    return scores
-
-# Triple-try with majority vote
-results = []
-for i in range(3):
-    try:
-        results.append(try_score())
-    except:
-        results.append(None)
-
-valid = [r for r in results if r is not None]
-if valid:
-    # Compare by serializing sorted by (option, criterion)
-    def sort_key(s):
-        return sorted(s, key=lambda x: (x.get("option",""), x.get("criterion","")))
-    serialized = [json.dumps(sort_key(r), default=str) for r in valid]
-    most_common = Counter(serialized).most_common(1)[0][0]
-    scores = json.loads(most_common)
-else:
+except Exception:
+    # Deterministic fallback: all 3s with generic reasons
     scores = []
     for opt in options:
         for crit in criteria:
-            scores.append({"option": opt, "criterion": crit, "score": 3})
+            scores.append({"option": opt, "criterion": crit, "score": 3, "reason": "Neutral default — insufficient information for assessment"})
 
 result = f"SCORES: {json.dumps(scores)}\nCRITERIA: {json.dumps(criteria)}\nOPTIONS: {json.dumps(options)}\nPROBLEM: {problem}"
 print(result)
@@ -227,15 +183,14 @@ print(result)
 
 ---
 
-### Step 4: Add one-sentence reasons for each score (triple-try)
+### Step 3: Identify dominant trade-off and recommend
 
-Now the model explains WHY each score was assigned. Separate from scoring so the model focuses on one thing at a time. Triple-try for consistency.
+Single call: the 4B can identify the key tension AND make a recommendation in one pass. The Pareto check is deterministic (pure math, no LLM).
 
 ```python
 import json
-from collections import Counter
 
-# Parse from Step 3
+# Parse Step 2
 lines = output.strip().split('\n')
 scores_str = ''
 criteria_str = ''
@@ -260,174 +215,7 @@ except:
     criteria = []
     options = []
 
-def try_reasons():
-    raw = llm_generate(
-        f"For each option-criterion pair, give ONE sentence explaining the score. "
-        f"Output ONLY a JSON array of objects with keys 'option', 'criterion', 'reason'. "
-        f"Example: [{{\"option\":\"A\",\"criterion\":\"cost\",\"reason\":\"Low cost because uses existing tools\"}}].\n\n"
-        f"Scores: {json.dumps(scores)}\nProblem: {problem}"
-    )
-    reasons = json.loads(raw.strip())
-    if not isinstance(reasons, list) or len(reasons) < len(scores):
-        raise ValueError("incomplete reasons")
-    return reasons
-
-# Triple-try
-results = []
-for i in range(3):
-    try:
-        results.append(try_reasons())
-    except:
-        results.append(None)
-
-valid = [r for r in results if r is not None]
-if valid:
-    serialized = [json.dumps(sorted(r, key=lambda x: (x.get("option",""), x.get("criterion",""))), default=str) for r in valid]
-    most_common = Counter(serialized).most_common(1)[0][0]
-    reasons = json.loads(most_common)
-else:
-    reasons = []
-    for s in scores:
-        reasons.append({"option": s.get("option",""), "criterion": s.get("criterion",""), "reason": "neutral default"})
-
-# Merge scores with reasons
-score_map = {}
-for r in reasons:
-    key = (r.get("option",""), r.get("criterion",""))
-    score_map[key] = r.get("reason","neutral default")
-
-merged = []
-for s in scores:
-    key = (s.get("option",""), s.get("criterion",""))
-    merged.append({**s, "reason": score_map.get(key, "neutral default")})
-
-result = f"SCORES_WITH_REASONS: {json.dumps(merged)}\nCRITERIA: {json.dumps(criteria)}\nOPTIONS: {json.dumps(options)}\nPROBLEM: {problem}"
-print(result)
-```
-
-[validate: contains "SCORES_WITH_REASONS:"]
-
----
-
-### Step 5: Identify the dominant trade-off (triple-try)
-
-The model identifies which criteria are in tension. Bounded observation task. Triple-try for consistency.
-
-```python
-import json
-from collections import Counter
-
-# Parse from Step 4
-lines = output.strip().split('\n')
-scores_str = ''
-criteria_str = ''
-options_str = ''
-problem = ''
-for line in lines:
-    if line.startswith('SCORES_WITH_REASONS: '):
-        scores_str = line.replace('SCORES_WITH_REASONS: ', '').strip()
-    elif line.startswith('CRITERIA: '):
-        criteria_str = line.replace('CRITERIA: ', '').strip()
-    elif line.startswith('OPTIONS: '):
-        options_str = line.replace('OPTIONS: ', '').strip()
-    elif line.startswith('PROBLEM: '):
-        problem = line.replace('PROBLEM: ', '').strip()
-
-try:
-    scores = json.loads(scores_str)
-    criteria = json.loads(criteria_str)
-    options = json.loads(options_str)
-except:
-    scores = []
-    criteria = []
-    options = []
-
-def try_dominant():
-    raw = llm_generate(
-        f"Looking at these scores, which two criteria are in the most direct tension "
-        f"(i.e. options that score high on one score low on the other)? "
-        f"Output ONE sentence describing the dominant trade-off.\n\nScores: {json.dumps(scores)}"
-    ).strip()
-    if len(raw) > 200:
-        raw = raw[:200]
-    if len(raw) < 10:
-        raise ValueError("too short")
-    return raw
-
-# Triple-try
-results = []
-for i in range(3):
-    try:
-        results.append(try_dominant())
-    except:
-        results.append(None)
-
-valid = [r for r in results if r is not None]
-if valid:
-    # Pick most common (or longest if all different)
-    most_common = Counter(valid).most_common(1)[0][0]
-    dominant = most_common
-else:
-    # DETERMINISTIC FALLBACK: find criteria with most variance
-    if scores and criteria:
-        import statistics
-        crit_vars = {}
-        for crit in criteria:
-            crit_scores = [s.get("score", 3) for s in scores if s.get("criterion") == crit]
-            if len(crit_scores) > 1:
-                crit_vars[crit] = statistics.variance(crit_scores)
-        if len(crit_vars) >= 2:
-            sorted_crits = sorted(crit_vars, key=crit_vars.get, reverse=True)
-            dominant = f"Primary tension: {sorted_crits[0]} vs {sorted_crits[1]}"
-        else:
-            dominant = "No clear dominant trade-off identified"
-    else:
-        dominant = "Unable to identify dominant trade-off"
-
-result = f"DOMINANT_TRADEOFF: {dominant}\nSCORES: {json.dumps(scores)}\nCRITERIA: {json.dumps(criteria)}\nOPTIONS: {json.dumps(options)}\nPROBLEM: {problem}"
-print(result)
-```
-
-[validate: contains "DOMINANT_TRADEOFF:"]
-
----
-
-### Step 6: Identify Pareto-optimal options (DETERMINISTIC — zero LLM cost)
-
-An option is Pareto-optimal if no other option scores >= on all criteria AND > on at least one. This is pure math — no model needed.
-
-```python
-import json
-
-# Parse from Step 5
-lines = output.strip().split('\n')
-scores_str = ''
-criteria_str = ''
-options_str = ''
-problem = ''
-dominant = ''
-for line in lines:
-    if line.startswith('SCORES: '):
-        scores_str = line.replace('SCORES: ', '').strip()
-    elif line.startswith('CRITERIA: '):
-        criteria_str = line.replace('CRITERIA: ', '').strip()
-    elif line.startswith('OPTIONS: '):
-        options_str = line.replace('OPTIONS: ', '').strip()
-    elif line.startswith('PROBLEM: '):
-        problem = line.replace('PROBLEM: ', '').strip()
-    elif line.startswith('DOMINANT_TRADEOFF: '):
-        dominant = line.replace('DOMINANT_TRADEOFF: ', '').strip()
-
-try:
-    scores = json.loads(scores_str)
-    criteria = json.loads(criteria_str)
-    options = json.loads(options_str)
-except:
-    scores = []
-    criteria = []
-    options = []
-
-# Build option->criterion->score mapping
+# --- DETERMINISTIC: Pareto-optimal check (zero LLM cost) ---
 option_scores = {}
 for entry in scores:
     opt = entry.get("option", "")
@@ -437,7 +225,6 @@ for entry in scores:
         option_scores[opt] = {}
     option_scores[opt][crit] = score
 
-# Find Pareto-optimal options (deterministic)
 pareto = []
 for opt in options:
     if opt not in option_scores:
@@ -457,84 +244,61 @@ for opt in options:
         pareto.append(opt)
 
 if not pareto:
-    pareto = options  # fallback: all are Pareto-optimal if no domination
+    pareto = options  # fallback
 
-result = f"PARETO_OPTIMAL: {json.dumps(pareto)}\nDOMINANT_TRADEOFF: {dominant}\nSCORES: {json.dumps(scores)}\nCRITERIA: {json.dumps(criteria)}\nOPTIONS: {json.dumps(options)}\nPROBLEM: {problem}"
-print(result)
-```
+# --- LLM: dominant trade-off + recommendation in one call ---
+prompt = f"""Based on these scores, write a 2-3 sentence recommendation that:
+1. Names the dominant trade-off (which two criteria are in most tension)
+2. Names what is being sacrificed and what is being gained
+3. Recommends a specific option from the Pareto-optimal set
 
-[validate: contains "PARETO_OPTIMAL:"]
+Scores: {json.dumps(scores)}
+Pareto-optimal options: {json.dumps(pareto)}
+Problem: {problem}
 
----
-
-### Step 7: Recommend with explicit trade-off acknowledgment (triple-try)
-
-The model synthesizes — but the Pareto set constrains the recommendation. This is the hermeneutic step: interpreting what the scores mean. Triple-try for consistency.
-
-```python
-import json
-from collections import Counter
-
-# Parse from Step 6
-lines = output.strip().split('\n')
-pareto_str = ''
-dominant = ''
-scores_str = ''
-problem = ''
-for line in lines:
-    if line.startswith('PARETO_OPTIMAL: '):
-        pareto_str = line.replace('PARETO_OPTIMAL: ', '').strip()
-    elif line.startswith('DOMINANT_TRADEOFF: '):
-        dominant = line.replace('DOMINANT_TRADEOFF: ', '').strip()
-    elif line.startswith('SCORES: '):
-        scores_str = line.replace('SCORES: ', '').strip()
-    elif line.startswith('PROBLEM: '):
-        problem = line.replace('PROBLEM: ', '').strip()
+Format:
+DOMINANT_TRADEOFF: [one sentence]
+RECOMMENDATION: [2-3 sentences with explicit trade-off acknowledgment]"""
 
 try:
-    pareto = json.loads(pareto_str)
-except:
-    pareto = []
-
-def try_recommend():
-    raw = llm_generate(
-        f"Based on the Pareto-optimal options and the dominant trade-off, "
-        f"write a 2-3 sentence recommendation that EXPLICITLY names what is being "
-        f"sacrificed and what is being gained. Do not hedge.\n\n"
-        f"Pareto-optimal options: {json.dumps(pareto)}\n"
-        f"Dominant trade-off: {dominant}\n"
-        f"Problem: {problem}"
-    ).strip()
-    if len(raw) < 20:
-        raise ValueError("too short")
-    return raw
-
-# Triple-try
-results = []
-for i in range(3):
-    try:
-        results.append(try_recommend())
-    except:
-        results.append(None)
-
-valid = [r for r in results if r is not None]
-if valid:
-    # Pick most common, or first if all different
-    most_common = Counter(valid).most_common(1)[0][0]
-    recommendation = most_common
-else:
-    if pareto:
-        if len(pareto) == 1:
-            recommendation = f"Recommend {pareto[0]}. This is the only Pareto-optimal option. Trade-off: {dominant}."
-        else:
-            recommendation = f"Pareto-optimal options: {', '.join(pareto)}. Dominant trade-off: {dominant}. Choose based on which criterion matters most for this context."
+    resp = llm_generate(prompt).strip()
+    if "RECOMMENDATION:" not in resp or len(resp) < 30:
+        raise ValueError("invalid response")
+except Exception:
+    # Deterministic fallback
+    if len(pareto) == 1:
+        resp = f"DOMINANT_TRADEOFF: The primary tension is between competing criteria.\nRECOMMENDATION: Recommend {pareto[0]}. This is the only Pareto-optimal option."
     else:
-        recommendation = "Unable to generate recommendation — no Pareto-optimal options identified."
+        resp = f"DOMINANT_TRADEOFF: Multiple criteria are in tension.\nRECOMMENDATION: Pareto-optimal options: {', '.join(pareto)}. Choose based on which criterion matters most for this context."
 
-result = f"RECOMMENDATION: {recommendation}\nPARETO_OPTIMAL: {json.dumps(pareto)}\nDOMINANT_TRADEOFF: {dominant}"
+# Parse recommendation
+dominant = ""
+recommendation = ""
+for line in resp.split('\n'):
+    if line.startswith("DOMINANT_TRADEOFF:"):
+        dominant = line.replace("DOMINANT_TRADEOFF:", "").strip()
+    elif line.startswith("RECOMMENDATION:"):
+        recommendation = line.replace("RECOMMENDATION:", "").strip()
+
+if not dominant:
+    dominant = "Unable to identify dominant trade-off"
+if not recommendation:
+    recommendation = resp[:300] if resp else "Unable to generate recommendation"
+
+result = f"""TRADE_OFF_ANALYSIS_RESULT:
+  OPTIONS: {json.dumps(options)}
+  CRITERIA: {json.dumps(criteria)}
+  SCORES: {json.dumps(scores)}
+  PARETO_OPTIMAL: {json.dumps(pareto)}
+  DOMINANT_TRADEOFF: {dominant}
+  RECOMMENDATION: {recommendation}
+  METHOD: Multi-attribute utility analysis + Pareto efficiency (deterministic)
+  TRIAD_LAYER: Ontology (options/criteria) -> Epistemology (scoring) -> Hermeneutics (recommendation)
+"""
 print(result)
 ```
 
+[validate: contains "TRADE_OFF_ANALYSIS_RESULT:"]
 [validate: contains "RECOMMENDATION:"]
 
 ---
@@ -549,9 +313,7 @@ print(result)
 
 4. **Knowledge Triad** ([[Knowledge-Triad-Ontology-Epistemology-Hermeneutics]]): Ontology = define options and criteria. Epistemology = score each option. Hermeneutics = interpret the pattern.
 
-5. **Deterministic Scaffolding** ([[Deterministic-Scaffolding-for-Small-Models]]): Every LLM call has a deterministic fallback. The Pareto check is fully deterministic. Triple-try consistency catches small model variance.
-
-6. **Bite-sized steps**: Scoring (numbers only) and reasoning (one-sentence explanations) are now separate steps so the model does one thing at a time.
+5. **Deterministic Scaffolding** ([[Deterministic-Scaffolding-for-Small-Models]]): Every LLM call has a deterministic fallback. The Pareto check is fully deterministic.
 
 ## Related
 

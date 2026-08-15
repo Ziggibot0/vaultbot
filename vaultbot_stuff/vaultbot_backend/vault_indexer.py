@@ -1,3 +1,10 @@
+"""FAISS vector index — embedding storage, similarity search, and file watching.
+
+Indexes all .md files in the vault using nomic-embed-text embeddings. Watches
+for file changes and updates the index incrementally. Supports chunked
+embeddings for long notes and drift feedback for relevance tuning.
+"""
+
 import hashlib
 import json
 import logging

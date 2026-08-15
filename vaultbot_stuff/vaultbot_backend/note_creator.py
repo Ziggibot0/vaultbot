@@ -1,3 +1,10 @@
+"""Note creation — writes research notes, chat notes, and concept cards to the vault.
+
+Each note gets YAML frontmatter (type, status, created, summary, tags),
+wikilink navigation, and source attribution. All writes go through
+``vault_guard`` safety checks.
+"""
+
 import os
 import re
 from pathlib import Path

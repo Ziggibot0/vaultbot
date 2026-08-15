@@ -1,3 +1,10 @@
+"""Ollama API client — chat, generate, embeddings, model preloading, and stats.
+
+Wraps the Ollama REST API (/api/chat, /api/generate, /api/embeddings) with
+streaming support, tool-call parsing, vision capability detection, and
+automatic model preloading for first-token latency optimization.
+"""
+
 import json
 import logging
 import os
@@ -93,10 +100,17 @@ class OllamaClient(_BASE):
 
         Queries /api/ps (running models).  Returns True if the model is
         loaded and ready, False if it's cold (or Ollama is unreachable).
+
+        Cloud models (``:cloud`` suffix, e.g. ``glm-5.2:cloud``) are proxied
+        through Ollama but never resident in local memory — /api/ps will
+        never list them.  Return True immediately so the chat-loop model-
+        load wait doesn't spin the full 300s timeout on every turn.
         """
         model = model or self.llm_model
         if not model:
             return False
+        if model.endswith(":cloud") or ":cloud:" in model:
+            return True
         try:
             resp = self._session.get(f"{self.base_url}/api/ps", timeout=5)
             resp.raise_for_status()
@@ -143,12 +157,23 @@ class OllamaClient(_BASE):
                 )
             return True
         ka = keep_alive or self._keep_alive
-        # Pass num_ctx so the model is loaded with the full context window
+        # Pass num_ctx so the model is loaded with the right context window
         # allocated upfront — otherwise the first real chat request triggers
         # a context resize (unload + reload) even after preload.
+        #
+        # CRITICAL: apply the SAME VAULTBOT_NUM_CTX_CAP as chat() does (line
+        # ~803). If preload uses the uncapped native context (e.g. 262144)
+        # but chat() caps it (32768), Ollama must unload+reload the model on
+        # the first chat request. For dense models like qwen3.8 this reload
+        # takes 30+ seconds; combined with a cold load it exceeds Ollama's
+        # 60s internal timeout and returns a 500. MoE models like qwen3.6
+        # can resize in-place (~2.7s) so the mismatch was invisible there.
         _opts = {"num_predict": 1, "temperature": 0}
         try:
             _ctx = self.context_window(model)
+            _cap = int(os.environ.get("VAULTBOT_NUM_CTX_CAP", "32768"))
+            if _cap > 0 and _ctx and _ctx > _cap:
+                _ctx = _cap
             if _ctx and _ctx > 0:
                 _opts["num_ctx"] = _ctx
         except Exception:  # noqa: BLE001 — best-effort context detection
@@ -425,10 +450,16 @@ class OllamaClient(_BASE):
         # answer directly in content.
         if think is False:
             payload["think"] = False
-        # Pass num_ctx so Ollama allocates the full context window upfront
-        # (same rationale as chat() — see comment there).
+        # Pass num_ctx so Ollama allocates the right context window upfront
+        # (same rationale as chat() — see comment there).  Apply the SAME
+        # VAULTBOT_NUM_CTX_CAP as chat() + preload_model() so generate()
+        # never triggers a context resize (unload+reload) on a model that
+        # was preloaded or chatted with a capped num_ctx.
         try:
             _ctx = self.context_window(self.llm_model)
+            _cap = int(os.environ.get("VAULTBOT_NUM_CTX_CAP", "32768"))
+            if _cap > 0 and _ctx and _ctx > _cap:
+                _ctx = _cap
             if _ctx and _ctx > 0:
                 payload["options"]["num_ctx"] = _ctx
         except Exception:  # noqa: BLE001 — best-effort context window
@@ -866,9 +897,16 @@ class OllamaClient(_BASE):
                 )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            # Capture the 500 error body from Ollama for debugging.
+            _err_body = ""
+            try:
+                if hasattr(e, "response") and e.response is not None:
+                    _err_body = e.response.text[:1000]
+            except Exception:  # noqa: BLE001 — best-effort error-body extraction; if this fails the outer except still logs + raises
+                pass
             self._log_tool(
                 "chat",
-                self._chat_log_summary(payload, stream),
+                {**self._chat_log_summary(payload, stream), "error_body": _err_body},
                 error=str(e),
                 duration_ms=(time.time() - t0) * 1000,
             )

@@ -5,7 +5,7 @@ baseline: true
 model_cartridge: big
 created: 2026-08-06
 description: "Build a complete, tested, verified procedure from a task description. This is the one-shot procedure factory: give it a task, get back a working procedure on disk. It composes drafting (LLM step), big-model quality review (code step with llm_generate), vault_safe_write (disk), Verify-Procedure-Args (static checks), vault_lint (link/frontmatter quality), and Test-Procedure-Until-Pass (dynamic test→fix→retest loop). The result is a procedure that has been drafted, reviewed, written, statically verified, dynamically tested, auto-fixed if broken, and linted. Use this whenever you need a new procedure — it replaces the manual draft→review→write→test→fix→lint workflow with a single call."
-when_to_use: when Sean says 'make a procedure for X', when you identify a gap that needs a new procedure, when you want to create a procedure and know it actually works before trusting it, when you're tired of the manual draft→review→write→test→fix→lint cycle, or when you want a procedure built strong from the start
+when_to_use: "When Sean says 'make a procedure for X', when you identify a gap that needs a new procedure, when you want to create a procedure and know it actually works before trusting it, when you're tired of the manual draft→review→write→test→fix→lint cycle, when you want a procedure built strong from the start, when you need to build a new skill as a procedure, when you want to automate a workflow you just did manually, when you realize you're doing something repetitive that should be proceduralized, when you need a one-shot procedure factory, when someone says 'create a procedure', 'build a procedure', 'make a procedure', 'automate this', 'proceduralize this', or 'turn this into a procedure'"
 falsifiable_if: the built procedure passes all checks but produces wrong output on real use, the review step approves a draft with obvious flaws, or the test loop reports success when the procedure actually fails (verifiable by running the procedure manually)
 applies_to:
   - procedure-creation
@@ -74,73 +74,51 @@ tools_available = args.get("tools_available", "vault_search, vault_read_note, va
 if not task:
     result = json.dumps({"error": "task argument required"})
 else:
-    prompt = f"""You are a procedure writer. Write a complete, valid procedure note for this task:
-
-**Task:** {task}
-
-**Available tools for allowed_tools:** {tools_available}
-
-## Rules
-
-### Step Format (UNIFIED — the only format the compiler guarantees)
-Every step MUST use this exact format:
-
-```
-### Step N: Short human-readable summary
-
-N. ```python
-code here
-```
-
-### Step N: Short human-readable summary
-
-N. [llm: instruction here]
-```
-
-- The `### Step N:` header provides the human-readable description (shown in logs and progress callbacks).
-- The `N.` prefix on the code fence or LLM tag makes step numbers visible in raw markdown.
-- Code steps use ```python blocks. LLM steps use `[llm: ...]` tags.
-- NEVER use bare `N.` without a `### Step N:` header above it.
-- NEVER use `[vllm:]`, `[model_cartridge:]`, or any other tag format — only `[llm: ...]`.
-
-### Required Frontmatter (all fields mandatory)
-```yaml
----
-type: procedure
-status: experimental
-model_cartridge: small  # or big, or vision
-created: YYYY-MM-DD
-description: "one-line summary for retrieval — specific enough that RAG surfaces it"
-when_to_use: "SITUATIONS that trigger this procedure, not topics"
-falsifiable_if: "specific, observable failure condition"
-allowed_tools:
-  - tool_name
-summary: Short-Title
-tags:
-  - procedure
-  - procedures
----
-```
-
-- `model_cartridge: small` for classification, extraction, routing, formatting.
-- `model_cartridge: big` only for novel reasoning or complex synthesis.
-- `status` should be `experimental` for new procedures.
-- `created` should be today's date (YYYY-MM-DD).
-
-### Standardized Sections (in this order)
-1. `## When to Run This` — trigger conditions (required)
-2. `## Inputs` — documented args if the procedure takes any (required if args exist)
-3. `## Steps` — the machine-executable steps (required)
-4. `## Why This Exists` — the failure or gap that spawned this procedure
-5. `## Related` — wikilinks to related notes
-
-Additional sections (Architecture, History, Composition Map, etc.) are optional and go after `## Related`.
-
-### Output Rules
-- Do NOT wrap the output in ```markdown or any code fences. Return raw markdown.
-- The output must start with `---` (YAML frontmatter).
-
-Write the FULL markdown including YAML frontmatter. Return ONLY the raw markdown, no code fences wrapping it, no commentary."""
+    # Build prompt in parts to avoid nested triple-quote issues
+    _task_line = f"TASK: The procedure you write must accomplish this specific task: {task}"
+    _tools_line = f"Available tools for allowed_tools: {tools_available}"
+    
+    prompt = (
+        "You are a VaultBot procedure writer. Write a procedure that DOES the task below.\n"
+        "The procedure must be ABOUT accomplishing the task — NOT about how to write procedures.\n"
+        "Do NOT write a meta-procedure about procedure creation. Write a procedure that actually does the work described.\n\n"
+        + _task_line + "\n\n"
+        + _tools_line + "\n\n"
+        "## Required Frontmatter (all fields mandatory)\n"
+        "type: procedure\n"
+        "status: experimental\n"
+        "model_cartridge: small  # or big, or vision\n"
+        "created: 2026-08-14\n"
+        'description: "one-line summary for retrieval — specific enough that RAG surfaces it"\n'
+        'when_to_use: "SITUATIONS that trigger this procedure, not topics"\n'
+        'falsifiable_if: "specific, observable failure condition"\n'
+        "allowed_tools:\n"
+        "  - tool_name\n"
+        "summary: Short-Title\n"
+        "tags:\n"
+        "  - procedure\n"
+        "  - procedures\n\n"
+        "## Step Format (UNIFIED — the only format the compiler guarantees)\n"
+        "Every step MUST use this exact format:\n"
+        "### Step N: Short human-readable summary\n"
+        "N. ```python\ncode here\n```\n"
+        "OR for LLM steps:\n"
+        "### Step N: Short human-readable summary\n"
+        "N. [llm: instruction here]\n\n"
+        "- Code steps use ```python blocks. LLM steps use [llm: ...] tags.\n"
+        "- NEVER use [vllm:] or [model_cartridge:] tags — only [llm: ...].\n"
+        "- model_cartridge: small for classification/extraction/routing. big for reasoning/synthesis.\n\n"
+        "## Standardized Sections (in this order)\n"
+        "1. ## When to Run This — trigger conditions\n"
+        "2. ## Inputs — documented args if any\n"
+        "3. ## Steps — the machine-executable steps\n"
+        "4. ## Why This Exists — the failure or gap that spawned this\n"
+        "5. ## Related — wikilinks to related notes\n\n"
+        "## Output Rules\n"
+        "- Do NOT wrap the output in markdown code fences. Return raw markdown.\n"
+        "- The output must start with --- (YAML frontmatter).\n\n"
+        "Write the FULL markdown including YAML frontmatter. Return ONLY the raw markdown."
+    )
 
     draft_md = llm_generate(prompt)
     result = draft_md

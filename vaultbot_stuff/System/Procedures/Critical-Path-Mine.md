@@ -6,7 +6,7 @@ model_cartridge: big
 created: 2026-08-10
 updated: 2026-08-11
 description: "Mines full user-assistant conversations for the critical reasoning path — the minimal chain of thought that actually got from the question to the answer. Strips waste (dead ends, over-explanation, wrong directions the user corrected). Turns the critical path into a procedure so next time that type of problem comes up, the model walks straight down the path with no detours. Auto-batches large corpora and deduplicates against previous runs. Uses LLM for all pattern detection — no regex, no keyword matching."
-when_to_use: "During Dream Pass, after Behavioral-Pattern-Mine. Also runnable standalone on specific chat notes or the full chat corpus."
+when_to_use: "During Dream Pass, after Behavioral-Pattern-Mine. Also runnable standalone on specific chat notes or the full chat corpus. Use when: extracting reasoning patterns from conversations, turning a good chat into a procedure, mining the critical thinking path from a session, finding the minimal reasoning that led to an answer, converting conversation insights into reusable procedures, analyzing what reasoning worked in a chat, extracting the decision path from a productive session, creating a procedure from a conversation that went well, or identifying the key reasoning steps that solved a problem."
 falsifiable_if: "The generated procedure contains reasoning steps that were actually unnecessary, or omits steps that were necessary to reach the answer, or re-analyzes notes that were already processed in a prior run."
 applies_to:
   - thinking-patterns

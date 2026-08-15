@@ -209,6 +209,40 @@ def run(args: dict) -> dict:
     except ImportError:
         pass  # note_schema unavailable — skip schema checks
 
+    # --- Procedure-specific frontmatter checks ---
+    # Procedures need when_to_use, description, falsifiable_if, and
+    # allowed_tools for RAG retrieval and quality. If this note is a
+    # procedure (type: procedure in frontmatter), check for these fields.
+    if has_frontmatter:
+        try:
+            import yaml
+
+            fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+            if fm_match:
+                fm = yaml.safe_load(fm_match.group(1))
+                if isinstance(fm, dict) and fm.get("type") == "procedure":
+                    proc_required = ["when_to_use", "description", "allowed_tools"]
+                    for field in proc_required:
+                        if not fm.get(field):
+                            issues.append(
+                                {
+                                    "type": "missing_procedure_field",
+                                    "field": field,
+                                    "message": f"Procedure is missing '{field}' field — this is required for RAG retrieval and procedure quality.",
+                                }
+                            )
+                    # falsifiable_if is strongly recommended but not strictly required
+                    if not fm.get("falsifiable_if"):
+                        issues.append(
+                            {
+                                "type": "missing_procedure_field",
+                                "field": "falsifiable_if",
+                                "message": "Procedure is missing 'falsifiable_if' field — strongly recommended for testability.",
+                            }
+                        )
+        except Exception as e:
+            print(f"vault_lint: procedure frontmatter check skipped: {e}")  # noqa: BLE001 — best-effort check, non-fatal
+
     # Extract tags (avoid matching hex colors like #FF0000)
     tags = list(set(re.findall(r"(?<!\w)#([a-zA-Z][a-zA-Z0-9_-]*)", content)))
 

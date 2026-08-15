@@ -5,8 +5,8 @@ baseline: true
 model_cartridge: small
 created: 2026-07-27
 last_reviewed: 2026-08-04
-description: "Biomimetic dream pass — thin orchestrator that runs 15 modular sub-procedures in sequence: Scan → Analyze → Dangle-Fix → Link → Chat-Consolidation → Session-Effort-Analysis → Behavioral-Pattern-Mine → Pattern-To-Procedure → Consolidate → Curate-Research → Prune → TODO-Track → Validate → Gap-Fill → Evaluate. Each sub-procedure can also be run independently. Uses small cartridge — all reasoning lives in sub-procedures (Dream-Consolidate and Dream-Pattern-To-Procedure carry their own big cartridges)."
-when_to_use: when asked to run a dream pass, when consolidating memories, when doing vault maintenance, or when the vault needs offline processing
+description: "Biomimetic dream pass — thin orchestrator that runs 16 modular sub-procedures in sequence: Scan → Analyze → Dangle-Fix → Link → Chat-Consolidation → Session-Effort-Analysis → Behavioral-Pattern-Mine → Pattern-To-Procedure → Consolidate → Curate-Research → Prune → TODO-Track → Validate → Gap-Fill → Evaluate → When-To-Use-Update. Each sub-procedure can also be run independently. Uses small cartridge — all reasoning lives in sub-procedures (Dream-Consolidate and Dream-Pattern-To-Procedure carry their own big cartridges)."
+when_to_use: "When asked to run a dream pass, when consolidating memories, when doing vault maintenance, when the vault needs offline processing, when fixing broken wikilinks, when cleaning up the vault, when consolidating chat logs, when mining patterns from conversations, when pruning junk notes, when validating vault health, when scanning for knowledge gaps, when creating procedures from patterns, or when the vault feels cluttered or disconnected"
 falsifiable_if: it fails to improve graph connectivity, produces duplicate semantic notes, or crashes on any step
 applies_to:
   - vault
@@ -40,6 +40,7 @@ provides:
   - Dream-Validate
   - Dream-Gap-Fill
   - Dream-Evaluate
+  - Dream-When-To-Use-Update
 success_count: 108
 failure_count: 1
 success_rate: 0.99
@@ -76,6 +77,7 @@ Dream-Pass (orchestrator, small cartridge)
 ├── Dream-Validate        — Verify graph is healthier (before/after)
 ├── Dream-Gap-Fill        — Create stub notes for genuine knowledge gaps
 └── Dream-Evaluate        — Score the procedure library
+└── Dream-When-To-Use-Update — Enrich thin procedure trigger language
 ```
 
 ## Cluster A: Error Handling, Telemetry, Conditional Dispatch, Prior Results
@@ -598,6 +600,31 @@ prior_results["telemetry"] = json.dumps(telemetry)
 
 ```
 
+### Step 6.5: When-To-Use-Update — Enrich Thin Procedure Trigger Language
+
+Calls [[Dream-When-To-Use-Update]] to scan all procedure notes for missing or thin `when_to_use` frontmatter fields, generate better trigger language via LLM, and update them in place. This is the self-improving retrieval feedback loop — procedures with poor `when_to_use` fields don't surface in RAG, so they never get used, so they never get improved. This step breaks that cycle. **Optional** — failures are logged but do not halt the pass.
+
+6.5. ```python
+import json
+
+# Load persisted telemetry from prior_results (survives subprocess boundaries)
+telemetry = json.loads(prior_results.get("telemetry", '{"pass": 0, "fail": 0, "skipped": 0, "steps": {}}'))
+
+wtu_result = run_procedure("Dream-When-To-Use-Update")
+prior_results["when_to_use_update"] = wtu_result.get("final_output", "{}")
+if wtu_result.get("overall_passed", False):
+    telemetry["pass"] += 1
+    telemetry["steps"]["when_to_use_update"] = "pass"
+else:
+    telemetry["fail"] += 1
+    telemetry["steps"]["when_to_use_update"] = "fail"
+    # Optional step — log but don't halt
+    prior_results["when_to_use_update_error"] = wtu_result.get("failed_step", "unknown")
+# Persist telemetry for next subprocess
+prior_results["telemetry"] = json.dumps(telemetry)
+
+```
+
 ## Running Sub-Procedures Individually
 
 Each sub-procedure can be run standalone via `execute_procedure("Dream-Scan")` etc. This is useful when you only need one phase:
@@ -617,6 +644,8 @@ On 2026-08-04 Cluster A fixes from [[Dream-Pass-Audit]] were implemented: error 
 
 On 2026-08-09 two new sub-procedures were wired in: [[Session-Effort-Analysis]] (step 2.6) quantifies token and tool usage across all chat sessions, and [[Behavioral-Pattern-Mine]] (step 2.7) mines recurring tool-call sequences that aren't yet automated as procedures. Both run after Chat-Consolidation and before Consolidate, and both are optional (failures are logged but do not halt the pass).
 
+
+On 2026-08-14 [[Dream-When-To-Use-Update]] was wired in as Step 6.5 (after Evaluate). It scans all procedure notes for missing or thin `when_to_use` frontmatter fields, generates better trigger language via LLM, and patches them in place. This closes the self-improving retrieval feedback loop: procedures with poor `when_to_use` fields don't surface in RAG, so they never get used, so they never get improved. This step breaks that cycle.
 
 ## Integration with Session-Effort-Analysis and Behavioral-Pattern-Mine
 

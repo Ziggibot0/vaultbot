@@ -58,6 +58,7 @@ vaultbot_stuff/vaultbot_backend/claim_verification_log.json
 vaultbot_stuff/vaultbot_backend/consolidation_log.json
 vaultbot_stuff/vaultbot_backend/rag_eval_log.json
 vaultbot_stuff/vaultbot_backend/backend.log
+vaultbot_stuff/vaultbot_backend/debug_chat.log
 vaultbot_stuff/vaultbot_backend/backend.err
 vaultbot_stuff/vaultbot_backend/backend_stdout.log
 vaultbot_stuff/vaultbot_backend/backend_stdout.txt

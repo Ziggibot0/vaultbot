@@ -300,6 +300,7 @@ def _extract_session_preview(path: Path) -> dict[str, Any] | None:
             evt = _json.loads(line)
         except _json.JSONDecodeError:
             continue
+        # New format: event-based (session_start, websocket_message, etc.)
         if not started_at and evt.get("event") == "session_start":
             started_at = evt.get("started_at", "")
             continue
@@ -316,6 +317,15 @@ def _extract_session_preview(path: Path) -> dict[str, Any] | None:
                 msg = data.get("user_message") or ""
                 if msg:
                     preview = msg[:120]
+        # Old format: type-based (session_start, user_message, etc.)
+        if not started_at and evt.get("type") == "session_start":
+            ts = evt.get("timestamp", 0)
+            started_at = str(ts) if ts else ""
+            continue
+        if not preview and evt.get("type") == "user_message":
+            msg = evt.get("content") or ""
+            if msg:
+                preview = msg[:120]
     # Also look for a session_title event (set by the user or auto-generated).
     title = ""
     for line in lines:
@@ -370,50 +380,122 @@ async def list_sessions() -> dict[str, Any]:
 
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str) -> dict[str, Any]:
-    """Return the user/assistant turns of one session, for read-only replay.
+    """Return the turns of one session, for read-only replay.
 
-    Parses the .jsonl session log and extracts the message turns in order:
-    user messages (event "in" with a payload message, or "chat_begin" with
-    user_message) and assistant final answers (event "chat_end" or any
-    event carrying a finalized assistant content). Returns ``{"turns":
-    [{"role": "user"|"assistant", "content": "..."}]}``. Read-only — this
-    never modifies the session file or the live conversation.
+    Parses the .jsonl session log and extracts message turns in order.
+    Supports three event formats:
 
-    The ``session_id`` is validated as a bare UUID stem (no path separators)
-    to prevent path traversal outside sessions/.
+    1. **Explicit assistant_response** (new): ``event: "assistant_response"``
+       with ``data.text`` (or ``data.content``) — the most reliable source.
+    2. **websocket_message** (current): ``event: "websocket_message"`` with
+       ``data.direction`` in/out and ``data.payload.type`` answer_chunk /
+       answer_done — accumulates chunks into the current assistant turn.
+    3. **Old type-based format**: ``type: "user_message"`` / ``type:
+       "assistant_response"`` with ``content`` / ``text`` fields.
+
+    Also extracts ``tool_call`` and ``thinking`` events so the replay shows
+    what VaultBot actually did, not just the final text.
+
+    Returns ``{"turns": [{"role", "content", "tool_name"?, "thinking"?}]}``.
+    Read-only — never modifies the session file or the live conversation.
+
+    The ``session_id`` is validated to reject path separators so a crafted
+    id can't escape the sessions/ directory.
     """
-    # Validate: only allow UUID-like characters so a crafted id can't
-    # escape the sessions/ directory (e.g. "../../etc/passwd").
     import re as _re
+    import json as _json
 
-    if not _re.fullmatch(r"[0-9a-fA-F-]{36}", session_id):
+    # Validate: allow UUIDs (36 chars) and timestamp_id format (e.g.
+    # "1752150184_9479"). Reject anything with path separators.
+    if not _re.fullmatch(r"[0-9a-fA-F_-]{1,60}", session_id):
         return {"turns": [], "error": "invalid session id"}
     path = _SESSIONS_DIR / f"{session_id}.jsonl"
     if not path.exists():
         return {"turns": [], "error": "session not found"}
-    import json as _json
 
-    turns: list[dict[str, str]] = []
-    # Accumulate outgoing answer_chunk events into the current assistant
-    # turn; a new incoming message starts a new user turn. This mirrors the
-    # WS streaming protocol: user → answer_chunks → user → answer_chunks.
+    turns: list[dict[str, Any]] = []
     current_assistant = ""
+    current_thinking = ""
+
+    def _flush_assistant():
+        nonlocal current_assistant, current_thinking
+        if current_assistant:
+            turn: dict[str, Any] = {"role": "assistant", "content": current_assistant}
+            if current_thinking:
+                turn["thinking"] = current_thinking
+            turns.append(turn)
+            current_assistant = ""
+            current_thinking = ""
+
     try:
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
             try:
                 evt = _json.loads(line)
             except _json.JSONDecodeError:
                 continue
-            if evt.get("event") != "websocket_message":
+
+            # --- Format 3: old type-based format (type field at top level) ---
+            evt_type = evt.get("type")
+            if evt_type == "user_message":
+                _flush_assistant()
+                msg = evt.get("content") or ""
+                if msg:
+                    turns.append({"role": "user", "content": msg})
                 continue
+            if evt_type == "assistant_response":
+                _flush_assistant()
+                # Old format: content is often empty, text has the actual response
+                text = evt.get("text") or evt.get("content") or ""
+                if text:
+                    turns.append({"role": "assistant", "content": text})
+                continue
+            if evt_type == "tool_call":
+                tool_name = evt.get("tool_name") or evt.get("content") or "tool"
+                turns.append({
+                    "role": "tool_call",
+                    "content": str(tool_name),
+                    "tool_name": str(tool_name),
+                })
+                continue
+
+            # --- Format 1 & 2: event-based format ---
+            event_name = evt.get("event")
+            if event_name == "assistant_response":
+                # Explicit assistant_response event (new, most reliable).
+                _flush_assistant()
+                data = evt.get("data") or {}
+                text = data.get("text") or data.get("content") or ""
+                if text:
+                    turns.append({"role": "assistant", "content": text})
+                continue
+
+            if event_name == "thinking":
+                # Accumulate thinking text for the current assistant turn.
+                data = evt.get("data") or {}
+                chunk = data.get("content") or data.get("chunk") or ""
+                if chunk:
+                    current_thinking += chunk
+                continue
+
+            if event_name == "tool_call":
+                data = evt.get("data") or {}
+                tool_name = data.get("tool") or data.get("tool_name") or "tool"
+                turns.append({
+                    "role": "tool_call",
+                    "content": str(tool_name),
+                    "tool_name": str(tool_name),
+                })
+                continue
+
+            if event_name != "websocket_message":
+                continue
+
+            # --- Format 2: websocket_message events ---
             data = evt.get("data") or {}
             payload = data.get("payload") or {}
             direction = data.get("direction")
             if direction == "in":
-                # Flush any accumulated assistant text before the new user turn.
-                if current_assistant:
-                    turns.append({"role": "assistant", "content": current_assistant})
-                    current_assistant = ""
+                _flush_assistant()
                 msg = payload.get("message") or ""
                 if msg:
                     turns.append({"role": "user", "content": msg})
@@ -421,15 +503,26 @@ async def get_session(session_id: str) -> dict[str, Any]:
                 ptype = payload.get("type")
                 if ptype == "answer_chunk":
                     current_assistant += payload.get("content") or ""
+                elif ptype == "thinking":
+                    current_thinking += payload.get("content") or ""
                 elif ptype == "answer_done":
-                    if current_assistant:
-                        turns.append(
-                            {"role": "assistant", "content": current_assistant}
-                        )
-                        current_assistant = ""
+                    # answer_done has the final assembled text in content.
+                    # Prefer it over accumulated chunks (chunks may be
+                    # skipped by send_personal_message's logging filter).
+                    done_content = payload.get("content") or ""
+                    if done_content:
+                        current_assistant = done_content
+                    _flush_assistant()
+                elif ptype == "tool_call":
+                    tool_name = payload.get("tool_name") or payload.get("content") or "tool"
+                    turns.append({
+                        "role": "tool_call",
+                        "content": str(tool_name),
+                        "tool_name": str(tool_name),
+                    })
+
         # Flush trailing assistant text if the session ended mid-stream.
-        if current_assistant:
-            turns.append({"role": "assistant", "content": current_assistant})
+        _flush_assistant()
     except OSError:
         return {"turns": [], "error": "could not read session"}
     return {"turns": turns}

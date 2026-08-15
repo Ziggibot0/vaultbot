@@ -152,6 +152,12 @@ class Identity:
 
             identity = self.get_identity()
             assembled = "# IDENTITY\n" + identity if identity else ""
+            # Inject the operator's name from VAULTBOT_OWNER env var so
+            # the agent knows who it's talking to without looking it up
+            # each turn. Set by the installer in .env.
+            owner_name = os.environ.get("VAULTBOT_OWNER", "").strip()
+            if owner_name:
+                assembled += f"\n\n# YOUR OPERATOR\nYour operator's name is {owner_name}."
             self._boot_cache = assembled
             if current_mtime != float("inf"):
                 self._boot_cache_mtime = current_mtime

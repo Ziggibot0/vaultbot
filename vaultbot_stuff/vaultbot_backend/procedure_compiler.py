@@ -1175,21 +1175,39 @@ def _parse_dispatch_section(body: str, allowed_tools: list[str]) -> list[Step]:
 
 # ── Public API ────────────────────────────────────────────────────────────
 
+# Compiled-procedure cache: {file_path: (mtime, Procedure)}.
+# compile_procedure re-reads + re-parses the markdown file on every call;
+# this cache avoids that when the file hasn't changed (mtime check).
+_COMPILE_CACHE: dict[str, tuple[float, "Procedure | None"]] = {}
+
 
 def compile_procedure(file_path: str) -> Procedure | None:
     """Compile a markdown procedure note from disk.
 
     Returns a :class:`Procedure` if the note has ``type: procedure`` or
     ``exemplar_procedure: true`` in its frontmatter, otherwise ``None``.
+
+    Results are cached by file path + mtime — if the file hasn't changed
+    since the last call, the cached :class:`Procedure` is returned without
+    re-reading or re-parsing.  The cache is invalidated automatically when
+    the file's mtime changes or the file is deleted.
     """
     path = Path(file_path)
     if not path.exists():
+        # Invalidate cache entry if the file was deleted.
+        _COMPILE_CACHE.pop(file_path, None)
         return None
+
+    mtime = path.stat().st_mtime
+    cached = _COMPILE_CACHE.get(file_path)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
 
     text = path.read_text(encoding="utf-8", errors="replace")
     proc = compile_from_text(path.stem, text)
     if proc is not None:
         proc.file_path = str(path)
+    _COMPILE_CACHE[file_path] = (mtime, proc)
     return proc
 
 

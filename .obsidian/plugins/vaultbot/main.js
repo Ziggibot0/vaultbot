@@ -2796,16 +2796,41 @@ class VaultBotSidebarView extends ItemView {
 
 		const chatContainer = this.contentEl.createDiv({cls: 'vaultbot-chat-container'});
 
-		// Smart auto-scroll: only scroll to bottom when the user is already near
-		// the bottom. This lets the user scroll up to read history while
-		// VaultBot is streaming without being yanked back down on every chunk.
+		// Smart auto-scroll: track whether the user is "at the bottom" of the
+		// chat. When the user scrolls up to read history, auto-scroll pauses.
+		// When they scroll back to the bottom, auto-scroll resumes. This
+		// mirrors GitHub Copilot's behavior: stay glued to the bottom unless
+		// the user explicitly scrolls up, then respect their position until
+		// they return to the bottom.
 		const SCROLL_THRESHOLD = 80; // px from bottom to still count as "at bottom"
-		const smartScrollToBottom = () => {
+		let userAtBottom = true;     // start assuming we're at the bottom
+
+		chatContainer.addEventListener('scroll', () => {
 			const isNearBottom = (chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight) < SCROLL_THRESHOLD;
-			if (isNearBottom) {
+			userAtBottom = isNearBottom;
+			// Show/hide the scroll-to-bottom button based on position
+			if (scrollToBottomBtn) {
+				scrollToBottomBtn.style.display = userAtBottom ? 'none' : 'flex';
+			}
+		});
+
+		const smartScrollToBottom = () => {
+			if (userAtBottom) {
 				chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
 			}
 		};
+
+		// Scroll-to-bottom button: a floating button that appears when the
+		// user has scrolled up, letting them jump back to the latest chat in
+		// one click. Positioned at the bottom-right of the chat container.
+		const scrollToBottomBtn = this.contentEl.createDiv({cls: 'vaultbot-scroll-bottom-btn'});
+		scrollToBottomBtn.style.display = 'none';
+		const btnIcon = scrollToBottomBtn.createSpan({text: '\u2193'});
+		scrollToBottomBtn.addEventListener('click', () => {
+			chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+			userAtBottom = true;
+			scrollToBottomBtn.style.display = 'none';
+		});
 
 	// Delegated click handler: make [[wikilinks]] and external links clickable
 	// in chat messages. Works for both user and assistant messages.
@@ -2815,7 +2840,30 @@ class VaultBotSidebarView extends ItemView {
 		if (intLink) {
 			e.preventDefault();
 			const href = intLink.getAttribute('data-href') || intLink.getAttribute('href');
-			if (href) this.app.workspace.openLinkText(href, '', false);
+			if (!href) return;
+			// Resolve the link through Obsidian's metadata cache. If the
+			// note exists, open it. If not, show a notice instead of
+			// silently creating an empty note with just the title —
+			// which is the "wikilinks resolve to empty notes" bug.
+			const resolved = this.app.metadataCache.getFirstLinkpathDest(href, '');
+			if (resolved) {
+				this.app.workspace.openLinkText(href, '', false);
+			} else {
+				// Try opening anyway — Obsidian may still resolve it via
+				// its own search if the file exists but isn't cached yet.
+				// If it truly doesn't exist, show a notice instead of
+				// creating an empty note.
+				const allFiles = this.app.vault.getMarkdownFiles();
+				const found = allFiles.some(f => {
+					const basename = f.path.split('/').pop().replace(/\.md$/i, '');
+					return basename.toLowerCase() === href.toLowerCase();
+				});
+				if (found) {
+					this.app.workspace.openLinkText(href, '', false);
+				} else {
+					try { new Notice(`Note "${href}" not found in vault.`); } catch(e2) {}
+				}
+			}
 			return;
 		}
 		// External links -> open in browser
@@ -3473,6 +3521,29 @@ class VaultBotSidebarView extends ItemView {
 					statusEl.setText(msg.content);
 				} else if (msg.type === 'thinking') {
 					if (!currentAssistantMessage) startAssistantMessage();
+					// If there was already a thinking block with content (from
+					// a previous thinking phase in this turn), close it and
+					// create a NEW one so each thinking phase gets its own
+					// bubble in chronological order — not appended to the old.
+					if (currentThinkingBlock && currentThinkingBlock.getText()) {
+						setThinkingVisible(false);
+						// Create a fresh thinking block for this new phase.
+						const prevHeader = currentThinkingHeader;
+						const prevBlock = currentThinkingBlock;
+						// Insert a new thinking header + block after the old one.
+						const newHeader = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-header', text: 'Thinking (click to show)'});
+						const newBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-block'});
+						newBlock.style.display = 'none';
+						newHeader.addEventListener('click', () => {
+							const hidden = newBlock.style.display === 'none';
+							newBlock.style.display = hidden ? 'block' : 'none';
+							newHeader.textContent = hidden
+								? 'Thinking (click to hide)'
+								: 'Thinking (click to show)';
+						});
+						currentThinkingHeader = newHeader;
+						currentThinkingBlock = newBlock;
+					}
 					// Show the thinking block live while the model reasons.
 					setThinkingVisible(true);
 					currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + msg.content);
@@ -3821,7 +3892,7 @@ class VaultBotSidebarView extends ItemView {
 					if (q.type === 'radio' && q.options && q.options.length > 0) {
 						const optsDiv = qDiv.createDiv({cls: 'vaultbot-questionnaire-opts'});
 						const allOpts = ['__best_practices__', ...q.options];
-						const labels = ['I don\'t know, use best practices', ...q.options];
+						const labels = ['idk', ...q.options];
 						const defaultVal = q.default === 'best_practices' ? '__best_practices__' : (q.default || q.options[0]);
 
 						for (let i = 0; i < allOpts.length; i++) {

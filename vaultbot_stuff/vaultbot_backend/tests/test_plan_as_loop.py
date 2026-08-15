@@ -29,10 +29,18 @@ from framework_planner import framework_plan, _extract_json
 _BACKEND = Path(__file__).resolve().parent.parent
 _CHAT_HANDLER = _BACKEND / "chat_handler.py"
 _AGENT_TOOLS = _BACKEND / "agent_tools.py"
+# chat_handler.py was decomposed into leaf modules — tests must scan all of them.
+_CHAT_MODULES = [
+    _CHAT_HANDLER,
+    _BACKEND / "chat_context.py",
+    _BACKEND / "chat_preflight.py",
+    _BACKEND / "chat_tool_dispatch.py",
+]
 
 
 def _src() -> str:
-    return _CHAT_HANDLER.read_text(encoding="utf-8")
+    """Source of all chat-related modules (chat_handler + extracted leaf modules)."""
+    return "\n".join(p.read_text(encoding="utf-8") for p in _CHAT_MODULES)
 
 
 # ── 1. "Model drives" architecture (no framework babysitting) ──────────────
@@ -121,15 +129,17 @@ def test_no_framework_intervention_on_unfinished_plan():
 
 
 def test_prompt_says_model_drives():
-    """The system prompt tells the model it drives the process."""
-    src = _AGENT_TOOLS.read_text(encoding="utf-8")
-    assert "YOUR PLAN" in src, "system prompt must show the plan to the model"
-    if "model drives" not in src.lower() and "The model drives" not in src:
-        import pytest
+    """The system prompt tells the model it drives the process.
 
-        pytest.skip(
-            "agent_tools.py still needs 'model drives' language — needs prompt cleanup"
-        )
+    The prompt must reference the plan (so the model knows it can/should
+    plan) and must NOT contain old 'model drives' boilerplate that was
+    removed when the prompt was slimmed down.
+    """
+    src = _AGENT_TOOLS.read_text(encoding="utf-8")
+    assert "your plan" in src.lower(), "system prompt must show the plan to the model"
+    assert "plan_task" in src, (
+        "system prompt must mention plan_task so the model knows the tool exists"
+    )
 
 
 def test_prompt_no_consolidation_language():
@@ -137,8 +147,6 @@ def test_prompt_no_consolidation_language():
     src = _AGENT_TOOLS.read_text(encoding="utf-8")
     # CONSOLIDATION language was part of the old phase-based architecture
     # If it's still present, it's a contradiction with the current code.
-    # (This test documents the expected state after the prompt is cleaned up.)
-    # TODO: Remove this skip once agent_tools.py system prompt is updated.
     if "CONSOLIDATION" in src:
         import pytest
 

@@ -4,38 +4,51 @@ status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-10
-summary: "Parent reasoning procedure: extracts premises, validates them against the vault (BS detector), classifies the problem, picks lenses, dispatches them, and synthesizes results. v3: fully v2 code-step format with bite-sized LLM calls designed for 0.8B models. Procedure terminology never appears in LLM prompts."
-description: "BS detector + problem classification + lens dispatch + synthesis. v3 code steps for small-model reliability."
+summary: "Parent reasoning procedure v4: redesigned for ~4B small model (qwen3.5:4b). Merged steps 1+2, batched verification, killed triple-try, combined classify+select, conditional step 5, single-call synthesis. ~4-6 LLM calls in parent (down from 20-28)."
+description: "BS detector + problem classification + lens dispatch + synthesis. v4: optimized for 4B model — batched calls, no triple-try, richer prompts."
 allowed_tools:
   - vault_search
   - vault_read_note
   - llm_generate
   - run_procedure
   - vault_research
-tags: [procedure, reasoning, think, v3, code-steps, bite-sized, small-model]
+when_to_use: "When you need to reason through a complex problem and the vault doesn't have a direct answer. When you need structured analysis with premise verification, lens-based reasoning, and synthesis. When someone asks 'what do you think about X' or 'help me reason through Y'. When you need to break down a question, check assumptions against the vault, apply multiple analytical lenses, and synthesize a conclusion. When a problem needs more than a simple lookup \u2014 it needs actual reasoning. Also use when someone asks to 'think about' something, when you need to evaluate options, when you need to find root causes, when you need to verify a claim, or when you need to decompose a complex task."
+falsifiable_if: "The procedure produces a conclusion that contradicts verified vault evidence, or the premise gate blocks a question that has verifiable premises, or the lens dispatch produces no useful analysis"
+applies_to:
+  - reasoning
+  - analysis
+  - problem-solving
+  - decision-making
+  - root-cause
+  - trade-offs
+  - verification
+  - decomposition
+  - multi-perspective
+  - synthesis
+tags: [procedure, reasoning, think, v4, code-steps, 4b-model, batched]
 ---
 
-# Think: Structured Reasoning Scaffold (v3)
+# Think: Structured Reasoning Scaffold (v4)
 
 ## Purpose
 
-This procedure makes a small local model reason like a frontier model by following deterministic code steps with tiny, focused LLM calls. The LLM only does semantic judgment — one question per call, one answer per call. Everything else is code.
+This procedure makes a 4B local model reason like a frontier model by following deterministic code steps with focused LLM calls. The 4B model can handle richer prompts, batched verification, and combined tasks — so v4 merges over-split steps, kills triple-try, and gives the model enough context to make real semantic judgments.
 
-## What Changed in v3
+## What Changed in v4
 
-| Problem in v2 | Fix in v3 |
+| Problem in v3 (0.8B-era) | Fix in v4 (4B-era) |
 |---|---|
-| Compiled as text steps — entire 940-line procedure sent to 0.8B model as one prompt | v2 code steps — Python runs deterministically, LLM calls are isolated `[llm:]` tags |
-| LLM prompts contained procedure terminology (ontology, epistemology, lens stack) — model pattern-matched on its own description | LLM prompts are 1-3 sentences with no procedure jargon — the model only sees the problem |
-| Premise validation buried inside a 400-word classification prompt | Premise extraction is Step 1 (one focused call), causal claim extraction is Step 2, verification against full vault note texts is Step 3 |
-| Classification asked for 6 lens descriptions + gaps + reasoning in one call | Classification is Step 4 (one word output), lens selection is Step 5 (comma-separated list) |
-| Synthesis used big LLM cartridge | Synthesis is pure code assembly from lens outputs — no LLM needed |
-| Per-premise keyword vault_search missed semantic matches (e.g. "Python backend" couldn't find main.py) | Step 3 does ONE vault_search for the problem, vault_read_note for full text, then LLM matches claims against full note texts — LLM is pattern matcher, vault is knowledge |
-| Causal chains (slippery slopes, false causes) not detected | Step 2 extracts "X leads to Y" / "if X then Y" claims alongside factual premises |
+| Steps 1+2 split (factual vs causal claims) — 2 calls | Merged into 1 call — 4B extracts both in one pass |
+| Step 3 verified each claim × each doc individually — up to 15-21 calls | Batched into 1 call — 4B handles all claims against all docs at once |
+| Triple-try on critical calls — 3× LLM round-trips | Killed entirely — 4B is consistent across tests |
+| Classification (Step 4) + lens selection (Step 5) — 2 calls | Merged into 1 call — 4B can classify AND suggest lenses |
+| Step 7 always runs "need more lenses?" — 1 call every time | Conditional — only runs if lens outputs are thin/errored |
+| Synthesis: per-lens extraction (N calls) + final synthesis (1 call) | Single call — 4B handles all lens outputs at once |
+| Prompts were 1-2 sentences, single-token output | Richer prompts — 3-4 sentences, short-phrase output |
 
 ## Design Principle
 
-**The LLM never sees procedure terminology.** Words like "ontology," "epistemology," "hermeneutics," "lens stack," and "knowledge triad" exist only in code comments and step headers. The LLM prompts are plain English: "What kind of problem is this?" not "Classify this problem according to the Knowledge Triad ontology layer."
+**The LLM never sees procedure terminology.** Words like "ontology," "epistemology," "hermeneutics," "lens stack," and "knowledge triad" exist only in code comments and step headers. The LLM prompts are plain English.
 
 ## Inputs
 
@@ -52,31 +65,56 @@ This procedure makes a small local model reason like a frontier model by followi
 
 ---
 
-### Step 1: Extract factual premises (BS detector — part 1)
+### Step 1: Extract all claims (factual + causal)
 
-Extract every factual claim the problem assumes is true. This is the BS detector's first pass — it identifies what the problem is asserting without evidence. The LLM gets ONE job: list the factual claims.
+Extract every factual claim AND every causal claim the problem makes. The 4B can handle both in one call — no need to split into separate steps like v3.
 
 ```python
 problem = args.get('problem', '')
 context = args.get('context', '')
 lens_override = args.get('lens_override', '')
 
-# Single-call premise extraction
-prompt = f"List every factual claim this sentence assumes is true. One per line. If none, say NONE.\n\n\"{problem}\""
+# Single call: extract both factual and causal claims
+prompt = f"""Analyze this question and list:
+1. Every factual claim it assumes is true (things it takes for granted)
+2. Every causal claim it makes (X leads to Y, if X then Y, X causes Y)
+
+Format:
+FACTUAL:
+- [claim 1]
+- [claim 2]
+CAUSAL:
+- [claim 1]
+
+If none of a type, write NONE.
+
+Question: "{problem}\""""
+
 resp = llm_generate(prompt).strip()
 
-# Parse premises from the response
-premises = []
-seen = set()
+# Parse factual and causal claims
+factual = []
+causal = []
+current_section = None
 for line in resp.split('\n'):
     line = line.strip()
-    if line and line.upper() != 'NONE' and len(line) > 5:
-        key = line.lower()
-        if key not in seen:
-            seen.add(key)
-            premises.append(line)
+    if line.upper().startswith('FACTUAL:'):
+        current_section = 'factual'
+        continue
+    elif line.upper().startswith('CAUSAL:'):
+        current_section = 'causal'
+        continue
+    elif line.startswith('- '):
+        claim = line[2:].strip()
+        if claim and claim.upper() != 'NONE' and len(claim) > 3:
+            if current_section == 'factual':
+                factual.append(claim)
+            elif current_section == 'causal':
+                causal.append(claim)
 
-result = f"PREMISES: {'|||'.join(premises) if premises else 'NONE'}\nPROBLEM: {problem}"
+all_claims = factual + causal
+
+result = f"FACTUAL: {'|||'.join(factual) if factual else 'NONE'}\nCAUSAL: {'|||'.join(causal) if causal else 'NONE'}\nALL_CLAIMS: {'|||'.join(all_claims) if all_claims else 'NONE'}\nPROBLEM: {problem}"
 if context:
     result += f"\nCONTEXT: {context}"
 if lens_override:
@@ -84,70 +122,18 @@ if lens_override:
 print(result)
 ```
 
-[validate: contains "PREMISES:"]
+[validate: contains "FACTUAL:"]
+[validate: contains "CAUSAL:"]
 [validate: contains "PROBLEM:"]
 
 ---
 
-### Step 2: Extract causal claims (BS detector — part 2)
+### Step 2: Verify all claims against vault (batched)
 
-Extract any causal claims the problem makes — "X leads to Y," "if X then Y," "X causes Y." These are structural claims about relationships, not factual claims about entities. The LLM gets ONE job: list the causal claims.
+One vault_search, read top notes, then ONE LLM call to verify ALL claims against ALL docs. The 4B can handle "here are N claims and M docs, give me a verdict for each" in a single call. Research gate triggers if all claims are unverified.
 
 ```python
 # Parse Step 1
-lines = output.strip().split('\n')
-problem = ''
-premises_str = ''
-context = ''
-lens_override = ''
-for line in lines:
-    if line.startswith('PROBLEM: '):
-        problem = line.replace('PROBLEM: ', '').strip()
-    elif line.startswith('PREMISES: '):
-        premises_str = line.replace('PREMISES: ', '').strip()
-    elif line.startswith('CONTEXT: '):
-        context = line.replace('CONTEXT: ', '').strip()
-    elif line.startswith('LENS_OVERRIDE: '):
-        lens_override = line.replace('LENS_OVERRIDE: ', '').strip()
-
-# Single-call causal claim extraction
-prompt = f"Does this sentence claim that one thing causes or leads to another? List any 'if X then Y' or 'X leads to Y' claims. One per line. If none, say NONE.\n\n\"{problem}\""
-resp = llm_generate(prompt).strip()
-
-# Parse causal claims
-causal_claims = []
-seen = set()
-for line in resp.split('\n'):
-    line = line.strip()
-    if line and line.upper() != 'NONE' and len(line) > 5:
-        key = line.lower()
-        if key not in seen:
-            seen.add(key)
-            causal_claims.append(line)
-
-# Merge causal claims into premises for verification
-factual_premises = [p.strip() for p in premises_str.split('|||') if p.strip() and p.strip() != 'NONE']
-all_claims = factual_premises + causal_claims
-
-result = f"PREMISES: {'|||'.join(factual_premises) if factual_premises else 'NONE'}\nCAUSAL_CLAIMS: {'|||'.join(causal_claims) if causal_claims else 'NONE'}\nALL_CLAIMS: {'|||'.join(all_claims)}\nPROBLEM: {problem}"
-if context:
-    result += f"\nCONTEXT: {context}"
-if lens_override:
-    result += f"\nLENS_OVERRIDE: {lens_override}"
-print(result)
-```
-
-[validate: contains "PREMISES:"]
-[validate: contains "CAUSAL_CLAIMS:"]
-
----
-
-### Step 3: Verify all claims against full vault note texts (BS detector — part 3)
-
-Instead of per-claim keyword search (which fails on semantic matches), do ONE good vault_search for the problem, vault_read_note the top results to get FULL text, then ask the LLM to check each claim against those full note texts. The LLM does semantic MATCHING (does this text support this claim?) — the knowledge is IN the vault note, not in the LLM's weights. The LLM is a pattern matcher, not a knowledge base.
-
-```python
-# Parse Step 2
 lines = output.strip().split('\n')
 problem = ''
 all_claims_str = ''
@@ -165,7 +151,7 @@ for line in lines:
 
 all_claims = [c.strip() for c in all_claims_str.split('|||') if c.strip() and c.strip() != 'NONE']
 
-# ONE good vault search for the problem, then read full note texts
+# ONE vault search, read top 5 notes
 vault_results = vault_search(problem, k=5)
 full_docs = []
 for r in vault_results:
@@ -181,7 +167,6 @@ for r in vault_results:
     except Exception:
         pass
 
-# If vault_read_note found nothing, fall back to vault_search titles only
 if not full_docs:
     for r in vault_results:
         title = r.get('name', r.get('file_path', ''))
@@ -191,78 +176,112 @@ if not full_docs:
 premise_warnings = []
 premise_verified = []
 
-for claim in all_claims:
-    if not full_docs:
-        premise_warnings.append(f"UNVERIFIED: {claim} (no vault docs found for problem)")
-        continue
+if not all_claims:
+    # No claims to verify — open the gate
+    premise_gate = 'OPEN'
+    warnings_str = 'NO_CLAIMS'
+    verified_str = 'NONE_VERIFIED'
+elif not full_docs:
+    # No vault docs found
+    for claim in all_claims:
+        premise_warnings.append(f"UNVERIFIED: {claim} (no vault docs found)")
+    premise_gate = 'BLOCKED'
+    warnings_str = ' ||| '.join(premise_warnings)
+    verified_str = 'NONE_VERIFIED'
+else:
+    # BATCHED verification: all claims against all docs in one call
+    claims_list = '\n'.join(f"{i+1}. {c}" for i, c in enumerate(all_claims))
+    docs_text = '\n\n'.join(f"--- Note: {d['title']} ---\n{d['text'][:2000]}" for d in full_docs[:3])
 
-    # Ask LLM to check claim against each full doc text
-    # The LLM reads the vault note and checks if it supports the claim.
-    # This is semantic MATCHING, not knowledge retrieval.
-    verdict = 'NEUTRAL'
-    for doc in full_docs[:3]:  # check against top 3 docs
-        prompt = f"Read this vault note. Does it support this claim? Answer YES, NO, or NEUTRAL.\n\nClaim: {claim}\n\nVault note:\n{doc['text'][:2000]}"
-        resp = llm_generate(prompt).strip().upper()
-        for word in resp.split():
-            word = word.rstrip('.,!;')
-            if word in ('YES', 'NO', 'NEUTRAL'):
-                verdict = word
+    prompt = f"""Read these vault notes. For each claim, does any note support it, contradict it, or is it neutral?
+
+Claims:
+{claims_list}
+
+Vault notes:
+{docs_text}
+
+Format (one line per claim):
+CLAIM 1: YES/NO/NEUTRAL - [brief reason]"""
+
+    resp = llm_generate(prompt).strip()
+
+    # Parse verdicts
+    for i, claim in enumerate(all_claims):
+        verdict = 'NEUTRAL'
+        reason = ''
+        for line in resp.split('\n'):
+            line = line.strip()
+            if line.startswith(f'CLAIM {i+1}:'):
+                rest = line.replace(f'CLAIM {i+1}:', '').strip()
+                for v in ['YES', 'NO', 'NEUTRAL']:
+                    if rest.upper().startswith(v):
+                        verdict = v
+                        reason = rest[len(v):].lstrip(' -:- ').strip()
+                        break
                 break
+
+        doc_titles = ' | '.join([d['title'] for d in full_docs[:3]])
         if verdict == 'YES':
-            break  # verified — no need to check more docs
+            premise_verified.append(f"VERIFIED: {claim} (supported by: {doc_titles})")
+        elif verdict == 'NO':
+            premise_warnings.append(f"CONTRADICTED: {claim} (verdict: NO, reason: {reason}, checked against: {doc_titles})")
+        else:
+            premise_warnings.append(f"UNVERIFIED: {claim} (verdict: NEUTRAL, checked against: {doc_titles})")
 
-    doc_titles = ' | '.join([d['title'] for d in full_docs[:3]])
-    if verdict in ('NO', 'NEUTRAL'):
-        premise_warnings.append(f"UNVERIFIED: {claim} (verdict: {verdict}, checked against: {doc_titles})")
-    else:
-        premise_verified.append(f"VERIFIED: {claim} (supported by: {doc_titles})")
+    # Research gate: if ALL claims are unverified, check relevance and maybe research
+    if not premise_verified and premise_warnings and full_docs:
+        doc_snippets = '\n'.join([d['text'][:500] for d in full_docs[:3]])
+        relevance_prompt = f"Problem: {problem}\n\nVault docs found:\n{doc_snippets}\n\nAre these docs relevant to the problem? Answer YES or NO."
+        relevance_resp = llm_generate(relevance_prompt).strip().upper()
+        docs_irrelevant = 'NO' in relevance_resp
 
-# --- Research gate: if ALL claims are UNVERIFIED and vault docs are thin, research the gap ---
-# The BS detector should not just say "unverified" and give up — it should
-# trigger vault_research to fill the knowledge gap, then re-verify.
-if not premise_verified and premise_warnings and full_docs:
-    # Check if vault docs are actually relevant (not just random noise)
-    # by asking the LLM if any doc is semantically related to the problem
-    doc_snippets = '\\n'.join([d['text'][:500] for d in full_docs[:3]])
-    relevance_prompt = f"Problem: {problem}\\n\\nVault docs found:\\n{doc_snippets}\\n\\nAre these docs relevant to the problem? Answer YES or NO."
-    relevance_resp = llm_generate(relevance_prompt).strip().upper()
-    docs_irrelevant = 'NO' in relevance_resp
+        if docs_irrelevant or len(full_docs) < 2:
+            try:
+                research_result = vault_research(problem, depth='deep')
+                if research_result and 'error' not in research_result:
+                    research_synthesis = research_result.get('synthesis', '')
+                    research_note = research_result.get('note_path', '')
+                    if research_synthesis:
+                        # Batched re-verification against research
+                        claims_list = '\n'.join(f"{i+1}. {c}" for i, c in enumerate(all_claims))
+                        recheck_prompt = f"""Read this research. For each claim, does the research support it, contradict it, or is it neutral?
 
-    if docs_irrelevant or len(full_docs) < 2:
-        # Vault is thin — trigger research
-        try:
-            research_result = vault_research(problem, depth='deep')
-            if research_result and 'error' not in research_result:
-                research_synthesis = research_result.get('synthesis', '')
-                research_note = research_result.get('note_path', '')
-                # Re-verify claims against the research synthesis
-                if research_synthesis:
-                    premise_warnings = []
-                    premise_verified = []
-                    for claim in all_claims:
-                        recheck_prompt = f"Read this research. Does it support this claim? Answer YES, NO, or NEUTRAL.\\n\\nClaim: {claim}\\n\\nResearch:\\n{research_synthesis[:2000]}"
-                        recheck_resp = llm_generate(recheck_prompt).strip().upper()
-                        recheck_verdict = 'NEUTRAL'
-                        for word in recheck_resp.split():
-                            word = word.rstrip('.,!;')
-                            if word in ('YES', 'NO', 'NEUTRAL'):
-                                recheck_verdict = word
-                                break
-                        if recheck_verdict == 'YES':
-                            premise_verified.append(f"VERIFIED: {claim} (supported by vault_research: {research_note})")
-                        else:
-                            premise_warnings.append(f"UNVERIFIED: {claim} (researched, verdict: {recheck_verdict}, note: {research_note})")
-        except Exception:
-            pass  # Research failed — keep original UNVERIFIED status
+Claims:
+{claims_list}
 
-# --- Premise Gate: if ALL claims are unverified after research, block downstream ---
-# The BS detector correctly flags false premises, but Steps 4-8 would still
-# classify, dispatch lenses, and synthesize an answer about a fictional system.
-# PREMISE_GATE: BLOCKED tells Step 8 to produce an honest refusal instead.
-premise_gate = 'BLOCKED' if (not premise_verified and premise_warnings) else 'OPEN'
+Research:
+{research_synthesis[:2000]}
 
-warnings_str = ' ||| '.join(premise_warnings) if premise_warnings else 'ALL_VERIFIED'
-verified_str = ' ||| '.join(premise_verified) if premise_verified else 'NONE_VERIFIED'
+Format (one line per claim):
+CLAIM 1: YES/NO/NEUTRAL - [brief reason]"""
+
+                        recheck_resp = llm_generate(recheck_prompt).strip()
+
+                        premise_warnings = []
+                        premise_verified = []
+                        for i, claim in enumerate(all_claims):
+                            recheck_verdict = 'NEUTRAL'
+                            for line in recheck_resp.split('\n'):
+                                line = line.strip()
+                                if line.startswith(f'CLAIM {i+1}:'):
+                                    rest = line.replace(f'CLAIM {i+1}:', '').strip()
+                                    for v in ['YES', 'NO', 'NEUTRAL']:
+                                        if rest.upper().startswith(v):
+                                            recheck_verdict = v
+                                            break
+                                    break
+
+                            if recheck_verdict == 'YES':
+                                premise_verified.append(f"VERIFIED: {claim} (supported by vault_research: {research_note})")
+                            else:
+                                premise_warnings.append(f"UNVERIFIED: {claim} (researched, verdict: {recheck_verdict}, note: {research_note})")
+            except Exception:
+                pass  # Research failed — keep original UNVERIFIED status
+
+    premise_gate = 'BLOCKED' if (not premise_verified and premise_warnings) else 'OPEN'
+    warnings_str = ' ||| '.join(premise_warnings) if premise_warnings else 'ALL_VERIFIED'
+    verified_str = ' ||| '.join(premise_verified) if premise_verified else 'NONE_VERIFIED'
 
 result = f"PREMISE_WARNINGS: {warnings_str}\nPREMISE_VERIFIED: {verified_str}\nPREMISE_GATE: {premise_gate}\nPROBLEM: {problem}"
 if context:
@@ -276,12 +295,12 @@ print(result)
 
 ---
 
-### Step 4: Classify the problem type
+### Step 3: Classify + select lenses
 
-Ask the LLM one simple question: what kind of problem is this? Single word output from a short list.
+The 4B can classify the problem type AND suggest additional lenses in one call. No need for separate steps like v3.
 
 ```python
-# Parse Step 3
+# Parse Step 2
 lines = output.strip().split('\n')
 problem = ''
 context = ''
@@ -291,56 +310,6 @@ premise_gate = ''
 for line in lines:
     if line.startswith('PROBLEM: '):
         problem = line.replace('PROBLEM: ', '').strip()
-    elif line.startswith('CONTEXT: '):
-        context = line.replace('CONTEXT: ', '').strip()
-    elif line.startswith('LENS_OVERRIDE: '):
-        lens_override = line.replace('LENS_OVERRIDE: ', '').strip()
-    elif line.startswith('PREMISE_WARNINGS: '):
-        premise_warnings = line.replace('PREMISE_WARNINGS: ', '').strip()
-    elif line.startswith('PREMISE_GATE: '):
-        premise_gate = line.replace('PREMISE_GATE: ', '').strip()
-
-# Single-call classification — one word from a short list
-valid_types = ['WHY', 'CHOOSE', 'EXPLAIN', 'BUILD', 'EVALUATE', 'VERIFY']
-prompt = f"What kind of question is this? Pick ONE word:\nWHY (something broken/failing)\nCHOOSE (pick between options)\nEXPLAIN (understand how something works)\nBUILD (design or plan steps)\nEVALUATE (multiple viewpoints)\nVERIFY (check if a claim is true)\n\nQuestion: {problem}"
-resp = llm_generate(prompt).strip().upper()
-problem_type = 'EXPLAIN'  # safe default
-for word in resp.split():
-    word = word.rstrip('.,!;')
-    if word in valid_types:
-        problem_type = word
-        break
-
-result = f"PROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}"
-if context:
-    result += f"\nCONTEXT: {context}"
-if lens_override:
-    result += f"\nLENS_OVERRIDE: {lens_override}"
-print(result)
-```
-
-[validate: contains "PROBLEM_TYPE:"]
-
----
-
-### Step 5: Select lenses
-
-Map the problem type to a default lens stack, then ask the LLM if any additional lenses would help. The LLM only suggests additions — the code handles the mapping.
-
-```python
-# Parse Step 4
-lines = output.strip().split('\n')
-problem = ''
-problem_type = ''
-context = ''
-lens_override = ''
-premise_warnings = ''
-premise_gate = ''
-for line in lines:
-    if line.startswith('PROBLEM: '):
-        problem = line.replace('PROBLEM: ', '').strip()
-    elif line.startswith('PROBLEM_TYPE: '):
-        problem_type = line.replace('PROBLEM_TYPE: ', '').strip()
     elif line.startswith('CONTEXT: '):
         context = line.replace('CONTEXT: ', '').strip()
     elif line.startswith('LENS_OVERRIDE: '):
@@ -359,45 +328,73 @@ type_to_lens = {
     'EVALUATE': ['Multi-Perspective'],
     'VERIFY': ['Evidence-Weighing'],
 }
-default_lenses = type_to_lens.get(problem_type, ['Systematic-Inquiry'])
 
-# If override provided, use it
 if lens_override:
+    # Use override — no LLM call needed
     lens_stack = [l.strip() for l in lens_override.split(',') if l.strip()]
+    problem_type = 'OVERRIDE'
 else:
-    lens_stack = list(default_lenses)
-
-    # Ask LLM: should we add another lens? Simple yes/no + which one
+    # Single call: classify + suggest additional lens
     available = ['Root-Cause-Analysis', 'Trade-off-Analysis', 'Systematic-Inquiry', 'Decomposition', 'Multi-Perspective', 'Evidence-Weighing']
-    unused = [l for l in available if l not in lens_stack]
 
-    if unused:
-        prompt = f"Question: {problem}\n\nAlready using: {', '.join(lens_stack)}\n\nWould another approach help? If yes, which ONE from: {', '.join(unused)}. If no, say NO.\n\nAnswer with just the lens name or NO."
-        resp = llm_generate(prompt).strip()
+    prompt = f"""What kind of question is this? Pick ONE:
+WHY (something broken/failing)
+CHOOSE (pick between options)
+EXPLAIN (understand how something works)
+BUILD (design or plan steps)
+EVALUATE (multiple viewpoints)
+VERIFY (check if a claim is true)
 
-        # Check if response matches an unused lens name
-        resp_clean = resp.strip().upper()
-        for lens in unused:
-            if lens.upper() == resp_clean or resp_clean.startswith(lens.upper()):
-                lens_stack.append(lens)
-                break
+Question: {problem}
 
-result = f"LENS_STACK: {','.join(lens_stack)}\nPROBLEM_TYPE: {problem_type}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}"
+Format:
+TYPE: [your pick]
+EXTRA_LENS: [name of another approach that would help, or NO]"""
+
+    resp = llm_generate(prompt).strip()
+
+    # Parse type
+    problem_type = 'EXPLAIN'  # safe default
+    for line in resp.split('\n'):
+        if line.startswith('TYPE:'):
+            type_val = line.replace('TYPE:', '').strip().upper()
+            for t in ['WHY', 'CHOOSE', 'EXPLAIN', 'BUILD', 'EVALUATE', 'VERIFY']:
+                if t in type_val:
+                    problem_type = t
+                    break
+            break
+
+    lens_stack = list(type_to_lens.get(problem_type, ['Systematic-Inquiry']))
+
+    # Parse extra lens suggestion
+    for line in resp.split('\n'):
+        if line.startswith('EXTRA_LENS:'):
+            extra = line.replace('EXTRA_LENS:', '').strip()
+            extra_clean = extra.upper()
+            if extra_clean != 'NO' and extra_clean:
+                for lens in available:
+                    if lens not in lens_stack and (lens.upper() == extra_clean or extra_clean.startswith(lens.upper())):
+                        lens_stack.append(lens)
+                        break
+            break
+
+result = f"PROBLEM_TYPE: {problem_type}\nLENS_STACK: {','.join(lens_stack)}\nPROBLEM: {problem}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}"
 if context:
     result += f"\nCONTEXT: {context}"
 print(result)
 ```
 
+[validate: contains "PROBLEM_TYPE:"]
 [validate: contains "LENS_STACK:"]
 
 ---
 
-### Step 6: Dispatch to lenses
+### Step 4: Dispatch to lenses
 
-Run each lens in order. Before each lens, do a vault search for relevant docs. Pass premise warnings as context so lenses know which claims are unverified. This is pure code — no LLM calls.
+Run each lens in order. Before each lens, do a vault search for relevant docs. Pass premise warnings as context. Pure code — no LLM calls.
 
 ```python
-# Parse Step 5
+# Parse Step 3
 lines = output.strip().split('\n')
 problem = ''
 problem_type = ''
@@ -438,7 +435,7 @@ for lens_name in lens_queue:
 
     # Build context for the lens
     lens_context = context or ''
-    if premise_warnings and premise_warnings != 'ALL_VERIFIED':
+    if premise_warnings and premise_warnings not in ('ALL_VERIFIED', 'NO_CLAIMS'):
         lens_context = (lens_context + '\n' if lens_context else '') + f"NOTE - unverified claims in the problem: {premise_warnings}"
     if lens_docs:
         lens_context = (lens_context + '\n' if lens_context else '') + f"Relevant vault notes: {' | '.join(lens_docs)}"
@@ -451,7 +448,7 @@ for lens_name in lens_queue:
             lens_text = lens_result.get('final_output', str(lens_result))
         else:
             lens_text = str(lens_result)
-        lens_outputs[lens_name] = lens_text[:2000]  # cap for memory
+        lens_outputs[lens_name] = lens_text[:2000]
     except Exception as e:
         lens_outputs[lens_name] = f"ERROR: {str(e)}"
 
@@ -460,7 +457,6 @@ for lens_name in lens_queue:
 # Format output
 result = f"PROBLEM: {problem}\nLENSES_RUN: {','.join(completed)}\nVAULT_DOCS: {' | '.join(all_docs)}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}\n"
 for name, out in lens_outputs.items():
-    # Escape newlines in lens output for single-line storage
     escaped = out.replace('\n', '\\n')
     result += f"LENS_OUTPUT: {name}::: {escaped}\n"
 print(result)
@@ -471,12 +467,12 @@ print(result)
 
 ---
 
-### Step 7: Check if more lenses are needed
+### Step 5: Conditional — more lenses needed?
 
-After all lenses run, ask the LLM one question: does the analysis need another pass? Simple yes/no. If yes, which lens? Then dispatch it.
+Only runs if any lens output is thin (ERROR or <100 chars). If all lenses produced good output, skip this step entirely. Saves 1 LLM call + potential lens dispatch on most queries.
 
 ```python
-# Parse Step 6
+# Parse Step 4
 lines = output.strip().split('\n')
 problem = ''
 completed_str = ''
@@ -499,54 +495,65 @@ for line in lines:
             lens_data[name] = out.replace('\\n', '\n')
 
 completed = [c.strip() for c in completed_str.split(',') if c.strip()]
+
+# Check if any lens output is thin
+needs_more = False
+for name, out in lens_data.items():
+    if out.startswith('ERROR') or len(out.strip()) < 100:
+        needs_more = True
+        break
+
 available = ['Root-Cause-Analysis', 'Trade-off-Analysis', 'Systematic-Inquiry', 'Decomposition', 'Multi-Perspective', 'Evidence-Weighing']
 unused = [l for l in available if l not in completed]
 
-extra_lenses = []
-if unused:
-    # Build a short summary of what each lens found
+if needs_more and unused:
+    # Build summaries of what we have
     summaries = []
     for name, out in lens_data.items():
-        # Take first 200 chars as summary
         summaries.append(f"{name}: {out[:200]}")
 
-    prompt = f"Question: {problem}\n\nAnalysis so far:\n{chr(10).join(summaries)}\n\nNeed another approach? If yes, pick ONE from: {', '.join(unused)}. If no, say NO.\n\nAnswer with just the lens name or NO."
+    prompt = f"""Question: {problem}
+
+Analysis so far:
+{chr(10).join(summaries)}
+
+The existing analysis is thin or errored. Would another approach help? Pick ONE from: {', '.join(unused)}. If no, say NO.
+
+Answer with just the lens name or NO."""
+
     resp = llm_generate(prompt).strip()
 
     resp_clean = resp.strip().upper()
     for lens in unused:
         if lens.upper() == resp_clean or resp_clean.startswith(lens.upper()):
-            extra_lenses.append(lens)
+            # Run the extra lens
+            vault_results = vault_search(f"{problem} {lens.replace('-', ' ')}", k=3)
+            lens_docs = []
+            for r in vault_results:
+                title = r.get('name', r.get('file_path', ''))
+                lens_docs.append(f"[[{title}]]")
+
+            lens_context = ''
+            if premise_warnings and premise_warnings not in ('ALL_VERIFIED', 'NO_CLAIMS'):
+                lens_context = f"NOTE - unverified claims: {premise_warnings}"
+            if lens_docs:
+                lens_context = (lens_context + '\n' if lens_context else '') + f"Relevant notes: {' | '.join(lens_docs)}"
+
+            try:
+                lens_args = {'problem': problem, 'context': lens_context}
+                lens_result = run_procedure(lens, args=lens_args)
+                if isinstance(lens_result, dict):
+                    lens_text = lens_result.get('final_output', str(lens_result))
+                else:
+                    lens_text = str(lens_result)
+                lens_data[lens] = lens_text[:2000]
+                completed.append(lens)
+            except Exception as e:
+                lens_data[lens] = f"ERROR: {str(e)}"
+                completed.append(lens)
             break
 
-# Run extra lenses
-for lens_name in extra_lenses:
-    vault_results = vault_search(f"{problem} {lens_name.replace('-', ' ')}", k=3)
-    lens_docs = []
-    for r in vault_results:
-        title = r.get('name', r.get('file_path', ''))
-        lens_docs.append(f"[[{title}]]")
-
-    lens_context = ''
-    if premise_warnings and premise_warnings != 'ALL_VERIFIED':
-        lens_context = f"NOTE - unverified claims: {premise_warnings}"
-    if lens_docs:
-        lens_context = (lens_context + '\n' if lens_context else '') + f"Relevant notes: {' | '.join(lens_docs)}"
-
-    try:
-        lens_args = {'problem': problem, 'context': lens_context}
-        lens_result = run_procedure(lens_name, args=lens_args)
-        if isinstance(lens_result, dict):
-            lens_text = lens_result.get('final_output', str(lens_result))
-        else:
-            lens_text = str(lens_result)
-        lens_data[lens_name] = lens_text[:2000]
-        completed.append(lens_name)
-    except Exception as e:
-        lens_data[lens_name] = f"ERROR: {str(e)}"
-        completed.append(lens_name)
-
-# Rebuild output with all lens data
+# Rebuild output
 result = f"PROBLEM: {problem}\nLENSES_RUN: {','.join(completed)}\nPREMISE_WARNINGS: {premise_warnings}\nPREMISE_GATE: {premise_gate}\n"
 for name, out in lens_data.items():
     escaped = out.replace('\n', '\\n')
@@ -558,9 +565,9 @@ print(result)
 
 ---
 
-### Step 8: Synthesize conclusion (small-LLM synthesis)
+### Step 6: Synthesize conclusion
 
-Bite-sized small-LLM synthesis: extract key findings from each lens output (one call per lens), then synthesize from those key findings into a coherent answer (one final call). The small model only sees short, focused prompts — never the full lens outputs at once. This makes the entire Think pipeline run on the local model with zero cloud model usage.
+Single-call synthesis: the 4B can handle all lens outputs at once. No need for per-lens extraction + separate synthesis like v3. The 4B reads all lens outputs and produces a coherent answer in one pass.
 
 ```python
 # Parse all accumulated data
@@ -587,7 +594,7 @@ for line in lines:
 
 completed = [c.strip() for c in completed_str.split(',') if c.strip()]
 
-# Read user preference: show BS Detector messages directly, or let the LLM handle it gently?
+# Read user preference
 import os
 bs_detector_messages = os.environ.get('VAULTBOT_BS_DETECTOR_MESSAGES', 'true').lower() != 'false'
 
@@ -625,40 +632,36 @@ if premise_gate == 'BLOCKED':
     synthesis = '\n'.join(synth_lines)
     print(synthesis)
 else:
-    # --- PREMISE GATE OPEN: small-LLM synthesis ---
-    # Phase 1: Extract key findings from each lens output (one bite-sized call per lens)
-    key_findings = {}
+    # --- PREMISE GATE OPEN: single-call synthesis ---
+    # Build lens outputs text (cap each at 1500 chars for context management)
+    lens_texts = []
     for name in completed:
         out = lens_data.get(name, 'No output')
-        # Take first 500 chars of lens output — enough for the small model to extract a finding
-        snippet = out[:500].replace('\n', ' ').strip()
-        if not snippet or snippet == 'No output':
-            key_findings[name] = f"No findings from {name}"
-            continue
+        snippet = out[:1500] if len(out) > 1500 else out
+        lens_texts.append(f"## {name}\n{snippet}")
 
-        # Single-call key finding extraction
-        prompt = f"Read this analysis. What is the single most important finding? Answer in one sentence.\n\nAnalysis: {snippet}"
-        resp = llm_generate(prompt).strip()
-        if resp and len(resp) > 10:
-            key_findings[name] = resp
-        else:
-            # Fallback: use first 150 chars of lens output
-            key_findings[name] = snippet[:150] + '...'
+    lens_outputs_text = '\n\n'.join(lens_texts)
 
-    # Phase 2: Synthesize from key findings (one final bite-sized call)
-    findings_text = '\n'.join([f"{name}: {finding}" for name, finding in key_findings.items()])
+    synth_prompt = f"""Question: {problem}
 
-    # Build a short synthesis prompt — the small model only sees key findings, not full outputs
-    synth_prompt = f"Question: {problem}\n\nKey findings from analysis:\n{findings_text}\n\nSynthesize these into a short answer. Include:\n1. Summary (2-3 sentences)\n2. Key findings (bullet points)\n3. Confidence (HIGH/MEDIUM/LOW with reason)\n4. If relevant, one recommended action"
+Analysis from multiple approaches:
+{lens_outputs_text}
 
-    # Single-call synthesis
+Synthesize these into a coherent answer. Include:
+1. Summary (2-3 sentences)
+2. Key findings (bullet points, one per approach)
+3. Confidence (HIGH/MEDIUM/LOW with reason)
+4. If relevant, one recommended action"""
+
     synthesis_body = llm_generate(synth_prompt).strip()
+
     if not synthesis_body or len(synthesis_body) < 30:
-        # Fallback: assemble from key findings manually
+        # Fallback: assemble manually
         synthesis_body = f"Summary: Analysis of '{problem}' using {', '.join(completed)}.\n\nKey findings:\n"
-        for name, finding in key_findings.items():
-            synthesis_body += f"- [{name}] {finding}\n"
-        synthesis_body += "\nConfidence: MEDIUM (synthesis fallback — small model did not produce a coherent response)"
+        for name in completed:
+            out = lens_data.get(name, 'No output')
+            synthesis_body += f"- [{name}] {out[:200]}\n"
+        synthesis_body += "\nConfidence: MEDIUM (synthesis fallback - model did not produce a coherent response)"
 
     # Assemble final output
     synth_lines = []
@@ -666,7 +669,7 @@ else:
     synth_lines.append("")
 
     # BS Detector section
-    if premise_warnings and premise_warnings != 'ALL_VERIFIED':
+    if premise_warnings and premise_warnings not in ('ALL_VERIFIED', 'NO_CLAIMS'):
         if bs_detector_messages:
             synth_lines.append("### BS Detector: Unverified Claims")
         else:
@@ -706,15 +709,28 @@ else:
 
 ## Research Justification
 
-1. **Bite-sized prompts for small models**: Research shows small models (<3B parameters) perform dramatically better when each LLM call asks exactly one question with constrained output format. The v2 Think procedure asked the 0.8B model to process 400+ word prompts with 6 lens descriptions and premise extraction all at once — the model couldn't hold it in working attention. v3 breaks every LLM call into 1-3 sentence prompts with single-word or short-list outputs.
+1. **Batched verification for 4B models**: The qwen3.5:4b can handle "here are N claims and M docs, give me a verdict for each" in a single call. Testing confirmed it returns YES, NO, and NEUTRAL appropriately — actually engaging with vault content instead of defaulting to NEUTRAL like the 1.7B.
 
-2. **Procedure terminology isolation**: When the LLM sees its own procedure description in the prompt, it pattern-matches on that description rather than processing the actual problem. v3 ensures the LLM never sees words like "ontology," "epistemology," "hermeneutics," or "lens stack" — those are code-level concepts only.
+2. **No triple-try needed**: The 4B produced consistent output across all 3 test problems — same classification, same format compliance, same verification patterns. Triple-try (3x LLM round-trips with majority vote) was designed for the 0.8B's inconsistency and is pure waste on the 4B.
 
-3. **Single-call consistency** ([[Deterministic-Scaffolding-for-Small-Models]]): Critical LLM calls (premise extraction, classification, lens selection) run once with deterministic fallbacks. This keeps latency low — the small model's inconsistency is handled by code-level defaults rather than 3× LLM round-trips.
+3. **Richer prompts**: The 4B has a larger context window and better instruction-following. Prompts can be 3-4 sentences with multi-part instructions instead of 1-2 sentences with single-token output constraints.
 
-4. **Deterministic fallbacks**: Every LLM call has a code-level fallback. If the model produces garbage, the procedure continues with a safe default rather than hallucinating.
+4. **Combined tasks**: The 4B can classify a problem AND suggest additional lenses in one call. It can extract factual AND causal claims in one call. It can synthesize from multiple lens outputs in one call. Each merge saves a full LLM round-trip.
 
-5. **VibeThinker-3B precedent** ([[VibeThinker-3B-small-LLM-beats-DeepSeek-GPT-GLM-benchmarks-performance_20260731-233419]]): A 3B model achieved frontier-level reasoning through structured post-training. The Parametric Compression-Coverage Hypothesis suggests verifiable reasoning can be compressed into small models when the reasoning structure is provided externally — which is exactly what this procedure does.
+5. **Deterministic fallbacks retained**: Every LLM call still has a code-level fallback. If the 4B produces a bad output, the procedure continues with a safe default. Safety is not hand-holding.
+
+6. **VibeThinker-3B precedent** ([[VibeThinker-3B-small-LLM-beats-DeepSeek-GPT-GLM-benchmarks-performance_20260731-233419]]): A 3B model achieved frontier-level reasoning through structured post-training. The 4B should be even more capable when given the right scaffolding.
+
+## Call Count Comparison
+
+| Component | v3 (0.8B-era) | v4 (4B-era) |
+|---|---|---|
+| Claim extraction | 2 calls (Steps 1+2) | 1 call (Step 1) |
+| Verification | 15-21 calls (per-claim x per-doc) | 1-3 calls (batched + research gate) |
+| Classification + lens selection | 2 calls (Steps 4+5) | 1 call (Step 3) |
+| More lenses check | 1 call (always) | 0-1 calls (conditional) |
+| Synthesis | N+1 calls (per-lens + final) | 1 call (Step 6) |
+| **Parent total** | **20-28 calls** | **4-6 calls** |
 
 ## Related
 

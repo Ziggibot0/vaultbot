@@ -1,0 +1,18 @@
+									this.backendUrl + '/sessions/' + s.session_id);
+								const turns = (await r.json()).turns || [];
+								chatContainer.empty();
+								for (const t of turns) {
+									if (t.role === 'user') {
+										const div = chatContainer.createDiv(
+											{cls: 'vaultbot-message user'});
+										renderMarkdownInto(div, t.content);
+									} else if (t.role === 'assistant' && t.content) {
+										const div = chatContainer.createDiv(
+											{cls: 'vaultbot-message assistant'});
+										const block = div.createEl('div',
+											{cls: 'vaultbot-answer-block'});
+										renderMarkdownInto(block, t.content);
+									}
+								}
+								chatContainer.scrollTop = 0;
+								setStatus('done', 'Showing past conversation');

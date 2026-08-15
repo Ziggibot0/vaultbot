@@ -1,3 +1,11 @@
+"""Session logger — append-only JSONL audit trail with automatic secret redaction.
+
+Every tool call, LLM interaction, WebSocket message, and internal event is
+logged to a per-session .jsonl file. Secrets (API keys, tokens) are redacted
+before writing. The log is the single source of truth for debugging and
+calibration.
+"""
+
 import json
 import re
 import time

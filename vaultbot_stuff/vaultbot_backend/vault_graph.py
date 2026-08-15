@@ -1,3 +1,9 @@
+"""Wikilink graph — in-memory representation of [[links]] between vault notes.
+
+Built lazily from the vault's .md files. Supports note lookups by stem,
+backlink queries, and graph-walk for retrieval. Thread-safe via RLock.
+"""
+
 import re
 import threading
 from collections import deque

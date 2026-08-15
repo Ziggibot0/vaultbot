@@ -1,3 +1,10 @@
+"""Subagent isolation — runs research and other heavy tasks in a separate process.
+
+The verbose work (source-rejection events, scrapes, 50K synthesis) stays in
+the subprocess; the orchestrator receives only a compact JSON brief. This
+prevents conversation context from ballooning during multi-round research.
+"""
+
 import json
 import os
 import subprocess

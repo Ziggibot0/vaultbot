@@ -186,6 +186,41 @@
 	box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 3px var(--vb-shadow-soft);
 }
 
+/* ---- Scroll-to-bottom button: floats over chat when not at bottom ---- */
+.vaultbot-scroll-bottom-btn {
+	position: absolute;
+	bottom: 70px;
+	right: 24px;
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	border: 1px solid var(--vb-stone);
+	background-color: var(--vb-bg-elev);
+	color: var(--vb-moss);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	box-shadow: 0 2px 8px var(--vb-shadow-soft);
+	opacity: 0;
+	transform: translateY(8px);
+	pointer-events: none;
+	transition: opacity 0.2s ease, transform 0.2s ease;
+	z-index: 100;
+}
+
+.vaultbot-scroll-bottom-btn.visible {
+	opacity: 1;
+	transform: translateY(0);
+	pointer-events: auto;
+}
+
+.vaultbot-scroll-bottom-btn:hover {
+	background-color: var(--vb-moss);
+	color: var(--vb-bg);
+}
+
 /* ---- Message bubbles: river-stone shapes ---- */
 .vaultbot-message {
 	max-width: 100%;

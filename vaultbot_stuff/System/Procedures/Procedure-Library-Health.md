@@ -24,7 +24,7 @@ provides:
   - Analyze-Failure-Log
   - Check-Procedure-Drift
   - Procedure-Coverage-Check
-summary: "## Summary"
+summary: SUMMARY
 tags:
   - procedure
   - library-health

@@ -356,6 +356,13 @@ _IGNORED_DIRS = {
     "__pycache__",
 }
 
+# --- Preamble cache (allowed_tools doesn't change between steps) ---
+# Keyed by sorted tuple of allowed_tools.  The preamble is a large
+# (~2-4 KB) string that's identical for all code steps in the same
+# procedure (allowed_tools comes from frontmatter).  Without this cache
+# the string is rebuilt from scratch for every code step.
+_PREAMBLE_CACHE: dict[tuple[str, ...], str] = {}
+
 
 def _build_tool_preamble(allowed_tools: list[str]) -> str:
     """Build the Python code that injects allowed tools into the namespace.
@@ -364,6 +371,13 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     backend modules and creates wrapper functions that the step code
     can call directly.
     """
+    # Cache hit: the preamble depends solely on the allowed_tools list.
+    # Sorted tuple key ensures order doesn't matter.
+    cache_key = tuple(sorted(allowed_tools))
+    cached = _PREAMBLE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     snippets: list[str] = []
 
     # --- Universal context variables (always injected) ---
@@ -512,9 +526,17 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        links = _re.findall(r"\\[\\[([^\\]]+)\\]\\]", text)\n'
             "        broken = []\n"
             "        vault = Path(vault_path)\n"
+            "        # Build a stem map with a single pruned walk instead of\n"
+            "        # one rglob per wikilink (O(vault) once, not O(n*vault)).\n"
+            "        _stem_map = {}\n"
+            "        for _root, _dirs, _files in os.walk(str(vault)):\n"
+            "            _dirs[:] = [d for d in _dirs if d not in _IGNORED_DIRS]\n"
+            "            for _f in _files:\n"
+            '                if _f.endswith(".md"):\n'
+            "                    _stem_map[Path(_f).stem] = Path(_root, _f)\n"
             "        for link in links:\n"
-            '            found = list(vault.rglob(f"{link.split(chr(124))[0]}.md"))\n'
-            "            if not found:\n"
+            "            link_stem = link.split(chr(124))[0]\n"
+            "            if link_stem not in _stem_map:\n"
             "                broken.append(link)\n"
             "        if broken:\n"
             '            issues.append(f"{len(broken)} broken wikilinks: {broken[:5]}")\n'
@@ -758,7 +780,9 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    namespace["vault_research"] = vault_research\n'
         )
 
-    return "\n".join(snippets)
+    result = "\n".join(snippets)
+    _PREAMBLE_CACHE[cache_key] = result
+    return result
 
 
 # ── Subprocess wrapper for code steps ───────────────────────────────────

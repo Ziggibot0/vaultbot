@@ -1,3 +1,10 @@
+"""Vault maintenance — stale note detection, thin-note identification, and cleanup.
+
+Scans the vault for notes that need attention: missing frontmatter, weak
+summaries, generic tags, stale references. Used by the autonomous researcher
+and QA worker to keep the vault healthy.
+"""
+
 import json
 import re
 from datetime import UTC, datetime

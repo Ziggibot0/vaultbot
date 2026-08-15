@@ -42,6 +42,80 @@ if str(_BACKEND) not in sys.path:
 from procedure_compiler import compile_procedure
 from step_gate_runtime import MAX_PROC_DEPTH, execute_procedure
 
+# --- Stem index cache (avoids full-vault rglob on every invocation) ---
+# Built once per process via a pruned os.walk (same pattern as
+# procedure_tracker._iter_procedural_notes).  Keyed by vault_path.
+_INDEX_CACHE: dict[str, dict[str, str]] = {}
+
+# Reuse the same ignore set as procedure_tracker (keep in sync).
+_IGNORED_DIRS = {
+    ".git",
+    ".obsidian",
+    ".venv",
+    "vaultbot_venv",
+    "vaultbot_index",
+    "sessions",
+    "partials",
+    "__pycache__",
+    "trash",
+}
+
+
+def _get_proc_index(vault_path: str) -> dict[str, str]:
+    """Build a {stem: file_path} index of procedural notes.
+
+    Walks the vault once with a pruned os.walk, reading only frontmatter
+    (the first few lines) to check for ``type: procedure``.  Far cheaper
+    than rglob which walks every file and compares stems.
+    """
+    vault = Path(vault_path)
+    index: dict[str, str] = {}
+    if not vault.is_dir():
+        return index
+    for root, dirs, files in os.walk(vault):
+        dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]
+        for fname in files:
+            if not fname.endswith(".md"):
+                continue
+            md = Path(root) / fname
+            try:
+                with open(md, encoding="utf-8", errors="replace") as f:
+                    head = f.read(2048)
+            except OSError:
+                continue
+            if not head.startswith("---"):
+                continue
+            end = head.find("---", 3)
+            if end == -1:
+                continue
+            fm = head[3:end]
+            if "type: procedure" not in fm:
+                continue
+            index[md.stem] = str(md)
+    return index
+
+
+def _resolve_procedure_file(proc_name: str, vault_path: str) -> Path | None:
+    """Resolve a procedure note by stem using the cached index.
+
+    Falls back to rglob if the stem isn't in the index (covers a note
+    written seconds ago by a sibling subprocess that the index hasn't
+    seen yet).
+    """
+    idx = _INDEX_CACHE.get(vault_path)
+    if idx is None:
+        idx = _get_proc_index(vault_path)
+        _INDEX_CACHE[vault_path] = idx
+    path_str = idx.get(proc_name)
+    if path_str:
+        return Path(path_str)
+    # Fallback: rglob for a just-written note the index hasn't seen.
+    vault = Path(vault_path)
+    for candidate in vault.rglob("*.md"):
+        if candidate.stem == proc_name:
+            return candidate
+    return None
+
 
 def _resolve_llm_client():
     """Get the default LLM client for child procedures.
@@ -123,16 +197,12 @@ def main() -> int:
         )
         return 1
 
-    # --- Resolve the procedure note by stem ---
-    proc_file = None
+    # --- Resolve the procedure note by stem (cached index, rglob fallback) ---
     vault = Path(args.vault_path)
     # Ensure VAULT_PATH is in the environment so code step subprocesses
     # (spawned by execute_procedure) can find the vault root.
     os.environ["VAULT_PATH"] = str(vault)
-    for candidate in vault.rglob("*.md"):
-        if candidate.stem == args.procedure_name:
-            proc_file = candidate
-            break
+    proc_file = _resolve_procedure_file(args.procedure_name, str(vault))
     if not proc_file:
         print(
             json.dumps(

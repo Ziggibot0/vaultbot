@@ -1,3 +1,9 @@
+"""SearXNG instance manager — starts and monitors a local SearXNG search instance.
+
+Used by the research engine as one of several search backends. Manages the
+SearXNG Docker container lifecycle and health checks.
+"""
+
 import logging
 import time
 from pathlib import Path

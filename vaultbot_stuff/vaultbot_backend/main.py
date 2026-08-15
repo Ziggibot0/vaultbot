@@ -1,3 +1,10 @@
+"""FastAPI application entry point — lifespan, middleware, WebSocket manager.
+
+Constructs all singleton services at startup, wires them into a ``Services``
+dataclass, and registers route handlers from ``routers/``. The PID lock
+prevents two backends from running on the same vault.
+"""
+
 import asyncio
 import atexit
 import json
