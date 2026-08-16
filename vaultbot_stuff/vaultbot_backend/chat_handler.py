@@ -1856,24 +1856,6 @@ async def handle_chat(
         _turn_tool_history: list = list(_resumed_tool_history)
         _tool_rounds_executed = 0
         _double_silent_once = False
-        # Detect a thinking/reasoning model by name so we can pre-digest large
-        # tool results for it (fix #1). A thinking model that gets a huge raw
-        # file dump tends to ECHO it char-by-char in its reasoning field and
-        # exhaust its budget before writing the answer. For those models we
-        # inject a compact structural digest instead of the raw blob.
-        _is_thinking_model = any(
-            k in (svc.ollama_client.llm_model or "").lower()
-            for k in (
-                "thinking",
-                "reason",
-                "nemotron",
-                "o1",
-                "qwq",
-                "r1",
-                "o3",
-                "deepseek-reason",
-            )
-        )
 
         # Working-memory signature cache. conversation[0] is rebuilt only
         # when this changes across rounds, so provider prompt caches see a
@@ -2937,32 +2919,13 @@ async def handle_chat(
                         )
                     else:
                         capped_result = truncate_tool_result(tool_result)
-                    # --- Pre-digest large tool results (thinking models only) -----
-                    # A THINKING/reasoning model (nemotron, o1, qwq, r1, ...) handed
-                    # a huge raw file blob tends to ECHO it char-by-char in its
-                    # reasoning field and exhaust its output budget before writing
-                    # the answer (see session 9450d6ad). For those models we inject a
-                    # compact structural digest instead of the raw blob.
-                    #
-                    # NON-thinking models (glm-5.2:cloud, etc.) get the raw content:
-                    # they have large context windows and don't echo into a reasoning
-                    # field. Digesting their results HIDES the content they asked
-                    # for — they can't read their own code, loop calling code_read
-                    # repeatedly, and stall (session 0ac1b764). truncate_tool_result
-                    # above already bounds the size for context-window safety.
-                    # NOTE: code_read is NO LONGER digested. The user wants the
-                    # entire file in context on every read — no truncation, no
-                    # structural summary. The raw content lands in the conversation
-                    # as-is.
-                    # Small-model digest paths REMOVED from the hot loop
-                    # (Priority A, 2026-08-06). The small model would rewrite
-                    # tool results the big model just asked for, introducing
-                    # hallucination + latency AND masking the actual content
-                    # the driving model needs. Big model gets raw results
-                    # (already bounded by truncate_tool_result for context
-                    # safety). If small-model driving lands as a procedure
-                    # later, it can opt into digest via its own procedure
-                    # step \u2014 the framework must not do it silently.
+                    # All models get the SAME treatment: raw tool results,
+                    # bounded only by truncate_tool_result for context-window
+                    # safety. No per-model heuristics (no thinking-model
+                    # digest, no name sniffing) — every model sees the same
+                    # content. code_read / vault_read_note are never digested
+                    # or structurally summarized; the raw content lands in the
+                    # conversation as-is.
                     conversation.append(
                         {
                             "role": "tool",
