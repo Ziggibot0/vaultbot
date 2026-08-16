@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-commit hook: block commits of non-baseline System/ .md files.
 
-Scans staged .md files under vaultbot_stuff/System/ and verifies each has
+Scans staged .md files under vaultbot/System/ and verifies each has
 ``baseline: true`` in its YAML frontmatter. Files without it are blocked
 from being committed — they're personal, not shippable.
 
@@ -109,8 +109,8 @@ def main() -> int:
 
     staged = [p.strip() for p in result.stdout.split("\n") if p.strip()]
 
-    # Filter to .md files under vaultbot_stuff/System/.
-    SYSTEM_PREFIX = "vaultbot_stuff/System/"
+    # Filter to .md files under vaultbot/System/.
+    SYSTEM_PREFIX = "vaultbot/System/"
     to_check = [p for p in staged if p.startswith(SYSTEM_PREFIX) and p.endswith(".md")]
 
     if not to_check:
@@ -133,7 +133,7 @@ def main() -> int:
         print("=" * 68, file=sys.stderr)
         print("", file=sys.stderr)
         print(
-            "The following files under vaultbot_stuff/System/ are missing",
+            "The following files under vaultbot/System/ are missing",
             file=sys.stderr,
         )
         print(
@@ -157,7 +157,7 @@ def main() -> int:
             file=sys.stderr,
         )
         print(
-            "outside vaultbot_stuff/System/ or add it to .gitignore.",
+            "outside vaultbot/System/ or add it to .gitignore.",
             file=sys.stderr,
         )
         print("", file=sys.stderr)

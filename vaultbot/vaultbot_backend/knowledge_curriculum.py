@@ -780,8 +780,8 @@ class KnowledgeCurriculum:
                 if self.skip_vaultbot_paths and any(
                     d in file_path.replace("\\", "/")
                     for d in (
-                        "vaultbot_stuff/Memory/Chat/",
-                        "vaultbot_stuff/Knowledge/Research/",
+                        "vaultbot/Memory/Chat/",
+                        "vaultbot/Knowledge/Research/",
                     )
                 ):
                     continue

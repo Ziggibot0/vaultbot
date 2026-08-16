@@ -131,7 +131,7 @@ def run(args: dict) -> dict:
     ]
 
     ALLOWED_PATHS = [
-        "vaultbot_stuff/",
+        "vaultbot/",
         ".obsidian/plugins/vaultbot/",
         ".gitignore",
         "LICENSE",
@@ -256,7 +256,7 @@ def run(args: dict) -> dict:
         # New procedures and System notes must have "baseline: true" in
         # their YAML frontmatter. Modified files are checked for marker
         # removal. Backend .py files and root-level files are exempt.
-        _SYSTEM_PREFIX = "vaultbot_stuff/System/"
+        _SYSTEM_PREFIX = "vaultbot/System/"
         if filename.startswith(_SYSTEM_PREFIX) and filename.endswith(".md"):
             _status = file_info.get("status", "")
             if _status == "added":

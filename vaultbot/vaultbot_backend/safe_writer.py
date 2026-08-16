@@ -58,8 +58,8 @@ def backup_path(target: Path, backend_root: Path, trash_dir: Path) -> Path:
 
     Uses the target's relative path from the vault root to create a unique
     backup name, so two files with the same name in different directories
-    don't collide.  Example: vaultbot_stuff/vaultbot_backend/main.py
-    -> trash/backups/vaultbot_stuff/vaultbot_backend/main.py.bak
+    don't collide.  Example: vaultbot/vaultbot_backend/main.py
+    -> trash/backups/vaultbot/vaultbot_backend/main.py.bak
     """
     try:
         rel = target.resolve().relative_to(backend_root.resolve())

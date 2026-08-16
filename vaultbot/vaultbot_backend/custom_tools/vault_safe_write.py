@@ -4,7 +4,7 @@ Agent-authored tool: vault_safe_write
 
 SCHEMA = {
     "name": "vault_safe_write",
-    "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root \u2014 those are gitignored hygiene zones.",
+    "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root \u2014 those are gitignored hygiene zones.",
     "parameters": {
         "properties": {
             "content": {
@@ -16,7 +16,7 @@ SCHEMA = {
                 "type": "boolean",
             },
             "file_path": {
-                "description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md', 'vaultbot_stuff/Memory/Chat/Chat-Topic.md', 'vaultbot_stuff/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER write to root-level Knowledge/, Memory/, or System/ \u2014 always use the vaultbot_stuff/ prefix.",
+                "description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md', 'vaultbot/Memory/Chat/Chat-Topic.md', 'vaultbot/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER write to root-level Knowledge/, Memory/, or System/ \u2014 always use the vaultbot/ prefix.",
                 "type": "string",
             },
         },
@@ -38,16 +38,16 @@ import tempfile
 from pathlib import Path
 
 # Determine paths from this file's location
-# custom_tools/vault_safe_write.py -> parent.parent = vaultbot_stuff/vaultbot_backend/
-# -> parent.parent.parent = vaultbot_stuff/ -> parent.parent.parent.parent = Vault2/ (vault root)
+# custom_tools/vault_safe_write.py -> parent.parent = vaultbot/vaultbot_backend/
+# -> parent.parent.parent = vaultbot/ -> parent.parent.parent.parent = Vault2/ (vault root)
 try:
     BACKEND_DIR = (
         Path(__file__).resolve().parent.parent
-    )  # vaultbot_stuff/vaultbot_backend/
+    )  # vaultbot/vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
-TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_stuff/vaultbot_backend/trash/
+TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
 
 
 def _is_sacred_journal(file_path: Path) -> bool:

@@ -47,7 +47,7 @@ SCHEMA = {
 try:
     VAULT_DIR = (
         Path(__file__).resolve().parent.parent.parent
-    )  # vaultbot_stuff/ (framework root, 3 levels up from vaultbot_stuff/vaultbot_backend/custom_tools/)
+    )  # vaultbot/ (framework root, 3 levels up from vaultbot/vaultbot_backend/custom_tools/)
     BACKEND_DIR = Path(__file__).resolve().parent.parent  # backend dir (2 levels up)
 except NameError:
     VAULT_DIR = Path(".").resolve()

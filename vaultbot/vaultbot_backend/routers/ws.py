@@ -620,7 +620,7 @@ async def websocket_endpoint(
 
                         loop = asyncio.get_event_loop()
                         vault_root = Path(os.getenv("VAULT_PATH", "."))
-                        learning_dir = vault_root / "vaultbot_stuff/learningMaterial"
+                        learning_dir = vault_root / "vaultbot/learningMaterial"
                         result = await loop.run_in_executor(
                             None, lambda: index_learning_material(str(learning_dir))
                         )

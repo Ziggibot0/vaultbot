@@ -24,7 +24,7 @@ from pathlib import Path
 
 VAULT_ROOT = Path(
     __file__
-).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",
@@ -34,7 +34,7 @@ EXCLUDE_DIRS = {
     "checkpoints",
     ".venv",
 }
-BACKEND_DIR = Path(__file__).parent.parent.resolve()  # vaultbot_stuff/vaultbot_backend/
+BACKEND_DIR = Path(__file__).parent.parent.resolve()  # vaultbot/vaultbot_backend/
 TRASH_DIR = BACKEND_DIR / "trash"
 IDENTITY_FILES = {"IDENTITY"}
 
@@ -175,7 +175,7 @@ def run(args: dict) -> dict:
 
     # Check if file is already in trash — skip re-backup
     is_in_trash = (
-        "vaultbot_stuff/vaultbot_backend" in file_path and "trash" in file_path
+        "vaultbot/vaultbot_backend" in file_path and "trash" in file_path
     )
 
     if is_in_trash:

@@ -133,7 +133,7 @@ def existing_note_titles(svc: Services) -> dict:
             if not fp:
                 continue
             # Skip the textbooks/ folder — those are what we're weaving.
-            if "vaultbot_stuff/Knowledge/Textbooks" + os.sep not in fp + os.sep:
+            if "vaultbot/Knowledge/Textbooks" + os.sep not in fp + os.sep:
                 pass  # not a textbook note — keep it
             else:
                 continue
@@ -152,8 +152,8 @@ def is_ignored_index_path(p: Path) -> bool:
     ignored = (
         ".venv/",
         "vaultbot_venv/",
-        "vaultbot_stuff/vaultbot_backend/vaultbot_index/",
-        "vaultbot_stuff/vaultbot_backend/partials/",
+        "vaultbot/vaultbot_backend/vaultbot_index/",
+        "vaultbot/vaultbot_backend/partials/",
         ".git/",
     )
     return any(seg in parts for seg in ignored)
@@ -253,7 +253,7 @@ def cross_link_textbooks(
     out: dict[str, Any] = {"cross_links_added": 0, "notes_linked": 0}
     try:
         textbooks_dir = (
-            Path(os.getenv("VAULT_PATH", ".")) / "vaultbot_stuff/Knowledge/Textbooks"
+            Path(os.getenv("VAULT_PATH", ".")) / "vaultbot/Knowledge/Textbooks"
         )
         if not textbooks_dir.exists():
             return out
@@ -289,7 +289,7 @@ def cross_link_textbooks(
                         continue
                     # Must be a textbook note.
                     if (
-                        "vaultbot_stuff/Knowledge/Textbooks" + os.sep
+                        "vaultbot/Knowledge/Textbooks" + os.sep
                         not in fp_norm + os.sep
                     ):
                         continue
@@ -627,7 +627,7 @@ async def weave_textbook_notes(
                 svc.vault_graph.refresh()
                 textbooks_dir = (
                     Path(os.getenv("VAULT_PATH", "."))
-                    / "vaultbot_stuff/Knowledge/Textbooks"
+                    / "vaultbot/Knowledge/Textbooks"
                 )
                 # Gather ALL L1 cards in the vault (incremental mode needs
                 # the full set to preserve existing cluster assignments;

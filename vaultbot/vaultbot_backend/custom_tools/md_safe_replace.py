@@ -37,7 +37,7 @@ SCHEMA = {
                 "type": "string",
                 "description": (
                     "Path to the .md note, relative to vault root. "
-                    "E.g. 'vaultbot_stuff/System/Procedures/Check-Error-Handling.md'."
+                    "E.g. 'vaultbot/System/Procedures/Check-Error-Handling.md'."
                 ),
             },
             "old_str": {
@@ -66,17 +66,17 @@ import shutil
 import tempfile
 from pathlib import Path
 
-# custom_tools/md_safe_replace.py -> parent.parent = vaultbot_stuff/vaultbot_backend/
-# -> parent.parent.parent = vaultbot_stuff/
+# custom_tools/md_safe_replace.py -> parent.parent = vaultbot/vaultbot_backend/
+# -> parent.parent.parent = vaultbot/
 # -> parent.parent.parent.parent = Vault2/ (vault root)
 try:
     BACKEND_DIR = (
         Path(__file__).resolve().parent.parent
-    )  # vaultbot_stuff/vaultbot_backend/
+    )  # vaultbot/vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
-TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_stuff/vaultbot_backend/trash/
+TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
 
 
 def _is_sacred_journal(file_path: Path) -> bool:

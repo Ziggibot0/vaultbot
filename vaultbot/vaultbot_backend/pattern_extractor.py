@@ -135,7 +135,7 @@ class PatternExtractor:
 
     def __init__(self, vault_path: str = None, log_path: str = None):
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
-        self.chat_dir = os.path.join(self.vault_path, "vaultbot_stuff/Memory/Chat")
+        self.chat_dir = os.path.join(self.vault_path, "vaultbot/Memory/Chat")
         self.log_path = log_path or os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "consolidation_log.json"
         )

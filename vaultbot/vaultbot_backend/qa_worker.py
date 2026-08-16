@@ -153,7 +153,7 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
         ".github",
         "learningMaterial",
     }
-    ALLOWED = ("vaultbot_stuff/", "User/")
+    ALLOWED = ("vaultbot/", "User/")
     notes: list[str] = []
     for root, dirs, files in os.walk(vault_root):
         dirs[:] = [d for d in dirs if d not in IGNORED]
@@ -173,7 +173,7 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
 # notes — they get consolidated by the semantic consolidation pipeline
 # (hippocampal replay), not QA'd for frontmatter quality.
 _QA_EXCLUDE_DIRS = (
-    "vaultbot_stuff/Memory/Chat",
+    "vaultbot/Memory/Chat",
 )
 
 # Cap the QA queue so it actually drains. Without a cap, a large vault fills
@@ -187,7 +187,7 @@ _QA_QUEUE_CAP = 200
 def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
     """Build the QA queue: vault notes, ordered by usage (most first).
 
-    Each entry: ``{"path": "vaultbot_stuff/.../Note.md", "touch_count": N}``
+    Each entry: ``{"path": "vaultbot/.../Note.md", "touch_count": N}``
     Notes with higher touch counts come first.  Notes never retrieved
     (touch_count=0) come last.
 

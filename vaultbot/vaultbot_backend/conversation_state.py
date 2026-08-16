@@ -273,7 +273,7 @@ def clear_trail_tracker(vault_path: str | None = None) -> None:
     """
     try:
         vp = Path(vault_path or os.getenv("VAULT_PATH", "."))
-        tracker = vp / "vaultbot_stuff" / "Memory" / "_last_chat_note.txt"
+        tracker = vp / "vaultbot" / "Memory" / "_last_chat_note.txt"
         if tracker.exists():
             tracker.unlink()
     except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks

@@ -30,7 +30,7 @@ except NameError:
         timeout=10,
     )
     git_root = Path(r.stdout.strip()) if r.returncode == 0 else Path.cwd()
-    BACKEND_DIR = git_root / "vaultbot_stuff" / "vaultbot_backend"
+    BACKEND_DIR = git_root / "vaultbot" / "vaultbot_backend"
 
 
 def run(args: dict) -> dict:
@@ -192,11 +192,11 @@ def run(args: dict) -> dict:
     # The vault uses function-based top-level folders: Knowledge/, Memory/, System/, User/
     vault_dir = (
         backend_dir.parent.parent
-    )  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
+    )  # vault root (2 levels up from vaultbot/vaultbot_backend/)
     expected_folders = [
-        "vaultbot_stuff/Knowledge",
-        "vaultbot_stuff/Memory",
-        "vaultbot_stuff/System",
+        "vaultbot/Knowledge",
+        "vaultbot/Memory",
+        "vaultbot/System",
         "User",
     ]
     found_folders = [f for f in expected_folders if (vault_dir / f).exists()]
@@ -206,7 +206,7 @@ def run(args: dict) -> dict:
         if "vaultbot_backend" not in str(f)
         and ".venv" not in str(f)
         and "vaultbot_venv" not in str(f)
-        and "vaultbot_stuff/vaultbot_backend" not in str(f)
+        and "vaultbot/vaultbot_backend" not in str(f)
     )
     results["checks"]["vault"] = {
         "exists": len(found_folders) >= 2,

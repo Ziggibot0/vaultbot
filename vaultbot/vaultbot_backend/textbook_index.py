@@ -50,12 +50,12 @@ from pathlib import Path
 from typing import Any
 
 # Resolve paths relative to this file. textbook_index.py lives in
-# vaultbot_stuff/vaultbot_backend/, so parent = vaultbot_backend,
-# parent.parent = vaultbot_stuff/ (the framework root).
+# vaultbot/vaultbot_backend/, so parent = vaultbot_backend,
+# parent.parent = vaultbot/ (the framework root).
 try:
     VAULT_DIR = (
         Path(__file__).resolve().parent.parent
-    )  # vaultbot_stuff/ (framework root, 2 levels up from vaultbot_stuff/vaultbot_backend/)
+    )  # vaultbot/ (framework root, 2 levels up from vaultbot/vaultbot_backend/)
 except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"

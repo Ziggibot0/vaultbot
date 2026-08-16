@@ -199,10 +199,10 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     # 3) Vault not inside a sync folder?
     vault_path = ""
     try:
-        # The vault root is 4 levels up from routers/ (vaultbot_stuff/vaultbot_backend/routers/ -> vault root)
+        # The vault root is 4 levels up from routers/ (vaultbot/vaultbot_backend/routers/ -> vault root)
         vault_path = str(
             Path(__file__).resolve().parent.parent.parent
-        )  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
+        )  # vault root (3 levels up from vaultbot/vaultbot_backend/routers/)
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         pass
     sync_diag = _check_synced_folder(vault_path)
@@ -549,10 +549,10 @@ async def preflight(request: Request) -> dict[str, Any]:
     """
     problems: list[Diagnosis] = []
 
-    # Vault root = 4 levels up from routers/ (vaultbot_stuff/vaultbot_backend/routers/ -> vault root)
+    # Vault root = 4 levels up from routers/ (vaultbot/vaultbot_backend/routers/ -> vault root)
     vault_path = str(
         Path(__file__).resolve().parent.parent.parent
-    )  # vault root (3 levels up from vaultbot_stuff/vaultbot_backend/routers/)
+    )  # vault root (3 levels up from vaultbot/vaultbot_backend/routers/)
     sync_diag = _check_synced_folder(vault_path)
     if sync_diag is not None:
         problems.append(sync_diag)

@@ -72,7 +72,7 @@ class Identity:
 
     def __init__(
         self,
-        identity_dir: str = "vaultbot_stuff/vaultbot_backend/identity",
+        identity_dir: str = "vaultbot/vaultbot_backend/identity",
         ollama_client: Any = None,
         session_logger: Any = None,
     ) -> None:

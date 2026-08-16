@@ -61,11 +61,11 @@ SCHEMA = {
 
 # textbook_read_page.py lives in vaultbot_backend/custom_tools/, so
 # parent = custom_tools, parent.parent = vaultbot_backend, parent.parent.parent
-# = vaultbot_stuff/ (the framework root).
+# = vaultbot/ (the framework root).
 try:
     VAULT_DIR = (
         Path(__file__).resolve().parent.parent.parent
-    )  # vaultbot_stuff/ (framework root, 3 levels up from vaultbot_stuff/vaultbot_backend/custom_tools/)
+    )  # vaultbot/ (framework root, 3 levels up from vaultbot/vaultbot_backend/custom_tools/)
 except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"

@@ -298,7 +298,7 @@ def _infer_tags(file_path: str, note_type: str) -> list[str]:
     if parts:
         parent = parts[-1]
         if parent.lower() not in (
-            "vaultbot_stuff",
+            "vaultbot",
             "system",
             "knowledge",
             "memory",
@@ -699,7 +699,7 @@ _HEAL_SKIP_ROOT_FILES = {
 }
 
 # Only heal files under these top-level directories (vault knowledge zones).
-_HEAL_ALLOWED_PREFIXES = ("vaultbot_stuff/", "User/")
+_HEAL_ALLOWED_PREFIXES = ("vaultbot/", "User/")
 
 
 def heal_note_on_disk(file_path: str | Path, vault_root: str | Path) -> dict:

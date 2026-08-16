@@ -435,7 +435,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        _vs = {"index": None, "metadata": {}, "loaded": False}\n'
             '        if not _vs["loaded"]:\n'
             '            _vs["loaded"] = True\n'
-            '            idx_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / "vaultbot_index"\n'
+            '            idx_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend" / "vaultbot_index"\n'
             '            idx_file = idx_dir / "index.faiss"\n'
             '            meta_file = idx_dir / "metadata.pkl"\n'
             "            if idx_file.exists() and meta_file.exists():\n"
@@ -494,7 +494,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
         snippets.append(
             'if "web_read_source" in allowed:\n'
             "    def web_read_source(url=None, file=None):\n"
-            '        web_dir = Path(vault_path) / "vaultbot_stuff/learningMaterial" / "web"\n'
+            '        web_dir = Path(vault_path) / "vaultbot/learningMaterial" / "web"\n'
             "        if file:\n"
             "            p = web_dir / file\n"
             "        elif url:\n"
@@ -745,7 +745,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "        try:\n"
             '            status = {"background_researcher": "unknown"}\n'
             "            # Check for researcher lock file\n"
-            '            lock = Path(vault_path) / "vaultbot_stuff" / "Memory" / ".researcher_lock"\n'
+            '            lock = Path(vault_path) / "vaultbot" / "Memory" / ".researcher_lock"\n'
             "            if lock.exists():\n"
             '                status["background_researcher"] = "running"\n'
             "            else:\n"

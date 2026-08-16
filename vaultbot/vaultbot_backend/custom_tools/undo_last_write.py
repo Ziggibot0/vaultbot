@@ -82,8 +82,8 @@ def run(args: dict) -> dict:
 
     # Determine the original path from the backup filename.
     # Backups are stored with the relative path flattened (slashes → underscores).
-    # Example: vaultbot_stuff/Knowledge/Research/My-Note.md
-    #       → vaultbot_stuff_Knowledge_Research_My-Note.md.bak
+    # Example: vaultbot/Knowledge/Research/My-Note.md
+    #       → vaultbot_Knowledge_Research_My-Note.md.bak
     backup_name = newest.name
     # Strip the .bak suffix.
     if backup_name.endswith(".bak"):

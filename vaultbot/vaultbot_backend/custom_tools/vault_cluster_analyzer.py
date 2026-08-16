@@ -39,7 +39,7 @@ IGNORED_DIRS = {
     ".git",
     ".obsidian",
     "vaultbot_backend",
-    "vaultbot_stuff",
+    "vaultbot",
     "learningMaterial",
     "node_modules",
     ".venv",
@@ -54,7 +54,7 @@ def run(args: dict) -> dict:
 
     if not vault_path:
         # Auto-detect: 4 levels up from custom_tools/ = vault root
-        # (custom_tools/ -> vaultbot_backend/ -> vaultbot_stuff/ -> the vault root)
+        # (custom_tools/ -> vaultbot_backend/ -> vaultbot/ -> the vault root)
         vault_path = str(Path(__file__).resolve().parent.parent.parent.parent)
 
     vault_root = Path(vault_path)

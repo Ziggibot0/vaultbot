@@ -28,7 +28,7 @@ def run(args: dict) -> dict:
 
     backend_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "vaultbot_stuff",
+        "vaultbot",
         "vaultbot_backend",
     )
     if backend_dir not in sys.path:

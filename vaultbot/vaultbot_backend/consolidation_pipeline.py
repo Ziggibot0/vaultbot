@@ -40,10 +40,10 @@ class ConsolidationPipeline:
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
         self.backend_path = backend_path or os.path.dirname(os.path.abspath(__file__))
         self.chat_dir = os.path.join(
-            self.vault_path, "vaultbot_stuff", "Memory", "Chat"
+            self.vault_path, "vaultbot", "Memory", "Chat"
         )
         self.semantic_dir = os.path.join(
-            self.vault_path, "vaultbot_stuff", "Memory", "Build-Log"
+            self.vault_path, "vaultbot", "Memory", "Build-Log"
         )
         self.log_path = os.path.join(self.backend_path, "consolidation_log.json")
         self._pattern_extractor = None
@@ -456,7 +456,7 @@ class ConsolidationPipeline:
             ]
             full_note = inject_schema(
                 full_note,
-                f"vaultbot_stuff/Memory/Build-Log/Semantic-{safe_name}.md",
+                f"vaultbot/Memory/Build-Log/Semantic-{safe_name}.md",
                 force_type="semantic",
             )
         except ImportError:

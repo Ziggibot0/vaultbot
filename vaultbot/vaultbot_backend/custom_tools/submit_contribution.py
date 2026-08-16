@@ -75,7 +75,7 @@ def run(args: dict) -> dict:
     description = args.get("description", "").strip()
     specific_files = args.get("files", [])
 
-    # Find the vault root (2 levels up from vaultbot_backend/ -> vaultbot_stuff/ -> vault root)
+    # Find the vault root (2 levels up from vaultbot_backend/ -> vaultbot/ -> vault root)
     vault_root = os.path.dirname(os.path.dirname(backend_dir))
 
     # 1. Check for GITHUB_TOKEN
@@ -168,7 +168,7 @@ def run(args: dict) -> dict:
                     }
 
     # 5b. Baseline-marker filter — exclude non-baseline System/ .md files.
-    # Only .md files under vaultbot_stuff/System/ are checked; .py files
+    # Only .md files under vaultbot/System/ are checked; .py files
     # and root-level files pass through. Files without "baseline: true" in
     # their YAML frontmatter are personal/bespoke and must not ship.
     from procedure_compiler import _parse_frontmatter as _parse_fm
@@ -186,7 +186,7 @@ def run(args: dict) -> dict:
             p.strip() for p in _untracked.split("\n") if p.strip()
         ]
 
-    _SYSTEM_PREFIX = "vaultbot_stuff/System/"
+    _SYSTEM_PREFIX = "vaultbot/System/"
     _excluded: list[str] = []
     _filtered_files: list[str] = []
     for _fp in _changed:
@@ -230,7 +230,7 @@ def run(args: dict) -> dict:
             ),
             "hint": (
                 "Add 'baseline: true' to the YAML frontmatter of any "
-                "vaultbot_stuff/System/ .md file you want to share. "
+                "vaultbot/System/ .md file you want to share. "
                 "Backend .py files are always baseline and don't need a marker. "
                 "See CONTRIBUTING.md → Baseline markers for the full policy."
             ),

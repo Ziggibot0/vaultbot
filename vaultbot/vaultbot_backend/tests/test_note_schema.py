@@ -19,7 +19,7 @@ from note_schema import (
 def test_no_frontmatter_auto_inject():
     """Note with no frontmatter gets all required fields."""
     content = "# Mitosis\n\nCell division process."
-    result = inject_schema(content, "vaultbot_stuff/Knowledge/Research/Mitosis.md")
+    result = inject_schema(content, "vaultbot/Knowledge/Research/Mitosis.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "research"
     assert fm.get("status") == "raw"
@@ -33,7 +33,7 @@ def test_no_frontmatter_auto_inject():
 def test_partial_frontmatter_fill_missing():
     """Note with partial frontmatter gets missing fields filled."""
     content = "---\ntype: research\nstatus: draft\n---\n# Photosynthesis\n\nPlants."
-    result = inject_schema(content, "vaultbot_stuff/Knowledge/Research/Photo.md")
+    result = inject_schema(content, "vaultbot/Knowledge/Research/Photo.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "research"
     assert fm.get("status") == "draft"
@@ -57,7 +57,7 @@ def test_claim_fields_preserved():
         "---\n"
         "# Test Claim\n\nBody."
     )
-    result = inject_schema(content, "vaultbot_stuff/System/Architecture/Test.md")
+    result = inject_schema(content, "vaultbot/System/Architecture/Test.md")
     fm = parse_frontmatter(result)
     assert fm.get("supports") == ["[[Other-Note]]"]
     assert fm.get("confidence") == "0.85"
@@ -91,7 +91,7 @@ def test_overwrite_preserves_status_and_created():
     new_content = "# Updated Title\n\nNew content."
     result = inject_schema(
         new_content,
-        "vaultbot_stuff/Knowledge/Research/Test.md",
+        "vaultbot/Knowledge/Research/Test.md",
         existing_content=existing,
     )
     fm = parse_frontmatter(result)
@@ -101,35 +101,35 @@ def test_overwrite_preserves_status_and_created():
 
 def test_path_inference_research():
     """Type is inferred from path."""
-    result = inject_schema("# X\n\nbody", "vaultbot_stuff/Knowledge/Research/X.md")
+    result = inject_schema("# X\n\nbody", "vaultbot/Knowledge/Research/X.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "research"
 
 
 def test_path_inference_chat():
     """Chat notes get type: chat."""
-    result = inject_schema("# Chat\n\nbody", "vaultbot_stuff/Memory/Chat/Chat-X.md")
+    result = inject_schema("# Chat\n\nbody", "vaultbot/Memory/Chat/Chat-X.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "chat"
 
 
 def test_path_inference_procedure():
     """Procedure notes get type: procedure."""
-    result = inject_schema("# Proc\n\nbody", "vaultbot_stuff/System/Procedures/Proc.md")
+    result = inject_schema("# Proc\n\nbody", "vaultbot/System/Procedures/Proc.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "procedure"
 
 
 def test_path_inference_default_claim():
     """Unknown paths get type: claim."""
-    result = inject_schema("# X\n\nbody", "vaultbot_stuff/X.md")
+    result = inject_schema("# X\n\nbody", "vaultbot/X.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "claim"
 
 
 def test_force_type_override():
     """Caller can force the type."""
-    result = inject_schema("# X\n\nbody", "vaultbot_stuff/X.md", force_type="semantic")
+    result = inject_schema("# X\n\nbody", "vaultbot/X.md", force_type="semantic")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "semantic"
 
@@ -144,7 +144,7 @@ def test_split_multi_topic_note():
         "## Photosynthesis\n\n" + "Photosynthesis converts light. " * 20 + "\n\n"
         "## Cellular Respiration\n\n" + "Respiration produces ATP. " * 20 + "\n\n"
     )
-    result = split_note_if_needed(content, "vaultbot_stuff/Knowledge/Research/Big.md")
+    result = split_note_if_needed(content, "vaultbot/Knowledge/Research/Big.md")
     assert result is not None
     assert len(result) == 3
     titles = [p["title"] for p in result]
@@ -163,7 +163,7 @@ def test_no_split_single_argument():
         "## Conclusion\n\n" + "Conclusion text. " * 30 + "\n\n"
     )
     result = split_note_if_needed(
-        content, "vaultbot_stuff/Knowledge/Research/Single.md"
+        content, "vaultbot/Knowledge/Research/Single.md"
     )
     assert result is None
 
@@ -178,7 +178,7 @@ def test_no_split_procedure():
         "## Step 3\n\n" + "Do step 3. " * 30 + "\n\n"
     )
     result = split_note_if_needed(
-        content, "vaultbot_stuff/System/Procedures/My-Proc.md"
+        content, "vaultbot/System/Procedures/My-Proc.md"
     )
     assert result is None
 
@@ -194,7 +194,7 @@ def test_strip_frontmatter():
 def test_existing_fields_not_overwritten():
     """inject_schema never overwrites a field the caller provided."""
     content = "---\ntype: architecture\nstatus: verified\ncreated: 2020-01-01\nsummary: mine\ntags: [custom]\n---\n# X\n\nbody"
-    result = inject_schema(content, "vaultbot_stuff/System/Architecture/X.md")
+    result = inject_schema(content, "vaultbot/System/Architecture/X.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "architecture"
     assert fm.get("status") == "verified"
@@ -220,7 +220,7 @@ def test_heal_note_adds_missing_fields():
     """heal_note_on_disk writes schema to a note that has no frontmatter."""
     tmp = tempfile.mkdtemp()
     try:
-        note = os.path.join(tmp, "vaultbot_stuff", "Knowledge", "Research")
+        note = os.path.join(tmp, "vaultbot", "Knowledge", "Research")
         os.makedirs(note)
         p = os.path.join(note, "Test-Heal.md")
         with open(p, "w", encoding="utf-8") as f:
@@ -241,7 +241,7 @@ def test_heal_note_skips_valid_note():
     """heal_note_on_disk does NOT rewrite a note that already has schema."""
     tmp = tempfile.mkdtemp()
     try:
-        note = os.path.join(tmp, "vaultbot_stuff", "System", "Architecture")
+        note = os.path.join(tmp, "vaultbot", "System", "Architecture")
         os.makedirs(note)
         p = os.path.join(note, "Good.md")
         content = (
@@ -262,11 +262,11 @@ def test_heal_vault_schema_scans_all():
     tmp = tempfile.mkdtemp()
     try:
         # Create notes: one with schema, one without, one in a skipped dir
-        os.makedirs(os.path.join(tmp, "vaultbot_stuff", "Knowledge", "Research"))
-        os.makedirs(os.path.join(tmp, "vaultbot_stuff", "Memory", "Chat"))
+        os.makedirs(os.path.join(tmp, "vaultbot", "Knowledge", "Research"))
+        os.makedirs(os.path.join(tmp, "vaultbot", "Memory", "Chat"))
 
         with_schema = os.path.join(
-            tmp, "vaultbot_stuff", "Knowledge", "Research", "Good.md"
+            tmp, "vaultbot", "Knowledge", "Research", "Good.md"
         )
         with open(with_schema, "w", encoding="utf-8") as f:
             f.write(
@@ -274,7 +274,7 @@ def test_heal_vault_schema_scans_all():
             )
 
         without_schema = os.path.join(
-            tmp, "vaultbot_stuff", "Memory", "Chat", "Chat-Test.md"
+            tmp, "vaultbot", "Memory", "Chat", "Chat-Test.md"
         )
         with open(without_schema, "w", encoding="utf-8") as f:
             f.write("# Chat Test\n\nNo frontmatter.")

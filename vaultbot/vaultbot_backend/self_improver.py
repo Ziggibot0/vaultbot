@@ -50,7 +50,7 @@ BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"
 BACKEND_ROOT = (
     BACKEND_DIR.parent.parent
-)  # vault root (2 levels up from vaultbot_stuff/vaultbot_backend/)
+)  # vault root (2 levels up from vaultbot/vaultbot_backend/)
 TRASH_DIR = (
     BACKEND_DIR / "trash" / "backups"
 )  # all .bak files go here, not alongside source
@@ -650,7 +650,7 @@ class SelfImprover:
                         "checkout",
                         "HEAD",
                         "--",
-                        "vaultbot_stuff/vaultbot_backend",
+                        "vaultbot/vaultbot_backend",
                     ],
                     capture_output=True,
                     text=True,

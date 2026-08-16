@@ -926,7 +926,7 @@ class ResearchEngine:
 
             return inject_schema(
                 body,
-                f"vaultbot_stuff/Knowledge/Research/{_topic}.md",
+                f"vaultbot/Knowledge/Research/{_topic}.md",
                 force_type="research",
             )
         except ImportError:
@@ -1172,7 +1172,7 @@ class ResearchEngine:
 
             note_md = inject_schema(
                 note_md,
-                f"vaultbot_stuff/Knowledge/Research/{topic}.md",
+                f"vaultbot/Knowledge/Research/{topic}.md",
                 force_type="research",
             )
         except ImportError:

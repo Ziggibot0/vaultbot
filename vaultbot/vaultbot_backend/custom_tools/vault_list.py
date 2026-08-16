@@ -26,7 +26,7 @@ from pathlib import Path
 
 VAULT_ROOT = Path(
     __file__
-).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",

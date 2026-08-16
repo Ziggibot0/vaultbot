@@ -73,7 +73,7 @@ def run(args: dict) -> dict:
         os.unlink(tmp.name)
 
     # Backup
-    trash_dir = vault_root / "vaultbot_stuff" / "vaultbot_backend" / "trash"
+    trash_dir = vault_root / "vaultbot" / "vaultbot_backend" / "trash"
     trash_dir.mkdir(exist_ok=True)
     backup_name = full_path.stem + "_js_replace_backup" + full_path.suffix
     shutil.copy2(full_path, trash_dir / backup_name)

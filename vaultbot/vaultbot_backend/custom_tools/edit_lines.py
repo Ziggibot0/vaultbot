@@ -51,14 +51,14 @@ from pathlib import Path
 
 # custom_tools/edit_lines.py -> parent = custom_tools
 # -> parent.parent = vaultbot_backend
-# -> parent.parent.parent = vaultbot_stuff/ (framework root)
+# -> parent.parent.parent = vaultbot/ (framework root)
 # -> parent.parent.parent.parent = vault root
 try:
     BACKEND_DIR = Path(__file__).resolve().parent.parent
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
-TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_stuff/vaultbot_backend/trash/
+TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
 
 SCHEMA = {
     "name": "edit_lines",
@@ -84,8 +84,8 @@ SCHEMA = {
                 "type": "string",
                 "description": (
                     "Path to the file, relative to vault root "
-                    "(e.g. 'vaultbot_stuff/vaultbot_backend/chat_handler.py' "
-                    "or 'vaultbot_stuff/System/Procedures/My-Procedure.md')."
+                    "(e.g. 'vaultbot/vaultbot_backend/chat_handler.py' "
+                    "or 'vaultbot/System/Procedures/My-Procedure.md')."
                 ),
             },
             "start_line": {

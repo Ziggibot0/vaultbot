@@ -4,7 +4,7 @@ Agent-authored tool: vault_append
 
 SCHEMA = {
     "name": "vault_append",
-    "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ or the vault root (e.g. 'Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root.",
+    "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ or the vault root (e.g. 'Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root.",
     "parameters": {
         "properties": {
             "content": {
@@ -12,7 +12,7 @@ SCHEMA = {
                 "type": "string",
             },
             "file_path": {
-                "description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot_stuff/ (e.g. 'vaultbot_stuff/Memory/Chat/Chat-Topic.md'). User-personal notes may be at the root (e.g. 'Autonomy-Directive.md') or in User/ (e.g. 'User/Research-Roadmap.md').",
+                "description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot/ (e.g. 'vaultbot/Memory/Chat/Chat-Topic.md'). User-personal notes may be at the root (e.g. 'Autonomy-Directive.md') or in User/ (e.g. 'User/Research-Roadmap.md').",
                 "type": "string",
             },
         },
@@ -26,7 +26,7 @@ from pathlib import Path
 
 VAULT_ROOT = Path(
     __file__
-).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot_stuff/vaultbot_backend/custom_tools/ -> the vault root)
+).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
 
 
 def _is_locked(content: str) -> bool:

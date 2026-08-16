@@ -36,7 +36,7 @@ from typing import Any
 try:
     VAULT_DIR = (
         Path(__file__).resolve().parent.parent
-    )  # vaultbot_stuff/ (framework root, 2 levels up from vaultbot_stuff/vaultbot_backend/)
+    )  # vaultbot/ (framework root, 2 levels up from vaultbot/vaultbot_backend/)
 except NameError:
     VAULT_DIR = Path(".").resolve()
 WEB_DIR = VAULT_DIR / "learningMaterial" / "web"
