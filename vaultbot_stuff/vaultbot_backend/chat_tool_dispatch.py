@@ -677,21 +677,6 @@ async def execute_agent_tool(
         wm = getattr(websocket, "working_memory", None)
         if wm is None:
             return {"error": "no active plan"}
-        action = args.get("action", "update")
-        if action == "add":
-            content = (args.get("content") or "").strip()
-            if not content:
-                return {"error": "action='add' requires 'content'"}
-            snap = wm.add_task(
-                content=content,
-                status=args.get("status", "pending"),
-                notes=args.get("notes", ""),
-            )
-            websocket._last_plan_progress_round = getattr(
-                websocket, "_chat_round_idx", 0
-            )
-            session_logger.log("plan_task_added", {"content": content[:80]})
-            return snap
         task_id = args.get("task_id") or ""
         _new_status = args.get("status", "")
         _was_completed = False
@@ -725,6 +710,24 @@ async def execute_agent_tool(
             session_logger.log("plan_snapshot", _full_snap)
         except Exception:  # noqa: BLE001 — best-effort
             pass
+        return snap
+
+    if tool_name == "add_task":
+        wm = getattr(websocket, "working_memory", None)
+        if wm is None:
+            return {"error": "no active plan"}
+        content = (args.get("content") or "").strip()
+        if not content:
+            return {"error": "add_task requires 'content'"}
+        snap = wm.add_task(
+            content=content,
+            status=args.get("status", "pending"),
+            notes=args.get("notes", ""),
+        )
+        websocket._last_plan_progress_round = getattr(
+            websocket, "_chat_round_idx", 0
+        )
+        session_logger.log("plan_task_added", {"content": content[:80]})
         return snap
 
     # --- Custom (agent-authored) tools --- #

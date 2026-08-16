@@ -184,20 +184,20 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "update_task",
             "description": (
-                "Update a task in your working memory. The PRIMARY use is "
-                "to mark the CURRENT in-progress step as status='completed' "
-                "when its work is verifiably done — the framework auto-starts "
-                "the next step for you. You rarely need status='in_progress' "
-                "(the framework auto-advances steps). You can also append a "
-                "newly-discovered step with action='add'. See "
-                "[[Agentic-Loop-Turn-Protocol]]."
+                "Update a task's status in your working memory. The PRIMARY "
+                "use is to mark the CURRENT in-progress step as "
+                "status='completed' when its work is verifiably done — the "
+                "framework auto-starts the next step for you. You rarely "
+                "need status='in_progress' (the framework auto-advances "
+                "steps). To ADD a new step discovered mid-plan, use add_task "
+                "instead. See [[Agentic-Loop-Turn-Protocol]]."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "task_id": {
                         "type": "string",
-                        "description": "The task id (from plan_task response).",
+                        "description": "The task id (from plan_task response or working memory display).",
                     },
                     "status": {
                         "type": "string",
@@ -208,18 +208,39 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Optional annotation — what you found or why the status changed.",
                     },
-                    "action": {
-                        "type": "string",
-                        "enum": ["update", "add"],
-                        "default": "update",
-                        "description": "'update' (default) to change an existing task, 'add' to append a new task discovered mid-plan.",
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "Required only when action='add': the new task content.",
-                    },
                 },
                 "required": ["task_id", "status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_task",
+            "description": (
+                "Add a new step to the current plan in working memory. "
+                "Use this when you discover an additional step mid-task "
+                "that wasn't in the original plan — no need to re-plan "
+                "the whole list. The new task is appended at the end."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The new task content (a concrete, verifiable step).",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "completed"],
+                        "description": "Initial status (default: pending).",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Optional annotation for the new task.",
+                    },
+                },
+                "required": ["content"],
             },
         },
     },
@@ -319,25 +340,6 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "self_reflect",
-            "description": (
-                "Reflect on a topic and propose 1-3 new tool abilities you "
-                "could create for yourself. Use this when you realize you "
-                "lack an ability — it returns concrete proposals with code "
-                "sketches you can then implement with tool_create."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "topic": {"type": "string"},
-                },
-                "required": ["topic"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "git_rollback",
             "description": (
                 "Restore files from git HEAD. Use this if a self-edit breaks "
@@ -357,17 +359,21 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "safe_write",
             "description": (
-                "SAFE self-edit of backend source code. Use this INSTEAD of "
-                "code_write for any .py file under vaultbot_backend/. It "
-                "verifies the edit won't break the backend: (1) syntax-checks "
-                "the new content, (2) writes as UTF-8, (3) for core modules, "
-                "imports the whole backend in a SUBPROCESS with the new file "
-                "in place — if that import fails, the edit is REJECTED and "
-                "the original file is auto-restored from the .bak backup. "
-                "This is the tool that prevents you from breaking yourself "
-                "in half. Set dry_run=true to preview whether an edit would "
-                "be safe without writing. For markdown notes or non-code "
-                "files, code_write is fine. IMPORTANT: safe_write is for PYTHON (.py) files only. For JavaScript (.js) files, use js_safe_write instead. For targeted edits to MARKDOWN (.md) notes, use md_safe_replace (surgical string replace) or vault_safe_write (full-file overwrite)."
+                "SAFE full-file self-edit of backend Python source code. "
+                "Requires the FULL file content — PREFER edit_lines for "
+                "targeted edits to existing files (line-number-based, no "
+                "need to regenerate the whole file). Only use safe_write to "
+                "write a NEW file from scratch or when you need to rewrite "
+                "most of the file. It verifies the edit won't break the "
+                "backend: (1) syntax-checks the new content, (2) writes as "
+                "UTF-8, (3) for core modules, imports the whole backend in a "
+                "SUBPROCESS with the new file in place — if that import "
+                "fails, the edit is REJECTED and the original file is "
+                "auto-restored from the .bak backup. Set dry_run=true to "
+                "preview whether an edit would be safe without writing. "
+                "IMPORTANT: safe_write is for PYTHON (.py) files only. For "
+                "JavaScript (.js) files, use js_safe_write instead. For "
+                "MARKDOWN (.md) notes, use edit_lines or md_safe_replace."
             ),
             "parameters": {
                 "type": "object",
@@ -416,31 +422,6 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["file_path", "content"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "capability_audit",
-            "description": (
-                "Inventory every tool you currently have (built-in + meta + "
-                "custom-authored), with names + descriptions. Pass a `task` "
-                "to also get a coverage assessment: which existing tools are "
-                "relevant to that task, and whether you have a CAPABILITY GAP. "
-                "Run this BEFORE attempting a task to see where your "
-                "capabilities end and the request begins — then fill any gap "
-                "by building a tool (tool_create) or editing source (safe_write)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task": {
-                        "type": "string",
-                        "default": "",
-                        "description": "The task you're about to attempt. Returns a coverage assessment for it.",
-                    },
-                },
             },
         },
     },
@@ -521,8 +502,10 @@ CORE_TOOL_NAMES: set[str] = {
     "code_read",  # read any file (vault or backend source)
     "plan_task",  # plan a multi-step task (working memory)
     "update_task",  # mark plan progress
+    "add_task",  # add a step discovered mid-plan
     "execute_procedure",  # run a procedure note — THE primary tool
     "vault_safe_write",  # write/create notes (bootstrapping new procedures)
+    "edit_lines",  # line-number-based editor — the PREFERRED edit tool
 }
 
 # Tier 2: Contextual tools (sent when keywords match)
@@ -534,9 +517,12 @@ CONTEXTUAL_TOOLS: dict[str, list[str]] = {
     ],
     "code_edit": [
         "code_run",  # test Python in a sandboxed subprocess
-        "safe_write",  # verified self-edit of backend .py files
-        "js_safe_write",  # verified self-edit of plugin .js files
-        "md_safe_replace",  # targeted edit of markdown notes (custom tool)
+        "safe_write",  # verified full-file self-edit of backend .py files
+        "safe_replace",  # targeted string replace in .py files (custom tool)
+        "js_safe_write",  # verified full-file self-edit of plugin .js files
+        "js_safe_replace",  # targeted string replace in .js files (custom tool)
+        "md_safe_replace",  # targeted string replace in markdown notes (custom tool)
+        "undo_last_write",  # undo the last safe_write / vault_safe_write (custom tool)
         "git_rollback",  # recover from a bad self-edit
         "backend_restart",  # restart the backend (custom tool)
         "plugin_reload",  # reload the Obsidian plugin (custom tool)
@@ -553,6 +539,8 @@ CONTEXTUAL_TOOLS: dict[str, list[str]] = {
     ],
     "status": [
         "vaultbot_status",  # system status check
+        "ollama_model_search",  # search/pull Ollama models (custom tool)
+        "machine_spec",  # report machine specs (custom tool)
     ],
 }
 
@@ -743,16 +731,21 @@ def build_tool_list(
     contextual_names = contextual_names - CORE_TOOL_NAMES  # don't double-add core
     tools.extend(_get_contextual_tool_schemas(contextual_names, custom_schemas))
 
-    # Add custom tools that aren't in any tier (pass-through for new tools)
+    # Build the full set of all classified tool names (core + all contextual
+    # tiers + procedure candidates). Any custom tool NOT in this set is truly
+    # unclassified — include it so newly-created tools are visible.
+    _all_contextual = set()
+    for cat_tools in CONTEXTUAL_TOOLS.values():
+        _all_contextual.update(cat_tools)
+    _classified = (
+        CORE_TOOL_NAMES | _all_contextual | PROCEDURE_CANDIDATES
+    )
+
     if custom_schemas:
         for s in custom_schemas:
             name = s.get("function", {}).get("name", "")
-            if name in PROCEDURE_CANDIDATES:
-                continue  # skip procedure candidates
-            if name in CORE_TOOL_NAMES:
-                continue  # already added
-            if name in contextual_names:
-                continue  # already added via contextual
+            if name in _classified:
+                continue  # already handled by a tier (core/contextual/procedure)
             # Custom tool not in any tier — include it (progressive disclosure
             # can handle this later). This ensures new custom tools are visible.
             tools.append(s)
@@ -765,8 +758,6 @@ def build_tool_list(
         if name and name not in seen:
             seen.add(name)
             deduped.append(t)
-
-    return deduped
 
     return deduped
 

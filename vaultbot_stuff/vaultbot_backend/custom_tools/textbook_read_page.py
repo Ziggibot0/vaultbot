@@ -43,9 +43,11 @@ SCHEMA = {
             "pdf": {
                 "type": "string",
                 "description": (
-                    "Filename of the source PDF in learningMaterial/ "
-                    "(e.g. 'calculus-volume-1_-_WEB.pdf'), OR the index TOC "
-                    "note name without -index.md."
+                    "The bare filename of the source PDF in "
+                    "learningMaterial/ (e.g. "
+                    "'calculus-volume-1_-_WEB.pdf'). Use vault_list or "
+                    "code_read on learningMaterial/ to find the exact "
+                    "filename if unsure."
                 ),
             },
             "page": {

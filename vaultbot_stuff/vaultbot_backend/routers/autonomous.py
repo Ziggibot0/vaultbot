@@ -107,6 +107,24 @@ async def consolidation_extract(svc: Annotated[Services, Depends(get_services)])
         return {"error": str(e)}, 500
 
 
+@router.post("/consolidation/run")
+async def consolidation_run(svc: Annotated[Services, Depends(get_services)]):
+    """Run the semantic consolidation pipeline immediately.
+
+    This is the hippocampal replay: mine chat logs for patterns, cluster
+    them, synthesize semantic knowledge notes. Normally this runs on every
+    5th autonomous researcher cycle, but the researcher may be blocked by
+    the QA queue or chat-priority pause. This endpoint lets us trigger it
+    directly so the vault doesn't saturate while waiting for the researcher.
+    """
+    try:
+        result = await svc.autonomous_researcher._run_consolidation()
+        return result
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        svc.session_logger.log_exception(e, context="consolidation_run")
+        return {"ok": False, "error": str(e)}, 500
+
+
 @router.post("/autonomous/toggle")
 async def autonomous_toggle(
     payload: dict | None = None, svc: Annotated[Services, Depends(get_services)] = None

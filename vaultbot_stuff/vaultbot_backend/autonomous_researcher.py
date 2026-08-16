@@ -315,6 +315,10 @@ class AutonomousResearcher:
         # This is a threading.Event (not asyncio) so it works across the
         # researcher's own thread + the main event loop without locks.
         self._chat_active = threading.Event()
+        # Idle trigger: resume_after_chat() sets this to wake the researcher
+        # immediately instead of waiting for the next timer tick. The
+        # researcher fills every idle moment between chat turns.
+        self._idle_trigger = threading.Event()
         self.last_run: dict[str, Any] | None = None
         self.history: list[dict[str, Any]] = []
         self.enabled = True
@@ -328,13 +332,24 @@ class AutonomousResearcher:
             self.session_logger.log(event, data or {})
 
     def pause_for_chat(self):
-        """Signal the researcher to yield the GPU for a chat turn."""
+        """Signal the researcher to yield the GPU for a chat turn.
+
+        Sets _chat_active AND clears the idle trigger so any pending
+        wake is cancelled. The researcher checks _chat_active at every
+        stage of its cycle and stops immediately when this is set.
+        """
         self._chat_active.set()
+        self._idle_trigger.clear()
 
     def resume_after_chat(self):
-        """Signal the researcher that the chat turn is done."""
-        self._chat_active.clear()
+        """Signal the researcher that the chat turn is done.
 
+        Clears _chat_active AND sets the idle trigger to wake the
+        researcher immediately — it fills every idle moment between
+        chat turns instead of waiting for a timer.
+        """
+        self._chat_active.clear()
+        self._idle_trigger.set()
     def _identify_gaps(self) -> list[dict[str, Any]]:
         """Identify knowledge gaps in the vault.
 
@@ -402,8 +417,15 @@ class AutonomousResearcher:
                 },
             )
             return str(existing)
-
         try:
+            # Chat-priority check: if chat became active while we were
+            # checking the already-researched guard, abort before the
+            # expensive web research call (30+ seconds of DuckDuckGo +
+            # LLM synthesis). The gap will be retried on the next cycle.
+            if self._chat_active.is_set():
+                self._log("autonomous_research_aborted_chat", {"topic": topic})
+                return None
+
             result = self.engine.research(topic)
             if not result or not result.get("synthesis"):
                 return None
@@ -492,6 +514,12 @@ class AutonomousResearcher:
                 vault_path=str(self.vault_path),
                 backend_path=str(self.vault_path / "vaultbot_stuff/vaultbot_backend"),
             )
+
+            # Chat-priority check: if chat became active while _cycle_impl
+            # was dispatching to us, abort before the expensive pipeline.run().
+            if self._chat_active.is_set():
+                self._log("autonomous_consolidation_aborted_chat", {})
+                return {"ok": False, "reason": "chat active"}
 
             # Phases 1-4: Extract, Cluster, build Synthesis prompts
             result = pipeline.run()
@@ -603,37 +631,14 @@ class AutonomousResearcher:
             return {"ok": False, "error": str(e)}
 
     async def _cycle(self):
-        """Run one autonomous research cycle."""
+        """Run one autonomous research cycle.
+
+        Thin executor: heartbeat + delegate to _cycle_impl. All decision
+        logic (chat yield, QA yield, consolidation scheduling, gap filtering,
+        budget) lives in the [[Autonomous-Research-Cycle]] procedure note.
+        """
         if not self.enabled:
             return
-        # Chat-priority: if an interactive chat turn is in flight, skip this
-        # cycle entirely. The user's embedding/LLM calls must not queue behind
-        # background research on a single-GPU laptop. The next cycle (after
-        # the interval) runs normally once the chat ends.
-        if self._chat_active.is_set():
-            self._log("autonomous_cycle_skipped_chat_active", {})
-            return
-        # QA-priority: if the QA worker still has notes to heal, skip this
-        # cycle. Existing vault notes get healed BEFORE the researcher
-        # creates new ones. The QA worker runs during chat idle windows;
-        # the researcher only fires when the queue is drained. This prevents
-        # the two background processes from fighting over the GPU — QA
-        # heals what's there, then the researcher expands, then QA heals
-        # what the researcher made.
-        try:
-            from qa_worker import load_qa_queue
-
-            qa_queue = load_qa_queue()
-            if qa_queue:
-                self._log(
-                    "autonomous_cycle_skipped_qa_pending",
-                    {
-                        "qa_queue_size": len(qa_queue),
-                    },
-                )
-                return
-        except Exception:  # noqa: BLE001 — best-effort
-            pass
         cycle_t0 = time.time()
         if hasattr(self, "_heartbeat"):
             self._heartbeat("cycle starting")
@@ -655,257 +660,321 @@ class AutonomousResearcher:
             if hasattr(self, "_heartbeat"):
                 self._heartbeat("cycle complete")
 
-    async def _cycle_impl(self, cycle_t0: float):
-        """Core cycle logic — separated so the outer _cycle can heartbeat
-        on error without duplicating the try/except in every branch."""
+    def _get_curriculum_gaps(self) -> list[dict[str, Any]]:
+        """Gather raw curriculum gaps. No filtering — that's the procedure's job."""
+        if self.curriculum is None:
+            return []
+        try:
+            return self.curriculum.propose_next_gaps()
+        except Exception as e:  # noqa: BLE001 — best-effort, logged
+            self._log("autonomous_curriculum_gaps_failed", {"error": str(e)})
+            return []
 
-        # --- Consolidation check ---
-        # Every Nth cycle, run the semantic consolidation pipeline
-        # (hippocampal replay) instead of gap-filling. This mines chat
-        # logs for patterns and writes semantic knowledge notes.
-        self._cycle_count += 1
-        if self._cycle_count % _CONSOLIDATION_INTERVAL == 0:
-            self._log(
-                "autonomous_consolidation_cycle",
-                {
-                    "cycle": self._cycle_count,
-                },
-            )
-            consolidation_result = await self._run_consolidation()
-            self.last_run = {
-                "timestamp": time.time(),
-                "kind": "consolidation",
-                "result": consolidation_result,
-                "duration_ms": (time.time() - cycle_t0) * 1000,
-            }
-            self.history.append(self.last_run)
-            if len(self.history) > 50:
-                self.history = self.history[-50:]
-            self._log("autonomous_cycle_end", self.last_run)
+    def _write_checkpoint(self, gaps: list[dict[str, Any]]) -> None:
+        """Persist in-flight gaps so a crash can resume them."""
+        if self.checkpointer is None:
             return
+        try:
+            from checkpointer import ResearchCheckpoint
+            from datetime import UTC, datetime
 
-        # If there are recovered gaps from a previous crash, research those
-        # FIRST before the curriculum proposes new ones. This is the retry.
-        recovered = getattr(self, "_recovered_gaps", None)
-        if recovered:
-            # Filter recovered gaps too — they may have been pre-filter garbage.
-            recovered = [g for g in recovered if _is_researchable_gap(g)]
-            self._log(
-                "autonomous_recovering_interrupted",
-                {
-                    "count": len(recovered),
-                    "topics": [g.get("topic") for g in recovered],
-                },
-            )
-            gaps = recovered
-            self._recovered_gaps = None  # consume them
-        elif self.procedure_tracker is not None:
-            # Check for failing/stale procedures and procedural gaps first.
-            # These are higher priority than normal knowledge gaps because
-            # they represent tasks where the system is actively failing.
-            proc_gaps = self.procedure_tracker.get_research_gaps(
-                vault_path=str(self.vault_path)
-            )
-            # Partition into researchable gaps and rejected procedure gaps.
-            # Procedure-name gaps (failing_procedure, failing_step,
-            # stale_procedure) are NOT web-researchable — the procedure's
-            # name is an internal identifier, not a concept the web knows
-            # about. Reset their failure counts so they stop coming back
-            # every cycle (the infinite-loop bug). Procedural gaps
-            # ("how to <task>") ARE researchable and pass through.
-            researchable_proc = []
-            rejected_proc = []
-            for g in proc_gaps:
-                if _is_researchable_gap(g):
-                    researchable_proc.append(g)
-                else:
-                    rejected_proc.append(g)
-            # Reset failure counts for rejected procedure gaps so the tracker
-            # stops feeding them back every cycle. This is the deterministic
-            # fix that replaces the old 7-hour small-model loop.
-            for g in rejected_proc:
-                proc_name = g.get("procedure") or g.get("topic", "")
-                if proc_name:
-                    try:
-                        self.procedure_tracker.update_after_research(
-                            proc_name, vault_path=str(self.vault_path)
-                        )
-                        self._log(
-                            "autonomous_procedure_gap_reset",
-                            {
-                                "procedure": proc_name,
-                                "kind": g.get("kind"),
-                                "reason": "not web-researchable",
-                            },
-                        )
-                    except Exception as e:  # noqa: BLE001 — best-effort
-                        self._log(
-                            "autonomous_procedure_reset_failed",
-                            {
-                                "procedure": proc_name,
-                                "error": str(e),
-                            },
-                        )
-            if rejected_proc:
-                self._log(
-                    "autonomous_procedure_gaps_rejected",
-                    {
-                        "count": len(rejected_proc),
-                        "topics": [g.get("topic", "") for g in rejected_proc[:5]],
-                    },
+            now = datetime.now(UTC).isoformat()
+            checkpoints = [
+                ResearchCheckpoint(
+                    topic=g.get("topic", ""),
+                    kind=g.get("kind", "unknown"),
+                    status="pending",
+                    started_at=now,
+                    gap=g,
                 )
-            if researchable_proc:
-                gaps = researchable_proc
-                self._log(
-                    "autonomous_procedure_gaps",
-                    {
-                        "count": len(gaps),
-                        "topics": [g.get("topic", "") for g in gaps[:5]],
-                    },
-                )
-            else:
-                gaps = self._identify_gaps()
-        else:
-            gaps = self._identify_gaps()
-        self._log(
-            "autonomous_cycle_begin",
-            {
-                "gap_count": len(gaps),
-                "top_gaps": [g["topic"] for g in gaps[:5]],
-            },
-        )
-        filled: list[dict[str, Any]] = []
-        budget = min(self.max_researches_per_cycle, len(gaps))
-        # Checkpoint the cycle's gaps so a crash mid-research can be recovered.
-        cycle_checkpoints = []
-        from datetime import datetime
+                for g in gaps
+            ]
+            self.checkpointer.save(checkpoints)
+        except Exception as e:  # noqa: BLE001 — best-effort, logged
+            self._log("autonomous_checkpoint_write_failed", {"error": str(e)})
 
-        now_iso = lambda: datetime.now(UTC).isoformat()
-        for gap in gaps[:budget]:
-            if self._stop_event.is_set():
-                break
-            # Chat-priority: stop the cycle mid-way if a chat turn starts,
-            # so the remaining researches don't keep Ollama busy. Already-
-            # started research finishes; the next gap waits for the next
-            # cycle (after the chat ends + the interval).
-            if self._chat_active.is_set():
-                self._log(
-                    "autonomous_cycle_paused_mid_cycle",
-                    {
-                        "completed": len(cycle_checkpoints),
-                        "remaining": budget - len(cycle_checkpoints),
-                    },
-                )
-                break
-            # Mark this gap as 'running' in the checkpoint before researching.
-            ckpt = {
-                "topic": gap["topic"],
-                "kind": gap["kind"],
-                "status": "running",
-                "started_at": now_iso(),
-                "completed_at": None,
-                "note_path": None,
-                "error": None,
-                "gap": gap,
-            }
-            cycle_checkpoints.append(ckpt)
-            if self.checkpointer is not None:
-                try:
-                    self.checkpointer.save(
-                        [
-                            __import__("checkpointer").ResearchCheckpoint(**c)
-                            for c in cycle_checkpoints
-                        ]
-                    )
-                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    # Checkpoint failure means no resume after restart.
-                    # Log loudly — the operator needs to know the researcher
-                    # can't recover from a crash.
-                    self._log(
-                        "checkpoint_save_failed",
-                        {
-                            "error": str(e),
-                            "category": "compaction_broken",
-                        },
-                    )
-            note_path = self._research_to_note(gap)
-            # Heartbeat after each gap is researched so the health monitor
-            # knows the researcher is making progress, not hung on a slow
-            # web request or LLM call.
-            if hasattr(self, "_heartbeat"):
-                self._heartbeat(f"researched: {gap.get('topic', 'unknown')[:60]}")
-            # Update the checkpoint with the result.
-            ckpt["status"] = "done" if note_path else "failed"
-            ckpt["completed_at"] = now_iso()
-            ckpt["note_path"] = note_path
-            if not note_path:
-                ckpt["error"] = "research returned no note"
-            filled.append(
-                {
-                    "topic": gap["topic"],
-                    "kind": gap["kind"],
-                    "note_path": note_path,
-                    "ok": note_path is not None,
-                }
-            )
-        # --- Phase 3: Run the promotion cycle after each research cycle ---
-        # Scan all procedural notes in the vault, check their success rates,
-        # and promote/flag them based on the deterministic thresholds.
-        # This is purely mechanical: read stats, compare to thresholds,
-        # write frontmatter. No LLM judgment.
-        if self.procedure_tracker is not None:
-            try:
-                promo_result = self.procedure_tracker.run_promotion_cycle(
-                    str(self.vault_path)
-                )
-                if promo_result["promoted"] or promo_result["flagged"]:
-                    self._log("autonomous_procedure_promotion", promo_result)
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("autonomous_promotion_cycle_failed", {"error": str(e)})
+    def _clear_checkpoint(self) -> None:
+        """Clear the checkpoint after a clean cycle completion."""
+        if self.checkpointer is None:
+            return
+        try:
+            self.checkpointer.clear()
+        except Exception as e:  # noqa: BLE001 — best-effort, logged
+            self._log("autonomous_checkpoint_clear_failed", {"error": str(e)})
+
+    def _record_last_run(self, cycle_t0: float, kind: str, result: dict[str, Any]):
+        """Record the cycle result in history. Called after every action."""
         self.last_run = {
             "timestamp": time.time(),
-            "gap_count": len(gaps),
-            "researched": filled,
+            "kind": kind,
+            "result": result,
             "duration_ms": (time.time() - cycle_t0) * 1000,
         }
         self.history.append(self.last_run)
-        # Keep history bounded.
         if len(self.history) > 50:
             self.history = self.history[-50:]
         self._log("autonomous_cycle_end", self.last_run)
-        # Clear the checkpoint — the cycle completed cleanly.
-        if self.checkpointer is not None:
-            try:
-                self.checkpointer.clear()
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log("checkpoint_clear_failed", {"error": str(e)})
 
+    async def _cycle_impl(self, cycle_t0: float):
+        """Thin executor: gather raw state → call procedure → execute plan.
+
+        All decision logic lives in the [[Autonomous-Research-Cycle]]
+        procedure note. This method does NO filtering, NO prioritization,
+        NO budget calculation. It gathers raw state, passes it to the
+        procedure, and mechanically executes whatever the procedure returns.
+        Edit the procedure note to change behavior — no backend restart needed.
+        """
+        import json
+        import importlib
+
+        self._cycle_count += 1
+        cycle_count = self._cycle_count
+
+        # --- 1. Gather raw state (no filtering, no logic) ---
+
+        recovered_gaps = getattr(self, "_recovered_gaps", [])
+        if recovered_gaps:
+            self._log(
+                "autonomous_recovered_gaps",
+                {"count": len(recovered_gaps), "topics": [g.get("topic") for g in recovered_gaps]},
+            )
+
+        procedure_gaps: list[dict[str, Any]] = []
+        if self.procedure_tracker is not None:
+            try:
+                procedure_gaps = self.procedure_tracker.get_research_gaps()
+            except Exception as e:  # noqa: BLE001 — best-effort, logged
+                self._log("autonomous_proc_gaps_failed", {"error": str(e)})
+
+        curriculum_gaps = self._get_curriculum_gaps()
+
+        # QA queue size (raw state for the procedure's QA-yield gate)
+        qa_queue_size = 0
+        try:
+            from qa_worker import load_qa_queue
+
+            qa_queue_size = len(load_qa_queue())
+        except Exception:  # noqa: BLE001 — best-effort, logged
+            self._log("autonomous_qa_queue_check_failed", {})
+
+        chat_active = self._chat_active.is_set()
+
+        # --- 2. Call the procedure for decision logic ---
+        try:
+            mod = importlib.import_module("step_gate_runtime")
+            proc_result = mod.run_procedure(
+                "Autonomous-Research-Cycle",
+                args={
+                    "cycle_count": cycle_count,
+                    "consolidation_interval": _CONSOLIDATION_INTERVAL,
+                    "recovered_gaps": recovered_gaps,
+                    "procedure_gaps": procedure_gaps,
+                    "curriculum_gaps": curriculum_gaps,
+                    "max_researches_per_cycle": self.max_researches_per_cycle,
+                    "qa_queue_size": qa_queue_size,
+                    "chat_active": chat_active,
+                },
+                vault_path=str(self.vault_path),
+                timeout=30,
+            )
+            plan = json.loads(proc_result.get("output", "{}"))
+        except Exception as e:  # noqa: BLE001 — best-effort, logged
+            self._log(
+                "autonomous_procedure_call_failed",
+                {"error": str(e)},
+            )
+            # If the procedure itself fails, we cannot proceed — the whole
+            # point is that ALL logic lives there. Surface the error loudly.
+            raise RuntimeError(
+                f"Autonomous-Research-Cycle procedure failed: {e}"
+            ) from e
+
+        action = plan.get("action", "no_gaps")
+        # Chat-priority check: if chat became active during the procedure
+        # call (up to 30s), skip execution entirely. The plan will be
+        # recomputed on the next idle cycle.
+        if action != "skip" and self._chat_active.is_set():
+            self._log("autonomous_plan_aborted_chat", {"action": action})
+            self._record_last_run(cycle_t0, "skip", {"reason": "chat became active during procedure call"})
+            return
+
+        # --- 3. Mechanically execute the plan ---
+
+        if action == "skip":
+            self._log("autonomous_cycle_skipped", {"reason": plan.get("reason", "")})
+            self._record_last_run(cycle_t0, "skip", {"reason": plan.get("reason", "")})
+            return
+
+        if action == "consolidation":
+            await self._run_consolidation()
+            self._record_last_run(cycle_t0, "consolidation", {})
+            return
+
+        if action == "no_gaps":
+            self._log("autonomous_no_gaps", {})
+            self._record_last_run(
+                cycle_t0, "no_gaps", {"rejected_count": plan.get("rejected_count", 0)}
+            )
+            return
+
+        # action == "research"
+        gaps = plan.get("gaps", [])
+        budget = plan.get("budget", self.max_researches_per_cycle)
+        gaps = gaps[:budget]
+
+        # Reset failure counts for rejected procedure gaps
+        reset_procs = plan.get("reset_procedures", [])
+        if reset_procs and self.procedure_tracker is not None:
+            for proc_name in reset_procs:
+                try:
+                    self.procedure_tracker.reset_failures(proc_name)
+                except Exception as e:  # noqa: BLE001 — best-effort, logged
+                    self._log(
+                        "autonomous_reset_failures_failed",
+                        {"procedure": proc_name, "error": str(e)},
+                    )
+            self._log(
+                "autonomous_proc_gaps_rejected",
+                {"count": len(reset_procs), "procedures": reset_procs},
+            )
+
+        if not gaps:
+            self._log("autonomous_no_gaps", {})
+            self._record_last_run(cycle_t0, "no_gaps", {})
+            return
+
+        self._log(
+            "autonomous_gaps_selected",
+            {"count": len(gaps), "topics": [g.get("topic") for g in gaps]},
+        )
+
+        # Clear recovered gaps — they've been selected for research
+        if recovered_gaps:
+            self._recovered_gaps = []
+
+        for i, gap in enumerate(gaps):
+            # Chat-priority: if chat became active mid-research, bail
+            # immediately. Don't clear the checkpoint, don't run promotion,
+            # don't record a "research" cycle — just get out. The next idle
+            # period starts a completely fresh cycle. The checkpoint will
+            # be cleaned up by the next cycle or by crash recovery.
+            if self._chat_active.is_set():
+                self._log(
+                    "autonomous_cycle_interrupted",
+                    {"gap_index": i, "remaining": len(gaps) - i},
+                )
+                self._record_last_run(cycle_t0, "interrupted", {"gap_index": i, "remaining": len(gaps) - i})
+                return
+
+            self._log(
+                "autonomous_researching_gap",
+                {
+                    "topic": gap.get("topic"),
+                    "index": i,
+                    "total": len(gaps),
+                    "source": gap.get("source", "unknown"),
+                },
+            )
+            note_path = self._research_to_note(gap)
+            self._log(
+                "autonomous_research_complete",
+                {
+                    "topic": gap.get("topic"),
+                    "note_path": note_path,
+                    "index": i,
+                    "total": len(gaps),
+                },
+            )
+
+        # Clear checkpoint — all gaps completed cleanly
+        self._clear_checkpoint()
+
+        # --- Procedure promotion cycle ---
+        if plan.get("run_promotion") and self.procedure_tracker is not None:
+            try:
+                self.procedure_tracker.run_promotion_cycle(str(self.vault_path))
+            except Exception as e:  # noqa: BLE001 — best-effort, logged
+                self._log(
+                    "autonomous_promotion_cycle_failed",
+                    {"error": str(e)},
+                )
+
+        self._record_last_run(cycle_t0, "research", {"gaps_researched": len(gaps)})
+        if len(self.history) > 50:
+            self.history = self.history[-50:]
     async def _run(self):
-        """Main loop: sleep, cycle, repeat until stopped."""
+        """Event-driven idle-filler loop.
+
+        The researcher fills idle moments between chat turns. When a chat
+        turn ends, resume_after_chat() sets _idle_trigger, which wakes this
+        loop immediately to run a cycle. When a new chat turn starts,
+        pause_for_chat() sets _chat_active — the cycle checks this at
+        every stage and aborts mid-flight.
+
+        A backstop timer (interval_seconds) ensures the researcher still
+        fires periodically even if no chat turns happen (e.g. overnight),
+        so the vault keeps growing when the user is away.
+        """
         self._loop = asyncio.get_event_loop()
         self._log(
             "autonomous_researcher_start",
             {
                 "interval_seconds": self.interval_seconds,
                 "max_per_cycle": self.max_researches_per_cycle,
+                "mode": "event-driven",
             },
         )
-        # Run an initial cycle shortly after start so the user sees value
-        # without waiting the full interval.
+
+        # Initial grace period: let the index/graph settle before the
+        # first cycle. After this, cycles are triggered by _idle_trigger
+        # (set by resume_after_chat) or the interval backstop.
         initial_delay = 15
+        first_cycle = True
+
         while not self._stop_event.is_set():
             try:
-                await asyncio.sleep(initial_delay)
-                initial_delay = self.interval_seconds
-                await self._cycle()
+                if first_cycle:
+                    # First cycle: short grace period, then run.
+                    await asyncio.sleep(initial_delay)
+                    first_cycle = False
+                else:
+                    # Wait for the idle trigger (set by resume_after_chat)
+                    # or fall through after the interval backstop.
+                    # The trigger is cleared after waiting so we don't
+                    # spin in a tight loop.
+                    triggered = self._idle_trigger.wait(
+                        timeout=self.interval_seconds
+                    )
+                    if triggered:
+                        self._idle_trigger.clear()
+                    # If chat is still active (user sent a new message
+                    # before we woke), skip — the procedure will also
+                    # check, but this avoids a wasted cycle.
+                    if self._chat_active.is_set():
+                        continue
+
+                # Run cycles back-to-back while idle. Each cycle may find
+                # more gaps to fill. Stop when:
+                #   - chat becomes active (pause_for_chat interrupts)
+                #   - the procedure returns "skip" or "no_gaps"
+                #   - a cycle errors
+                while not self._stop_event.is_set():
+                    if self._chat_active.is_set():
+                        break
+                    await self._cycle()
+                    # If the last cycle was skip, no_gaps, or interrupted,
+                    # don't immediately retry — wait for the next trigger.
+                    if self.last_run and self.last_run.get("kind") in (
+                        "skip",
+                        "no_gaps",
+                        "interrupted",
+                    ):
+                        break
             except asyncio.CancelledError:
                 break
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            except Exception as e:  # noqa: BLE001 — best-effort, logged
                 self._log("autonomous_researcher_error", {"error": str(e)})
-                # Avoid a tight error loop.
-                await asyncio.sleep(self.interval_seconds)
         self._log("autonomous_researcher_stop", {})
-
     def start(self):
         """Start the background researcher thread."""
         if self._thread and self._thread.is_alive():
@@ -938,6 +1007,8 @@ class AutonomousResearcher:
     def stop(self):
         """Signal the background researcher to stop."""
         self._stop_event.set()
+        # Wake the researcher immediately if it's blocked on _idle_trigger.wait()
+        self._idle_trigger.set()
         if self._loop:
             try:
                 # Nudge any sleeping coroutine.

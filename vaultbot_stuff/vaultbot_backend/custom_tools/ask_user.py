@@ -12,19 +12,15 @@ SCHEMA = {
                 "type": "string",
             },
             "questions": {
-                "description": "List of question objects to present to the user",
+                "description": "List of simple question objects. Each has 'question' (the text to display) and optionally 'options' (a list of strings — if present, the question is single-choice radio; if absent, it's free-form text). Optionally 'id' (a unique key for the answer; auto-generated as q1, q2... if omitted).",
                 "items": {
                     "properties": {
-                        "default": {
-                            "description": "Default value: 'best_practices' to pre-select the 'I don't know, use best practices' option, or a string for text default",
-                            "type": "string",
-                        },
                         "id": {
-                            "description": "Unique key for this question (used as the key in the returned dict)",
+                            "description": "Unique key for this question (used as the key in the returned dict). Auto-generated as q1, q2... if omitted.",
                             "type": "string",
                         },
                         "options": {
-                            "description": "List of option strings (for radio type only)",
+                            "description": "List of option strings for single-choice. If present, the question is radio (pick one). If absent, the question is free-form text.",
                             "items": {"type": "string"},
                             "type": "array",
                         },
@@ -32,13 +28,8 @@ SCHEMA = {
                             "description": "The question text to display",
                             "type": "string",
                         },
-                        "type": {
-                            "description": "'radio' for single-choice with options, 'text' for free-form input",
-                            "enum": ["radio", "text"],
-                            "type": "string",
-                        },
                     },
-                    "required": ["id", "question", "type"],
+                    "required": ["question"],
                     "type": "object",
                 },
                 "type": "array",
@@ -108,13 +99,12 @@ def run(
     Args:
         title: Short title for the question card (e.g. "Research approach")
         context: Background context explaining what you're trying to decide
-        questions: List of question objects, each with:
-            - id: unique key for this question
-            - question: the question text
-            - type: "radio" (single choice) or "text" (free-form)
-            - options: list of option strings (for radio type)
-            - default: "best_practices" to pre-select the "I don't know" option,
-                       or a string for text default
+        questions: List of simplified question objects, each with:
+            - question: the question text (required)
+            - options: list of option strings (optional — if present,
+              the question is single-choice radio; if absent, free-form text)
+            - id: unique key for this question (optional — auto-generated
+              as q1, q2... if omitted)
         websocket: The owning WebSocket connection (optional).  When
             provided, the questionnaire is sent to THIS tab only, not
             broadcast to all tabs.  This enables multi-tab isolation.
@@ -132,21 +122,45 @@ def run(
             "context": "I'm building a knowledge graph and need to decide...",
             "questions": [
                 {"id": "edge_types", "question": "Which edge typing approach?",
-                 "type": "radio", "options": ["Typed", "Untyped", "Hybrid"],
-                 "default": "best_practices"},
-                {"id": "nuance", "question": "Any constraints?",
-                 "type": "text", "default": ""}
+                 "options": ["Typed", "Untyped", "Hybrid"]},
+                {"id": "nuance", "question": "Any constraints?"}
             ]
         }, websocket=ws, session_id=session_id)
     """
     _cleanup_stale()
 
-    questions = args.get("questions", [])
-    if not questions:
+    raw_questions = args.get("questions", [])
+    if not raw_questions:
         return {"error": "No questions provided"}
 
     title = args.get("title", "I need your input")
     context = args.get("context", "")
+
+    # Normalize simplified schema → full GUI-compatible format.
+    # The GUI expects each question to have: id, question, type, options,
+    # and default. We derive type from options presence and auto-generate
+    # ids if the LLM didn't provide them.
+    questions = []
+    for i, q in enumerate(raw_questions):
+        q_id = q.get("id") or f"q{i + 1}"
+        q_text = q.get("question", "")
+        q_options = q.get("options")
+        if q_options and isinstance(q_options, list) and len(q_options) > 0:
+            q_type = "radio"
+            q_default = "best_practices"  # pre-select "I don't know" by default
+        else:
+            q_type = "text"
+            q_default = q.get("default", "") if isinstance(q.get("default"), str) else ""
+            q_options = None
+        gui_q = {
+            "id": q_id,
+            "question": q_text,
+            "type": q_type,
+        }
+        if q_options:
+            gui_q["options"] = q_options
+        gui_q["default"] = q_default
+        questions.append(gui_q)
 
     request_id = str(uuid.uuid4())
     event = threading.Event()
