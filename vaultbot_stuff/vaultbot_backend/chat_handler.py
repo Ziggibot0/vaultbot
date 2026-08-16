@@ -720,11 +720,15 @@ async def _prepare_turn(
     # Build the conversation for /api/chat using PERSISTENT per-session history.
     #
     # PROMPT-CACHING STRUCTURE (2026-08-15):
-    # The conversation starts with TWO separate system messages at the
-    # beginning — both are valid (Ollama /v1 accepts multiple system
-    # messages at the start, verified via live test). The split is what
-    # enables provider-side prompt caching (GLM cloud, OpenAI,
-    # OpenRouter, Anthropic all cache on prefix):
+    # The conversation starts with up to THREE separate system messages at
+    # the beginning (stable prompt, vault context, wm block). This split is
+    # INTERNAL bookkeeping only — it lets the in-loop composer update the wm
+    # block in place (conversation[2]) without rebuilding the stable prefix.
+    # Ollama's /v1/chat/completions REJECTS multiple leading system messages
+    # with a 500, so OllamaClient.chat() collapses them into ONE system
+    # message right before sending (see merge_leading_system_messages).
+    # Token-prefix caching is unaffected by the merge — the token sequence is
+    # identical either way, so the stable prompt prefix still caches:
     #
     #   conversation[0] = STABLE system prompt (identity + briefing +
     #     procedure surface). This NEVER changes between rounds within
@@ -2093,16 +2097,27 @@ async def handle_chat(
                 _post_cap_tokens = _estimate_conv_tokens(conversation)
 
                 # —€—€ Wait for model to finish loading —€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€
-                # On a fresh backend start the startup-preload thread is
-                # still cold-loading the model (up to 30s for a 17GB dense
-                # model like qwen3.8).  If we send the chat request before
-                # Ollama finishes loading, Ollama returns an instant 500.
-                # Block here (with a heartbeat) until the model is resident.
-                # is_model_loaded() is a no-op (returns True) for cloud
-                # backends, so this only waits for local Ollama models.
+                # The startup-preload thread warms the model configured AT
+                # BOOT. If the user switched models via the GUI since then
+                # (or the model was evicted after keep_alive expired), the
+                # current model is cold and NOTHING is loading it — polling
+                # is_model_loaded() alone would spin the full timeout doing
+                # nothing. So we ACTIVELY preload (a 1-token generate that
+                # forces Ollama to load the model now), then poll with a
+                # heartbeat until it's resident. preload_model() is a no-op
+                # (returns True) for cloud backends, so this only loads
+                # local Ollama models.
                 _model_wait_t0 = loop.time()
                 _model_wait_max = float(
                     os.environ.get("VAULTBOT_MODEL_LOAD_WAIT_S", "300")
+                )
+                # Kick off an ACTIVE preload in the executor. It returns
+                # immediately if the model is already resident; otherwise it
+                # blocks (up to 600s) while Ollama loads the model from disk.
+                # We poll is_model_loaded() below with a heartbeat so the
+                # user sees progress instead of a silent stall.
+                _preload_task = loop.run_in_executor(
+                    None, svc.ollama_client.preload_model
                 )
                 while True:
                     _loaded = await loop.run_in_executor(

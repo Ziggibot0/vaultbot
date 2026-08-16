@@ -27,6 +27,42 @@ except Exception:  # pragma: no cover - circular-import safety
     _BASE = object
 
 
+def merge_leading_system_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collapse consecutive leading ``system`` messages into a single one.
+
+    Ollama's OpenAI-compatible ``/v1/chat/completions`` endpoint rejects
+    multiple consecutive ``system`` messages at the start of the message
+    list with a 500 ("system message must be at the beginning"). The chat
+    loop builds a 3-message prefix (stable system prompt, vault context,
+    working-memory block) for prompt-caching bookkeeping, but that shape
+    must be collapsed to ONE system message before it reaches Ollama.
+
+    Token-prefix caching is unaffected: the merged message's token sequence
+    is identical to the concatenation of the separate messages (minus the
+    inter-message role markers), so the stable prompt prefix still caches.
+
+    Returns a NEW list; the caller's list is never mutated. Empty leading
+    system messages (e.g. the wm-block placeholder on round 0) are dropped
+    rather than joined as blank lines.
+    """
+    if not messages:
+        return messages
+    n = 0
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "system":
+            n += 1
+        else:
+            break
+    if n <= 1:
+        return messages
+    parts = [str(m.get("content", "") or "") for m in messages[:n]]
+    parts = [p for p in parts if p.strip()]
+    merged = {"role": "system", "content": "\n\n".join(parts)}
+    return [merged] + messages[n:]
+
+
 class OllamaClient(_BASE):
     def __init__(
         self,
@@ -804,6 +840,12 @@ class OllamaClient(_BASE):
         If stream=False, returns a dict with 'response', 'thinking',
         'tool_calls', 'finish_reason'.
         """
+        # Collapse consecutive leading system messages into one. Ollama's
+        # /v1/chat/completions rejects multiple leading system messages with
+        # a 500; the chat loop builds a 3-message prefix (stable prompt,
+        # vault context, wm block) for prompt-caching bookkeeping that must
+        # be merged here. Token-prefix caching is unaffected (see helper).
+        messages = merge_leading_system_messages(messages)
         payload: dict[str, Any] = {
             "model": self.llm_model,
             "messages": messages,
