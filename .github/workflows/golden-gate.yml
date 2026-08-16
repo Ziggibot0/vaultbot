@@ -1,4 +1,4 @@
-# Live golden-set retrieval gate — scores the REAL fused retriever against
+# Live golden-set retrieval gate â€” scores the REAL fused retriever against
 # golden_set.json using a service container running Ollama + nomic-embed-text.
 #
 # Runs on PRs that touch retrieval-affecting code (paths filter) and on
@@ -14,15 +14,15 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "vaultbot_stuff/vaultbot_backend/fused_retrieval.py"
-      - "vaultbot_stuff/vaultbot_backend/vault_indexer.py"
-      - "vaultbot_stuff/vaultbot_backend/vault_graph.py"
-      - "vaultbot_stuff/vaultbot_backend/abstract_context.py"
-      - "vaultbot_stuff/vaultbot_backend/weaving.py"
-      - "vaultbot_stuff/vaultbot_backend/embedding_drift.py"
-      - "vaultbot_stuff/vaultbot_backend/golden_eval.py"
-      - "vaultbot_stuff/vaultbot_backend/golden_set.json"
-      - "vaultbot_stuff/vaultbot_backend/run_golden_gate.py"
+      - "vaultbot/vaultbot_backend/fused_retrieval.py"
+      - "vaultbot/vaultbot_backend/vault_indexer.py"
+      - "vaultbot/vaultbot_backend/vault_graph.py"
+      - "vaultbot/vaultbot_backend/abstract_context.py"
+      - "vaultbot/vaultbot_backend/weaving.py"
+      - "vaultbot/vaultbot_backend/embedding_drift.py"
+      - "vaultbot/vaultbot_backend/golden_eval.py"
+      - "vaultbot/vaultbot_backend/golden_set.json"
+      - "vaultbot/vaultbot_backend/run_golden_gate.py"
       - ".github/workflows/golden-gate.yml"
 
 concurrency:
@@ -31,10 +31,10 @@ concurrency:
 
 jobs:
   golden-gate:
-    name: recall@5 ≥ 0.5 against seed golden set
+    name: recall@5 â‰¥ 0.5 against seed golden set
     runs-on: ubuntu-latest
 
-    # Ollama service container — exposes 11434 to the job container.
+    # Ollama service container â€” exposes 11434 to the job container.
     services:
       ollama:
         image: ollama/ollama:latest
@@ -58,7 +58,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt
+          pip install -r vaultbot/vaultbot_backend/requirements.txt
 
       - name: Cache Ollama nomic-embed-text model
         id: cache-model
@@ -85,7 +85,7 @@ jobs:
         run: ollama list
 
       - name: Build index + run golden gate
-        working-directory: vaultbot_stuff/vaultbot_backend
+        working-directory: vaultbot/vaultbot_backend
         env:
           OLLAMA_BASE_URL: http://localhost:11434
           OLLAMA_EMBED_MODEL: nomic-embed-text

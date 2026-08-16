@@ -1,34 +1,34 @@
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Secrets & personal config
 # NEVER commit - API keys, owner name, local paths.
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 .env
 .env.local
 .env.*.local
 providers.json
 providers.json.tmp
-vaultbot_stuff/vaultbot_backend/.vaultbot_auth_token
+vaultbot/vaultbot_backend/.vaultbot_auth_token
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Python virtual environment
 # setup.ps1/setup.sh create .venv (hidden in Obsidian). vaultbot_venv/
 # kept as a legacy pattern in case an old install left one behind.
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 .venv/
 vaultbot_venv/
 venv/
 env/
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Nested vault from in-repo installer runs
 # If someone runs setup.ps1/setup.sh inside the repo itself, it creates a
-# VaultBot/ subfolder — never commit that.
+# VaultBot/ subfolder â€” never commit that.
 # Anchored to root so it doesn't match .obsidian/plugins/vaultbot/.
 /VaultBot/
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Python cache
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 __pycache__/
 *.py[cod]
 *$py.class
@@ -36,75 +36,75 @@ __pycache__/
 *.egg-info/
 *.egg
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # VaultBot runtime state (regenerated on first run)
 # These are YOUR vault's state - another user's VaultBot makes its own.
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _test_*.py
-vaultbot_stuff/vaultbot_backend/identity/
-vaultbot_stuff/vaultbot_backend/sessions/
-vaultbot_stuff/vaultbot_backend/checkpoints/
-vaultbot_stuff/vaultbot_backend/vaultbot_index/
-vaultbot_stuff/vaultbot_backend/vaultbot/
-vaultbot_stuff/vaultbot_backend/vaultbot.pid
-vaultbot_stuff/vaultbot_backend/chat_loop_checkpoint.json
-vaultbot_stuff/vaultbot_backend/curriculum_state.json
-vaultbot_stuff/vaultbot_backend/touch_counts.json
-vaultbot_stuff/vaultbot_backend/embedding_drift.json
-vaultbot_stuff/vaultbot_backend/conversation_state.json
-vaultbot_stuff/vaultbot_backend/procedure_failure_log.json
-vaultbot_stuff/vaultbot_backend/calibration_log.json
-vaultbot_stuff/vaultbot_backend/claim_verification_log.json
-vaultbot_stuff/vaultbot_backend/consolidation_log.json
-vaultbot_stuff/vaultbot_backend/rag_eval_log.json
-vaultbot_stuff/vaultbot_backend/backend.log
-vaultbot_stuff/vaultbot_backend/debug_chat.log
-vaultbot_stuff/vaultbot_backend/backend.err
-vaultbot_stuff/vaultbot_backend/backend_stdout.log
-vaultbot_stuff/vaultbot_backend/backend_stdout.txt
-vaultbot_stuff/vaultbot_backend/backend_stderr.log
-vaultbot_stuff/vaultbot_backend/backend_stderr.txt
-vaultbot_stuff/vaultbot_backend/backend_live.log
-vaultbot_stuff/vaultbot_backend/pythonw_stdout.log
-vaultbot_stuff/vaultbot_backend/pythonw_stderr.log
-vaultbot_stuff/vaultbot_backend/boot.log
-vaultbot_stuff/vaultbot_backend/maintenance.log
-vaultbot_stuff/vaultbot_backend/test_err.log
-vaultbot_stuff/vaultbot_backend/test_out.log
-vaultbot_stuff/vaultbot_backend/**/*.bak
-vaultbot_stuff/vaultbot_backend/**/*.bak.*
-vaultbot_stuff/vaultbot_backend/*.tmp
-vaultbot_stuff/vaultbot_backend/*.patched
-vaultbot_stuff/vaultbot_backend/*.pre_*
-vaultbot_stuff/vaultbot_backend/_test_*.py
-vaultbot_stuff/vaultbot_backend/_diag*.py
-vaultbot_stuff/vaultbot_backend/_torture_test.py
-vaultbot_stuff/vaultbot_backend/_dream_pass_themes.json
-vaultbot_stuff/vaultbot_backend/_spawn_diag*.log
-vaultbot_stuff/vaultbot_backend/trash/
-vaultbot_stuff/vaultbot_backend/partials/
-vaultbot_stuff/vaultbot_backend/*_log.json
-vaultbot_stuff/vaultbot_backend/golden_set.json
-vaultbot_stuff/vaultbot_backend/backend_out.log
-vaultbot_stuff/vaultbot_backend/backend_err.log
-vaultbot_stuff/vaultbot_backend/backend.err.log
-vaultbot_stuff/vaultbot_backend/backend_stderr.txt
-vaultbot_stuff/vaultbot_backend/backend_stdout.txt
-vaultbot_stuff/vaultbot_backend/procedure_tracker.log
+vaultbot/vaultbot_backend/identity/
+vaultbot/vaultbot_backend/sessions/
+vaultbot/vaultbot_backend/checkpoints/
+vaultbot/vaultbot_backend/vaultbot_index/
+vaultbot/vaultbot_backend/vaultbot/
+vaultbot/vaultbot_backend/vaultbot.pid
+vaultbot/vaultbot_backend/chat_loop_checkpoint.json
+vaultbot/vaultbot_backend/curriculum_state.json
+vaultbot/vaultbot_backend/touch_counts.json
+vaultbot/vaultbot_backend/embedding_drift.json
+vaultbot/vaultbot_backend/conversation_state.json
+vaultbot/vaultbot_backend/procedure_failure_log.json
+vaultbot/vaultbot_backend/calibration_log.json
+vaultbot/vaultbot_backend/claim_verification_log.json
+vaultbot/vaultbot_backend/consolidation_log.json
+vaultbot/vaultbot_backend/rag_eval_log.json
+vaultbot/vaultbot_backend/backend.log
+vaultbot/vaultbot_backend/debug_chat.log
+vaultbot/vaultbot_backend/backend.err
+vaultbot/vaultbot_backend/backend_stdout.log
+vaultbot/vaultbot_backend/backend_stdout.txt
+vaultbot/vaultbot_backend/backend_stderr.log
+vaultbot/vaultbot_backend/backend_stderr.txt
+vaultbot/vaultbot_backend/backend_live.log
+vaultbot/vaultbot_backend/pythonw_stdout.log
+vaultbot/vaultbot_backend/pythonw_stderr.log
+vaultbot/vaultbot_backend/boot.log
+vaultbot/vaultbot_backend/maintenance.log
+vaultbot/vaultbot_backend/test_err.log
+vaultbot/vaultbot_backend/test_out.log
+vaultbot/vaultbot_backend/**/*.bak
+vaultbot/vaultbot_backend/**/*.bak.*
+vaultbot/vaultbot_backend/*.tmp
+vaultbot/vaultbot_backend/*.patched
+vaultbot/vaultbot_backend/*.pre_*
+vaultbot/vaultbot_backend/_test_*.py
+vaultbot/vaultbot_backend/_diag*.py
+vaultbot/vaultbot_backend/_torture_test.py
+vaultbot/vaultbot_backend/_dream_pass_themes.json
+vaultbot/vaultbot_backend/_spawn_diag*.log
+vaultbot/vaultbot_backend/trash/
+vaultbot/vaultbot_backend/partials/
+vaultbot/vaultbot_backend/*_log.json
+vaultbot/vaultbot_backend/golden_set.json
+vaultbot/vaultbot_backend/backend_out.log
+vaultbot/vaultbot_backend/backend_err.log
+vaultbot/vaultbot_backend/backend.err.log
+vaultbot/vaultbot_backend/backend_stderr.txt
+vaultbot/vaultbot_backend/backend_stdout.txt
+vaultbot/vaultbot_backend/procedure_tracker.log
 # Stray single-letter files from accidental `> e` redirects
-vaultbot_stuff/vaultbot_backend/e
+vaultbot/vaultbot_backend/e
 # Runtime working-memory snapshot (regenerated each session; contains
 # personal goals/tasks scraped from the live conversation)
-vaultbot_stuff/vaultbot_backend/working_memory_state.json
+vaultbot/vaultbot_backend/working_memory_state.json
 # Session state checkpoints (chat loop + conversation + working memory
 # snapshots; regenerated each session)
-vaultbot_stuff/vaultbot_backend/session_state/
+vaultbot/vaultbot_backend/session_state/
 # Idle-time QA worker queue (regenerated from vault state on startup)
-vaultbot_stuff/vaultbot_backend/qa_queue.json
+vaultbot/vaultbot_backend/qa_queue.json
 
 # Nested accidental duplicate (from in-repo reorg runs)
-vaultbot_stuff/vaultbot_backend/vaultbot_stuff/
-vaultbot_stuff/vaultbot_stuff/
+vaultbot/vaultbot_backend/vaultbot/
+vaultbot/vaultbot/
 
 # Root-level scratch / debug artifacts
 test_pull_output.txt
@@ -126,27 +126,27 @@ batch5_*.txt
 
 # Stale-reference scan artifacts (generated by audit procedures;
 # contain local file paths from the operator's machine)
-vaultbot_stuff/stale_audit_results.json
-vaultbot_stuff/stale_refs_report.json
-vaultbot_stuff/stale_scan_results.json
+vaultbot/stale_audit_results.json
+vaultbot/stale_refs_report.json
+vaultbot/stale_scan_results.json
 
 # Debug / runtime scratch files (not source code)
-vaultbot_stuff/vaultbot_backend/_spawn_diag.log
-vaultbot_stuff/vaultbot_backend/_spawn_diag_err.log
-vaultbot_stuff/vaultbot_backend/_dream_pass_themes.json
+vaultbot/vaultbot_backend/_spawn_diag.log
+vaultbot/vaultbot_backend/_spawn_diag_err.log
+vaultbot/vaultbot_backend/_dream_pass_themes.json
 
 # Personal communication preferences (operator-specific, not shippable)
 Communication-Preferences.md
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # The vault itself - the USER'S mind
 # The vault is personal knowledge, chat history, directives, and notes.
 # A baseline vault ships empty; each user grows their own.
-# These hierarchical folders (now under vaultbot_stuff/) are where VaultBot writes its output:
-# ─────────────────────────────────────────────────────────────────────
+# These hierarchical folders (now under vaultbot/) are where VaultBot writes its output:
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Vault-root hygiene: VaultBot must NEVER create Memory/, Knowledge/, or
-# System/ at the vault root. All generated content lives under vaultbot_stuff/.
+# System/ at the vault root. All generated content lives under vaultbot/.
 # These ignores are a safety net in case a code path drifts back to the root.
 /Memory/
 /Knowledge/
@@ -154,24 +154,24 @@ Communication-Preferences.md
 
 # Hierarchical-layout personal vault content (post-reorg)
 # These are the USER'S mind: chat logs, personal knowledge, personal notes.
-# vaultbot_stuff/System/ ships framework defaults (filtered below) but the rest is personal.
-vaultbot_stuff/Memory/
-vaultbot_stuff/Knowledge/
+# vaultbot/System/ ships framework defaults (filtered below) but the rest is personal.
+vaultbot/Memory/
+vaultbot/Knowledge/
 User/
 
 # Personal files inside the shippable System/ framework tree
-vaultbot_stuff/System/Identity/Sean-Communication-Preferences.md
-vaultbot_stuff/System/Identity/Auto-Resume-Directive.md
-vaultbot_stuff/System/Identity/Autonomy-Directive.md
-vaultbot_stuff/System/Identity/IDK-Fallback-Directive.md
-vaultbot_stuff/System/Identity/No-Wikipedia-Directive.md
-vaultbot_stuff/System/Identity/Vault-Knowledge-Only-Directive.md
-vaultbot_stuff/System/Identity/Fractal-Entropy-Principle.md
-vaultbot_stuff/System/Identity/Self-Edit-Verification-Directive.md
-vaultbot_stuff/System/Patterns/Cross-Session-Patterns-*.md
-vaultbot_stuff/System/Quality-Gates/Calibration-via-Operator-Feedback.md
-vaultbot_stuff/System/Architecture/Small-Model-Path-to-AGI.md
-vaultbot_stuff/System/Architecture/Vault-Longevity-Architecture.md
+vaultbot/System/Identity/Sean-Communication-Preferences.md
+vaultbot/System/Identity/Auto-Resume-Directive.md
+vaultbot/System/Identity/Autonomy-Directive.md
+vaultbot/System/Identity/IDK-Fallback-Directive.md
+vaultbot/System/Identity/No-Wikipedia-Directive.md
+vaultbot/System/Identity/Vault-Knowledge-Only-Directive.md
+vaultbot/System/Identity/Fractal-Entropy-Principle.md
+vaultbot/System/Identity/Self-Edit-Verification-Directive.md
+vaultbot/System/Patterns/Cross-Session-Patterns-*.md
+vaultbot/System/Quality-Gates/Calibration-via-Operator-Feedback.md
+vaultbot/System/Architecture/Small-Model-Path-to-AGI.md
+vaultbot/System/Architecture/Vault-Longevity-Architecture.md
 
 # Personal root directives + notes (operator relationship with their bot)
 2026-*.md
@@ -195,14 +195,14 @@ Research-Engine-Robustness-Requirement.md
 *-Pattern.md
 *-Requirement.md
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Learning materials (user-supplied PDFs)
-# ─────────────────────────────────────────────────────────────────────
-vaultbot_stuff/learningMaterial/
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+vaultbot/learningMaterial/
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Obsidian config (user local workspace settings)
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 .obsidian/app.json
@@ -211,9 +211,9 @@ vaultbot_stuff/learningMaterial/
 .obsidian/plugins/obsidian-git/data.json
 .obsidian/plugins/vaultbot/data.json
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # OS / editor cruft
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -222,9 +222,9 @@ desktop.ini
 *~
 .vscode/settings.json
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Stray boot/test logs
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 boot_*.log
 
 # MCP client config (generated dynamically by plugin on startup)
@@ -238,11 +238,11 @@ boot_*.log
 # Backup files
 *.bak
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Personal content (NOT part of VaultBot)
 # The user's personal notes, lyrics, projects, etc. live alongside the
 # repo but must never be committed as part of VaultBot.
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Lyrics/
 
 # Local-only vault artifacts (not for public repo)

@@ -1,4 +1,4 @@
-# VaultBot CI — lint, type-check, and test on every PR + push to main.
+# VaultBot CI â€” lint, type-check, and test on every PR + push to main.
 #
 # This is the single highest-leverage guard against "silent feature death":
 # the 2026-07-30 audit found three features that had been dead for weeks
@@ -42,55 +42,55 @@ jobs:
       - name: Install runtime + dev dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt
+          pip install -r vaultbot/vaultbot_backend/requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: "Ruff check — hard gate (F-rules: real bugs only)"
-        # Gate on F-rules only (undefined names, unused imports, etc.) —
+      - name: "Ruff check â€” hard gate (F-rules: real bugs only)"
+        # Gate on F-rules only (undefined names, unused imports, etc.) â€”
         # these are real bugs, not style.  The remaining ~250 B/UP/SIM/RUF
         # violations are pre-existing style debt that needs an incremental
         # cleanup pass; they're reported as warnings in the next step.
-        working-directory: vaultbot_stuff
+        working-directory: vaultbot
         run: ruff check --select F vaultbot_backend/
 
-      - name: "Ruff check — soft gate (B, UP, SIM, RUF: style + correctness)"
+      - name: "Ruff check â€” soft gate (B, UP, SIM, RUF: style + correctness)"
         # Report bug-class + style violations.  Non-blocking so the team
         # sees the debt but CI doesn't fail on pre-existing issues.
         # Once the debt is paid down, flip this to a hard gate.
-        working-directory: vaultbot_stuff
+        working-directory: vaultbot
         run: ruff check --select B,UP,SIM,RUF vaultbot_backend/
         continue-on-error: true
 
-      - name: Ruff check — full rule set (non-blocking baseline)
+      - name: Ruff check â€” full rule set (non-blocking baseline)
         # Report ALL violations including style.  Non-blocking.
-        working-directory: vaultbot_stuff
+        working-directory: vaultbot
         run: ruff check vaultbot_backend/
         continue-on-error: true
 
       - name: Ruff format check
-        working-directory: vaultbot_stuff
+        working-directory: vaultbot
         run: ruff format --check vaultbot_backend/
 
-      - name: Pyright (non-blocking — pre-existing debt, enforced later)
+      - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
         # errors as warnings so the team sees the debt but CI stays green.
         # Config is in pyproject.toml [tool.pyright].
-        working-directory: vaultbot_stuff
+        working-directory: vaultbot
         run: pyright --level warning vaultbot_backend/
         continue-on-error: true
 
-      - name: Pytest (non-blocking — needs Ollama + indexed vault)
+      - name: Pytest (non-blocking â€” needs Ollama + indexed vault)
         # Non-blocking: the offline suite needs an LLM and vault infrastructure
         # that don't exist in a bare CI runner. Ruff F-rules + format are the
         # hard gates. Pytest runs locally before pushing.
-        working-directory: vaultbot_stuff/vaultbot_backend
+        working-directory: vaultbot/vaultbot_backend
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
           VAULT_PATH: ${{ github.workspace }}
         run: |
-          mkdir -p "$VAULT_PATH/vaultbot_stuff/Memory/Chat"
-          mkdir -p "$VAULT_PATH/vaultbot_stuff/Knowledge"
-          mkdir -p "$VAULT_PATH/vaultbot_stuff/System"
+          mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
+          mkdir -p "$VAULT_PATH/vaultbot/Knowledge"
+          mkdir -p "$VAULT_PATH/vaultbot/System"
           pytest -q --tb=short || true
         continue-on-error: true
