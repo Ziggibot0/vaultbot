@@ -1979,9 +1979,26 @@ async def handle_chat(
                 }
             )
             _turn_failed_write_count = 0
+            # --- Thought-loop detector (2026-08-15) ---
+            # Counts consecutive rounds where the ONLY tool called is "thought".
+            # The thought tool is a no-op scratchpad — it changes nothing in the
+            # world. If the model calls it N times in a row without any other
+            # tool, it's stuck in a thinking loop ("I need to stop thinking and
+            # ACT" — but it never acts). This was observed in session 15e346b7
+            # where the model called thought 20 consecutive times (R30-R47)
+            # saying "I'll write the file next time" but never calling a write
+            # tool, until the user manually hit Stop.
+            #
+            # Threshold: 5 consecutive thought-only rounds. At ~4s per round,
+            # that's ~20s of zero progress — enough to be confident it's stuck,
+            # not enough to waste the user's money on a long spiral.
+            _THOUGHT_LOOP_THRESHOLD = int(
+                os.getenv("VAULTBOT_THOUGHT_LOOP_LIMIT", "5")
+            )
+            _consecutive_thought_rounds = 0
             while round_idx < _MAX_ROUNDS:
                 _check_cancelled(websocket)
-                # --- Only break condition: 3+ consecutive failed writes ---
+                # --- Break condition 1: 3+ consecutive failed writes ---
                 # A model hammering a broken tool is genuine thrash. Everything
                 # else (reading, searching, planning, thinking) is the model's
                 # business — the framework does not second-guess it.
@@ -2001,6 +2018,63 @@ async def handle_chat(
                         "determine, but I was unable to complete the task.*"
                     )
                     break
+
+                # --- Break condition 2: consecutive thought-only rounds ---
+                # If the model has called ONLY the thought tool for N
+                # consecutive rounds, it's stuck in a thinking loop. Inject a
+                # system message that forces it to act, and if it still loops
+                # after the nudge, break out.
+                if _consecutive_thought_rounds >= _THOUGHT_LOOP_THRESHOLD:
+                    session_logger.log(
+                        "thought_loop_detected",
+                        {
+                            "round": round_idx,
+                            "consecutive_thought_rounds": _consecutive_thought_rounds,
+                        },
+                    )
+                    # Inject a firm nudge. 'user' role, NOT 'system' — Ollama's
+                    # /v1/chat/completions rejects system messages that appear
+                    # after user/assistant messages ("system message must be at
+                    # the beginning"), returning a 500. Same rule as the
+                    # preflight_chain_injected / go_find_out injections below.
+                    conversation.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "FRAMEWORK DIRECTIVE: You have called the "
+                                "thought tool "
+                                f"{_consecutive_thought_rounds} consecutive "
+                                "times without taking any action. Stop "
+                                "thinking and DO the thing you keep saying "
+                                "you'll do. Call the actual tool (code_run, "
+                                "safe_write, md_safe_replace, vault_safe_write, "
+                                "etc.) RIGHT NOW. If you are stuck because a "
+                                "tool keeps failing, explain the failure to "
+                                "the user in a text response and end the turn. "
+                                "Do NOT call the thought tool again."
+                            ),
+                        }
+                    )
+                    # Give it one more chance after the nudge. If it calls
+                    # thought again, the counter will still be above threshold
+                    # on the next iteration and we break.
+                    if _consecutive_thought_rounds >= _THOUGHT_LOOP_THRESHOLD + 2:
+                        session_logger.log(
+                            "loop_exit",
+                            {
+                                "reason": "thought_loop",
+                                "round": round_idx,
+                                "consecutive_thought_rounds": _consecutive_thought_rounds,
+                            },
+                        )
+                        final_answer += (
+                            "\n\n*The loop was stopped after "
+                            f"{_consecutive_thought_rounds} consecutive "
+                            "thought-only rounds. I was stuck in a thinking "
+                            "loop and unable to break out of it. The findings "
+                            "above are what I was able to determine.*"
+                        )
+                        break
 
                 # All tools available every round — no masking, no gate.
                 _round_tools = all_tools
@@ -2998,6 +3072,22 @@ async def handle_chat(
                 # conversation only grows; between turns is when we compact.
                 # See /memories/repo/hermes-agent-lessons.md.
 
+                # --- Thought-loop tracking (2026-08-15) ---
+                # Count consecutive rounds where the ONLY tool called is
+                # "thought". Reset to 0 if any non-thought tool was called
+                # (the model took action) or if no tools were called (the
+                # model produced a text answer — the turn is ending).
+                _round_tool_names = [
+                    tc.get("function", {}).get("name", "?")
+                    for tc in round_tool_calls
+                ]
+                if _round_tool_names and all(
+                    t == "thought" for t in _round_tool_names
+                ):
+                    _consecutive_thought_rounds += 1
+                else:
+                    _consecutive_thought_rounds = 0
+
                 # Loop back.
                 round_idx += 1
                 _check_cancelled(websocket)
@@ -3077,6 +3167,7 @@ async def handle_chat(
                         "text_chars": len(round_text),
                         "thinking_chars": len(round_thinking),
                         "failed_write_count": _turn_failed_write_count,
+                        "consecutive_thought_rounds": _consecutive_thought_rounds,
                         "has_plan": wm.has_plan(),
                         "findings_count": len(_findings),
                         "conv_chars": sum(
