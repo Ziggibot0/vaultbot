@@ -18,6 +18,19 @@ class VaultBotPlugin extends Plugin {
 			safeMode: true,
 			allowWebResearch: true,
 			bsDetectorMessages: true,
+		// -- Talk Mode (JARVIS-style spoken conversations) --
+		// Off by default; opt in via the settings toggle. The Call button only
+		// appears in the sidebar when talkMode is true. STT/TTS run in the
+		// browser (Web Speech API) -- no server, no blocked DLLs.
+		talkMode: false,
+		// STT/TTS model selections (browser voice/lang ids). Empty = not set;
+		// picked from dropdowns. Mirrored into the backend registry pot.
+		sttModel: '',
+		ttsModel: '',
+		// Speak each sentence as it streams (chunked TTS) -- real-time feel.
+		ttsStream: true,
+		// Auto-listen after the bot finishes speaking, for back-and-forth.
+		ttsAutoListen: false,
 		};
 		this.backendStarting = false;
 		this.mcpProcess = null;
@@ -2219,7 +2232,378 @@ class VaultBotSettingTab extends PluginSettingTab {
 		configRefreshBtn.addEventListener('click', () => refreshConfigStatus());
 		refreshConfigStatus();
 
-		// ── Advanced disclosure (Backend URL) ─────────────────────────
+		// ── Talk Mode (JARVIS-style spoken conversations) ────────────────
+
+		// STT/TTS are first-class roles in the SAME pot as the LLMs. The user
+
+		// can point stt at any endpoint (OpenAI Whisper, Groq, a local server)
+
+		// and tts at any endpoint (OpenAI voices, Edge TTS, a local server),
+
+		// OR use the built-in browser (Web Speech API) / Edge TTS providers.
+
+		// No pigeonholing — same add-provider + add-model flow as the LLMs.
+
+		containerEl.createEl('h3', {text: 'Talk Mode'});
+
+		containerEl.createEl('p', {text: 'When on, the Call button in the sidebar lets you have a real-time spoken conversation. VaultBot speaks as it types (in chunks), and you can talk back. This is the JARVIS mode.', attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+
+
+
+		new Setting(containerEl)
+
+			.setName('Enable talk mode')
+
+			.setDesc('Show the Call button in the sidebar and allow spoken conversations.')
+
+			.addToggle(toggle => toggle
+
+				.setValue(this.plugin.settings.talkMode || false)
+
+				.onChange(async (value) => {
+
+					this.plugin.settings.talkMode = value;
+
+					await this.plugin.saveSettings();
+
+				}));
+
+
+
+		new Setting(containerEl)
+
+			.setName('TTS speaks as it types')
+
+			.setDesc('Speak each sentence as it finishes, instead of waiting for the whole reply. Recommended for real-time feel.')
+
+			.addToggle(toggle => toggle
+
+				.setValue(this.plugin.settings.ttsStream !== false)
+
+				.onChange(async (value) => {
+
+					this.plugin.settings.ttsStream = value;
+
+					await this.plugin.saveSettings();
+
+				}));
+
+
+
+		new Setting(containerEl)
+
+			.setName('Auto-listen after reply')
+
+			.setDesc('During a call, start listening again after VaultBot finishes speaking — for back-and-forth conversation.')
+
+			.addToggle(toggle => toggle
+
+				.setValue(this.plugin.settings.ttsAutoListen || false)
+
+				.onChange(async (value) => {
+
+					this.plugin.settings.ttsAutoListen = value;
+
+					await this.plugin.saveSettings();
+
+				}));
+
+
+
+		// ── Speech Models (STT / TTS) — same pot as the LLMs ─────────────
+
+		// STT and TTS draw from the same registry pot. The dropdown lists
+
+		// every model that can serve that role (any openai-type provider,
+
+		// edge-tts, browser). Pick any; it persists to providers.json like
+
+		// the LLM roles. For edge-tts/openai we ALSO offer a voice picker
+
+		// (from /tts/voices) so the user can pick the exact voice, which
+
+		// becomes the model id for the tts role.
+
+		containerEl.createEl('h3', {text: 'Speech Models (STT / TTS)'});
+
+		containerEl.createEl('p', {text: 'STT and TTS use the same pot as your LLMs — add any provider (OpenAI, Groq, a local Whisper server, Edge TTS, the browser) and assign it to the role. Edge TTS + Browser are built in and free. The Call button appears in the sidebar once Talk Mode is on.', attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+
+
+
+		// Fetch the full pot (all roles + models) once.
+
+		const fetchPot = async () => {
+
+			try {
+
+				const res = await fetch(this.plugin.settings.backendUrl + '/llm/models/all');
+
+				if (!res.ok) return null;
+
+				const data = await res.json();
+
+				return data;
+
+			} catch (e) { return null; }
+
+		};
+
+
+
+		// STT role dropdown: any model that can serve STT.
+
+		const sttSetting = new Setting(containerEl)
+
+			.setName('Speech-to-text (STT) model')
+
+			.setDesc('What transcribes your voice. Any OpenAI-compatible /v1/audio/transcriptions endpoint, or Browser (in-browser mic).');
+
+		const sttSel = sttSetting.controlEl.createEl('select');
+
+		sttSel.style.minWidth = '220px';
+
+		sttSel.createEl('option', {text: '— not set —', attr: {value: ''}});
+
+
+
+		// TTS role dropdown: any model that can serve TTS.
+
+		const ttsSetting = new Setting(containerEl)
+
+			.setName('Text-to-speech (TTS) model')
+
+			.setDesc('What voice VaultBot speaks with. Any OpenAI-compatible /v1/audio/speech endpoint, Edge TTS (free), or Browser.');
+
+		const ttsSel = ttsSetting.controlEl.createEl('select');
+
+		ttsSel.style.minWidth = '220px';
+
+		ttsSel.createEl('option', {text: '— not set —', attr: {value: ''}});
+
+
+
+		// Voice picker for the TTS provider (edge-tts/openai). Lets the user
+
+		// pick the exact voice, which becomes the model entry for the tts
+
+		// role. Shown only when the provider has a voice list.
+
+		let ttsVoiceRow = containerEl.createDiv({attr: {style: 'display:none;margin:4px 0 8px 24px;'}});
+
+		ttsVoiceRow.createEl('span', {text: 'Voice: ', attr: {style: 'font-size:0.85em;opacity:0.8;'}});
+
+		const ttsVoiceSel = ttsVoiceRow.createEl('select');
+
+		ttsVoiceSel.style.minWidth = '200px';
+
+
+
+		const setRole = async (role, modelId) => {
+
+			try {
+
+				await fetch(this.plugin.settings.backendUrl + '/llm/role', {
+
+					method: 'POST', headers: {'Content-Type':'application/json'},
+
+					body: JSON.stringify({role, model_id: modelId})
+
+				});
+
+			} catch (e) {}
+
+		};
+
+		const addModel = async (id, model, provider, label, kind) => {
+
+			try {
+
+				await fetch(this.plugin.settings.backendUrl + '/llm/models', {
+
+					method: 'POST', headers: {'Content-Type':'application/json'},
+
+					body: JSON.stringify({id, model, provider, instruct: true, label, kind: kind || 'llm'})
+
+				});
+
+			} catch (e) {}
+
+		};
+
+
+
+		// Populate the STT + TTS role dropdowns from the pot.
+
+				const populateSpeechRoles = async () => {
+
+			const data = await fetchPot();
+
+			if (!data) { new Notice('Start the backend to pick speech models.'); return; }
+
+			const roles = data.roles || {};
+
+			const models = data.models || [];
+
+			// Provider lookup for labels.
+
+			const provRes = await fetch(this.plugin.settings.backendUrl + '/llm/providers');
+
+			const provData = await provRes.json();
+
+			const provLabel = {};
+
+			for (const p of (provData.providers || [])) provLabel[p.id] = p.label || p.id;
+
+			// STT dropdown — only kind === 'stt' models (its own pot).
+
+			while (sttSel.options.length > 1) sttSel.remove(1);
+
+			let sttCur = roles.stt || '';
+
+			for (const m of models) {
+
+				if (m.kind !== 'stt') continue;
+
+				const opt = sttSel.createEl('option', {text: (provLabel[m.provider]||m.provider) + ' · ' + (m.label||m.model), attr: {value: m.id}});
+
+				if (m.id === sttCur) opt.selected = true;
+
+			}
+
+			// TTS dropdown — only kind === 'tts' models (its own pot).
+
+			while (ttsSel.options.length > 1) ttsSel.remove(1);
+
+			let ttsCur = roles.tts || '';
+
+			for (const m of models) {
+
+				if (m.kind !== 'tts') continue;
+
+				const opt = ttsSel.createEl('option', {text: (provLabel[m.provider]||m.provider) + ' · ' + (m.label||m.model), attr: {value: m.id}});
+
+				if (m.id === ttsCur) opt.selected = true;
+
+			}
+
+			// If the current TTS model is edge-tts/openai, show the voice picker.
+
+			await refreshTtsVoices(ttsSel.value);
+
+		};
+
+// Refresh the TTS voice picker for the selected TTS model's provider.
+
+		const refreshTtsVoices = async (modelId) => {
+
+			// Determine the provider type of the selected tts model.
+
+			const data = await fetchPot();
+
+			if (!data) { ttsVoiceRow.style.display = 'none'; return; }
+
+			const m = (data.models || []).find(x => x.id === modelId);
+
+			if (!m) { ttsVoiceRow.style.display = 'none'; return; }
+
+			const provRes = await fetch(this.plugin.settings.backendUrl + '/llm/providers');
+
+			const provData = await provRes.json();
+
+			const ptype = (provData.providers.find(p => p.id === m.provider) || {}).type;
+
+			if (ptype === 'edge-tts' || ptype === 'openai') {
+
+				ttsVoiceRow.style.display = '';
+
+				while (ttsVoiceSel.options.length > 0) ttsVoiceSel.remove(0);
+
+				ttsVoiceSel.createEl('option', {text: 'loading voices…', attr: {value: '', disabled: true}});
+
+				try {
+
+					const vr = await fetch(this.plugin.settings.backendUrl + '/tts/voices');
+
+					const vj = await vr.json();
+
+					ttsVoiceSel.empty();
+
+					const voices = vj.voices || [];
+
+					// If the current model IS a voice, pre-select it.
+
+					for (const v of voices) {
+
+						const opt = ttsVoiceSel.createEl('option', {text: v.label || v.id, attr: {value: v.id}});
+
+						if (v.id === m.model) opt.selected = true;
+
+					}
+
+					if (!voices.length) ttsVoiceSel.createEl('option', {text: '(no voices — check the provider)', attr: {value: ''}});
+
+				} catch (e) {
+
+					ttsVoiceSel.empty();
+
+					ttsVoiceSel.createEl('option', {text: 'could not load voices', attr: {value: ''}});
+
+				}
+
+				// Changing the voice creates/updates a model entry + assigns the role.
+
+				ttsVoiceSel.onchange = async () => {
+
+					const voiceId = ttsVoiceSel.value;
+
+					if (!voiceId) return;
+
+					const entryId = m.provider + ':' + voiceId;
+
+					await addModel(entryId, voiceId, m.provider, ttsVoiceSel.options[ttsVoiceSel.selectedIndex].text, 'tts');
+
+					await setRole('tts', entryId);
+
+					new Notice('TTS voice set to ' + voiceId);
+
+					await populateSpeechRoles();
+
+				};
+
+			} else {
+
+				ttsVoiceRow.style.display = 'none';
+
+			}
+
+		};
+
+
+
+		sttSel.addEventListener('change', async () => {
+
+			await setRole('stt', sttSel.value);
+
+			new Notice('STT model set');
+
+		});
+
+		ttsSel.addEventListener('change', async () => {
+
+			await setRole('tts', ttsSel.value);
+
+			new Notice('TTS model set');
+
+			await refreshTtsVoices(ttsSel.value);
+
+		});
+
+
+
+		populateSpeechRoles();
+
+
+				// ── Advanced disclosure (Backend URL) ─────────────────────────
 		// Backend URL is an internal setting most users never need. It's
 		// behind a disclosure so a non-tech user isn't confronted with it,
 		// but still accessible for the rare case it's needed. The placeholder
@@ -2549,13 +2933,23 @@ class VaultBotSidebarView extends ItemView {
 		const titleEl = headerLeft.createEl('div', {cls: 'vaultbot-header-title'});
 		titleEl.createEl('span', {cls: 'vaultbot-header-mark', text: '🌿'});
 		titleEl.createEl('span', {text: 'VaultBot'});
-		headerLeft.createEl('div', {cls: 'vaultbot-header-sub', text: 'a garden for your thoughts'});
 
 		// Right side of the header: three compact model dropdowns (big /
 		// small / vision) in the upper-right corner. Moved up from the
 		// footer so model selection is always visible and the chat input
 		// area stays uncluttered. Each dropdown is a tiny labeled select.
 		const headerModels = headerEl.createDiv({cls: 'vaultbot-header-models'});
+
+		// History toggle ("Recent") — sits in the same row as the LLM
+		// dropdowns, not under the title. The button + dropdowns share one
+		// tidy row in the header's upper-right area.
+		const historyToggle = headerModels.createEl('button', {
+			cls: 'vaultbot-history-toggle', text: 'Recent'});
+		historyToggle.title = 'Show recent conversations';
+
+		// Backend status line — lives in the header's upper-right corner,
+		// small and unobtrusive, so it's not front-and-center in the chat.
+		const statusEl = headerModels.createDiv({cls: 'vaultbot-status'});
 
 		// Populate a role <select> from the combined registry "pot". `models`
 		// is [{id, model, provider_label, provider_type, vision, instruct,
@@ -2565,7 +2959,7 @@ class VaultBotSidebarView extends ItemView {
 		// id currently assigned to the role. `allowNone` prepends a "(none)".
 		const populateSelectPot = (sel, models, selectedId, {allowNone = true, visionOnly = false} = {}) => {
 			sel.empty();
-			let pool = models.filter(m => m.instruct);
+			let pool = models.filter(m => m.instruct && (m.kind === undefined || m.kind === 'llm'));
 			if (visionOnly) pool = pool.filter(m => m.vision);
 			if (allowNone) {
 				const none = sel.createEl('option', {text: '(none)', attr: {value: ''}});
@@ -2671,14 +3065,9 @@ class VaultBotSidebarView extends ItemView {
 			refreshAllModelDropdowns();
 		});
 
-		// History disclosure: a small "Recent" toggle in the header that
-		// expands a list of past chat sessions (read from /sessions). This
-		// makes closed/reopened Obsidian feel less like data loss: the user
-		// can see their past conversations and pick up where they left off.
-		// Selecting an entry loads its messages read-only into the chat.
-		const historyToggle = headerLeft.createEl('button', {
-			cls: 'vaultbot-history-toggle', text: 'Recent'});
-		historyToggle.title = 'Show recent conversations';
+		// History disclosure: expands a dropdown list of past chat sessions
+		// (read from /sessions). The toggle button was already created in
+		// headerModels above so it sits in the same row as the LLM dropdowns.
 		const historyPanel = this.contentEl.createDiv({cls: 'vaultbot-history-panel'});
 		historyPanel.style.display = 'none';
 		let historyLoaded = false;
@@ -2728,24 +3117,72 @@ class VaultBotSidebarView extends ItemView {
 							historyToggle.setText('Recent');
 							try {
 								const r = await fetch(
-									this.backendUrl + '/sessions/' + s.session_id);
-								const turns = (await r.json()).turns || [];
-								chatContainer.empty();
-								for (const t of turns) {
-									if (t.role === 'user') {
-										const div = chatContainer.createDiv(
-											{cls: 'vaultbot-message user'});
-										renderMarkdownInto(div, t.content);
-									} else if (t.role === 'assistant' && t.content) {
-										const div = chatContainer.createDiv(
-											{cls: 'vaultbot-message assistant'});
-										const block = div.createEl('div',
-											{cls: 'vaultbot-answer-block'});
-										renderMarkdownInto(block, t.content);
-									}
+							this.backendUrl + '/sessions/' + s.session_id);
+						const turns = (await r.json()).turns || [];
+						chatContainer.empty();
+						for (const t of turns) {
+							if (t.role === 'user') {
+								const div = chatContainer.createDiv(
+									{cls: 'vaultbot-message user'});
+								renderMarkdownInto(div, t.content);
+							} else if (t.role === 'assistant' && t.content) {
+								const div = chatContainer.createDiv(
+									{cls: 'vaultbot-message assistant'});
+								const block = div.createEl('div',
+									{cls: 'vaultbot-answer-block'});
+								renderMarkdownInto(block, t.content);
+							if (t.thinking) {
+								const thinkHeader = div.createEl('div', {cls: 'vaultbot-thinking-header', text: 'Thinking (click to show)'});
+								const thinkBody = div.createEl('div', {cls: 'vaultbot-thinking-block'});
+								thinkBody.style.display = 'none';
+								thinkBody.setText(t.thinking);
+								thinkHeader.addEventListener('click', () => {
+									const hidden = thinkBody.style.display === 'none';
+									thinkBody.style.display = hidden ? 'block' : 'none';
+									thinkHeader.textContent = hidden ? 'Thinking (click to hide)' : 'Thinking (click to show)';
+								});
+							}
+							} else if (t.role === 'tool_call' && t.content) {
+								const div = chatContainer.createDiv(
+									{cls: 'vaultbot-message tool-call'});
+								const label = div.createEl('div',
+									{cls: 'vaultbot-tool-call-label'});
+								label.createEl('span', {cls: 'vaultbot-tool-icon', text: '\u2699\ufe0f'});
+								label.createEl('span', {text: ' ' + (t.content || 'tool')});
+								if (t.arguments) {
+									const args = div.createEl('div',
+										{cls: 'vaultbot-tool-args'});
+									args.setText(typeof t.arguments === 'string'
+										? t.arguments
+										: JSON.stringify(t.arguments, null, 2));
 								}
-								chatContainer.scrollTop = 0;
-								setStatus('done', 'Showing past conversation');
+							} else if (t.role === 'tool_result' && t.content) {
+								const div = chatContainer.createDiv(
+									{cls: 'vaultbot-message tool-result'});
+								const label = div.createEl('div',
+									{cls: 'vaultbot-tool-result-label',
+									 text: 'Result'});
+								const body = div.createEl('div',
+									{cls: 'vaultbot-tool-result-body'});
+								const preview = String(t.content).substring(0, 500);
+								body.setText(preview + (t.content.length > 500 ? '...' : ''));
+							} else if (t.role === 'thinking' && t.content) {
+								const div = chatContainer.createDiv(
+									{cls: 'vaultbot-message thinking'});
+								const header = div.createEl('div',
+									{cls: 'vaultbot-thinking-header',
+									 text: 'Thinking'});
+								const body = div.createEl('div',
+									{cls: 'vaultbot-thinking-body'});
+								body.setText(t.content);
+								div.addClass('collapsed');
+								header.addEventListener('click', () => {
+									div.toggleClass('collapsed', !div.hasClass('collapsed'));
+								});
+							}
+						}
+						chatContainer.scrollTop = 0;
+						setStatus('done', 'Showing past conversation')
 							} catch (e) {
 								new Notice('Could not load that conversation.');
 							}
@@ -2763,13 +3200,29 @@ class VaultBotSidebarView extends ItemView {
 			}
 		});
 
-		const statusEl = this.contentEl.createDiv({cls: 'vaultbot-status'});
-
-		// Session title: shows the current session's title above the chat.
-		// Click to edit inline; Enter or blur saves via WebSocket set_title.
-		const sessionTitleEl = this.contentEl.createDiv({cls: 'vaultbot-session-title'});
+		// Session title bar: editable session title on the left, a
+		// compact copy-session-id button on the right. Click title to
+		// rename; click ID button to copy the UUID to the clipboard.
+		const sessionTitleBar = this.contentEl.createDiv({cls: 'vaultbot-session-title-bar'});
+		const sessionTitleEl = sessionTitleBar.createDiv({cls: 'vaultbot-session-title'});
 		sessionTitleEl.setText('New Session');
 		sessionTitleEl.title = 'Click to rename this session';
+		const sessionIdBtn = sessionTitleBar.createEl('button', {cls: 'vaultbot-session-id-btn', text: 'Session ID'});
+		sessionIdBtn.title = 'Click to copy the session ID to clipboard';
+		sessionIdBtn.addEventListener('click', async () => {
+			if (!currentSessionId) { new Notice('No session ID yet.'); return; }
+			const shortId = currentSessionId.substring(0, 8);
+			sessionIdBtn.setText('Copying...');
+			try {
+				await navigator.clipboard.writeText(currentSessionId);
+			} catch (e) {
+				const ta = document.createElement('textarea');
+				ta.value = currentSessionId;
+				document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+			}
+			sessionIdBtn.setText('Copied: ' + shortId);
+			setTimeout(() => { sessionIdBtn.setText('Session ID'); }, 2000);
+		});
 		sessionTitleEl.addEventListener('click', () => {
 			sessionTitleEl.setAttribute('contenteditable', 'true');
 			sessionTitleEl.addClass('vaultbot-session-title-editing');
@@ -3171,15 +3624,45 @@ class VaultBotSidebarView extends ItemView {
 		const buttonContainer = inputContainer.createDiv({cls: 'vaultbot-button-container'});
 		const clayGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-clay'});
 		const mossGroup = buttonContainer.createDiv({cls: 'vaultbot-btn-group vaultbot-btn-group-moss'});
-		const ingestButton = clayGroup.createEl('button', {text: 'Ingest', cls: 'vaultbot-btn'});
 		const restartButton = mossGroup.createEl('button', {text: 'Restart', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-restart'});
 		const diagnoseButton = mossGroup.createEl('button', {text: 'Diagnose', cls: 'vaultbot-btn vaultbot-btn-quiet vaultbot-btn-diagnose'});
-		ingestButton.title = 'Ingest any new textbooks from the learningMaterial/ folder into the vault. No AI involved - just parses and links them. Weaving happens in the background.';
 		restartButton.title = 'Restart the VaultBot backend. Use this after code changes or if the bot seems stuck. Takes a few seconds.';
+
 		diagnoseButton.title = 'Run a health check. VaultBot looks for common problems (Ollama not running, missing model, port conflict) and shows plain-English fixes.';
+
+		// Restart + Diagnose + Ingest are slash commands now (/restart,
+
+		// /diagnose, /ingest) — the buttons stay in the DOM (the slash-command
+
+		// handler calls restartButton.click()) but are hidden so the bar isn't
+
+		// cluttered with rarely-used buttons. The Call button is the voice
+
+		// entry point.
+
+		restartButton.style.display = 'none';
+
+		diagnoseButton.style.display = 'none';
+
+
+
+		// Call button — starts a real-time spoken conversation (Talk Mode).
+
+		// Hidden unless talkMode is on (set in the settings tab). Uses the
+
+		// browser's Web Speech API for both STT + TTS, so there's no server
+
+		// dependency + no blocked DLL. TTS streams in chunks (one sentence at
+
+		// a time) so the voice speaks as the model types — the JARVIS feel.
+
+		const callButton = clayGroup.createEl('button', {text: '📞 Call', cls: 'vaultbot-btn'});
+
+		const muteButton = clayGroup.createEl('button', {text: '🔇', cls: 'vaultbot-btn vaultbot-btn-quiet'});
 
 		let currentAssistantMessage = null;
 		let currentThinkingBlock = null;
+					let _thinkingActive = false;  // true while receiving thinking chunks; false when answer/tool events arrive
 		// Turn state: tracks whether the bot is actively generating, so the
 		// inline Stop button only shows when there's something to stop.
 		let turnActive = false;
@@ -3187,6 +3670,523 @@ class VaultBotSidebarView extends ItemView {
 			turnActive = active;
 			stopButton.style.display = active ? '' : 'none';
 		};
+		// ── Voice state (Talk Mode) ──────────────────────────────────
+
+		// The Call button starts a real-time spoken conversation. STT uses the
+
+		// browser's SpeechRecognition for mic capture, then POSTs the audio to
+
+		// /stt (server-side transcription via the configured provider) OR uses
+
+		// the browser's own recognizer when the stt role is the browser.
+
+		// TTS calls /tts per sentence (server-side synthesis via the configured
+
+		// provider — OpenAI, Edge TTS, a local server) and plays the audio as
+
+		// it arrives, so the voice speaks as the model types — chunked, real
+
+		// time. When the tts role is the browser, falls back to speechSynthesis.
+
+		// This is the JARVIS feel with ANY provider, not just the browser.
+
+		let onCall = false;             // in a spoken conversation
+
+		let ttsMuted = false;            // mute toggle
+
+		let ttsSentenceBuffer = '';      // accumulates chunks until a sentence
+
+		let ttsQueue = [];               // sentences waiting to be spoken
+
+		let ttsBusy = false;             // a TTS fetch is in flight
+
+		let ttsAudio = null;             // HTMLAudioElement for server TTS
+
+		let recognition = null;          // SpeechRecognition instance (browser STT)
+
+		let listening = false;           // recognition is active
+
+		let autoListenArmed = false;     // start listening after TTS finishes
+
+		let sttMode = 'browser';         // 'browser' | 'server'
+
+		let ttsMode = 'browser';         // 'browser' | 'server'
+
+
+
+		// Show/hide the Call button based on the talk mode setting.
+
+		const talkModeOn = !!(this.plugin.settings.talkMode);
+
+		callButton.style.display = talkModeOn ? '' : 'none';
+
+		muteButton.style.display = 'none';
+
+
+
+		// Fetch the current speech role assignments to decide server vs browser.
+
+		const refreshSpeechModes = async () => {
+
+			try {
+
+				const res = await fetch(this.plugin.settings.backendUrl + '/llm/models/all');
+
+				if (!res.ok) return;
+
+				const data = await res.json();
+
+				const roles = data.roles || {};
+
+				const models = data.models || [];
+
+				const sttModel = models.find(m => m.id === roles.stt);
+
+				const ttsModel = models.find(m => m.id === roles.tts);
+
+				sttMode = sttModel && sttModel.provider !== 'browser' ? 'server' : 'browser';
+
+				ttsMode = ttsModel && ttsModel.provider !== 'browser' ? 'server' : 'browser';
+
+			} catch (e) {}
+
+		};
+
+		refreshSpeechModes();
+
+
+
+		// ── TTS ────────────────────────────────────────────────────────
+
+		const stopAllTTS = () => {
+
+			ttsSentenceBuffer = '';
+
+			ttsQueue = [];
+
+			ttsBusy = false;
+
+			if (ttsAudio) { try { ttsAudio.pause(); } catch (e) {} }
+
+			if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+
+		};
+
+
+
+		const playNextTTS = async () => {
+
+			if (ttsBusy || ttsQueue.length === 0) {
+
+				if (ttsQueue.length === 0) {
+
+					// Queue drained — arm auto-listen if enabled.
+
+					if (autoListenArmed && onCall && !ttsMuted && this.plugin.settings.ttsAutoListen) startListening();
+
+				}
+
+				return;
+
+			}
+
+			ttsBusy = true;
+
+			const sentence = ttsQueue.shift();
+
+			try {
+
+				if (ttsMode === 'server') {
+
+					// POST /tts, play the returned audio bytes.
+
+					const r = await fetch(this.plugin.settings.backendUrl + '/tts', {
+
+						method: 'POST', headers: {'Content-Type':'application/json'},
+
+						body: JSON.stringify({text: sentence})
+
+					});
+
+					const ct = r.headers.get('content-type') || '';
+
+					if (ct.indexOf('audio') !== -1) {
+
+						const blob = await r.blob();
+
+						const url = URL.createObjectURL(blob);
+
+						ttsAudio = new Audio(url);
+
+						await new Promise((resolve) => {
+
+							ttsAudio.onended = resolve;
+
+							ttsAudio.onerror = resolve;
+
+							ttsAudio.play().catch(resolve);
+
+						});
+
+						URL.revokeObjectURL(url);
+
+					} else {
+
+						// The server returned JSON (browser sentinel or error) —
+
+						// fall back to browser speechSynthesis for this sentence.
+
+						const j = await r.json().catch(() => ({}));
+
+						if (j.browser) { await speakBrowser(sentence); } else { /* skip */ }
+
+					}
+
+				} else {
+
+					// Browser TTS (speechSynthesis).
+
+					await speakBrowser(sentence);
+
+				}
+
+			} catch (e) {
+
+				// On error, try the browser fallback so a server hiccup
+
+				// doesn't kill the conversation.
+
+				try { await speakBrowser(sentence); } catch (e2) {}
+
+			}
+
+			ttsBusy = false;
+
+			playNextTTS();
+
+		};
+
+
+
+		// Speak a sentence via the browser's speechSynthesis (fallback / browser role).
+
+		const speakBrowser = (text) => new Promise((resolve) => {
+
+			if (!window.speechSynthesis || !text || ttsMuted) { resolve(); return; }
+
+			const u = new SpeechSynthesisUtterance(text);
+
+			const name = this.plugin.settings.ttsModel || '';
+
+			const voices = window.speechSynthesis.getVoices();
+
+			const v = voices.find(x => x.name === name);
+
+			if (v) u.voice = v;
+
+			u.rate = 1.0;
+
+			u.onend = resolve;
+
+			u.onerror = resolve;
+
+			window.speechSynthesis.speak(u);
+
+		});
+
+
+
+		// Feed a streaming answer chunk into the sentence buffer. When a
+
+		// sentence boundary is hit, queue it for TTS so the voice speaks as
+
+		// the model types — chunked, real-time.
+
+		const feedTTS = (chunk) => {
+
+			if (!onCall || this.plugin.settings.ttsStream === false) return;
+
+			ttsSentenceBuffer += chunk;
+
+			let idx;
+
+			while ((idx = ttsSentenceBuffer.search(/[.!?]\s|\n/)) !== -1) {
+
+				const sentence = ttsSentenceBuffer.slice(0, idx + 2).trim();
+
+				ttsSentenceBuffer = ttsSentenceBuffer.slice(idx + 2);
+
+				if (sentence && !ttsMuted) {
+
+					ttsQueue.push(sentence);
+
+					if (!ttsBusy) playNextTTS();
+
+				}
+
+			}
+
+		};
+
+
+
+		// Flush leftover buffered text at answer_done + arm auto-listen.
+
+		const flushTTS = () => {
+
+			if (!onCall) return;
+
+			if (ttsSentenceBuffer.trim()) {
+
+				ttsQueue.push(ttsSentenceBuffer.trim());
+
+				ttsSentenceBuffer = '';
+
+				if (!ttsBusy) playNextTTS();
+
+			}
+
+			if (this.plugin.settings.ttsAutoListen) autoListenArmed = true;
+
+		};
+
+
+
+		// ── STT ────────────────────────────────────────────────────────
+
+		// STT captures audio in the browser (mic access is browser-only),
+
+		// then either POSTs it to /stt (server-side transcription) or uses
+
+		// the browser's SpeechRecognition when the stt role is browser.
+
+		const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+		let mediaRecorder = null;
+
+		let audioChunks = [];
+
+
+
+		const buildRecognition = () => {
+
+			if (!SpeechRecognitionImpl) return null;
+
+			const r = new SpeechRecognitionImpl();
+
+			r.lang = this.plugin.settings.sttModel || 'en-US';
+
+			r.continuous = false;
+
+			r.interimResults = false;
+
+			r.maxAlternatives = 1;
+
+			r.onresult = (event) => {
+
+				let transcript = '';
+
+				for (let i = event.resultIndex; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+
+				if (transcript.trim()) { const heard = transcript.trim(); input.value = heard; new Notice('Heard: ' + heard); statusEl.setText('📞 Heard: ' + heard); send('chat'); }
+
+			};
+
+			r.onerror = (event) => { listening = false; statusEl.setText('Call — mic error: ' + (event.error || 'unknown')); };
+
+			r.onend = () => { listening = false; if (onCall) statusEl.setText('📞 On call — say something (click Call to listen)'); };
+
+			return r;
+
+		};
+
+
+
+		// Server-side STT: record via MediaRecorder, POST the blob to /stt.
+
+		const startServerListening = async () => {
+
+			try {
+
+				const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+
+				audioChunks = [];
+
+				mediaRecorder = new MediaRecorder(stream);
+
+				mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+
+				mediaRecorder.onstop = async () => {
+
+					stream.getTracks().forEach(t => t.stop());
+
+					const blob = new Blob(audioChunks, {type: mediaRecorder.mimeType || 'audio/webm'});
+
+					if (!blob.size) { listening = false; if (onCall) statusEl.setText('📞 On call — no audio captured'); return; }
+
+					statusEl.setText('📞 Transcribing...');
+
+					try {
+
+						const r = await fetch(this.plugin.settings.backendUrl + '/stt', {method: 'POST', body: blob});
+
+						const j = await r.json();
+
+						if (j.browser) {
+
+							// The stt role switched back to browser; fall back.
+
+							if (!recognition) recognition = buildRecognition();
+
+							if (recognition) { try { recognition.start(); listening = true; } catch (e) {} }
+
+						} else if (j.text && j.text.trim()) {
+
+							const heard = j.text.trim();
+
+							input.value = heard;
+
+							new Notice('Heard: ' + heard);
+
+							statusEl.setText('?? Heard: ' + heard);
+
+							send('chat');
+
+						} else {
+
+							statusEl.setText('📞 No transcription: ' + (j.error || 'empty'));
+
+						}
+
+					} catch (e) {
+
+						statusEl.setText('📞 STT failed: ' + (e.message || e));
+
+					}
+
+					listening = false;
+
+					if (onCall) statusEl.setText('📞 On call — say something (click Call to listen)');
+
+				};
+
+				mediaRecorder.start();
+
+				listening = true;
+
+				statusEl.setText('🎤 Listening... (speak, then pause)');
+
+				// Auto-stop after 6s of silence-ish (MediaRecorder has no VAD);
+
+				// the user can also click Call again to stop early.
+
+				setTimeout(() => { if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop(); }, 8000);
+
+			} catch (e) {
+
+				listening = false;
+
+				statusEl.setText('🎤 Mic error: ' + (e.message || e));
+
+			}
+
+		};
+
+
+
+		const startListening = () => {
+
+			if (listening) return;
+
+			stopAllTTS();
+
+			autoListenArmed = false;
+
+			// Refresh the mode in case the user changed the stt role.
+
+			refreshSpeechModes().then(() => {
+
+				if (sttMode === 'server') {
+
+					startServerListening();
+
+				} else {
+
+					if (!SpeechRecognitionImpl) { new Notice('Browser STT unavailable. Set an STT provider in Settings, or use Chrome/Edge.'); return; }
+
+					if (!recognition) recognition = buildRecognition();
+
+					if (!recognition) return;
+
+					try { recognition.lang = this.plugin.settings.sttModel || 'en-US'; recognition.start(); listening = true; statusEl.setText('🎤 Listening... (speak, then pause)'); }
+
+					catch (e) { listening = false; }
+
+				}
+
+			});
+
+		};
+
+		const stopListening = () => {
+
+			if (mediaRecorder && mediaRecorder.state === 'recording') { try { mediaRecorder.stop(); } catch (e) {} }
+
+			if (recognition && listening) { try { recognition.stop(); } catch (e) {} }
+
+			listening = false;
+
+		};
+
+
+
+		// Toggle the call: on = start a spoken conversation, off = hang up.
+
+		const toggleCall = () => {
+
+			if (!onCall) {
+
+				onCall = true;
+
+				callButton.setText('📞 Hang up');
+
+				muteButton.style.display = '';
+
+				statusEl.setText('📞 On call — say something (click Call to listen)');
+
+				startListening();
+
+			} else {
+
+				onCall = false;
+
+				callButton.setText('📞 Call');
+
+				muteButton.style.display = 'none';
+
+				stopListening();
+
+				stopAllTTS();
+
+				autoListenArmed = false;
+
+				statusEl.setText('Call ended');
+
+			}
+
+		};
+
+		callButton.addEventListener('click', toggleCall);
+
+		muteButton.addEventListener('click', () => {
+
+			ttsMuted = !ttsMuted;
+
+			muteButton.setText(ttsMuted ? '🔈' : '🔇');
+
+			if (ttsMuted) stopAllTTS();
+
+		});;
 		// Thinking blocks: shown live while the model reasons, then auto-
 		// collapse when the actual answer starts streaming so they don't
 		// clutter the chat. The header stays as a clickable toggle so the
@@ -3486,6 +4486,8 @@ class VaultBotSidebarView extends ItemView {
 		};
 
 		let ws = null;
+		// Backend-provided session_id for the current chat session.
+		let currentSessionId = null;
 		const connectWebSocket = () => {
 			// Don't touch a socket that's already OPEN or still CONNECTING; closing
 			// a connecting socket yields 'closed before the connection is established'.
@@ -3521,16 +4523,14 @@ class VaultBotSidebarView extends ItemView {
 					statusEl.setText(msg.content);
 				} else if (msg.type === 'thinking') {
 					if (!currentAssistantMessage) startAssistantMessage();
-					// If there was already a thinking block with content (from
-					// a previous thinking phase in this turn), close it and
-					// create a NEW one so each thinking phase gets its own
-					// bubble in chronological order — not appended to the old.
-					if (currentThinkingBlock && currentThinkingBlock.getText()) {
+					// Only create a NEW thinking block if thinking is RESTARTING
+					// after a gap (answer_chunk, tool_call, etc.). During an
+					// active thinking phase, _thinkingActive is true and we
+					// just append to the existing block. This prevents a new
+					// thinking section being created for every word/chunk.
+					if (currentThinkingBlock && currentThinkingBlock.getText() && !_thinkingActive) {
 						setThinkingVisible(false);
 						// Create a fresh thinking block for this new phase.
-						const prevHeader = currentThinkingHeader;
-						const prevBlock = currentThinkingBlock;
-						// Insert a new thinking header + block after the old one.
 						const newHeader = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-header', text: 'Thinking (click to show)'});
 						const newBlock = currentAssistantMessage.createEl('div', {cls: 'vaultbot-thinking-block'});
 						newBlock.style.display = 'none';
@@ -3544,11 +4544,13 @@ class VaultBotSidebarView extends ItemView {
 						currentThinkingHeader = newHeader;
 						currentThinkingBlock = newBlock;
 					}
+					// Mark that we're in an active thinking phase.
+					_thinkingActive = true;
 					// Show the thinking block live while the model reasons.
 					setThinkingVisible(true);
 					currentThinkingBlock.setText((currentThinkingBlock.getText() || '') + msg.content);
-					smartScrollToBottom();
-				} else if (msg.type === 'answer_chunk') {
+					smartScrollToBottom();				} else if (msg.type === 'answer_chunk') {
+					_thinkingActive = false;
 					if (!currentAssistantMessage) startAssistantMessage();
 					// Some models embed reasoning as <think>...</think> tags
 					// inside the content stream instead of a separate thinking
@@ -3620,8 +4622,10 @@ class VaultBotSidebarView extends ItemView {
 					currentSegmentText += raw;
 					currentAnswerText += raw;
 					scheduleSegmentRender();
+					feedTTS(raw);
 					smartScrollToBottom();
 				} else if (msg.type === 'tool_call') {
+					_thinkingActive = false;
 					if (!currentAssistantMessage) startAssistantMessage();
 					// The model moved past reasoning to act: auto-collapse the
 					// thinking block (it may have been left open if there was
@@ -3695,6 +4699,7 @@ class VaultBotSidebarView extends ItemView {
 						updateActivity(label, detail);
 					}
 				} else if (msg.type === 'tool_result') {
+					_thinkingActive = false;
 					if (!currentAssistantMessage) startAssistantMessage();
 					closeCurrentSegment();
 					const summary = msg.summary || 'done';
@@ -3736,10 +4741,12 @@ class VaultBotSidebarView extends ItemView {
 					// section of the stats bar.
 					updateStatsFromChat(msg);
 				} else if (msg.type === 'answer_done') {
+					_thinkingActive = false;
 					endActivity();
 					// Flush the final text segment so its markdown renders.
 					closeCurrentSegment();
 					statusEl.setText('Done');
+					flushTTS();
 					setTurnActive(false);
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
@@ -3791,6 +4798,7 @@ class VaultBotSidebarView extends ItemView {
 					// Flush whatever text was streamed so far so it stays visible.
 					closeCurrentSegment();
 					statusEl.setText('Stopped');
+					_thinkingActive = false;
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
@@ -3799,12 +4807,18 @@ class VaultBotSidebarView extends ItemView {
 				} else if (msg.type === 'session_info') {
 				// Backend sent session metadata (id + title). Update the title
 				// display so the user knows which session they're in.
-				if (msg.title) sessionTitleEl.setText(msg.title);
+					if (msg.title) sessionTitleEl.setText(msg.title);
+					if (msg.session_id) {
+						currentSessionId = msg.session_id;
+						sessionIdBtn.title = 'Click to copy: ' + currentSessionId;
+						sessionIdBtn.setText('ID: ' + currentSessionId.substring(0, 8));
+					}
 			} else if (msg.type === 'session_reset') {
 					// /new command: clear the chat UI for a fresh session.
 					endActivity();
 					setTurnActive(false);
 					chatContainer.empty();
+					_thinkingActive = false;
 					currentAssistantMessage = null;
 					currentThinkingBlock = null;
 					currentAnswerBlock = null;
@@ -3813,6 +4827,9 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerText = '';
 					statusEl.setText('New session');
 				sessionTitleEl.setText('New Session');
+				sessionIdBtn.setText('Session ID');
+				sessionIdBtn.title = 'Click to copy the session ID to clipboard';
+				currentSessionId = null;
 					const div = chatContainer.createDiv({cls: 'vaultbot-message system'});
 					div.createSpan({text: msg.content || 'New session started.'});
 					smartScrollToBottom();
@@ -4033,13 +5050,16 @@ class VaultBotSidebarView extends ItemView {
 				return;
 			}
 			appendUserMessage(message);
-			ws.send(JSON.stringify({type, message}));
+		// Interrupt-on-send: stop any in-flight TTS so the bot isn't talking over the user.
+		if (onCall) stopAllTTS();
+		ws.send(JSON.stringify({type, message}));
 			input.value = '';
 			input.focus();
 			// A new turn is now in flight: show the inline Stop button.
 			setTurnActive(true);
 			// Reset the think-tag parser state for the new turn.
 			this._inThinkTag = false;
+			_thinkingActive = false;
 			// Flush the in-flight text segment so it renders before the new turn.
 			closeCurrentSegment();
 			currentAssistantMessage = null;
@@ -4049,69 +5069,6 @@ class VaultBotSidebarView extends ItemView {
 			currentAnswerText = '';
 		};
 
-		// Ingest button: a one-press way for a non-tech user to feed new
-		// textbooks into the vault without typing a prompt. No LLM involved -
-		// the backend scans learningMaterial/ for uningested PDFs, parses +
-		// weaves them, and reports back. Weaving continues in the background
-		// so the user isn't blocked.
-		ingestButton.addEventListener('click', async () => {
-			if (!ws || ws.readyState !== 1) {
-				new Notice('VaultBot backend is not connected yet.');
-				return;
-			}
-			ingestButton.setText('Ingesting...');
-			ingestButton.setAttribute('disabled', 'disabled');
-			appendUserMessage('(ingesting any new textbooks from learningMaterial/)');
-			// Human-centered vision check: before ingesting, probe whether the
-			// page-reading model can read textbook pages (equations/figures).
-			// The probed model is the dedicated vision model if one is
-			// configured, else the chat model. If it can't see images, alert
-			// the user RIGHT HERE in the chat — in plain language — that they
-			// should pick a vision model in Settings, so the LLM can later read
-			// the pages it's pointed to. This is the moment a non-coder learns
-			// their setup needs one extra field, not a silent failure later
-			// when they ask a math question.
-			try {
-				const vcheck = await this.plugin.fetchVisionCheck();
-				if (vcheck && vcheck.vision_capable === false) {
-					const which = vcheck.source === 'vision'
-						? 'your vision model'
-						: 'your current chat model';
-					const settingsPath = vcheck.source === 'vision'
-						? 'VaultBot Settings → Vision Model'
-						: 'VaultBot Settings → Vision Model (or pick a vision-capable chat model under LLM Backend)';
-					appendAssistantMessage(
-						`Heads up: ${which} (${vcheck.model || 'unknown'}) can't read images. ` +
-						`That's fine for ingest (it just indexes the PDFs), but when you later ask about ` +
-						`math/figures, I won't be able to see the equations on the page. ` +
-						`Open ${settingsPath} and pick a vision-capable model ` +
-						`(e.g. gpt-4o-mini, gemini-1.5-flash, qwen-vl, llava) so I can read textbook pages for you. ` +
-						`Proceeding with ingest now...`
-					);
-				}
-			} catch (e) { /* vision check is advisory, never blocks ingest */ }
-			try {
-				const resp = await fetch(this.backendUrl + '/ingest_learning_material', {
-					method: 'POST',
-					headers: {'Content-Type': 'application/json'},
-					body: JSON.stringify({})
-				});
-				const data = await resp.json();
-				const msg = data.message || `Ingested ${data.ingested || 0}, skipped ${data.skipped || 0}.`;
-				appendAssistantMessage(msg);
-				if (data.details) {
-					for (const d of data.details) {
-						if (d.error) appendAssistantMessage(`  X ${d.file}: ${d.error}`);
-						else appendAssistantMessage(`  OK ${d.file}: ${d.notes_created} notes`);
-					}
-				}
-			} catch (e) {
-				appendAssistantMessage(`Ingest request failed: ${e.message || e}`);
-			} finally {
-				ingestButton.setText('Ingest');
-				ingestButton.removeAttribute('disabled');
-			}
-		});
 		// Restart button: stops the backend (self-shutdown + taskkill
 		// fallback) and starts it fresh. The one-click way for a non-tech
 		// user to pick up code changes or recover from a stuck backend
@@ -4233,6 +5190,7 @@ class VaultBotSidebarView extends ItemView {
 			{cmd: '/new',      desc: 'Start a fresh conversation'},
 			{cmd: '/clear',    desc: 'Clear the chat window (keeps history)'},
 			{cmd: '/stop',     desc: 'Stop what I\'m doing'},
+			{cmd: '/ingest',   desc: 'Ingest new textbooks from learningMaterial/'},
 			{cmd: '/diagnose', desc: 'Run a health check'},
 			{cmd: '/help',     desc: 'Show available commands'},
 		];

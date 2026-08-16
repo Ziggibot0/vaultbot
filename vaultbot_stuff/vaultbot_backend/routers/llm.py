@@ -649,6 +649,9 @@ async def add_model(payload: dict, svc: Annotated[Services, Depends(get_services
     vision = bool(payload.get("vision", False))
     instruct = bool(payload.get("instruct", True))
     label = (payload.get("label") or "").strip()
+    kind = (payload.get("kind") or "llm").strip()
+    if kind not in ("llm", "stt", "tts"):
+        kind = "llm"
     if not mid:
         mid = f"{provider}:{model}" if provider and model else ""
     if not model or not provider:
@@ -675,6 +678,7 @@ async def add_model(payload: dict, svc: Annotated[Services, Depends(get_services
             instruct=instruct,
             label=label,
             free=free,
+            kind=kind,
         )
     except ValueError as e:
         return {"status": "error", "detail": str(e)}, 400

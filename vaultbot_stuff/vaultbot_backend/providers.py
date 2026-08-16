@@ -79,14 +79,25 @@ import requests
 # gitignored exactly like .env (it is — see .gitignore).
 _REGISTRY_PATH = Path(__file__).resolve().parent.parent.parent / "providers.json"
 
-# The three role cartridges. A role is just a name; the registry maps each to
-# a model id drawn from the pot. Adding a new role = append to this tuple.
-ROLES: tuple[str, ...] = ("big", "small", "vision")
+# The role cartridges. A role is just a name; the registry maps each to a
+# model id drawn from the pot. Adding a new role = append to this tuple.
+#
+# The LLM roles (big/small/vision) are the original three. The speech roles
+# (stt/tts) are first-class too — they draw from the SAME pot as the LLMs,
+# so the user can point stt at a Groq Whisper endpoint, tts at an OpenAI
+# voice, or an edge-tts voice, or the browser's built-in speech — whatever
+# provider they configure, same as the LLMs. No pigeonholing.
+ROLES: tuple[str, ...] = ("big", "small", "vision", "stt", "tts")
 
 # Valid provider types. "ollama" covers local Ollama AND Ollama-cloud (same
-# /api/* surface, just a remote host). "openai" covers any OpenAI-compatible
-# /v1/chat/completions endpoint.
-PROVIDER_TYPES: tuple[str, ...] = ("ollama", "openai")
+# /api/* surface). "openai" covers any OpenAI-compatible endpoint — this
+# serves chat (/v1/chat/completions), vision, STT (/v1/audio/transcriptions),
+# AND TTS (/v1/audio/speech) depending on the role that points at a model
+# on this provider. "edge-tts" is a free Microsoft Edge TTS backend that
+# needs no API key or endpoint (uses edge-tts's websocket relay). "browser"
+# is a synthetic type for the browser's Web Speech API (in-browser STT/TTS
+# fallback — no server, no blocked DLLs).
+PROVIDER_TYPES: tuple[str, ...] = ("ollama", "openai", "edge-tts", "browser")
 
 # Well-known base URLs so the UI can offer one-click provider presets.
 # The user can always type a custom base_url — these are just conveniences.
@@ -125,6 +136,22 @@ KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
         "type": "openai",
         "base_url": "http://localhost:1234",
         "label": "LM Studio (local)",
+    },
+    # Free Microsoft Edge TTS — no API key, no endpoint config. The model
+    # is an edge-tts voice short name (e.g. "en-US-GuyNeural"). Great JARVIS-
+    # like voices, free, no DLL blocks (pure-Python websocket relay).
+    "edge-tts": {
+        "type": "edge-tts",
+        "base_url": "",
+        "label": "Edge TTS (free, Microsoft)",
+    },
+    # Synthetic provider for the browser's Web Speech API (in-browser STT/TTS
+    # fallback — no server, no blocked DLLs). The "model" is a browser-
+    # recognized voice/lang id; the backend never connects to this provider.
+    "browser": {
+        "type": "browser",
+        "base_url": "",
+        "label": "Browser (Web Speech API)",
     },
 }
 
@@ -166,9 +193,14 @@ def normalize_base_url(url: str, type_: str) -> str:
         stored base must not carry it (or you'd get /v1/v1/chat/completions).
       - "ollama" providers: uses the native /api/* surface; a stray /v1 is
         meaningless and stripped too.
-    Raises ValueError on an empty result so a typo never becomes a silent 404.
+      - "browser" providers: no network endpoint at all — base_url is unused,
+        so an empty string is accepted (and returned as-is).
+    Raises ValueError on an empty result (for non-browser types) so a typo
+    never becomes a silent 404.
     """
     u = (url or "").strip().rstrip("/")
+    if type_ in ("browser", "edge-tts"):
+        return ""  # no endpoint; browser is in-browser, edge-tts uses a relay
     if not u:
         raise ValueError("base_url required")
     low = u.lower()
@@ -190,7 +222,27 @@ def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
     tries (and fails) to chat with a model from it. This is the
     'test the endpoint' path Sean asked for: if it works, you ALSO get the
     live model list for the dropdown.
+
+    For ``browser`` providers (in-browser STT/TTS fallback) there's no
+    endpoint to probe; we report ok with an empty model list. The frontend
+    enumerates browser voices/languages itself (the backend can't see them).
+
+    For ``edge-tts`` providers we probe the relay by listing voices — if it
+    returns, the provider works AND the voice list IS the dropdown content
+    (edge-tts voice short names like "en-US-GuyNeural").
     """
+    if prov.type == "browser":
+        return {"ok": True, "models": [], "count": 0, "latency_ms": 0.0, "error": None}
+    if prov.type == "edge-tts":
+        try:
+            import asyncio
+            import edge_tts
+            t0 = time.time()
+            voices = asyncio.run(edge_tts.list_voices())
+            names = [v["ShortName"] for v in voices if v.get("ShortName")]
+            return {"ok": True, "models": names, "count": len(names), "latency_ms": round((time.time() - t0) * 1000, 1), "error": None}
+        except Exception as e:  # noqa: BLE001
+            return _probe_fail(time.time(), f"edge-tts list_voices failed: {e}")
     base = prov.base_url.rstrip("/")
     headers = {"Content-Type": "application/json"}
     if prov.api_key:
@@ -266,6 +318,7 @@ class ModelEntry:
     instruct: bool = True
     free: bool = False
     label: str = ""
+    kind: str = "llm"  # "llm" | "stt" | "tts" — which POT this model belongs to
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -359,12 +412,27 @@ class ProviderRegistry:
                         prov.type if prov else "openai",
                         prov.base_url if prov else "",
                     )
+                    # Heal the `kind` field for entries written before it
+                    # existed: a model on an edge-tts/browser provider is a
+                    # speech model, not an LLM. This keeps voice models OUT of
+                    # the big/small/vision pickers even for pre-existing pots.
+                    if getattr(entry, "kind", "llm") == "llm" and prov is not None:
+                        if prov.type == "edge-tts":
+                            entry.kind = "tts"
+                        elif prov.type == "browser":
+                            # The browser serves both STT and TTS; the model id
+                            # (e.g. "browser:stt" / "browser:tts") disambiguates.
+                            entry.kind = "tts" if entry.id.endswith(":tts") else "stt"
                     self._models[entry.id] = entry
                 for role, mid in (data.get("roles") or {}).items():
                     if role in ROLES and isinstance(mid, str):
                         self._roles[role] = mid
             except Exception as e:  # noqa: BLE001 — a broken registry must never crash boot
                 print(f"[WARN] ProviderRegistry.load failed ({e}); starting empty.")
+            # Always ensure the synthetic ``browser`` provider exists so the
+            # speech roles (stt/tts) have a home for their model selections.
+            # It's idempotent: a no-op if it's already in the file.
+            self._ensure_browser_provider()
 
     def save(self) -> None:
         """Persist to providers.json (atomic: temp + replace)."""
@@ -380,6 +448,36 @@ class ProviderRegistry:
                 os.replace(tmp, self._path)
             except Exception as e:  # noqa: BLE001 — best-effort persist; surfacing is the endpoint's job
                 print(f"[WARN] ProviderRegistry.save failed: {e}")
+
+    def _ensure_browser_provider(self) -> None:
+        """Ensure the built-in ``browser`` + ``edge-tts`` providers exist.
+
+        These give stt/tts a home out of the box (browser fallback + free
+        Edge TTS) so the user can use voice immediately without configuring
+        an endpoint. They're still free to add ANY other provider (OpenAI,
+        Groq, a local Whisper server, etc.) and point stt/tts at it — same
+        pot, same dropdown. Idempotent + held under the lock.
+        """
+        with self._lock:
+            changed = False
+            if "browser" not in self._providers:
+                self._providers["browser"] = Provider(
+                    id="browser",
+                    type="browser",
+                    base_url="",
+                    label="Browser (Web Speech API)",
+                )
+                changed = True
+            if "edge-tts" not in self._providers:
+                self._providers["edge-tts"] = Provider(
+                    id="edge-tts",
+                    type="edge-tts",
+                    base_url="",
+                    label="Edge TTS (free, Microsoft)",
+                )
+                changed = True
+            if changed:
+                self.save()
 
     # ------------------------------------------------------------------
     # providers
@@ -453,9 +551,20 @@ class ProviderRegistry:
         instruct: bool = True,
         free: bool = False,
         label: str = "",
+        kind: str = "llm",
     ) -> ModelEntry:
         if provider_id not in self._providers:
             raise ValueError(f"unknown provider {provider_id!r}")
+        # Infer the kind from the provider type when not explicitly given, so
+        # a model added to an edge-tts/browser provider is automatically a
+        # speech model (kept OUT of the LLM pickers) without the caller
+        # having to remember to pass kind=.
+        if kind == "llm":
+            ptype = self._providers[provider_id].type
+            if ptype == "edge-tts":
+                kind = "tts"
+            elif ptype == "browser":
+                kind = "stt"  # browser serves both; default to stt, caller can override
         with self._lock:
             entry = ModelEntry(
                 id=model_id,
@@ -465,6 +574,7 @@ class ProviderRegistry:
                 instruct=instruct,
                 free=free,
                 label=label,
+                kind=kind,
             )
             self._models[model_id] = entry
             self.save()
@@ -511,11 +621,21 @@ class ProviderRegistry:
     def models_for_role(self, role: str) -> list[ModelEntry]:
         """The pot, filtered/flagged for a role picker.
 
-        - vision role: only vision-capable instruct models.
-        - big/small: all instruct models (any vision model can also do text).
-        Embedding models (instruct=False) are excluded from every picker.
+        Three SEPARATE pots, no cross-contamination:
+        - big/small/vision: only kind == "llm" instruct models.
+        - stt: only kind == "stt" models.
+        - tts: only kind == "tts" models.
+        Voice models never appear in the LLM pickers, and LLMs never appear
+        in the speech pickers. A user who wants an OpenAI Whisper endpoint
+        for STT adds a model with kind="stt" pointing at that provider; a
+        user who wants an OpenAI voice for TTS adds kind="tts". The built-in
+        browser + edge-tts providers seed kind=stt/tts models out of the box.
         """
-        pot = [m for m in self.list_models() if m.instruct]
+        if role == "stt":
+            return [m for m in self.list_models() if m.kind == "stt"]
+        if role == "tts":
+            return [m for m in self.list_models() if m.kind == "tts"]
+        pot = [m for m in self.list_models() if m.instruct and m.kind == "llm"]
         if role == "vision":
             return [m for m in pot if m.vision]
         return pot
