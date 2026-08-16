@@ -699,7 +699,16 @@ _HEAL_SKIP_ROOT_FILES = {
 }
 
 # Only heal files under these top-level directories (vault knowledge zones).
-_HEAL_ALLOWED_PREFIXES = ("vaultbot/", "User/")
+# NOTE: narrowed from ("vaultbot/", "User/") — the broad "vaultbot/" prefix
+# matched the repo's SOURCE docs (vaultbot/README.md, vaultbot/ARCHITECTURE.md,
+# vaultbot/docs/*.md, vaultbot/baseline/*.md) and auto-injected `type: claim`
+# frontmatter into them on every boot. Only actual knowledge zones are healed.
+_HEAL_ALLOWED_PREFIXES = (
+    "vaultbot/Knowledge/",
+    "vaultbot/Memory/",
+    "vaultbot/System/",
+    "User/",
+)
 
 
 def heal_note_on_disk(file_path: str | Path, vault_root: str | Path) -> dict:

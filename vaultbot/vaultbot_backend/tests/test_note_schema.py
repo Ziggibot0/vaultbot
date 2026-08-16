@@ -290,6 +290,31 @@ def test_heal_vault_schema_scans_all():
         shutil.rmtree(tmp)
 
 
+def test_heal_vault_schema_skips_source_docs():
+    """heal_vault_schema must NOT inject frontmatter into repo source docs.
+
+    Regression test for the bug where the broad "vaultbot/" prefix matched
+    vaultbot/README.md, vaultbot/ARCHITECTURE.md, vaultbot/docs/*.md, and
+    vaultbot/baseline/*.md — auto-injecting `type: claim` frontmatter into
+    the repo's own source documentation on every boot.
+    """
+    tmp = tempfile.mkdtemp()
+    try:
+        # A source doc directly under vaultbot/ (not a knowledge zone)
+        os.makedirs(os.path.join(tmp, "vaultbot", "docs"))
+        source_doc = os.path.join(tmp, "vaultbot", "docs", "ARCHITECTURE.md")
+        with open(source_doc, "w", encoding="utf-8") as f:
+            f.write("# Architecture\n\nThis is a source doc, not a vault note.")
+
+        heal_vault_schema(tmp)
+        # The source doc must be untouched (not scanned, not healed)
+        content = open(source_doc, encoding="utf-8").read()
+        assert content == "# Architecture\n\nThis is a source doc, not a vault note."
+        assert "type: claim" not in content
+    finally:
+        shutil.rmtree(tmp)
+
+
 if __name__ == "__main__":
     # Run all tests
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

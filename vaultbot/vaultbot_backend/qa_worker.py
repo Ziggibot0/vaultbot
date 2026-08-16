@@ -153,7 +153,16 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
         ".github",
         "learningMaterial",
     }
-    ALLOWED = ("vaultbot/", "User/")
+    # NOTE: narrowed from ("vaultbot/", "User/") — the broad "vaultbot/" prefix
+    # matched the repo's SOURCE docs (vaultbot/README.md, vaultbot/docs/*.md,
+    # vaultbot/baseline/*.md) and QA'd them as vault notes. Only actual
+    # knowledge zones are QA'd.
+    ALLOWED = (
+        "vaultbot/Knowledge/",
+        "vaultbot/Memory/",
+        "vaultbot/System/",
+        "User/",
+    )
     notes: list[str] = []
     for root, dirs, files in os.walk(vault_root):
         dirs[:] = [d for d in dirs if d not in IGNORED]
