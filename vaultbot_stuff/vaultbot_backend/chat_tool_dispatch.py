@@ -433,21 +433,45 @@ async def execute_agent_tool(
         )
 
     if tool_name == "safe_write":
+        # Guard: reject empty/missing content before calling safe_write.
+        # If the model passes old_str/new_str (md_safe_replace params)
+        # instead of content, args.get('content', '') returns '' —
+        # safe_write would ast.parse('') successfully and write 0 bytes,
+        # destroying the file. Catch this here for a clear error message.
+        _sw_content = args.get("content", "")
+        if not _sw_content:
+            return {
+                "error": (
+                    "safe_write requires a 'content' parameter with the "
+                    "FULL file content. You passed empty or missing content. "
+                    "If you meant to do a targeted string replacement, use "
+                    "md_safe_replace (.md) or safe_replace (.py) with "
+                    "old_str and new_str instead."
+                ),
+            }
         return await loop.run_in_executor(
             None,
             lambda: svc.self_improver.safe_write(
                 args.get("file_path", ""),
-                args.get("content", ""),
+                _sw_content,
                 bool(args.get("dry_run", False)),
             ),
         )
 
     if tool_name == "js_safe_write":
+        _jsw_content = args.get("content", "")
+        if not _jsw_content:
+            return {
+                "error": (
+                    "js_safe_write requires a 'content' parameter with the "
+                    "FULL file content. You passed empty or missing content."
+                ),
+            }
         return await loop.run_in_executor(
             None,
             lambda: svc.self_improver.js_safe_write(
                 args.get("file_path", ""),
-                args.get("content", ""),
+                _jsw_content,
                 bool(args.get("dry_run", False)),
             ),
         )

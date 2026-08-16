@@ -147,6 +147,49 @@ def safe_write(
             "node --check before writing.",
         }
 
+    # --- 0b. Markdown guard: reject .md files (use md_safe_replace or vault_safe_write instead) ---
+    # Without this, ast.parse() on markdown content either succeeds on
+    # empty strings (writing 0 bytes — see session 15e346b7) or fails with
+    # a confusing SyntaxError on em-dashes and other non-ASCII characters.
+    if full.suffix == ".md":
+        return {
+            "status": "rejected",
+            "error": (
+                "safe_write is for Python (.py) files only. "
+                "Got '.md' — use md_safe_replace for targeted edits "
+                "or vault_safe_write for full-file writes of markdown "
+                "notes. safe_write runs Python syntax validation "
+                "(ast.parse) which will reject markdown content."
+            ),
+            "hint": (
+                "For a section edit: call md_safe_replace with "
+                "file_path, old_str, new_str. "
+                "For a full rewrite: call vault_safe_write with "
+                "file_path and content."
+            ),
+        }
+
+    # --- 0c. Empty content guard: reject empty content (silent 0-byte write prevention) ---
+    # If the caller passes old_str/new_str (md_safe_replace params) instead
+    # of content, args.get('content', '') returns '' — ast.parse('') succeeds,
+    # and the file is overwritten with 0 bytes. This guard prevents that.
+    if not content:
+        return {
+            "status": "rejected",
+            "error": (
+                "safe_write received empty content. This usually means "
+                "you passed old_str/new_str (md_safe_replace parameters) "
+                "instead of content. safe_write requires a 'content' "
+                "parameter with the FULL file content."
+            ),
+            "hint": (
+                "Check your parameters: safe_write takes file_path + "
+                "content (not old_str/new_str). If you want to do a "
+                "targeted string replacement, use md_safe_replace for "
+                ".md files or safe_replace for .py files."
+            ),
+        }
+
     checks: dict[str, Any] = {}
 
     # --- 1. Syntax check (no disk touch) ---
