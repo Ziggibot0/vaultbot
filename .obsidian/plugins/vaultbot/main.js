@@ -194,7 +194,7 @@ class VaultBotPlugin extends Plugin {
 		// cooking" — the backend writes session logs, conversation state, and
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
-		const required = ['vaultbot_stuff/vaultbot_backend/', '.venv/', 'vaultbot_stuff/vaultbot_backend/vaultbot_index/'];
+		const required = ['vaultbot/vaultbot_backend/', '.venv/', 'vaultbot/vaultbot_backend/vaultbot_index/'];
 		try {
 			const current = this.app.vault.getConfig('userIgnoreFilters') || [];
 			let changed = false;
@@ -265,7 +265,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$|^/, '');
 			}
-			const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
+			const pidFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'vaultbot.pid');
 			const fs = require('fs');
 			while (Date.now() - start < timeoutMs) {
 				// Only probe with fetch if the PID file exists — the backend
@@ -801,7 +801,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
-			const mcpPy = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'mcp_server.py');
+			const mcpPy = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'mcp_server.py');
 			const fs = require('fs');
 			const mcpPythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(mcpPythonExe) || !fs.existsSync(mcpPy)) {
@@ -853,7 +853,7 @@ class VaultBotPlugin extends Plugin {
 		} else {
 			vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 		}
-		const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
+		const pidFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'vaultbot.pid');
 
 		// 1) Ask the backend to self-terminate. Best-effort, short timeout.
 		try {
@@ -970,7 +970,7 @@ class VaultBotPlugin extends Plugin {
 	// live vault, WITHOUT touching any user state.
 	//
 	// What gets updated (code only):
-	//   - vaultbot_stuff/vaultbot_backend/**/*.py  (the backend engine)
+	//   - vaultbot/vaultbot_backend/**/*.py  (the backend engine)
 	//   - .obsidian/plugins/vaultbot/main.js   (this plugin file)
 	//   - .obsidian/plugins/vaultbot/manifest.json
 	//   - .obsidian/plugins/vaultbot/styles.css
@@ -1019,7 +1019,7 @@ class VaultBotPlugin extends Plugin {
 		// first; if GitHub 404s, retry as a tag so users can pin a release.
 
 		const pluginDir = path.join(vaultRoot, '.obsidian', 'plugins', 'vaultbot');
-		const backendDir = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend');
+		const backendDir = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend');
 		const dataJsonPath = path.join(pluginDir, 'data.json');
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vaultbot-update-'));
 		const stagingDir = path.join(tmpDir, 'staging');
@@ -1072,29 +1072,29 @@ class VaultBotPlugin extends Plugin {
 				'-xzf', tarballPath,
 				'-C', stagingDir,
 				'--exclude=*/.obsidian/plugins/vaultbot/data.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/*.log',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/*_log.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/calibration_log.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/claim_verification_log.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/consolidation_log.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/embedding_drift.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/procedure_failure_log.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/rag_eval_log.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/touch_counts.json',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/vaultbot.pid',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/sessions',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/sessions/*',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/checkpoints',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/checkpoints/*',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/vaultbot_index',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/vaultbot_index/*',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/trash',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/trash/*',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/__pycache__',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/__pycache__/*',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/*/__pycache__',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/*/__pycache__/*',
-				'--exclude=*/vaultbot_stuff/vaultbot_backend/**/*.pyc'
+				'--exclude=*/vaultbot/vaultbot_backend/*.log',
+				'--exclude=*/vaultbot/vaultbot_backend/*_log.json',
+				'--exclude=*/vaultbot/vaultbot_backend/calibration_log.json',
+				'--exclude=*/vaultbot/vaultbot_backend/claim_verification_log.json',
+				'--exclude=*/vaultbot/vaultbot_backend/consolidation_log.json',
+				'--exclude=*/vaultbot/vaultbot_backend/embedding_drift.json',
+				'--exclude=*/vaultbot/vaultbot_backend/procedure_failure_log.json',
+				'--exclude=*/vaultbot/vaultbot_backend/rag_eval_log.json',
+				'--exclude=*/vaultbot/vaultbot_backend/touch_counts.json',
+				'--exclude=*/vaultbot/vaultbot_backend/vaultbot.pid',
+				'--exclude=*/vaultbot/vaultbot_backend/sessions',
+				'--exclude=*/vaultbot/vaultbot_backend/sessions/*',
+				'--exclude=*/vaultbot/vaultbot_backend/checkpoints',
+				'--exclude=*/vaultbot/vaultbot_backend/checkpoints/*',
+				'--exclude=*/vaultbot/vaultbot_backend/vaultbot_index',
+				'--exclude=*/vaultbot/vaultbot_backend/vaultbot_index/*',
+				'--exclude=*/vaultbot/vaultbot_backend/trash',
+				'--exclude=*/vaultbot/vaultbot_backend/trash/*',
+				'--exclude=*/vaultbot/vaultbot_backend/__pycache__',
+				'--exclude=*/vaultbot/vaultbot_backend/__pycache__/*',
+				'--exclude=*/vaultbot/vaultbot_backend/*/__pycache__',
+				'--exclude=*/vaultbot/vaultbot_backend/*/__pycache__/*',
+				'--exclude=*/vaultbot/vaultbot_backend/**/*.pyc'
 			];
 			execFileSync('tar.exe', extractArgs, { stdio: 'ignore' });
 
@@ -1111,8 +1111,8 @@ class VaultBotPlugin extends Plugin {
 			// tracked files rather than nuking the whole directory, so any
 			// untracked local state files (sessions/, logs, models, etc.) that
 			// the exclusions left untouched in the LIVE vault are preserved.
-			const srcBackend = path.join(archiveRoot, 'vaultbot_stuff', 'vaultbot_backend');
-			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot_stuff/vaultbot_backend/ folder.');
+			const srcBackend = path.join(archiveRoot, 'vaultbot', 'vaultbot_backend');
+			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot/vaultbot_backend/ folder.');
 			await copyCodeTree(srcBackend, backendDir);
 
 			notify(`Applying plugin files…`);
@@ -1149,7 +1149,7 @@ class VaultBotPlugin extends Plugin {
 			// Re-run pip install in case the update added new dependencies.
 			try {
 				const venvPython = this._venvPythonExe(vaultRoot);
-				const reqPath = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'requirements.txt');
+				const reqPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'requirements.txt');
 				if (fs.existsSync(venvPython) && fs.existsSync(reqPath)) {
 					notify('Checking for new dependencies...');
 					const { execFileSync } = require('child_process');
@@ -1315,7 +1315,7 @@ class VaultBotPlugin extends Plugin {
 	// Read the last N lines of backend.log for diagnostics.
 	_readBackendLog(vaultRoot, maxLines = 50) {
 		const fs = require('fs');
-		const logFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'backend.log');
+		const logFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'backend.log');
 		try {
 			if (!fs.existsSync(logFile)) return '';
 			const content = fs.readFileSync(logFile, 'utf8');
@@ -1475,7 +1475,7 @@ class VaultBotPlugin extends Plugin {
 	async _installDeps(vaultRoot) {
 		const { execFile } = require('child_process');
 		const venvPython = this._venvPythonExe(vaultRoot);
-		const reqPath = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'requirements.txt');
+		const reqPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'requirements.txt');
 		const notify = (msg) => { try { new Notice(msg); } catch (e) {} };
 		notify('Installing missing packages... this can take a few minutes.');
 		try {
@@ -1517,7 +1517,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/].obsidian[\\/]?$|^/, '');
 			}
-			const pidFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'vaultbot.pid');
+			const pidFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'vaultbot.pid');
 			const fs = require('fs');
 			let running = false;
 			if (fs.existsSync(pidFile)) {
@@ -1531,8 +1531,8 @@ class VaultBotPlugin extends Plugin {
 
 			new Notice('Starting VaultBot backend...');
 
-			const mainPy = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'main.py');
-			const logFile = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', 'backend.log');
+			const mainPy = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'main.py');
+			const logFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'backend.log');
 
 			const pythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(pythonExe) || !fs.existsSync(mainPy)) {
@@ -1557,7 +1557,7 @@ class VaultBotPlugin extends Plugin {
 			openedHandles = [fd];
 		} catch (e) {
 			const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-			const altLog = path.join(vaultRoot, 'vaultbot_stuff', 'vaultbot_backend', `backend-${stamp}.log`);
+			const altLog = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', `backend-${stamp}.log`);
 			try {
 				const fd = fs.openSync(altLog, 'a');
 				out = fd;
