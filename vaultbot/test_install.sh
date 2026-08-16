@@ -41,17 +41,16 @@ check_file() {
     if [ -f "$VAULT_PATH/$1" ]; then ok "$1 exists"
     else fail "$1 missing"; fi
 }
-check_file "setup.sh"
-check_file "setup.ps1"
-check_file "README.md"
-check_file "CONTRIBUTING.md"
-check_file "SECURITY.md"
-check_file "LICENSE"
-check_file "vaultbot_stuff/setup.sh"
-check_file "vaultbot_stuff/.env.example"
-check_file "vaultbot_stuff/vaultbot_backend/requirements.txt"
-check_file "vaultbot_stuff/vaultbot_backend/main.py"
-check_file "vaultbot_stuff/baseline/identity/IDENTITY.md"
+check_file "vaultbot/setup.sh"
+check_file "vaultbot/setup.ps1"
+check_file "vaultbot/README.md"
+check_file "vaultbot/CONTRIBUTING.md"
+check_file "vaultbot/SECURITY.md"
+check_file "vaultbot/LICENSE"
+check_file "vaultbot/.env.example"
+check_file "vaultbot/vaultbot_backend/requirements.txt"
+check_file "vaultbot/vaultbot_backend/main.py"
+check_file "vaultbot/baseline/identity/IDENTITY.md"
 check_file ".obsidian/plugins/vaultbot/main.js"
 check_file ".obsidian/plugins/vaultbot/manifest.json"
 
@@ -73,7 +72,7 @@ else fail "venv creation failed"; fi
 
 echo "  Installing dependencies (this takes a few minutes)..."
 "$VENV_PYTHON" -m pip install --upgrade pip --quiet 2>&1 | tail -1
-"$VENV_PYTHON" -m pip install -r "$VAULT_PATH/vaultbot_stuff/vaultbot_backend/requirements.txt" 2>&1 | tail -3
+"$VENV_PYTHON" -m pip install -r "$VAULT_PATH/vaultbot/vaultbot_backend/requirements.txt" 2>&1 | tail -3
 
 # Verify key deps importable
 for mod in fastapi uvicorn requests bs4 faiss watchdog numpy dotenv; do
@@ -82,7 +81,7 @@ for mod in fastapi uvicorn requests bs4 faiss watchdog numpy dotenv; do
 done
 
 section "4. Write .env (non-interactive)"
-ENV_EXAMPLE="$VAULT_PATH/vaultbot_stuff/.env.example"
+ENV_EXAMPLE="$VAULT_PATH/vaultbot/.env.example"
 ENV_FILE="$VAULT_PATH/.env"
 
 if [ -f "$ENV_EXAMPLE" ]; then
@@ -103,13 +102,13 @@ fi
 
 section "5. Backend import test"
 # Create directories the backend expects to exist
-mkdir -p "$VAULT_PATH/vaultbot_stuff/Memory/Chat"
-mkdir -p "$VAULT_PATH/vaultbot_stuff/Memory/Build-Log"
-mkdir -p "$VAULT_PATH/vaultbot_stuff/Knowledge/Research"
+mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
+mkdir -p "$VAULT_PATH/vaultbot/Memory/Build-Log"
+mkdir -p "$VAULT_PATH/vaultbot/Knowledge/Research"
 cd "$VAULT_PATH"
 VAULT_PATH="$VAULT_PATH" "$VENV_PYTHON" -c "
 import sys, os
-sys.path.insert(0, '$VAULT_PATH/vaultbot_stuff/vaultbot_backend')
+sys.path.insert(0, '$VAULT_PATH/vaultbot/vaultbot_backend')
 try:
     import main
     print('  [PASS] main.py imports successfully')
@@ -126,9 +125,9 @@ cd "$VAULT_PATH"
 cp .env .env.test-backup
 echo "GITHUB_TOKEN=ghp_fake_token_for_testing" > .env
 # Create fake sensitive dirs
-mkdir -p vaultbot_stuff/Memory/Chat
-mkdir -p vaultbot_stuff/vaultbot_backend/sessions
-echo "fake session" > vaultbot_stuff/vaultbot_backend/sessions/test.jsonl
+mkdir -p vaultbot/Memory/Chat
+mkdir -p vaultbot/vaultbot_backend/sessions
+echo "fake session" > vaultbot/vaultbot_backend/sessions/test.jsonl
 
 # Init git and check .env is NOT tracked
 git init -q 2>/dev/null
@@ -153,7 +152,7 @@ else
 fi
 
 section "7. Custom tools check"
-TOOLS_DIR="$VAULT_PATH/vaultbot_stuff/vaultbot_backend/custom_tools"
+TOOLS_DIR="$VAULT_PATH/vaultbot/vaultbot_backend/custom_tools"
 if [ -d "$TOOLS_DIR" ]; then
     TOOL_COUNT=$(ls "$TOOLS_DIR"/*.py 2>/dev/null | wc -l)
     if [ "$TOOL_COUNT" -ge 3 ]; then ok "custom_tools/ has $TOOL_COUNT tools"

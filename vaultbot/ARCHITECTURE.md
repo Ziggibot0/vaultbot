@@ -14,7 +14,7 @@ sourced notes, and can improve its own code.
 ┌─────────────────────────────────────────────────────────┐
 │                    Obsidian Vault                        │
 │  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│  │  User/   │  │ Knowledge│  │  vaultbot_stuff/      │  │
+│  │  User/   │  │ Knowledge│  │  vaultbot/           │  │
 │  │  (notes) │  │  /Research│  │  ┌────────────────┐  │  │
 │  └──────────┘  └──────────┘  │  │ vaultbot_backend│  │  │
 │                               │  │  (Python)       │  │  │
@@ -166,7 +166,7 @@ with them. The `.gitignore` keeps personal data out of git, and a
    as a safety net.
 
 Backend `.py` files are always baseline — no marker needed. The membrane
-only applies to `vaultbot_stuff/System/` `.md` files, which is where the
+only applies to `vaultbot/System/` `.md` files, which is where the
 ambiguity between "general-purpose" and "personal" lives.
 
 ## Directory Map
@@ -248,7 +248,7 @@ This is a dedicated project, not a quick refactor.
 
 ## Further Reading
 
-- `vaultbot_stuff/System/` — living architecture notes in the vault
-- `vaultbot_stuff/CONTRIBUTING.md` — development setup and conventions
-- `vaultbot_stuff/SECURITY.md` — vulnerability reporting
+- `vaultbot/System/` — living architecture notes in the vault
+- `vaultbot/CONTRIBUTING.md` — development setup and conventions
+- `vaultbot/SECURITY.md` — vulnerability reporting
 - `/memories/repo/` — 80+ incident reports and design decisions

@@ -32,11 +32,11 @@ their notes, their chat history, their API keys. The `.gitignore` already
 excludes these, but double-check before pushing:
 
 - `.env` — contains API keys and the owner's name
-- `vaultbot_stuff/Memory/` and `vaultbot_stuff/Knowledge/` — the user's notes, chats, research
-- `vaultbot_stuff/vaultbot_backend/sessions/` — chat logs
-- `vaultbot_stuff/vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
+- `vaultbot/Memory/` and `vaultbot/Knowledge/` — the user's notes, chats, research
+- `vaultbot/vaultbot_backend/sessions/` — chat logs
+- `vaultbot/vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
   SELF_MODEL.md) — these are personal, regenerate per user
-- `vaultbot_stuff/learningMaterial/` — the user's PDFs
+- `vaultbot/learningMaterial/` — the user's PDFs
 
 The `baseline/` folder holds templates; the `vaultbot_backend/identity/`
 folder holds *one user's* live identity. Don't confuse them.
@@ -47,11 +47,11 @@ The fastest way to get a dev environment running is the one-liner installer:
 
 ```powershell
 # Windows
-irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex
+irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ```
 ```bash
 # macOS / Linux
-curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
+curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash
 ```
 
 This creates a `VaultBot/` folder with a fully set-up venv, deps, models,
@@ -63,15 +63,15 @@ git clone <your-fork>.git
 cd vaultbot
 python -m venv vaultbot_venv
 # No activation needed — invoke the venv's python directly:
-vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt   # Windows
-# or: vaultbot_venv/bin/python -m pip install -r vaultbot_stuff/vaultbot_backend/requirements.txt       # macOS/Linux
+vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot/vaultbot_backend/requirements.txt   # Windows
+# or: vaultbot_venv/bin/python -m pip install -r vaultbot/vaultbot_backend/requirements.txt       # macOS/Linux
 ollama pull qwen3.6:latest nomic-embed-text
-cp vaultbot_stuff/.env.example .env   # fill in your values
+cp vaultbot/.env.example .env   # fill in your values
 ```
 
 The backend is started automatically by the Obsidian plugin. For manual
-testing: `vaultbot_venv/Scripts/python.exe vaultbot_stuff/vaultbot_backend/main.py`
-(Windows) or `vaultbot_venv/bin/python vaultbot_stuff/vaultbot_backend/main.py` (macOS/Linux).
+testing: `vaultbot_venv/Scripts/python.exe vaultbot/vaultbot_backend/main.py`
+(Windows) or `vaultbot_venv/bin/python vaultbot/vaultbot_backend/main.py` (macOS/Linux).
 ```
 
 ## Safe self-editing
@@ -127,21 +127,21 @@ categories) to tag errors that don't have a distinctive exception signature.
 
 ## What to commit
 
-- Backend source code (`vaultbot_stuff/vaultbot_backend/*.py`)
+- Backend source code (`vaultbot/vaultbot_backend/*.py`)
 - The Obsidian plugin (`.obsidian/plugins/vaultbot/`)
-- `vaultbot_stuff/baseline/` directive templates
+- `vaultbot/baseline/` directive templates
 - `README.md`, `CONTRIBUTING.md`, `LICENSE`
-- `vaultbot_stuff/.env.example`, `.gitignore`, `pyproject.toml`
-- `vaultbot_stuff/setup.ps1`, `vaultbot_stuff/setup.sh` (one-click installers)
+- `vaultbot/.env.example`, `.gitignore`, `pyproject.toml`
+- `vaultbot/setup.ps1`, `vaultbot/setup.sh` (one-click installers)
 
 ## What NOT to commit
 
 - `.env` (secrets)
 - `vaultbot_venv/` (regenerated per install)
-- `vaultbot_stuff/Memory/`, `vaultbot_stuff/Knowledge/` (the user's notes and research)
-- `vaultbot_stuff/vaultbot_backend/sessions/`, `vaultbot_stuff/vaultbot_backend/identity/` (personal data)
-- `vaultbot_stuff/vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
-- `vaultbot_stuff/learningMaterial/` (user's PDFs)
+- `vaultbot/Memory/`, `vaultbot/Knowledge/` (the user's notes and research)
+- `vaultbot/vaultbot_backend/sessions/`, `vaultbot/vaultbot_backend/identity/` (personal data)
+- `vaultbot/vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
+- `vaultbot/learningMaterial/` (user's PDFs)
 
 ## Coding style
 
@@ -152,9 +152,9 @@ categories) to tag errors that don't have a distinctive exception signature.
   card building, and MOC clustering are all LLM-free by design. Don't add
   LLM calls to those paths — they're the reason VaultBot can run on a free
   local model.
-- New tools go in `vaultbot_stuff/vaultbot_backend/custom_tools/` as self-contained `.py` files with a
+- New tools go in `vaultbot/vaultbot_backend/custom_tools/` as self-contained `.py` files with a
   `SCHEMA` dict and a `run(args: dict) -> dict` function. They hot-load.
-- New backend modules: add them to `_CORE_FILES` in `vaultbot_stuff/vaultbot_backend/self_improver.py` so
+- New backend modules: add them to `_CORE_FILES` in `vaultbot/vaultbot_backend/self_improver.py` so
   `safe_write` knows to verify the import graph when they're edited.
 
 ## Pull requests
@@ -162,7 +162,7 @@ categories) to tag errors that don't have a distinctive exception signature.
 1. Fork and branch from `main`.
 2. Keep your vault and `.env` out of the commit (`.gitignore` handles this,
    but verify with `git status` before pushing).
-3. Test that the backend boots cleanly: `python vaultbot_stuff/vaultbot_backend/main.py`
+3. Test that the backend boots cleanly: `python vaultbot/vaultbot_backend/main.py`
    should start without `ImportError` or `Traceback`.
 4. If you added a tool, mention it in the README's feature list.
 5. Keep the LLM-call economy — don't introduce gratuitous LLM calls in
@@ -184,9 +184,9 @@ is rejected with a comment explaining what failed.
 
 ### What you can contribute
 
-- Bug fixes in backend Python code (`vaultbot_stuff/vaultbot_backend/`)
+- Bug fixes in backend Python code (`vaultbot/vaultbot_backend/`)
 - Plugin improvements (`.obsidian/plugins/vaultbot/`)
-- New custom tools (`vaultbot_stuff/vaultbot_backend/custom_tools/`)
+- New custom tools (`vaultbot/vaultbot_backend/custom_tools/`)
 - Documentation improvements
 - Setup script fixes
 - Baseline template improvements
@@ -194,7 +194,7 @@ is rejected with a comment explaining what failed.
 ### What you cannot contribute
 
 - Changes to `.env` or any secrets file
-- Files outside `vaultbot_stuff/` or `.obsidian/plugins/vaultbot/`
+- Files outside `vaultbot/` or `.obsidian/plugins/vaultbot/`
 - Changes to `.gitignore` that un-ignore sensitive paths
 - Code with dangerous patterns (`eval`, `exec`, `os.system`, `pickle.loads`,
   raw sockets, non-GitHub network calls)
@@ -240,7 +240,7 @@ material, open a [GitHub Issue](https://github.com/ziggibot-uni/vaultbot/issues)
 
 ## Further reading
 
-The `vaultbot_stuff/System/` directory contains architecture docs,
+The `vaultbot/System/` directory contains architecture docs,
 procedures, and design notes that explain how VaultBot works internally.
 These are living documents in the vault, not static docs — but they're
 useful if you want to understand the design philosophy.

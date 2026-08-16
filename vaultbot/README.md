@@ -86,7 +86,7 @@ Then open a terminal and paste **one line**:
 ### Windows (PowerShell)
 
 ```powershell
-irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex
+irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ```
 
 > **Don't know how to open PowerShell?** Press the Windows key, type
@@ -96,7 +96,7 @@ irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
+curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash
 ```
 
 ### What the installer does
@@ -321,7 +321,7 @@ The backend (~95 modules) is organized into these key areas:
 ```
 .
 ├── .obsidian/plugins/vaultbot/   # The Obsidian plugin (chat UI)
-├── vaultbot_stuff/
+├── vaultbot/
 │   ├── baseline/                  # Starter directive templates (not active)
 │   ├── vaultbot_backend/          # The Python backend (~95 modules)
 │   ├── System/                    # Architecture docs, procedures, playbooks
@@ -335,9 +335,9 @@ The backend (~95 modules) is organized into these key areas:
 
 Your personal content stays at the vault root:
 - `User/` — your notes (gitignored)
-- `vaultbot_stuff/Memory/` — chat logs (gitignored)
-- `vaultbot_stuff/Knowledge/` — research notes (gitignored)
-- `vaultbot_stuff/learningMaterial/` — PDFs / textbooks (gitignored)
+- `vaultbot/Memory/` — chat logs (gitignored)
+- `vaultbot/Knowledge/` — research notes (gitignored)
+- `vaultbot/learningMaterial/` — PDFs / textbooks (gitignored)
 - `.env` — API keys (gitignored)
 
 ## License & contact

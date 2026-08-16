@@ -564,8 +564,8 @@ class VaultBotPlugin extends Plugin {
 		modal.titleEl.setText('Welcome to VaultBot');
 		const isWin = process.platform === 'win32';
 		const cmd = isWin
-			? 'irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex'
-			: 'curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash';
+			? 'irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex'
+			: 'curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash';
 
 		// ── Checklist: what's missing? ──────────────────────────────────
 		// /preflight checks Python + Ollama presence, port, and sync folder

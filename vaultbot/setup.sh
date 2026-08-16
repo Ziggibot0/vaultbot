@@ -3,7 +3,7 @@
 # VaultBot one-click installer for macOS / Linux
 #
 # Run from any folder:
-#   curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/setup.sh | bash
+#   curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash
 # ═══════════════════════════════════════════════════════════════════════════
 set -e
 

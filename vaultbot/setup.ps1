@@ -2,7 +2,7 @@
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
-#   irm https://github.com/ziggibot-uni/vaultbot/raw/main/setup.ps1 | iex
+#   irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 #
 # Downloads the repo, creates a Python venv, installs everything,
 # pulls AI models, asks your name, and opens Obsidian. No terminal
