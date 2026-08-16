@@ -24,7 +24,10 @@ env/
 # If someone runs setup.ps1/setup.sh inside the repo itself, it creates a
 # VaultBot/ subfolder â€” never commit that.
 # Anchored to root so it doesn't match .obsidian/plugins/vaultbot/.
-/VaultBot/
+# NOTE: removed the bare `/VaultBot/` rule — on case-insensitive filesystems
+# (Windows, core.ignorecase=true) it silently matched the `vaultbot/` SOURCE
+# folder and ignored every new source file. The nested-installer scenario is
+# an edge case not worth silently dropping source code.
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Python cache
@@ -51,6 +54,7 @@ vaultbot/vaultbot_backend/chat_loop_checkpoint.json
 vaultbot/vaultbot_backend/curriculum_state.json
 vaultbot/vaultbot_backend/touch_counts.json
 vaultbot/vaultbot_backend/embedding_drift.json
+vaultbot/vaultbot_backend/trigger_embeddings.json
 vaultbot/vaultbot_backend/conversation_state.json
 vaultbot/vaultbot_backend/procedure_failure_log.json
 vaultbot/vaultbot_backend/calibration_log.json

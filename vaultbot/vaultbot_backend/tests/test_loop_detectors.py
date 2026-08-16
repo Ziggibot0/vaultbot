@@ -28,6 +28,12 @@ _CHAT_MODULES = [
     _BACKEND / "chat_context.py",
     _BACKEND / "chat_preflight.py",
     _BACKEND / "chat_tool_dispatch.py",
+    _BACKEND / "chat_turn_prep.py",
+    _BACKEND / "chat_turn_finalize.py",
+    _BACKEND / "chat_background.py",
+    _BACKEND / "chat_agentic_loop.py",
+    _BACKEND / "chat_loop_streaming.py",
+    _BACKEND / "chat_loop_tools.py",
 ]
 
 

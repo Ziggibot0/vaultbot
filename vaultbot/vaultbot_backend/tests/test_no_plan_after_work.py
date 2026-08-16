@@ -38,6 +38,12 @@ _CHAT_MODULES = [
     _BACKEND / "chat_context.py",
     _BACKEND / "chat_preflight.py",
     _BACKEND / "chat_tool_dispatch.py",
+    _BACKEND / "chat_turn_prep.py",
+    _BACKEND / "chat_turn_finalize.py",
+    _BACKEND / "chat_background.py",
+    _BACKEND / "chat_agentic_loop.py",
+    _BACKEND / "chat_loop_streaming.py",
+    _BACKEND / "chat_loop_tools.py",
 ]
 
 
@@ -223,7 +229,7 @@ class TestFinishReasonProtocol:
     def test_agent_silent_error_still_used(self):
         """AgentSilentError must still be raised for the double-silent
         failsafe — the one contract preserved from the old protocol."""
-        tree = _load_ast(_CHAT_HANDLER)
+        tree = ast.parse(_all_chat_source())
         raises = _find_raise_nodes(tree)
         agent_silent_raises = [r for r in raises if _raise_matches_agent_silent(r)]
         assert len(agent_silent_raises) >= 1, (
