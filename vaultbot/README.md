@@ -1,5 +1,7 @@
 # VaultBot
 
+[![CI](https://github.com/ziggibot-uni/vaultbot/workflows/CI/badge.svg)](https://github.com/ziggibot-uni/vaultbot/actions/workflows/ci.yml)
+
 > A self-improving AI research agent that lives inside your Obsidian vault.
 > It thinks with your notes, researches the web, writes permanent
 > knowledge, and grows itself — all while spending minimal LLM calls.
