@@ -732,10 +732,32 @@ embedding_drift = EmbeddingDrift(
     state_path=Path(__file__).with_name("embedding_drift.json"),
     session_logger=default_session_logger,
 )
+
+# Trigger/inhibitor store (feedback-driven retrieval gate).  Per-note
+# trigger/inhibitor phrase embeddings: when a note's inhibitor phrases match
+# the query more strongly than its trigger phrases, the retrieval gate drops
+# the note entirely — the model sees less noise over time as inhibitors
+# accumulate from user-sentiment feedback (Dream-Pass writes the phrases).
+# Wired into the vault_indexer (populated at add/update time) and the
+# fused_retriever (gate at retrieval time).  See trigger_store.py.
+from trigger_store import TriggerStore
+
+trigger_store = TriggerStore(
+    state_path=Path(__file__).with_name("trigger_embeddings.json"),
+    embedding_getter=None,  # set after vault_indexer is wired below
+    session_logger=default_session_logger,
+)
+# Late-bind the embedding getter now that vault_indexer exists.  The store
+# embeds phrases via the same Ollama embed model the indexer uses.
+trigger_store.embedding_getter = vault_indexer._get_embedding
+# Wire the store into the indexer so add/update/delete keep it in sync.
+vault_indexer.trigger_store = trigger_store
+
 fused_retriever = FusedRetriever(
     vault_graph=vault_graph,
     vault_indexer=vault_indexer,
     embedding_drift=embedding_drift,
+    trigger_store=trigger_store,
     session_logger=default_session_logger,
 )
 
@@ -958,6 +980,7 @@ svc = Services(
     amem=amem,
     fused_retriever=fused_retriever,
     embedding_drift=embedding_drift,
+    trigger_store=trigger_store,
     lazy_condenser=lazy_condenser,
     context_budgeter=context_budgeter,
     conversation_index=conversation_index,

@@ -168,7 +168,11 @@ class VaultChangeHandler(FileSystemEventHandler):
 
 class VaultIndexer:
     def __init__(
-        self, vault_path: str, index_path: str | None = None, session_logger=None
+        self,
+        vault_path: str,
+        index_path: str | None = None,
+        session_logger=None,
+        trigger_store: Any = None,
     ):
         self.vault_path = Path(vault_path).resolve()
         if index_path is None:
@@ -183,6 +187,11 @@ class VaultIndexer:
         self.timestamp_file = self.index_path / "timestamps.json"
 
         self.session_logger = session_logger
+        # Trigger/inhibitor phrase-embedding store (optional).  When wired,
+        # the indexer populates it at add/update time so the retrieval gate
+        # in fused_retrieval can drop notes whose inhibitors match the query.
+        # None = no gate (the store is a bonus layer — see trigger_store.py).
+        self.trigger_store = trigger_store
         self.ollama_client = OllamaClient(
             embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
             session_logger=session_logger,
@@ -519,16 +528,21 @@ class VaultIndexer:
         description = ""
         when = ""
         provides: list[str] = []
+        triggers: list[str] = []
         current_key: str | None = None
         for line in fm_block.split("\n"):
             line = line.rstrip()
             if not line:
                 continue
-            # List item: "  - value" — collect provides sub-procedure names.
-            if line.startswith("  - ") and current_key == "provides":
+            # List item: "  - value" — collect provides sub-procedure names
+            # and trigger phrases (both are list-valued frontmatter fields).
+            if line.startswith("  - ") and current_key in ("provides", "trigger"):
                 val = line[4:].strip().strip('"').strip("'")
                 if val:
-                    provides.append(val)
+                    if current_key == "provides":
+                        provides.append(val)
+                    else:
+                        triggers.append(val)
                 continue
             if line.startswith("  "):
                 continue
@@ -545,24 +559,36 @@ class VaultIndexer:
                 description = value
             elif key in ("when_to_use", "when"):
                 when = value
+            elif key == "trigger":
+                # Inline single value: ``trigger: some phrase``
+                triggers.append(value)
             elif key == "provides":
                 # Inline single value: ``provides: Dream-Scan``
                 provides.append(value)
         # No description → can't do intent-based retrieval; embed full
         # content as a degraded fallback (validator will have flagged it).
-        if not description and not when:
+        if not description and not when and not triggers:
             return content
         title = file_path.stem
         surface = f"{title}"
         if description:
             surface += f"\n{description}"
-        if when:
-            # Split when_to_use into individual use-cases so each one gets
-            # its own embedding line. Without this, the embedding model
-            # averages all use-cases into one vector, diluting each specific
-            # use-case. With individual lines, a query matching any single
-            # use-case gets high similarity instead of being averaged away.
-            # Pattern: "when X, when Y, when Z, or when W"
+        if triggers:
+            # Trigger phrases are individual use-cases (feedback-tuned).
+            # One "Use when:" line per phrase so each gets its own embedding
+            # line — same rationale as the when_to_use split below.
+            for phrase in triggers:
+                phrase = phrase.strip().strip('"').strip("'")
+                if not phrase:
+                    continue
+                surface += f"\nUse when: {phrase}"
+        elif when:
+            # Fallback: split when_to_use into individual use-cases so each
+            # one gets its own embedding line. Without this, the embedding
+            # model averages all use-cases into one vector, diluting each
+            # specific use-case. With individual lines, a query matching any
+            # single use-case gets high similarity instead of being averaged
+            # away.  Pattern: "when X, when Y, when Z, or when W"
             import re as _re
 
             clauses = _re.split(r",\s*(?:or\s+)?when\s+", when)
@@ -578,6 +604,27 @@ class VaultIndexer:
         if provides:
             surface += "\nComposes: " + ", ".join(provides)
         return surface
+
+    def _update_trigger_store(self, file_path: Path, content: str) -> None:
+        """Parse trigger/inhibitor frontmatter and update the store.
+
+        Uses ``note_schema.parse_frontmatter`` (handles list values) to
+        extract the two fields.  A note with neither field has its entry
+        removed so a stale gate doesn't persist after the fields are dropped.
+        Called from ``_add_file_to_index`` when ``self.trigger_store`` is
+        wired.  The store embeds each phrase via the indexer's own
+        ``_get_embedding`` (passed as the embedding getter at construction).
+        """
+        from note_schema import parse_frontmatter
+
+        fm = parse_frontmatter(content)
+        triggers = fm.get("trigger") or []
+        inhibitors = fm.get("inhibitor") or []
+        if isinstance(triggers, str):
+            triggers = [triggers]
+        if isinstance(inhibitors, str):
+            inhibitors = [inhibitors]
+        self.trigger_store.update_note(str(file_path), triggers, inhibitors)
 
     def _add_file_to_index(self, file_path: Path):
         """Read a file, compute embedding, and add to index."""
@@ -618,6 +665,17 @@ class VaultIndexer:
         except (RuntimeError, ConnectionError) as e:  # Ollama down / API error
             _logger.warning(f"Error getting embedding for {file_path}: {e}")
             return
+
+        # Update the trigger/inhibitor store from this note's frontmatter.
+        # The store embeds each phrase so the retrieval gate can compare the
+        # query against trigger vs inhibitor phrases.  A note with neither
+        # field has its stale entry removed.  Best-effort: a failure here
+        # must not block indexing (the gate is a bonus layer).
+        if self.trigger_store is not None:
+            try:
+                self._update_trigger_store(file_path, content)
+            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+                _logger.warning("trigger store update failed for %s: %s", file_path, e)
 
         self._add_embedding_to_index(
             file_path, embedding, last_modified, content_hash, content_preview=content
@@ -823,6 +881,15 @@ class VaultIndexer:
         Tombstoned ids are never reused until a full _rebuild_index compaction.
         """
         key = str(file_path)
+        # Clean the trigger/inhibitor store even if the note was never in
+        # the FAISS index — a note deleted from disk but still in the store
+        # would leave a dangling gate entry that drops nothing (harmless)
+        # but bloats the JSON.  Best-effort: never block the removal.
+        if self.trigger_store is not None:
+            try:
+                self.trigger_store.remove_note(key)
+            except Exception as e:  # noqa: BLE001 — best-effort
+                _logger.warning("trigger store remove failed for %s: %s", key, e)
         faiss_id = self._path_to_id.pop(key, None)
         if faiss_id is None:
             return  # not indexed — nothing to do

@@ -182,6 +182,21 @@ class Tunables:
     session_log_retention_days: int = 30  # delete files older than N days
     session_log_max_file_mb: int = 5  # truncate a single file over this
 
+    # ── Trigger/inhibitor retrieval gate (trigger_store + fused_retrieval) ─
+    # How much stronger the inhibitor match must be than the trigger match
+    # to drop a note from retrieval.  Conservative start — only drop when
+    # the inhibitor clearly dominates.  See trigger_store.py.
+    trigger_gate_margin: float = 0.05
+    # Minimum consistent feedback signals before Dream-Pass writes a phrase
+    # to a note's trigger/inhibitor list.  Prevents single-noisy-turn
+    # poisoning (sarcasm, terse "ok").  Mirrors procedure_tracker's
+    # FAILURE_THRESHOLD = 3 philosophy but lower (2) because user sentiment
+    # is scarcer than procedure pass/fail.
+    trigger_evidence_threshold: int = 2
+    # Cap on trigger/inhibitor phrases per note to prevent unbounded list
+    # growth from endless feedback.
+    trigger_max_phrases: int = 15
+
 
 # The single importable instance. Frozen — do not mutate.
 TUNABLES = Tunables()

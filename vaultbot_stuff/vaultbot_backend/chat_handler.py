@@ -1370,6 +1370,46 @@ async def _run_background_tasks(
                 context="drift_feedback",
             )
 
+    # --- Model self-assessment: tag retrieved notes as useful/neutral ----
+    # This is the per-turn half of the trigger/inhibitor feedback loop.  For
+    # each retrieved note, we check whether the final answer CITES it via a
+    # [[wikilink]].  Cited → "useful"; uncited → "neutral".  "Harmful" is
+    # NOT detectable heuristically (an uncited note wasn't necessarily
+    # harmful — the model might just not have needed it) and is deferred to
+    # user sentiment (the Dream-Pass update step pairs this event with the
+    # user's next-message sentiment).
+    #
+    # Zero LLM calls: cite detection is a regex match (same pattern as the
+    # grounding check).  The event is read offline by Dream-Trigger-
+    # Inhibitor-Update, which pairs it with the next websocket_message
+    # (direction "in") and classifies sentiment.
+    if retrieved_paths:
+        try:
+            import re as _re
+
+            _answer_links = set(
+                _re.findall(
+                    r"\[\[([^\]|#]+)(?:[|#][^\]]+)?\]\]", final_answer or ""
+                )
+            )
+            _answer_links_lower = {l.strip().lower() for l in _answer_links}
+            _tags = []
+            for fp in retrieved_paths:
+                stem = Path(fp).stem
+                tag = "useful" if stem.strip().lower() in _answer_links_lower else "neutral"
+                _tags.append({"path": fp, "stem": stem, "tag": tag})
+            session_logger.log(
+                "model_relevance_tags",
+                {
+                    "query": (user_message or "")[:500],
+                    "tags": _tags,
+                    "answer_length": len(final_answer or ""),
+                    "rounds": round_idx + 1,
+                },
+            )
+        except Exception as e:  # noqa: BLE001 — best-effort
+            session_logger.log("model_relevance_tags_failed", {"error": str(e)})
+
     # Lazy de-fluff: after the answer is delivered, condense any retrieved
     # notes that have crossed the touch threshold.
     if retrieved_paths:

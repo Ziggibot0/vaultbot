@@ -96,6 +96,11 @@ class FusedRetriever:
     # multiplied by this factor so it sinks below usable notes — it should
     # not crowd the procedure surface when it can't be run.
     FLAGGED_PENALTY = 0.5
+    # Trigger/inhibitor gate margin: a note is dropped when its inhibitor
+    # phrase match score exceeds its trigger phrase match score by more
+    # than this margin.  Conservative start (0.05) — only drop when the
+    # inhibitor clearly dominates.  See trigger_store.py.
+    TRIGGER_GATE_MARGIN = 0.05
 
     def __init__(
         self,
@@ -103,6 +108,7 @@ class FusedRetriever:
         vault_indexer: VaultIndexer,
         session_logger: SessionLogger | None = None,
         embedding_drift: Any | None = None,
+        trigger_store: Any | None = None,
     ) -> None:
         self.vault_graph = vault_graph
         self.vault_indexer = vault_indexer
@@ -114,6 +120,11 @@ class FusedRetriever:
         # keeps the constructor call in main.py valid even when the
         # retriever-side re-ranking isn't active.
         self.embedding_drift = embedding_drift
+        # Optional TriggerStore (trigger/inhibitor phrase embeddings). When
+        # wired, the retrieval gate drops notes whose inhibitors match the
+        # query more strongly than their triggers.  None = no gate (the
+        # store is a bonus layer — see trigger_store.py).
+        self.trigger_store = trigger_store
         # Optional stem -> frontmatter-status map for verified-procedure
         # retrieval boost (Phase 3 grading loop).  Populated by main.py
         # from procedure_tracker.get_procedure_index(); None disables the
@@ -242,6 +253,57 @@ class FusedRetriever:
             top_k = filtered[:k]
 
             results = [self._finalize(c, query) for c in top_k]
+
+            # ---- (g) trigger/inhibitor gate ----
+            # Drop notes whose inhibitor phrases match the query more
+            # strongly than their trigger phrases (by a margin).  A note
+            # with no trigger/inhibitor entry passes through (the gate is
+            # a no-op until notes acquire the fields).  This is the
+            # feedback-driven "do not show me this here" signal: the Dream
+            # Pass writes inhibitor phrases after observing that a note was
+            # unhelpful for a given kind of query.  The gate reuses the
+            # query embedding already computed for the vector channel —
+            # zero extra embedding calls.
+            if self.trigger_store is not None and results:
+                # Compute the query embedding once for the gate (reuses the
+                # same embedding the vector channel already computed, but
+                # that one is local to _vector_channel).  Only paid when the
+                # store is wired AND there are results to gate — zero cost
+                # for the common no-store / no-results paths.
+                _gate_q_emb: Any = None
+                try:
+                    _gate_q_emb = self.vault_indexer._get_embedding(query)
+                except Exception as e:  # noqa: BLE001 — best-effort
+                    self._log("trigger_gate.embed_failed", f"{e}")
+                _gated: list[dict[str, Any]] = []
+                _dropped: list[dict[str, Any]] = []
+                for r in results:
+                    fp = r.get("file_path", "")
+                    if not fp or _gate_q_emb is None:
+                        _gated.append(r)
+                        continue
+                    try:
+                        should_drop, trig_s, inib_s = self.trigger_store.check(
+                            _gate_q_emb, fp, margin=self.TRIGGER_GATE_MARGIN
+                        )
+                    except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+                        should_drop, trig_s, inib_s = False, 0.0, 0.0
+                    if should_drop:
+                        _dropped.append(
+                            {
+                                "file_path": fp,
+                                "trigger_score": round(trig_s, 4),
+                                "inhibitor_score": round(inib_s, 4),
+                            }
+                        )
+                    else:
+                        _gated.append(r)
+                if _dropped and self.session_logger is not None:
+                    self.session_logger.log(
+                        "trigger_gate_drop",
+                        {"dropped": _dropped, "kept": len(_gated)},
+                    )
+                results = _gated
 
             return {
                 "results": results,

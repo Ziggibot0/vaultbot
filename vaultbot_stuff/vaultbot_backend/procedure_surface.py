@@ -122,6 +122,10 @@ def procedure_surface_line(
     validator and future tooling.
     """
     desc = _fm_get(frontmatter, "description")
+    # Prefer the feedback-tuned trigger/inhibitor lists; fall back to the
+    # legacy when_to_use string when the lists are absent (pre-migration).
+    triggers = _fm_list(frontmatter, "trigger")
+    inhibitors = _fm_list(frontmatter, "inhibitor")
     when = _fm_get(frontmatter, "when_to_use") or _fm_get(frontmatter, "when")
     status = _fm_get(frontmatter, "status").lower()
     cartridge = _fm_get(frontmatter, "model_cartridge").lower()
@@ -165,8 +169,18 @@ def procedure_surface_line(
         if child_summaries:
             line += f" (composes: {', '.join(child_summaries)})"
 
-    if when:
+    if triggers:
+        line += f" (triggers: {', '.join(triggers[:3])}"
+        if len(triggers) > 3:
+            line += f", +{len(triggers) - 3} more"
+        line += ")"
+    elif when:
         line += f" (use when: {when})"
+    if inhibitors:
+        line += f" (avoid when: {', '.join(inhibitors[:2])}"
+        if len(inhibitors) > 2:
+            line += f", +{len(inhibitors) - 2} more"
+        line += ")"
     line += f" [{tag}]"
     return line
 

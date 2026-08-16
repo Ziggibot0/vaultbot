@@ -5,7 +5,7 @@ baseline: true
 model_cartridge: small
 created: 2026-07-27
 last_reviewed: 2026-08-04
-description: "Biomimetic dream pass — thin orchestrator that runs 16 modular sub-procedures in sequence: Scan → Analyze → Dangle-Fix → Link → Chat-Consolidation → Session-Effort-Analysis → Behavioral-Pattern-Mine → Pattern-To-Procedure → Consolidate → Curate-Research → Prune → TODO-Track → Validate → Gap-Fill → Evaluate → When-To-Use-Update. Each sub-procedure can also be run independently. Uses small cartridge — all reasoning lives in sub-procedures (Dream-Consolidate and Dream-Pattern-To-Procedure carry their own big cartridges)."
+description: "Biomimetic dream pass — thin orchestrator that runs 16 modular sub-procedures in sequence: Scan → Analyze → Dangle-Fix → Link → Chat-Consolidation → Session-Effort-Analysis → Behavioral-Pattern-Mine → Pattern-To-Procedure → Consolidate → Curate-Research → Prune → TODO-Track → Validate → Gap-Fill → Evaluate → Trigger-Inhibitor-Update. Each sub-procedure can also be run independently. Uses small cartridge — all reasoning lives in sub-procedures (Dream-Consolidate, Dream-Pattern-To-Procedure, and Dream-Trigger-Inhibitor-Update carry their own big cartridges)."
 when_to_use: "When asked to run a dream pass, when consolidating memories, when doing vault maintenance, when the vault needs offline processing, when fixing broken wikilinks, when cleaning up the vault, when consolidating chat logs, when mining patterns from conversations, when pruning junk notes, when validating vault health, when scanning for knowledge gaps, when creating procedures from patterns, or when the vault feels cluttered or disconnected"
 falsifiable_if: it fails to improve graph connectivity, produces duplicate semantic notes, or crashes on any step
 applies_to:
@@ -40,7 +40,7 @@ provides:
   - Dream-Validate
   - Dream-Gap-Fill
   - Dream-Evaluate
-  - Dream-When-To-Use-Update
+  - Dream-Trigger-Inhibitor-Update
 success_count: 108
 failure_count: 1
 success_rate: 0.99
@@ -77,7 +77,7 @@ Dream-Pass (orchestrator, small cartridge)
 ├── Dream-Validate        — Verify graph is healthier (before/after)
 ├── Dream-Gap-Fill        — Create stub notes for genuine knowledge gaps
 └── Dream-Evaluate        — Score the procedure library
-└── Dream-When-To-Use-Update — Enrich thin procedure trigger language
+└── Dream-Trigger-Inhibitor-Update — Tune trigger/inhibitor phrases from user feedback
 ```
 
 ## Cluster A: Error Handling, Telemetry, Conditional Dispatch, Prior Results
@@ -600,9 +600,9 @@ prior_results["telemetry"] = json.dumps(telemetry)
 
 ```
 
-### Step 6.5: When-To-Use-Update — Enrich Thin Procedure Trigger Language
+### Step 6.5: Trigger-Inhibitor-Update — Tune Trigger/Inhibitor Phrases From User Feedback
 
-Calls [[Dream-When-To-Use-Update]] to scan all procedure notes for missing or thin `when_to_use` frontmatter fields, generate better trigger language via LLM, and update them in place. This is the self-improving retrieval feedback loop — procedures with poor `when_to_use` fields don't surface in RAG, so they never get used, so they never get improved. This step breaks that cycle. **Optional** — failures are logged but do not halt the pass.
+Calls [[Dream-Trigger-Inhibitor-Update]] to scan session logs for `model_relevance_tags` events, pair each with the user's next-message sentiment, LLM-distill query texts into concise trigger/inhibitor phrases, and patch note frontmatter. This is the self-improving retrieval feedback loop — notes that proved helpful earn trigger phrases; notes the user reacted negatively to earn inhibitor phrases. The retrieval gate then drops notes whose inhibitors match the query, so the model sees less noise over time. **Optional** — failures are logged but do not halt the pass.
 
 6.5. ```python
 import json
@@ -610,16 +610,16 @@ import json
 # Load persisted telemetry from prior_results (survives subprocess boundaries)
 telemetry = json.loads(prior_results.get("telemetry", '{"pass": 0, "fail": 0, "skipped": 0, "steps": {}}'))
 
-wtu_result = run_procedure("Dream-When-To-Use-Update")
-prior_results["when_to_use_update"] = wtu_result.get("final_output", "{}")
-if wtu_result.get("overall_passed", False):
+tiu_result = run_procedure("Dream-Trigger-Inhibitor-Update")
+prior_results["trigger_inhibitor_update"] = tiu_result.get("final_output", "{}")
+if tiu_result.get("overall_passed", False):
     telemetry["pass"] += 1
-    telemetry["steps"]["when_to_use_update"] = "pass"
+    telemetry["steps"]["trigger_inhibitor_update"] = "pass"
 else:
     telemetry["fail"] += 1
-    telemetry["steps"]["when_to_use_update"] = "fail"
+    telemetry["steps"]["trigger_inhibitor_update"] = "fail"
     # Optional step — log but don't halt
-    prior_results["when_to_use_update_error"] = wtu_result.get("failed_step", "unknown")
+    prior_results["trigger_inhibitor_update_error"] = tiu_result.get("failed_step", "unknown")
 # Persist telemetry for next subprocess
 prior_results["telemetry"] = json.dumps(telemetry)
 
@@ -646,6 +646,8 @@ On 2026-08-09 two new sub-procedures were wired in: [[Session-Effort-Analysis]] 
 
 
 On 2026-08-14 [[Dream-When-To-Use-Update]] was wired in as Step 6.5 (after Evaluate). It scans all procedure notes for missing or thin `when_to_use` frontmatter fields, generates better trigger language via LLM, and patches them in place. This closes the self-improving retrieval feedback loop: procedures with poor `when_to_use` fields don't surface in RAG, so they never get used, so they never get improved. This step breaks that cycle.
+
+On 2026-08-15 [[Dream-Trigger-Inhibitor-Update]] replaced [[Dream-When-To-Use-Update]] in the chain. The new procedure reads session logs for `model_relevance_tags` events (logged by the chat handler after each turn), pairs each with the user's next-message sentiment, and writes feedback-tuned `trigger`/`inhibitor` phrases to note frontmatter. The retrieval gate (`fused_retrieval.py`) then drops notes whose inhibitors match the query. This is the closed feedback loop: the model sees less noise over time as inhibitors accumulate from real user reactions. Dream-When-To-Use-Update is kept as a standalone procedure for manual `when_to_use` audits. Run [[Migrate-Triggers]] once to seed `trigger` lists from existing `when_to_use` fields before the first Dream-Pass with the new step.
 
 ## Integration with Session-Effort-Analysis and Behavioral-Pattern-Mine
 

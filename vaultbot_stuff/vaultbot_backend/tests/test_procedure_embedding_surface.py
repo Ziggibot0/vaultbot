@@ -46,6 +46,7 @@ def _make_indexer(tmp_path, monkeypatch):
     idx.preview_chars = 2000
     idx._needs_full_rebuild = False
     idx.session_logger = None
+    idx.trigger_store = None
     return idx
 
 
