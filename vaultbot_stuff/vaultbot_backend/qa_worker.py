@@ -168,12 +168,33 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
     return notes
 
 
+# Directories that are ephemeral/derived and should NOT go through the QA
+# frontmatter pipeline. Chat logs are conversation traces, not knowledge
+# notes — they get consolidated by the semantic consolidation pipeline
+# (hippocampal replay), not QA'd for frontmatter quality.
+_QA_EXCLUDE_DIRS = (
+    "vaultbot_stuff/Memory/Chat",
+)
+
+# Cap the QA queue so it actually drains. Without a cap, a large vault fills
+# the queue with every note (thousands), the QA worker processes 50 per idle
+# window, and the autonomous researcher refuses to run until the queue is
+# empty — a permanent deadlock. The cap keeps QA focused on the most-used
+# notes (highest touch counts) so the queue drains in a few idle windows.
+_QA_QUEUE_CAP = 200
+
+
 def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
-    """Build the QA queue: all vault notes, ordered by usage (most first).
+    """Build the QA queue: vault notes, ordered by usage (most first).
 
     Each entry: ``{"path": "vaultbot_stuff/.../Note.md", "touch_count": N}``
     Notes with higher touch counts come first.  Notes never retrieved
     (touch_count=0) come last.
+
+    Excludes ephemeral directories (Memory/Chat — consolidated by the
+    semantic pipeline, not QA'd) and caps at ``_QA_QUEUE_CAP`` entries so
+    the queue drains in a few idle windows instead of deadlocking the
+    autonomous researcher.
     """
     vault = Path(vault_root).resolve()
     touch_counts = _load_touch_counts()
@@ -181,6 +202,9 @@ def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
 
     entries: list[dict[str, Any]] = []
     for rel in all_notes:
+        # Skip excluded (ephemeral/derived) directories
+        if any(rel.replace("\\", "/").startswith(ex) for ex in _QA_EXCLUDE_DIRS):
+            continue
         # Match touch_counts keys (which are resolved absolute paths)
         abs_path = str((vault / rel).resolve())
         tc = touch_counts.get(abs_path, touch_counts.get(rel, 0))
@@ -188,6 +212,11 @@ def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
 
     # Sort: highest touch_count first, then alphabetical for stable order
     entries.sort(key=lambda e: (-e["touch_count"], e["path"]))
+
+    # Cap the queue — keep only the top N most-used notes.
+    if len(entries) > _QA_QUEUE_CAP:
+        entries = entries[:_QA_QUEUE_CAP]
+
     return entries
 
 

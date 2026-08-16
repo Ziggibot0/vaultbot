@@ -248,11 +248,64 @@ class NoteCreator:
 
         return str(note_path)
 
+    def _find_matching_chat_note(self, user_message: str) -> str | None:
+        """Find an existing chat note whose topic closely matches this message.
+
+        Uses the FAISS vector index to find the nearest existing chat note.
+        If the nearest chat note is semantically close enough (below a
+        relative threshold), return its topic so ``merge_chat_note`` merges
+        into it instead of creating yet another single-exchange file.
+
+        This is the fix for chat-note fragmentation: without it, every chat
+        exchange gets a unique LLM-generated title → a new file, and 798/821
+        notes end up with only 1 exchange. With it, conversations about the
+        same topic accumulate into a single running log.
+        """
+        try:
+            results = self.indexer.search(user_message, k=5)
+            for hit in results:
+                fp = hit.get("file_path", "")
+                # Only consider existing chat notes
+                if "Memory/Chat" not in fp.replace("\\", "/"):
+                    continue
+                # Relative distance threshold: if the nearest chat note is
+                # much closer than the typical cross-topic distance, it's the
+                # same conversation thread. We use a generous threshold because
+                # the goal is reducing fragmentation, not precision — merging
+                # two related-but-different chats is far better than creating
+                # 800 single-exchange files.
+                score = hit.get("score", 1.0)
+                # FAISS L2 distance: lower = closer. nomic-embed-text chat
+                # notes about the same topic cluster around 15-35; cross-topic
+                # is 50+. Use 45 as a conservative threshold.
+                if score < 45.0:
+                    stem = Path(fp).stem
+                    # Strip "Chat-" prefix to get the topic that merge_chat_note
+                    # would use as the filename.
+                    if stem.startswith("Chat-"):
+                        return stem[5:]  # after "Chat-"
+                    return stem
+            return None
+        except Exception:  # noqa: BLE001 — best-effort
+            return None
+
     def create_note_from_chat(
         self, user_message: str, assistant_response: str, thinking: str | None = None
     ) -> str:
-        """Append chat exchanges to a running chat note and clean up afterwards."""
-        topic = self._generate_chat_title(user_message, assistant_response)
+        """Append chat exchanges to a running chat note and clean up afterwards.
+
+        Topic resolution: first tries to find an existing chat note that's
+        semantically close to this message (via the FAISS index). If found,
+        merges into it. Only if no match is found does it generate a new
+        LLM title. This prevents the fragmentation where every single chat
+        exchange creates a new file (798/821 notes had only 1 exchange).
+        """
+        # Try to match to an existing chat note first.
+        existing_topic = self._find_matching_chat_note(user_message)
+        if existing_topic:
+            topic = existing_topic
+        else:
+            topic = self._generate_chat_title(user_message, assistant_response)
         entry = f"**User:** {user_message}\n\n**Assistant:** {assistant_response}"
         if thinking:
             entry += f"\n\n<details>\n<summary>Thinking process</summary>\n\n{thinking}\n\n</details>"

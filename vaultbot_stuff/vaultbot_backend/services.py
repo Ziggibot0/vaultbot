@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from amem_evolution import AMemeEvolution
     from fused_retrieval import FusedRetriever
     from embedding_drift import EmbeddingDrift
+    from trigger_store import TriggerStore
     from lazy_condenser import LazyCondenser
     from context_budgeter import ContextBudgeter
     from supervision import HealthMonitor
@@ -120,6 +121,10 @@ class Services:
     # turns so the bot can "remember what it just said." Optional with a
     # default so tests that build Services without it still construct.
     conversation_index: object | None = None
+    # Trigger/inhibitor phrase-embedding store (optional — None when not
+    # wired).  Drives the retrieval gate that drops notes whose inhibitors
+    # match the query.  See trigger_store.py.
+    trigger_store: TriggerStore | None = None
 
     @property
     def vault_path(self) -> str:

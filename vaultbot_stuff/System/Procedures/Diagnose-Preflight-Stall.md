@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: active
+status: verified
 baseline: true
 model_cartridge: small
 created: 2026-08-14
@@ -26,6 +26,9 @@ tags:
   - timeout
   - event-loop
   - latency
+success_count: 7
+failure_count: 1
+success_rate: 0.88
 ---
 
 # Diagnose-Preflight-Stall
@@ -48,8 +51,15 @@ another full subprocess chain. The event loop is blocked inside
 fires** — it can't interrupt a blocking call that's hogging the event
 loop.
 
-The fix: wrap blocking calls in `asyncio.to_thread()` so they run in a
-thread pool, freeing the event loop to enforce timeouts.
+**Status (2026-08-14): FIXED.** All three step types in
+`step_gate_runtime.py` now run via `asyncio.to_thread()`:
+- Code steps: `await asyncio.to_thread(_run_code_step, ...)`
+- LLM steps: `await asyncio.to_thread(_run_llm_step, ...)`
+- Text steps: `await asyncio.to_thread(llm_client.chat, ...)`
+
+The event loop is no longer blocked by subprocess or HTTP calls, so
+`asyncio.wait_for` timeouts fire correctly. This procedure remains
+useful for diagnosing *new* stalls that may arise from other causes.
 
 ## When to Run This
 
@@ -112,11 +122,21 @@ if not events:
         result = "ERROR: no parseable events in session log"
 else:
     result = f"Loaded {len(events)} events from {log_file.name}"
+
+# Persist events into prior_results so step 2 can access them.
+# Each step runs in a separate subprocess with a fresh namespace;
+# only prior_results (a dict) survives between steps.
+prior_results["events"] = events
+prior_results["log_file_name"] = log_file.name if log_file else "unknown"
 ```
 
 ### Step 2: Extract procedure step events and compute durations
 
 ```python
+# Step 2 runs in a separate subprocess — recover events from prior_results.
+events = prior_results.get("events", [])
+log_file_name = prior_results.get("log_file_name", "unknown")
+
 if not events:
     result = "ERROR: no events to analyze (step 1 failed)"
 else:
@@ -174,7 +194,7 @@ else:
     report_lines = []
     report_lines.append("## Preflight Stall Diagnosis")
     report_lines.append("")
-    report_lines.append(f"Session: {log_file.name}")
+    report_lines.append(f"Session: {log_file_name}")
     report_lines.append(f"Total events: {len(events)}")
     report_lines.append(f"Procedure step events: {len(step_events)}")
     report_lines.append(f"Timeout/error events: {len(timeout_events)}")
@@ -243,7 +263,7 @@ else:
             f"in `_run_code_step`, preventing `asyncio.wait_for` from firing on time."
         )
         report_lines.append("")
-        report_lines.append("**Fix:** Ensure `_run_code_step` and `_run_llm_step` are wrapped in `asyncio.to_thread()` in `step_gate_runtime.py` so the event loop can enforce timeouts.")
+        report_lines.append("**Note:** The `asyncio.to_thread()` fix is already applied in step_gate_runtime.py. If this still fires, the blocking is elsewhere.")
     elif think_total > think_timeout_s and not think_timeout_events:
         report_lines.append(
             f"**LIKELY: Event-loop blocking.** Think ran for {think_total:.0f}s "

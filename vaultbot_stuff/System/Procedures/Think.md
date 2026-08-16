@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: verified
 baseline: true
 model_cartridge: small
 created: 2026-08-10
@@ -26,6 +26,9 @@ applies_to:
   - multi-perspective
   - synthesis
 tags: [procedure, reasoning, think, v4, code-steps, 4b-model, batched]
+success_count: 77
+failure_count: 0
+success_rate: 1.0
 ---
 
 # Think: Structured Reasoning Scaffold (v4)
@@ -651,7 +654,9 @@ Synthesize these into a coherent answer. Include:
 1. Summary (2-3 sentences)
 2. Key findings (bullet points, one per approach)
 3. Confidence (HIGH/MEDIUM/LOW with reason)
-4. If relevant, one recommended action"""
+4. If relevant, one recommended action
+
+CRITICAL: Only use [[wikilinks]] that already appear in the analysis above. Do NOT invent new wikilinks. If you want to reference a concept, use plain text instead of a wikilink unless the exact wikilink appears above."""
 
     synthesis_body = llm_generate(synth_prompt).strip()
 
@@ -662,6 +667,27 @@ Synthesize these into a coherent answer. Include:
             out = lens_data.get(name, 'No output')
             synthesis_body += f"- [{name}] {out[:200]}\n"
         synthesis_body += "\nConfidence: MEDIUM (synthesis fallback - model did not produce a coherent response)"
+
+    # --- WIKILINK VALIDATION: check all [[wikilinks]] in synthesis against vault ---
+    import re
+    wl_pattern = r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]'
+    found_wikilinks = re.findall(wl_pattern, synthesis_body)
+    unresolved_wl = []
+    for wl in found_wikilinks:
+        wl_clean = wl.strip().split('#')[0].strip()  # strip section refs
+        if not wl_clean:
+            continue
+        try:
+            check = vault_read_note(wl_clean, max_lines=1)
+            if isinstance(check, dict) and 'error' in check:
+                unresolved_wl.append(wl_clean)
+        except Exception:
+            unresolved_wl.append(wl_clean)
+    if unresolved_wl:
+        for wl_name in unresolved_wl:
+            synthesis_body = synthesis_body.replace(f'[[{wl_name}]]', f'[UNRESOLVED: {wl_name}]')
+        synth_warning = f"\n\n> [!] {len(unresolved_wl)} hallucinated wikilink(s) detected and replaced: {', '.join(unresolved_wl)}"
+        synthesis_body += synth_warning
 
     # Assemble final output
     synth_lines = []

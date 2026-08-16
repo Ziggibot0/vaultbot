@@ -1,9 +1,10 @@
 ---
 type: procedure
-status: active
+status: verified
 created: 2023-10-25
 summary: Drafts a new procedure markdown note from a provided task description, including frontmatter, description, steps, and falsifiability conditions.
 tags: [procedure, meta, drafting]
+last_reviewed: 2026-08-15
 ---
 
 ## Description

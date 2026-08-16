@@ -1,28 +1,3 @@
 {
-  "entries": [
-    {
-      "id": "Lemonade:Qwen3-1.7B-Hybrid",
-      "model": "Qwen3-1.7B-Hybrid",
-      "provider": "Lemonade",
-      "label": ""
-    },
-    {
-      "id": "Lemonade:SmolLM2-135M-Instruct-Hybrid",
-      "model": "SmolLM2-135M-Instruct-Hybrid",
-      "provider": "Lemonade",
-      "label": ""
-    },
-    {
-      "id": "Lemonade:gemma4-it-e2b-FLM",
-      "model": "gemma4-it-e2b-FLM",
-      "provider": "Lemonade",
-      "label": ""
-    },
-    {
-      "id": "Lemonade:Llama-3.2-3B-Hybrid",
-      "model": "Llama-3.2-3B-Hybrid",
-      "provider": "Lemonade",
-      "label": ""
-    }
-  ]
+  "entries": []
 }

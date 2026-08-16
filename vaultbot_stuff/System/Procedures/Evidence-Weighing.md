@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: verified
 baseline: true
 created: 2026-08-10
 summary: "Lens procedure for evaluating claims by weighing evidence for and against. v4: redesigned for qwen3.5:4b — killed triple-try, merged over-split steps, richer prompts. Based on epistemological justification theory and Bayesian reasoning. ~4 LLM calls (down from ~24). Already optimal — no v4.1 changes needed."
@@ -18,6 +18,9 @@ research_sources:
   - "[[epistemology-theory-of-knowledge-how-knowledge-is-justified-and-validated-especi]]"
   - "[[cognitive-psychology-of-reasoning-dual-process-theory-System-1-System-2-thinking]]"
   - "[[cognitive-psychology-metacognition-thinking-dispositions-need-for-cognition-refl]]"
+success_count: 36
+failure_count: 0
+success_rate: 1.0
 ---
 
 # Evidence-Weighing Lens (v4)

@@ -599,6 +599,117 @@ async def websocket_endpoint(
                             session_logger=session_logger,
                         )
                     continue
+                if cmd == "/ingest":
+                    # Index any new PDFs from learningMaterial/ as
+                    # pointer-only TOCs. Replaces the old Ingest GUI button
+                    # — same logic as the /ingest_learning_material HTTP
+                    # endpoint, but streamed back through the chat so the
+                    # user sees progress + results in the conversation.
+                    await svc.manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "status",
+                                "content": "Scanning learningMaterial/ for new textbooks...",
+                            }
+                        ),
+                        websocket,
+                        session_logger=session_logger,
+                    )
+                    try:
+                        from textbook_index import index_learning_material
+
+                        loop = asyncio.get_event_loop()
+                        vault_root = Path(os.getenv("VAULT_PATH", "."))
+                        learning_dir = vault_root / "vaultbot_stuff/learningMaterial"
+                        result = await loop.run_in_executor(
+                            None, lambda: index_learning_material(str(learning_dir))
+                        )
+                        msg = result.get(
+                            "message",
+                            f"Indexed {result.get('indexed', 0)} new, "
+                            f"skipped {result.get('skipped', 0)}, "
+                            f"errors {result.get('errors', 0)}.",
+                        )
+                        await svc.manager.send_personal_message(
+                            json.dumps({"type": "system_info", "content": msg}),
+                            websocket,
+                            session_logger=session_logger,
+                        )
+                        # Stream per-file details so the user sees what
+                        # happened to each PDF.
+                        for d in result.get("details", []):
+                            if d.get("error"):
+                                await svc.manager.send_personal_message(
+                                    json.dumps(
+                                        {
+                                            "type": "system_info",
+                                            "content": f"  ✗ {d.get('file', '?')}: {d['error']}",
+                                        }
+                                    ),
+                                    websocket,
+                                    session_logger=session_logger,
+                                )
+                            else:
+                                notes = d.get("notes_created", "?")
+                                await svc.manager.send_personal_message(
+                                    json.dumps(
+                                        {
+                                            "type": "system_info",
+                                            "content": f"  ✓ {d.get('file', '?')}: {notes} notes",
+                                        }
+                                    ),
+                                    websocket,
+                                    session_logger=session_logger,
+                                )
+                    except Exception as ingest_err:  # noqa: BLE001 — best-effort, surfaces error to user — see CONTRIBUTING.md no-silent-fallbacks
+                        session_logger.log_exception(
+                            ingest_err, context="/ingest command"
+                        )
+                        await svc.manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "problem",
+                                    "diagnosis": classify_error(
+                                        ingest_err, {"stage": "ingest"}
+                                    ).to_dict(),
+                                }
+                            ),
+                            websocket,
+                            session_logger=session_logger,
+                        )
+                    continue
+                if cmd == "/restart":
+                    # Restart the backend via the same /restart broadcast
+                    # path the GUI button used. We send a heads-up, then
+                    # broadcast the restart event so the plugin's
+                    # restartBackend() fires. No HTTP round-trip needed.
+                    await svc.manager.send_personal_message(
+                        json.dumps(
+                            {
+                                "type": "system_info",
+                                "content": "Restarting the backend...",
+                            }
+                        ),
+                        websocket,
+                        session_logger=session_logger,
+                    )
+                    try:
+                        import asyncio as _aio
+
+                        if svc.manager:
+                            await svc.manager.broadcast(
+                                json.dumps(
+                                    {
+                                        "type": "restart",
+                                        "content": "Restart requested via /restart command.",
+                                    }
+                                )
+                            )
+                    except Exception as restart_err:  # noqa: BLE001
+                        session_logger.log_exception(
+                            restart_err, context="/restart command"
+                        )
+                    continue
                 if cmd.startswith("/") and cmd not in ("/new",):
                     # Unknown slash command: nudge, don't hallucinate.
                     await svc.manager.send_personal_message(

@@ -1,10 +1,10 @@
 ---
 type: procedure
-status: verified
+status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-03
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-15
 description: Intent router that classifies incoming user requests and returns a procedure chain. Uses a small-model LLM step for classification — cheap, local, zero cloud cost. Each branch is backed by vault research.
 when_to_use: when a new user request arrives and you need to know which procedure chain to run, when you want procedures to handle most of the work automatically, when the big model should delegate to deterministic procedure chains
 falsifiable_if: the router classifies a task into the wrong branch, or a branch's procedure chain produces worse results than an unconstrained cloud model would
@@ -27,6 +27,9 @@ summary: master dispatcher classifies requests via small LLM to dispatch procedu
 tags:
   - procedure
   - procedures
+success_count: 0
+failure_count: 0
+success_rate: 0.0
 ---
 
 # Route-Task

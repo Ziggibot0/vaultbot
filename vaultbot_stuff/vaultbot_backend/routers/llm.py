@@ -79,6 +79,7 @@ _CONFIG_KEYS = [
     ("VAULTBOT_RESEARCH_BACKEND", "Research backend", False),
     ("TAVILY_API_KEY", "Tavily API key", True),
     ("OLLAMA_HOST", "Ollama host", False),
+    ("VAULTBOT_SAFE_MODE", "Safe Mode", False),
 ]
 
 

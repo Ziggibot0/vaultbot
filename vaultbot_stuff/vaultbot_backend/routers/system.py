@@ -520,6 +520,15 @@ async def get_session(session_id: str) -> dict[str, Any]:
                         "content": str(tool_name),
                         "tool_name": str(tool_name),
                     })
+                elif ptype == "tool_result":
+                    tool_name = payload.get("tool") or "tool"
+                    summary = payload.get("summary") or ""
+                    if summary:
+                        turns.append({
+                            "role": "tool_result",
+                            "content": str(summary)[:500],
+                            "tool_name": str(tool_name),
+                        })
 
         # Flush trailing assistant text if the session ended mid-stream.
         _flush_assistant()

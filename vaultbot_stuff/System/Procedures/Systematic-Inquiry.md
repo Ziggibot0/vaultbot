@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: verified
 baseline: true
 created: 2026-08-10
 summary: "Lens procedure for exploring open questions through structured Socratic questioning. v4.1: batched independent steps 2,4,5,6 into 2 calls (saves 2-3 LLM calls). ~4-5 LLM calls (down from 6-8)."
@@ -17,6 +17,9 @@ depends_on:
 research_sources:
   - "[[critical-thinking-frameworks-and-methods-Socratic-method-dialectical-reasoning-f]]"
   - "[[cognitive-psychology-metacognition-thinking-dispositions-need-for-cognition-refl]]"
+success_count: 6
+failure_count: 0
+success_rate: 1.0
 ---
 
 # Systematic-Inquiry Lens (v4.1)

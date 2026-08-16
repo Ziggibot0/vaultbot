@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: active
 baseline: true
 created: 2026-07-31
 description: Fix indentation errors in chat_handler.py after Remove-All-Stops procedure.
@@ -13,6 +13,7 @@ summary: Steps
 tags:
   - procedure
   - procedures
+last_reviewed: 2026-08-15
 ---
 
 ## Steps

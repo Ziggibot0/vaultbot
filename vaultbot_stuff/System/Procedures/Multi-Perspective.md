@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: verified
 baseline: true
 created: 2026-08-10
 summary: "Lens procedure for evaluating a problem from multiple conflicting viewpoints to find synthesis. v4.1: batched thesis+antithesis into single call, merged shared ground + synthesis + hermeneutic check into 2 calls. ~3-4 LLM calls (down from 5)."
@@ -17,6 +17,9 @@ depends_on:
 research_sources:
   - "[[critical-thinking-frameworks-and-methods-Socratic-method-dialectical-reasoning-f]]"
   - "[[cognitive-psychology-metacognition-thinking-dispositions-need-for-cognition-refl]]"
+success_count: 11
+failure_count: 2
+success_rate: 0.85
 ---
 
 # Multi-Perspective Lens (v4.1)

@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: verified
 baseline: true
 created: 2026-08-10
 summary: "Lens procedure for evaluating competing options by mapping trade-offs. v4: redesigned for qwen3.5:4b — killed triple-try, merged scoring+reasoning, merged tradeoff+pareto+recommendation. ~3 LLM calls (down from ~21). Already optimal — no v4.1 changes needed."
@@ -17,6 +17,9 @@ depends_on:
 research_sources:
   - "[[cognitive-psychology-of-reasoning-dual-process-theory-System-1-System-2-thinking]]"
   - "[[psychology-of-analytical-thinking-methods-when-to-use-root-cause-analysis-vs-fir]]"
+success_count: 10
+failure_count: 1
+success_rate: 0.91
 ---
 
 # Trade-off Analysis Lens (v4)

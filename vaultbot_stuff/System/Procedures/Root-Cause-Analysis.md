@@ -17,6 +17,10 @@ depends_on:
 research_sources:
   - "[[cognitive-psychology-of-reasoning-dual-process-theory-System-1-System-2-thinking]]"
   - "[[psychology-of-analytical-thinking-methods-when-to-use-root-cause-analysis-vs-fir]]"
+last_reviewed: 2026-08-15
+success_count: 0
+failure_count: 0
+success_rate: 0.0
 ---
 
 # Root-Cause-Analysis Lens (v4.1)

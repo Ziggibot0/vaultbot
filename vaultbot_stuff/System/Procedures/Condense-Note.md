@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: active
 baseline: true
 model_cartridge: small
 created: 2026-07-31
@@ -18,6 +18,7 @@ summary: Condense-Note
 tags:
   - procedure
   - procedures
+last_reviewed: 2026-08-15
 ---
 
 # Condense-Note

@@ -9,8 +9,9 @@ tags:
   - scaffolding
   - small-models
   - deterministic
-status: stale
+status: complete
 baseline: true
+updated: 2026-08-15
 ---
 
 <!-- EXEMPLAR ANNOTATION: ARCHITECTURE NOTE
@@ -34,7 +35,7 @@ baseline: true
 
 AI models are probabilistic. Production systems must be deterministic. The solution is **not** to make the AI deterministic -- that's fighting physics. The solution is to wrap the probabilistic AI in deterministic validation, orchestration, and rollback mechanisms. The model generates proposals; the framework validates, corrects, or rejects them.
 
-This is the architecture that makes a 30B local model sufficient from day 1. The framework does the heavy lifting, not the model's weights.
+This is the architecture that lets a small local model (~4B) handle more and more over time. The big model (local or cloud) is the trailblazer — it goes first into novel territory, and the procedure it writes becomes a permanent path the small model can follow. Over time, the big model's role narrows to edge cases only. The framework does the heavy lifting, not the model's weights.
 
 <!-- ANNOTATION: Present the core pattern with a structured code block. This makes the architecture visually clear and easy to pattern-match against. -->
 ## The Sandwich Pattern
@@ -84,7 +85,7 @@ VaultBot already has pieces of this pattern. The gap is making them explicit and
 
 ### What's Currently Probabilistic (Needs Scaffolding)
 - **Tool selection** -- The LLM decides which tool to call. Should be: deterministic rules ("if vault_search returns <3 results with score <200 -> vault_research").
-- **Note synthesis** -- The LLM synthesizes research into a note. Should be: template + structured facts -> fill in sections. The 30B formats, it doesn't reason.
+- **Note synthesis** -- The LLM synthesizes research into a note. Should be: template + structured facts -> fill in sections. The small model formats, it doesn't reason.
 - **Decision making** -- The LLM decides when to research, when to say IDK, when to build a tool. Should be: explicit decision tree, not judgment.
 - **Code generation** -- The LLM writes new tools. Should be: template + examples from the vault -> fill in blanks -> safe_write validates.
 
@@ -105,7 +106,7 @@ The [empirical study on SLMs for function calling](learningMaterial/web/arxiv-or
 - They're robust against prompt injection (slight decline only)
 - They demonstrate potential but need refinement for real-time use
 
-**Implication for VaultBot:** The format adherence problem is solved by the validation layer, not by the model. If the 30B produces malformed JSON, the framework catches it and either retries or falls back. The model doesn't need to be perfect -- it needs to be "good enough that the scaffolding can catch the rest."
+**Implication for VaultBot:** The format adherence problem is solved by the validation layer, not by the model. If the small model produces malformed JSON, the framework catches it and either retries or falls back. The model doesn't need to be perfect -- it needs to be "good enough that the scaffolding can catch the rest."
 
 ### SWEnergy: SLMs in Agentic Frameworks
 The [SWEnergy study](learningMaterial/web/arxiv-org-abs-2512-09543v2-7d4ef3ba.html) tested Gemma-3 4B and Qwen-3 1.7B in agentic frameworks (SWE-Agent, OpenHands, Mini SWE Agent, AutoCodeRover). Even 1.7B models can operate within agentic frameworks -- the framework does the orchestration, not the model.
@@ -120,7 +121,7 @@ From [Few-Shot Prompting Examples 2026](learningMaterial/web/neuraplus-ai-github
 - **Consistent formatting is critical.** If examples use different formats, the model gets confused.
 - **Dynamic retrieval of examples** (vs static) -- examples can be retrieved based on the query, not hardcoded. This is exactly what FUSED retrieval does: pull the most relevant exemplar from the vault based on the current task.
 
-**For VaultBot:** The vault should contain tagged exemplar notes -- best research note, best tool creation, best gap-fill. When a 30B model needs to write a research note, FUSED retrieval pulls the exemplar and the model pattern-matches. The shots live permanently in the vault, not in the prompt.
+**For VaultBot:** The vault should contain tagged exemplar notes -- best research note, best tool creation, best gap-fill. When the small model needs to write a research note, FUSED retrieval pulls the exemplar and the model pattern-matches. The shots live permanently in the vault, not in the prompt.
 
 <!-- ANNOTATION: End with a forward-looking section. What needs to be built? What components are missing? This makes the note actionable, not just descriptive. -->
 ## The Path to Cloud Model Obsolescence
@@ -129,26 +130,26 @@ From [Few-Shot Prompting Examples 2026](learningMaterial/web/neuraplus-ai-github
 
 | Dependency | Deterministic Replacement |
 |---|---|
-| Research synthesis | Research engine returns structured facts -> template -> 30B formats |
+| Research synthesis | Research engine returns structured facts -> template -> small model formats |
 | Tool selection | Decision rules: "if score <200 and <3 results -> vault_research" |
-| Multi-step planning | Procedural notes found online -> 30B follows steps |
-| Code generation | Templates + examples from vault -> 30B fills blanks -> safe_write validates |
-| Note writing | Template + structured facts -> 30B fills sections |
+| Multi-step planning | Procedural notes found online -> small model follows steps |
+| Code generation | Templates + examples from vault -> small model fills blanks -> safe_write validates |
+| Note writing | Template + structured facts -> small model fills sections |
 | Decision making | Explicit if-then rules, not judgment |
 
 ### The Framework Components We Need to Build
 
 1. **Decision tree engine** -- A deterministic rules system that routes tasks. Not "the LLM decides what to do" but "the framework evaluates conditions and tells the LLM what to do."
 
-2. **Template system** -- Note templates for research notes, tool specs, gap-fills. The 30B fills in sections, doesn't design the structure.
+2. **Template system** -- Note templates for research notes, tool specs, gap-fills. The small model fills in sections, doesn't design the structure.
 
-3. **Exemplar retrieval** -- When a task is assigned, FUSED retrieval pulls the best exemplar from the vault. The 30B pattern-matches against it.
+3. **Exemplar retrieval** -- When a task is assigned, FUSED retrieval pulls the best exemplar from the vault. The small model pattern-matches against it.
 
 4. **Output validation** -- Every LLM output passes through schema validation before it's committed to the vault. Malformed output -> retry or IDK. This is the "scaffolding disposes" half.
 
-5. **Procedural knowledge base** -- Step-by-step procedures for every operation, found through research and stored in the vault. The 30B follows the procedure, doesn't figure it out.
+5. **Procedural knowledge base** -- Step-by-step procedures for every operation, found through research and stored in the vault. The small model follows the procedure, doesn't figure it out.
 
-6. **Consistency checking** -- For high-stakes operations, run the 30B multiple times and flag divergent outputs. Deterministic reliability check on a probabilistic system.
+6. **Consistency checking** -- For high-stakes operations, run the small model multiple times and flag divergent outputs. Deterministic reliability check on a probabilistic system.
 
 ### The Profound Shift
 
@@ -159,14 +160,30 @@ The cloud model's job is **not** to build the scaffolding. The framework's job i
 - How to make decisions -> store the decision tree
 - Few-shot examples for everything -> store the exemplars
 
-The vault finds these things through [[Autonomy-Directive|autonomous research]] and stores them. The 30B follows them. The cloud model becomes unnecessary not because it's been replaced by a better model, but because the framework has absorbed the cognition that the model was providing.
+The vault finds these things through [[Autonomy-Directive|autonomous research]] and stores them. The small model follows them. The big model becomes unnecessary not because it's been replaced by a better model, but because the framework has absorbed the cognition that the model was providing. The goal is not for the small model to *be* the big model — it's for the small model to do more and more over time, so the big model is used just for edge cases after a while. Every procedure written, every template created, every exemplar stored shrinks the big model's role.
+
+## The Real Goal: Progressive Offload, Not Replacement
+
+The goal is **not** for the small model to *replace* the big model. The goal is for the small model to do **more and more over time**, so the big model is used just for **edge cases** after a while.
+
+This is a gradual shift, not a flip:
+
+| Phase | Small model handles | Big model handles |
+|---|---|---|
+| **Today** | Routing, classification, formatting | Everything else — research, synthesis, procedure design, note writing |
+| **After scaffolding** | + Note writing from templates, tool selection via rules, planning from templates | Novel reasoning, new procedure design, complex synthesis |
+| **Eventually** | + Most routine operations, gap-fill classification, vault health checks | Edge cases only — things nobody has proceduralized yet |
+
+Every procedure written, every template created, every exemplar stored moves one more task from the big model's column to the small model's column. The big model never goes to zero — but it shrinks to a sliver of its current role. The vault grows, the small model's competence grows, and the big model becomes a luxury for the genuinely novel.
+
+See [[Cloud-Model-Obsolescence-Architecture]] for the full 5-phase roadmap.
 
 <!-- ANNOTATION: Every architecture note should end with wikilinks to related notes. These connections make the note findable via graph traversal, not just keyword search. -->
 ## Related
 - [[Small-Model-Path-to-AGI]] -- the original theory note (now updated with this framing)
 - [[Autonomy-Directive]] -- VaultBot operates autonomously, finding and storing scaffolding
 - [[IDK-Fallback-Directive]] -- the "fail safe" pattern in practice
-- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] -- the vault is the only knowledge source
+- [[Vault-Knowledge-Only-Directive 1]] -- the vault is the only knowledge source
 - [[Vault-Longevity-Architecture]] -- why the vault, not the model, is the mind
 
 ---
@@ -176,4 +193,3 @@ The vault finds these things through [[Autonomy-Directive|autonomous research]] 
 The sandwich pattern (deterministic validation wrapping probabilistic AI) is grounded in **epistemology** — specifically the Gettier problem. A model can produce a true output by accident (Gettier case), but the validation layer ensures outputs are not just true but *justified*. See [[Knowledge-Triad-Ontology-Epistemology-Hermeneutics]] for how this connects to ontology (structure) and hermeneutics (interpretation).
 
 
-LOCKED

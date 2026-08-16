@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: verified
 baseline: true
 created: 2026-08-10
 summary: "Lens procedure for breaking complex problems into manageable sub-problems. v4: redesigned for qwen3.5:4b — killed triple-try, merged steps 2+3 (goal/current/gap in one call), richer prompts. ~3 LLM calls (down from ~21). Already optimal — no v4.1 changes needed."
@@ -17,6 +17,9 @@ depends_on:
 research_sources:
   - "[[cognitive-psychology-of-reasoning-dual-process-theory-System-1-System-2-thinking]]"
   - "[[psychology-of-problem-solving-Gestalt-psychology-insight-vs-analytical-reasoning]]"
+success_count: 24
+failure_count: 0
+success_rate: 1.0
 ---
 
 # Decomposition Lens (v4)

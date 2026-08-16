@@ -121,5 +121,6 @@ class TestConfigEffective:
             "VAULTBOT_RESEARCH_BACKEND",
             "TAVILY_API_KEY",
             "OLLAMA_HOST",
+            "VAULTBOT_SAFE_MODE",
         }
         assert keys == expected

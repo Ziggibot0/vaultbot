@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: active
 baseline: true
 model_cartridge: small
 created: 2026-07-31
@@ -17,6 +17,7 @@ summary: Analyze this note and write a one-sentence summary (max 120 chars) desc
 tags:
   - procedure
   - procedures
+last_reviewed: 2026-08-15
 ---
 
 # Judge-Plan

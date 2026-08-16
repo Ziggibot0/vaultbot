@@ -26,6 +26,7 @@ _IGNORED_DIRS = {
     ".git",
     ".obsidian",
     ".trash",  # Obsidian's recycle bin — deleted files must not pollute the graph
+    "trash",  # backend's own backup dir — deleted notes must not pollute the graph
 }
 
 

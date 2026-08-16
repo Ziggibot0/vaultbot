@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: active
 baseline: true
 model_cartridge: small
 created: 2026-07-31
@@ -13,12 +13,8 @@ applies_to:
   - research-quality
 allowed_tools:
   - llm_generate
-summary: "CHECK_ENTAILMENT_PROCESS: Verifies source support of claims in fact-checking workflows.
-
-| |
-| :--- |
-| # Check-Entailment
-| 1. Ask the small model for a verdict (supported, unsupported, or contradict"
+summary: ""CHECK_ENTAILMENT_PROCESS: Verifies source support of claims in fact-checking workflows."
+last_reviewed: 2026-08-15
 tags:
   - procedure
   - procedures

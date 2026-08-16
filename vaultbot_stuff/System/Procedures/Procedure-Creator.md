@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: active
 baseline: true
 model_cartridge: small
 created: 2026-07-28
@@ -27,6 +27,7 @@ tags:
   - meta-procedure
   - validation
   - self-improvement
+last_reviewed: 2026-08-15
 ---
 
 # Procedure-Creator

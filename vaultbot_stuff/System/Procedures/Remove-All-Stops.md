@@ -1,6 +1,6 @@
 ---
 type: procedure
-status: experimental
+status: active
 baseline: true
 created: 2026-07-31
 description: Remove all turn caps, read-only loop detectors, and force-synthesize nudges from chat_handler.py so VaultBot runs to completion without dying mid-task.
@@ -14,6 +14,7 @@ summary: Remove-All-Stops
 tags:
   - procedure
   - procedures
+last_reviewed: 2026-08-15
 ---
 
 # Remove-All-Stops

@@ -32,6 +32,7 @@ IGNORED_DIRS = {
     ".git",
     ".obsidian",
     ".trash",  # Obsidian's recycle bin — deleted files must not pollute search
+    "trash",  # backend's own backup dir — deleted notes must not pollute search
 }
 
 # Embedding schema version. Bumped whenever the text we embed for a note

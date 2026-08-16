@@ -1,9 +1,10 @@
 ---
 type: procedure
-status: active
+status: verified
 created: 2023-10-27
 summary: Converts a task description or workflow gap into a structured, machine-executable procedure markdown file with frontmatter, falsifiable conditions, and executable steps.
 tags: [procedure, meta, documentation]
+last_reviewed: 2026-08-15
 ---
 
 ## Description
