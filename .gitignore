@@ -244,3 +244,9 @@ boot_*.log
 # repo but must never be committed as part of VaultBot.
 # ─────────────────────────────────────────────────────────────────────
 Lyrics/
+
+# Local-only vault artifacts (not for public repo)
+vault_inventory_md.csv
+/procedures/
+.obsidian/workspace.json
+
