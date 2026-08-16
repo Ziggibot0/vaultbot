@@ -57,17 +57,32 @@ def run(args: dict) -> dict:
         parts.append("")
 
         # ── Read the CURRENT session's working memory plan ──────────
-        # Find the most recent working_memory_state_*.json in session_state/.
-        # This is the plan the model was actively working on — NOT old chat
-        # notes from days ago.
+        # Use the last-active-session pointer (deterministic) instead of
+        # the old "most-recent file by mtime" heuristic, which with 60+
+        # accumulated files frequently picked the WRONG session. Fall back
+        # to mtime only if the pointer is absent.
+        try:
+            from last_session import read as _read_last_session
+            _pointer_sid = _read_last_session()
+        except Exception:
+            _pointer_sid = None
         wm_files = []
         if os.path.isdir(session_state_dir):
-            for f in glob.glob(
-                os.path.join(session_state_dir, "working_memory_state_*.json")
-            ):
-                mtime = os.path.getmtime(f)
-                wm_files.append((mtime, f))
-            wm_files.sort(key=lambda x: x[0], reverse=True)
+            # Prefer the pointer session's working memory file.
+            if _pointer_sid:
+                _p = os.path.join(
+                    session_state_dir, f"working_memory_state_{_pointer_sid}.json"
+                )
+                if os.path.exists(_p):
+                    wm_files.append((os.path.getmtime(_p), _p))
+            # Fall back: most recent by mtime (covers pre-pointer state).
+            if not wm_files:
+                for f in glob.glob(
+                    os.path.join(session_state_dir, "working_memory_state_*.json")
+                ):
+                    mtime = os.path.getmtime(f)
+                    wm_files.append((mtime, f))
+                wm_files.sort(key=lambda x: x[0], reverse=True)
 
         plan_included = False
         if wm_files:
@@ -115,15 +130,22 @@ def run(args: dict) -> dict:
             parts.append("")
 
         # ── Read the CURRENT session's conversation history ─────────
-        # Find the most recent conversation_state_*.json in session_state/.
+        # Same pointer-first approach as the working memory lookup above.
         conv_files = []
         if os.path.isdir(session_state_dir):
-            for f in glob.glob(
-                os.path.join(session_state_dir, "conversation_state_*.json")
-            ):
-                mtime = os.path.getmtime(f)
-                conv_files.append((mtime, f))
-            conv_files.sort(key=lambda x: x[0], reverse=True)
+            if _pointer_sid:
+                _p = os.path.join(
+                    session_state_dir, f"conversation_state_{_pointer_sid}.json"
+                )
+                if os.path.exists(_p):
+                    conv_files.append((os.path.getmtime(_p), _p))
+            if not conv_files:
+                for f in glob.glob(
+                    os.path.join(session_state_dir, "conversation_state_*.json")
+                ):
+                    mtime = os.path.getmtime(f)
+                    conv_files.append((mtime, f))
+                conv_files.sort(key=lambda x: x[0], reverse=True)
 
         if conv_files:
             try:

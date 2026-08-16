@@ -26,6 +26,7 @@ from research_handler import handle_research
 from conversation_state import load_history, clear_history, clear_trail_tracker
 from diagnostics import classify_error
 from working_memory import TaskList
+from last_session import touch as touch_last_session, read as read_last_session, clear as clear_last_session
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -40,7 +41,8 @@ _RESTART_CONTEXT_PATH = (
 
 @router.websocket("/ws")
 async def websocket_endpoint(
-    websocket: WebSocket, svc: Annotated[Services, Depends(get_services)]
+    websocket: WebSocket,
+    svc: Annotated[Services, Depends(get_services)],
 ):
     """The chat/research dispatch loop.
 
@@ -49,19 +51,57 @@ async def websocket_endpoint(
     spawns fire-and-forget tasks for each chat/research turn so stop/new
     messages stay responsive.
 
+    SESSION RESUME (2026-08-15): The frontend sends the last-known
+    ``session_id`` as a query parameter (``?sid=<uuid>``) so a dropped-
+    and-reconnected socket resumes the SAME session instead of minting a
+    fresh UUID with zero history. When no ``sid`` is provided (first-ever
+    connect, or an older plugin build), the backend falls back to the
+    last-active-session pointer written on every turn. Only when that is
+    absent too does it mint a new UUID. This fixes the "cuts out and
+    resumes the wrong session" bug.
+
     AUTO-RESUME: If RESTART_CONTEXT.md exists (written by backend_restart
     before triggering a restart), the agent proactively sends a message to
     the operator and spawns handle_chat with a synthetic "continue" trigger. This
     means after a restart, the agent wakes up and continues working without
     the operator having to send a wake-up message. See [[Auto-Resume-Directive]].
     """
-    session_logger = SessionLogger()
+    # ── Session resume: reuse the same session_id across reconnects ──
+    # Priority: explicit frontend sid > last-active pointer > new UUID.
+    _resume_sid = None
+    try:
+        _resume_sid = websocket.query_params.get("sid")
+    except Exception:  # noqa: BLE001
+        pass
+    if not _resume_sid:
+        _resume_sid = read_last_session()
+    # Validate a frontend-provided sid actually has state on disk; if not,
+    # ignore it (stale plugin-side value after a /new on a different tab)
+    # and fall through to a new UUID so we don't silently adopt a dead id.
+    if _resume_sid:
+        _ss_dir = Path(__file__).resolve().parent.parent / "session_state"
+        _has_state = (_ss_dir / f"conversation_state_{_resume_sid}.json").exists() or (
+            _ss_dir / f"working_memory_state_{_resume_sid}.json"
+        ).exists()
+        if not _has_state:
+            _resume_sid = None
+    session_logger = SessionLogger(session_id=_resume_sid)
     client_host = websocket.client.host if websocket.client else "unknown"
-    session_logger.log("websocket_connect", {"client_host": client_host})
+    session_logger.log(
+        "websocket_connect",
+        {
+            "client_host": client_host,
+            "session_id": session_logger.session_id,
+            "resumed": _resume_sid is not None,
+        },
+    )
     # Store the session_id on the websocket so chat_handler and tools can
     # read it for per-session persistence (conversation_state, working_memory,
     # checkpoint).  Updated on /new when a new SessionLogger is rolled.
     websocket.session_id = session_logger.session_id
+    # Record this as the most recently active session so a reconnect
+    # without an explicit sid still finds it.
+    touch_last_session(session_logger.session_id, session_logger.title)
     await svc.manager.connect(websocket)
     # Send session info (id + title) so the frontend can display it.
     await svc.manager.send_personal_message(
@@ -169,60 +209,55 @@ async def websocket_endpoint(
     _is_restart_resume = (
         _RESTART_CONTEXT_PATH.exists()
     )  # only used for auto-resume nudge
-    # ── Restart-resume: adopt the most recent per-session state ──────
-    # When the backend restarts, the new WebSocket gets a NEW session_id.
-    # The per-session state files (conversation_state_*.json,
-    # working_memory_state_*.json) are keyed by the OLD session_id, so
-    # load_history(session_id=NEW) and load_from_disk(session_id=NEW)
-    # find nothing.  On a restart-resume (RESTART_CONTEXT.md exists),
-    # find the most recent state files in session_state/ and adopt them
-    # under the new session_id so the model wakes up with its plan and
-    # conversation intact.
+    # ── Restart-resume: adopt the pointer session's state ───────────
+    # When the backend restarts AND the session_id didn't carry through
+    # (no frontend sid, pointer missing/stale), the per-session state
+    # files are keyed by the OLD session_id.  We use the last-active
+    # pointer (deterministic) instead of the old "most-recent file by
+    # mtime" heuristic, which with 60+ accumulated files frequently
+    # picked the WRONG session. The pointer is written on every turn,
+    # so it reflects the session the operator was actually using.
     _adopted_old_session_id: str | None = None
     if _is_restart_resume:
         try:
-            import glob as _glob
+            _pointer_sid = read_last_session()
+            if (
+                _pointer_sid
+                and _pointer_sid != session_logger.session_id
+            ):
+                _old_sid = _pointer_sid
+                _adopted_old_session_id = _old_sid
+                # Adopt the working memory under the new session_id.
+                _old_wm = TaskList.load_from_disk(session_id=_old_sid)
+                if _old_wm is not None and _old_wm.has_plan():
+                    _old_wm.save_to_disk(session_id=session_logger.session_id)
+                    session_logger.log(
+                        "wm_adopted_from_old_session",
+                        {
+                            "old_session_id": _old_sid,
+                            "new_session_id": session_logger.session_id,
+                            "goal": _old_wm.goal[:100],
+                            "tasks": len(_old_wm.tasks),
+                            "source": "last_active_pointer",
+                        },
+                    )
+                # Adopt the conversation history under the new session_id.
+                _old_conv = load_history(session_id=_old_sid)
+                if _old_conv:
+                    from conversation_state import save_history
 
-            _ss_dir = Path(__file__).resolve().parent.parent / "session_state"
-            # Find the most recent working_memory_state_*.json
-            _wm_candidates = sorted(
-                _glob.glob(str(_ss_dir / "working_memory_state_*.json")),
-                key=lambda f: Path(f).stat().st_mtime,
-                reverse=True,
-            )
-            if _wm_candidates:
-                _old_stem = Path(_wm_candidates[0]).stem
-                # Extract the old session_id: "working_memory_state_<uuid>"
-                _old_sid = _old_stem.replace("working_memory_state_", "")
-                if _old_sid and _old_sid != session_logger.session_id:
-                    _adopted_old_session_id = _old_sid
-                    # Adopt the working memory under the new session_id.
-                    _old_wm = TaskList.load_from_disk(session_id=_old_sid)
-                    if _old_wm is not None and _old_wm.has_plan():
-                        _old_wm.save_to_disk(session_id=session_logger.session_id)
-                        session_logger.log(
-                            "wm_adopted_from_old_session",
-                            {
-                                "old_session_id": _old_sid,
-                                "new_session_id": session_logger.session_id,
-                                "goal": _old_wm.goal[:100],
-                                "tasks": len(_old_wm.tasks),
-                            },
-                        )
-                    # Adopt the conversation history under the new session_id.
-                    _old_conv = load_history(session_id=_old_sid)
-                    if _old_conv:
-                        from conversation_state import save_history
-
-                        save_history(_old_conv, session_id=session_logger.session_id)
-                        session_logger.log(
-                            "conv_adopted_from_old_session",
-                            {
-                                "old_session_id": _old_sid,
-                                "new_session_id": session_logger.session_id,
-                                "turns": len(_old_conv),
-                            },
-                        )
+                    save_history(_old_conv, session_id=session_logger.session_id)
+                    session_logger.log(
+                        "conv_adopted_from_old_session",
+                        {
+                            "old_session_id": _old_sid,
+                            "new_session_id": session_logger.session_id,
+                            "turns": len(_old_conv),
+                            "source": "last_active_pointer",
+                        },
+                    )
+                # Update the pointer to the new session_id.
+                touch_last_session(session_logger.session_id, session_logger.title)
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("restart_adopt_failed", {"error": str(_e)})
     try:
@@ -414,6 +449,9 @@ async def websocket_endpoint(
                 # only — other tabs' sessions are untouched.
                 clear_history(session_id=_old_sid)
                 clear_trail_tracker()
+                # Clear the last-active pointer so a reconnect after /new
+                # doesn't resurrect the just-discarded session.
+                clear_last_session()
                 # Clear the conversation index so recall starts fresh.
                 try:
                     _conv_idx = getattr(svc, "conversation_index", None)
@@ -426,6 +464,8 @@ async def websocket_endpoint(
                 # Update the websocket's session_id to the new session so
                 # subsequent save/load calls target the new session's files.
                 websocket.session_id = session_logger.session_id
+                # Point the last-active pointer at the new session.
+                touch_last_session(session_logger.session_id, session_logger.title)
                 session_logger.log(
                     "session_reset",
                     {"trigger": "/new", "previous_session_id": old_session_id},
@@ -472,11 +512,13 @@ async def websocket_endpoint(
                                 "type": "system_info",
                                 "content": (
                                     "Commands you can type here:\n"
-                                    "  /new     — start a fresh conversation\n"
-                                    "  /clear   — clear the chat window (keeps history)\n"
-                                    "  /stop    — stop what I'm doing (same as the Stop button)\n"
+                                    "  /new      — start a fresh conversation\n"
+                                    "  /clear    — clear the chat window (keeps history)\n"
+                                    "  /stop     — stop what I'm doing (same as the Stop button)\n"
+                                    "  /ingest   — index any new textbooks from learningMaterial/\n"
                                     "  /diagnose — run a health check and show any problems\n"
-                                    "  /help    — show this list"
+                                    "  /restart  — restart the backend\n"
+                                    "  /help     — show this list"
                                 ),
                             }
                         ),

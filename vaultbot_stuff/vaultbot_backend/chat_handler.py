@@ -51,6 +51,7 @@ from chat_helpers import (
     truncate_tool_result,
 )
 from conversation_state import save_history
+from last_session import touch as touch_last_session
 from error_types import AgentSilentError
 from fastapi import WebSocket
 from config import TUNABLES
@@ -1658,6 +1659,11 @@ async def _run_background_tasks(
                 save_history(
                     new_turns, session_id=getattr(websocket, "session_id", None)
                 )
+                # Refresh the last-active-session pointer so a reconnect
+                # or restart finds THIS session, not a stale one.
+                _sid = getattr(websocket, "session_id", None)
+                if _sid:
+                    touch_last_session(_sid, session_logger.title)
             # Index this turn in the conversation index so future queries
             # can retrieve it (conversation-aware retrieval).  Only
             # index when there's a real answer — a tool-only or empty

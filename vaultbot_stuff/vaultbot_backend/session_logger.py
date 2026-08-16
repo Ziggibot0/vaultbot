@@ -89,7 +89,15 @@ class SessionLogger:
     file, making it trivial to replay or grep a request's full lifecycle.
     """
 
-    def __init__(self, log_dir: str | None = None):
+    def __init__(self, log_dir: str | None = None, session_id: str | None = None):
+        """Create a new session logger.
+
+        ``session_id`` lets the caller REUSE an existing session across a
+        WebSocket reconnect (the frontend sends its last-known session_id
+        back so a dropped-and-reconnected socket resumes the same session
+        instead of minting a fresh UUID with zero history). When ``None``
+        (legacy behavior) a new UUID is generated.
+        """
         if log_dir is None:
             log_dir = Path(__file__).parent / "sessions"
         else:
@@ -108,7 +116,7 @@ class SessionLogger:
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             pass  # cleanup must never crash the backend
 
-        self.session_id: str = str(uuid.uuid4())
+        self.session_id: str = session_id or str(uuid.uuid4())
         self.started_at: str = datetime.now(UTC).isoformat()
         self._file_path = self.log_dir / f"{self.session_id}.jsonl"
         self._closed = False
