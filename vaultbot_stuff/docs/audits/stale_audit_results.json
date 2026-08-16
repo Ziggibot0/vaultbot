@@ -1,0 +1,1032 @@
+{
+  "stale_py_file_refs": [
+    {
+      "note": "README.md",
+      "stale_files": [
+        "www.py"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/pymupdf-1.28.0.dist-info/README.md",
+      "stale_files": [
+        "demo.py"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/pyright/dist/README.md",
+      "stale_files": [
+        "pyright.py"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/pyright/dist/dist/typeshed-fallback/README.md",
+      "stale_files": [
+        "typing.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Fix-Specification-Remove-Masking-Fallbacks.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Remove-Masking-Fallbacks.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/.pytest_cache/README.md",
+      "stale_files": [
+        "docs.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Biology/Artificial-Homeostasis-and-VaultBot-Regulation.md",
+      "stale_files": [
+        "negative_selection.py",
+        "signal_integrator.py",
+        "vault_nephrologist.py",
+        "vault_osmoregulator.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/atomic-file-write-pattern-write-to-temporary-file-validate-then-rename-to-target.md",
+      "stale_files": [
+        "catalog.py",
+        "context.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/Cross-Session-Patterns-from-75-Chat-Logs.md",
+      "stale_files": [
+        "backend_test.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/Designing-permanent-exemplar-documents-for-pattern-matching-in-knowledge-based-A.md",
+      "stale_files": [
+        "create_embeddings.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/Other-post.md",
+      "stale_files": [
+        "app.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/Pesky-Fallbacks-Hiding-Deeper-Issues.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/Womens-suffrage-movement-how-women-won-the-right-to-vote-19th-Amendment-suffragi.md",
+      "stale_files": [
+        "www.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-are-you-certain-based-on-the-facts-and-the-documen.md",
+      "stale_files": [
+        "test_index_composite.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-can-you-read-your-own-code.md",
+      "stale_files": [
+        "python_app.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-can-you-see-the-missing-directives-now-i-think-th.md",
+      "stale_files": [
+        "settings.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-check-your-framework-for-code-that-isnt-very-effi.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Do-a-3-step-audit-1-Read-the-READMEmd-and-list.md",
+      "stale_files": [
+        "tool.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-do-an-audit-of-your-workspace.md",
+      "stale_files": [
+        "journal_prune.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-do-you-remember-what-we-were-doing-just-now-i-had.md",
+      "stale_files": [
+        "procedure_runner.py",
+        "process_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-dreaming-is-important-also-you-should-have-a-tool.md",
+      "stale_files": [
+        "launcher.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-DSL-Steps-YAML.md",
+      "stale_files": [
+        "procedure_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-dude-you-were-already-doing-that-wtf.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-dude-youve-been-on-this-same-problem-for-a-few-ho.md",
+      "stale_files": [
+        "procedure_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-exactly-so-rethink-your-plan-now-please.md",
+      "stale_files": [
+        "code_analysis.py",
+        "code_timing.py",
+        "validate_fact_json.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-first-do-any-research-so-that-you-actually-know-wh.md",
+      "stale_files": [
+        "main_patched.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-first-do-research-to-see-if-anyone-else-has-alread.md",
+      "stale_files": [
+        "bootstrap_scan_gate.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-GitHub-Copilot-Fix.md",
+      "stale_files": [
+        "procedure_runtime.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-go-ahead.md",
+      "stale_files": [
+        "main_new.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-i-dont-think-youre-being-very-safe-about-self-ed.md",
+      "stale_files": [
+        "chat_handler_new.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-i-wonder-why-it-didnt-surface-in-the-initial-cont.md",
+      "stale_files": [
+        "backend.py",
+        "context.py",
+        "preflight.py",
+        "prompt_builder.py",
+        "retrieval.py",
+        "vault_context.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-if-the-research-checks-out-then-yes-plan-out-exact.md",
+      "stale_files": [
+        "check_spec.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-isnt-regex-brittle-as-hell-by-any-domain-i-did.md",
+      "stale_files": [
+        "domain_profiles.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-lets-think-about-how-you-can-improve-your-current.md",
+      "stale_files": [
+        "Analysis.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-look-to-see-how-much-of-that-already-exists.md",
+      "stale_files": [
+        "procedure_test.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-new-law-all-code-must-fail-loudly-and-there-are-n.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-nope-i-want-you-to-pivot-and-try-to-fix-your-sear.md",
+      "stale_files": [
+        "forum_search.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-oh-thats-right-dawg-you-were-gonna-use-the-procedu.md",
+      "stale_files": [
+        "warm_models.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-go-ahead-and-fix-it-use-procedures-wherever-yo.md",
+      "stale_files": [
+        "procedure_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-go-ahead-remember-to-be-thorough-safe-and-di.md",
+      "stale_files": [
+        "compactor.py",
+        "filename.py",
+        "procedure_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-i-need-you-to-clean-that-process-up-so-that-you.md",
+      "stale_files": [
+        "resume_context.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-no-worries-you-just-scared-me-for-a-sec-are-yo.md",
+      "stale_files": [
+        "vault_gaps.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ollama-pull-is-a-terminal-thing.md",
+      "stale_files": [
+        "subprocess.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-option-D-arguments-are-constructed-in-memory-eph.md",
+      "stale_files": [
+        "abstraction_cache.py",
+        "argument_builder.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-pattern-scan-better-be-perfect-before-you-do-anyth.md",
+      "stale_files": [
+        "procedure_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Research-Roadmap-phase-3-now-please.md",
+      "stale_files": [
+        "docs.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-should-the-file-even-be-that-big-idk-how-to-code.md",
+      "stale_files": [
+        "post_loop.py",
+        "tool_dispatch.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Start-with-foundation.md",
+      "stale_files": [
+        "procedure_test.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-the-first-thing-you-need-to-fix-is-not-you-being-l.md",
+      "stale_files": [
+        "system_prompt.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-the-real-question-is-why-is-your-thinking-so-decou.md",
+      "stale_files": [
+        "fused_retriever.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-theres-mojibake-in-the-GUI-and-i-dont-like-it-c.md",
+      "stale_files": [
+        "app.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-this-is-a-new-session-and-you-just-had-a-lot-of-ch.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-vaultbot-framework-has-been-saying-streaming-answ.md",
+      "stale_files": [
+        "_test_wrapper.py",
+        "procedure_runner.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-we-need-to-work-hard-to-create-for-you-the-vaultb.md",
+      "stale_files": [
+        "chat_handler_new.py",
+        "goal_tracker.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-where-does-your-framework-seem-weak-before-we-sta.md",
+      "stale_files": [
+        "dsl_runtime.py",
+        "procedure_dispatch.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-where-were-we-on-the-procedure-compiling-to-code-r.md",
+      "stale_files": [
+        "chat_handler_new.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yeah-dude-that-really-sucks-go-ahead-and-mold-the.md",
+      "stale_files": [
+        "agentic_loop.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yeah-go-ahead-with-all-that-IF-it-is-safe-to-don.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yeah-i-was-thinking-that-the-whole-LLM-call-would.md",
+      "stale_files": [
+        "chat_handler_new.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes-research-those-gaps-now-please-and-thank-you-h.md",
+      "stale_files": [
+        "check_spec.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-You-were-just-restarted-mid-session-Your-restart.md",
+      "stale_files": [
+        "baz.py",
+        "chat_handler_new.py",
+        "domain_profiles.py",
+        "some_file.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Architecture/Procedure-Subprocess-Architecture.md",
+      "stale_files": [
+        "chat_handler_new.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Architecture/Token-Efficiency-Audit.md",
+      "stale_files": [
+        "compactor.py"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Playbooks/Python-3.11-Playbook.md",
+      "stale_files": [
+        "docs.py"
+      ]
+    }
+  ],
+  "stale_symbol_refs": [
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/SKILL.md",
+      "stale_symbols": [
+        "create_item",
+        "create_items",
+        "get_current_user",
+        "get_item",
+        "list_items",
+        "read_async_items",
+        "read_item",
+        "read_items",
+        "stream_events"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/references/dependencies.md",
+      "stale_symbols": [
+        "get_db",
+        "get_db_paginator",
+        "get_page",
+        "get_user_me",
+        "get_username",
+        "read_items"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/references/other-tools.md",
+      "stale_symbols": [
+        "do_async_work",
+        "do_blocking_work",
+        "read_items"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/references/path-operations.md",
+      "stale_symbols": [
+        "create_item",
+        "handle_items",
+        "list_items"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/references/pydantic.md",
+      "stale_symbols": [
+        "create_item",
+        "create_items"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/references/responses.md",
+      "stale_symbols": [
+        "get_item"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/fastapi/.agents/skills/fastapi/references/streaming.md",
+      "stale_symbols": [
+        "stream_events",
+        "stream_image_no_async_no_annotation",
+        "stream_items"
+      ]
+    },
+    {
+      "note": ".venv/Lib/site-packages/pymupdf-1.28.0.dist-info/README.md",
+      "stale_symbols": [
+        "process_pages"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Remove-Masking-Fallbacks.md",
+      "stale_symbols": [
+        "_safe_neighbors"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Research/Python-exec-function-with-restricted-globals-namespace-how-to-safely-execute-unt.md",
+      "stale_symbols": [
+        "example"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Simulations/Simulating-Cell-Membrane-Diffusion-in-Python.md",
+      "stale_symbols": [
+        "simulate_diffusion",
+        "simulate_osmosis"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Simulations/Simulating-Homeostasis-in-Python.md",
+      "stale_symbols": [
+        "sense_and_correct",
+        "simulate_homeostasis"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Simulations/Simulating-Natural-Selection-in-Python.md",
+      "stale_symbols": [
+        "crossover",
+        "fitness",
+        "mutate",
+        "simulate_natural_selection",
+        "tournament_select"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Simulations/Simulating-Phylogenetic-Trees-in-Python.md",
+      "stale_symbols": [
+        "build_phylogenetic_tree",
+        "get_dist",
+        "is_leaf",
+        "print_tree",
+        "to_newick"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Simulations/Simulating-Predator-Prey-Ecosystems-in-Python.md",
+      "stale_symbols": [
+        "equilibrium_predator",
+        "equilibrium_prey",
+        "print_summary",
+        "simulate",
+        "simulate_with_carrying_capacity",
+        "step"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Knowledge/Simulations/Simulating-Slime-Mold-Pathfinding-in-Python.md",
+      "stale_symbols": [
+        "simulate_slime_mold",
+        "visualize_paths"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-1-Single-lens-dispatch-is-too-narrow-so-insert-a.md",
+      "stale_symbols": [
+        "llm_generate",
+        "triple_try",
+        "triple_try_classify",
+        "validate_synthesis"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-alright-sorry-thats-just-really-confusing-nomencl.md",
+      "stale_symbols": [
+        "plan_task"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Backend-restart-hang-found.md",
+      "stale_symbols": [
+        "_auto_resume",
+        "hangs"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-can-you-call-tools-try-calling-a-tool.md",
+      "stale_symbols": [
+        "block"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Code-Audit-Senior-Review-Test.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Code-knowledge-improves-logging.md",
+      "stale_symbols": [
+        "sequences"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Context-window-document-count.md",
+      "stale_symbols": [
+        "turns"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-did-the-dream-pass-do-QUALITY-work-yes-it-does-it.md",
+      "stale_symbols": [
+        "strip_md"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-did-you-test-it.md",
+      "stale_symbols": [
+        "llm_generate",
+        "vault_delete",
+        "vault_graph_analyzer"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-do-all-of-that-except-for-re-enabling-compaction.md",
+      "stale_symbols": [
+        "_select_contextual_tools",
+        "build_system_prompt",
+        "site"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-do-you-have-a-procedure-that-audits-your-code-for.md",
+      "stale_symbols": [
+        "foo"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-do-you-remember-what-we-were-doing-just-now-i-had.md",
+      "stale_symbols": [
+        "f"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Documentation-Compliance-Check.md",
+      "stale_symbols": [
+        "test_final_synthesis_on_all_done"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-dont-triple-try-the-big-llm-only-the-small.md",
+      "stale_symbols": [
+        "validate_synthesis"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Dream-Pass-Successful.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-dreaming-is-important-also-you-should-have-a-tool.md",
+      "stale_symbols": [
+        "extract_chat_description",
+        "idempotent_connect",
+        "link_exists_in_note",
+        "merge_duplicate_sections",
+        "strip_md"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-DSL-replaces-Python.md",
+      "stale_symbols": [
+        "run_procedure",
+        "tools",
+        "vault_gaps",
+        "vault_list"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-dude-youve-been-on-this-same-problem-for-a-few-ho.md",
+      "stale_symbols": [
+        "_graph_is_healthy",
+        "_graph_was_modified",
+        "_has_themes",
+        "directly",
+        "vault_graph_analyzer"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Find-procedure-fixes.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-go-ahead-with-phase-4-then.md",
+      "stale_symbols": [
+        "_deterministic_entailment",
+        "load_source"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-go-ahead.md",
+      "stale_symbols": [
+        "rank_results"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-hold-up-why-was-kimi-k3-called-when-ive-had-nemot.md",
+      "stale_symbols": [
+        "sites"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-how-do-we-make-the-framework-ready-to-support-a-sm.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-i-wonder-why-it-didnt-surface-in-the-initial-cont.md",
+      "stale_symbols": [
+        "directly"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-if-a-tool-needs-to-be-keyword-gated-then-it-should.md",
+      "stale_symbols": [
+        "select_contextual_categories"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-if-the-research-checks-out-then-yes-plan-out-exact.md",
+      "stale_symbols": [
+        "build_active_frame",
+        "execute_procedure",
+        "validate_step_output"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-is-there-anything-wrong-with-your-chat_handlerpy.md",
+      "stale_symbols": [
+        "branch"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-is-this-a-procedure-discovery-issue.md",
+      "stale_symbols": [
+        "bodies",
+        "definitions"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-iterate-one-more-time-on-that-plan-do-a-last-minu.md",
+      "stale_symbols": [
+        "training"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-lets-think-about-how-you-can-improve-your-current.md",
+      "stale_symbols": [
+        "execute_procedure",
+        "parse_note",
+        "patterns"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-no-definitely-fix-that-please.md",
+      "stale_symbols": [
+        "link_exists_in_note"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-now-the-complete-migration-should-be-WAY-easier-ri.md",
+      "stale_symbols": [
+        "definitions"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-oh-thats-right-dawg-you-were-gonna-use-the-procedu.md",
+      "stale_symbols": [
+        "fuzzy_match",
+        "prewarm",
+        "vault_unsafe_write"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-and-how-do-you-enforce-the-better-notes-becau.md",
+      "stale_symbols": [
+        "check_note_quality"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-go-ahead-and-fix-it-use-procedures-wherever-yo.md",
+      "stale_symbols": [
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-ok-go-ahead-remember-to-be-thorough-safe-and-di.md",
+      "stale_symbols": [
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-omg-dude-you-already-did-that-im-literally-gonna.md",
+      "stale_symbols": [
+        "_fallback_self_model"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-only-if-you-have-everything-you-need-in-order-to-i.md",
+      "stale_symbols": [
+        "_llm_generate",
+        "llm_generate",
+        "vault_search",
+        "web_read_source"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-pattern-scan-better-be-perfect-before-you-do-anyth.md",
+      "stale_symbols": [
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Pipeline-assessment-complete.md",
+      "stale_symbols": [
+        "sequences"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Procedure-Creator-Restored.md",
+      "stale_symbols": [
+        "execute_procedure",
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-remove-stops-no-stops.md",
+      "stale_symbols": [
+        "_max_tool_rounds",
+        "_max_tool_rounds_hard_stop",
+        "_max_tool_rounds_soft_warn",
+        "_rounds_used",
+        "handle_chat"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-run-a-dream-pas.md",
+      "stale_symbols": [
+        "execute_procedure",
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-run-a-dream-pass.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Run-Your-Know-Thy-Self-Procedure.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Session-restart-and-fix.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-Task-execution-plan.md",
+      "stale_symbols": [
+        "llm_generate"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-there-should-be-no-small-model-gate-or-mode-the-b.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-we-need-to-be-on-the-trajectory-of-making-procedur.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-why-arent-you-testing-it-by-calling-it-with-proce.md",
+      "stale_symbols": [
+        "vault_graph_analyzer",
+        "worked"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-wrong-you-were-working-on-the-pattern-scanner.md",
+      "stale_symbols": [
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yeah-go-ahead-and-add-the-falsifiable-section-if-y.md",
+      "stale_symbols": [
+        "mapping"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yeah-we-need-to-use-if-it-exists-and-create-if-it.md",
+      "stale_symbols": [
+        "sequences"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes-and-make-sure-that-you-show-the-LLM-anything.md",
+      "stale_symbols": [
+        "llm_generate",
+        "vault_lint"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes-fix-those-three-issues-and-then-lmk-when-your.md",
+      "stale_symbols": [
+        "extract_chat_description",
+        "idempotent_connect",
+        "link_exists_in_note",
+        "merge_duplicate_sections",
+        "strip_md"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes-plan-out-how-youd-fix-the-issues-without-intr.md",
+      "stale_symbols": [
+        "_infer_task_description",
+        "site"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes-please.md",
+      "stale_symbols": [
+        "_compile_dispatch_entries",
+        "_compile_dispatch_entry",
+        "_sub",
+        "definition",
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes-you-can-build-that-but-i-want-you-to-think-ca.md",
+      "stale_symbols": [
+        "parse_claims",
+        "validate_wikilinks",
+        "validate_wikilinks_resolve",
+        "verify_claim",
+        "verify_claims"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-yes.md",
+      "stale_symbols": [
+        "evaluate_generation"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-you-didnt-call-that-tool-right-because-i-just-see.md",
+      "stale_symbols": [
+        "tool"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-you-might-be-overworking-that-lil-model-could-it.md",
+      "stale_symbols": [
+        "run_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-You-were-just-restarted-mid-session-Your-restart.md",
+      "stale_symbols": [
+        "__enter__",
+        "__exit__",
+        "_apply_sliding_window",
+        "block",
+        "response",
+        "run_procedure",
+        "sites",
+        "succeeds"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/Memory/Chat/Chat-youre-forgetting-that-procedures-should-only-be-vi.md",
+      "stale_symbols": [
+        "execute_procedure"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Procedure-Expansion-Proposal.md",
+      "stale_symbols": [
+        "vault_research"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Architecture/Implementation-Plan-Architecture-Modules.md",
+      "stale_symbols": [
+        "evaluate_generation"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Architecture/Procedural-Bootstrap-and-Evolution-Plan.md",
+      "stale_symbols": [
+        "training"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Architecture/Procedure-Subprocess-Architecture.md",
+      "stale_symbols": [
+        "stack"
+      ]
+    },
+    {
+      "note": "vaultbot_stuff/System/Playbooks/Python-3.11-Playbook.md",
+      "stale_symbols": [
+        "__repr__",
+        "__str__",
+        "calls",
+        "clone",
+        "connect",
+        "expensive",
+        "extract_wikilinks",
+        "flexible",
+        "from_config",
+        "greet",
+        "internal",
+        "process",
+        "safe_function",
+        "safe_write_file",
+        "validate_name"
+      ]
+    }
+  ],
+  "total_actual_py_files": 148,
+  "total_actual_symbols": 1376
+}
