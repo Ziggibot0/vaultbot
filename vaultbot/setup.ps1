@@ -161,7 +161,7 @@ if (Test-StepDone "venv_created") {
 
 # ── 5. Install dependencies ─────────────────────────────────────────────────
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
-$reqPath    = Join-Path $vaultPath "vaultbot_stuff\vaultbot_backend\requirements.txt"
+$reqPath    = Join-Path $vaultPath "vaultbot\vaultbot_backend\requirements.txt"
 
 if (Test-StepDone "deps_installed") {
     Write-Warn2 "Dependencies already installed -- skipping."
@@ -251,7 +251,7 @@ if ($chatBackend -eq "ollama" -and $chatModel -and -not (Test-StepDone "chat_mod
 }
 
 # ── 7. Write .env with the user's name + LLM config ─────────────────────────
-$envExample = Join-Path $vaultPath "vaultbot_stuff\.env.example"
+$envExample = Join-Path $vaultPath "vaultbot\.env.example"
 $envFile    = Join-Path $vaultPath ".env"
 if (Test-StepDone "env_written") {
     Write-Warn2 "Config already written -- skipping."

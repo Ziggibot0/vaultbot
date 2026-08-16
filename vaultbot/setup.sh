@@ -150,7 +150,7 @@ else
 fi
 
 # ── 5. Install dependencies ─────────────────────────────────────────────────
-REQ_PATH="$VAULT_PATH/vaultbot_stuff/vaultbot_backend/requirements.txt"
+REQ_PATH="$VAULT_PATH/vaultbot/vaultbot_backend/requirements.txt"
 if step_done "deps_installed"; then
     echo "  [!]  Dependencies already installed -- skipping."
 else
@@ -227,7 +227,7 @@ if [ "$CHAT_BACKEND" = "ollama" ] && [ -n "$CHAT_MODEL" ] && ! step_done "chat_m
 fi
 
 # ── 7. Write .env with the user's name + LLM config ────────────────────────
-ENV_EXAMPLE="$VAULT_PATH/vaultbot_stuff/.env.example"
+ENV_EXAMPLE="$VAULT_PATH/vaultbot/.env.example"
 ENV_FILE="$VAULT_PATH/.env"
 if step_done "env_written"; then
     echo "  [!]  Config already written -- skipping."
@@ -246,7 +246,7 @@ elif [ -f "$ENV_EXAMPLE" ]; then
     fi
     mark_step_done "env_written"
 else
-    echo "  [!]  vaultbot_stuff/.env.example not found -- skipping .env creation"
+    echo "  [!]  vaultbot/.env.example not found -- skipping .env creation"
     mark_step_done "env_written"
 fi
 
