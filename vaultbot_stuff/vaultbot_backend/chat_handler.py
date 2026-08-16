@@ -717,18 +717,49 @@ async def _prepare_turn(
     )
 
     # Build the conversation for /api/chat using PERSISTENT per-session history.
-    # NOTE: Ollama's /v1/chat/completions endpoint only allows ONE system
-    # message at the beginning. Merge the system prompt and vault context
-    # into a single system message to avoid "system message must be at
-    # the beginning" errors (affects qwen3.8 and other strict models).
+    #
+    # PROMPT-CACHING STRUCTURE (2026-08-15):
+    # The conversation starts with TWO separate system messages at the
+    # beginning — both are valid (Ollama /v1 accepts multiple system
+    # messages at the start, verified via live test). The split is what
+    # enables provider-side prompt caching (GLM cloud, OpenAI,
+    # OpenRouter, Anthropic all cache on prefix):
+    #
+    #   conversation[0] = STABLE system prompt (identity + briefing +
+    #     procedure surface). This NEVER changes between rounds within
+    #     a turn → the entire prefix is a cache hit every round after
+    #     the first.
+    #   conversation[1] = PER-QUERY vault context (retrieved notes). This
+    #     changes between turns (different query → different notes) but
+    #     is stable across rounds WITHIN a turn. It's the cache-break
+    #     boundary: everything from here down is re-billed each round,
+    #     but the stable prefix above it is cached.
+    #   conversation[2] = Working-memory block (task list). Updated by
+    #     the in-loop composer only when the task list changes, so it
+    #     also benefits from prefix caching between rounds where the
+    #     task list is unchanged. Stored as a system message so it
+    #     stays at the beginning (Ollama rejects system messages after
+    #     user messages).
+    #
+    # The wm block is added by the in-loop composer on the first round
+    # (see the "System prompt is FROZEN after preflight build" block).
+    # We pre-allocate slot [2] here so the composer can update it in
+    # place without shifting indices.
     conversation = [
         {
             "role": "system",
+            "content": system_prompt,
+        },
+        {
+            "role": "system",
             "content": (
-                system_prompt
-                + "\n\n# VAULT CONTEXT (retrieved for this query; compactable)\n"
+                "# VAULT CONTEXT (retrieved for this query; compactable)\n"
                 + context
             ),
+        },
+        {
+            "role": "system",
+            "content": "",  # wm block placeholder — filled by in-loop composer
         },
     ]
     conversation.extend(getattr(websocket, "conversation_history", []))
@@ -1915,10 +1946,15 @@ async def handle_chat(
             # detector, NO plan-enforcement gate, NO convergence nudge. The
             # model decides when it's done — same as Copilot's harness.
             round_idx = 0
-            _MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "200"))
+            _MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "10000"))
             # Only two safety nets: failed-write streak (genuine thrash) and
             # the MAX_ROUNDS cap (runaway loop). Everything else is the model's
             # decision.
+            # 10000 rounds allows multi-day autonomous work sessions. At ~12s
+            # per round (typical for cloud models), 10K rounds ≈ 33 hours of
+            # continuous work. The failed-write streak detector (3 consecutive
+            # failed writes) is the primary anti-thrash guard — MAX_ROUNDS is
+            # just a last-resort cap to prevent a truly infinite loop.
             _WRITE_TOOLS = frozenset(
                 {
                     "safe_write",
@@ -1972,8 +2008,8 @@ async def handle_chat(
                 websocket._chat_round_idx = round_idx
 
                 # System prompt is FROZEN after preflight build (Priority A,
-                # 2026-08-06). We only refresh conversation[0] when the
-                # working-memory task list changed \u2014 the model owns that list
+                # 2026-08-06). We only refresh the working-memory block when
+                # the task list changed \u2014 the model owns that list
                 # via plan_task/update_task and needs to see the current state.
                 # Everything else that used to be re-injected here (per-step
                 # RAG, findings ledger, procedure surface) has been removed
@@ -1982,18 +2018,30 @@ async def handle_chat(
                 # OpenRouter all cache on prefix), and duplicated content the
                 # model already had in conversation history. If the model
                 # wants procedure info, it can call vault_search itself.
+                #
+                # PROMPT-CACHING STRUCTURE (2026-08-15):
+                # conversation[0] = stable system prompt (NEVER touched here)
+                # conversation[1] = per-query vault context (NEVER touched here)
+                # conversation[2] = wm block (updated ONLY when the task list
+                #   changes — when it's unchanged, the entire 3-message prefix
+                #   is a cache hit, costing zero input tokens on the cached
+                #   portion). This is the key: by NOT rebuilding conversation[0]
+                #   every round, the stable prefix stays byte-identical and
+                #   the provider's prefix cache fires.
                 try:
                     _wm_block = wm.render_for_prompt() if wm else ""
                     _wm_sig = hash(_wm_block)
                     if _wm_sig != _last_step_rag_key:  # reused as wm-signature cache
-                        _composed = system_prompt
-                        if _wm_block:
-                            _composed += "\n\n" + _wm_block
-                        conversation[0] = {"role": "system", "content": _composed}
+                        conversation[2] = {
+                            "role": "system",
+                            "content": _wm_block,
+                        }
                         _last_step_rag_key = _wm_sig
+                    # When unchanged: conversation[2] stays as-is from the
+                    # previous round. The prefix is byte-identical → cache hit.
                 except Exception as e:  # noqa: BLE001 \u2014 wm render is best-effort; base system prompt passes through on failure
                     session_logger.log("wm_render_failed", {"error": str(e)})
-                    conversation[0] = {"role": "system", "content": system_prompt}
+                    conversation[2] = {"role": "system", "content": ""}
 
                 # Stream the LLM response for this round.
                 round_text = ""
@@ -2024,13 +2072,13 @@ async def handle_chat(
                 # the context_budgeter (which only budgets vault context) and
                 # preflight compression (which only fires once per turn at
                 # 50% of context window), this is the enforcement layer that
-                # guarantees the TOTAL conversation never exceeds ~60K tokens
-                # — regardless of context window size, accumulated tool
-                # results, or raw code_read dumps. It prunes old tool-result
-                # content (never breaking pairs) and, as a last resort, drops
-                # old middle messages. This is the fix for the "2000 t/s but
-                # still slow" symptom: the model was chewing through 100K+
-                # tokens of prompt every round.
+                # guarantees the TOTAL conversation never exceeds the cap.
+                # It prunes old tool-result content (never breaking pairs)
+                # and, as a last resort, drops old middle messages.
+                # The cap is set to 800K tokens by default — large enough for
+                # cloud models with 1M context to work through long multi-round
+                # tasks without losing context. For local models with smaller
+                # context windows, the cap still applies as a hard ceiling.
                 _pre_cap_msgs = len(conversation)
                 _pre_cap_tokens = _estimate_conv_tokens(conversation)
                 conversation = _enforce_token_cap(
@@ -2092,6 +2140,43 @@ async def handle_chat(
                         "t_ms": loop.time() * 1000,
                     },
                 )
+                # Log the prompt-cache structure: sizes of the stable
+                # prefix (system prompt, vault context, wm block) so we
+                # can see how much is cacheable vs. how much is re-billed
+                # each round. The stable system prompt (conversation[0])
+                # is the cacheable prefix; vault context + wm block are
+                # cacheable WITHIN a turn (they don't change between
+                # rounds unless the task list changes).
+                _sys_msgs = [
+                    m
+                    for m in conversation
+                    if isinstance(m, dict) and m.get("role") == "system"
+                ]
+                if _sys_msgs:
+                    session_logger.log(
+                        "prompt_cache_structure",
+                        {
+                            "round": round_idx,
+                            "system_msg_count": len(_sys_msgs),
+                            "stable_prompt_chars": len(
+                                str(_sys_msgs[0].get("content", "") or "")
+                            ),
+                            "vault_context_chars": (
+                                len(str(_sys_msgs[1].get("content", "") or ""))
+                                if len(_sys_msgs) > 1
+                                else 0
+                            ),
+                            "wm_block_chars": (
+                                len(str(_sys_msgs[2].get("content", "") or ""))
+                                if len(_sys_msgs) > 2
+                                else 0
+                            ),
+                            "cacheable_prefix_chars": sum(
+                                len(str(m.get("content", "") or ""))
+                                for m in _sys_msgs
+                            ),
+                        },
+                    )
                 # Tool-history sanitization is a NARROW workaround for the
                 # glm-5.2:cloud-via-Ollama bug (the model returns empty when it
                 # sees ANY prior tool_calls / tool-role messages). Every other

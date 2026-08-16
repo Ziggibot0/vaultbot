@@ -128,15 +128,25 @@ class Tunables:
     # ── Hard token cap (chat_handler._enforce_token_cap) ─────────────────
     # Maximum total tokens sent to the big LLM in a single /chat call.
     # This is the GUARANTEED ceiling — regardless of the model's context
-    # window size, we never send more than this. On a 128K-context model
-    # without this cap, the conversation grew to 100K+ tokens (400K+ chars)
-    # because nothing else bounded it: the context budgeter allowed huge
-    # vault context, code_read bypassed truncation, and tool results
-    # accumulated across rounds. The user saw "2000 t/s but still slow"
-    # — the model was chewing through a massive prompt every round.
-    # 60K tokens is generous for a multi-round agentic turn while keeping
-    # prompt-processing time reasonable. Override via env var.
-    max_send_tokens: int = 60000
+    # window size, we never send more than this.
+    #
+    # History: originally 60K to prevent "2000 t/s but still slow" on local
+    # models where 100K+ token prompts made each round sluggish. But that
+    # cap was catastrophic for cloud models with 1M context windows: the
+    # model was actively working through a complex multi-round task (64
+    # tool rounds, making real progress) and the cap kept pruning away
+    # context the model needed — old tool results, prior reasoning, file
+    # contents — causing it to lose the plot and go in circles. The cap
+    # was 16x smaller than the model's actual context window.
+    #
+    # 800K leaves ~200K for the model's output (thinking + content + tool
+    # calls) within a 1M context window. For local models with smaller
+    # context (e.g. 32K), the cap still applies as a hard ceiling — the
+    # pruning logic in enforce_token_cap activates when total tokens exceed
+    # this number, regardless of model context size.
+    #
+    # Override via env var VAULTBOT_MAX_SEND_TOKENS.
+    max_send_tokens: int = 800000
 
     # ── File-read result cap (chat_handler truncate_tool_result) ──────────
     # Maximum chars for code_read / vault_read_note tool results before

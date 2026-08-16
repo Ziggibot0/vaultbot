@@ -114,8 +114,8 @@ class TestSafetyNetsRemain:
     def test_max_rounds_remains(self):
         src = _all_chat_source()
         assert "_MAX_ROUNDS" in src, "MAX_ROUNDS safety net must remain"
-        assert 'os.getenv("VAULTBOT_MAX_ROUNDS", "200")' in src, (
-            "VAULTBOT_MAX_ROUNDS default must be 200"
+        assert 'os.getenv("VAULTBOT_MAX_ROUNDS", "10000")' in src, (
+            "VAULTBOT_MAX_ROUNDS default must be 10000"
         )
 
     def test_double_silent_failsafe_remains(self):

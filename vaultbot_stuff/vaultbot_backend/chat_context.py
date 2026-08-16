@@ -18,6 +18,26 @@ from typing import Any
 from config import TUNABLES
 
 
+def _leading_system_count(conversation: list[dict[str, Any]]) -> int:
+    """Count how many leading system messages the conversation has.
+
+    The prompt-caching structure (2026-08-15) splits the prefix into up to
+    3 separate system messages (stable prompt, vault context, wm block).
+    All pruning/aging functions must skip ALL of them — touching any
+    system message in the prefix invalidates the provider's prompt cache.
+
+    Returns the count of consecutive ``role: system`` messages at the start
+    of the conversation. Stops at the first non-system message.
+    """
+    count = 0
+    for msg in conversation:
+        if isinstance(msg, dict) and msg.get("role") == "system":
+            count += 1
+        else:
+            break
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Seen-content deduplication (breaks the "search anxiety" loop)
 # ---------------------------------------------------------------------------
@@ -196,7 +216,8 @@ def age_old_tool_results(
     # Work on a shallow copy so we don't mutate the caller's list.
     conv = [dict(m) if isinstance(m, dict) else m for m in conversation]
     _stubbed = 0
-    for i in range(2, _cutoff_idx):  # skip system prompt + vault context
+    _skip = _leading_system_count(conv)  # skip all leading system messages
+    for i in range(_skip, _cutoff_idx):
         m = conv[i]
         if not (isinstance(m, dict) and m.get("role") == "tool"):
             continue
@@ -303,6 +324,11 @@ def enforce_token_cap(
     _protect_last = int(os.getenv("VAULTBOT_CAP_PROTECT_LAST_N", "8"))
     _stub_min_chars = int(os.getenv("VAULTBOT_CAP_STUB_MIN_CHARS", "2000"))
 
+    # Skip all leading system messages (prompt-caching structure: up to 3
+    # system messages — stable prompt, vault context, wm block). Touching
+    # any of them would invalidate the provider's prefix cache.
+    _skip = _leading_system_count(conv)
+
     # ── Phase 1: Stub large old tool results (2+ rounds back) ──
     # Read tools (code_read, vault_read_note) are EXEMPT — the user wants
     # the model to read the whole file, and the read_result_cap already
@@ -310,8 +336,8 @@ def enforce_token_cap(
     # reasoning over forces a re-read, wasting a round-trip.
     _protect_read_tools = os.getenv("VAULTBOT_CAP_PROTECT_FILE_READS", "1") == "1"
     _pruned = 0
-    _cutoff = max(2, len(conv) - _protect_last)
-    for i in range(2, _cutoff):  # skip system prompt + vault context (0,1)
+    _cutoff = max(_skip, len(conv) - _protect_last)
+    for i in range(_skip, _cutoff):
         m = conv[i]
         if not (
             isinstance(m, dict)
@@ -351,7 +377,7 @@ def enforce_token_cap(
     # ── Phase 2: Stub ALL old tool results (even small ones) ──
     # Read tools are still exempt here — see Phase 1 comment.
     _pruned2 = 0
-    for i in range(2, _cutoff):
+    for i in range(_skip, _cutoff):
         m = conv[i]
         if not (
             isinstance(m, dict)
@@ -384,12 +410,96 @@ def enforce_token_cap(
             )
         return conv
 
+    # ── Phase 2b: Truncate old tool_call ARGUMENTS in assistant messages ──
+    # tool_calls live inside assistant messages as JSON. The 'thought' tool
+    # is the worst offender: the model writes 2K-6K-char reasoning dumps as
+    # its argument, and those accumulate forever because phases 1-2 only
+    # stub tool RESULTS, not tool CALLS. This phase truncates old tool_call
+    # arguments to a short stub, preserving the call structure (name, id,
+    # tool_call_id) so pairings stay valid — only the heavy argument payload
+    # is replaced with a 1-line note.
+    _pruned_calls = 0
+    _call_stub = "[Old tool call arguments cleared to stay within token cap.]"
+    for i in range(_skip, _cutoff):
+        m = conv[i]
+        if not (isinstance(m, dict) and m.get("role") == "assistant" and m.get("tool_calls")):
+            continue
+        tcs = m.get("tool_calls")
+        if not isinstance(tcs, list):
+            continue
+        _modified = False
+        for tc in tcs:
+            if not (isinstance(tc, dict) and isinstance(tc.get("function"), dict)):
+                continue
+            _fn = tc["function"]
+            _args = _fn.get("arguments", "")
+            if isinstance(_args, str) and len(_args) > 300:
+                _fn["arguments"] = _call_stub
+                _pruned_calls += 1
+                _modified = True
+        if _modified:
+            # Re-assign the modified list so estimate_conv_tokens sees the change
+            m = dict(m)
+            m["tool_calls"] = tcs
+            conv[i] = m
+
+    _est = estimate_conv_tokens(conv)
+    if _est <= _cap:
+        if session_logger:
+            session_logger.log(
+                "token_cap_pruned",
+                {
+                    "round": round_idx,
+                    "pruned_count": _pruned + _pruned2,
+                    "pruned_calls": _pruned_calls,
+                    "est_tokens_after": _est,
+                    "phase": "old_tool_call_args",
+                    "cap": _cap,
+                },
+            )
+        return conv
+
+    # ── Phase 2c: Unprotect read tool results (last-resort before drop) ──
+    # code_read and vault_read_note results were exempt in phases 1-2. If
+    # we're still over cap, stub them too — keeping a 100KB old file dump in
+    # context is worse than forcing a re-read later.
+    _pruned3 = 0
+    for i in range(_skip, _cutoff):
+        m = conv[i]
+        if not (
+            isinstance(m, dict)
+            and m.get("role") == "tool"
+            and isinstance(m.get("content"), str)
+            and len(m["content"]) > 200
+        ):
+            continue
+        # No read-tool exemption here — stub everything.
+        conv[i] = dict(m)
+        conv[i]["content"] = "[Old tool output cleared to stay within token cap.]"
+        _pruned3 += 1
+
+    _est = estimate_conv_tokens(conv)
+    if _est <= _cap:
+        if session_logger:
+            session_logger.log(
+                "token_cap_pruned",
+                {
+                    "round": round_idx,
+                    "pruned_count": _pruned + _pruned2 + _pruned3,
+                    "pruned_calls": _pruned_calls,
+                    "est_tokens_after": _est,
+                    "phase": "unprotected_reads",
+                    "cap": _cap,
+                },
+            )
+        return conv
+
     # ── Phase 3: Drop old middle messages (keep head + tail) ──
-    # Head = system prompt + vault context (indices 0,1) + first 2 history msgs.
+    # Head = all leading system messages + first 2 history msgs.
     # Tail = last _protect_last messages.
     # Middle = old user/assistant turns that aren't tool messages.
     _dropped = 0
-    _head_keep = 4  # system + context + first 2 conversation msgs
+    _head_keep = _skip + 2  # system messages + first 2 conversation msgs
     _tail_start = max(_head_keep, len(conv) - _protect_last)
     new_conv = conv[:_head_keep]
     for i in range(_head_keep, _tail_start):
