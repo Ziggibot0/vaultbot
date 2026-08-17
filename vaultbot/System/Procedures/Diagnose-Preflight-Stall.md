@@ -82,7 +82,7 @@ useful for diagnosing *new* stalls that may arise from other causes.
 ```python
 import json, os, pathlib, glob
 
-sessions_dir = pathlib.Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / "sessions"
+sessions_dir = pathlib.Path(vault_path) / "vaultbot" / "vaultbot_backend" / "sessions"
 target_id = (args.get("session_id") or "").strip()
 
 if target_id:

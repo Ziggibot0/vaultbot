@@ -164,7 +164,7 @@ for cn in created_notes:
     
     # Sanitize filename
     safe_name = re.sub(r'[<>:"/\\|?*]', '-', topic)[:80]
-    note_path = os.path.join(vault_path, "vaultbot_stuff", "Knowledge", "Concepts", f"{safe_name}.md")
+    note_path = os.path.join(vault_path, "vaultbot", "Knowledge", "Concepts", f"{safe_name}.md")
     
     # Check if note already exists (race condition guard)
     if os.path.exists(note_path):

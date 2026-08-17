@@ -29,7 +29,7 @@ The [[Procedural-Bootstrap-and-Evolution-Plan]] established that small models be
 ### The Vault Already Has Implicit Exemplars
 
 Several existing notes serve as de facto exemplars:
-- [[vaultbot_stuff/Structure-Research-Note]] — exemplar for research note structure
+- [[vaultbot/Structure-Research-Note]] — exemplar for research note structure
 - [[How-to-Evaluate-Source-Credibility]] — exemplar for source evaluation
 - [[Deterministic-Scaffolding-for-Small-Models]] — exemplar for architecture notes
 - [[Knowledge-Triad-Ontology-Epistemology-Hermeneutics]] — exemplar for synthesis notes
@@ -44,7 +44,7 @@ Each exemplar should demonstrate one *type* of output. Don't mix a research note
 
 | Exemplar Type | What it demonstrates | Status |
 |---|---|---|
-| Research note | Synthesis with sources, wikilinks, frontmatter | Exists ([[vaultbot_stuff/Structure-Research-Note]]) |
+| Research note | Synthesis with sources, wikilinks, frontmatter | Exists ([[vaultbot/Structure-Research-Note]]) |
 | Architecture note | Design reasoning, trade-offs, what-to-build | Exists ([[Deterministic-Scaffolding-for-Small-Models]]) |
 | Procedural note | Step-by-step procedure with schema | Exists ([[How-to-Evaluate-Source-Credibility]]) |
 | Tool creation | Code, test, deploy, lint | Needed |
@@ -87,5 +87,5 @@ This is the difference between a senior engineer (frontier model with weights th
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — procedures + exemplars = the scaffolding
 - [[Pre-Thought-Information-Shapes]] — exemplars are a type of pre-thought information shape
 - [[Deterministic-Scaffolding-for-Small-Models]] — exemplars are deterministic scaffolding
-- [[vaultbot_stuff/Structure-Research-Note]] — existing implicit exemplar
+- [[vaultbot/Structure-Research-Note]] — existing implicit exemplar
 - [[Self-Assessment-Using-the-Knowledge-Triad]] — the gap this fills

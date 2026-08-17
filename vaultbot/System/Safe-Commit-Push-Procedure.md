@@ -39,14 +39,14 @@ Sensitive paths that MUST be ignored:
 - `.env`
 - `vaultbot_venv/`
 - `User/`
-- `vaultbot_stuff/Memory/`
-- `vaultbot_stuff/Knowledge/`
-- `vaultbot_stuff/vaultbot_backend/sessions/`
-- `vaultbot_stuff/vaultbot_backend/identity/`
-- `vaultbot_stuff/vaultbot_backend/vaultbot_index/`
-- `vaultbot_stuff/vaultbot_backend/trash/`
-- `vaultbot_stuff/vaultbot_backend/checkpoints/`
-- `vaultbot_stuff/learningMaterial/`
+- `vaultbot/Memory/`
+- `vaultbot/Knowledge/`
+- `vaultbot/vaultbot_backend/sessions/`
+- `vaultbot/vaultbot_backend/identity/`
+- `vaultbot/vaultbot_backend/vaultbot_index/`
+- `vaultbot/vaultbot_backend/trash/`
+- `vaultbot/vaultbot_backend/checkpoints/`
+- `vaultbot/learningMaterial/`
 - `.obsidian/plugins/vaultbot/data.json`
 - `.obsidian/plugins/vaultbot/mcp.json`
 - `.vscode/mcp.json`
@@ -58,13 +58,13 @@ import subprocess, os, sys
 vault_root = os.getcwd()  # or pass as arg
 sensitive = [
     '.env', 'vaultbot_venv/', 'User/',
-    'vaultbot_stuff/Memory/', 'vaultbot_stuff/Knowledge/',
-    'vaultbot_stuff/vaultbot_backend/sessions/',
-    'vaultbot_stuff/vaultbot_backend/identity/',
-    'vaultbot_stuff/vaultbot_backend/vaultbot_index/',
-    'vaultbot_stuff/vaultbot_backend/trash/',
-    'vaultbot_stuff/vaultbot_backend/checkpoints/',
-    'vaultbot_stuff/learningMaterial/',
+    'vaultbot/Memory/', 'vaultbot/Knowledge/',
+    'vaultbot/vaultbot_backend/sessions/',
+    'vaultbot/vaultbot_backend/identity/',
+    'vaultbot/vaultbot_backend/vaultbot_index/',
+    'vaultbot/vaultbot_backend/trash/',
+    'vaultbot/vaultbot_backend/checkpoints/',
+    'vaultbot/learningMaterial/',
     '.obsidian/plugins/vaultbot/data.json',
     '.obsidian/plugins/vaultbot/mcp.json',
     '.vscode/mcp.json',

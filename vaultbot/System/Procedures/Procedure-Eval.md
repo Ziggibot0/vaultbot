@@ -49,8 +49,8 @@ only formats/labels, it does not judge from scratch.
 import os, json, datetime
 
 vault = str(Path(vault_path).resolve())
-proc_dir = Path(vault) / "vaultbot_stuff" / "System" / "Procedures"
-log_file = Path(vault) / "vaultbot_stuff" / "vaultbot_backend" / "procedure_failure_log.json"
+proc_dir = Path(vault) / "vaultbot" / "System" / "Procedures"
+log_file = Path(vault) / "vaultbot" / "vaultbot_backend" / "procedure_failure_log.json"
 
 def parse_fm(text):
     if not text.startswith("---"):

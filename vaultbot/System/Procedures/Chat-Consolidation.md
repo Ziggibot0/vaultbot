@@ -47,8 +47,8 @@ import os
 import re
 
 vault = str(vault_path)
-chat_dir = os.path.join(vault, "vaultbot_stuff", "Memory", "Chat")
-highway_dir = os.path.join(vault, "vaultbot_stuff", "Memory", "Build-Log")
+chat_dir = os.path.join(vault, "vaultbot", "Memory", "Chat")
+highway_dir = os.path.join(vault, "vaultbot", "Memory", "Build-Log")
 
 # Get all chat log filenames
 chat_files = []

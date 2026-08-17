@@ -86,7 +86,7 @@ Is it any other file type?
 ```python
 # Example: targeted edit to a .md file
 result = md_safe_replace(
-    file_path="vaultbot_stuff/vaultbot_backend/identity/IDENTITY.md",
+    file_path="vaultbot/vaultbot_backend/identity/IDENTITY.md",
     old_str="# SECTION TO REPLACE\n\nold content",
     new_str="# SECTION TO REPLACE\n\nnew content",
 )

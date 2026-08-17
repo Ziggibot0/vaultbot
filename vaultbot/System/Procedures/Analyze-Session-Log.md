@@ -29,7 +29,7 @@ tags:
 Reads a VaultBot session's JSONL log and returns a structured summary of
 everything that happened: title, turns, tool calls + results, exceptions,
 console errors, and thinking. Sessions live in
-`vaultbot_stuff/vaultbot_backend/sessions/*.jsonl` — one file per chat
+`vaultbot/vaultbot_backend/sessions/*.jsonl` — one file per chat
 session, named by UUID, append-only.
 
 Read-only — never modifies a session file.
@@ -51,7 +51,7 @@ Read-only — never modifies a session file.
    import json
    from pathlib import Path
 
-   backend_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend"
+   backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
    sessions_dir = backend_dir / "sessions"
 
    session_arg = (args.get("session") or "latest").strip()

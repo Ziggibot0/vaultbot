@@ -91,5 +91,5 @@ Return JSON: {"results": [{"claim": "...", "verdict": "supported|contradicted|un
 
 ## Related Procedures
 - [[Cross-Check-Claims]] — verifies claims against web sources (external verification)
-- [[vaultbot_stuff/Structure-Research-Note]] — parent procedure for note creation
+- [[vaultbot/Structure-Research-Note]] — parent procedure for note creation
 - [[Vault-Lint]] — structural quality checks (broken links, frontmatter)

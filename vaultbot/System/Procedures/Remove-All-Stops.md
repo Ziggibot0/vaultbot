@@ -28,7 +28,7 @@ last_reviewed: 2026-08-15
    # 3. Disable the force-synthesize nudge
    import os
    
-   fpath = os.path.join("C:\\Users\\skell\\Desktop\\Vault2", "vaultbot_stuff", "vaultbot_backend", "chat_handler.py")
+   fpath = os.path.join("C:\\Users\\skell\\Desktop\\Vault2", "vaultbot", "vaultbot_backend", "chat_handler.py")
    
    with open(fpath, "r", encoding="utf-8") as f:
        content = f.read()
@@ -94,7 +94,7 @@ last_reviewed: 2026-08-15
 2. ```python
    # Verify the changes by reading back the modified sections
    import os
-   fpath = os.path.join("C:\\Users\\skell\\Desktop\\Vault2", "vaultbot_stuff", "vaultbot_backend", "chat_handler.py")
+   fpath = os.path.join("C:\\Users\\skell\\Desktop\\Vault2", "vaultbot", "vaultbot_backend", "chat_handler.py")
    
    with open(fpath, "r", encoding="utf-8") as f:
        content = f.read()

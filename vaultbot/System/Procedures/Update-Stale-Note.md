@@ -49,7 +49,7 @@ else:
         note_text = p.read_text(encoding="utf-8", errors="replace")
         # Find referenced .py files
         py_refs = list(set(re.findall(r'[\w_/]+\.py', note_text)))
-        backend_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend"
+        backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
         code_texts = []
         for pyf in py_refs[:3]:
             cp = backend_dir / pyf

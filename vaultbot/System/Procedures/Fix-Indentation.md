@@ -20,7 +20,7 @@ last_reviewed: 2026-08-15
 
 1. ```python
    import os
-   filepath = r"C:\Users\skell\Desktop\Vault2\vaultbot_stuff\vaultbot_backend\chat_handler.py"
+   filepath = r"C:\Users\skell\Desktop\Vault2\vaultbot\vaultbot_backend\chat_handler.py"
    with open(filepath, "r", encoding="utf-8") as f:
        content = f.read()
    

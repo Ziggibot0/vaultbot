@@ -45,13 +45,13 @@ import json, os, re, difflib
 # Detect the vault root by finding the Procedures directory.
 vault_root = None
 for candidate in [os.getcwd(), "C:\\Users\\skell\\Desktop\\Vault2", os.path.expanduser("~")]:
-    if os.path.isdir(os.path.join(candidate, "vaultbot_stuff", "System", "Procedures")):
+    if os.path.isdir(os.path.join(candidate, "vaultbot", "System", "Procedures")):
         vault_root = candidate
         break
 if vault_root is None:
     d = os.getcwd()
     for _ in range(10):
-        if os.path.isdir(os.path.join(d, "vaultbot_stuff", "System", "Procedures")):
+        if os.path.isdir(os.path.join(d, "vaultbot", "System", "Procedures")):
             vault_root = d
             break
         d = os.path.dirname(d)

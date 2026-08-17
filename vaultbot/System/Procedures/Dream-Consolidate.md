@@ -81,7 +81,7 @@ for root, dirs, files in os.walk(vault_path):
             continue
 
 # --- Load exemplar note for formatting guidance ---
-exemplar_path = os.path.join(vault_path, "vaultbot_stuff", "Knowledge", "Research", "python-108dates-and-times-L1.md")
+exemplar_path = os.path.join(vault_path, "vaultbot", "Knowledge", "Research", "python-108dates-and-times-L1.md")
 exemplar_content = ""
 if os.path.exists(exemplar_path):
     with open(exemplar_path, encoding='utf-8') as f:
@@ -191,7 +191,7 @@ for i, note_data in enumerate(llm_results):
     
     # Sanitize title for filename
     safe_title = re.sub(r'[^\w\-]', '-', title)[:80]
-    note_path = os.path.join(vault_path, "vaultbot_stuff", "Knowledge", "Research", f"{safe_title}.md")
+    note_path = os.path.join(vault_path, "vaultbot", "Knowledge", "Research", f"{safe_title}.md")
     
     # Write the note
     with open(note_path, 'w', encoding='utf-8') as f:

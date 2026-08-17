@@ -37,7 +37,7 @@ When you need to create a new vault note. This procedure handles:
 1. **Directory routing** — decides where the note goes based on content type
 2. **YAML frontmatter** — auto-injects missing fields (type, status, created, summary, tags)
 3. **Locked-note protection** — blocks writes to LOCKED or sacred journal files
-4. **Name deduplication** — checks if a note with the same name already exists
+4. **Name deduplication** — checks if a note with the same name already exists (anywhere in the vault)
 
 ## Inputs
 
@@ -50,6 +50,7 @@ When you need to create a new vault note. This procedure handles:
 | `tags` | No | List of tags (default: `[concept]`) |
 | `summary` | No | One-line summary (default: derived from first paragraph) |
 | `directory` | No | Override the auto-routed directory |
+| `allow_suffix` | No | If a duplicate name exists, auto-suffix with `-2`, `-3`, etc. (default: false) |
 
 ## Steps
 
@@ -65,6 +66,7 @@ status = args.get("status", "active")
 tags = args.get("tags", ["concept"])
 summary = args.get("summary", "")
 directory = args.get("directory", "")
+allow_suffix = args.get("allow_suffix", False)
 
 # Validate required fields
 if not title:
@@ -75,19 +77,34 @@ else:
     # Route directory if not specified
     if not directory:
         if note_type == "procedure":
-            directory = "vaultbot_stuff/System/Procedures"
+            directory = "vaultbot/System/Procedures"
         elif note_type in ("concept", "research", "reference"):
-            directory = "vaultbot_stuff/Knowledge/Concepts"
+            directory = "vaultbot/Knowledge/Concepts"
         elif note_type in ("memory", "chat"):
-            directory = "vaultbot_stuff/Memory/Chat"
+            directory = "vaultbot/Memory/Chat"
         else:
-            directory = "vaultbot_stuff/Knowledge/Concepts"
+            directory = "vaultbot/Knowledge/Concepts"
 
-    # Check for existing note with same name
-    existing = vault_list()
-    existing_names = [f.split("/")[-1].replace(".md", "") for f in existing]
+    # Get ALL existing notes across the entire vault
+    all_files = vault_list()
+    existing_names = [f.split("/")[-1].replace(".md", "") for f in all_files]
+
+    # Check for duplicate name (anywhere in the vault)
     if title in existing_names:
-        result = json.dumps({"warning": f"Note '{title}' already exists", "action": "consider using edit_lines instead"})
+        if allow_suffix:
+            # Generate unique suffixed name
+            candidate = f"{title}-2"
+            counter = 3
+            while candidate in existing_names:
+                candidate = f"{title}-{counter}"
+                counter += 1
+            final_title = candidate
+        else:
+            result = json.dumps({
+                "error": f"Duplicate note name '{title}' exists in the vault",
+                "existing_in": [f for f in all_files if f.split("/")[-1].replace(".md", "") == title],
+                "action": "use allow_suffix=true to auto-suffix, or choose a different title"
+            })
     else:
         # Derive summary if not provided
         if not summary:
@@ -113,9 +130,12 @@ from datetime import date
 
 data = json.loads(output)
 
-if "error" in data or "warning" in data:
+if "error" in data:
     result = json.dumps(data)
 else:
+    # Use suffixed title if generated
+    final_title = data.get("title")
+
     # Build YAML frontmatter
     tags_yaml = "\n".join(f"  - {t}" for t in data["tags"])
     frontmatter = f"""---
@@ -127,16 +147,16 @@ tags:
 summary: {data["summary"]}
 ---"""
 
-    full_content = frontmatter + "\n\n# " + data["title"] + "\n\n" + data["content"]
+    full_content = frontmatter + "\n\n# " + final_title + "\n\n" + data["content"]
 
     # Write the note
-    file_path = f"{data['directory']}/{data['title']}.md"
+    file_path = f"{data['directory']}/{final_title}.md"
     write_result = vault_safe_write(file_path=file_path, content=full_content)
 
     result = json.dumps({
         "status": "written",
         "file_path": file_path,
-        "note": f"Created {data['title']} in {data['directory']}",
+        "note": f"Created {final_title} in {data['directory']}",
         "write_result": write_result,
     })
 ```

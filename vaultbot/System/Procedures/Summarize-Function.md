@@ -43,7 +43,7 @@ if not file_path or not func_name:
 else:
     p = Path(file_path)
     if not p.exists():
-        p = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / file_path
+        p = Path(vault_path) / "vaultbot" / "vaultbot_backend" / file_path
     if not p.exists():
         result = json.dumps({"error": f"file not found: {file_path}"})
     else:

@@ -41,7 +41,7 @@ wrong intent. Run this to catch description-step drift and optionally fix it.
 1. ```python
 import json, re
 
-proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
 procedures = []
 for p in proc_dir.glob("*.md"):
     try:

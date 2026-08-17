@@ -42,7 +42,7 @@ former Vault-Topic-Map procedure.
 1. ```python
 import json
 
-directory = args.get("directory", "vaultbot_stuff/Knowledge")
+directory = args.get("directory", "vaultbot/Knowledge")
 vault = Path(vault_path) / directory
 if not vault.exists():
     vault = Path(vault_path)

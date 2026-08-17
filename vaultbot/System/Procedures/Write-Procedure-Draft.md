@@ -36,7 +36,7 @@ and writes it to disk with `vault_safe_write`.
 1. ```python
 import json
 
-proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
 existing = [p.stem for p in proc_dir.glob("*.md")]
 result = json.dumps({"existing_procedures": existing})
 ```

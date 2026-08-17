@@ -66,7 +66,7 @@ result = json.dumps(contract, indent=2)
 2. ```python
 import json
 try:
-    listing = vault_list(directory="vaultbot_stuff/System/Procedures")
+    listing = vault_list(directory="vaultbot/System/Procedures")
     files = listing if isinstance(listing, list) else json.loads(listing).get("files", [])
     names = sorted(f.replace(".md", "").split("/")[-1] for f in files)
     result = json.dumps({"available_procedures": names, "count": len(names),

@@ -99,7 +99,7 @@ Lists all open PRs on `ziggibot-uni/vaultbot` and for each PR:
 2. **Fetch the diff** — `GET /repos/{owner}/{repo}/pulls/{number}/files`
 3. **Safety scan** — check each changed file for:
    - `.env` or secrets (tokens, API keys, passwords)
-   - Changes outside allowed paths (`vaultbot_stuff/` and
+   - Changes outside allowed paths (`vaultbot/` and
      `.obsidian/plugins/vaultbot/`)
    - Dangerous code patterns (`eval(`, `exec(`, `subprocess.call` with
      user input, `os.system(`, `__import__`)
@@ -154,7 +154,7 @@ If any check fails:
 
 VaultBot is a single repo that is both the public baseline AND each user's
 personal vault. The `.gitignore` keeps personal data out of git, but
-procedures and System notes (`vaultbot_stuff/System/`) are a gray zone:
+procedures and System notes (`vaultbot/System/`) are a gray zone:
 some are general-purpose, some are bespoke to one user's vault.
 
 The **baseline membrane** solves this with a single frontmatter field:

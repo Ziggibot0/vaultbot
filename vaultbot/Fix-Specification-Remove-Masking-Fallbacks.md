@@ -18,7 +18,7 @@ summary: Removing masking fallbacks to enforce strict fail loudly behavior ensur
 > **<!-- updated 2026-08-11 -->** This spec was written 2026-07-31 and has been applied. Some code references have since changed:
 > - `compactor.py` no longer exists — replaced by `lazy_condenser.py` (588 lines). Compaction is now a sliding window, not LLM-based.
 > - Line numbers and function locations may have shifted since the original audit.
-> - See `vaultbot_stuff/System/Procedures/Fix-Masking-Fallbacks.md` for the applied version.
+> - See `vaultbot/System/Procedures/Fix-Masking-Fallbacks.md` for the applied version.
 
 ## Law
 
@@ -32,7 +32,7 @@ summary: Removing masking fallbacks to enforce strict fail loudly behavior ensur
 
 ## Fix 1: `self_improver.py` L400 — Pytest gate fakes a pass
 
-**File:** `vaultbot_stuff/vaultbot_backend/self_improver.py`
+**File:** `vaultbot/vaultbot_backend/self_improver.py`
 **Lines:** 400–402
 
 ### Problem
@@ -65,7 +65,7 @@ If the safety gate can't run, the edit must be **rejected**, not allowed through
 
 ## Fix 2: `fused_retrieval.py` — 13 silent channel degradations
 
-**File:** `vaultbot_stuff/vaultbot_backend/fused_retrieval.py`
+**File:** `vaultbot/vaultbot_backend/fused_retrieval.py`
 **Lines:** 213, 231–234, 343–345, 378–380, 436–438, 496–498, 506, 516, 590
 
 ### Problem
@@ -112,7 +112,7 @@ The caller (`handle_chat`) already has a try/except around `fused_retriever.retr
 
 ## Fix 3: `chat_handler.py` L293–323 — Retrieval fallback chain
 
-**File:** `vaultbot_stuff/vaultbot_backend/chat_handler.py`
+**File:** `vaultbot/vaultbot_backend/chat_handler.py`
 **Lines:** 293–323
 
 ### Problem
@@ -160,7 +160,7 @@ Trying a second search mechanism after the first fails is exactly the "try diffe
 
 ## Fix 4: `knowledge_curriculum.py` — 14 silent failures returning `[]`
 
-**File:** `vaultbot_stuff/vaultbot_backend/knowledge_curriculum.py`
+**File:** `vaultbot/vaultbot_backend/knowledge_curriculum.py`
 **Lines:** 405, 446–448, 568–570, 606, 636, 706, 795, 823
 
 ### Problem
@@ -210,7 +210,7 @@ If gap detection fails, the autonomous researcher can't find work to do, and the
 
 ## Fix 5: `autonomous_researcher.py` — 11 log-only failures
 
-**File:** `vaultbot_stuff/vaultbot_backend/autonomous_researcher.py`
+**File:** `vaultbot/vaultbot_backend/autonomous_researcher.py`
 **Lines:** 438–443, 467–469, 572–573, 598–600, 616–617, 631, 661, 678
 
 ### Problem
@@ -252,7 +252,7 @@ Checkpoint save failure means the researcher can't resume after a restart — it
 
 ## Fix 6: `compactor.py` L169 — Compaction failure returns original messages
 
-**File:** `vaultbot_stuff/vaultbot_backend/compactor.py`
+**File:** `vaultbot/vaultbot_backend/compactor.py`
 **Lines:** 169–175
 
 ### Problem
@@ -288,7 +288,7 @@ Returning the original messages on compaction failure means the context window g
 
 ## Fix 7: `chat_handler.py` L1288 + L1637 — Checkpoint and history persist silently fail
 
-**File:** `vaultbot_stuff/vaultbot_backend/chat_handler.py`
+**File:** `vaultbot/vaultbot_backend/chat_handler.py`
 **Lines:** 1288, 1637
 
 ### Problem
@@ -345,7 +345,7 @@ These aren't "remove the try/except" fixes — the chat should continue even if 
 
 ## Fix 8: `main.py` L410 — Researcher crash notification silently passes
 
-**File:** `vaultbot_stuff/vaultbot_backend/main.py`
+**File:** `vaultbot/vaultbot_backend/main.py`
 **Lines:** 410–411
 
 ### Problem
@@ -380,7 +380,7 @@ The callback shouldn't raise (it's called from a thread), but `pass` means total
 
 ## Fix 9: `llm_client.py` — Pass-only excepts on logging
 
-**File:** `vaultbot_stuff/vaultbot_backend/llm_client.py`
+**File:** `vaultbot/vaultbot_backend/llm_client.py`
 **Lines:** 185–186, 194–195
 
 ### Problem
@@ -426,7 +426,7 @@ These are logging-of-logging failures, so they're low severity. But `pass` is st
 
 ## Fix 10: `chat_handler.py` remaining log-only excepts — audit and classify
 
-**File:** `vaultbot_stuff/vaultbot_backend/chat_handler.py`
+**File:** `vaultbot/vaultbot_backend/chat_handler.py`
 **Lines:** Multiple (see table)
 
 ### Problem
@@ -500,11 +500,11 @@ After each fix:
 
 ## Files Modified
 
-- `vaultbot_stuff/vaultbot_backend/self_improver.py` (Fix 1)
-- `vaultbot_stuff/vaultbot_backend/fused_retrieval.py` (Fix 2)
-- `vaultbot_stuff/vaultbot_backend/chat_handler.py` (Fixes 3, 7, 10)
-- `vaultbot_stuff/vaultbot_backend/knowledge_curriculum.py` (Fix 4)
-- `vaultbot_stuff/vaultbot_backend/autonomous_researcher.py` (Fix 5)
-- `vaultbot_stuff/vaultbot_backend/compactor.py` (Fix 6)
-- `vaultbot_stuff/vaultbot_backend/main.py` (Fix 8)
-- `vaultbot_stuff/vaultbot_backend/llm_client.py` (Fix 9)
+- `vaultbot/vaultbot_backend/self_improver.py` (Fix 1)
+- `vaultbot/vaultbot_backend/fused_retrieval.py` (Fix 2)
+- `vaultbot/vaultbot_backend/chat_handler.py` (Fixes 3, 7, 10)
+- `vaultbot/vaultbot_backend/knowledge_curriculum.py` (Fix 4)
+- `vaultbot/vaultbot_backend/autonomous_researcher.py` (Fix 5)
+- `vaultbot/vaultbot_backend/compactor.py` (Fix 6)
+- `vaultbot/vaultbot_backend/main.py` (Fix 8)
+- `vaultbot/vaultbot_backend/llm_client.py` (Fix 9)

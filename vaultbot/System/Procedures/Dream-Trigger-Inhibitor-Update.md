@@ -54,7 +54,7 @@ Each `model_relevance_tags` event is paired with the **next** `websocket_message
 
 ## Output Contract
 
-**File written:** `vaultbot_stuff/Memory/Build-Log/trigger-inhibitor-update.json`
+**File written:** `vaultbot/Memory/Build-Log/trigger-inhibitor-update.json`
 
 Human-readable summary is printed as the final output.
 
@@ -73,7 +73,7 @@ from pathlib import Path
 
 # Resolve vault root (use injected vault_path from wrapper)
 vault_root = Path(vault_path)
-sessions_dir = vault_root / "vaultbot_stuff" / "vaultbot_backend" / "sessions"
+sessions_dir = vault_root / "vaultbot" / "vaultbot_backend" / "sessions"
 
 if not sessions_dir.is_dir():
     raise RuntimeError(
@@ -485,7 +485,7 @@ for line in lines:
         break
 
 vault_root = Path(vault_path)
-output_dir = vault_root / "vaultbot_stuff" / "Memory" / "Build-Log"
+output_dir = vault_root / "vaultbot" / "Memory" / "Build-Log"
 output_dir.mkdir(parents=True, exist_ok=True)
 out_file = output_dir / "trigger-inhibitor-update.json"
 

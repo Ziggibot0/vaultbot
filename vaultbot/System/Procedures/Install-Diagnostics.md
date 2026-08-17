@@ -66,10 +66,10 @@ print(f"Procedures: {proc_count}")
 import os
 
 backend_files = [
-    "vaultbot_stuff/vaultbot_backend/main.py",
-    "vaultbot_stuff/vaultbot_backend/agent_tools.py",
-    "vaultbot_stuff/vaultbot_backend/vault_indexer.py",
-    "vaultbot_stuff/vaultbot_backend/identity/identity.py",
+    "vaultbot/vaultbot_backend/main.py",
+    "vaultbot/vaultbot_backend/agent_tools.py",
+    "vaultbot/vaultbot_backend/vault_indexer.py",
+    "vaultbot/vaultbot_backend/identity/identity.py",
 ]
 
 missing = []

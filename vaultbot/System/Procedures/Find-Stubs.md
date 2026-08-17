@@ -40,7 +40,7 @@ procedures (which are legitimately structured differently).
 import json, os
 
 run_procedure("Pattern-Scan")
-out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot_stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
+out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
 data = json.loads(Path(out_file).read_text(encoding="utf-8"))
 records = data.get("notes", [])
 

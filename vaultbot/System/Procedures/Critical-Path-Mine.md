@@ -53,7 +53,7 @@ This procedure reads those conversations, uses the LLM to semantically identify 
 
 ## Output Contract
 
-Writes a JSON report to `vaultbot_stuff/Memory/Build-Log/critical-path-mine.json` containing extracted critical paths grouped by problem type. Also writes `critical-path-mine-processed.json` tracking which notes have been analyzed. The calling code (Dream-Pass) can feed these to [[Dream-Pattern-To-Procedure]] for procedure generation.
+Writes a JSON report to `vaultbot/Memory/Build-Log/critical-path-mine.json` containing extracted critical paths grouped by problem type. Also writes `critical-path-mine-processed.json` tracking which notes have been analyzed. The calling code (Dream-Pass) can feed these to [[Dream-Pattern-To-Procedure]] for procedure generation.
 
 ---
 
@@ -67,8 +67,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 vault_root = Path(vault_path)
-chat_dir = vault_root / "vaultbot_stuff" / "Memory" / "Chat"
-output_dir = vault_root / "vaultbot_stuff" / "Memory" / "Build-Log"
+chat_dir = vault_root / "vaultbot" / "Memory" / "Chat"
+output_dir = vault_root / "vaultbot" / "Memory" / "Build-Log"
 output_dir.mkdir(parents=True, exist_ok=True)
 manifest_file = output_dir / "critical-path-mine-processed.json"
 
@@ -211,7 +211,7 @@ Set procedure_worthy to true only if the critical path is reusable — if this t
                     all_analyses.append(parsed)
             except json.JSONDecodeError:
                 # Save raw for debugging
-                debug_dir = Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log"
+                debug_dir = Path(vault_path) / "vaultbot" / "Memory" / "Build-Log"
                 debug_dir.mkdir(parents=True, exist_ok=True)
                 debug_file = debug_dir / f"critical-path-mine-step2-raw-{conv['title'][:30]}.txt"
                 debug_file.write_text(raw, encoding="utf-8")
@@ -220,7 +220,7 @@ Set procedure_worthy to true only if the critical path is reusable — if this t
     print(f"Analyzed {len(all_analyses)} conversations across {len(batches)} batches.")
 
     # Save step 2 output for debugging
-    debug_dir = Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log"
+    debug_dir = Path(vault_path) / "vaultbot" / "Memory" / "Build-Log"
     debug_dir.mkdir(parents=True, exist_ok=True)
     debug_file = debug_dir / "critical-path-mine-step2-raw.txt"
     debug_file.write_text(json.dumps(all_analyses, indent=2), encoding="utf-8")
@@ -319,7 +319,7 @@ Here are the critical path analyses:
     print(f"Found {len(groups)} problem type groups.")
 
     # Save step 3 output for debugging
-    debug_dir = Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log"
+    debug_dir = Path(vault_path) / "vaultbot" / "Memory" / "Build-Log"
     debug_dir.mkdir(parents=True, exist_ok=True)
     debug_file = debug_dir / "critical-path-mine-step3-raw.txt"
     debug_file.write_text(json.dumps(groups, indent=2), encoding="utf-8")
@@ -335,7 +335,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 vault_root = Path(vault_path)
-output_dir = vault_root / "vaultbot_stuff" / "Memory" / "Build-Log"
+output_dir = vault_root / "vaultbot" / "Memory" / "Build-Log"
 output_dir.mkdir(parents=True, exist_ok=True)
 out_file = output_dir / "critical-path-mine.json"
 manifest_file = output_dir / "critical-path-mine-processed.json"

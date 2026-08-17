@@ -84,6 +84,6 @@ These constraints are non-negotiable operational baselines derived from direct o
 ## Related
 
 - [[Deterministic-Scaffolding-for-Small-Models]] — foundational design philosophy
-- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — vault integrity baseline
+- [[vaultbot/Vault-Knowledge-Only-Directive]] — vault integrity baseline
 - [[Calibration-via-Operator-Feedback]] — tracks the corrections feeding this rule
 - [[Semantic-Consolidation-Architecture]] — generation pipeline

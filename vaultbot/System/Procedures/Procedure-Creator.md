@@ -20,7 +20,7 @@ summary: |
   1. Read draft from _procedure_draft.md
   2. Run 13 static validation checks via procedure_validator
   3. Dry-run all code steps in a sandbox
-  4. Publish to vaultbot_stuff/System/Procedures/ only if all checks pass
+  4. Publish to vaultbot/System/Procedures/ only if all checks pass
   5. Lint the published procedure
 tags:
   - procedure
@@ -145,7 +145,7 @@ draft_path = vault_root / "_procedure_draft.md"
 draft_text = draft_path.read_text(encoding="utf-8")
 
 # Add vaultbot_backend to path for procedure_validator import
-backend_dir = vault_root / "vaultbot_stuff" / "vaultbot_backend"
+backend_dir = vault_root / "vaultbot" / "vaultbot_backend"
 sys.path.insert(0, str(backend_dir))
 
 from procedure_validator import validate_procedure_text
@@ -184,7 +184,7 @@ draft_path = vault_root / "_procedure_draft.md"
 
 draft_text = draft_path.read_text(encoding="utf-8")
 
-backend_dir = vault_root / "vaultbot_stuff" / "vaultbot_backend"
+backend_dir = vault_root / "vaultbot" / "vaultbot_backend"
 sys.path.insert(0, str(backend_dir))
 
 from procedure_validator import dry_run_procedure
@@ -207,7 +207,7 @@ result = json.dumps({
 
 ### Step 3: Publish
 
-Write the validated draft to `vaultbot_stuff/System/Procedures/`. Extract the title from the first `#` heading.
+Write the validated draft to `vaultbot/System/Procedures/`. Extract the title from the first `#` heading.
 
 3. ```python
 import os, json, re
@@ -215,7 +215,7 @@ from pathlib import Path
 
 vault_root = Path(vault_path)
 draft_path = vault_root / "_procedure_draft.md"
-proc_dir = vault_root / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = vault_root / "vaultbot" / "System" / "Procedures"
 
 draft_text = draft_path.read_text(encoding="utf-8")
 
@@ -230,7 +230,7 @@ else:
     proc_filename = "Untitled-Procedure.md"
     proc_title = "Untitled Procedure"
 
-# Write to vaultbot_stuff/System/Procedures/
+# Write to vaultbot/System/Procedures/
 proc_path = proc_dir / proc_filename
 
 # Don't overwrite existing notes
@@ -259,7 +259,7 @@ import os, json
 from pathlib import Path
 
 vault_root = Path(vault_path)
-proc_dir = vault_root / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = vault_root / "vaultbot" / "System" / "Procedures"
 
 # Find the most recently created .md file in the procedures directory
 # (more reliable than reading prior_results which may have key mismatches)
@@ -318,7 +318,7 @@ result = json.dumps({
 This procedure is working correctly when:
 - Step 1 reports 0 errors (static validation passes)
 - Step 2 reports all code steps passed (dry run succeeds)
-- Step 3 publishes the procedure to `vaultbot_stuff/System/Procedures/`
+- Step 3 publishes the procedure to `vaultbot/System/Procedures/`
 - Step 4 verifies the published file exists and lints clean
 - The published procedure runs successfully on first live execution
 

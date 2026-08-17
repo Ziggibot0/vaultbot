@@ -37,7 +37,7 @@ create.
 import json, re
 
 # Scan backend for tool definitions
-backend_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend"
+backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
 tools = []
 # Core tools from agent_tools
 core_tools = ["vault_search", "code_read", "plan_task", "update_task",
@@ -53,7 +53,7 @@ if custom_dir.exists():
         tools.append({"name": py.stem, "type": "custom", "file": str(py.name)})
 
 # Procedure library as tools
-proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
 proc_count = len(list(proc_dir.glob("*.md")))
 tools.append({"name": f"{proc_count} procedures", "type": "procedure-library"})
 

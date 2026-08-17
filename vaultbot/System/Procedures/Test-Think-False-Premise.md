@@ -28,7 +28,7 @@ The test passes if:
 
 ## Outputs
 
-- A vault note at `vaultbot_stuff/Memory/Chat/Think-Test-Results.md` containing the full Think output
+- A vault note at `vaultbot/Memory/Chat/Think-Test-Results.md` containing the full Think output
 - Pass/fail verdict for each check
 
 ---
@@ -110,14 +110,14 @@ all_pass = check1_pass and check2_pass and check3_pass
 note_content += f"## Overall Verdict: {'ALL CHECKS PASSED' if all_pass else 'SOME CHECKS FAILED'}\n"
 
 # Write the note
-vault_safe_write('vaultbot_stuff/Memory/Chat/Think-Test-Results.md', note_content)
+vault_safe_write('vaultbot/Memory/Chat/Think-Test-Results.md', note_content)
 
 # Print summary
 result = f"Check 1 (PREMISE_WARNINGS): {'PASS' if check1_pass else 'FAIL'}\n"
 result += f"Check 2 (WIKILINKS_UNRESOLVED): {'PASS' if check2_pass else 'FAIL'}\n"
 result += f"Check 3 (Confidence low): {'PASS' if check3_pass else 'FAIL'}\n"
 result += f"Overall: {'ALL PASSED' if all_pass else 'SOME FAILED'}\n"
-result += f"Full results written to: vaultbot_stuff/Memory/Chat/Think-Test-Results.md"
+result += f"Full results written to: vaultbot/Memory/Chat/Think-Test-Results.md"
 print(result)
 ```
 

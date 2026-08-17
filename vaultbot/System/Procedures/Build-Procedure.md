@@ -133,7 +133,7 @@ if not draft_md or len(draft_md) < 50:
     result = json.dumps({"error": "draft too short", "len": len(draft_md)})
 else:
     vault_path = os.environ.get("VAULT_PATH", ".")
-    temp_dir = os.path.join(vault_path, "vaultbot_stuff", "vaultbot_backend", "trash")
+    temp_dir = os.path.join(vault_path, "vaultbot", "vaultbot_backend", "trash")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, "_build_procedure_draft.md")
     with open(temp_path, "w", encoding="utf-8") as f:
@@ -210,7 +210,7 @@ if not final_md or len(final_md) < 50:
     result = json.dumps({"error": "no valid draft", "len": len(final_md) if final_md else 0})
 else:
     proc_name = suggested_name.replace(" ", "-").replace("_", "-")
-    file_path = f"vaultbot_stuff/System/Procedures/{proc_name}.md"
+    file_path = f"vaultbot/System/Procedures/{proc_name}.md"
     write_result = vault_safe_write(file_path, final_md)
     # Check if the write actually succeeded
     write_status = write_result.get("status", "blocked") if isinstance(write_result, dict) else "blocked"
@@ -274,7 +274,7 @@ import json
 
 step4 = json.loads(output) if output else {}
 proc_name = step4.get("n", "")
-file_path = f"vaultbot_stuff/System/Procedures/{proc_name}.md"
+file_path = f"vaultbot/System/Procedures/{proc_name}.md"
 
 lint_result = vault_lint(file_path)
 
@@ -331,7 +331,7 @@ import json
 
 step4 = json.loads(output) if output else {}
 proc_name = step4.get("n", "")
-file_path = f"vaultbot_stuff/System/Procedures/{proc_name}.md"
+file_path = f"vaultbot/System/Procedures/{proc_name}.md"
 
 lint_result = vault_lint(file_path)
 

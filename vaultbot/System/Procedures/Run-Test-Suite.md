@@ -44,7 +44,7 @@ reports the results. Use it as a gate before restarting the backend.
 import json, os, subprocess
 
 # The test suite lives in vaultbot_backend/tests/
-backend_dir = str(Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend")
+backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
 venv_python = str(Path(vault_path) / ".venv" / "Scripts" / "python.exe")
 if not os.path.exists(venv_python):
     venv_python = "python"

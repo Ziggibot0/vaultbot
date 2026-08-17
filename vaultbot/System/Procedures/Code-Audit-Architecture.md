@@ -47,7 +47,7 @@ Each follows the same 3-step template:
 
 ## Verification
 
-After building all four procedures, execute the orchestrator against a real backend file (e.g., `vaultbot_stuff/vaultbot_backend/chat_handler.py`) to validate end-to-end behavior.
+After building all four procedures, execute the orchestrator against a real backend file (e.g., `vaultbot/vaultbot_backend/chat_handler.py`) to validate end-to-end behavior.
 
 ## Design Rules
 

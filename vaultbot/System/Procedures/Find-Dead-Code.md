@@ -35,7 +35,7 @@ Useful before a refactor or when cleaning up.
 1. ```python
 import re, json
 
-backend_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend"
+backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
 # Collect all definitions
 defs = []  # {name, file, line, kind}
 all_text = {}  # file -> text

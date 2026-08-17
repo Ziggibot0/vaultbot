@@ -74,5 +74,5 @@ A 30B model is more likely to hallucinate during synthesis than a frontier model
 - [[How-to-Evaluate-Source-Credibility]] — pre-synthesis source evaluation (this is post-synthesis)
 - [[Calibration-via-Operator-Feedback]] — using the operator's corrections to calibrate verification
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — where this fits in the evolution roadmap
-- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — why provenance matters
+- [[vaultbot/Vault-Knowledge-Only-Directive]] — why provenance matters
 - [[Self-Assessment-Using-the-Knowledge-Triad]] — the gap this fills

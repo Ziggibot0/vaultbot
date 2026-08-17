@@ -21,7 +21,7 @@ last_reviewed: 2026-08-15
 1. ```python
    import py_compile
    import sys
-   filepath = r"C:\Users\skell\Desktop\Vault2\vaultbot_stuff\vaultbot_backend\chat_handler.py"
+   filepath = r"C:\Users\skell\Desktop\Vault2\vaultbot\vaultbot_backend\chat_handler.py"
    try:
        py_compile.compile(filepath, doraise=True)
        print("VALID: chat_handler.py compiles without errors")

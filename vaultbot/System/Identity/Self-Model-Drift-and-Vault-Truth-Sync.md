@@ -45,11 +45,11 @@ This note was produced by deterministic pattern extraction across 75 chat logs i
 - "have you saved your progress and updated all your notes?" — the operator explicitly flags persistence gaps
 - "i thought you already did that, can you take a sec to sync yourself with reality please" — the operator catches self-model claiming 2 procedures when there were 5
 
-**Semantic rule:** Always run `vault_list` before trusting or reporting the self-model's claims. The self-model is a cache, not a source of truth. The vault directory structure and file timestamps are the only ground truth. This prevents hallucinated state reporting and aligns with [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] which establishes the vault as the sole authoritative knowledge store.
+**Semantic rule:** Always run `vault_list` before trusting or reporting the self-model's claims. The self-model is a cache, not a source of truth. The vault directory structure and file timestamps are the only ground truth. This prevents hallucinated state reporting and aligns with [[vaultbot/Vault-Knowledge-Only-Directive]] which establishes the vault as the sole authoritative knowledge store.
 
 **Prevention:** Integrate `vault_list` into the pre-flight phase of every session start. If self-model claims differ from `vault_list` output, immediately overwrite the self-model with the command output before proceeding.
 
 ## Related
-- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] -- establishes that the vault directory is the sole ground truth, making the self-model a secondary cache that must be validated against it
+- [[vaultbot/Vault-Knowledge-Only-Directive]] -- establishes that the vault directory is the sole ground truth, making the self-model a secondary cache that must be validated against it
 - [[Cross-Session-Patterns-from-75-Chat-Logs]] -- provides the broader historical context of state drift across early development sessions
 - [[Deterministic-Scaffolding-for-Small-Models]] -- explains why deterministic vault queries are preferred over in-memory model state for reliability

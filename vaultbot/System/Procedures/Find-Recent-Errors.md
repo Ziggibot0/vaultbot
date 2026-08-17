@@ -56,7 +56,7 @@ Read-only — never modifies session files.
    import json
    from pathlib import Path
 
-   sessions_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / "sessions"
+   sessions_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend" / "sessions"
    count = int(args.get("count", 10))
    errors_only = str(args.get("errors_only", "true")).lower() == "true"
 

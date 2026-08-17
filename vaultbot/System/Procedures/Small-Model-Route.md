@@ -37,7 +37,7 @@ the best one. Uses the small model (cheap, local) for the routing decision.
 1. ```python
 import json, re
 
-proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
 procedures = []
 for p in proc_dir.glob("*.md"):
     try:

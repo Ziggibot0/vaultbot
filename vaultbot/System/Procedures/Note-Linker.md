@@ -41,7 +41,7 @@ genuinely related — so it's cheap enough to run after every write.
 import json, re, os, datetime
 
 run_procedure("Pattern-Scan")
-out_file = str(Path(vault_path) / "vaultbot_stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
+out_file = str(Path(vault_path) / "vaultbot" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
 data = json.loads(Path(out_file).read_text(encoding="utf-8"))
 records = data.get("notes", [])
 

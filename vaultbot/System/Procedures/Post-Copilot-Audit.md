@@ -41,7 +41,7 @@ Zero LLM cost.
 import subprocess, json, os
 
 vault_path = os.environ.get("VAULT_PATH", "")
-backend_dir = os.path.join(vault_path, "vaultbot_stuff", "vaultbot_backend")
+backend_dir = os.path.join(vault_path, "vaultbot", "vaultbot_backend")
 
 # Get the diff stat (summary of changes)
 try:
@@ -87,7 +87,7 @@ This step greps the changed files for safety-critical patterns. Zero LLM cost.
 import subprocess, json, os, re
 
 vault_path = os.environ.get("VAULT_PATH", "")
-backend_dir = os.path.join(vault_path, "vaultbot_stuff", "vaultbot_backend")
+backend_dir = os.path.join(vault_path, "vaultbot", "vaultbot_backend")
 
 # Safety-critical patterns to check
 patterns = {
@@ -142,7 +142,7 @@ This step lists the backend directory structure and file sizes. Zero LLM cost.
 import os, json, subprocess
 
 vault_path = os.environ.get("VAULT_PATH", "")
-backend_dir = os.path.join(vault_path, "vaultbot_stuff", "vaultbot_backend")
+backend_dir = os.path.join(vault_path, "vaultbot", "vaultbot_backend")
 
 # List all .py files in the backend
 py_files = []
@@ -183,7 +183,7 @@ This step reads the full content of each changed .py file for the LLM step to an
 import os, json, subprocess
 
 vault_path = os.environ.get("VAULT_PATH", "")
-backend_dir = os.path.join(vault_path, "vaultbot_stuff", "vaultbot_backend")
+backend_dir = os.path.join(vault_path, "vaultbot", "vaultbot_backend")
 
 # Re-run git diff --name-only to get the list (code steps don't share state)
 result = subprocess.run(

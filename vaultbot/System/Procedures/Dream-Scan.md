@@ -68,7 +68,7 @@ for jf in journal_files:
         pass
 
 # --- Save themes to a temp file for downstream steps ---
-themes_path = os.path.join(vault_path, "vaultbot_stuff", "vaultbot_backend", "_dream_pass_themes.json")
+themes_path = os.path.join(vault_path, "vaultbot", "vaultbot_backend", "_dream_pass_themes.json")
 with open(themes_path, 'w', encoding='utf-8') as f:
     json.dump(journal_themes, f)
 

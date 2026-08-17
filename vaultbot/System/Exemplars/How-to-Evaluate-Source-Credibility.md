@@ -15,7 +15,7 @@ applies_to:
   - research
   - source-evaluation
 depends_on:
-  - "[[vaultbot_stuff/Structure-Research-Note]]"
+  - "[[vaultbot/Structure-Research-Note]]"
   - "[[No-Wikipedia-Directive]]"
 sources:
   - "https://ohiostate.pressbooks.pub/choosingsources/chapter/evaluating-websites/"
@@ -93,9 +93,9 @@ A 2017 Stanford University study compared how university students, faculty, and 
 ## Related
 
 - [[Procedural-Bootstrap-and-Evolution-Plan]] — the full plan this procedure is part of
-- [[vaultbot_stuff/Structure-Research-Note]] — the next step after source evaluation
+- [[vaultbot/Structure-Research-Note]] — the next step after source evaluation
 - [[No-Wikipedia-Directive]] — blocked sources
-- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — vault is the only knowledge source
+- [[vaultbot/Vault-Knowledge-Only-Directive]] — vault is the only knowledge source
 
 
 LOCKED

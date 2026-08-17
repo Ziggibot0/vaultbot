@@ -36,7 +36,7 @@ fixing.
 1. ```python
 import json
 
-log_path = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend" / "procedure_failure_log.json"
+log_path = Path(vault_path) / "vaultbot" / "vaultbot_backend" / "procedure_failure_log.json"
 if not log_path.exists():
     result = json.dumps({"error": "no failure log found"})
 else:

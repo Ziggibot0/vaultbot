@@ -90,7 +90,7 @@ for c in candidates:
     if not py_refs:
         continue
     # Read the first referenced .py file
-    backend_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend"
+    backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
     code_snippets = []
     for pyf in py_refs[:2]:
         code_path = backend_dir / pyf

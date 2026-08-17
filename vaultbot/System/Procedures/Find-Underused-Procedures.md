@@ -37,13 +37,13 @@ import re, json
 from collections import Counter
 
 # Get all procedure names
-proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
 all_procs = {p.stem for p in proc_dir.glob("*.md")}
 
 # Scan chat logs for execute_procedure calls
-chat_dir = Path(vault_path) / "vaultbot_stuff" / "Memory" / "Chat"
+chat_dir = Path(vault_path) / "vaultbot" / "Memory" / "Chat"
 if not chat_dir.exists():
-    chat_dir = Path(vault_path) / "vaultbot_stuff" / "Memory"
+    chat_dir = Path(vault_path) / "vaultbot" / "Memory"
 
 call_counter = Counter()
 for log_file in sorted(chat_dir.rglob("*.md"))[-50:]:  # last 50 chat logs
@@ -89,7 +89,7 @@ if not unused:
     result = _json.dumps({"analysis": [], "note": "all procedures are used"})
 else:
     # Read descriptions of unused procedures
-    proc_dir = Path(vault_path) / "vaultbot_stuff" / "System" / "Procedures"
+    proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
     proc_info = []
     for name in unused[:15]:
         p = proc_dir / f"{name}.md"

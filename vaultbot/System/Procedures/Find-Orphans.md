@@ -46,7 +46,7 @@ try:
 except Exception:
     out_file = None
 if not out_file or not Path(out_file).exists():
-    out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot_stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
+    out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
 
 data = json.loads(Path(out_file).read_text(encoding="utf-8"))
 records = data.get("notes", [])
@@ -57,7 +57,7 @@ orphans = [
     for r in records if r.get("is_orphan")
 ]
 # Sort: procedures/system notes last, big useful notes first
-orphans.sort(key=lambda o: (o["dir"] in ("System", "vaultbot_stuff"), -o["chars"]))
+orphans.sort(key=lambda o: (o["dir"] in ("System", "vaultbot"), -o["chars"]))
 
 result = json.dumps({
     "orphan_count": len(orphans),

@@ -7,7 +7,7 @@ created: 2026-08-09
 updated: 2026-08-09
 description: "Session-Effort-Analysis scans all chat logs to quantify token consumption, tool usage patterns, and time spent across sessions. It aggregates data per session, highlights the most token-heavy tools, and suggests new procedures that could consolidate repetitive sequences.
 
-The report is written to `vaultbot_stuff/Memory/Build-Log/session-effort-analysis.json` and a concise human-readable summary is printed as the final output."
+The report is written to `vaultbot/Memory/Build-Log/session-effort-analysis.json` and a concise human-readable summary is printed as the final output."
 when_to_use: "Whenever you want an overview of where my tokens, time, and effort are going across all sessions.— Ideal before starting a new complex task or when debugging performance issues."
 falsifiable_if: "The analysis misses a session file, miscounts tokens, or fails to identify the top 3 tools accurately."
 applies_to:
@@ -21,7 +21,7 @@ allowed_tools:
   - code_read
 summary: |
   Session-Effort-Analysis aggregates chat logs to produce token usage statistics, tool call frequencies, and time spent per session.
-  1. List all chat notes under `vaultbot_stuff/Memory/Chat`. 
+  1. List all chat notes under `vaultbot/Memory/Chat`. 
   2. For each note, read metadata (tokens, timestamp) and extract ordered list of tool calls from the chat text. 
   3. Aggregate totals: total tokens per session, token per tool, time between first \u0026 last user message.
   4. Identify top token-heavy tools and top recurring tool chains.
@@ -42,11 +42,11 @@ Collects and aggregates token \u0026 tool usage data from all chat logs to surfa
 
 ## Inputs
 
-No explicit arguments. The procedure scans the entire `vaultbot_stuff/Memory/Chat` directory.
+No explicit arguments. The procedure scans the entire `vaultbot/Memory/Chat` directory.
 
 ## Output Contract
 
-**File written:** `vaultbot_stuff/Memory/Build-Log/session-effort-analysis.json`
+**File written:** `vaultbot/Memory/Build-Log/session-effort-analysis.json`
 
 Human-readable summary is printed as the final output.
 
@@ -60,15 +60,15 @@ from pathlib import Path
 
 # Resolve vault root (use injected vault_path from wrapper)
 vault_root = Path(vault_path)
-chat_dir = vault_root / "vaultbot_stuff" / "Memory" / "Chat"
-output_dir = vault_root / "vaultbot_stuff" / "Memory" / "Build-Log"
+chat_dir = vault_root / "vaultbot" / "Memory" / "Chat"
+output_dir = vault_root / "vaultbot" / "Memory" / "Build-Log"
 output_dir.mkdir(parents=True, exist_ok=True)
 out_file = output_dir / "session-effort-analysis.json"
 
 # Step 1: List all chat notes
 chat_files = list(chat_dir.rglob("*.md"))
 if not chat_files:
-    raise RuntimeError("No chat logs found in vaultbot_stuff/Memory/Chat.")
+    raise RuntimeError("No chat logs found in vaultbot/Memory/Chat.")
 
 sessions = []
 for chat_file in chat_files:

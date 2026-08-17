@@ -174,8 +174,8 @@ for line in lines:
         context = line.replace('CONTEXT: ', '').strip()
 
 vault_path = Path(os.environ.get('VAULT_PATH', '.'))
-backend_dir = vault_path / 'vaultbot_stuff' / 'vaultbot_backend'
-procedures_dir = vault_path / 'vaultbot_stuff' / 'System' / 'Procedures'
+backend_dir = vault_path / 'vaultbot' / 'vaultbot_backend'
+procedures_dir = vault_path / 'vaultbot' / 'System' / 'Procedures'
 
 located_files = []
 location_notes = []
@@ -505,7 +505,7 @@ for line in lines:
 
 # Also pull LOCATED_FILES from the preserved data
 vault_path = Path(os.environ.get('VAULT_PATH', '.'))
-backend_dir = vault_path / 'vaultbot_stuff' / 'vaultbot_backend'
+backend_dir = vault_path / 'vaultbot' / 'vaultbot_backend'
 
 dependencies = []  # list of "source -> dependency (type, line)"
 

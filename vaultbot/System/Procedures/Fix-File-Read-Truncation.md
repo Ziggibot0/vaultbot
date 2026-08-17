@@ -102,7 +102,7 @@ for flag, desc in flags.items():
 # This is hardcoded — verify it's still present.
 import ast, pathlib
 
-src = pathlib.Path("vaultbot_stuff/vaultbot_backend/chat_handler.py").read_text()
+src = pathlib.Path("vaultbot/vaultbot_backend/chat_handler.py").read_text()
 assert "code_read" in src and "vault_read_note" in src, "Read tool names missing from chat_handler.py"
 assert "VAULTBOT_READ_RESULT_CAP" in src, "Read result cap env var missing"
 print("Sanitize exemption and read cap are present in chat_handler.py")

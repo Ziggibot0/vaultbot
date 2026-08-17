@@ -38,9 +38,9 @@ toward covering everything.
 import json, re
 from collections import Counter
 
-chat_dir = Path(vault_path) / "vaultbot_stuff" / "Memory" / "Chat"
+chat_dir = Path(vault_path) / "vaultbot" / "Memory" / "Chat"
 if not chat_dir.exists():
-    chat_dir = Path(vault_path) / "vaultbot_stuff" / "Memory"
+    chat_dir = Path(vault_path) / "vaultbot" / "Memory"
 
 # Collect tool-call sequences from chat logs
 sequences = []

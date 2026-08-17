@@ -35,7 +35,7 @@ claim carry its own frontmatter (supports, contradicts, confidence).
    from pathlib import Path
 
 # Import the schema module
-backend = str(Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend")
+backend = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
 if backend not in sys.path:
     sys.path.insert(0, backend)
 from note_schema import split_note_if_needed, parse_frontmatter
@@ -45,7 +45,7 @@ vault = Path(vault_path)
 candidates = []
 
 # Skip directories that shouldn't be split
-skip_dirs = {"vaultbot_stuff/Memory/Chat", "vaultbot_stuff/vaultbot_backend", ".obsidian"}
+skip_dirs = {"vaultbot/Memory/Chat", "vaultbot/vaultbot_backend", ".obsidian"}
 
 for md_file in vault.rglob("*.md"):
     rel = md_file.relative_to(vault)
@@ -96,7 +96,7 @@ print(json.dumps({"candidates": candidates, "count": len(candidates)}, indent=2)
    import json, os, re, sys
    from pathlib import Path
 
-   backend = str(Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend")
+   backend = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
 if backend not in sys.path:
     sys.path.insert(0, backend)
 from note_schema import split_note_if_needed, inject_schema, parse_frontmatter

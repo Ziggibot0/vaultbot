@@ -40,7 +40,7 @@ Run after a refactor. Notes that reference `old_function_name` or
 import re, json
 
 all_files = vault_list()
-backend_dir = Path(vault_path) / "vaultbot_stuff" / "vaultbot_backend"
+backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
 # Get all actual .py files and their function/class names
 actual_files = set()
 actual_symbols = set()

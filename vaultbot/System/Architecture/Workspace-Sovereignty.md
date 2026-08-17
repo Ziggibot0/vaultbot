@@ -63,7 +63,7 @@ needs to see any of these during normal use.
 - [[VaultBot Issues]] — the issues that motivated this principle
 - [[Autonomy-Directive]] — the AI operates without permission, but within
   the user's sovereign workspace
-- [[vaultbot_stuff/Vault-Knowledge-Only-Directive]] — the vault is the only knowledge
+- [[vaultbot/Vault-Knowledge-Only-Directive]] — the vault is the only knowledge
   source; this principle ensures the vault remains *usable* as it grows
 
 ## Implementation
