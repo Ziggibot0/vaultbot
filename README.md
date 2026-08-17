@@ -4,7 +4,8 @@
 
 > A retrieval-augmented research assistant that lives inside your Obsidian vault.
 > It searches your notes, researches the web when the vault is thin, and writes
-> sourced knowledge — all while running entirely on your own computer.
+> sourced knowledge — your vault and embeddings stay on your machine; the chat
+> model can run locally (with capable hardware) or via a free-tier cloud API.
 
 VaultBot is not a chatbot. It's a **personal research assistant** that
 treats your Obsidian vault as its knowledge base. The LLM is swappable plumbing; the
@@ -112,8 +113,11 @@ For the full strategic vision, see
 
 ## Quick start (one command)
 
-VaultBot runs **entirely on your own computer** — nothing leaves your
-machine unless you choose to add a cloud LLM later.
+VaultBot can run **entirely on your own computer**, but most people should
+use a free-tier cloud API key (e.g. [OpenRouter](https://openrouter.ai))
+for the chat model — running a capable local LLM needs real hardware (see
+[Local vs. cloud](#local-vs-cloud-what-do-i-need) below). Either way, your
+vault, embeddings, and search index always stay on your machine.
 
 You need two things installed first — both are free, one-click downloads:
 
@@ -146,15 +150,14 @@ curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh |
 
 The installer asks for your name, downloads the VaultBot files, creates a
 Python environment, installs all dependencies, pulls the lightweight embedding
-model (~270 MB), asks whether you want a local or cloud chat model (and
-pulls a local model for you if you pick local), writes your config, and
-opens Obsidian for you — all automatically. It takes 10–30 minutes the
-first time (mostly downloads). You only do this once.
-
-If you choose the cloud API path, you'll add your API key to `.env` after
-setup (the installer tells you exactly what to write). If you choose
-local, the installer pulls the model for you. Either way, the backend
-starts automatically when you open Obsidian — no terminal needed.
+model (~270 MB, always local), and asks whether you want a local or cloud chat
+model. If you pick **cloud** (recommended for most users — a free OpenRouter
+key works), you'll add your API key to `.env` after setup (the installer tells
+you exactly what to write). If you pick **local**, the installer pulls a
+local chat model for you — but note that a capable LLM for the agentic loop
+needs real hardware (see [Local vs. cloud](#local-vs-cloud-what-do-i-need)).
+Either way, the backend starts automatically when you open Obsidian — no
+terminal needed.
 
 If Python or Ollama aren't installed yet, the installer tells you and
 opens the download page for you. Install them, then run the command again.
@@ -216,7 +219,7 @@ close and reopen Obsidian) for changes to take effect.
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
 | `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; the installer can pull it for you, or manually `ollama pull` it) | `qwen3:latest` |
 | `OLLAMA_EMBED_MODEL` | The embedding model (auto-pulled by the installer, ~270 MB) | `nomic-embed-text` |
-| `LLM_BACKEND` | `ollama` (local, free, **default — zero-config**) or `openai` (cloud, any OpenAI-compatible API — recommended for laptops) | `ollama` |
+| `LLM_BACKEND` | `ollama` (local, free, **default — needs capable hardware for the agentic loop**) or `openai` (cloud, any OpenAI-compatible API — **recommended for most users**, free OpenRouter tier works) | `ollama` |
 | `LLM_API_KEY` | Cloud API key (leave blank for local-only; if `LLM_BACKEND=openai` but this is empty, the backend fails with a clear error — set the key to use the cloud backend) | (empty) |
 | `LLM_BASE_URL` | Cloud API base URL (OpenAI, OpenRouter, LM Studio, vLLM, etc.) | `https://api.openai.com` |
 | `LLM_MODEL` | Cloud model name (only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
@@ -230,7 +233,19 @@ close and reopen Obsidian) for changes to take effect.
 | `VAULTBOT_PRELOAD_ON_STARTUP` | Preload models when the backend starts to reduce first-chat latency (`1`/`0`) | `1` |
 | `VAULTBOT_PRELOAD_ON_CONNECT` | Preload when a chat WebSocket opens (`1`/`0`) | `1` |
 
-> **Want to use a cloud model (like GPT-4o) instead of local?** Set
+### Local vs. cloud: what do I need?
+
+**Most users — use a free-tier cloud API key (recommended).** VaultBot's
+chat loop needs a model that can actually reason, follow plans, and call
+tools. On a typical laptop, a local model small enough to fit in RAM is
+too weak for the agentic loop. Sign up at
+[OpenRouter](https://openrouter.ai) (free tier available), grab an API
+key, and set `LLM_BACKEND=openai`, `LLM_BASE_URL=https://openrouter.ai/api/v1`,
+`LLM_API_KEY=your-key`, and `LLM_MODEL=` to a free-tier model. Your vault,
+embeddings, and search index stay local on Ollama — only the chat prompt
+hits the API.
+
+> **Want to use a cloud model (like GPT-4o) instead?** Set
 > `LLM_BACKEND=openai`, `LLM_API_KEY=your-key`, and `LLM_MODEL=gpt-4o-mini`
 > (or any OpenAI/OpenRouter model) in `.env`. Embeddings stay local on
 > Ollama either way. You can also switch between cloud and local back and
@@ -238,10 +253,13 @@ close and reopen Obsidian) for changes to take effect.
 > changes persist for you. If you set `LLM_BACKEND=openai` but forget the
 > API key, the backend fails with a clear error — set the key to actually use the cloud backend.
 >
-> **Want to run a local LLM instead?** That's the default — just `ollama pull
-> qwen3:latest` (or any model you like). The installer can pull it for you
-> during setup, or you can pull it manually later. Embeddings always use
-> Ollama regardless.
+> **Want to run a local LLM instead?** You can, but you need the hardware
+> for it: **at least a ~30B model** to keep up with the agentic loop (we
+> suggest `qwen3.8:latest`), which means a capable GPU or a lot of RAM.
+> `ollama pull qwen3.8:latest` (or any model you like). The installer can
+> pull a model for you during setup, or you can pull one manually later.
+> Embeddings always use Ollama regardless. Don't expect a laptop to run
+> the full chat loop locally — that's what the cloud option is for.
 
 ---
 
@@ -300,8 +318,10 @@ folders. Then restart the backend.
 
 ## Safety & Security
 
-VaultBot runs entirely on your machine. It does not phone home, send
-telemetry, or share your data unless you explicitly configure a cloud LLM.
+VaultBot itself runs entirely on your machine — it does not phone home, send
+telemetry, or share your data. Your vault, embeddings, and search index never
+leave your computer. If you configure a cloud LLM (recommended for most users),
+only the chat prompt is sent to that provider — your notes are not uploaded.
 
 **Defense in depth:**
 
