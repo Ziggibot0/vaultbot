@@ -369,6 +369,20 @@ def run(args: dict) -> dict:
     if not full_path.exists():
         return {"status": "error", "error": f"File not found: {file_path_str}"}
 
+    # 4a. Safe Mode content-aware gate: block edits to source-code files.
+    # edit_lines is dual-use (edits .md notes AND .py/.js source), so it's
+    # NOT in _DANGEROUS_TOOLS. Instead, this gate blocks source-code
+    # extensions in Safe Mode while allowing .md and other non-code edits.
+    # See safe_mode.py → is_file_edit_allowed().
+    try:
+        from safe_mode import is_file_edit_allowed, blocked_file_edit_message
+
+        if not is_file_edit_allowed(file_path_str):
+            msg = blocked_file_edit_message(file_path_str)
+            return {"status": "blocked", "safe_mode_blocked": True, "error": msg}
+    except ImportError:
+        pass  # safe_mode not available — don't block (shouldn't happen)
+
     # 5. Read existing content
     try:
         existing_content = full_path.read_text(encoding="utf-8")
