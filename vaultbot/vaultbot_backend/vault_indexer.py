@@ -3,6 +3,12 @@
 Indexes all .md files in the vault using nomic-embed-text embeddings. Watches
 for file changes and updates the index incrementally. Supports chunked
 embeddings for long notes and drift feedback for relevance tuning.
+
+File-watching (``VaultChangeHandler``, ``_is_ignored_path``, ``IGNORED_DIRS``)
+lives in ``vault_watcher.py``; embedding-text/chunking helpers live in
+``embedding_utils.py``.  This module re-exports them for backwards
+compatibility so existing imports (``from vault_indexer import
+VaultChangeHandler``) keep working.
 """
 
 import hashlib
@@ -10,161 +16,40 @@ import json
 import logging
 import os
 import pickle
-import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import faiss
 import numpy as np
+from embedding_utils import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    embedding_text_for_note,
+    get_chunked_embedding,
+    split_into_chunks,
+)
 from ollama_client import OllamaClient
-from watchdog.events import FileSystemEventHandler
+from vault_watcher import IGNORED_DIRS, VaultChangeHandler, _is_ignored_path
 from watchdog.observers import Observer
 
 _logger = logging.getLogger(__name__)
 
-IGNORED_DIRS = {
-    ".venv",
-    "vaultbot_venv",  # legacy name; superseded by .venv (Obsidian-hidden)
-    "vaultbot_index",
-    "sessions",
-    "partials",
-    ".git",
-    ".obsidian",
-    ".trash",  # Obsidian's recycle bin — deleted files must not pollute search
-    "trash",  # backend's own backup dir — deleted notes must not pollute search
-}
+# Re-export so `from vault_indexer import VaultChangeHandler` etc. keep working.
+__all__ = [
+    "VaultIndexer",
+    "VaultChangeHandler",
+    "IGNORED_DIRS",
+    "_is_ignored_path",
+    "EMBEDDING_SCHEMA_VERSION",
+]
 
 # Embedding schema version. Bumped whenever the text we embed for a note
 # changes meaningfully (e.g. procedures now embed their description surface
 # instead of full content). On load, if the persisted version doesn't match,
 # the index is rebuilt from scratch so every vector reflects the current
-# embedding strategy. See _embedding_text_for_note.
+# embedding strategy. See embedding_text_for_note.
 EMBEDDING_SCHEMA_VERSION = 4
-
-
-def _is_ignored_path(path: Path) -> bool:
-    for part in path.parts:
-        if part in IGNORED_DIRS:
-            return True
-    return False
-
-
-class VaultChangeHandler(FileSystemEventHandler):
-    """File-system event handler with debounce.
-
-    When VaultBot writes multiple notes in rapid succession (e.g. during a
-    research dig), the watchdog fires on_modified/on_created for every file.
-    Without debouncing, each event triggers an immediate embedding compute
-    via Ollama, which is CPU-intensive and starves the event loop.  We batch
-    events for DEBOUNCE_SECONDS, then process the final set once.
-    """
-
-    DEBOUNCE_SECONDS = 2.0
-
-    def __init__(self, indexer):
-        self.indexer = indexer
-        self._pending: dict[
-            str, str
-        ] = {}  # path -> event type ('modified'/'created'/'deleted')
-        self._moved_pairs: dict[str, str] = {}  # src_path -> dest_path (for on_moved)
-        self._timer: threading.Timer | None = None
-        self._lock = threading.Lock()
-        super().__init__()
-
-    def _schedule_flush(self):
-        if self._timer is not None:
-            self._timer.cancel()
-        self._timer = threading.Timer(self.DEBOUNCE_SECONDS, self._flush)
-        self._timer.daemon = True
-        self._timer.start()
-
-    def _flush(self):
-        with self._lock:
-            pending = dict(self._pending)
-            moved_pairs = dict(self._moved_pairs)
-            self._pending.clear()
-            self._moved_pairs.clear()
-            self._timer = None
-
-        # Process moves first — remove old path, add new path
-        for src_path, dest_path in moved_pairs.items():
-            try:
-                self.indexer._remove_file(src_path)
-            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                _logger.warning("Error removing moved src %s: %s", src_path, e)
-            try:
-                self.indexer._add_file(dest_path)
-            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                _logger.warning("Error adding moved dest %s: %s", dest_path, e)
-
-        for path, evt_type in pending.items():
-            try:
-                if evt_type == "deleted":
-                    self.indexer._remove_file(path)
-                elif evt_type == "created":
-                    self.indexer._add_file(path)
-                else:
-                    self.indexer._update_file(path)
-            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                _logger.warning("Error processing %s: %s", path, e)
-
-    def on_modified(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
-            if _is_ignored_path(Path(event.src_path)):
-                return
-            with self._lock:
-                # 'created' takes priority over 'modified' — a file that was
-                # just created and then modified should be added, not updated.
-                if (
-                    event.src_path not in self._pending
-                    or self._pending[event.src_path] != "created"
-                ):
-                    self._pending[event.src_path] = "modified"
-            self._schedule_flush()
-
-    def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
-            if _is_ignored_path(Path(event.src_path)):
-                return
-            with self._lock:
-                self._pending[event.src_path] = "created"
-            self._schedule_flush()
-
-    def on_deleted(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
-            if _is_ignored_path(Path(event.src_path)):
-                return
-            with self._lock:
-                self._pending[event.src_path] = "deleted"
-            self._schedule_flush()
-
-    def on_moved(self, event):
-        """Handle file moves/renames — remove old path, add new path.
-
-        Without this handler, moved files leave stale entries in the index
-        (the old path becomes a ghost). Watchdog fires on_moved for both
-        renames and directory moves.
-        """
-        if not event.is_directory and event.src_path.endswith(".md"):
-            dest_path = getattr(event, "dest_path", "")
-            if not dest_path:
-                return
-            src_ignored = _is_ignored_path(Path(event.src_path))
-            dest_ignored = _is_ignored_path(Path(dest_path))
-            with self._lock:
-                if not src_ignored and dest_ignored:
-                    # File moved OUT of vault — just delete src
-                    self._pending[event.src_path] = "deleted"
-                elif not src_ignored and not dest_ignored:
-                    # File moved within vault — remove old, add new
-                    self._pending.pop(event.src_path, None)
-                    self._pending.pop(dest_path, None)
-                    self._moved_pairs[event.src_path] = dest_path
-                elif src_ignored and not dest_ignored:
-                    # File moved INTO vault — just add dest
-                    self._pending[dest_path] = "created"
-            self._schedule_flush()
 
 
 class VaultIndexer:
@@ -188,58 +73,39 @@ class VaultIndexer:
         self.timestamp_file = self.index_path / "timestamps.json"
 
         self.session_logger = session_logger
-        # Trigger/inhibitor phrase-embedding store (optional).  When wired,
-        # the indexer populates it at add/update time so the retrieval gate
-        # in fused_retrieval can drop notes whose inhibitors match the query.
-        # None = no gate (the store is a bonus layer — see trigger_store.py).
+        # Trigger/inhibitor phrase-embedding store (optional, bonus layer — see trigger_store.py).
         self.trigger_store = trigger_store
         self.ollama_client = OllamaClient(
             embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
             session_logger=session_logger,
         )
-        self.dimension = None  # Will be set after first embedding
+        self.dimension = None  # set after first embedding
         self.index = None
-        # ── Phase 1 migration: id-keyed metadata + IndexIDMap2 ──────────
-        # _metadata maps faiss id → {file_path, last_modified, content_hash, ...}.
-        # _path_to_id maps str(file_path) → faiss id for O(1) lookup.
-        # _next_id is monotonic; tombstoned ids (removed via remove_ids) are
-        # never reused until a full _rebuild_index compaction.
-        # The legacy `self.metadata` list is kept as a back-compat @property
-        # below so external readers (note_creator.py:83) keep working.
+        # Phase 1: id-keyed metadata + IndexIDMap2. _metadata: faiss id → meta dict;
+        # _path_to_id: str(file_path) → faiss id (O(1) lookup). _next_id is monotonic;
+        # tombstoned ids reused only after _rebuild_index compaction. The legacy
+        # `self.metadata` list is kept as a back-compat @property below.
         self._metadata: dict[int, dict[str, Any]] = {}
         self._path_to_id: dict[str, int] = {}
         self._next_id: int = 0
         self.timestamps = {}  # file_path -> last_modified timestamp
-        # Bounded content-preview cache stored alongside each metadata entry.
-        # Populated at index time (where the file is already read for hashing +
-        # embedding) so search() / search_by_vector() can return a snippet
-        # WITHOUT re-reading the file from disk on every query. The whole point:
-        # FAISS finds K nearest in O(log N), then we used to do K synchronous
-        # disk reads for the content — this cache removes those reads. Set to
-        # 0 via VAULTBOT_INDEX_PREVIEW_CHARS to disable (full content returned,
-        # reads from disk as before). Default 2000 covers every known consumer
-        # (abstract_context uses 500, build_graph_context 2000, _snippet 200,
-        # graph_ops.search 240, build_context 1500). A-MEM's write-back path
-        # re-reads from disk itself, so it is unaffected by this cap.
+        # Bounded content-preview cache (populated at index time) so search()
+        # returns snippets WITHOUT re-reading files. 0 via VAULTBOT_INDEX_PREVIEW_CHARS
+        # disables (full content, reads from disk). Default 2000 covers all consumers.
         self.preview_chars = int(os.getenv("VAULTBOT_INDEX_PREVIEW_CHARS", "2000"))
-        # Set by _load_index when the persisted embedding schema version
-        # doesn't match EMBEDDING_SCHEMA_VERSION (see index_missing_or_changed).
-        self._needs_full_rebuild = False
+        self._needs_full_rebuild = False  # set by _load_index on schema mismatch
 
         self.observer = None
         self._load_index()
 
-    # Back-compat: external callers (note_creator._generate_links) iterate
-    # `indexer.metadata` as a list of dicts.  Return the live values so they
-    # see current state without touching the dict internals.
+    # Back-compat: external callers iterate `indexer.metadata` as a list of dicts.
     @property
     def metadata(self) -> list[dict[str, Any]]:
         return list(self._metadata.values())
 
     @metadata.setter
     def metadata(self, value):
-        # Legacy callers / _load_index migration may assign a list.  Re-key
-        # it into the id-keyed dict with sequential ids starting at 0.
+        # Legacy callers / migration may assign a list — re-key into id dict.
         self._metadata = {}
         self._path_to_id = {}
         for i, m in enumerate(value):
@@ -247,36 +113,17 @@ class VaultIndexer:
             self._path_to_id[m["file_path"]] = i
         self._next_id = len(value)
 
-    def _log_tool(
-        self,
-        method: str,
-        inputs: dict[str, Any] | None = None,
-        outputs: Any = None,
-        error: str | None = None,
-    ):
+    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None, outputs: Any = None, error: str | None = None):
         if self.session_logger is None:
             return
-        self.session_logger.log_tool_call(
-            tool="vault_indexer",
-            method=method,
-            inputs=inputs,
-            outputs=outputs,
-            error=error,
-        )
+        self.session_logger.log_tool_call(tool="vault_indexer", method=method, inputs=inputs, outputs=outputs, error=error)
 
     def _load_index(self):
         """Load existing index and metadata from disk, or initialize new.
 
-        Handles three on-disk formats:
-        1. New format (Phase 1+): metadata.pkl is a tuple
-           ``(_metadata: dict[int, dict], _path_to_id: dict[str, int],
-           _next_id: int)`` and index.faiss is an IndexIDMap2.
-        2. Legacy format: metadata.pkl is a list[dict] and index.faiss is
-           an IndexFlatL2.  We detect this by checking whether the pickle
-           unpacks into a tuple of length 3; if it's a list, we migrate it
-           in-place by assigning sequential ids 0..N-1 and rebuilding an
-           IndexIDMap2 from reconstruct(i) of each vector in the old flat
-           index — zero Ollama calls.
+        Handles on-disk formats: new (tuple of 3 or 4 with schema version +
+        IndexIDMap2) and legacy (list[dict] + IndexFlatL2, migrated in-place
+        via reconstruct — zero Ollama calls).
         """
         if (
             self.index_file.exists()
@@ -290,20 +137,14 @@ class VaultIndexer:
                 with open(self.timestamp_file) as f:
                     self.timestamps = json.load(f)
 
-                # Detect format: tuple of length 3 = new (v1); tuple of
-                # length 4 = new (v2+, carries embedding schema version);
-                # list = legacy.
+                # Detect format: tuple(3)=v1, tuple(4)=v2+ (schema ver), list=legacy.
                 _stored_schema_version = 1
                 if isinstance(loaded, tuple) and len(loaded) == 4:
-                    (
-                        self._metadata,
-                        self._path_to_id,
-                        self._next_id,
-                        _stored_schema_version,
-                    ) = loaded
+                    (self._metadata, self._path_to_id, self._next_id,
+                     _stored_schema_version) = loaded
                 elif isinstance(loaded, tuple) and len(loaded) == 3:
                     self._metadata, self._path_to_id, self._next_id = loaded
-                    # Normalize any stale relative paths to absolute.
+                    # Normalize stale relative paths to absolute.
                     for fid, meta in list(self._metadata.items()):
                         fp = Path(meta["file_path"])
                         if not fp.is_absolute():
@@ -313,16 +154,11 @@ class VaultIndexer:
                             self._path_to_id.pop(old_key, None)
                             self._path_to_id[str(resolved)] = fid
                 else:
-                    # Legacy list format — migrate to id-keyed dict.
-                    _logger.info(
-                        "[migration] Detected legacy list-format metadata; "
-                        "converting to IndexIDMap2 (zero re-embedding)..."
-                    )
+                    # Legacy list format — migrate to id-keyed dict + IndexIDMap2.
+                    _logger.info("[migration] Detected legacy list-format; converting to IndexIDMap2...")
                     legacy_list = loaded if isinstance(loaded, list) else []
                     self._metadata = {}
                     self._path_to_id = {}
-                    # Reconstruct each vector from the old IndexFlatL2 and
-                    # re-add it to a fresh IndexIDMap2 with sequential ids.
                     old_index = self.index
                     dim = old_index.d if old_index is not None else None
                     self.index = None  # let _add_embedding_to_index create it
@@ -334,31 +170,18 @@ class VaultIndexer:
                         try:
                             vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
                         except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                            _logger.info(
-                                f"[migration] Skipping unreconstructable "
-                                f"legacy vector {i} ({meta['file_path']})"
-                            )
+                            _logger.info(f"[migration] Skipping unreconstructable legacy vector {i} ({meta['file_path']})")
                             continue
-                        # Use the internal add path so the id map + metadata
-                        # + timestamps are all set consistently.
                         self._add_embedding_to_index(
-                            fp,
-                            vec,
-                            meta.get("last_modified", 0.0),
+                            fp, vec, meta.get("last_modified", 0.0),
                             meta.get("content_hash", ""),
                             content_preview=meta.get("content_preview", ""),
                         )
                     self.dimension = dim
-                    _logger.info(
-                        f"[migration] Migrated {self._next_id} vectors to IndexIDMap2."
-                    )
+                    _logger.info(f"[migration] Migrated {self._next_id} vectors to IndexIDMap2.")
 
-                # If the embedding schema changed since this index was
-                # built, the stored vectors no longer match the text we now
-                # embed (e.g. procedures embedded from full content instead
-                # of their description surface). Discard the old vectors and
-                # force a full rebuild on the next index_missing_or_changed
-                # / batch_add_files call by clearing the index.
+                # If the embedding schema changed, stored vectors no longer
+                # match the text we now embed — discard and force full rebuild.
                 if _stored_schema_version != EMBEDDING_SCHEMA_VERSION:
                     _logger.info(
                         f"[migration] Embedding schema version changed "
@@ -388,16 +211,11 @@ class VaultIndexer:
 
     def _init_new_index(self):
         """Initialize a new empty index."""
-        # We'll determine the dimension when we add the first vector
-        self.index = None
+        self.index = None  # dimension set on first vector add
         self._metadata = {}
         self._path_to_id = {}
         self._next_id = 0
         self.timestamps = {}
-        # Set by _load_index when the persisted embedding schema version
-        # doesn't match EMBEDDING_SCHEMA_VERSION. index_missing_or_changed
-        # checks this to force a full re-embed instead of skipping
-        # unchanged files by content hash.
         self._needs_full_rebuild = getattr(self, "_needs_full_rebuild", False)
 
     def _get_file_hash(self, file_path: Path) -> str:
@@ -409,212 +227,41 @@ class VaultIndexer:
             return ""
 
     def _get_embedding(self, text: str) -> np.ndarray:
-        """Get embedding for text using Ollama.
-
-        For long text (> 4000 chars), uses chunked embedding: splits the
-        text into ~3K-char overlapping chunks, embeds each in parallel, and
-        averages into one vector.  This ensures a long note's FULL content
-        contributes to its FAISS vector — without it, nomic-embed-text's
-        ~4000-char input limit means only the first ~600 words are embedded
-        and the rest of the note is invisible to vector search.
-        """
+        """Get embedding for text using Ollama (chunked for > 4000 chars)."""
         if len(text) > 4000:
             return self._get_chunked_embedding(text)
         embedding = self.ollama_client.embeddings(text)
         return np.array(embedding, dtype=np.float32)
 
-    _CHUNK_SIZE = 3000
-    _CHUNK_OVERLAP = 300
+    _CHUNK_SIZE = CHUNK_SIZE
+    _CHUNK_OVERLAP = CHUNK_OVERLAP
 
     def _get_chunked_embedding(self, text: str) -> np.ndarray:
-        """Embed long text by chunking + averaging.
-
-        Splits on paragraph boundaries (\n\n) into ~3K-char chunks with
-        ~300-char overlap, embeds all chunks in parallel via
-        batch_embeddings, and averages the vectors.  Returns a single
-        float32 array of the same dimensionality as a single embedding.
-        Falls back to a single truncated embedding if anything fails.
-        """
-        chunks = self._split_into_chunks(text, self._CHUNK_SIZE, self._CHUNK_OVERLAP)
-        if not chunks:
-            embedding = self.ollama_client.embeddings(text[:4000])
-            return np.array(embedding, dtype=np.float32)
-        if len(chunks) == 1:
-            embedding = self.ollama_client.embeddings(chunks[0][:4000])
-            return np.array(embedding, dtype=np.float32)
-        # Parallel embed all chunks.
-        embs = self.ollama_client.batch_embeddings(chunks)
-        valid = [
-            np.array(e, dtype=np.float32) for e in embs if e is not None and len(e) > 0
-        ]
-        if not valid:
-            # All chunks failed — fall back to first 4K.
-            embedding = self.ollama_client.embeddings(text[:4000])
-            return np.array(embedding, dtype=np.float32)
-        # Average into one vector.
-        stacked = np.stack(valid)
-        return np.mean(stacked, axis=0).astype(np.float32)
+        """Embed long text by chunking + averaging (delegates to embedding_utils)."""
+        return get_chunked_embedding(
+            text, self.ollama_client, self._CHUNK_SIZE, self._CHUNK_OVERLAP
+        )
 
     @staticmethod
     def _split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[str]:
-        """Split text into overlapping chunks on paragraph boundaries.
-
-        Tries to break on \n\n (paragraph) or \n (line) boundaries near the
-        target chunk size, so chunks don't split mid-sentence.  Each chunk
-        overlaps the previous by `overlap` chars so context isn't lost at
-        the seam.
-        """
-        if len(text) <= chunk_size:
-            return [text]
-        chunks: list[str] = []
-        start = 0
-        while start < len(text):
-            end = start + chunk_size
-            if end >= len(text):
-                chunks.append(text[start:])
-                break
-            # Try to break at a paragraph boundary near `end`.
-            boundary = text.rfind("\n\n", end - overlap, end)
-            if boundary == -1 or boundary <= start:
-                boundary = text.rfind("\n", end - overlap, end)
-            if boundary == -1 or boundary <= start:
-                boundary = end  # hard cut — no nice boundary nearby
-            chunks.append(text[start:boundary])
-            start = boundary + 1  # +1 to skip the newline
-        # Filter out empty / tiny chunks.
-        return [c for c in chunks if len(c.strip()) > 50]
+        """Split text into overlapping chunks on paragraph boundaries (delegates to embedding_utils)."""
+        return split_into_chunks(text, chunk_size, overlap)
 
     @staticmethod
     def _embedding_text_for_note(file_path: Path, content: str) -> str:
-        """Return the text that should be EMBEDDED for a note.
+        """Return the text that should be EMBEDDED for a note (delegates to embedding_utils).
 
-        For ordinary notes this is the full content (current behaviour): a
-        note is retrieved when the query semantically matches what the note
-        *says*.
-
-        For PROCEDURE notes (``type: procedure``) this returns only the
-        *discovery surface* — the title, ``description``, and
-        ``when_to_use``/``when`` frontmatter fields — NOT the step body or
-        code. The operator's insight: a procedure should be discovered when
-        the user's need matches *when to use it*, not when the query happens
-        to lexically overlap the procedure's implementation (code blocks,
-        tool names, step prose). Embedding the full body meant a procedure
-        about "verify Python syntax" would surface for any Python-syntax
-        question even when the user didn't want a procedure; and a procedure
-        whose steps mention "FAISS" would surface for FAISS questions
-        unrelated to the procedure's purpose.
-
-        Embedding the description surface instead means the procedure's
-        FAISS vector represents its *capability*, so retrieval matches on
-        intent ("I need to check syntax before restart" → Verify-Syntax)
-        rather than on incidental content overlap. The full body is only
-        loaded at execution time via ``execute_procedure``.
-
-        Falls back to full content if the note has no description
-        (procedures without a description can't be retrieved by intent
-        anyway, and the validator flags the missing field).
+        See ``embedding_utils.embedding_text_for_note`` for the full
+        rationale on procedure discovery surfaces vs. full-content embedding.
         """
-        if not content.startswith("---"):
-            return content
-        end = content.find("\n---", 3)
-        if end == -1:
-            return content
-        fm_block = content[3:end]
-        # Only special-case procedures; everything else embeds full content.
-        if "type: procedure" not in fm_block:
-            return content
-        # Parse the few scalar keys that form the discovery surface.
-        # Mirrors the lightweight frontmatter parse in procedure_surface.py
-        # / procedure_tracker.py (no YAML dep, no nested mappings).
-        description = ""
-        when = ""
-        provides: list[str] = []
-        triggers: list[str] = []
-        current_key: str | None = None
-        for line in fm_block.split("\n"):
-            line = line.rstrip()
-            if not line:
-                continue
-            # List item: "  - value" — collect provides sub-procedure names
-            # and trigger phrases (both are list-valued frontmatter fields).
-            if line.startswith("  - ") and current_key in ("provides", "trigger"):
-                val = line[4:].strip().strip('"').strip("'")
-                if val:
-                    if current_key == "provides":
-                        provides.append(val)
-                    else:
-                        triggers.append(val)
-                continue
-            if line.startswith("  "):
-                continue
-            if ":" not in line:
-                continue
-            key, _, value = line.partition(":")
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if not value:
-                current_key = key
-                continue
-            current_key = key
-            if key == "description":
-                description = value
-            elif key in ("when_to_use", "when"):
-                when = value
-            elif key == "trigger":
-                # Inline single value: ``trigger: some phrase``
-                triggers.append(value)
-            elif key == "provides":
-                # Inline single value: ``provides: Dream-Scan``
-                provides.append(value)
-        # No description → can't do intent-based retrieval; embed full
-        # content as a degraded fallback (validator will have flagged it).
-        if not description and not when and not triggers:
-            return content
-        title = file_path.stem
-        surface = f"{title}"
-        if description:
-            surface += f"\n{description}"
-        if triggers:
-            # Trigger phrases are individual use-cases (feedback-tuned).
-            # One "Use when:" line per phrase so each gets its own embedding
-            # line — same rationale as the when_to_use split below.
-            for phrase in triggers:
-                phrase = phrase.strip().strip('"').strip("'")
-                if not phrase:
-                    continue
-                surface += f"\nUse when: {phrase}"
-        elif when:
-            # Fallback: split when_to_use into individual use-cases so each
-            # one gets its own embedding line. Without this, the embedding
-            # model averages all use-cases into one vector, diluting each
-            # specific use-case. With individual lines, a query matching any
-            # single use-case gets high similarity instead of being averaged
-            # away.  Pattern: "when X, when Y, when Z, or when W"
-            import re as _re
-
-            clauses = _re.split(r",\s*(?:or\s+)?when\s+", when)
-            for clause in clauses:
-                clause = clause.strip().rstrip(",").strip('"').strip("'")
-                if not clause:
-                    continue
-                surface += f"\nUse when: {clause}"
-        # Include sub-procedure names so an orchestrator is discoverable by
-        # the capabilities it composes — a query about "scan orphans" should
-        # surface Dream-Pass (which composes Dream-Scan), not just Dream-Scan.
-        # Only the names are added (not descriptions) to stay compact.
-        if provides:
-            surface += "\nComposes: " + ", ".join(provides)
-        return surface
+        return embedding_text_for_note(file_path, content)
 
     def _update_trigger_store(self, file_path: Path, content: str) -> None:
         """Parse trigger/inhibitor frontmatter and update the store.
 
-        Uses ``note_schema.parse_frontmatter`` (handles list values) to
-        extract the two fields.  A note with neither field has its entry
-        removed so a stale gate doesn't persist after the fields are dropped.
-        Called from ``_add_file_to_index`` when ``self.trigger_store`` is
-        wired.  The store embeds each phrase via the indexer's own
-        ``_get_embedding`` (passed as the embedding getter at construction).
+        Uses ``note_schema.parse_frontmatter`` (handles list values).  A note
+        with neither field has its entry removed so a stale gate doesn't
+        persist.  Called from ``_add_file_to_index`` when wired.
         """
         from note_schema import parse_frontmatter
 
@@ -638,28 +285,19 @@ class VaultIndexer:
             _logger.warning(f"Error reading file {file_path}: {e}")
             return
 
-        # Compute hash to detect changes
         content_hash = self._get_file_hash(file_path)
-        stat = file_path.stat()
-        last_modified = stat.st_mtime
+        last_modified = file_path.stat().st_mtime
 
-        # Check if we already have this file and if it's unchanged (O(1) lookup)
+        # Skip unchanged (O(1) lookup); update existing by removing old vector.
         key = str(file_path)
         existing_id = self._path_to_id.get(key)
         if existing_id is not None:
             meta = self._metadata.get(existing_id)
             if meta and meta.get("content_hash") == content_hash:
-                # No change
                 return
-            else:
-                # Update existing: remove old vector (O(1), no re-embedding)
-                self._remove_file_internal(file_path)
+            self._remove_file_internal(file_path)
 
-        # Get embedding.  Procedures embed only their description/when-to-use
-        # surface (intent-based discovery); other notes embed full content.
-        # The full content is still cached as the preview below so search
-        # results and the procedure surface can read frontmatter/snippets
-        # without a disk read.
+        # Procedures embed description surface; other notes embed full content.
         embed_text = self._embedding_text_for_note(file_path, content)
         try:
             embedding = self._get_embedding(embed_text)
@@ -667,11 +305,7 @@ class VaultIndexer:
             _logger.warning(f"Error getting embedding for {file_path}: {e}")
             return
 
-        # Update the trigger/inhibitor store from this note's frontmatter.
-        # The store embeds each phrase so the retrieval gate can compare the
-        # query against trigger vs inhibitor phrases.  A note with neither
-        # field has its stale entry removed.  Best-effort: a failure here
-        # must not block indexing (the gate is a bonus layer).
+        # Update trigger store from frontmatter (best-effort).
         if self.trigger_store is not None:
             try:
                 self._update_trigger_store(file_path, content)
@@ -692,25 +326,13 @@ class VaultIndexer:
     ):
         """Add a pre-computed embedding to the index (shared by single and batch paths).
 
-        ``content_preview`` is an optional bounded slice of the file content,
-        cached so search results can return a snippet without re-reading the
-        file from disk. Callers that already have the content (both add paths
-        # below read the file for hashing/embedding) pass it in for free.
+        ``content_preview`` is an optional bounded slice cached so search
+        results can return a snippet without re-reading the file from disk.
         """
         embed_dim = len(embedding)
         if embed_dim == 0:
-            _logger.warning(
-                f"Skipping {file_path}: received empty embedding from Ollama."
-            )
-            self._log_tool(
-                "add_file",
-                {
-                    "file_path": str(file_path),
-                    "last_modified": last_modified,
-                    "content_hash": content_hash,
-                },
-                error="empty embedding",
-            )
+            _logger.warning(f"Skipping {file_path}: received empty embedding from Ollama.")
+            self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error="empty embedding")
             return
 
         if self.index is None:
@@ -718,25 +340,12 @@ class VaultIndexer:
             self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
             _logger.info(f"Initialized new IndexIDMap2 with dimension {self.dimension}")
         elif embed_dim != self.index.d:
-            _logger.warning(
-                f"Skipping {file_path}: embedding dimension {embed_dim} does not match index dimension {self.index.d}."
-            )
-            self._log_tool(
-                "add_file",
-                {
-                    "file_path": str(file_path),
-                    "last_modified": last_modified,
-                    "content_hash": content_hash,
-                },
-                error=f"dimension mismatch: {embed_dim} vs {self.index.d}",
-            )
+            _logger.warning(f"Skipping {file_path}: dim {embed_dim} != index dim {self.index.d}.")
+            self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error=f"dimension mismatch: {embed_dim} vs {self.index.d}")
             return
 
-        # Normalize the embedding in-place so L2 distance ≡ cosine
-        # distance.  This makes the embedding-drift re-ranking layer
-        # correct-by-construction for ANY embed model, not just the
-        # currently-used normalized nomic-embed-text.  Unit vectors:
-        # ||a−b||² = 2(1−cos(a,b)), so L2 ranking == cosine ranking.
+        # Normalize in-place so L2 distance ≡ cosine distance (unit vectors:
+        # ||a−b||² = 2(1−cos(a,b)), so L2 ranking == cosine ranking).
         vec = embedding.reshape(1, -1).astype(np.float32)
         faiss.normalize_L2(vec)
 
@@ -760,26 +369,13 @@ class VaultIndexer:
         self._path_to_id[abs_path_str] = faiss_id
         self.timestamps[abs_path_str] = last_modified
         _logger.debug(f"Added {file_path} to index. Total vectors: {self.index.ntotal}")
-        self._log_tool(
-            "add_file",
-            {
-                "file_path": abs_path_str,
-                "last_modified": last_modified,
-                "content_hash": content_hash,
-            },
-        )
+        self._log_tool("add_file", {"file_path": abs_path_str, "last_modified": last_modified, "content_hash": content_hash})
 
     def batch_add_files(self, file_paths: list[str], return_embeddings: bool = False):
         """Add multiple files to the index using parallel embedding calls.
 
-        Reads all files, sends their content to Ollama in parallel batches,
-        then adds all embeddings to the FAISS index in one pass.
-
-        Returns the number of files successfully indexed.  When
-        ``return_embeddings`` is True, returns a tuple
-        ``(indexed, {abs_path_str: embedding_list})`` so callers that need
-        the embeddings right away (e.g. A-MEM neighbor search during a
-        textbook weave) can reuse them instead of re-embedding each note.
+        Returns the number of files indexed, or ``(indexed, {path: emb})``
+        when ``return_embeddings`` is True (e.g. A-MEM neighbor reuse).
         """
         if not file_paths:
             return (0, {}) if return_embeddings else 0
@@ -814,22 +410,11 @@ class VaultIndexer:
         if not contents:
             return (0, {}) if return_embeddings else 0
 
-        # Get embeddings.  Short texts go through the parallel batch path;
-        # long texts (\u003e 4000 chars) use chunked embedding (split + average)
-        # so the note's FULL content contributes to its vector, not just the
-        # first 4K chars.  We dispatch each file to the right path and still
-        # parallelize across files via a thread pool.
-        #
-        # Procedures embed only their description/when-to-use surface
-        # (intent-based discovery — see _embedding_text_for_note); other
-        # notes embed full content.  The surface is typically short, so it
-        # goes through the single-embedding path (no chunking needed).
+        # Short texts → parallel batch; long texts → chunked embedding.
+        # Procedures embed description surface (see _embedding_text_for_note).
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        embed_texts = [
-            self._embedding_text_for_note(fp, content)
-            for fp, content in zip(valid_paths, contents)
-        ]
+        embed_texts = [self._embedding_text_for_note(fp, content) for fp, content in zip(valid_paths, contents)]
 
         def _embed_one(text: str):
             if len(text) > 4000:
@@ -875,17 +460,11 @@ class VaultIndexer:
     def _remove_file_internal(self, file_path: Path):
         """Remove a file from the index — O(1), zero re-embedding.
 
-        IndexIDMap2.remove_ids marks the id as removed (tombstone) in a single
-        pass over the id map — no Ollama calls, no re-reading files.  This is
-        the fix for the old rebuild-on-delete which re-embedded the ENTIRE
-        vault on every single note deletion (O(N) LLM calls per delete).
-        Tombstoned ids are never reused until a full _rebuild_index compaction.
+        IndexIDMap2.remove_ids tombstones the id in one pass — no Ollama
+        calls.  Tombstoned ids are never reused until _rebuild_index compaction.
         """
         key = str(file_path)
-        # Clean the trigger/inhibitor store even if the note was never in
-        # the FAISS index — a note deleted from disk but still in the store
-        # would leave a dangling gate entry that drops nothing (harmless)
-        # but bloats the JSON.  Best-effort: never block the removal.
+        # Clean trigger store even if note wasn't in FAISS (best-effort).
         if self.trigger_store is not None:
             try:
                 self.trigger_store.remove_note(key)
@@ -902,24 +481,16 @@ class VaultIndexer:
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_tool("remove_file", {"file_path": key}, error=str(e))
                 raise
-        _logger.debug(
-            f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}"
-        )
+        _logger.debug(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
         self._log_tool("remove_file", {"file_path": key})
 
     def _rebuild_index(self):
         """Compact the index by reconstructing live vectors — zero Ollama calls.
 
-        This is NOT called on delete anymore (Phase 1: _remove_file_internal
-        uses remove_ids).  It is kept for two purposes:
-        1. On-disk corruption recovery (a broken index.faiss is rebuilt from
-           the metadata + file contents).
-        2. Optional compaction: remove_ids leaves tombstones; over months of
-           churn the flat storage grows.  Calling this rebuilds a fresh
-           IndexIDMap2 from reconstruct(id) of all live ids — zero embedding
-           calls because the vectors are already in the index.
-
-        Files whose paths in _metadata no longer exist on disk are pruned.
+        Kept for corruption recovery and optional compaction (remove_ids
+        leaves tombstones).  Rebuilds a fresh IndexIDMap2 from
+        reconstruct(id) of all live ids — zero embedding calls.  Prunes
+        files whose paths no longer exist on disk.
         """
         if not self._metadata:
             self.index = None
@@ -928,9 +499,8 @@ class VaultIndexer:
             self._next_id = 0
             return
 
-        # Reconstruct live vectors straight from the FAISS index (zero
-        # Ollama calls) — this is the key difference from the old rebuild
-        # which re-embedded every file.  Prune any whose path is gone on disk.
+        # Reconstruct live vectors from FAISS (zero Ollama calls); prune
+        # any whose path is gone on disk.
         live_ids = []
         live_vecs = []
         dead_keys = []
@@ -944,12 +514,8 @@ class VaultIndexer:
                 live_ids.append(fid)
                 live_vecs.append(vec)
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                # reconstruct can fail if the id was already tombstoned;
-                # treat as dead and prune.
                 dead_keys.append((fid, meta["file_path"]))
-                _logger.warning(
-                    f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}"
-                )
+                _logger.warning(f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}")
                 continue
 
         for fid, fp_str in dead_keys:
@@ -964,18 +530,14 @@ class VaultIndexer:
             self._next_id = 0
             return
 
-        # Build a fresh compact IndexIDMap2 with the same ids (so
-        # _path_to_id stays valid) and normalized vectors.
+        # Build fresh compact IndexIDMap2 with same ids + normalized vectors.
         stacked = np.vstack(live_vecs).astype(np.float32)
         faiss.normalize_L2(stacked)
         ids_arr = np.array(live_ids, dtype=np.int64)
         self.dimension = stacked.shape[1]
         self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
         self.index.add_with_ids(stacked, ids_arr)  # type: ignore
-        # _next_id stays as-is (ids are reused, not reassigned).
-        _logger.info(
-            f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)"
-        )
+        _logger.info(f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)")
 
     def _update_file(self, file_path_str: str):
         """Update a file in the index (called on modification)."""
@@ -1039,11 +601,9 @@ class VaultIndexer:
         # Build a quick lookup from metadata by file path.
         meta_by_path = {meta["file_path"]: meta for meta in self.metadata}
 
-        # If the embedding schema changed (or the index was just created),
-        # re-embed EVERY file — content hashes haven't changed but the
-        # vectors are stale relative to the current embedding strategy
-        # (e.g. procedures now embed their description surface, not full
-        # content). The flag is set by _load_index and cleared after.
+        # If the embedding schema changed, re-embed EVERY file — content
+        # hashes haven't changed but the vectors are stale. Flag set by
+        # _load_index, cleared after.
         force_full = getattr(self, "_needs_full_rebuild", False)
         if force_full:
             _logger.info(
@@ -1108,16 +668,10 @@ class VaultIndexer:
     def search(self, query: str, k: int = 5) -> list[dict[str, Any]]:
         """Search the vault for the k most relevant notes to `query`.
 
-        Returns a list of dicts: {'file_path', 'content', 'score'} sorted by
-        relevance (lower L2 distance = more similar).
+        Returns [{'file_path', 'content', 'score'}] sorted by relevance.
         """
         if self.index is None or self.index.ntotal == 0 or not self._metadata:
-            self._log_tool(
-                "search",
-                {"query": query, "k": k},
-                outputs={"result_count": 0},
-                error="empty index",
-            )
+            self._log_tool("search", {"query": query, "k": k}, outputs={"result_count": 0}, error="empty index")
             return []
 
         try:
@@ -1129,14 +683,9 @@ class VaultIndexer:
         return self.search_by_vector(query_embedding, k)
 
     def reconstruct_embedding(self, file_path: str) -> np.ndarray | None:
-        """Pull a note's content embedding straight out of the FAISS index.
+        """Pull a note's embedding from FAISS (zero Ollama calls) for drift re-ranking.
 
-        This is the key to LLM-free drift re-ranking: instead of re-embedding
-        a candidate note's content to apply drift (which would cost an
-        Ollama call per candidate), we reconstruct the stored vector
-        directly from the IndexIDMap2 index via its rev_map. Zero Ollama calls.
-
-        Returns the float32 embedding (normalized), or None if the file isn't indexed.
+        Returns the float32 embedding (normalized), or None if not indexed.
         """
         if self.index is None or not self._metadata:
             return None
@@ -1146,28 +695,13 @@ class VaultIndexer:
         try:
             return self.index.reconstruct(faiss_id).astype(np.float32)  # type: ignore
         except RuntimeError as e:  # faiss raises on bad/tombstoned id
-            self._log_tool(
-                "reconstruct_embedding", {"file_path": file_path}, error=str(e)
-            )
+            self._log_tool("reconstruct_embedding", {"file_path": file_path}, error=str(e))
             return None
 
-    def search_by_vector(
-        self, query_embedding: np.ndarray, k: int = 5
-    ) -> list[dict[str, Any]]:
-        """Search using a pre-computed embedding vector.
-
-        This is the same as ``search()`` but skips the Ollama embedding call,
-        letting callers reuse an embedding they already computed (e.g. A-MEM
-        during a textbook weave reuses the just-indexed note's embedding as
-        the neighbor-search query instead of re-embedding the note text).
-        """
+    def search_by_vector(self, query_embedding: np.ndarray, k: int = 5) -> list[dict[str, Any]]:
+        """Search using a pre-computed embedding vector (skips Ollama call)."""
         if self.index is None or self.index.ntotal == 0 or not self._metadata:
-            self._log_tool(
-                "search_by_vector",
-                {"k": k},
-                outputs={"result_count": 0},
-                error="empty index",
-            )
+            self._log_tool("search_by_vector", {"k": k}, outputs={"result_count": 0}, error="empty index")
             return []
 
         # Guard against dimension mismatch (e.g. embed model changed).
@@ -1195,11 +729,8 @@ class VaultIndexer:
             if meta is None:
                 continue  # tombstoned or unknown id
             file_path = Path(meta["file_path"])
-            # Prefer the cached preview (populated at index time) so the
-            # search never re-reads the file from disk. Fall back to a disk
-            # read only for legacy entries (pre-preview) or when the cache
-            # is disabled (preview_chars == 0). Full-content callers (A-MEM
-            # write-back) re-read from disk themselves and ignore this field.
+            # Prefer cached preview so search never re-reads from disk; fall
+            # back to disk read for legacy entries or when cache is disabled.
             content = meta.get("content_preview")
             if content is None:
                 try:
@@ -1223,8 +754,8 @@ class VaultIndexer:
         """Save the index and metadata to disk.
 
         The metadata pickle stores a tuple ``(_metadata, _path_to_id,
-        _next_id)`` so _load_index can detect the new format vs. the legacy
-        list format and migrate accordingly.
+        _next_id, EMBEDDING_SCHEMA_VERSION)`` so _load_index can detect the
+        format and migrate accordingly.
         """
         if self.index is not None:
             faiss.write_index(self.index, str(self.index_file))
@@ -1243,23 +774,13 @@ class VaultIndexer:
         _logger.info(f"Index persisted to {self.index_path}")
 
 
-# Example usage (for testing)
 if __name__ == "__main__":
-    import os
-
     from dotenv import load_dotenv
 
     load_dotenv()
-
-    vault_path = os.getenv("VAULT_PATH", ".")
-    indexer = VaultIndexer(vault_path)
+    indexer = VaultIndexer(os.getenv("VAULT_PATH", "."))
     indexer.initialize()
-
-    # Try a search
-    results = indexer.search("test query", k=3)
-    _logger.debug(f"Search results: {results}")
-
-    # Keep the script running to allow watching
+    _logger.debug(f"Search results: {indexer.search('test query', k=3)}")
     try:
         while True:
             time.sleep(1)
