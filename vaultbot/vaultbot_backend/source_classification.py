@@ -48,6 +48,12 @@ _ACADEMIC_DOMAINS = {
     "bmglabtech.com",
 }
 
+# NOTE: DOI extraction from publisher URLs (nature.com → 10.1038/...,
+# arxiv.org → 10.48550/arXiv...., etc.) lives in ``citation_exporter.py``
+# (``extract_doi``), NOT here. This module classifies domains; DOI pattern
+# matching is a citation-export concern and is kept separate so this module
+# stays dependency-free. See [[Citation-Export-BibTeX]].
+
 
 def is_blocked_source(url: str) -> bool:
     if not url:

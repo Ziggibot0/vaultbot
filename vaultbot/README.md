@@ -2,15 +2,15 @@
 
 [![CI](https://github.com/ziggibot-uni/vaultbot/workflows/CI/badge.svg)](https://github.com/ziggibot-uni/vaultbot/actions/workflows/ci.yml)
 
-> A self-improving AI research agent that lives inside your Obsidian vault.
-> It thinks with your notes, researches the web, writes permanent
-> knowledge, and grows itself — all while spending minimal LLM calls.
+> A retrieval-augmented research assistant that lives inside your Obsidian vault.
+> It searches your notes, researches the web when the vault is thin, and writes
+> sourced knowledge — all while running entirely on your own computer.
 
-VaultBot is not a chatbot. It's a **personal intelligence system** that
-treats your Obsidian vault as its mind. The LLM is swappable plumbing; the
+VaultBot is not a chatbot. It's a **personal research assistant** that
+treats your Obsidian vault as its knowledge base. The LLM is swappable plumbing; the
 vault — your notes, your links, your shared history — is what it actually
 knows. It researches gaps, writes sourced notes, builds its own tools, and
-gets smarter the more you use it.
+adapts its retrieval as you use it.
 
 ---
 
@@ -22,10 +22,12 @@ gets smarter the more you use it.
 4. [Configuration](#configuration)
 5. [Troubleshooting](#troubleshooting)
 6. [Updating VaultBot](#updating-vaultbot)
-7. [How it thinks](#how-it-thinks)
-8. [Directives (how to shape its behavior)](#directives-how-to-shape-its-behavior)
-9. [Project structure](#project-structure)
-10. [License & contact](#license--contact)
+7. [Safety & Security](#safety--security)
+8. [Limitations](#limitations)
+9. [How it thinks](#how-it-thinks)
+10. [Directives (how to shape its behavior)](#directives-how-to-shape-its-behavior)
+11. [Project structure](#project-structure)
+12. [License & contact](#license--contact)
 
 ## What it does
 
@@ -35,15 +37,16 @@ gets smarter the more you use it.
 - **Researches the web** — when the vault is thin, it digs multiple sources,
   corroborates them, and writes a permanent sourced note. Keyless by default
   (DuckDuckGo + Marginalia + arXiv); optional Tavily/SearXNG backends.
-- **Fills gaps autonomously** — a background researcher scans for dangling
-  wikilinks and thin notes, ranks them by a Voyager-style curriculum, and
-  researches them on its own.
-- **Self-improves safely** — it can write new tools for itself and edit its
-  own source code. Every self-edit is verified (syntax + import-graph check)
-  and auto-rolled-back if it would break the backend.
-- **Gets smarter over time** — four compounding loops: embedding drift
-  (relevance feedback re-ranks retrieval), lazy condensing (notes de-fluff
-  as you use them), concept-card refinement, and self-model regeneration.
+- **Scans for knowledge gaps** — dangling wikilinks and thin notes are ranked
+  by a curriculum and researched in the background. You can review what it
+  proposes before it writes.
+- **Can modify its own code in Developer Mode** (off by default) — every
+  self-edit is verified (syntax + import-graph + pytest) and auto-rolled-back
+  on failure. In Safe Mode, all self-modification tools are blocked.
+- **Adapts retrieval over time** — embedding drift re-ranks results based on
+  what you found useful, and verbose notes are condensed as they're used. No
+  longitudinal benchmark yet; building evaluation infrastructure is an
+  active priority.
 - **Provider/Model Registry** — a single interchangeable "pot" for all LLM
   backends. Mix and match: Ollama for embeddings, OpenRouter for chat,
   Gemini for vision — all through the same picker UI. No more scattered
@@ -53,8 +56,7 @@ gets smarter the more you use it.
   memory each turn, keeping small local models on track across long tasks.
 - **Small model cartridge** — a tiny local model (~1 GB, auto-pulled by
   the installer) handles cheap classification, tagging, and routing so the
-  big model only does the heavy reasoning. As more procedures use the small
-  cartridge, cloud token costs approach zero.
+  large model is only used for reasoning.
 - **Context budgeting** — token-aware context management keeps the vault
   usable as it grows. Notes are compacted, truncated, and prioritized so
   the model always sees the most relevant subgraph without context flood.
@@ -255,6 +257,58 @@ folders. Then restart the backend.
 
 ---
 
+## Safety & Security
+
+VaultBot runs entirely on your machine. It does not phone home, send
+telemetry, or share your data unless you explicitly configure a cloud LLM.
+
+**Defense in depth:**
+
+- **Safe Mode (default-on):** 13 dangerous tools (code execution, self-editing,
+  file deletion, git operations) are blocked unless you explicitly opt into
+  Developer Mode.
+- **Self-edit verification:** When self-modification is enabled, every code
+  change goes through a 4-stage gate: AST syntax check → import-graph
+  verification → pytest → automatic rollback on failure.
+- **Authenticated API:** A 256-bit shared secret guards all sensitive
+  endpoints. The token is generated on first run and stored locally with
+  restricted permissions.
+- **Secret scrubbing:** API keys and tokens are stripped from any subprocess
+  the agent spawns, so LLM-authored code cannot read or exfiltrate them.
+- **Session audit trail:** All agent actions are logged to an append-only
+  JSONL trail with automatic secret redaction.
+- **Sandboxed verifiers:** Plan verification expressions are evaluated in an
+  AST-walking interpreter — no `eval()`, no attribute-chain escapes.
+- **Rate limiting:** Token-bucket limiter on all endpoints prevents runaway
+  loops or abuse.
+- **Localhost-only:** The backend binds to `127.0.0.1` and CORS is restricted
+  to Obsidian and localhost origins.
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+---
+
+## Limitations
+
+VaultBot is a work in progress. Being honest about what it doesn't do yet:
+
+- **Retrieval benchmark is small.** The golden-set retrieval test currently has
+  ~30-50 hand-curated queries. Expanding it to a statistically meaningful size
+  with inter-annotator agreement is an active priority.
+- **No longitudinal self-improvement evaluation.** The adaptation loops
+  (embedding drift, lazy condensing) are architecturally in place, but there is
+  no benchmark showing measurable quality gain over time. Building that
+  measurement is a top goal.
+- **No uncertainty quantification.** The claim verifier gives
+  supported/unsupported verdicts but not calibrated confidence scores.
+  Synthesized answers do not carry probability estimates.
+- **FAISS uses brute-force search** (IndexFlatL2), which is fine up to ~50k
+  notes. IVF or HNSW indexing would be needed beyond that.
+- **Single-user, localhost-only.** Not designed for multi-user or networked
+  deployment.
+
+---
+
 ## How it thinks
 
 VaultBot's architecture is biomimetic — it models a cortical hierarchy:
@@ -270,7 +324,7 @@ multi-resolution context: the MOC orients it, the L1 cards are the
 thought-highway it reasons over, and the L0 drill-down gives it the full
 detail of the one note that matters most. No truncation, no context flood.
 
-The vault **is** the mind. The model is a cartridge you can swap without
+The vault **is** the knowledge base. The model is a cartridge you can swap without
 losing anything — your identity and self-model live in the vault
 and are boot-injected every session.
 

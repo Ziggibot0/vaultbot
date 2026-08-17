@@ -135,6 +135,42 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "vault_export_citations",
+            "description": (
+                "Export the sources from a research note as BibTeX or RIS "
+                "citations, with DOI extraction. Parses the note's "
+                "'## Sources' section, extracts DOIs from publisher URLs "
+                "(nature.com, arxiv.org, doi.org, springer.com, wiley.com, "
+                "plos.org, frontiersin.org), and returns formatted citation "
+                "text. Also writes a .bib file alongside the note. Call this "
+                "when the user needs academic citations (BibTeX/RIS) for a "
+                "research note — e.g. for a paper, thesis, or review."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": (
+                            "Path to the research note (.md) to export "
+                            "citations from. Relative to the vault root."
+                        ),
+                    },
+                    "format": {
+                        "type": "string",
+                        "enum": ["bibtex", "ris"],
+                        "description": (
+                            "Citation format (default: bibtex)."
+                        ),
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "vaultbot_status",
             "description": (
                 "Report VaultBot's operational state: whether the backend "

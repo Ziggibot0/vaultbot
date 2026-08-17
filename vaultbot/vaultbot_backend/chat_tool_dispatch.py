@@ -261,6 +261,28 @@ async def execute_agent_tool(
                 report["note_path"] = note_path
             except Exception as e:
                 session_logger.log_exception(e, context="agent_research_note")
+        # Citation export: write a .bib file alongside the research note so
+        # the sources are available as BibTeX for academic use (DOI extraction
+        # + @article/@misc entries). Best-effort — a failure here must never
+        # break the research flow. See [[Citation-Export-BibTeX]].
+        if report.get("note_path") and report.get("sources"):
+            try:
+                from citation_exporter import export_citations_to_file
+
+                _bib_path = await loop.run_in_executor(
+                    None,
+                    export_citations_to_file,
+                    report["note_path"],
+                    report["sources"],
+                )
+                session_logger.log(
+                    "research_citations_exported",
+                    {"note_path": report["note_path"], "bib_path": _bib_path},
+                )
+            except Exception as e:  # noqa: BLE001 — best-effort
+                session_logger.log(
+                    "research_citations_export_failed", {"error": str(e)}
+                )
         # A-MEM: evolve neighboring notes' tags/links so the vault learns from
         # the new note (arXiv:2502.12110).
         if report.get("note_path"):
@@ -384,6 +406,46 @@ async def execute_agent_tool(
             None, svc.autonomous_researcher._identify_gaps
         )
         return {"gaps": gaps[:20], "count": len(gaps)}
+
+    if tool_name == "vault_export_citations":
+        from citation_exporter import export_citations, export_citations_to_file
+
+        raw_path = (args.get("file_path") or "").strip()
+        if not raw_path:
+            return {"error": "missing file_path"}
+        fmt = (args.get("format") or "bibtex").strip().lower()
+
+        def _resolve_note_path() -> Path | None:
+            p = Path(raw_path)
+            if p.is_absolute() and p.exists():
+                return p
+            # Try relative to vault root.
+            vr = Path(svc.vault_path) / raw_path
+            if vr.exists():
+                return vr
+            # Try as a note title → resolve via the vault graph.
+            stem = Path(raw_path).stem
+            resolved = svc.vault_graph._resolve_note_path(stem)
+            if resolved is not None and resolved.exists():
+                return resolved
+            return None
+
+        def _do_export():
+            np = _resolve_note_path()
+            if np is None:
+                return {"error": f"note not found: {raw_path}"}
+            text = export_citations(str(np), format=fmt)
+            bib_path = None
+            if fmt == "bibtex" and text:
+                bib_path = export_citations_to_file(str(np))
+            return {
+                "format": fmt,
+                "note_path": str(np),
+                "bib_path": bib_path,
+                "citations": text,
+            }
+
+        return await loop.run_in_executor(None, _do_export)
 
     if tool_name == "vaultbot_status":
         return svc.autonomous_researcher.status()
