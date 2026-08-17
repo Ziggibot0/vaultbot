@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from chat_loop_state import TurnState
+from config import TUNABLES
 from services import Services
 
 
@@ -34,6 +36,7 @@ async def finalize_turn(
     conversation: list,
     partial_path: Path,
     _cp,
+    st: TurnState | None = None,
 ) -> str:
     """Post-loop cleanup, grounding enforcement, answer delivery.
 
@@ -53,62 +56,79 @@ async def finalize_turn(
         },
     )
 
-    # --- Grounding enforcement: verify the answer is grounded in vault ---
-    # This is the code-level fix for Problem #1 from
-    # [[Why-Vault-Knowledge-Loses-to-Model-Weights]]: no enforcement
-    # mechanism. We check that the answer cites vault notes (wikilinks)
-    # and that those wikilinks actually exist. An answer with zero
-    # wikilinks is flagged as ungrounded. This is logged for calibration
-    # and surfaced to the user as a caution when the grounding score
-    # is below threshold.
-    _grounding_score = 1.0
+    # --- Grounding enforcement: closed-set citation gate ----------------
+    # The big LLM is a synthesis router. Its answer must cite notes from
+    # the per-turn allowed-citations set (st._allowed_citations), built
+    # from the retrieved vault context. We score the answer against that
+    # closed set: every [[wikilink]] must be in the set, and every factual
+    # sentence must contain one. If the answer fails (zero citations, or
+    # too many ungrounded sentences), we flag it for a retry re-entry into
+    # the agentic loop (capped at TUNABLES.max_grounding_retries) with a
+    # reprimand. After the retry cap, we ship the answer + a ⚠️ caution so
+    # the user is never left with no answer.
+    _allowed = getattr(st, "_allowed_citations", None) or {}
     _grounding_caution = ""
+    _graph_lookup = None
+    try:
+        _graph_lookup = lambda _wl: bool(
+            svc.vault_graph.get_note(_wl)
+            and svc.vault_graph.get_note(_wl).get("file_path")
+        )
+    except Exception:  # noqa: BLE001 — best-effort
+        _graph_lookup = None
     if final_answer and len(final_answer) > 50:
         try:
-            import re as _re
+            from citation_gate import score_grounding, build_reprimand
 
-            # Extract all [[wikilinks]] from the answer
-            _wikilinks = _re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]+)?\]\]", final_answer)
-            _unique_links = list(dict.fromkeys(_wikilinks))  # dedup, preserve order
-            # Verify each wikilink exists in the vault graph
-            _found = 0
-            _missing = []
-            for _wl in _unique_links[:20]:  # check up to 20
-                _node = svc.vault_graph.get_note(_wl)
-                if _node and _node.get("file_path"):
-                    _found += 1
-                else:
-                    _missing.append(_wl)
-            _total = len(_unique_links)
-            if _total == 0:
-                # Zero wikilinks — answer is completely ungrounded
-                _grounding_score = 0.0
-                _grounding_caution = (
-                    "\n\n> ⚠️ **Grounding check**: This answer cites no vault notes. "
-                    "It may be from model weights rather than your vault. "
-                    "Consider asking me to verify or research this topic."
-                )
-            else:
-                _grounding_score = _found / _total
-                if _grounding_score < 0.5:
-                    _grounding_caution = (
-                        f"\n\n> ⚠️ **Grounding check**: Only {_found}/{_total} "
-                        f"cited notes were found in the vault. "
-                        f"Missing: {', '.join(_missing[:5])}. "
-                        f"This answer may be partially ungrounded."
-                    )
+            _score = score_grounding(final_answer, _allowed, _graph_lookup)
             session_logger.log(
                 "grounding_check",
                 {
-                    "total_wikilinks": _total,
-                    "found": _found,
-                    "missing": _missing[:10],
-                    "grounding_score": round(_grounding_score, 2),
-                    "caution": bool(_grounding_caution),
+                    "total_wikilinks": _score["total_wikilinks"],
+                    "allowed_cited": _score["allowed_cited"],
+                    "missing_from_set": _score["missing_from_set"],
+                    "missing_from_vault": _score["missing_from_vault"],
+                    "sentences": _score["sentences"],
+                    "ungrounded_sentences": _score["ungrounded_sentences"],
+                    "ungrounded_ratio": _score["ungrounded_ratio"],
+                    "grounding_score": _score["grounding_score"],
+                    "failed": _score["failed"],
+                    "allowed_set_size": len(_allowed),
+                    "retry_count": getattr(st, "_grounding_retry_count", 0),
                 },
             )
-            # Append the caution to the answer so the user sees it
-            if _grounding_caution:
+            if _score["failed"]:
+                # Hard gate: flag for retry if under the cap.
+                _retries = getattr(st, "_grounding_retry_count", 0)
+                if _retries < TUNABLES.max_grounding_retries:
+                    st._grounding_failed = True
+                    st._grounding_reprimand = build_reprimand(_score, _allowed)
+                    session_logger.log(
+                        "grounding_retry_requested",
+                        {"retry_count": _retries, "max": TUNABLES.max_grounding_retries},
+                    )
+                    return final_answer  # caller re-enters the loop
+                else:
+                    # Retry cap reached — ship with a visible caution.
+                    _grounding_caution = (
+                        f"\n\n> ⚠️ **Grounding check**: This answer may be "
+                        f"partially ungrounded ({_score['ungrounded_sentences']}/"
+                        f"{_score['sentences']} sentences uncited, "
+                        f"grounding_score {_score['grounding_score']}). "
+                        f"It may draw on model weights rather than your "
+                        f"vault. Consider asking me to verify or research "
+                        f"this topic."
+                    )
+                    final_answer += _grounding_caution
+            elif _score["grounding_score"] < 0.5 and _score["total_wikilinks"] > 0:
+                # Some citations but many missing from the set/vault — soft warn.
+                _grounding_caution = (
+                    f"\n\n> ⚠️ **Grounding check**: Only "
+                    f"{_score['allowed_cited']}/{_score['total_wikilinks']} "
+                    f"cited notes were in the allowed set. Missing: "
+                    f"{', '.join(_score['missing_from_set'][:5])}. "
+                    f"This answer may be partially ungrounded."
+                )
                 final_answer += _grounding_caution
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("grounding_check_failed", {"error": str(_e)})

@@ -207,6 +207,47 @@ class Tunables:
     # growth from endless feedback.
     trigger_max_phrases: int = 15
 
+    # ── Vault-centric synthesis + provenance (2026-08-16) ──────────────────
+    # The big LLM is a ROUTER/SYNTHESIZER over vault notes. These tunables
+    # enforce closed-set citation and auto-research-then-answer.
+    #
+    #   auto_research_on_empty: when the preflight FUSED retrieval returns
+    #     zero usable results (or all below min_retrieval_score), fire
+    #     vault_research ONCE synchronously before building context so the
+    #     model never sees an empty vault context. The freshly-researched
+    #     note becomes a valid citation target. Override via env var
+    #     VAULTBOT_AUTO_RESEARCH_ON_EMPTY (0 = disable).
+    #   min_retrieval_score: the FUSED similarity score below which a
+    #     result is treated as "not really retrieved" for the empty-retrieval
+    #     gate. Results below this count as empty. Override via env var
+    #     VAULTBOT_MIN_RETRIEVAL_SCORE.
+    #   max_grounding_retries: how many times finalize_turn may re-enter the
+    #     agentic loop to demand a re-cited answer before shipping the answer
+    #     with a ⚠️ caution (last resort so the user is never left with no
+    #     answer). 1 = one retry round; 0 = soft-fail only (legacy behavior).
+    #   ungrounded_sentence_threshold: fraction of answer sentences with no
+    #     [[wikilink]] from the allowed-citations set that triggers a grounding
+    #     retry. 0.30 = retry if >30% of sentences are uncited. Only applies
+    #     to answers >3 sentences (short answers are hard to split cleanly).
+    #   legacy_seed_note_cap: per-note char cap for the TOP seed notes in the
+    #     legacy build_graph_context path (the common personal-vault case).
+    #     Seeds get more body (4000) so the model can synthesize accurately;
+    #     non-seed walked nodes keep the tight 900 cap. This is the synthesis-
+    #     accuracy lever for non-textbook vaults.
+    #   legacy_walked_note_cap: per-note char cap for walked-but-non-seed
+    #     nodes in the legacy path.
+    #   abstract_extra_drill_cap: char cap for the 2nd/3rd seed drill-down in
+    #     the abstract (L0/L1/L2) path. The top seed keeps DRILL_CAP=12000;
+    #     seeds 2-3 get this smaller cap so multi-note synthesis isn't
+    #     limited to one note's full body.
+    auto_research_on_empty: bool = True
+    min_retrieval_score: float = 0.15
+    max_grounding_retries: int = 1
+    ungrounded_sentence_threshold: float = 0.30
+    legacy_seed_note_cap: int = 4000
+    legacy_walked_note_cap: int = 900
+    abstract_extra_drill_cap: int = 4000
+
 
 # The single importable instance. Frozen — do not mutate.
 TUNABLES = Tunables()

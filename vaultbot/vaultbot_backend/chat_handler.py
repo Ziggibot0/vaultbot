@@ -35,6 +35,8 @@ from services import Services
 from task_api import write_partial
 from working_memory import TaskList
 
+from config import TUNABLES
+
 
 # ---------------------------------------------------------------------------
 # Extracted leaf modules — imported with underscore aliases so all existing
@@ -153,6 +155,7 @@ async def handle_chat(
             retrieved_paths,
             chat_start_time,
             loop,
+            allowed_citations,
         ) = _prep
 
         # --- Agentic loop: model speaks →’ tool calls (if any) →’ repeat →’ final ---
@@ -160,6 +163,11 @@ async def handle_chat(
         # NEVER blocks, rejects, or auto-marks anything.
         st = TurnState()
         st._turn_tool_history = list(_resumed_tool_history)
+        # Seed the closed-set citation target set from the preflight
+        # retrieval. Updated mid-loop when the model calls vault_search /
+        # vault_read_note (see chat_loop_tools). Used by the grounding
+        # gate in finalize_turn to reject uncited claims.
+        st._allowed_citations = allowed_citations
         t0 = loop.time()
 
         # Working-memory signature cache. conversation[0] is rebuilt only
@@ -255,7 +263,62 @@ async def handle_chat(
             conversation,
             st.partial_path,
             _cp,
+            st,
         )
+
+        # --- Grounding retry re-entry (vault-centric provenance) -------
+        # finalize_turn flagged the answer as ungrounded (uncited claims
+        # against the closed-set). Re-enter the agentic loop ONCE with a
+        # reprimand as a user-role turn so the model rewrites the answer
+        # with citations. Capped at TUNABLES.max_grounding_retries (1) —
+        # after that, finalize_turn shipped the answer + a ⚠️ caution so
+        # the user is never left with no answer.
+        while getattr(st, "_grounding_failed", False) and getattr(
+            st, "_grounding_retry_count", 0
+        ) < TUNABLES.max_grounding_retries:
+            st._grounding_failed = False
+            st._grounding_retry_count += 1
+            st.final_answer = ""  # reset so the rewrite replaces, not appends
+            # Append the reprimand as a user-role turn — Ollama rejects
+            # system messages after user/assistant/tool messages.
+            conversation.append(
+                {"role": "user", "content": st._grounding_reprimand}
+            )
+            session_logger.log(
+                "grounding_retry_reenter",
+                {"retry_count": st._grounding_retry_count},
+            )
+            await run_agentic_loop(
+                svc,
+                websocket,
+                session_logger,
+                loop,
+                user_message,
+                wm,
+                conversation,
+                all_tools,
+                custom_schemas,
+                procedures_in_context,
+                st,
+                _cp,
+            )
+            st.final_answer = await _finalize_turn(
+                svc,
+                websocket,
+                session_logger,
+                loop,
+                st.final_answer,
+                st.thinking_text,
+                st.total_chunks,
+                st.round_idx,
+                t0,
+                st._turn_token_totals,
+                st._model_conversation,
+                conversation,
+                st.partial_path,
+                _cp,
+                st,
+            )
 
         await _run_background_tasks(
             svc,

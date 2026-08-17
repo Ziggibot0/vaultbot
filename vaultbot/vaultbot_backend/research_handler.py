@@ -30,6 +30,111 @@ from services import Services
 from session_logger import SessionLogger
 
 
+async def run_research_and_write_note(
+    websocket: WebSocket | None,
+    topic: str,
+    session_logger: SessionLogger,
+    svc: Services,
+    max_rounds: int = 1,
+) -> str | None:
+    """Research the web and write a linked note. Returns the note path.
+
+    This is the reusable core of handle_research WITHOUT the recursive
+    handle_chat at the end. Used by the auto-research-then-answer preflight
+    gate in chat_turn_prep so the model never sees an empty vault context:
+    the gate fires this, waits for the note to be written + indexed, then
+    re-retrieves so the freshly-researched note becomes a citation target.
+
+    `max_rounds` caps the dig depth for preflight use (default 1 — the
+    user wants the vault to "do its own work" but not spend minutes on
+    a multi-round dig for every empty-retrieval turn). Full multi-round
+    research stays a tool the model calls explicitly via vault_research.
+
+    Returns the path to the created note, or None if no sources were found
+    or the note couldn't be written.
+    """
+    loop = asyncio.get_event_loop()
+    t0 = loop.time()
+
+    # Cap the dig depth for preflight use.
+    prev_cb = svc.research_engine.progress_callback
+
+    def _progress_cb(stage: str, detail: dict):
+        if websocket is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                send_progress(svc, websocket, stage, detail), loop
+            )
+        except Exception as e:  # noqa: BLE001 — best-effort
+            session_logger.log("research_progress_cb_failed", {"error": str(e)})
+
+    svc.research_engine.progress_callback = _progress_cb
+    try:
+        report = await run_with_heartbeat(
+            svc, websocket, "auto-research", svc.research_engine.research, topic
+        ) if websocket is not None else await loop.run_in_executor(
+            None, svc.research_engine.research, topic
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort
+        svc.research_engine.progress_callback = prev_cb
+        session_logger.log_exception(e, context="auto_research_engine")
+        return None
+    finally:
+        svc.research_engine.progress_callback = prev_cb
+
+    if not report.get("source_count"):
+        session_logger.log(
+            "auto_research_no_sources", {"topic": topic[:80]}
+        )
+        return None
+
+    research_text = report.get("synthesis", "")
+    if not research_text:
+        research_text = " ".join(
+            s.get("snippet", "") for s in report.get("sources", [])[:3]
+        )
+
+    try:
+        note_topic = report.get("topic") or derive_topic(topic)
+        summary = (
+            f"Deep research into '{note_topic}' "
+            f"({report.get('source_count', 0)} sources, "
+            f"{report.get('synthesis_facts', 0)} facts)."
+        )
+        if len(summary) > 800:
+            summary = summary[:797] + "..."
+        note_path = await loop.run_in_executor(
+            None,
+            svc.note_creator.create_note_from_research,
+            note_topic,
+            research_text,
+            summary,
+        )
+        try:
+            md = svc.research_engine.synthesize_note_markdown(report, summary)
+            Path(note_path).write_text(md, encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            session_logger.log("auto_research_note_md_failed", {"error": str(e)})
+        session_logger.log(
+            "auto_research_note_created",
+            {"note_path": note_path, "topic": note_topic, "duration_ms": (loop.time() - t0) * 1000},
+        )
+    except Exception as e:  # noqa: BLE001
+        session_logger.log_exception(e, context="auto_research_note_write")
+        return None
+
+    # Refresh graph + index so subsequent retrieval sees the new note.
+    try:
+        svc.vault_graph.refresh()
+        from vault_indexer import VaultIndexer  # noqa: F401 — type hint only
+        svc.vault_indexer._add_file(Path(note_path))
+        svc.vault_indexer.persist()
+    except Exception as e:  # noqa: BLE001
+        session_logger.log("auto_research_index_failed", {"error": str(e)})
+    return note_path
+
+
 async def handle_research(
     websocket: WebSocket,
     user_message: str,
@@ -42,8 +147,7 @@ async def handle_research(
     The dig itself uses NO LLM — only extractive synthesis over corroborated
     sources. The LLM only sees the finished, sourced summary at the end.
     """
-    # Module-level imports from chat_helpers, chat_handler — no longer
-    # deferred from main (circular dependency eliminated).
+
     session_logger.log("research_begin", {"user_message": user_message})
     await svc.manager.send_personal_message(
         json.dumps({"type": "status", "content": "Researching the web (deep dig)..."}),

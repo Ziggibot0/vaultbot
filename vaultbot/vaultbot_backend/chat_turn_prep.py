@@ -30,6 +30,8 @@ from chat_helpers import (
     run_with_heartbeat,
     send_progress,
 )
+from citation_gate import build_allowed_citations
+from config import TUNABLES
 from conversation_index import build_conversation_context
 from conversation_state import save_history
 from procedure_surface import build_procedure_surface
@@ -63,8 +65,8 @@ async def prepare_turn(
     """Setup, RAG, preflight routing, trivial-turn shortcut.
 
     Returns (conversation, results, system_prompt, all_tools, custom_schemas,
-    procedures_in_context, retrieved_paths, chat_start_time, loop) or None
-    if the turn was trivial and handled directly.
+    procedures_in_context, retrieved_paths, chat_start_time, loop,
+    allowed_citations) or None if the turn was trivial and handled directly.
     """
     # Calibration: detect if this message is a correction of the previous
     # answer. Corrections are ground truth for calibrating quality gates.
@@ -245,6 +247,87 @@ async def prepare_turn(
             else "",
         },
     )
+
+    # --- Auto-research-then-answer preflight gate (vault-centric) -------
+    # When FUSED retrieval returns nothing usable (empty OR all results
+    # below TUNABLES.min_retrieval_score), the vault has no answer. Rather
+    # than letting the model answer from its weights, fire vault_research
+    # ONCE synchronously, write a note, re-index, then re-retrieve so the
+    # model sees the freshly-researched note as a citation target. This is
+    # the "vault does its own work" pattern — the big LLM never sees an
+    # empty context; it synthesizes from the new note with provenance.
+    # Gated behind TUNABLES.auto_research_on_empty. Skipped for trivial
+    # messages and resumed turns (those don't need fresh research).
+    _auto_research_note: str | None = None
+    if (
+        TUNABLES.auto_research_on_empty
+        and not _resumed_tool_history
+        and not _classify_trivial(
+            user_message, getattr(websocket, "conversation_history", []), wm
+        )
+    ):
+        _usable = [
+            r for r in results
+            if isinstance(r, dict) and r.get("score", 0.0) >= TUNABLES.min_retrieval_score
+        ]
+        if not _usable:
+            try:
+                await send_progress(
+                    svc, websocket, "auto_research",
+                    {"reason": "empty_retrieval", "query": _rewritten_query[:80]},
+                )
+                await svc.manager.send_personal_message(
+                    json.dumps({
+                        "type": "status",
+                        "content": "Nothing in the vault covers this — researching it now...",
+                    }),
+                    websocket,
+                    session_logger=session_logger,
+                )
+                # Lazy import to avoid any circular dependency.
+                from research_handler import run_research_and_write_note
+                _auto_research_note = await run_research_and_write_note(
+                    websocket, _rewritten_query, session_logger, svc, max_rounds=1
+                )
+                if _auto_research_note:
+                    session_logger.log(
+                        "auto_research_fired",
+                        {"note_path": _auto_research_note, "query": _rewritten_query[:80]},
+                    )
+                    # Re-retrieve so the new note is in the results set.
+                    _fused = await run_with_heartbeat(
+                        svc, websocket, "re-retrieving vault",
+                        svc.fused_retriever.retrieve, _rewritten_query, 15, 1,
+                    )
+                    _new = (
+                        _fused.get("results", [])
+                        if isinstance(_fused, dict)
+                        else (_fused or [])
+                    )
+                    if _new:
+                        results = (
+                            dedup_results(results + _new)
+                            if results
+                            else _new
+                        )
+                        if len(results) > 5:
+                            results = await rerank_results(
+                                svc, user_message, results, k=5,
+                                session_logger=session_logger,
+                            )
+                        else:
+                            results = results[:5]
+                    session_logger.log(
+                        "auto_research_reretrieve",
+                        {"result_count": len(results)},
+                    )
+                else:
+                    session_logger.log(
+                        "auto_research_no_note",
+                        {"query": _rewritten_query[:80]},
+                    )
+            except Exception as e:  # noqa: BLE001 — best-effort, never break chat
+                session_logger.log("auto_research_failed", {"error": str(e)})
 
     # Conversation-aware retrieval: search the conversation index for
     # prior turns relevant to this query. This is what lets the bot
@@ -708,6 +791,48 @@ async def prepare_turn(
     # (see the "System prompt is FROZEN after preflight build" block).
     # We pre-allocate slot [2] here so the composer can update it in
     # place without shifting indices.
+    # Build the closed-set citation directive (vault-centric provenance).
+    # The model may ONLY cite notes that appear in the retrieved vault
+    # context. We build the allowed-citations set from the rendered
+    # context's `### [[Name]]` headers (backed by the raw search_results)
+    # and append a directive to the VAULT CONTEXT message telling the
+    # model exactly which notes it's allowed to cite. This is the
+    # closed-set constraint that makes the big LLM a pure synthesizer.
+    allowed_citations = build_allowed_citations(context, results)
+    if allowed_citations:
+        _allowed_stems = list(allowed_citations.keys())[:25]
+        _allowed_block = (
+            "\n\n--- CLOSED-SET CITATION RULE ---\n"
+            "You are a SYNTHESIS ROUTER. Your world knowledge is DISABLED "
+            "in this vault. You may ONLY make claims supported by the notes "
+            "above, cited inline as [[Note-Name]] next to each claim.\n"
+            "Allowed citation targets (cite ONLY from these):\n"
+            + ", ".join(f"[[{s}]]" for s in _allowed_stems)
+            + "\n\nIf you cannot support a claim from these notes, say "
+            "\"I don't know — nothing in the vault covers this\" and offer "
+            "to call vault_research. Do NOT write from your own knowledge. "
+            "A factual sentence with no [[wikilink]] from the allowed set is "
+            "an UNCITED claim and is FORBIDDEN."
+        )
+        context = context + _allowed_block
+        session_logger.log(
+            "allowed_citations_built",
+            {"count": len(allowed_citations), "stems": _allowed_stems[:10]},
+        )
+    else:
+        # No notes retrieved — the model should refuse + offer research.
+        # The auto-research preflight gate (above) usually prevents this,
+        # but keep the directive so the model knows not to hallucinate.
+        _allowed_block = (
+            "\n\n--- CLOSED-SET CITATION RULE ---\n"
+            "NO vault notes were retrieved for this query. You have NOTHING "
+            "to cite. Say \"I don't know — nothing in the vault covers this. "
+            "Want me to research it?\" and offer to call vault_research. "
+            "Do NOT answer from your own knowledge."
+        )
+        context = context + _allowed_block
+        session_logger.log("allowed_citations_empty", {"result_count": len(results)})
+
     conversation = [
         {
             "role": "system",
@@ -1033,4 +1158,5 @@ async def prepare_turn(
         retrieved_paths,
         chat_start_time,
         loop,
+        allowed_citations,
     )

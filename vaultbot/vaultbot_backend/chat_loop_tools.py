@@ -182,6 +182,39 @@ async def execute_round_tools(
                     "round": st.round_idx,
                 }
 
+        # --- Closed-set citation: register tool-retrieved notes --------
+        # When the model calls vault_search / vault_read_note mid-loop,
+        # those notes become valid citation targets. Update the
+        # allowed-citations set so the grounding gate accepts them. This
+        # makes the closed set dynamic — the model can cite notes it
+        # retrieved on its own, not just the preflight ones.
+        try:
+            from citation_gate import add_citation_target
+
+            if tool_name == "vault_search" and isinstance(tool_result, dict):
+                for _r in tool_result.get("results", []):
+                    _fp = _r.get("file_path", "")
+                    if _fp:
+                        add_citation_target(
+                            st._allowed_citations,
+                            _fp,
+                            _r.get("content", ""),
+                        )
+            elif (
+                tool_name == "vault_read_note"
+                and isinstance(tool_result, dict)
+                and not tool_result.get("error")
+            ):
+                _fp = tool_result.get("file_path", "")
+                if _fp:
+                    add_citation_target(
+                        st._allowed_citations,
+                        _fp,
+                        tool_result.get("content", ""),
+                    )
+        except Exception:  # noqa: BLE001 — best-effort, never break the tool
+            pass
+
         # --- Annotate vault_search results against seen content ------
         # If the model calls vault_search and gets back files it
         # already saw (via a previous vault_search or code_read),

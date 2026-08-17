@@ -602,6 +602,14 @@ def build_graph_context(
 
     subgraph = graph.walk(seed_names, depth=depth)
 
+    # Seed stems get a larger per-note cap so the model has real body to
+    # synthesize from (the common personal-vault case hits this legacy
+    # path, not the abstract L0/L1/L2 path). Non-seed walked nodes keep
+    # the tight cap. This is the synthesis-accuracy lever.
+    seed_set = set(seed_names)
+    seed_cap = TUNABLES.legacy_seed_note_cap
+    walked_cap = TUNABLES.legacy_walked_note_cap
+
     lines = [
         "VAULT CONTEXT — relevant sub-vault graph",
         f"Query: {query}",
@@ -625,8 +633,10 @@ def build_graph_context(
                 "Linked from: " + ", ".join(f"[[{n}]]" for n in node["backlinks"])
             )
         lines.append("")
-        snippet = node["content"][:per_note_cap]
-        if len(node["content"]) > per_note_cap:
+        # Seed notes get more body; walked neighbors stay tight.
+        cap = seed_cap if node["name"] in seed_set else walked_cap
+        snippet = node["content"][:cap]
+        if len(node["content"]) > cap:
             snippet += "\n*[... full note via vault_search / card > source ...]*"
         lines.append(snippet)
     if subgraph["stats"]["selected"] > len(nodes):

@@ -336,7 +336,11 @@ def build_abstract_context(
             + (f"\nLinks: {link_str}" if link_str else "")
         )
 
-    # ---- L0 drill-down: full raw of the single top seed ----
+    # ---- L0 drill-down: full raw of the top seed + 2nd/3rd seeds ----
+    # The top seed gets the full DRILL_CAP (12000 chars). Seeds 2-3 get a
+    # smaller extra drill (TUNABLES.abstract_extra_drill_cap, 4000) so
+    # multi-note synthesis isn't limited to one note's body. The model
+    # can synthesize accurately from 2-3 notes, not just cite the top one.
     drill_path: Path | None = None
     if seed_l0_paths:
         drill_path = seed_l0_paths[0]
@@ -350,6 +354,23 @@ def build_abstract_context(
             drill_text = drill_text[:DRILL_CAP] + (
                 f"\n\n*[... full section on disk: {drill_path.name} ...]*"
             )
+
+    # Extra drill-downs for seeds 2-3 (multi-note synthesis surface).
+    extra_drills: list[str] = []
+    EXTRA_DRILL_CAP = TUNABLES.abstract_extra_drill_cap
+    for _extra_path in seed_l0_paths[1:3]:
+        if _extra_path == drill_path or not _extra_path.exists():
+            continue
+        _extra_text = _read(_extra_path)
+        if not _extra_text:
+            continue
+        if len(_extra_text) > EXTRA_DRILL_CAP:
+            _extra_text = _extra_text[:EXTRA_DRILL_CAP] + (
+                f"\n\n*[... full section on disk: {_extra_path.name} ...]*"
+            )
+        extra_drills.append(
+            f"### [[{_extra_path.stem}]] (drill-down)\n{_extra_text}"
+        )
 
     # ---- Assemble the multi-resolution context ----
     lines = [
@@ -378,6 +399,10 @@ def build_abstract_context(
             "--- L0: DRILL-DOWN (none — query the source via the card's "
             "> source link if needed) ---"
         )
+    if extra_drills:
+        lines.append("")
+        lines.append("--- L0: EXTRA DRILL-DOWNS (seeds 2-3) ---")
+        lines.extend(extra_drills)
     lines.append("")
     lines.append(
         "NOTE: L1 cards are terse summaries. For any card you need full "

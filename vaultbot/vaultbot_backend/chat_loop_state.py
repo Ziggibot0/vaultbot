@@ -56,6 +56,27 @@ class TurnState:
     # Seen-content tracker: {file_path: {"source", "lines", "round"}}.
     _seen_content: dict = field(default_factory=dict)
 
+    # Allowed-citations set (closed-set citation enforcement):
+    # {note_stem: {"file_path": str, "snippet": str}}. Built per-turn from
+    # the retrieved vault context (the `### [[Name]]` headers in the
+    # rendered context). Updated when the model calls vault_search /
+    # vault_read_note mid-loop so tool-retrieved notes are also valid
+    # citation targets. The grounding gate in finalize_turn checks the
+    # answer's [[wikilinks]] against this set; wikilinks NOT in it are
+    # treated as ungrounded even if the note exists in the graph.
+    _allowed_citations: dict = field(default_factory=dict)
+
+    # Grounding retry state: how many times the hard grounding gate has
+    # re-entered the agentic loop to demand a re-cited answer. Capped at
+    # TUNABLES.max_grounding_retries (default 1) before soft-fail + ⚠️.
+    _grounding_retry_count: int = 0
+    # Set by finalize_turn when the answer failed the grounding check so
+    # the re-entry wrapper knows to loop back. Cleared on a clean pass.
+    _grounding_failed: bool = False
+    # The reprimand message to append as a user-role turn when re-entering
+    # the loop for a grounding retry. Built by finalize_turn.
+    _grounding_reprimand: str = ""
+
     # Findings ledger (anti-amnesia): 1-line entries per round.
     _findings: list = field(default_factory=list)
 

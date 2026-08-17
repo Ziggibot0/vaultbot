@@ -1,0 +1,178 @@
+"""Unit tests for citation_gate — closed-set citation enforcement.
+
+These are pure offline tests (no Ollama, no FAISS, no Services). They
+verify the closed-set construction, wikilink extraction, grounding score,
+reprimand builder, and the retry-trigger logic.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from citation_gate import (
+    add_citation_target,
+    build_allowed_citations,
+    build_reprimand,
+    extract_wikilinks,
+    score_grounding,
+)
+
+
+class TestExtractWikilinks:
+    def test_simple(self):
+        assert extract_wikilinks("see [[Note-A]] for details") == ["Note-A"]
+
+    def test_alias(self):
+        assert extract_wikilinks("[[Note-A|the first note]]") == ["Note-A"]
+
+    def test_heading(self):
+        assert extract_wikilinks("[[Note-A#Section]]") == ["Note-A"]
+
+    def test_dedup_preserves_order(self):
+        assert extract_wikilinks("[[B]] [[A]] [[B]]") == ["B", "A"]
+
+    def test_empty(self):
+        assert extract_wikilinks("") == []
+        assert extract_wikilinks("no links here") == []
+
+    def test_strips_whitespace(self):
+        assert extract_wikilinks("[[ Note-A ]]") == ["Note-A"]
+
+
+class TestBuildAllowedCitations:
+    def test_from_headers(self):
+        ctx = (
+            "VAULT CONTEXT\n\n"
+            "--- CONNECTED NOTES ---\n"
+            "### [[Alpha]]\nbody alpha\n\n"
+            "### [[Beta]]\nbody beta\n"
+        )
+        allowed = build_allowed_citations(ctx)
+        assert set(allowed.keys()) == {"Alpha", "Beta"}
+
+    def test_from_search_results_backfills_paths(self):
+        ctx = "### [[Alpha]]\nbody\n"
+        results = [
+            {"file_path": "/vault/Alpha.md", "content": "alpha body"},
+            {"file_path": "/vault/Beta.md", "content": "beta body"},
+        ]
+        allowed = build_allowed_citations(ctx, results)
+        assert set(allowed.keys()) == {"Alpha", "Beta"}
+        assert allowed["Alpha"]["file_path"] == "/vault/Alpha.md"
+        assert "alpha body" in allowed["Alpha"]["snippet"]
+
+    def test_empty_context_with_results(self):
+        results = [{"file_path": "/v/X.md", "content": "x"}]
+        allowed = build_allowed_citations("", results)
+        assert set(allowed.keys()) == {"X"}
+
+    def test_empty(self):
+        assert build_allowed_citations("", None) == {}
+
+
+class TestAddCitationTarget:
+    def test_adds_new(self):
+        allowed: dict = {}
+        add_citation_target(allowed, "/vault/Gamma.md", "gamma body")
+        assert "Gamma" in allowed
+        assert allowed["Gamma"]["file_path"] == "/vault/Gamma.md"
+
+    def test_idempotent_does_not_overwrite(self):
+        allowed = {"Gamma": {"file_path": "/original/Gamma.md", "snippet": "orig"}}
+        add_citation_target(allowed, "/new/Gamma.md", "new body")
+        assert allowed["Gamma"]["file_path"] == "/original/Gamma.md"
+
+    def test_empty_path_noop(self):
+        allowed: dict = {}
+        add_citation_target(allowed, "", "x")
+        assert allowed == {}
+
+
+class TestScoreGrounding:
+    def test_all_cited_passes(self):
+        allowed = {"Alpha": {}, "Beta": {}}
+        answer = "Alpha is first [[Alpha]]. Beta is second [[Beta]]."
+        score = score_grounding(answer, allowed)
+        assert score["failed"] is False
+        assert score["allowed_cited"] == 2
+        assert score["grounding_score"] == 1.0
+        assert score["ungrounded_sentences"] == 0
+
+    def test_zero_wikilinks_with_sentences_fails(self):
+        allowed = {"Alpha": {}}
+        answer = "This is a claim. This is another claim. And a third one."
+        score = score_grounding(answer, allowed)
+        assert score["failed"] is True
+        assert score["total_wikilinks"] == 0
+        assert score["grounding_score"] == 0.0
+
+    def test_wikilink_not_in_set_counts_missing(self):
+        allowed = {"Alpha": {}}
+        answer = "See [[Alpha]] and [[Hallucinated-Note]] here."
+        score = score_grounding(answer, allowed)
+        assert "Hallucinated-Note" in score["missing_from_set"]
+        assert score["allowed_cited"] == 1
+        assert score["total_wikilinks"] == 2
+
+    def test_ungrounded_ratio_above_threshold_fails(self):
+        allowed = {"Alpha": {}}
+        # 5 sentences, only 1 cited → 4/5 = 0.8 uncited > 0.30 threshold.
+        answer = (
+            "First claim is cited [[Alpha]]. "
+            "Second claim is not. "
+            "Third is not either. "
+            "Fourth has nothing. "
+            "Fifth is bare."
+        )
+        score = score_grounding(answer, allowed)
+        assert score["sentences"] == 5
+        assert score["ungrounded_sentences"] == 4
+        assert score["failed"] is True
+
+    def test_short_answer_not_subject_to_ratio(self):
+        # 2 sentences, 1 uncited — but <3 sentences so ratio gate doesn't fire.
+        allowed = {"Alpha": {}}
+        answer = "One cited [[Alpha]]. Two not."
+        score = score_grounding(answer, allowed)
+        assert score["failed"] is False  # has a wikilink, short enough
+
+    def test_graph_lookup_detects_broken_citations(self):
+        allowed = {"Alpha": {}, "Broken": {}}
+
+        def lookup(stem):
+            return stem == "Alpha"  # "Broken" doesn't exist in graph
+
+        score = score_grounding(
+            "See [[Alpha]] and [[Broken]].", allowed, graph_lookup=lookup
+        )
+        assert "Broken" in score["missing_from_vault"]
+
+    def test_empty_answer_is_ok(self):
+        score = score_grounding("", {})
+        assert score["failed"] is False
+        assert score["grounding_score"] == 1.0
+
+
+class TestBuildReprimand:
+    def test_includes_allowed_stems(self):
+        allowed = {"Alpha": {}, "Beta": {}}
+        score = {"grounding_score": 0.0, "allowed_cited": 0, "total_wikilinks": 0,
+                 "ungrounded_sentences": 3, "sentences": 3, "missing_from_set": []}
+        msg = build_reprimand(score, allowed)
+        assert "[[Alpha]]" in msg
+        assert "[[Beta]]" in msg
+        assert "uncited" in msg.lower() or "forbidden" in msg.lower()
+
+    def test_includes_missing_set(self):
+        allowed = {"Alpha": {}}
+        score = {"grounding_score": 0.5, "allowed_cited": 1, "total_wikilinks": 2,
+                 "ungrounded_sentences": 1, "sentences": 2,
+                 "missing_from_set": ["Hallucinated"]}
+        msg = build_reprimand(score, allowed)
+        assert "[[Hallucinated]]" in msg
+
+    def test_empty_allowed_set_says_dont_know(self):
+        score = {"grounding_score": 0.0, "allowed_cited": 0, "total_wikilinks": 0,
+                 "ungrounded_sentences": 2, "sentences": 2, "missing_from_set": []}
+        msg = build_reprimand(score, {})
+        assert "I don't know" in msg or "say 'I don't know'" in msg
