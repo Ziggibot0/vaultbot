@@ -14,6 +14,47 @@ adapts its retrieval as you use it.
 
 ---
 
+## Project Mission
+
+**The goal: sustainable AI inference with provenance.**
+
+VaultBot exists to prove a single thesis: **you don't need a frontier cloud
+model for everyday AI tasks.** A small local model + well-engineered
+procedures + a vault of sourced knowledge can match a 70B cloud model for
+most workloads — at a fraction of the energy cost, with every claim
+traceable to its source.
+
+This mission has two pillars:
+
+1. **Sustainable inference.** Every query that runs on a ~4B local model
+   instead of a 70B cloud model uses a fraction of the energy. Every
+   procedure that migrates from the big model to the small model is a
+   *permanent* energy saving for every future invocation. The vault
+   compounds: knowledge stored once, used forever, zero re-computation.
+2. **Provenance.** Every knowledge claim in the vault is sourced and
+   traceable. The vault is the knowledge base — not the model's training
+   data. If it isn't in the vault with a citation, it doesn't exist.
+
+**This is the goal — not the current state.** VaultBot is a work in
+progress, not a finished proof. The architecture is in place (small-model
+cartridge, procedure engine, fused retrieval, source-cited research), but
+the proof itself is not demonstrated yet:
+
+- The procedure library is small. Most task types are not yet
+  proceduralized — the big model still fires for the majority of work.
+- There is no longitudinal benchmark showing that the small model +
+  procedures matches a frontier model on real workloads over time.
+- The retrieval golden-set is ~30–50 hand-curated queries — not yet
+  statistically meaningful.
+- Provenance enforcement is architectural, not yet audited at scale.
+
+The mission is the direction. The work is getting there.
+
+For the full strategic vision, see
+[`Knowledge/Architecture/VaultBot-Strategic-Vision.md`](Knowledge/Architecture/VaultBot-Strategic-Vision.md).
+
+---
+
 ## Table of contents
 
 1. [What it does](#what-it-does)

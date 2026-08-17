@@ -3,6 +3,33 @@
 A high-level map of how VaultBot works, for contributors who want to
 understand the system before reading the code.
 
+## Project Mission
+
+**The goal: sustainable AI inference with provenance.**
+
+VaultBot is a proof-of-concept that frontier cloud models can be made
+obsolete by programming well around small models. The two pillars:
+
+1. **Sustainable inference** — a ~4B local model + deterministic procedures
+   + a vault of sourced knowledge can handle most tasks at a fraction of
+   the energy cost of a 70B cloud model. Every procedure that moves from
+   the big model to the small model is a permanent energy saving.
+2. **Provenance** — every knowledge claim in the vault is sourced and
+   traceable. The vault is the knowledge base, not the model's training
+   data.
+
+**This is the goal, not the current state.** The architecture described
+in this document is the *scaffolding* for that goal. The proof itself — a
+longitudinal benchmark showing the small model + procedures matching a
+frontier model on real workloads — does not exist yet. The procedure
+library is small, the retrieval golden-set is ~30–50 queries, and the big
+model still fires for most non-trivial work. The mission is the direction;
+the work is getting there.
+
+See
+[`Knowledge/Architecture/VaultBot-Strategic-Vision.md`](Knowledge/Architecture/VaultBot-Strategic-Vision.md)
+for the full strategic vision.
+
 ## Overview
 
 VaultBot is a **personal AI research agent** that lives inside an Obsidian
