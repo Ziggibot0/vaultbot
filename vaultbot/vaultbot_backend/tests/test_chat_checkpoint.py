@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from chat_checkpoint import ChatLoopCheckpointer, snapshot_working_memory
 from working_memory import TaskList
 

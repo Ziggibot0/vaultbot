@@ -22,6 +22,10 @@ from subprocess_utils import run as _subprocess_run
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 def test_main_imports_without_name_error():
     """import main in a subprocess — verifies all shims resolve.

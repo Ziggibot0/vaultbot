@@ -16,6 +16,8 @@ violation.
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from chat_helpers import tool_result_summary
 
 

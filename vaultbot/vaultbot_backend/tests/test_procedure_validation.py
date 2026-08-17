@@ -7,6 +7,10 @@ and a fail case.
 See [[Procedure-Subprocess-Architecture]] validation section.
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from step_gate_runtime import _parse_validation, _validate_step
 
 

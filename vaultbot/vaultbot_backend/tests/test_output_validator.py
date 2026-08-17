@@ -8,6 +8,10 @@ Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from output_validator import corrective_message, validate_tool_call
 
 # A minimal combined schema list mirroring TOOL_DEFINITIONS shape.

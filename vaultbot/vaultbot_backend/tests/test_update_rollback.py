@@ -15,6 +15,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from routers.config import _find_latest_backup, _list_backups
 
 

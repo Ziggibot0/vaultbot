@@ -17,6 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 
 class TestGetModelCapabilities:
     """get_model_capabilities on OllamaClient with mocked /api/show."""

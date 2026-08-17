@@ -13,6 +13,8 @@ Run: pytest tests/test_diagnostics.py -v
 from __future__ import annotations
 
 import pytest
+
+pytestmark = pytest.mark.unit
 from diagnostics import classify_error, diagnose_from_message
 from error_types import Diagnosis, ProblemCategory, Severity
 

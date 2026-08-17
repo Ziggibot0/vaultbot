@@ -30,6 +30,10 @@ monkeypatching free_search.time.time / free_search.time.sleep so cooldown
 windows can be advanced deterministically.
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 import free_search as fs
 
 

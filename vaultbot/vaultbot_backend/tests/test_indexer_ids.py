@@ -32,6 +32,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.integration
+
 # ── faiss import — must use the REAL faiss, not the stub from test_fused_retrieval ──
 # test_fused_retrieval.py (which runs first alphabetically) installs a no-op
 # `faiss` stub in sys.modules so it can test FusedRetriever without the broken

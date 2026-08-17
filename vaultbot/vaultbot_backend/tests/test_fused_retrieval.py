@@ -21,6 +21,7 @@ import sys
 import types
 
 import numpy as np
+import pytest
 
 # fused_retrieval imports vault_indexer, which imports `faiss`.  The
 # installed faiss wheel was compiled against NumPy 1.x and raises an
@@ -38,6 +39,8 @@ if "faiss" not in sys.modules:
 
 from embedding_drift import EmbeddingDrift
 from fused_retrieval import FusedRetriever
+
+pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,8 @@ without the filters.
 import sys
 import types
 
+import pytest
+
 # Shim faiss so fused_retrieval imports without the NumPy 2.x ABI break
 # (same pattern as test_fused_retrieval.py).
 if "faiss" not in sys.modules:
@@ -30,6 +32,8 @@ from small_model_filters import (
     _parse_json_array,
     _split_context_sections,
 )
+
+pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------

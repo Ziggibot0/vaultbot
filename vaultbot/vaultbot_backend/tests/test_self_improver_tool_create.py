@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 def test_tool_create_rejects_syntax_error(tmp_path, monkeypatch):
     """A tool with invalid Python syntax is rejected before writing."""

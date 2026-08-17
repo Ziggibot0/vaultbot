@@ -33,6 +33,8 @@ os.environ.setdefault("VAULTBOT_SKIP_LOCK", "1")
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.endpoints
+
 
 @pytest.fixture(scope="module")
 def client():

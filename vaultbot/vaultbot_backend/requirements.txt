@@ -1,27 +1,70 @@
-fastapi>=0.115.0
+# ── VaultBot backend — runtime dependencies (pinned from uv.lock) ──────────
+# This file is regenerated from uv.lock via:
+#   cd vaultbot && uv export --format requirements-txt --no-dev --no-hashes
+# then manually merged with the comments below.  The lockfile (uv.lock) is
+# the source of truth; this file is the pip fallback for environments that
+# don't have uv.  When you add or bump a dep, update [project.dependencies]
+# in pyproject.toml, run `uv lock`, then re-merge this file.
+#
+# Direct deps are listed first (with their rationale comments); transitive
+# deps follow in a separate section.  All versions are pinned to what
+# `uv lock` resolved on 2026-08-16.
+
+# ── Direct dependencies ────────────────────────────────────────────────────
+fastapi==0.141.1
 # [standard] extras pull in websockets, httptools, watchfiles, etc.
 # Without websockets the FastAPI WebSocket endpoints crash on startup.
-uvicorn[standard]>=0.30.0
-requests>=2.31.0
-beautifulsoup4>=4.12.2
+uvicorn[standard]==0.52.3
+requests==2.34.2
+beautifulsoup4==4.15.0
 # faiss-cpu 1.8.0 is built against numpy 1.x and breaks on numpy 2
 # (ABI error in tests — see /memories/repo/pytest-faiss-numpy2-abi.md).
 # 1.11+ supports numpy 2.x.
-faiss-cpu>=1.11.0
-watchdog>=4.0.1
+faiss-cpu==1.15.0
+watchdog==6.0.0
 # numpy 2.x required by faiss-cpu 1.11+.
-numpy>=2.0.0
+# uv resolves different patch versions per Python minor (2.4.6 on 3.11,
+# 2.5.2 on 3.12); the lower bound is the floor for both.
+numpy==2.5.2 ; python_full_version >= "3.12"
+numpy==2.4.6 ; python_full_version < "3.12"
 python-dotenv==1.0.0
-lxml>=4.9.0
-PyMuPDF>=1.24.0
+lxml==6.1.1
+PyMuPDF==1.28.2
 # Pillow: used by llm_client.vision_capable() to render a test image.
 # html2text: used by textbook_ingest.parse_html() (HTML→Markdown).
 # pypdf: fallback PDF text-layer parser when PyMuPDF is unavailable.
-Pillow>=10.0.0
-html2text>=2024.0.0
-pypdf>=4.0.0
+Pillow==12.3.0
+html2text==2025.4.15
+pypdf==6.16.1
 # psutil: used by /system/stats for CPU/RAM/disk/net resource meters.
-psutil>=5.9.0
+psutil==7.2.2
+
+# ── Transitive dependencies (pinned by uv.lock) ────────────────────────────
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+certifi==2026.7.22
+charset-normalizer==3.5.1
+click==8.4.2
+colorama==0.4.6 ; sys_platform == "win32"
+h11==0.16.0
+httptools==0.8.0
+idna==3.18
+packaging==26.3
+pydantic==2.13.4
+pydantic-core==2.46.4
+pyyaml==6.0.3
+soupsieve==2.9.2
+starlette==1.6.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+urllib3==2.7.0
+uvloop==0.22.1 ; platform_python_implementation != "PyPy" and sys_platform != "cygwin" and sys_platform != "win32"
+watchfiles==1.2.0
+websockets==17.0.1
 
 # ── Testing ──────────────────────────────────────────────────────────
+# pytest is a dev-only dep (see [project.optional-dependencies].dev in
+# pyproject.toml) but is kept here so `pip install -r requirements.txt`
+# works for users who install runtime deps only and want to run tests.
 pytest>=8.0

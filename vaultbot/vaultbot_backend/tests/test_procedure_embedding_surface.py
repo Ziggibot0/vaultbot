@@ -6,6 +6,10 @@ when the query matches *when to use it*, not when it lexically overlaps
 the procedure's implementation (code blocks, tool names, step prose).
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from vault_indexer import VaultIndexer
 
 

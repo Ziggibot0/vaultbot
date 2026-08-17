@@ -11,6 +11,10 @@ See [[Procedure-Subprocess-Architecture]] grading-loop section.
 import numpy as np
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from embedding_drift import EmbeddingDrift
 from procedure_tracker import ProcedureTracker
 

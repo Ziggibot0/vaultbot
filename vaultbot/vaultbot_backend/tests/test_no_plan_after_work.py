@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from error_types import AgentSilentError
 
 _BACKEND = Path(__file__).resolve().parent.parent

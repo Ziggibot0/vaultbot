@@ -5,6 +5,50 @@
 #
 # Run: `ruff check vaultbot_backend/` (lint) / `ruff format vaultbot_backend/` (format)
 
+# ── Project metadata + dependency manifest ──────────────────────────────────
+# Phase 2: declares the dependency surface so `uv lock` can produce a fully
+# resolved, hashed lockfile (uv.lock) for reproducible installs. The runtime
+# deps here mirror vaultbot_backend/requirements.txt; `uv export` regenerates
+# that file from the lock so the pip fallback stays in sync.
+# pytest is a dev-only dep (see [project.optional-dependencies].dev) but is
+# kept in requirements.txt for users who install runtime deps only.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vaultbot"
+version = "0.1.0"
+description = "A retrieval-augmented research assistant that lives inside your Obsidian vault."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.2",
+    "faiss-cpu>=1.11.0",
+    "watchdog>=4.0.1",
+    "numpy>=2.0.0",
+    "python-dotenv==1.0.0",
+    "lxml>=4.9.0",
+    "PyMuPDF>=1.24.0",
+    "Pillow>=10.0.0",
+    "html2text>=2024.0.0",
+    "pypdf>=4.0.0",
+    "psutil>=5.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.16.0",
+    "pyright>=1.1.350",
+    "pytest>=8.0",
+    "httpx2",
+    "uv>=0.4.0",
+]
+
 [tool.ruff]
 # Ruff's default exclude covers .venv/venv automatically. We add vaultbot_venv
 # for any legacy installs, plus the standard build/test artifact dirs.
@@ -168,3 +212,19 @@ reportMissingImports = "warning"
 reportMissingTypeStubs = "none"
 # Basic mode: catch real bugs without drowning in strict-mode noise.
 typeCheckingMode = "basic"
+
+# ── pytest ───────────────────────────────────────────────────────────────────
+# Phase 3: marker-gated test selection so CI can run pure-unit tests as a HARD
+# gate (no I/O, no Ollama, no FAISS) and integration tests as a soft gate.
+# `pytest -m unit` runs only the unit suite; `pytest -m integration` runs the
+# fixture-building suite; `pytest -m ollama` is reserved for the golden-gate
+# workflow which has a live Ollama service container.
+[tool.pytest.ini_options]
+testpaths = ["vaultbot_backend/tests"]
+markers = [
+    "unit: pure logic tests — no I/O, no network, no Ollama, no FAISS. Always gate CI.",
+    "integration: tests needing FAISS index or vault fixtures. Can build fixtures in CI.",
+    "ollama: tests needing a live Ollama instance. Skip in base CI, run in golden-gate workflow.",
+    "endpoints: tests needing the FastAPI app (uses __allows_main_import__ opt-in).",
+]
+addopts = "-q"

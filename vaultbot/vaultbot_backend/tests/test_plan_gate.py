@@ -8,6 +8,10 @@ Leaf-module imports only — `import main` is hard-fenced by conftest.py.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from plan_gate import (
     EXPLORE_TOOLS,
     is_multi_step,

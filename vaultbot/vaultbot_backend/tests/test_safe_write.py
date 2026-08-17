@@ -38,6 +38,9 @@ Test anatomy follows https://docs.pytest.org/en/stable/explanation/anatomy.html
 import hashlib
 
 import pytest
+
+pytestmark = pytest.mark.unit
+
 import self_improver
 
 # The *real* backend dir, captured once at import time (before any

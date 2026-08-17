@@ -14,6 +14,10 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 from vault_graph import VaultGraph
 

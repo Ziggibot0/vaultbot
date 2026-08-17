@@ -18,6 +18,8 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from procedure_compiler import compile_from_text
 from subprocess_utils import run as _subprocess_run
 from step_gate_runtime import (

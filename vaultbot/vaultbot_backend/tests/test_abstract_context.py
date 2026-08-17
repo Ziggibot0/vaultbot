@@ -18,6 +18,10 @@ Documentation grounding:
 from abstract_context import build_abstract_context
 from vault_graph import VaultGraph
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 # ---------------------------------------------------------------------------
 # Test 1 — legacy fallback when no L1 cards exist
 # ---------------------------------------------------------------------------

@@ -14,6 +14,10 @@ import json
 import time
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 # ---------------------------------------------------------------------------
 # conversation_state: per-session load/save/clear

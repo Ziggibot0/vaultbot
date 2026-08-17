@@ -5,6 +5,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from note_schema import (
     inject_schema,
     validate_schema,

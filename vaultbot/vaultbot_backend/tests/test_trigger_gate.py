@@ -15,6 +15,7 @@ import sys
 import types
 
 import numpy as np
+import pytest
 
 # Install the no-op faiss stub so the leaf import of fused_retrieval
 # (which imports vault_indexer → faiss) succeeds without the broken
@@ -27,6 +28,8 @@ if "faiss" not in sys.modules:
     sys.modules["faiss"] = _faiss_stub
 
 from fused_retrieval import FusedRetriever
+
+pytestmark = pytest.mark.unit
 
 
 # ── Stubs ────────────────────────────────────────────────────────────────

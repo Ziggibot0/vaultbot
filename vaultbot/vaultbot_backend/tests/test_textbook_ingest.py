@@ -16,6 +16,9 @@ from pathlib import Path
 
 import custom_tools.textbook_ingest as tbi
 import pytest
+
+pytestmark = pytest.mark.unit
+
 from custom_tools.textbook_ingest import (
     _source_key_line,
     find_prior_ingest,

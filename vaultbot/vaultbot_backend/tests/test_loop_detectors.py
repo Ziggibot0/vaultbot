@@ -18,6 +18,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 _BACKEND = Path(__file__).resolve().parent.parent
 _CHAT_HANDLER = _BACKEND / "chat_handler.py"

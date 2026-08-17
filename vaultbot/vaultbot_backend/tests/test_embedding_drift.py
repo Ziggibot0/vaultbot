@@ -13,6 +13,11 @@ Documentation grounding:
 """
 
 import numpy as np
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from embedding_drift import DRIFT_MAX_RATIO, EmbeddingDrift
 
 

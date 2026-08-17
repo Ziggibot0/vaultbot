@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 # faiss ABI shim (same as test_fused_retrieval.py) so fused_retrieval imports.
 if "faiss" not in sys.modules:
     _faiss_stub = types.ModuleType("faiss")
@@ -25,6 +27,8 @@ from procedure_surface import (
     procedure_surface_line,
     status_allows_execution,
 )
+
+pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------

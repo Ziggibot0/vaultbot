@@ -8,6 +8,10 @@ See [[Procedure-Subprocess-Architecture]] and
 [[Deterministic-Scaffolding-for-Small-Models]].
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from procedure_compiler import (
     _extract_annotations,
     _parse_frontmatter,

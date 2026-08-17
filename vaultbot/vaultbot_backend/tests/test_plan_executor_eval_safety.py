@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from plan_executor import PlanExecutor, Subtask, _safe_eval_verifier, _VerifierError
 
 

@@ -18,6 +18,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 # faiss ABI shim so vault_indexer imports without the real faiss package.
 if "faiss" not in sys.modules:
     _faiss_stub = types.ModuleType("faiss")
@@ -32,6 +34,8 @@ from procedure_surface import (
     procedure_surface_line,
 )
 from vault_indexer import VaultIndexer
+
+pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------
 # procedure_surface_line — provides rendering

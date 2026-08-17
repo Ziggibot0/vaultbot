@@ -39,11 +39,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install runtime + dev dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r vaultbot/vaultbot_backend/requirements.txt
-          pip install -r vaultbot/requirements-dev.txt
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies (locked)
+        # `uv sync --frozen` installs exactly what uv.lock pins — no
+        # re-resolution, fully reproducible.  --extra dev pulls in the
+        # [project.optional-dependencies].dev group (ruff, pyright,
+        # pytest, httpx2, uv).
+        working-directory: vaultbot
+        run: uv sync --frozen --extra dev
 
       - name: "Ruff check â€” hard gate (F-rules: real bugs only)"
         # Gate on F-rules only (undefined names, unused imports, etc.) â€”
@@ -79,10 +84,11 @@ jobs:
         run: pyright --level warning vaultbot_backend/
         continue-on-error: true
 
-      - name: Pytest (non-blocking â€” needs Ollama + indexed vault)
-        # Non-blocking: the offline suite needs an LLM and vault infrastructure
-        # that don't exist in a bare CI runner. Ruff F-rules + format are the
-        # hard gates. Pytest runs locally before pushing.
+      - name: Pytest — unit tests (HARD GATE)
+        # Pure-logic tests marked with `pytestmark = pytest.mark.unit`.
+        # No I/O, no network, no Ollama, no FAISS.  These MUST pass —
+        # no continue-on-error.  This is the gate that catches regressions
+        # before they ship.
         working-directory: vaultbot/vaultbot_backend
         env:
           VAULTBOT_SKIP_LOCK: "1"
@@ -92,5 +98,18 @@ jobs:
           mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
           mkdir -p "$VAULT_PATH/vaultbot/Knowledge"
           mkdir -p "$VAULT_PATH/vaultbot/System"
-          pytest -q --tb=short || true
+          pytest -q -m "unit" --tb=short
+
+      - name: Pytest — integration tests (soft gate)
+        # Tests marked `pytestmark = pytest.mark.integration` — these need
+        # FAISS or vault fixtures that may not be fully buildable in a
+        # bare CI runner.  Soft gate: failures are reported but don't fail
+        # the build.  Once fixtures are CI-ready, flip to a hard gate.
+        working-directory: vaultbot/vaultbot_backend
+        env:
+          VAULTBOT_SKIP_LOCK: "1"
+          VAULTBOT_SKIP_WATCHER: "1"
+          VAULT_PATH: ${{ github.workspace }}
+        run: |
+          pytest -q -m "integration" --tb=short
         continue-on-error: true

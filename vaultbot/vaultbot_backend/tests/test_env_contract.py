@@ -16,6 +16,10 @@ expressions, then assert the two sides agree.
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 import routers.llm as llm
 
 

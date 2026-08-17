@@ -22,6 +22,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from working_memory import TaskList
 from step_summarizer import summarize_step, _build_raw_material
 from framework_planner import framework_plan, _extract_json

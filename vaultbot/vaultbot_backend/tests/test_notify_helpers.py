@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from chat_helpers import notify_info, notify_problem
 from error_types import Diagnosis, ProblemCategory
 

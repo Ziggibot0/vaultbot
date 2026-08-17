@@ -10,6 +10,10 @@ See [[Procedure-Subprocess-Architecture]] and subagent.py docstring.
 
 import json
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # conftest adds the backend dir to sys.path so leaf modules import.
 from subagent import (
