@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   golden-gate:
-    name: recall@5 â‰¥ 0.5 against seed golden set
+    name: recall@5 ≥ 0.7 against expanded golden set
     runs-on: ubuntu-latest
 
     # Ollama service container â€” exposes 11434 to the job container.
@@ -108,4 +108,4 @@ jobs:
             idx.persist()
           print(f'Indexed {len(md)} notes for golden-gate run.')
           "
-          python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.5 --k 5
+          python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.7 --k 5

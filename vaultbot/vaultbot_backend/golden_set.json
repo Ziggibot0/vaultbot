@@ -1,0 +1,245 @@
+{
+  "description": "Golden set for the FUSED-retrieval eval gate. Each entry maps a realistic vault query to the note(s) that SHOULD be retrieved. Hand-curated across 5 categories (direct, semantic, graph, negative, multi). Grow this over time from real queries + operator corrections. Keep expected_notes as note stems or paths — normalization strips path/case/.md. See golden_set.README.md for methodology.",
+  "queries": [
+    {
+      "query": "what is the no wikipedia directive",
+      "expected_notes": ["No-Wikipedia-Directive"],
+      "note": "Category: direct — title-level keyword match for the no-wikipedia source blocklist",
+      "category": "direct"
+    },
+    {
+      "query": "what is the autonomy directive",
+      "expected_notes": ["Autonomy-Directive"],
+      "note": "Category: direct — title-level keyword match for the act-without-permission directive",
+      "category": "direct"
+    },
+    {
+      "query": "what is the IDK fallback directive",
+      "expected_notes": ["IDK-Fallback-Directive"],
+      "note": "Category: direct — title-level keyword match for the I-dont-know honesty fallback",
+      "category": "direct"
+    },
+    {
+      "query": "what are the communication preferences",
+      "expected_notes": ["Communication-Preferences"],
+      "note": "Category: direct — title-level keyword match for the operator communication-style template",
+      "category": "direct"
+    },
+    {
+      "query": "what is the FUSED retrieval system",
+      "expected_notes": ["FUSED-Retrieval"],
+      "note": "Category: direct — title-level keyword match for the hybrid retrieval concept note",
+      "category": "direct"
+    },
+    {
+      "query": "what is the record convention",
+      "expected_notes": ["Record-Convention"],
+      "note": "Category: direct — title-level keyword match for the historical-note marking convention",
+      "category": "direct"
+    },
+    {
+      "query": "what is the safe write procedure",
+      "expected_notes": ["Safe-Write"],
+      "note": "Category: direct — title-level keyword match for the safe-code-edit procedure",
+      "category": "direct"
+    },
+    {
+      "query": "what is the vault lint procedure",
+      "expected_notes": ["Vault-Lint"],
+      "note": "Category: direct — title-level keyword match for the note quality-check procedure",
+      "category": "direct"
+    },
+    {
+      "query": "what is the think procedure",
+      "expected_notes": ["Think"],
+      "note": "Category: direct — title-level keyword match for the structured-reasoning scaffold procedure",
+      "category": "direct"
+    },
+    {
+      "query": "what is the repo hygiene guide",
+      "expected_notes": ["REPO-HYGIENE"],
+      "note": "Category: direct — title-level keyword match for the repository cleanliness rules doc",
+      "category": "direct"
+    },
+    {
+      "query": "how do I stop the bot from using online encyclopedias",
+      "expected_notes": ["No-Wikipedia-Directive"],
+      "note": "Category: semantic — paraphrase: 'online encyclopedias' instead of 'wikipedia', 'stop using' instead of 'avoid'",
+      "category": "semantic"
+    },
+    {
+      "query": "when should the bot say I don't know instead of guessing",
+      "expected_notes": ["IDK-Fallback-Directive"],
+      "note": "Category: semantic — paraphrase: 'say I don't know' instead of 'IDK fallback', 'guessing' instead of 'hedging'",
+      "category": "semantic"
+    },
+    {
+      "query": "how does the bot combine vector search with link following",
+      "expected_notes": ["FUSED-Retrieval"],
+      "note": "Category: semantic — paraphrase: 'combine vector search with link following' instead of 'FUSED retrieval', describes the hybrid mechanism not the name",
+      "category": "semantic"
+    },
+    {
+      "query": "how should the bot mark notes that describe old behavior",
+      "expected_notes": ["Record-Convention"],
+      "note": "Category: semantic — paraphrase: 'mark notes that describe old behavior' instead of 'record convention'",
+      "category": "semantic"
+    },
+    {
+      "query": "how do I safely edit python files without breaking the backend",
+      "expected_notes": ["Safe-Write"],
+      "note": "Category: semantic — paraphrase: 'safely edit python files without breaking' instead of 'safe write', describes the intent not the procedure name",
+      "category": "semantic"
+    },
+    {
+      "query": "how do I check a note for broken links and missing metadata",
+      "expected_notes": ["Vault-Lint"],
+      "note": "Category: semantic — paraphrase: 'check a note for broken links and missing metadata' instead of 'vault lint', describes what the linter does",
+      "category": "semantic"
+    },
+    {
+      "query": "how does the bot reason through complex problems step by step",
+      "expected_notes": ["Think"],
+      "note": "Category: semantic — paraphrase: 'reason through complex problems step by step' instead of 'think procedure', describes the reasoning scaffold's function",
+      "category": "semantic"
+    },
+    {
+      "query": "how does the vault remember who I am across sessions",
+      "expected_notes": ["Vault-Longevity-Architecture"],
+      "note": "Category: semantic — paraphrase: 'remember who I am across sessions' instead of 'vault longevity architecture', tests identity persistence concept",
+      "category": "semantic"
+    },
+    {
+      "query": "how should the bot act without asking permission each time",
+      "expected_notes": ["Autonomy-Directive"],
+      "note": "Category: semantic — paraphrase: 'act without asking permission each time' instead of 'autonomy directive'",
+      "category": "semantic"
+    },
+    {
+      "query": "how should the bot talk to me in terms of length and tone",
+      "expected_notes": ["Communication-Preferences"],
+      "note": "Category: semantic — paraphrase: 'talk to me in terms of length and tone' instead of 'communication preferences'",
+      "category": "semantic"
+    },
+    {
+      "query": "why did the operator correct vaultbot about making itself redundant",
+      "expected_notes": ["Vault-Longevity-Architecture"],
+      "note": "Category: graph — query matches VaultBot-Is-the-Vault (the correction story), graph walk pulls in Vault-Longevity-Architecture (linked as 'the vault IS the mind, the model is swappable')",
+      "category": "graph"
+    },
+    {
+      "query": "what is the philosophical framework behind the vault's interpretation layer",
+      "expected_notes": ["Knowledge-Triad-Ontology-Epistemology-Hermeneutics"],
+      "note": "Category: graph — query matches Vault-Thinks-LLM-Synthesizes (mentions hermeneutics/interpretation), graph walk pulls in Knowledge-Triad (linked as the philosophical grounding)",
+      "category": "graph"
+    },
+    {
+      "query": "how does mutation testing relate to evolutionary code",
+      "expected_notes": ["Evolution-and-the-Long-Arc"],
+      "note": "Category: graph — query matches Darwinian-Coding-Mutation-Testing-Evolution, graph walk pulls in Evolution-and-the-Long-Arc (linked as a depends_on)",
+      "category": "graph"
+    },
+    {
+      "query": "what are the maintenance costs of adding semantic link types to notes",
+      "expected_notes": ["Vault-Thinks-LLM-Synthesizes"],
+      "note": "Category: graph — query matches Typed-Edges-Research-Assessment (discusses typed edge costs), graph walk pulls in Vault-Thinks-LLM-Synthesizes (linked as the design principle that rejected typed edges)",
+      "category": "graph"
+    },
+    {
+      "query": "how does the vault maintain stable internal conditions like a living organism",
+      "expected_notes": ["Homeostasis-and-Animal-Regulation"],
+      "note": "Category: graph — query matches Artificial-Homeostasis-and-VaultBot-Regulation, graph walk pulls in Homeostasis-and-Animal-Regulation (linked as a depends_on — the biological basis)",
+      "category": "graph"
+    },
+    {
+      "query": "how do you decide between building a reusable capability vs a specific workflow",
+      "expected_notes": ["Write-Python-Tool"],
+      "note": "Category: graph — query matches Tool-vs-Procedure-Decision-Guide, graph walk pulls in Write-Python-Tool (linked as the canonical tool-creation procedure)",
+      "category": "graph"
+    },
+    {
+      "query": "what are the isolated notes in the vault graph called and how do you find them",
+      "expected_notes": ["Vault-Cluster-Analysis"],
+      "note": "Category: graph — query matches Vault-Graph-Analysis (islands/connectedness), graph walk pulls in Vault-Cluster-Analysis (linked as the finer-grained community detection follow-up)",
+      "category": "graph"
+    },
+    {
+      "query": "what pattern connects biological feedback loops to the structure of knowledge",
+      "expected_notes": ["Knowledge-Triad-Ontology-Epistemology-Hermeneutics"],
+      "note": "Category: graph — query matches Homeostasis-Through-the-Knowledge-Triad (fractal pattern), graph walk pulls in Knowledge-Triad (linked as the philosophical framework the biological pattern maps to)",
+      "category": "graph"
+    },
+    {
+      "query": "how does CRISPR Cas9 cut DNA",
+      "expected_notes": ["CRISPR-Gene-Editing"],
+      "note": "Category: negative — biology query about gene editing; verifies the system does NOT retrieve code-quality, procedure-system, or vault-architecture notes at high rank",
+      "category": "negative"
+    },
+    {
+      "query": "what is the PT2399 chip power consumption",
+      "expected_notes": ["Low-Power-Pedal-Assumption"],
+      "note": "Category: negative — guitar pedal electronics query; verifies the system does NOT retrieve AI/LLM/vault-architecture notes at high rank",
+      "category": "negative"
+    },
+    {
+      "query": "how do bacteria communicate with autoinducer molecules",
+      "expected_notes": ["how-bacteria-communicate"],
+      "note": "Category: negative — microbiology query about quorum sensing; verifies the system does NOT retrieve vault maintenance procedures or AI architecture notes at high rank",
+      "category": "negative"
+    },
+    {
+      "query": "how to implement OAuth2 authentication in Express.js with Passport",
+      "expected_notes": ["How-to-implement-OAuth2-authentication-in-an-Expressjs-application-passport-stra"],
+      "note": "Category: negative — Node.js web authentication query; verifies the system does NOT retrieve vault-specific architecture or procedure notes at high rank",
+      "category": "negative"
+    },
+    {
+      "query": "what is the hermeneutic circle in philosophy",
+      "expected_notes": ["hermeneutics-theory-of-interpretation-the-hermeneutic-circle-how-meaning-is-deri"],
+      "note": "Category: negative — philosophy query about interpretation theory; verifies the system does NOT retrieve biology or code-quality notes at high rank",
+      "category": "negative"
+    },
+    {
+      "query": "how does vaultbot handle safety when editing code",
+      "expected_notes": ["Safe-Write", "Self-Edit-Verification-Directive", "Run-Test-Suite"],
+      "note": "Category: multi — three safety procedures for code editing: safe write with auto-rollback, the verification directive, and the test suite runner",
+      "category": "multi"
+    },
+    {
+      "query": "how does the bot evaluate retrieval quality",
+      "expected_notes": ["RAG-Evaluation-for-FUSED-Retrieval", "FUSED-Retrieval", "RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g"],
+      "note": "Category: multi — retrieval evaluation spans the quality-gate architecture note, the FUSED concept note, and the research metrics note",
+      "category": "multi"
+    },
+    {
+      "query": "how do I create a new procedure",
+      "expected_notes": ["Build-Procedure", "Procedure-Creator", "How-to-Create-a-Procedure"],
+      "note": "Category: multi — three procedure-creation procedures with different approaches: one-shot factory, sandboxed draft publisher, and manual step-by-step guide",
+      "category": "multi"
+    },
+    {
+      "query": "how does the bot find disconnected or broken notes",
+      "expected_notes": ["Find-Orphans", "Find-Broken-Links", "Vault-Graph-Analysis"],
+      "note": "Category: multi — graph health queries: orphan detection (disconnected islands), broken link finding (dangling wikilinks), and graph analysis (islands/density/diameter)",
+      "category": "multi"
+    },
+    {
+      "query": "how does the bot manage context as the vault grows",
+      "expected_notes": ["Context-Budgeting-for-Vault-Growth", "Token-Efficiency-Audit", "Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec"],
+      "note": "Category: multi — context management at vault scale: budgeting subgraphs, auditing token flow, and the sliding-window conversation spec",
+      "category": "multi"
+    },
+    {
+      "query": "how does the bot decide what model to use for a task",
+      "expected_notes": ["Small-Model-Driving-Architecture", "Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge", "Procedure-Cartridge-Audit"],
+      "note": "Category: multi — model selection: the small-model driving architecture, the tiny LLM use-case mapping, and the procedure cartridge audit that classified each procedure",
+      "category": "multi"
+    },
+    {
+      "query": "what are the operator's preferences for how the bot communicates",
+      "expected_notes": ["Sean-Communication-Preferences", "Sean-Profile", "Communication-Preferences"],
+      "note": "Category: multi — operator communication: the concept note (terse/direct), the full profile (background/worldview), and the root template directive",
+      "category": "multi"
+    }
+  ]
+}
