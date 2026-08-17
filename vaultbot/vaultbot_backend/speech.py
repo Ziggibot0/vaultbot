@@ -29,11 +29,8 @@ stack (blocked by WDAC) is NOT used.
 
 from __future__ import annotations
 
-import asyncio
 import io
 import logging
-import os
-import tempfile
 from typing import Any
 
 logger = logging.getLogger(__name__)

@@ -24,7 +24,6 @@ import os
 import re
 import threading
 import time
-from datetime import UTC
 from pathlib import Path
 from typing import Any
 from collections.abc import Callable

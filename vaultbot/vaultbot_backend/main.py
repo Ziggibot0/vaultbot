@@ -456,7 +456,13 @@ app = FastAPI(title="VaultBot API", lifespan=lifespan)
 # there — not here.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "app://obsidian.md",
+        "http://localhost",
+        "http://localhost:*",
+        "http://127.0.0.1",
+        "http://127.0.0.1:*",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -486,7 +492,47 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(_RateLimitMiddleware)
 
-app.add_middleware(_RateLimitMiddleware)
+# ── Auth middleware ─────────────────────────────────────────────────────
+# Shared-secret token guard for sensitive endpoints. The token is a
+# 256-bit hex string generated on first run (see auth.py). The Obsidian
+# plugin sends it as the X-VaultBot-Token header on fetch() calls. For
+# /shutdown, the plugin uses navigator.sendBeacon() which CANNOT set
+# custom headers — so /shutdown also accepts the token as a ?token= query
+# parameter. This is a well-known workaround for the sendBeacon limitation.
+# Health/preflight endpoints are exempt (the plugin needs them before it
+# can read the token file). When VAULTBOT_SKIP_LOCK=1 (test mode), auth is
+# bypassed entirely so the test client can call endpoints without a token.
+from auth import get_or_create_token, is_auth_exempt, is_auth_required
+
+
+class _AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        path = request.url.path.rstrip("/") or "/"
+        if is_auth_exempt(path):
+            return await call_next(request)
+        if not is_auth_required(path):
+            # Non-sensitive endpoints are trusted from localhost.
+            return await call_next(request)
+        # Sensitive endpoint — validate the token.
+        token = request.headers.get("X-VaultBot-Token")
+        if token is None and path == "/shutdown":
+            # sendBeacon can't set headers — accept ?token= query param.
+            token = request.query_params.get("token")
+        if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
+            return await call_next(request)
+        if token is None:
+            return JSONResponse(status_code=401, content={"detail": "missing auth token"})
+        try:
+            expected = get_or_create_token()
+        except Exception:
+            return JSONResponse(status_code=503, content={"detail": "auth unavailable"})
+        import secrets as _secrets
+        if not _secrets.compare_digest(token, expected):
+            return JSONResponse(status_code=401, content={"detail": "invalid auth token"})
+        return await call_next(request)
+
+
+app.add_middleware(_AuthMiddleware)
 
 # Default global session logger for startup/shutdown and background tasks.
 default_session_logger = SessionLogger()

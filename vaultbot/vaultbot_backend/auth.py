@@ -46,7 +46,6 @@ _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
         "/health",
         "/preflight",
         "/",
-        "/shutdown",  # sendBeacon can't set custom headers; PID lock prevents abuse
     }
 )
 
@@ -58,6 +57,7 @@ _AUTH_REQUIRED_PATHS: frozenset[str] = frozenset(
     {
         "/custom_tools/call",
         "/ws",
+        "/shutdown",  # sendBeacon can't set custom headers; accept ?token= query param instead
     }
 )
 

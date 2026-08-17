@@ -35,8 +35,8 @@ modules. The caller (e.g. main.py) constructs an `op_registry` mapping op-name
 to a callable `(args: dict) -> dict` and passes it in. That keeps the executor
 decoupled from the concrete graph implementation.
 
-Pure stdlib only: dataclasses, json, eval (restricted), pathlib, datetime,
-typing. No new dependencies.
+Pure stdlib only: dataclasses, json, ast (manual walk — no eval),
+pathlib, datetime, typing. No new dependencies.
 """
 
 from __future__ import annotations
@@ -360,9 +360,228 @@ def _safe_eval_verifier(expr: str, result: Any) -> Any:
                     "on safe attributes are permitted"
                 )
 
-    # Compile the vetted AST and eval with restricted globals.
-    code = compile(tree, "<verifier>", "eval")
-    return eval(code, {"__builtins__": _SAFE_BUILTINS}, {"result": result})
+    # Walk the vetted AST directly with our own interpreter — no eval().
+    # The pre-walk above already rejected every dangerous node type and
+    # attribute, so _ast_eval only needs to handle the whitelisted subset.
+    return _ast_eval(tree.body, result)
+
+
+# ---------------------------------------------------------------------------
+# Pure AST interpreter — replaces eval() so there is no builtin-eval surface
+# at all.  The AST was already vetted by _safe_eval_verifier's pre-walk
+# (only whitelisted node types + attribute names), so this interpreter only
+# needs to handle the allowed subset.  It cannot escape because it never
+# touches Python's eval machinery — it walks the tree manually.
+# ---------------------------------------------------------------------------
+
+# Map AST operator nodes to the Python functions that implement them.
+_BIN_OPS = {
+    ast.Add: lambda a, b: a + b,
+    ast.Sub: lambda a, b: a - b,
+    ast.Mult: lambda a, b: a * b,
+    ast.Div: lambda a, b: a / b,
+    ast.Mod: lambda a, b: a % b,
+    ast.Pow: lambda a, b: a ** b,
+    ast.FloorDiv: lambda a, b: a // b,
+    ast.LShift: lambda a, b: a << b,
+    ast.RShift: lambda a, b: a >> b,
+    ast.BitOr: lambda a, b: a | b,
+    ast.BitAnd: lambda a, b: a & b,
+    ast.BitXor: lambda a, b: a ^ b,
+}
+
+_UNARY_OPS = {
+    ast.USub: lambda a: -a,
+    ast.UAdd: lambda a: +a,
+    ast.Invert: lambda a: ~a,
+    ast.Not: lambda a: not a,
+}
+
+_CMP_OPS = {
+    ast.Eq: lambda a, b: a == b,
+    ast.NotEq: lambda a, b: a != b,
+    ast.Gt: lambda a, b: a > b,
+    ast.GtE: lambda a, b: a >= b,
+    ast.Lt: lambda a, b: a < b,
+    ast.LtE: lambda a, b: a <= b,
+    ast.In: lambda a, b: a in b,
+    ast.NotIn: lambda a, b: a not in b,
+    ast.Is: lambda a, b: a is b,
+    ast.IsNot: lambda a, b: a is not b,
+}
+
+
+def _ast_eval(node: ast.AST, result: Any, names: dict | None = None) -> Any:
+    """Walk a vetted AST node and return its value.
+
+    No eval(), no compile(), no exec() — pure tree walk.  The caller
+    (_safe_eval_verifier) already rejected any node type or attribute not
+    in the whitelist, so this only handles the allowed subset.  ``result``
+    is the dict exposed to the verifier expression as the name ``result``.
+    ``names`` is an optional dict of extra name bindings (used by
+    comprehensions for loop variables).
+    """
+    local_names = names or {}
+
+    # ── Leaf / container nodes ─────────────────────────────────────────
+    if isinstance(node, ast.Expression):
+        return _ast_eval(node.body, result, local_names)
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        # Look up in _SAFE_BUILTINS first (for True/False/None/len/etc.),
+        # then loop-variable scope, then `result`.
+        if node.id in _SAFE_BUILTINS:
+            return _SAFE_BUILTINS[node.id]
+        if node.id in local_names:
+            return local_names[node.id]
+        if node.id == "result":
+            return result
+        raise _VerifierError(f"unknown name: {node.id!r}")
+    if isinstance(node, ast.List):
+        return [_ast_eval(e, result, local_names) for e in node.elts]
+    if isinstance(node, ast.Tuple):
+        return tuple(_ast_eval(e, result, local_names) for e in node.elts)
+    if isinstance(node, ast.Set):
+        return {_ast_eval(e, result, local_names) for e in node.elts}
+    if isinstance(node, ast.Dict):
+        return {
+            _ast_eval(k, result, local_names): _ast_eval(v, result, local_names)
+            for k, v in zip(node.keys, node.values)
+        }
+
+    # ── Operators ──────────────────────────────────────────────────────
+    if isinstance(node, ast.BoolOp):
+        values = [_ast_eval(v, result, local_names) for v in node.values]
+        if isinstance(node.op, ast.And):
+            return all(values)
+        return any(values)
+    if isinstance(node, ast.BinOp):
+        left = _ast_eval(node.left, result, local_names)
+        right = _ast_eval(node.right, result, local_names)
+        op_fn = _BIN_OPS.get(type(node.op))
+        if op_fn is None:
+            raise _VerifierError(f"unsupported binary op: {type(node.op).__name__}")
+        return op_fn(left, right)
+    if isinstance(node, ast.UnaryOp):
+        operand = _ast_eval(node.operand, result, local_names)
+        op_fn = _UNARY_OPS.get(type(node.op))
+        if op_fn is None:
+            raise _VerifierError(f"unsupported unary op: {type(node.op).__name__}")
+        return op_fn(operand)
+    if isinstance(node, ast.Compare):
+        left = _ast_eval(node.left, result, local_names)
+        for op, comparator in zip(node.ops, node.comparators):
+            right = _ast_eval(comparator, result, local_names)
+            op_fn = _CMP_OPS.get(type(op))
+            if op_fn is None:
+                raise _VerifierError(f"unsupported comparison op: {type(op).__name__}")
+            if not op_fn(left, right):
+                return False
+            left = right
+        return True
+
+    # ── Subscript + attribute access ───────────────────────────────────
+    if isinstance(node, ast.Subscript):
+        value = _ast_eval(node.value, result, local_names)
+        # Python 3.9+: slice is a single expression node.
+        slice_val = _ast_eval(node.slice, result, local_names)
+        return value[slice_val]
+    if isinstance(node, ast.Attribute):
+        # The pre-walk already verified attr ∈ _SAFE_ATTRS.
+        value = _ast_eval(node.value, result, local_names)
+        return getattr(value, node.attr)
+
+    # ── Calls ──────────────────────────────────────────────────────────
+    if isinstance(node, ast.Call):
+        func = _ast_eval(node.func, result, local_names)
+        args = [_ast_eval(a, result, local_names) for a in node.args]
+        kwargs = {
+            kw.arg: _ast_eval(kw.value, result, local_names)
+            for kw in node.keywords
+            if kw.arg is not None
+        }
+        return func(*args, **kwargs)
+
+    # ── Conditional expression ─────────────────────────────────────────
+    if isinstance(node, ast.IfExp):
+        if _ast_eval(node.test, result, local_names):
+            return _ast_eval(node.body, result, local_names)
+        return _ast_eval(node.orelse, result, local_names)
+
+    # ── Comprehensions ─────────────────────────────────────────────────
+    if isinstance(node, (ast.ListComp, ast.SetComp)):
+        return _eval_comp(node, result, local_names)
+    if isinstance(node, ast.DictComp):
+        return _eval_dict_comp(node, result, local_names)
+
+    # Should never reach here — the pre-walk rejected everything else.
+    raise _VerifierError(
+        f"unhandled AST node in interpreter: {type(node).__name__} — "
+        f"this is a bug: the pre-walk should have rejected it"
+    )
+
+
+def _eval_comp(
+    comp_node: ast.ListComp | ast.SetComp,
+    result: Any,
+    names: dict,
+) -> list | set:
+    """Evaluate a ListComp or SetComp into a list or set."""
+    is_set = isinstance(comp_node, ast.SetComp)
+    out: list = []
+
+    def _run(clauses, scope):
+        if not clauses:
+            out.append(_ast_eval(comp_node.elt, result, scope))
+            return
+        clause = clauses[0]
+        rest = clauses[1:]
+        iterable = _ast_eval(clause.iter, result, scope)
+        for item in iterable:
+            new_scope = dict(scope)
+            _bind_target(clause.target, item, new_scope)
+            if all(_ast_eval(cond, result, new_scope) for cond in clause.ifs):
+                _run(rest, new_scope)
+
+    _run(comp_node.generators, dict(names))
+    return set(out) if is_set else out
+
+
+def _eval_dict_comp(comp_node: ast.DictComp, result: Any, names: dict) -> dict:
+    """Evaluate a DictComp into a dict."""
+    out: dict = {}
+
+    def _run(clauses, scope):
+        if not clauses:
+            k = _ast_eval(comp_node.key, result, scope)
+            v = _ast_eval(comp_node.value, result, scope)
+            out[k] = v
+            return
+        clause = clauses[0]
+        rest = clauses[1:]
+        iterable = _ast_eval(clause.iter, result, scope)
+        for item in iterable:
+            new_scope = dict(scope)
+            _bind_target(clause.target, item, new_scope)
+            if all(_ast_eval(cond, result, new_scope) for cond in clause.ifs):
+                _run(rest, new_scope)
+
+    _run(comp_node.generators, dict(names))
+    return out
+
+
+def _bind_target(target: ast.AST, value: Any, scope: dict) -> None:
+    """Bind a comprehension target (Name or Tuple/List of Names) to value."""
+    if isinstance(target, ast.Name):
+        scope[target.id] = value
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for i, elt in enumerate(target.elts):
+            _bind_target(elt, value[i], scope)
+    else:
+        raise _VerifierError(
+            f"unsupported comprehension target: {type(target).__name__}"
+        )
 
 
 class PlanExecutor:

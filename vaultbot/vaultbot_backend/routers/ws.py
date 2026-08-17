@@ -694,7 +694,6 @@ async def websocket_endpoint(
                         session_logger=session_logger,
                     )
                     try:
-                        import asyncio as _aio
 
                         if svc.manager:
                             await svc.manager.broadcast(

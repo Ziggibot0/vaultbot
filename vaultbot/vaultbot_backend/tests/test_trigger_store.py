@@ -7,10 +7,12 @@ no state leaks between tests.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.unit
 
 from trigger_store import TriggerStore
 

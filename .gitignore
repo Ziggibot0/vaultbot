@@ -88,7 +88,6 @@ vaultbot/vaultbot_backend/_spawn_diag*.log
 vaultbot/vaultbot_backend/trash/
 vaultbot/vaultbot_backend/partials/
 vaultbot/vaultbot_backend/*_log.json
-vaultbot/vaultbot_backend/golden_set.json
 vaultbot/vaultbot_backend/backend_out.log
 vaultbot/vaultbot_backend/backend_err.log
 vaultbot/vaultbot_backend/backend.err.log
@@ -133,9 +132,15 @@ batch5_*.txt
 vaultbot/stale_audit_results.json
 vaultbot/stale_refs_report.json
 vaultbot/stale_scan_results.json
+vaultbot/docs/audits/stale_audit_results.json
+vaultbot/docs/audits/stale_refs_report.json
+vaultbot/docs/audits/stale_scan_results.json
+vaultbot/docs/audits/proc_audit.txt
+vaultbot/docs/audits/proc_audit_temp.md
 
 # Debug / runtime scratch files (not source code)
 vaultbot/vaultbot_backend/_spawn_diag.log
+vaultbot/pytestdebug.log
 vaultbot/vaultbot_backend/_spawn_diag_err.log
 vaultbot/vaultbot_backend/_dream_pass_themes.json
 

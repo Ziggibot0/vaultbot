@@ -105,7 +105,14 @@ class VaultBotPlugin extends Plugin {
 		// onunload's async fetch is torn down before it completes.
 		this._beforeUnloadHandler = (e) => {
 			try {
-				navigator.sendBeacon(this.settings.backendUrl + '/shutdown', new Blob([''], {type: 'text/plain'}));
+				// sendBeacon can't set custom headers, so the auth token goes
+				// as a ?token= query param (the backend's _AuthMiddleware
+				// accepts this on /shutdown only).
+				const token = this._getAuthToken();
+				const url = token
+					? this.settings.backendUrl + '/shutdown?token=' + encodeURIComponent(token)
+					: this.settings.backendUrl + '/shutdown';
+				navigator.sendBeacon(url, new Blob([''], {type: 'text/plain'}));
 			} catch (err) {}
 		};
 		window.addEventListener('beforeunload', this._beforeUnloadHandler);
@@ -836,6 +843,28 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
+	// Read the 256-bit shared-secret auth token that the backend generated
+	// on first run. Returns '' if the token file doesn't exist or can't be
+	// read (e.g. backend hasn't started yet). The token is sent as the
+	// X-VaultBot-Token header on fetch() calls and as a ?token= query param
+	// on sendBeacon() calls (sendBeacon can't set custom headers).
+	_getAuthToken() {
+		try {
+			const fs = require('fs');
+			const path = require('path');
+			let vaultRoot;
+			if (this.app.vault.adapter.getBasePath) {
+				vaultRoot = this.app.vault.adapter.getBasePath();
+			} else {
+				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
+			}
+			const tokenPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', '.vaultbot_auth_token');
+			return fs.readFileSync(tokenPath, 'utf-8').trim();
+		} catch (e) {
+			return '';
+		}
+	}
+
 	// Kill the backend process when Obsidian closes so nothing is left
 	// running in the background. The backend writes its PID to
 	// vaultbot_backend/vaultbot.pid on startup; we read that and taskkill it.
@@ -859,9 +888,13 @@ class VaultBotPlugin extends Plugin {
 		try {
 			const controller = new AbortController();
 			const to = setTimeout(() => controller.abort(), 3000);
+			const token = this._getAuthToken();
+			const headers = {};
+			if (token) headers['X-VaultBot-Token'] = token;
 			await fetch(this.settings.backendUrl + '/shutdown', {
 				method: 'POST',
-				signal: controller.signal
+				signal: controller.signal,
+				headers,
 			});
 			clearTimeout(to);
 		} catch (e) {

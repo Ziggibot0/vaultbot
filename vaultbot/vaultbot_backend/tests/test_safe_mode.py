@@ -10,11 +10,12 @@ Verifies that Safe Mode blocks the right tools:
   - Developer Mode (VAULTBOT_SAFE_MODE=0) allows everything.
 """
 
-import os
 import importlib
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
