@@ -16,6 +16,15 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The project is named "vaultbot" but the actual importable package lives in
+# vaultbot_backend/ (there is no vaultbot/ package directory). hatchling's
+# default wheel target auto-detects a package matching the project name,
+# finds nothing, and fails with "Unable to determine which files to ship".
+# Explicitly ship vaultbot_backend so `uv sync` / `pip install -e .` can
+# build the editable install that CI's pytest hard gate depends on.
+[tool.hatch.build.targets.wheel]
+packages = ["vaultbot_backend"]
+
 [project]
 name = "vaultbot"
 version = "0.1.0"

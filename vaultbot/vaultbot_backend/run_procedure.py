@@ -227,25 +227,34 @@ def main() -> int:
     # --- Execute via the async runtime ---
     # Read the procedure's model_cartridge to select the right LLM client.
     # Falls back to 'big' if the field is missing or empty.
-    try:
-        from llm_client import get_cartridge
+    #
+    # Only resolve a client when the procedure actually has an LLM/text
+    # step. A pure code-step procedure (e.g. one that just calls
+    # run_procedure to recurse) needs no model — resolving one
+    # unconditionally breaks in environments with no configured model
+    # (CI, fresh installs) and violates the "no I/O" unit-test contract.
+    llm_client = None
+    _needs_llm = any(s.step_type in ("llm", "text") for s in proc.steps)
+    if _needs_llm:
+        try:
+            from llm_client import get_cartridge
 
-        cartridge = getattr(proc, "model_cartridge", None) or "big"
-        llm_client = get_cartridge(cartridge)
-        if llm_client is None:
-            # Cartridge not assigned — fall back to big
-            from llm_client import get_llm_client
+            cartridge = getattr(proc, "model_cartridge", None) or "big"
+            llm_client = get_cartridge(cartridge)
+            if llm_client is None:
+                # Cartridge not assigned — fall back to big
+                from llm_client import get_llm_client
 
-            llm_client = get_llm_client()
-    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        print(
-            json.dumps(
-                {
-                    "error": f"LLM client unavailable: {e}",
-                }
+                llm_client = get_llm_client()
+        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+            print(
+                json.dumps(
+                    {
+                        "error": f"LLM client unavailable: {e}",
+                    }
+                )
             )
-        )
-        return 1
+            return 1
 
     # --- Procedure tracker: log this child's pass/fail + step results --- #
     # When invoked as a sub-procedure (via run_procedure() in a parent's

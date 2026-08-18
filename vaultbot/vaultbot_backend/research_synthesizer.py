@@ -77,7 +77,6 @@ def llm_synthesize(
         title = src.get("title") or src.get("url", f"Source {i + 1}")
         text = src.get("text", "")[:3000]  # Cap each source
         url = src.get("url", "")
-        cred = src.get("_credibility", _cred.get(url))
         cred_label = src.get("_credibility_label", _cred.get_label(url))
         block = (
             f"### Source {i + 1}: {title}\n"
