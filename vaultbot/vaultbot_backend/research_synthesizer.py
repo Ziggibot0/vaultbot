@@ -78,10 +78,23 @@ def llm_synthesize(
         text = src.get("text", "")[:3000]  # Cap each source
         url = src.get("url", "")
         cred_label = src.get("_credibility_label", _cred.get_label(url))
+        low_cred = src.get("_low_credibility_domain", False)
+        # Warn the LLM when a source is from a low-credibility domain
+        # (code-hosting platform). The LLM should not rely on these for
+        # factual claims — they're project planning docs, not documentation.
+        warning = ""
+        if low_cred:
+            warning = (
+                "\n⚠️ LOW-CREDIBILITY: This source is from a code-hosting "
+                "platform (GitHub/GitLab/etc). It is a project-specific "
+                "document, NOT authoritative documentation. Do NOT use it "
+                "as the sole source for any claim. Only cite it alongside "
+                "a higher-credibility source.\n"
+            )
         block = (
             f"### Source {i + 1}: {title}\n"
             f"URL: {url}\n"
-            f"Credibility: {cred_label}\n"
+            f"Credibility: {cred_label}{warning}\n"
             f"{text}"
         )
         if total_chars + len(block) > max_chars:
@@ -123,6 +136,11 @@ def llm_synthesize(
         "as an established fact.\n"
         "3b. If a source contradicts another, prefer the higher-credibility\n"
         "source and note the disagreement rather than silently dropping it.\n"
+        "3c. NEVER use a source from a code-hosting platform (GitHub,\n"
+        "GitLab, Bitbucket) as the sole backing for a claim. These are\n"
+        "project planning documents (issues, PRs, wikis), NOT authoritative\n"
+        "documentation. If a source is marked ⚠️ LOW-CREDIBILITY, only cite\n"
+        "it alongside a higher-credibility source — never alone.\n"
         "4. SKIP any source that is not relevant to the topic.\n"
         "5. Insert [[wikilinks]] to existing vault notes ONLY where "
         "topically relevant (use the EXISTING VAULT NOTES list). Never "
@@ -130,8 +148,11 @@ def llm_synthesize(
         "2 relevant existing notes if any are topically related.\n"
         "6. Keep ALL the factual content -- don't drop facts, just "
         "weave them into readable prose.\n"
-        "7. End with a ## Sources section listing each source as a "
-        "markdown link: - [Title](URL)\n"
+        "7. End with a ## Sources section listing EVERY source you used as "
+        "a markdown link: - [Title](URL). You MUST use the source list "
+        "provided below — do NOT invent URLs, do NOT write '- none', and "
+        "do NOT leave the Sources section empty. Every claim in the note "
+        "must have at least one corresponding entry in the Sources section.\n"
         "8. Do NOT add a top-level # heading. Start with the YAML "
         "frontmatter.\n"
         "9. Output ONLY the note content, nothing else.\n"
@@ -142,7 +163,11 @@ def llm_synthesize(
         "contradicts a high-credibility claim, prefer the high-credibility "
         "source. If ALL sources have low credibility (< 0.4), note this in "
         "the summary: 'status: low_confidence' and add a warning in the "
-        "note body that the sources have not been verified."
+        "note body that the sources have not been verified.\n"
+        "11. Do NOT write claims from your own training data. Every "
+        "factual statement must be traceable to one of the provided "
+        "source texts. If the sources do not cover something, do NOT "
+        "fill the gap with your own knowledge — note the gap instead."
     )
 
     # Build source list for the Sources section, including DOI when
@@ -163,12 +188,18 @@ def llm_synthesize(
         f"Topic: {topic}\n\n"
         f"Source texts:\n\n{sources_text}\n\n"
         f"{titles_hint}\n\n"
-        f"Source list for the Sources section:\n{source_list}\n\n"
+        f"Source list for the Sources section (use EXACTLY these entries — "
+        f"do NOT add URLs not in this list, do NOT write '- none'):\n"
+        f"{source_list}\n\n"
         f"Write a structured research note about '{topic}' from these "
         f"sources. Start with YAML frontmatter, then 2-4 H2 prose "
         f"sections with [sources: ...] citations and [[wikilinks]] to "
         f"relevant existing vault notes. End with a ## Sources section "
-        f"using the source list above. Skip irrelevant sources."
+        f"that lists EVERY source from the source list above (copy them "
+        f"verbatim — do not skip any, do not write '- none'). "
+        f"Skip irrelevant sources from the text, but include ALL provided "
+        f"sources in the Sources section. Do NOT invent facts not present "
+        f"in the source texts."
     )
 
     try:

@@ -35,6 +35,8 @@ from text_scoring import (
 )
 from source_classification import (
     is_blocked_source as _is_blocked_source,
+    is_low_credibility_domain as _is_low_credibility_domain,
+    is_github_issue_or_pr as _is_github_issue_or_pr,
     normalize_url as _normalize_url,
     source_relevance as _source_relevance,
 )
@@ -57,6 +59,11 @@ try:
     from free_search import FreeSearch
 except Exception:  # noqa: BLE001 — type-hint-only import; module instance is injected at runtime
     FreeSearch = None  # type: ignore
+
+try:
+    from url_liveness import filter_dead_urls as _filter_dead_urls
+except Exception:  # noqa: BLE001 — best-effort import, liveness check is optional
+    _filter_dead_urls = None  # type: ignore
 
 
 # --- Compound signal detection (2026-08-17) -------------------------------
@@ -499,6 +506,30 @@ class ResearchEngine:
                     },
                 )
                 continue
+            # Low-credibility domain check: GitHub issues/PRs and other
+            # code-hosting planning documents are NOT authoritative sources.
+            # They pass the relevance gate (they contain the signal terms)
+            # but they're project-specific planning docs, not documentation.
+            # Tag them so the synthesis knows to down-rank them, and skip
+            # them entirely if the URL is a GitHub issue/PR (the lowest
+            # quality source type — a random project's todo item).
+            is_low_cred = _is_low_credibility_domain(url)
+            is_github_iss = _is_github_issue_or_pr(url)
+            if is_github_iss:
+                # GitHub issues/PRs/discussions are project planning artifacts,
+                # not sources. Skip them — a random repo's OAuth issue is not
+                # a source about OAuth. This is the root cause of the "links
+                # to GitHub repos" problem: search engines return them because
+                # the title matches, but they carry no authority.
+                self._log(
+                    "research_source_skipped_github_issue",
+                    {
+                        "round": round_idx,
+                        "url": url,
+                        "title": (hit.get("title", "") or "")[:80],
+                    },
+                )
+                continue
             sources.append(
                 {
                     "url": url,
@@ -508,6 +539,7 @@ class ResearchEngine:
                     "_relevance": rel_score,
                     "_credibility": self.credibility.get(url),
                     "_credibility_label": self.credibility.get_label(url),
+                    "_low_credibility_domain": is_low_cred,
                 }
             )
             self._log(
@@ -519,8 +551,40 @@ class ResearchEngine:
                     "relevance": round(rel_score, 2),
                     "credibility": round(self.credibility.get(url), 2),
                     "credibility_label": self.credibility.get_label(url),
+                    "low_credibility_domain": is_low_cred,
                 },
             )
+        # --- URL liveness verification ----------------------------------
+        # Check that all accepted source URLs actually resolve (return a
+        # 2xx/3xx response). Dead links go straight into research notes
+        # without this check — the search engine returned a URL, the
+        # scraper got content (or the snippet was used), and the URL was
+        # cited as a source even though it 404s. This batch-checks all
+        # accepted URLs in parallel before returning.
+        if _filter_dead_urls is not None and sources:
+            candidate_urls = [s["url"] for s in sources]
+            alive_urls, dead_urls = _filter_dead_urls(
+                candidate_urls,
+                timeout=5.0,
+                max_workers=5,
+                session_logger=self.session_logger,
+            )
+            if dead_urls:
+                alive_set = set(alive_urls)
+                before = len(sources)
+                sources = [s for s in sources if s["url"] in alive_set]
+                self._log(
+                    "research_dead_urls_filtered",
+                    {
+                        "round": round_idx,
+                        "checked": before,
+                        "alive": len(alive_urls),
+                        "dead": len(dead_urls),
+                        "dead_urls": [
+                            {"url": u, "reason": r} for u, r in dead_urls[:10]
+                        ],
+                    },
+                )
         return sources
 
     def _expand_query(self, base_terms: list[str], discovered_terms: list[str]) -> str:
@@ -844,6 +908,7 @@ class ResearchEngine:
                     "title": s["title"],
                     "credibility": s.get("_credibility", self.credibility.get(s["url"])),
                     "credibility_label": s.get("_credibility_label", self.credibility.get_label(s["url"])),
+                    "low_credibility_domain": s.get("_low_credibility_domain", False),
                 }
                 for s in all_sources
             ],
