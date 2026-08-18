@@ -45,8 +45,12 @@ class VaultMaintenance:
         self._ensure_dirs()
 
     def _ensure_dirs(self):
-        self.chat_dir.mkdir(exist_ok=True)
-        self.research_dir.mkdir(exist_ok=True)
+        # parents=True is required: on a fresh install the parent folders
+        # (vaultbot/Memory/, vaultbot/Knowledge/) do not exist yet, and
+        # mkdir without parents=True raises FileNotFoundError when the
+        # leaf directory's parent is missing.
+        self.chat_dir.mkdir(parents=True, exist_ok=True)
+        self.research_dir.mkdir(parents=True, exist_ok=True)
 
     def _log(self, action: str, details: dict[str, Any]):
         record = {
