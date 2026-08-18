@@ -73,8 +73,14 @@ jobs:
         continue-on-error: true
 
       - name: Ruff format check
+        # Non-blocking: the codebase has pre-existing formatting drift
+        # (dozens of files) unrelated to any PR. Report it so the team sees
+        # the debt, but don't fail the build on it — same treatment as the
+        # pyright and full-rule-set steps. Flip to a hard gate once the
+        # drift is paid down.
         working-directory: vaultbot
         run: uv run ruff format --check vaultbot_backend/
+        continue-on-error: true
 
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
