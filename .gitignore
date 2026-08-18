@@ -8,6 +8,8 @@
 providers.json
 providers.json.tmp
 vaultbot/vaultbot_backend/.vaultbot_auth_token
+vaultbot/vaultbot_backend/google_workspace_config.json
+vaultbot/vaultbot_backend/google_workspace_token.json
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Python virtual environment
