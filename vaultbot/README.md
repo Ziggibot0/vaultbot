@@ -179,8 +179,11 @@ again after that one paste.**
 > **Don't put your vault in OneDrive or Dropbox** — syncing services can
 > corrupt the database files VaultBot creates.
 
-> **Optional:** [Docker](https://www.docker.com) — only if you want to run
-> the self-hosted SearXNG search backend. Skip it for a first install.
+> **Recommended:** [Docker](https://www.docker.com) — the setup script
+> automatically starts a SearXNG search container if Docker is present,
+> giving the research feature full web coverage (Google, Brave, etc.).
+> Without Docker, research still works via keyless backends (DuckDuckGo
+> Lite, Marginalia, arXiv) but is more rate-limited.
 
 ---
 

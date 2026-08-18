@@ -5,6 +5,8 @@ SearXNG Docker container lifecycle and health checks.
 """
 
 import logging
+import os
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -61,12 +63,85 @@ class SearxngManager:
                 try:
                     response = requests.get(f"http://localhost:{self.port}", timeout=5)
                     return response.status_code == 200
-                except:
+                except Exception:  # noqa: BLE001 — best-effort
                     return False
             else:
                 return False
         except docker.errors.NotFound:
             return False
+        except Exception:  # noqa: BLE001 — daemon down or other docker error
+            return False
+
+    # ── Docker daemon self-management ──────────────────────────────────────
+    # VaultBot owns its SearXNG container end-to-end. If Docker Desktop
+    # isn't running, the daemon is unreachable and every docker API call
+    # raises. These helpers detect that, launch Docker Desktop, and wait for
+    # the daemon to come up — so the operator never has to touch Docker.
+
+    def _daemon_up(self) -> bool:
+        """True if the Docker daemon is reachable."""
+        try:
+            self.client.ping()
+            return True
+        except Exception:  # noqa: BLE001 — daemon down
+            return False
+
+    def _docker_desktop_exe(self) -> str | None:
+        """Locate Docker Desktop.exe on Windows, or None if not installed."""
+        candidates = [
+            Path(os.environ.get("LOCALAPPDATA", ""))
+            / "Programs"
+            / "DockerDesktop"
+            / "Docker Desktop.exe",
+            Path("C:/Program Files/Docker/Docker/Docker Desktop.exe"),
+        ]
+        for c in candidates:
+            try:
+                if c.exists():
+                    return str(c)
+            except Exception:  # noqa: BLE001 — best-effort
+                continue
+        return None
+
+    def _start_docker_desktop(self) -> bool:
+        """Launch Docker Desktop so the daemon comes up. Returns True if launched."""
+        exe = self._docker_desktop_exe()
+        if not exe:
+            return False
+        try:
+            subprocess.Popen(
+                [exe],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except Exception as e:  # noqa: BLE001 — best-effort
+            self._log_tool("start_docker_desktop", {"exe": exe}, error=str(e))
+            return False
+
+    def _ensure_daemon(self, timeout: int = 180) -> bool:
+        """Ensure the Docker daemon is up, starting Docker Desktop if needed.
+
+        Returns True once the daemon responds to ping. A cold Docker Desktop
+        start can take 30-60s (or longer on a slow host), so we poll up to
+        ``timeout`` seconds. Returns False if Docker isn't installed or the
+        daemon never comes up.
+        """
+        if self._daemon_up():
+            return True
+        self._log_tool("ensure_daemon", {"action": "daemon_down", "starting": True})
+        if self._start_docker_desktop():
+            _logger.info("Docker Desktop launched — waiting for daemon...")
+        else:
+            _logger.warning("Docker Desktop not found — cannot start daemon.")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._daemon_up():
+                self._log_tool("ensure_daemon", {"action": "daemon_up"})
+                return True
+            time.sleep(2)
+        self._log_tool("ensure_daemon", {"action": "daemon_timeout", "seconds": timeout})
+        return False
 
     def start(self):
         """Start the searxng container if not already running."""
@@ -251,7 +326,7 @@ class SearxngManager:
         try:
             response = requests.get(
                 f"http://localhost:{self.port}/search",
-                params={"q": query, "format": "json", "categories": "science,general"},
+                params={"q": query, "format": "json"},
                 timeout=timeout,
                 headers={"Accept": "application/json"},
             )

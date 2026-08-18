@@ -412,6 +412,11 @@ class ResearchEngine:
         # real hits. See [[How-to-Fix-Research-Engine-Returning-Garbage]].
         topic_terms = _keyterms(topic) if topic else []
         signal = _signal_terms(topic_terms)
+        # base_signal_count: the signal count BEFORE compound signals are
+        # merged in. Passed to source_relevance() so the min_matches
+        # threshold isn't inflated by compounds (which are alternative
+        # match opportunities, not additional requirements).
+        base_signal_count = len(signal)
         # Merge compound signals from the raw topic (e.g., "sea shells" from
         # "what are sea shells made of"). Without this, the signal list is
         # just ['shells'] — a single word that matches astrophysics papers
@@ -479,7 +484,8 @@ class ResearchEngine:
             # search-result snippet (which the engine ranked relevant).
             gate_text = text if len(text) >= 200 else (f"{snippet}\n{text}")
             rel_score, rel_reason = _source_relevance(
-                hit.get("title", ""), gate_text, signal, topic_terms, url=url
+                hit.get("title", ""), gate_text, signal, topic_terms, url=url,
+                base_signal_count=base_signal_count,
             )
             if rel_score < 1.0:
                 self._log(

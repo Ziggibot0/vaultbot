@@ -162,6 +162,68 @@ else
     mark_step_done "deps_installed"
 fi
 
+# ── 5b. Set up SearXNG search container (optional, needs Docker) ───────────
+# SearXNG is a self-hosted meta-search engine that gives VaultBot's research
+# feature access to Google, Brave, DuckDuckGo, etc. via one private container.
+# Without it, research falls back to keyless backends (DDG Lite, Marginalia,
+# arXiv) which are rate-limited and less reliable. With Docker installed, we
+# start the container automatically so research works out of the box.
+if step_done "searxng_setup"; then
+    echo "  [!]  SearXNG search container already set up -- skipping."
+else
+    DOCKER_OK=false
+    if command -v docker &>/dev/null; then
+        DOCKER_OK=true
+        echo "  [OK] Docker: $(docker --version 2>/dev/null)"
+    fi
+
+    if [ "$DOCKER_OK" = true ]; then
+        echo ">>> Starting SearXNG search container (one-time, ~30 seconds)..."
+
+        # Check if the container already exists
+        EXISTING=$(docker ps -a --filter "name=vaultbot_searxng" --format "{{.Names}}" 2>/dev/null)
+        if [ "$EXISTING" = "vaultbot_searxng" ]; then
+            echo "  [!]  SearXNG container already exists -- starting it."
+            docker start vaultbot_searxng >/dev/null 2>&1
+        else
+            SETTINGS_PATH="$VAULT_PATH/vaultbot/vaultbot_backend/searxng_settings.yml"
+            if [ -f "$SETTINGS_PATH" ]; then
+                docker run -d --name vaultbot_searxng -p 8080:8080 \
+                    -v "$SETTINGS_PATH:/etc/searxng/settings.yml:ro" \
+                    searxng/searxng 2>&1 | sed 's/^/  /'
+            else
+                docker run -d --name vaultbot_searxng -p 8080:8080 searxng/searxng 2>&1 | sed 's/^/  /'
+            fi
+        fi
+
+        # Wait for the container to be ready (up to 30 seconds)
+        READY=false
+        for i in $(seq 1 15); do
+            sleep 2
+            if curl -sf -o /dev/null "http://localhost:8080" 2>/dev/null; then
+                READY=true
+                break
+            fi
+        done
+
+        if [ "$READY" = true ]; then
+            echo "  [OK] SearXNG search container is running on port 8080"
+            echo "  VaultBot's research feature can now search Google, Brave, and more."
+        else
+            echo "  [!]  SearXNG container started but not responding yet."
+            echo "  It may need a few more seconds. Research will work once it's ready."
+        fi
+        mark_step_done "searxng_setup"
+    else
+        echo "  [!]  Docker not found -- SearXNG search container skipped."
+        echo "  Without Docker, VaultBot's research feature uses keyless backends"
+        echo "  (DuckDuckGo Lite, Marginalia, arXiv) which work but are rate-limited."
+        echo "  Install Docker (https://docker.com) and re-run setup to enable"
+        echo "  full web search via SearXNG."
+        mark_step_done "searxng_setup"
+    fi
+fi
+
 # ── 6. Pull embedding model via Ollama ────────────────────────────────────
 # Only the lightweight embedding model (nomic-embed-text, ~270 MB) is
 # auto-pulled. The chat/synthesis LLM is handled in step 6b based on the

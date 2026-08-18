@@ -220,6 +220,22 @@ class DuckDuckGoLite(_Backend):
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
+        # Detect DDG's botnet anomaly/challenge page. When DDG flags the IP
+        # as suspicious, it returns a 202 status with an HTML page whose
+        # forms point to //duckduckgo.com/anomaly.js (instead of results).
+        # Without this check, the parser silently returns 0 results (no
+        # result-link anchors on the challenge page) and reports success —
+        # masking the ban from the aggregator. By raising here, the base
+        # class marks a failure and enters cooldown so other backends carry
+        # the load and the ban self-heals.
+        _forms = soup.find_all("form")
+        if _forms and any(
+            "anomaly.js" in (f.get("action") or "") for f in _forms
+        ):
+            raise requests.HTTPError(
+                "duckduckgo botnet challenge page (anomaly.js)",
+                response=resp,
+            )
         results: list[dict[str, Any]] = []
         # lite.duckduckgo.com lays results out as a series of <tr> rows:
         #   row A: <a class="result-link" href="ABSOLUTE_URL">Title</a>

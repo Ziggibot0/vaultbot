@@ -117,7 +117,8 @@ def normalize_url(url: str) -> str:
 
 
 def source_relevance(
-    title: str, text: str, signal: list[str], all_keyterms: list[str], url: str = ""
+    title: str, text: str, signal: list[str], all_keyterms: list[str], url: str = "",
+    base_signal_count: int | None = None,
 ) -> tuple[float, str]:
     """Score how on-topic a source is. Returns (score, reason).
 
@@ -130,6 +131,10 @@ def source_relevance(
       quorum of all keyterms — a source must share >= 40% of them.
     - Title match boost: signal terms in the title count double (titles are
       the author's own claim of what the page is about).
+    - base_signal_count: the number of signal terms BEFORE compound signals
+      were added. The min_matches threshold is computed from this, not from
+      len(signal), so compound signals (which are alternative match
+      opportunities, not additional requirements) don't inflate the gate.
     """
     if not signal:
         # No signal terms → use generic quorum. This is the case for soft
@@ -195,14 +200,21 @@ def source_relevance(
     # nothing about communication). With 2 signal terms, 50% = 1, but
     # with 3+ terms it requires 2+, filtering out marginally-related sources.
     is_academic = is_academic_source(url)
+    # The threshold is based on the ORIGINAL signal count (before compound
+    # signals were merged in). Compound signals are alternative match
+    # opportunities (e.g. "sea shells" vs "shells"), not additional
+    # requirements — inflating the threshold with them would reject
+    # legitimate sources that match 6/7 original signals just because
+    # they don't also match every compound variant.
+    _thresh_count = base_signal_count if base_signal_count is not None else len(signal)
     # Require ALL signal terms to match when there are <= 3 (typical case).
     # With 4+ signal terms, require at least 60%. This prevents sources that
     # match just one generic signal word (e.g. "bacteria" in a paper about
     # bacterial mutation) from passing the gate.
-    if len(signal) <= 3:
-        min_matches = len(signal)  # ALL must match
+    if _thresh_count <= 3:
+        min_matches = _thresh_count  # ALL must match
     else:
-        min_matches = max(2, int(len(signal) * 0.6))
+        min_matches = max(2, int(_thresh_count * 0.6))
     # Minimum floor of 2 signal matches for ALL sources (academic or not)
     # when there are 2+ keyterms available. Without this, a single-signal-term
     # query like "sea shells" (signal=["shells"]) lets through any arxiv paper
