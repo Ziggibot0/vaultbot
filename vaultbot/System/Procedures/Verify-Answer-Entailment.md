@@ -111,7 +111,58 @@ result = json.dumps({"pairs": enriched, "total": len(enriched)})
 
 ### Step 3: Check entailment for each claim against its source
 
-3. [llm: You are a fact-checking system. Given a list of (claim, source_text) pairs, determine for each whether the source text supports the claim. For each pair, return a JSON object with: "claim" (the claim text), "note" (the note name), "verdict" (one of "supported", "unsupported", "contradicted"), "reasoning" (one sentence explaining why). If source_text is empty, verdict is "unsupported" with reasoning "no source text available". Return a JSON array of these objects, one per pair. Do not fabricate support — if the source does not clearly entail the claim, mark it "unsupported".]
+3. ```python
+import json
+
+data = json.loads(output)
+pairs = data.get("pairs", [])
+verdicts = []
+
+for p in pairs:
+    claim = p.get("claim", "")
+    note = p.get("note", "")
+    source_text = p.get("source_text", "")
+    if not source_text:
+        verdicts.append({
+            "claim": claim,
+            "note": note,
+            "verdict": "unsupported",
+            "reasoning": "no source text available",
+        })
+        continue
+    prompt = (
+        "Determine whether the source text supports the claim.\n\n"
+        "Source text:\n" + source_text[:1500] + "\n\n"
+        "Claim:\n" + claim + "\n\n"
+        'Return ONLY JSON: {"verdict": "supported|unsupported|contradicted", "reasoning": "one sentence"}'
+    )
+    try:
+        raw = llm_generate(prompt).strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        v = json.loads(raw)
+        verdict = str(v.get("verdict", "unsupported")).lower()
+        if verdict not in ("supported", "unsupported", "contradicted"):
+            verdict = "unsupported"
+        verdicts.append({
+            "claim": claim,
+            "note": note,
+            "verdict": verdict,
+            "reasoning": v.get("reasoning", ""),
+        })
+    except Exception as e:
+        verdicts.append({
+            "claim": claim,
+            "note": note,
+            "verdict": "unsupported",
+            "reasoning": "entailment check failed: " + str(e)[:100],
+        })
+
+result = json.dumps(verdicts)
+```
 
 ## Related
 
