@@ -4786,6 +4786,23 @@ class VaultBotSidebarView extends ItemView {
 					currentAnswerBlock = null;
 					currentSegmentText = '';
 					currentAnswerText = '';
+				} else if (msg.type === 'provenance_verified') {
+					// Idle-time entailment verification finished. The trust
+					// badge in the answer already shows "Grounded"; this
+					// confirms the per-claim checks completed. Update the
+					// status line so the scholar sees verification happened.
+					try {
+						let verdicts = [];
+						try { verdicts = JSON.parse(msg.verdicts || '[]'); } catch (e) {}
+						const unsupported = Array.isArray(verdicts)
+							? verdicts.filter(v => v && v.verdict !== 'supported').length
+							: 0;
+						statusEl.setText(unsupported > 0
+							? `Verified — ${unsupported} claim(s) need review`
+							: 'Verified ✓');
+					} catch (e) {
+						statusEl.setText('Verified ✓');
+					}
 				} else if (msg.type === 'error') {
 					endActivity();
 					setTurnActive(false);

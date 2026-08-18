@@ -66,8 +66,16 @@ async def finalize_turn(
     # the agentic loop (capped at TUNABLES.max_grounding_retries) with a
     # reprimand. After the retry cap, we ship the answer + a ⚠️ caution so
     # the user is never left with no answer.
+    #
+    # IDK escape hatch: if the model said "I don't know" (the correct
+    # response when the vault has nothing relevant), skip the grounding
+    # retry entirely. An IDK answer is not a factual claim — it's an
+    # admission of ignorance. Retrying it wastes an LLM round and may
+    # force the model to cite irrelevant notes just to pass the gate.
     _allowed = getattr(st, "_allowed_citations", None) or {}
+    _score: dict = {}
     _grounding_caution = ""
+    _is_idk = False
     _graph_lookup = None
     try:
         _graph_lookup = lambda _wl: bool(
@@ -78,8 +86,12 @@ async def finalize_turn(
         _graph_lookup = None
     if final_answer and len(final_answer) > 50:
         try:
-            from citation_gate import score_grounding, build_reprimand
+            from citation_gate import score_grounding, build_reprimand, detect_idk
 
+            # Check IDK BEFORE scoring — skip the grounding retry for
+            # admissions of ignorance. We still score (for logging) but
+            # don't trigger a retry or append a caution.
+            _is_idk = detect_idk(final_answer)
             _score = score_grounding(final_answer, _allowed, _graph_lookup)
             session_logger.log(
                 "grounding_check",
@@ -95,9 +107,10 @@ async def finalize_turn(
                     "failed": _score["failed"],
                     "allowed_set_size": len(_allowed),
                     "retry_count": getattr(st, "_grounding_retry_count", 0),
+                    "is_idk": _is_idk,
                 },
             )
-            if _score["failed"]:
+            if _score["failed"] and not _is_idk:
                 # Hard gate: flag for retry if under the cap.
                 _retries = getattr(st, "_grounding_retry_count", 0)
                 if _retries < TUNABLES.max_grounding_retries:
@@ -120,6 +133,13 @@ async def finalize_turn(
                         f"this topic."
                     )
                     final_answer += _grounding_caution
+            elif _score["failed"] and _is_idk:
+                # IDK answer failed grounding (expected — it has no factual
+                # claims to cite). Log and skip — don't retry, don't caution.
+                session_logger.log(
+                    "grounding_skipped_idk",
+                    {"retry_count": getattr(st, "_grounding_retry_count", 0)},
+                )
             elif _score["grounding_score"] < 0.5 and _score["total_wikilinks"] > 0:
                 # Some citations but many missing from the set/vault — soft warn.
                 _grounding_caution = (
@@ -132,6 +152,32 @@ async def finalize_turn(
                 final_answer += _grounding_caution
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("grounding_check_failed", {"error": str(_e)})
+
+    # --- Positive provenance surface: trust badge + Sources block --------
+    # After grounding enforcement, append a POSITIVE affordance so a scholar
+    # can see where the answer came from: a one-line trust badge + a
+    # "## Sources" list of clickable [[wikilinks]]. This is the "I can see
+    # where the answers are coming from" moment. Only added when the answer
+    # actually cites vault notes AND is not an IDK answer (a greeting or
+    # "I don't know" gets no block — the citations in an IDK answer are
+    # just the irrelevant notes the model was told it could cite, not
+    # real provenance for a factual claim).
+    if not _is_idk:
+        try:
+            from citation_gate import build_sources_block, build_trust_badge
+
+            _badge = build_trust_badge(_score) if _score else ""
+            _sources = build_sources_block(final_answer, _allowed)
+            if _sources:
+                final_answer = f"{final_answer}\n\n{_badge}\n\n{_sources}"
+                session_logger.log(
+                    "provenance_surface",
+                    {"badge": _badge, "sources": len(_sources.splitlines()) - 1},
+                )
+        except Exception as _e:  # noqa: BLE001 — best-effort
+            session_logger.log("provenance_surface_failed", {"error": str(_e)})
+    else:
+        session_logger.log("provenance_surface_skipped_idk", {})
 
     # --- Token cost tracking: log and emit cumulative per-turn totals ---
     _turn_token_totals["rounds"] = round_idx + 1

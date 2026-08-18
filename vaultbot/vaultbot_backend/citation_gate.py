@@ -228,13 +228,53 @@ def score_grounding(
     }
 
 
+# ── IDK detection ────────────────────────────────────────────────────────
+# Shared detector for "I don't know" / admission-of-ignorance answers.
+# Used by the grounding gate (skip retry on IDK), the provenance verifier
+# (skip entailment on IDK), and the trust badge (show a different badge).
+# These patterns cover the phrasing the system prompt instructs the model
+# to use (see chat_turn_prep.py _allowed_block) plus natural variants.
+_IDK_PATTERNS: list[str] = [
+    "i don't know",
+    "i don't have enough",
+    "nothing in the vault",
+    "no notes cover",
+    "not covered in the vault",
+    "vault doesn't have",
+    "vault does not have",
+    "want me to research",
+    "want me to look into",
+    "nothing relevant",
+    "no relevant notes",
+    "i cannot answer",
+    "i can't answer",
+    "i have nothing",
+]
+
+
+def detect_idk(answer: str) -> bool:
+    """Return True if ``answer`` is an admission of ignorance (IDK fallback).
+
+    Checks the lowercase answer against known IDK phrases. This is a
+    fast string scan — no LLM call, no I/O. It prevents the grounding
+    gate and provenance verifier from wasting rounds/tokens verifying
+    an answer that is explicitly "I don't know".
+    """
+    if not answer:
+        return False
+    _low = answer.lower()
+    return any(p in _low for p in _IDK_PATTERNS)
+
+
 # ── Reprimand ─────────────────────────────────────────────────────────────
 
 def build_reprimand(score: dict[str, Any], allowed: dict[str, dict[str, str]] | None) -> str:
     """Build the user-role message sent back to the model on a grounding fail.
 
     Lists the allowed citation targets so the model can re-cite, and states
-    the rule plainly.
+    the rule plainly. Includes an IDK escape hatch: if none of the allowed
+    notes address the user's question, the model should say "I don't know"
+    and NOT cite irrelevant notes just to pass the gate.
     """
     allowed = allowed or {}
     stems = list(allowed.keys())[:25]
@@ -261,8 +301,77 @@ def build_reprimand(score: dict[str, Any], allowed: dict[str, dict[str, str]] | 
         f"Notes you ARE allowed to cite: {stems_block}\n"
         f"{missing_block}\n\n"
         "Rewrite your answer. Every factual sentence MUST contain at least "
-        "one [[wikilink]] from the allowed set above. If you cannot support "
-        "a claim from those notes, say \"I don't know — nothing in the vault "
-        "covers this\" and offer to call vault_research. Do NOT write from "
-        "your own knowledge."
+        "one [[wikilink]] from the allowed set above.\n\n"
+        "IMPORTANT: If none of the allowed notes actually address the user's "
+        "question, do NOT cite irrelevant notes just to pass this check. "
+        "Instead say \"I don't know — nothing in the vault covers this\" and "
+        "offer to call vault_research. Citing an irrelevant note is worse "
+        "than admitting ignorance. Do NOT write from your own knowledge."
     )
+
+
+# ── Positive provenance surface (scholar-trust) ──────────────────────────
+# The grounding gate above is NEGATIVE (reprimand on failure). These helpers
+# build the POSITIVE surface: a trust badge + a "## Sources" block listing
+# the cited vault notes as clickable [[wikilinks]], so a scholar can see
+# exactly where every answer came from. Pure string transforms — no I/O.
+
+
+def build_trust_badge(score: dict[str, Any]) -> str:
+    """Return a one-line trust badge describing grounding state.
+
+    Three states:
+      - "✓ Grounded in N vault notes"  (grounded, no failure)
+      - "⚠ Partially grounded"         (some citations but failed/low score)
+      - "✗ Ungrounded"                 (no citations at all)
+
+    The badge is coarse by design — the detailed per-claim verdict lives in
+    the provenance manifest, not the chat. This keeps the chat clean while
+    still giving the scholar an at-a-glance trust signal.
+    """
+    total = score.get("total_wikilinks", 0)
+    allowed_cited = score.get("allowed_cited", 0)
+    failed = score.get("failed", False)
+    grounding_score = score.get("grounding_score", 0.0)
+
+    if total == 0:
+        return "> ✗ **Ungrounded** — no vault notes cited"
+    if failed or grounding_score < 0.5:
+        return (
+            f"> ⚠ **Partially grounded** — {allowed_cited}/{total} "
+            f"citations verified"
+        )
+    return f"> ✓ **Grounded** in {allowed_cited} vault note{'s' if allowed_cited != 1 else ''}"
+
+
+def build_sources_block(
+    answer: str,
+    allowed: dict[str, dict[str, str]] | None,
+) -> str:
+    """Build a ``## Sources`` markdown block from the cited vault notes.
+
+    Extracts the [[wikilinks]] actually cited in ``answer``, keeps only those
+    in the closed set (``allowed``), and renders them as a bulleted list of
+    clickable [[wikilinks]]. Returns "" if there are no citable notes.
+
+    The rendered wikilinks are already clickable in the Obsidian chat UI
+    (the plugin's delegated click handler opens them in Obsidian), so this
+    block is the "click to see where this came from" affordance.
+    """
+    allowed = allowed or {}
+    cited = extract_wikilinks(answer)
+    # Keep only cited stems that are in the closed set, preserving order.
+    seen: set[str] = set()
+    citable: list[str] = []
+    for stem in cited:
+        if stem in allowed and stem not in seen:
+            seen.add(stem)
+            citable.append(stem)
+
+    if not citable:
+        return ""
+
+    lines = ["## Sources"]
+    for stem in citable:
+        lines.append(f"- [[{stem}]]")
+    return "\n".join(lines)
