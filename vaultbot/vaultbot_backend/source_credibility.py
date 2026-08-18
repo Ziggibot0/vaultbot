@@ -43,6 +43,14 @@ import os
 import threading
 from urllib.parse import urlparse
 
+# Import the low-credibility domain set so the credibility tracker can
+# apply a lower default score to code-hosting platforms (GitHub/GitLab/etc).
+# These are project planning documents, not authoritative sources.
+try:
+    from source_classification import _LOW_CREDIBILITY_DOMAINS
+except ImportError:
+    _LOW_CREDIBILITY_DOMAINS = set()
+
 
 def _extract_domain(url: str) -> str:
     """Extract the registrable domain from a URL.
@@ -114,7 +122,11 @@ class SourceCredibilityTracker:
     def get(self, url: str) -> float:
         """Return the credibility score [0.0, 1.0] for a source URL.
 
-        Uses the domain-level score. Unknown domains return 0.5 (neutral).
+        Uses the domain-level score. Unknown domains return 0.5 (neutral),
+        EXCEPT for known low-credibility domains (code-hosting platforms
+        like GitHub/GitLab/Bitbucket) which return 0.3 — these are project
+        planning documents, not authoritative sources, and their default
+        trust level should be below neutral.
         The score is the expected value of the Beta(alpha, beta) posterior:
         alpha / (alpha + beta).
         """
@@ -124,6 +136,11 @@ class SourceCredibilityTracker:
         with self._lock:
             entry = self._scores.get(domain)
             if not entry:
+                # No empirical data for this domain. Use a prior based on
+                # domain type: code-hosting platforms start below neutral
+                # because they're project planning docs, not documentation.
+                if domain in _LOW_CREDIBILITY_DOMAINS:
+                    return 0.3
                 return 0.5  # neutral prior
             alpha = entry.get("alpha", 1.0)
             beta = entry.get("beta", 1.0)

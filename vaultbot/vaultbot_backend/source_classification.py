@@ -17,6 +17,36 @@ _BLOCKED_DOMAINS = {
     "simple.wikipedia.org",
 }
 
+# --- Low-credibility source domains --------------------------------------
+# Code-hosting platforms (GitHub, GitLab, Bitbucket, Gitee) are NOT
+# authoritative research sources. A GitHub issue titled "Implement OAuth2
+# authentication" is a project planning document for a specific app, not
+# documentation about OAuth2. Search engines return these because the
+# title/keywords match, but the content is project-specific and carries
+# no authority. They pass the relevance gate (they contain the signal
+# terms) but are down-ranked by the credibility system.
+#
+# The research engine uses is_low_credibility_domain() to:
+#   1. Skip these sources when enough better sources are available.
+#   2. Start their credibility score below neutral (0.3 instead of 0.5).
+#   3. Never use them as the sole source for a claim (corroboration gate).
+_LOW_CREDIBILITY_DOMAINS = {
+    "github.com",
+    "gitlab.com",
+    "bitbucket.org",
+    "gitee.com",
+    "codeberg.org",
+    "sourcehut.org",
+}
+
+# Within GitHub, issue/PR/wiki pages are even less authoritative than
+# README/docs pages. This regex matches the path patterns that indicate
+# a project planning document rather than documentation.
+_GITHUB_LOW_CREDIBILITY_PATH = re.compile(
+    r"github\.com/[^/]+/[^/]+/(issues|pull|wiki|discussions|projects)/",
+    re.IGNORECASE,
+)
+
 # Academic domains — used only by citation_exporter.py for DOI extraction
 # and by is_academic_source() (legacy callers). NOT used for credibility
 # scoring (that's the credibility tracker's job).
@@ -77,6 +107,34 @@ def is_academic_source(url: str) -> bool:
         return False
     url_lower = url.lower()
     return any(domain in url_lower for domain in _ACADEMIC_DOMAINS)
+
+
+def is_low_credibility_domain(url: str) -> bool:
+    """Check if a URL is from a low-credibility domain (code-hosting platforms).
+
+    GitHub/GitLab/Bitbucket issues, PRs, and wikis are project planning
+    documents, not authoritative sources. Search engines return them because
+    keyword matching hits, but a GitHub issue titled "Implement OAuth2" is
+    about one team's specific implementation plan — it's not documentation
+    about OAuth2. The research engine down-ranks these sources and never
+    uses them as the sole backing for a claim.
+    """
+    if not url:
+        return False
+    url_lower = url.lower()
+    return any(domain in url_lower for domain in _LOW_CREDIBILITY_DOMAINS)
+
+
+def is_github_issue_or_pr(url: str) -> bool:
+    """Check if a URL points to a GitHub issue, PR, wiki, or discussion.
+
+    These are the LEAST authoritative pages on GitHub — they're project
+    planning artifacts. A README or docs/ page at least documents the project;
+    an issue is just someone's todo item with keywords in the title.
+    """
+    if not url:
+        return False
+    return bool(_GITHUB_LOW_CREDIBILITY_PATH.search(url.lower()))
 
 
 def normalize_url(url: str) -> str:
