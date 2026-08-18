@@ -8,16 +8,18 @@ dependencies on the research engine.
 import re
 
 # --- Source blocklist (the operator's directive: never use Wikipedia) ---------------
-# Defense-in-depth: the DDG client already filters, but we check again here
-# so that even if a different search backend is swapped in, Wikipedia is
-# never used as a source. See [[No-Wikipedia-Directive]].
+# Only Wikipedia is hard-blocked. All other sources are scored by the
+# empirical credibility tracker (see source_credibility.py), which
+# measures how often a domain's claims hold up under verification.
 _BLOCKED_DOMAINS = {
     "wikipedia.org",
     "en.m.wikipedia.org",
     "simple.wikipedia.org",
 }
 
-# Academic/authoritative domains get a relevance boost.
+# Academic domains — used only by citation_exporter.py for DOI extraction
+# and by is_academic_source() (legacy callers). NOT used for credibility
+# scoring (that's the credibility tracker's job).
 _ACADEMIC_DOMAINS = {
     "arxiv.org",
     "pubmed.ncbi.nlm.nih.gov",
@@ -48,20 +50,25 @@ _ACADEMIC_DOMAINS = {
     "bmglabtech.com",
 }
 
-# NOTE: DOI extraction from publisher URLs (nature.com → 10.1038/...,
-# arxiv.org → 10.48550/arXiv...., etc.) lives in ``citation_exporter.py``
+
+# NOTE: DOI extraction from publisher URLs (nature.com -> 10.1038/...,
+# arxiv.org -> 10.48550/arXiv...., etc.) lives in ``citation_exporter.py``
 # (``extract_doi``), NOT here. This module classifies domains; DOI pattern
 # matching is a citation-export concern and is kept separate so this module
 # stays dependency-free. See [[Citation-Export-BibTeX]].
 
 
 def is_blocked_source(url: str) -> bool:
+    """Check if a URL should be hard-blocked from use as a research source.
+
+    Only Wikipedia is hard-blocked (per [[No-Wikipedia-Directive]]).
+    All other sources are scored by the empirical credibility tracker
+    (see source_credibility.py), not blocked.
+    """
     if not url:
         return False
     url_lower = url.lower()
-    if any(domain in url_lower for domain in _BLOCKED_DOMAINS):
-        return True
-    return False
+    return any(domain in url_lower for domain in _BLOCKED_DOMAINS)
 
 
 def is_academic_source(url: str) -> bool:

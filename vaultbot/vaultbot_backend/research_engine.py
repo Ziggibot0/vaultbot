@@ -38,6 +38,7 @@ from source_classification import (
     normalize_url as _normalize_url,
     source_relevance as _source_relevance,
 )
+from source_credibility import SourceCredibilityTracker
 from research_synthesizer import (
     extractive_synthesis as _extractive_synthesis_fn,
     get_vault_note_titles as _get_vault_note_titles_fn,
@@ -332,6 +333,10 @@ class ResearchEngine:
         # Optional progress_callback(stage: str, detail: dict) called at every
         # long-running step so a live UI can show "round 2/4, 12 sources…".
         self.progress_callback = progress_callback
+        # Empirical credibility tracker — measures how trustworthy a source
+        # domain is based on how often its claims hold up under verification.
+        # Scores evolve over time as more verifications accumulate.
+        self.credibility = SourceCredibilityTracker()
 
     def _log(self, event: str, data: dict[str, Any] | None = None):
         if self.session_logger is None:
@@ -495,7 +500,20 @@ class ResearchEngine:
                     "snippet": snippet,
                     "text": text,
                     "_relevance": rel_score,
+                    "_credibility": self.credibility.get(url),
+                    "_credibility_label": self.credibility.get_label(url),
                 }
+            )
+            self._log(
+                "research_source_accepted",
+                {
+                    "round": round_idx,
+                    "url": url,
+                    "title": (hit.get("title", "") or "")[:80],
+                    "relevance": round(rel_score, 2),
+                    "credibility": round(self.credibility.get(url), 2),
+                    "credibility_label": self.credibility.get_label(url),
+                },
             )
         return sources
 
@@ -540,9 +558,15 @@ class ResearchEngine:
                     "title": src["title"],
                 }
             )
+            # Credibility-weighted sentence score: a sentence from a
+            # domain with a high credibility score (claims consistently
+            # verified) contributes more than one from a domain with a
+            # low score (claims frequently unsupported). The score
+            # evolves over time as more verifications accumulate.
+            _c_weight = self.credibility.get_weight(src.get("url", ""))
             bucket["score"] += _score_sentence(
                 sentence, keyterms, len(bucket["sources"])
-            )
+            ) * _c_weight
 
         facts = list(fact_buckets.values())
         facts.sort(key=lambda f: f["score"], reverse=True)
@@ -808,7 +832,15 @@ class ResearchEngine:
             "llm_synthesized": llm_synthesized,
             "rounds": rounds_log,
             "gaps_filled": gaps,
-            "sources": [{"url": s["url"], "title": s["title"]} for s in all_sources],
+            "sources": [
+                {
+                    "url": s["url"],
+                    "title": s["title"],
+                    "credibility": s.get("_credibility", self.credibility.get(s["url"])),
+                    "credibility_label": s.get("_credibility_label", self.credibility.get_label(s["url"])),
+                }
+                for s in all_sources
+            ],
             "source_count": len(all_sources),
             "synthesis": synthesis,
             "synthesis_facts": len(used),

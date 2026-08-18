@@ -29,7 +29,8 @@ class ClaimVerifier:
     ERROR = "error"
 
     def __init__(
-        self, llm_client=None, log_path=None, vault_root=None, max_source_chars=8000
+        self, llm_client=None, log_path=None, vault_root=None, max_source_chars=8000,
+        credibility_tracker=None,
     ):
         self.llm_client = llm_client
         self.log_path = log_path or os.path.join(
@@ -39,6 +40,17 @@ class ClaimVerifier:
             os.path.dirname(os.path.abspath(__file__)), ".."
         )
         self.max_source_chars = max_source_chars
+        # Empirical credibility tracker — updated after each verify_note
+        # call based on whether the source's claims held up. If no tracker
+        # is passed in, create one (shared file in the backend dir).
+        if credibility_tracker is not None:
+            self.credibility = credibility_tracker
+        else:
+            try:
+                from source_credibility import SourceCredibilityTracker
+                self.credibility = SourceCredibilityTracker()
+            except Exception:  # noqa: BLE001 — best-effort
+                self.credibility = None
         self._ensure_log()
 
     def _log_error(self, event: str, exc: Exception, context=None):
@@ -441,6 +453,39 @@ class ClaimVerifier:
         }
         self._update_frontmatter(note_path, report)
         self._log_verification(report)
+
+        # --- Feed verification results back into the credibility tracker ---
+        # Each claim was checked against its cited source. "supported" means
+        # the source actually backs the claim (positive signal for the
+        # source's domain). "unsupported" / "contradicted" means it doesn't
+        # (negative signal). This is how credibility scores evolve over time:
+        # domains whose claims consistently hold up earn high scores; domains
+        # whose claims are frequently unsupported lose them.
+        if self.credibility:
+            for vc in verified_claims:
+                verdict = vc.get("verdict", "")
+                if verdict in (self.SUPPORTED, self.UNSUPPORTED, self.CONTRADICTED):
+                    # Find the source URL for this claim.
+                    source_title = vc.get("source", "")
+                    source_info = sources_index.get(
+                        (source_title or "").lower()
+                    )
+                    if not source_info:
+                        # Try fuzzy match (same as above).
+                        for key, info in sources_index.items():
+                            if (source_title or "").lower() in key or key in (source_title or "").lower():
+                                source_info = info
+                                break
+                    if source_info and source_info.get("url"):
+                        self.credibility.record_verification(
+                            source_info["url"], verdict
+                        )
+            try:
+                _stats = self.credibility.get_domain_stats()
+                self._log_error("credibility_updated", Exception(""), context=_stats)
+            except Exception:  # noqa: BLE001
+                pass
+
         return report
 
     def _update_frontmatter(self, note_path, report):

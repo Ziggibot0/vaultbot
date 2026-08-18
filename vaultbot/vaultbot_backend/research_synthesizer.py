@@ -63,13 +63,28 @@ def llm_synthesize(
     produces too-short output.
     """
     # Build source texts block, capped to avoid overflowing context.
+    # Each source is annotated with its empirical credibility score so the
+    # LLM can weight sources appropriately. The score is earned over time:
+    # domains whose claims consistently pass verification score higher.
+    from source_credibility import SourceCredibilityTracker
+
+    _cred = SourceCredibilityTracker()
+
     source_blocks = []
     total_chars = 0
     max_chars = 12000  # Leave room for the prompt itself
     for i, src in enumerate(sources):
         title = src.get("title") or src.get("url", f"Source {i + 1}")
         text = src.get("text", "")[:3000]  # Cap each source
-        block = f"### Source {i + 1}: {title}\n{text}"
+        url = src.get("url", "")
+        cred = src.get("_credibility", _cred.get(url))
+        cred_label = src.get("_credibility_label", _cred.get_label(url))
+        block = (
+            f"### Source {i + 1}: {title}\n"
+            f"URL: {url}\n"
+            f"Credibility: {cred_label}\n"
+            f"{text}"
+        )
         if total_chars + len(block) > max_chars:
             break
         source_blocks.append(block)
@@ -120,7 +135,15 @@ def llm_synthesize(
         "markdown link: - [Title](URL)\n"
         "8. Do NOT add a top-level # heading. Start with the YAML "
         "frontmatter.\n"
-        "9. Output ONLY the note content, nothing else."
+        "9. Output ONLY the note content, nothing else.\n"
+        "10. Each source is tagged with a credibility score (0.0-1.0) "
+        "that reflects how often that domain's claims have held up under "
+        "verification. Higher is more trustworthy. Weight high-credibility "
+        "sources above low-credibility ones — if a low-credibility claim "
+        "contradicts a high-credibility claim, prefer the high-credibility "
+        "source. If ALL sources have low credibility (< 0.4), note this in "
+        "the summary: 'status: low_confidence' and add a warning in the "
+        "note body that the sources have not been verified."
     )
 
     # Build source list for the Sources section, including DOI when

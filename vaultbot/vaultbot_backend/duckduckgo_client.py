@@ -19,22 +19,10 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-# --- Source blocklist (the operator's directive: never use Wikipedia) ---------------
-# Any URL containing one of these substrings is filtered out of search
-# results before they ever reach the research engine.
-_BLOCKED_DOMAINS = {
-    "wikipedia.org",
-    "en.m.wikipedia.org",
-    "simple.wikipedia.org",
-}
-
-
-def _is_blocked_source(url: str) -> bool:
-    """Return True if the URL points to a blocked domain."""
-    if not url:
-        return False
-    url_lower = url.lower()
-    return any(domain in url_lower for domain in _BLOCKED_DOMAINS)
+# --- Source blocklist --------------------------------------------------------
+# The authoritative blocklist lives in source_classification.py (which also
+# blocks low-quality UGC platforms like Reddit, Medium, GitHub issues, etc.).
+from source_classification import is_blocked_source as _is_blocked_source
 
 
 class DuckDuckGoClient:

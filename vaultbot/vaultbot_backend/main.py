@@ -624,6 +624,13 @@ note_creator = NoteCreator(
 
 # LLM-light deep research engine. Used by both the /research_tool endpoint
 # (for MCP clients) and the autonomous researcher. No LLM calls inside.
+# Shared credibility tracker — measures how trustworthy a source domain is
+# based on how often its claims hold up under verification. Both the
+# research engine (uses scores as synthesis weights) and the claim verifier
+# (updates scores after verification) share this one instance.
+from source_credibility import SourceCredibilityTracker
+
+source_credibility = SourceCredibilityTracker()
 research_engine = ResearchEngine(
     session_logger=default_session_logger,
     max_rounds=int(os.getenv("VAULTBOT_RESEARCH_ROUNDS", "4")),
@@ -631,6 +638,9 @@ research_engine = ResearchEngine(
     max_follow_ups=int(os.getenv("VAULTBOT_RESEARCH_FOLLOWUPS", "3")),
     search_client=search_client,
 )
+# Share the credibility tracker so the research engine uses the same
+# scores that the claim verifier updates.
+research_engine.credibility = source_credibility
 
 # --- The VaultBot spine: the vault is the mind, the model is plumbing ---
 # Knowledge curriculum (Voyager-style self-directed growth): decides what the
@@ -906,7 +916,7 @@ rag_evaluator = RAGEvaluator()
 # from research notes, loads cited sources, checks entailment. Uses LLM when
 # available, falls back to deterministic string matching.
 # See [[Claim-Verification-for-Vault-Notes]].
-claim_verifier = ClaimVerifier(llm_client=ollama_client)
+claim_verifier = ClaimVerifier(llm_client=ollama_client, credibility_tracker=source_credibility)
 
 # Pattern extractor: deterministic extraction of cross-session patterns from
 # chat logs. Scans episodic memory, finds recurring topics, sentiment

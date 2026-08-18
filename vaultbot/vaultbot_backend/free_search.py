@@ -43,25 +43,11 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-# --- Source blocklist (the operator's directive: never use Wikipedia) ---------------
-_BLOCKED_DOMAINS = {
-    "wikipedia.org",
-    "en.m.wikipedia.org",
-    "simple.wikipedia.org",
-}
-
-
-def _is_blocked_source(url: str) -> bool:
-    """Check if a URL should be blocked.
-
-    Only Wikipedia is hard-blocked (per [[No-Wikipedia-Directive]]).
-    All other filtering is done by the relevance gate and LLM synthesis
-    in the research engine — no domain-specific blocklists.
-    """
-    if not url:
-        return False
-    u = url.lower()
-    return any(d in u for d in _BLOCKED_DOMAINS)
+# --- Source blocklist --------------------------------------------------------
+# The authoritative blocklist lives in source_classification.py.
+# Only Wikipedia is hard-blocked; all other sources are quality-scored
+# (see source_quality()) rather than blocked.
+from source_classification import is_blocked_source as _is_blocked_source
 
 
 # Realistic browser headers — many sites 403 the python-requests default UA.
