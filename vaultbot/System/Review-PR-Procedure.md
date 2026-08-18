@@ -19,13 +19,13 @@ summary: Review PR Procedure
 
 ## Purpose
 
-When a community PR is submitted to VaultBot, Sean's VaultBot follows
+When a community PR is submitted to VaultBot, the user's VaultBot follows
 this procedure to review it for safety and quality before merging.
 This ensures every contribution is checked the same way, every time.
 
 ## Trigger
 
-Sean says "review PRs" or "check contributions" or similar.
+The user says "review PRs" or "check contributions" or similar.
 
 ## Steps
 
@@ -40,13 +40,13 @@ a structured report with a verdict for each PR:
 - **REVIEW_MANUAL** — high-severity issues need human review
 - **REJECT** — critical issues (secrets, sensitive files, etc.)
 
-### Step 2: Report to Sean (LLM)
+### Step 2: Report to the user (LLM)
 
-Summarize the review results for Sean:
+Summarize the review results for the user:
 - How many open PRs
 - For each PR: title, author, verdict, key issues (if any)
 - Which PRs are ready for torture test (PASS)
-- Which PRs need Sean's manual review
+- Which PRs need the user's manual review
 
 ### Step 3: Run Torture Test on PASS PRs (LLM)
 
@@ -68,15 +68,15 @@ For each PR that was torture-tested:
 ### Step 5: Merge Decision (LLM)
 
 For PRs that passed BOTH safety scan AND torture test:
-- Ask Sean: "PR #X passed all checks. Merge?"
-- Only merge if Sean explicitly says yes
+- Ask the user: "PR #X passed all checks. Merge?"
+- Only merge if the user explicitly says yes
 - Call `review_contributions` with `merge=True` and `pr_number=X`
 
 For PRs that failed:
-- Report the failures to Sean
+- Report the failures to the user
 - Do NOT merge
-- If Sean asks to merge anyway, warn about the risks but respect
-  Sean's decision (he's the owner)
+- If the user asks to merge anyway, warn about the risks but respect
+  the user's decision (they're the owner)
 
 ### Step 6: Post-merge Verification (CODE)
 
@@ -103,7 +103,7 @@ else:
 
 ## Safety Guarantees
 
-1. **No auto-merge** — Sean must explicitly approve every merge
+1. **No auto-merge** — the user must explicitly approve every merge
 2. **Two-layer review** — safety scan + torture test must both pass
 3. **No secrets leak** — the scanner checks for tokens, keys, .env
 4. **No path traversal** — only allowed paths can be modified

@@ -705,7 +705,7 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
 
     REPLACES the old .env factory. Now reads the big role from the registry.
     Raises RuntimeError if the big role is unassigned — fail loud, never
-    silently talk to a wrong model, per Sean's no-silent-fallback rule.
+    silently talk to a wrong model, per the no-silent-fallback rule.
     """
     client = build_role_client("big", _default_registry(), session_logger)
     if client is None:

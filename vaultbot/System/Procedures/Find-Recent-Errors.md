@@ -4,7 +4,7 @@ status: active
 baseline: true
 model_cartridge: small
 created: 2026-08-05
-description: "Scan the N most recent VaultBot session logs and return every failure across them: exceptions, console errors, failed tool results, and procedure-step failures. Broad-net self-diagnosis — finds problems the operator never reported because they happened silently in a background task or a session the operator isn't looking at. Use when Sean asks 'what went wrong', 'any errors recently', 'why did you stop', 'did something break', or when the system feels off. Read-only — never modifies session files."
+description: "Scan the N most recent VaultBot session logs and return every failure across them: exceptions, console errors, failed tool results, and procedure-step failures. Broad-net self-diagnosis — finds problems the operator never reported because they happened silently in a background task or a session the operator isn't looking at. Use when the user asks 'what went wrong', 'any errors recently', 'why did you stop', 'did something break', or when the system feels off. Read-only — never modifies session files."
 when_to_use: when asked 'what went wrong', 'any errors recently', 'why did you stop', 'did something break', 'what went wrong recently', when the system feels broken but you don't know which session, as the first diagnostic step before calling a repair procedure, when doing a proactive health sweep
 falsifiable_if: it reports an error that isn't actually in any session JSONL (verifiable by grepping the cited files), or it misses an error present in the scanned files
 applies_to:

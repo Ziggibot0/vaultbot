@@ -57,7 +57,7 @@ and the type decides the real API surface at call time:
   - ``openai`` providers talk the OpenAI-compatible API. ``llm_client`` appends
     ``/v1/chat/completions`` / ``/v1/models`` itself, so the stored base must
     NOT carry ``/v1`` or it would double up to ``/v1/v1/...`` (the exact 404
-    Sean hit). Normalizing here makes `changed ollama endpoint to /v1` a
+    the user hit). Normalizing here makes `changed ollama endpoint to /v1` a
     no-op instead of a break.
 """
 
@@ -220,7 +220,7 @@ def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
     "latency_ms": float, "error": str|None}. Never raises — the UI shows
     success/failure so a bad base_url or dead key is caught BEFORE the user
     tries (and fails) to chat with a model from it. This is the
-    'test the endpoint' path Sean asked for: if it works, you ALSO get the
+    'test the endpoint' path the user asked for: if it works, you ALSO get the
     live model list for the dropdown.
 
     For ``browser`` providers (in-browser STT/TTS fallback) there's no
@@ -394,7 +394,7 @@ class ProviderRegistry:
                 for p in data.get("providers", []):
                     prov = Provider(**p)
                     # Heal any stray /v1 (or trailing slash) so call-time path
-                    # joining is unambiguous (Sean's /v1 Ollama case).
+                    # joining is unambiguous (the user's /v1 Ollama case).
                     try:
                         prov.base_url = normalize_base_url(prov.base_url, prov.type)
                     except ValueError:

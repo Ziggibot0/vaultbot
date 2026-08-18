@@ -202,7 +202,7 @@ async def websocket_endpoint(
     # history is loaded on EVERY connection, not only when RESTART_CONTEXT.md
     # exists. The old RESTART_CONTEXT.md gate meant a crash, uvicorn reload,
     # plugin reload, or WS drop silently WIPED the persisted history via
-    # clear_history() — Sean's complaint "if the backend restarts, the
+    # clear_history() — the user's complaint "if the backend restarts, the
     # vaultbot should get back its context from the current session." History
     # only clears on explicit /new. This is the Hermes Agent shape: session
     # persists across restarts, user controls when to reset.

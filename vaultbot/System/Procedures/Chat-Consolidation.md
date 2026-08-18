@@ -30,9 +30,9 @@ tags:
 Run during a dream pass or when chat logs are accumulating without being
 linked into the pattern highway system. The three existing highways are:
 
-- [[VaultBot-Build-Log]] — chats where Sean directed building/fixing
-- [[Sean-Design-Decisions]] — chats where Sean set philosophical direction
-- [[Testing-and-Verification-History]] — chats where Sean tested/challenged
+- [[VaultBot-Build-Log]] — chats where the user directed building/fixing
+- [[Sean-Design-Decisions]] — chats where the user set philosophical direction
+- [[Testing-and-Verification-History]] — chats where the user tested/challenged
 
 This procedure finds unlinked chat logs, classifies them, and suggests
 which highway each belongs to. The small model handles classification
@@ -87,10 +87,10 @@ print(json.dumps(result, indent=2))
 ### Step 2: Read each unlinked chat's first 500 chars and classify
 
 2. [llm: You are a pattern classifier. For each unlinked chat log, read its opening lines and classify it into exactly one of these categories:
-   - "build-log" — Sean directed VaultBot to build, fix, or implement something
-   - "design-decisions" — Sean set philosophical direction, made architecture choices, or stated principles
-   - "testing-history" — Sean tested, challenged, or verified VaultBot's behavior
-   - "research" — Sean asked for research on a topic (not a highway category)
+   - "build-log" — the user directed VaultBot to build, fix, or implement something
+   - "design-decisions" — the user set philosophical direction, made architecture choices, or stated principles
+   - "testing-history" — the user tested, challenged, or verified VaultBot's behavior
+   - "research" — the user asked for research on a topic (not a highway category)
    - "casual" — greeting, small talk, or one-off question with no lasting pattern
    - "new-pattern" — recurring topic that doesn't fit existing highways (describe what highway it suggests)
 
@@ -140,7 +140,7 @@ system. Without this branch, code patterns stay buried in chat logs.
 ### IF category == "design-decisions"
 
 → Run `run_procedure("Extract-Entities", note_path=<chat_file>)` to
-extract key concepts and principles Sean articulated. Then suggest
+extract key concepts and principles the user articulated. Then suggest
 linking the chat to [[Sean-Design-Decisions]].
 
 **Rationale:** Design-decision chats contain architectural principles

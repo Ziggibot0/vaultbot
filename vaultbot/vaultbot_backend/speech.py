@@ -17,7 +17,7 @@ real, configurable voice (Edge TTS / OpenAI) rather than the browser's
 limited built-in voices. STT can also be server-side if the browser
 uploads the recording (POST /stt with the audio body).
 
-Why server-side at all (not pure browser): Sean wants to pick ANY TTS/STT
+Why server-side at all (not pure browser): the user wants to pick ANY TTS/STT
 model from ANY provider, like the LLMs — OpenAI voices, Groq Whisper, a
 local Whisper server, Edge TTS. The browser can only do its own built-in
 voices. So TTS is server-side by default; the browser path is a fallback.
