@@ -1,4 +1,4 @@
-# ═══════════════════════════════════════════════════════════════════════════
+﻿# ═══════════════════════════════════════════════════════════════════════════
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
@@ -177,6 +177,73 @@ if (Test-StepDone "deps_installed") {
     }
     Write-OK "Dependencies installed"
     Set-StepDone "deps_installed"
+}
+
+# ── 5b. Set up SearXNG search container (optional, needs Docker) ───────────
+# SearXNG is a self-hosted meta-search engine that gives VaultBot's research
+# feature access to Google, Brave, DuckDuckGo, etc. via one private container.
+# Without it, research falls back to keyless backends (DDG Lite, Marginalia,
+# arXiv) which are rate-limited and less reliable. With Docker installed, we
+# start the container automatically so research works out of the box.
+if (Test-StepDone "searxng_setup") {
+    Write-Warn2 "SearXNG search container already set up -- skipping."
+} else {
+    $dockerOk = $false
+    try {
+        $dv = & docker --version 2>&1
+        if ($LASTEXITCODE -eq 0) { $dockerOk = $true; Write-OK "Docker: $dv" }
+    } catch {}
+
+    if ($dockerOk) {
+        Write-Step "Starting SearXNG search container (one-time, ~30 seconds)..."
+
+        # Check if the container is already running
+        $existing = & docker ps -a --filter "name=vaultbot_searxng" --format "{{.Names}}" 2>$null
+        if ($existing -eq "vaultbot_searxng") {
+            Write-Warn2 "SearXNG container already exists -- starting it."
+            & docker start vaultbot_searxng 2>$null | Out-Null
+        } else {
+            # Run the container with the bundled settings file mounted.
+            $settingsPath = Join-Path $vaultPath "vaultbot\vaultbot_backend\searxng_settings.yml"
+            # Convert to Windows-style absolute path for Docker bind mount
+            $settingsPath = (Get-Item $settingsPath -ErrorAction SilentlyContinue).FullName
+            if ($settingsPath) {
+                # Docker on Windows needs forward-slash or escaped backslashes
+                $mountPath = $settingsPath -replace '\\', '/'
+                $runArgs = @("run","-d","--name","vaultbot_searxng","-p","8080:8080","-v","${mountPath}:/etc/searxng/settings.yml:ro","searxng/searxng")
+                & docker @runArgs 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+            } else {
+                # No settings file -- run without the mount (uses SearXNG defaults)
+                & docker run -d --name vaultbot_searxng -p 8080:8080 searxng/searxng 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+            }
+        }
+
+        # Wait for the container to be ready (up to 30 seconds)
+        $ready = $false
+        for ($i = 0; $i -lt 15; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+                $resp = Invoke-WebRequest -Uri "http://localhost:8080" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+                if ($resp.StatusCode -eq 200) { $ready = $true; break }
+            } catch {}
+        }
+
+        if ($ready) {
+            Write-OK "SearXNG search container is running on port 8080"
+            Write-Host "  VaultBot's research feature can now search Google, Brave, and more." -ForegroundColor DarkGray
+        } else {
+            Write-Warn2 "SearXNG container started but not responding yet."
+            Write-Host "  It may need a few more seconds. Research will work once it's ready." -ForegroundColor DarkGray
+        }
+        Set-StepDone "searxng_setup"
+    } else {
+        Write-Warn2 "Docker not found -- SearXNG search container skipped."
+        Write-Host "  Without Docker, VaultBot's research feature uses keyless backends" -ForegroundColor DarkGray
+        Write-Host "  (DuckDuckGo Lite, Marginalia, arXiv) which work but are rate-limited." -ForegroundColor DarkGray
+        Write-Host "  Install Docker Desktop (https://docker.com) and re-run setup to enable" -ForegroundColor DarkGray
+        Write-Host "  full web search via SearXNG." -ForegroundColor DarkGray
+        Set-StepDone "searxng_setup"
+    }
 }
 
 # ── 6. Pull embedding model via Ollama ─────────────────────────────────────
