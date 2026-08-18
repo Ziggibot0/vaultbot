@@ -7,8 +7,6 @@ reprimand builder, and the retry-trigger logic.
 
 from __future__ import annotations
 
-import pytest
-
 from citation_gate import (
     add_citation_target,
     build_allowed_citations,
