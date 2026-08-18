@@ -258,6 +258,68 @@ async def prepare_turn(
     # empty context; it synthesizes from the new note with provenance.
     # Gated behind TUNABLES.auto_research_on_empty. Skipped for trivial
     # messages and resumed turns (those don't need fresh research).
+    #
+    # Topical-relevance check (2026-08-17): even when results pass the
+    # score threshold, they may be topically irrelevant — e.g., the vault
+    # returns gecko-adhesives and slime-molds notes for "what are cat
+    # whiskers made of?" because their FUSED similarity scores are above
+    # min_retrieval_score. In that case, the model correctly says "I don't
+    # know" but auto-research never fires because the gate only checks
+    # scores, not topical overlap. We now also fire auto-research when ALL
+    # results pass the score threshold but have zero content-word overlap
+    # with the query — a dead giveaway that the vault has nothing relevant.
+    _STOPWORDS = frozenset({
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "of", "in", "on", "at", "to", "for", "with", "by", "from", "as",
+        "and", "or", "but", "not", "no", "yes", "do", "does", "did", "done",
+        "have", "has", "had", "will", "would", "could", "should", "may",
+        "might", "can", "what", "which", "who", "whom", "whose", "where",
+        "when", "why", "how", "all", "any", "some", "this", "that", "these",
+        "those", "it", "its", "i", "you", "he", "she", "we", "they", "me",
+        "him", "her", "us", "them", "my", "your", "his", "our", "their",
+        "about", "into", "than", "then", "so", "if", "just", "also", "only",
+        "more", "most", "such", "very", "too", "quite", "make", "made",
+        "get", "got", "go", "goes", "went", "gone", "tell", "told", "say",
+        "said", "know", "want", "need", "use", "used", "using", "like",
+        "up", "down", "out", "over", "off", "here", "there", "now",
+    })
+
+    def _content_words(text: str) -> set[str]:
+        """Extract lowercase content words (len >= 3, not stopwords)."""
+        import re as _re
+        _words = _re.findall(r"[a-z]{3,}", (text or "").lower())
+        return {w for w in _words if w not in _STOPWORDS}
+
+    def _is_topically_relevant(query: str, results: list[dict]) -> bool:
+        """Check if any result has content-word overlap with the query.
+
+        Returns True if at least one result shares at least one content
+        word with the query. Returns False if results are empty or if
+        zero content words overlap — a strong signal that the vault has
+        nothing relevant (e.g., gecko-adhesives notes for "cat whiskers").
+        """
+        if not results:
+            return False
+        _q_words = _content_words(query)
+        if not _q_words:
+            return True  # can't tell — don't block auto-research on empty queries
+        for r in results:
+            if not isinstance(r, dict):
+                continue
+            # Check the file stem + content snippet for word overlap.
+            _fp = r.get("file_path", "") or ""
+            _stem = ""
+            try:
+                from pathlib import Path
+                _stem = Path(_fp).stem if _fp else ""
+            except Exception:  # noqa: BLE001
+                _stem = ""
+            _snippet = (r.get("content", "") or "")[:500]
+            _r_words = _content_words(_stem + " " + _snippet)
+            if _q_words & _r_words:
+                return True
+        return False
+
     _auto_research_note: str | None = None
     if (
         TUNABLES.auto_research_on_empty
@@ -270,7 +332,25 @@ async def prepare_turn(
             r for r in results
             if isinstance(r, dict) and r.get("score", 0.0) >= TUNABLES.min_retrieval_score
         ]
-        if not _usable:
+        # Topical-relevance gate: even if results pass the score threshold,
+        # fire auto-research if none share content words with the query.
+        # This catches the "retrieval returned high-similarity-but-irrelevant
+        # notes" case (e.g., gecko adhesives for "cat whiskers").
+        _topically_relevant = _is_topically_relevant(_rewritten_query or user_message, _usable)
+        if _usable and not _topically_relevant:
+            from pathlib import Path as _Path
+            _stems = []
+            for r in _usable[:5]:
+                _fp = r.get("file_path", "") if isinstance(r, dict) else ""
+                _stems.append(_Path(_fp).stem if _fp else "")
+            session_logger.log(
+                "auto_research_topical_miss",
+                {
+                    "query": (_rewritten_query or user_message)[:80],
+                    "result_stems": _stems,
+                },
+            )
+        if not _usable or not _topically_relevant:
             try:
                 await send_progress(
                     svc, websocket, "auto_research",
@@ -287,7 +367,8 @@ async def prepare_turn(
                 # Lazy import to avoid any circular dependency.
                 from research_handler import run_research_and_write_note
                 _auto_research_note = await run_research_and_write_note(
-                    websocket, _rewritten_query, session_logger, svc, max_rounds=1
+                    websocket, _rewritten_query, session_logger, svc,
+                    max_rounds=TUNABLES.auto_research_rounds,
                 )
                 if _auto_research_note:
                     session_logger.log(

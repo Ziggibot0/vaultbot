@@ -140,11 +140,13 @@ class SearxngManager:
     def ensure_running(self):
         """Start the searxng container if not already running.
 
-        Also self-heals containers that were created before the settings
-        mount was added: if the running container lacks the `outgoing`
-        tuning block (old default settings), it is recreated with the
-        current mounted settings file so rate-limit/ban fixes take effect.
+        Self-heals at every layer: starts Docker Desktop if the daemon is
+        down, pulls the image if missing, recreates the container if it has
+        stale settings, and waits for the service to be ready. The operator
+        never has to touch Docker — VaultBot manages its own container.
         """
+        if not self._ensure_daemon():
+            raise RuntimeError("Docker daemon unavailable — SearXNG disabled")
         if self.is_running():
             # Health check: does the running container have our tuned settings?
             if _SEARXNG_SETTINGS_PATH.exists():

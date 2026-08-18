@@ -241,6 +241,12 @@ class Tunables:
     #     seeds 2-3 get this smaller cap so multi-note synthesis isn't
     #     limited to one note's full body.
     auto_research_on_empty: bool = True
+    # How many search rounds the auto-research-then-answer preflight runs
+    # when the vault has no coverage for a query. 1 round = 1 query = ~1-2
+    # sources (thin, single-source claims). 3 rounds + gap-fill yields
+    # multiple corroborating sources per claim. Override via env var
+    # VAULTBOT_AUTO_RESEARCH_ROUNDS.
+    auto_research_rounds: int = 3
     min_retrieval_score: float = 0.15
     max_grounding_retries: int = 1
     ungrounded_sentence_threshold: float = 0.30

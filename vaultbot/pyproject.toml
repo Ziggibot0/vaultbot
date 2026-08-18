@@ -38,6 +38,7 @@ dependencies = [
     "html2text>=2024.0.0",
     "pypdf>=4.0.0",
     "psutil>=5.9.0",
+    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]

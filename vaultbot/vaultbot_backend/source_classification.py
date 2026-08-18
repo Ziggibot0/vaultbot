@@ -152,9 +152,16 @@ def source_relevance(
         For terms >= 7 chars, match on a stem of max(7, len(s)-3) chars so
         'communicate' catches 'communication', 'communicating', etc. but NOT
         'community' (unrelated). For shorter terms, use exact substring match.
+        For multi-word phrases (e.g., 'sea shells'), also try the de-spaced
+        variant ('seashells') — many sources use compound words.
         """
         if s in text:
             return True
+        # Multi-word phrase: also try de-spaced match ("sea shells" → "seashells")
+        if " " in s:
+            despaced = s.replace(" ", "")
+            if despaced in text:
+                return True
         if len(s) >= 7:
             stem_len = max(7, len(s) - 3)
             stem = s[:stem_len]
@@ -189,8 +196,15 @@ def source_relevance(
         min_matches = len(signal)  # ALL must match
     else:
         min_matches = max(2, int(len(signal) * 0.6))
-    if not is_academic:
-        min_matches = max(2, min_matches)  # non-academic needs at least 2
+    # Minimum floor of 2 signal matches for ALL sources (academic or not)
+    # when there are 2+ keyterms available. Without this, a single-signal-term
+    # query like "sea shells" (signal=["shells"]) lets through any arxiv paper
+    # that mentions "shells" — including astrophysics papers about "shell
+    # galaxies" that have nothing to do with mollusk sea shells. Academic
+    # sources previously bypassed this floor, which allowed off-topic arxiv
+    # papers to pass with a single generic signal match.
+    if len(all_keyterms) >= 2:
+        min_matches = max(2, min_matches)
     if len(matched) < min_matches:
         return (
             0.5,

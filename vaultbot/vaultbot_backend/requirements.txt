@@ -38,6 +38,10 @@ html2text==2025.4.15
 pypdf==6.16.1
 # psutil: used by /system/stats for CPU/RAM/disk/net resource meters.
 psutil==7.2.2
+# docker: used by searxng_manager.py to run the SearXNG container. Without
+# it the import fails at startup and SearXNG silently drops out of the
+# search pool (the "one thin source per claim" symptom).
+docker==7.1.0
 
 # ── Transitive dependencies (pinned by uv.lock) ────────────────────────────
 annotated-doc==0.0.5

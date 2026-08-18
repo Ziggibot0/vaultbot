@@ -496,9 +496,14 @@ class ArxivBackend(_Backend):
 # they trip, the cooldown self-heals and the keyless engines carry on.
 class SearxngBackend(_Backend):
     name = "searxng"
-    min_interval = 0.5  # local container, no need to be slow
-    cooldown_seconds = 30.0  # short — container is local, just retry
-    ban_threshold = 3
+    # Local container — no throttle, no cooldown. The operator runs SearXNG
+    # as a private backend with `server.limiter: false`, so there is no
+    # reason for VaultBot to rate-limit its own search engine. A genuine
+    # failure (container down) is surfaced immediately rather than hidden
+    # behind a cooldown window.
+    min_interval = 0.0
+    cooldown_seconds = 0.0
+    ban_threshold = 10**9  # effectively never enter cooldown
 
     def __init__(self, searxng_manager=None, session_logger=None, timeout: int = 20):
         # searxng_manager: a SearxngManager instance (which manages the

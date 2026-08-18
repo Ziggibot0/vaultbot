@@ -35,7 +35,7 @@ async def run_research_and_write_note(
     topic: str,
     session_logger: SessionLogger,
     svc: Services,
-    max_rounds: int = 1,
+    max_rounds: int = 3,
 ) -> str | None:
     """Research the web and write a linked note. Returns the note path.
 
@@ -45,10 +45,10 @@ async def run_research_and_write_note(
     the gate fires this, waits for the note to be written + indexed, then
     re-retrieves so the freshly-researched note becomes a citation target.
 
-    `max_rounds` caps the dig depth for preflight use (default 1 — the
-    user wants the vault to "do its own work" but not spend minutes on
-    a multi-round dig for every empty-retrieval turn). Full multi-round
-    research stays a tool the model calls explicitly via vault_research.
+    `max_rounds` caps the dig depth for preflight use (default 3 — enough
+    rounds to gather multiple corroborating sources per claim, without the
+    full 4-round dig the explicit vault_research tool runs). A single round
+    yields ~1-2 sources and produces thin, single-source claims.
 
     Returns the path to the created note, or None if no sources were found
     or the note couldn't be written.
@@ -71,10 +71,31 @@ async def run_research_and_write_note(
 
     svc.research_engine.progress_callback = _progress_cb
     try:
+        # Pass llm_client + vault_note_titles so the research engine uses
+        # LLM synthesis (which understands topical context) instead of
+        # extractive synthesis (which just keyword-matches). Without this,
+        # a query like "what are sea shells made of" with signal=["shells"]
+        # passes arxiv papers about "shell galaxies" through the relevance
+        # gate — the extractive synthesizer happily writes a note about
+        # stellar shells because the keyword "shells" matches. The LLM
+        # synthesizer understands "sea shells" = mollusk shells and filters
+        # out the astrophysics papers.
+        _vault_titles = []
+        try:
+            _vault_titles = svc.research_engine._get_vault_note_titles(
+                svc.vault_path
+            )
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+        _research_fn = lambda: svc.research_engine.research(
+            topic,
+            llm_client=svc.ollama_client,
+            vault_note_titles=_vault_titles,
+        )
         report = await run_with_heartbeat(
-            svc, websocket, "auto-research", svc.research_engine.research, topic
+            svc, websocket, "auto-research", _research_fn
         ) if websocket is not None else await loop.run_in_executor(
-            None, svc.research_engine.research, topic
+            None, _research_fn
         )
     except Exception as e:  # noqa: BLE001 — best-effort
         svc.research_engine.progress_callback = prev_cb

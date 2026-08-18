@@ -58,6 +58,67 @@ except Exception:  # noqa: BLE001 — type-hint-only import; module instance is 
     FreeSearch = None  # type: ignore
 
 
+# --- Compound signal detection (2026-08-17) -------------------------------
+# When a topic like "what are sea shells made of" is keyterm-extracted,
+# the result is ['shells', 'made', 'sea'] — three separate single-word
+# tokens. signal_terms() then keeps only 'shells' (≥5 chars, not generic),
+# dropping 'sea' (3 chars) and 'made' (4 chars). The relevance gate ends
+# up with a single signal term ['shells'], which matches any arxiv paper
+# about "shell galaxies" — the word "shells" is a homonym.
+#
+# This helper scans the ORIGINAL topic string for adjacent content-word
+# pairs (e.g., "sea shells") and adds them as compound signal terms.
+# A source about "shell galaxies" won't contain "sea shells", so it
+# fails the gate — even with a single-signal-term topic.
+_COMPOUND_STOP = frozenset({
+    "what", "are", "is", "the", "a", "an", "of", "in", "on", "at", "to",
+    "for", "with", "by", "from", "and", "or", "but", "how", "why", "when",
+    "who", "where", "which", "this", "that", "these", "those", "it", "its",
+    "was", "were", "be", "been", "being", "have", "has", "had", "do",
+    "does", "did", "can", "could", "should", "would", "will", "may",
+    "might", "about", "into", "than", "then", "so", "if", "just", "also",
+})
+
+
+def _compound_signals(topic: str) -> list[str]:
+    """Extract adjacent content-word pairs from the topic as compound signals.
+
+    "what are sea shells made of" → ["sea shells"]
+    "how do bacteria communicate" → ["bacteria communicate"]
+    These compounds are more specific than individual words and help the
+    relevance gate reject sources that match one word but not the concept.
+    Only pairs of content words (len >= 3, not stopwords, not generic verbs)
+    are kept. Common verbs like "made", "used", "done" are excluded because
+    they form spurious compounds ("shells made") that don't appear in real
+    sources even when the topic is correctly covered.
+    """
+    import re as _re
+    tokens = _re.findall(r"[a-z]{3,}", (topic or "").lower())
+    # Common verbs/adjectives that form spurious compounds — they're content
+    # words by length but too generic to be useful as compound signal terms.
+    _SPURIOUS = frozenset({
+        "made", "used", "done", "based", "using", "via",
+        "like", "also", "many", "much", "some", "such",
+        "can", "may", "will", "has", "had", "did", "get",
+    })
+    compounds: list[str] = []
+    for i in range(len(tokens) - 1):
+        w1, w2 = tokens[i], tokens[i + 1]
+        if w1 in _COMPOUND_STOP or w2 in _COMPOUND_STOP:
+            continue
+        if w1 in _SPURIOUS or w2 in _SPURIOUS:
+            continue
+        compounds.append(f"{w1} {w2}")
+    # Dedup preserving order.
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in compounds:
+        if c not in seen:
+            out.append(c)
+            seen.add(c)
+    return out
+
+
 # Facets are the kinds of questions a "deep" answer should cover. The engine
 # detects which facets a topic implies and then checks coverage of each.
 _FACET_PATTERNS = [
@@ -346,6 +407,18 @@ class ResearchEngine:
         # real hits. See [[How-to-Fix-Research-Engine-Returning-Garbage]].
         topic_terms = _keyterms(topic) if topic else []
         signal = _signal_terms(topic_terms)
+        # Merge compound signals from the raw topic (e.g., "sea shells" from
+        # "what are sea shells made of"). Without this, the signal list is
+        # just ['shells'] — a single word that matches astrophysics papers
+        # about "shell galaxies". The compound "sea shells" doesn't appear
+        # in galaxy papers, so they get rejected by the gate.
+        _compounds = _compound_signals(topic)
+        if _compounds:
+            _existing = {s.lower() for s in signal}
+            for c in _compounds:
+                if c not in _existing:
+                    signal.append(c)
+                    _existing.add(c)
         sources = []
         for hit in hits:
             url = hit.get("url")

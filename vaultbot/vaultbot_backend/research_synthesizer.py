@@ -21,6 +21,7 @@ import re
 from typing import Any
 
 from citation_exporter import extract_doi as _extract_doi
+from note_schema import strip_frontmatter as _strip_frontmatter
 from text_scoring import (
     score_sentence as _score_sentence,
     split_sentences as _split_sentences,
@@ -99,6 +100,15 @@ def llm_synthesize(
         "build an argument -- NOT bullet points, NOT flat lists. Write "
         "connected sentences that flow. This is non-negotiable.\n"
         "3. After each claim, cite the source title in [sources: ...] tags.\n"
+        "3a. CORROBORATION: a claim is only a FACT if it is supported by at\n"
+        "least TWO independent sources. Cite BOTH in the [sources: ...] tag\n"
+        "(e.g. [sources: Title A; Title B]). A claim backed by only ONE\n"
+        "source is a SINGLE-SOURCE claim — you MUST mark it explicitly as\n"
+        "low-confidence, e.g. prefix it with '(single source)' or write\n"
+        "'one source reports that...'. Never present a single-source claim\n"
+        "as an established fact.\n"
+        "3b. If a source contradicts another, prefer the higher-credibility\n"
+        "source and note the disagreement rather than silently dropping it.\n"
         "4. SKIP any source that is not relevant to the topic.\n"
         "5. Insert [[wikilinks]] to existing vault notes ONLY where "
         "topically relevant (use the EXISTING VAULT NOTES list). Never "
@@ -289,13 +299,21 @@ def synthesize_note_markdown(report: dict[str, Any], summary: str | None = None)
     _topic = report.get("topic", "Research Note")
     _src_count = report.get("source_count", 0)
     _facts = report.get("synthesis_facts", 0)
+    # The LLM synthesis already carries its own YAML frontmatter. Embedding
+    # it raw under "## Key Findings" and then calling inject_schema() on the
+    # whole note produced a DOUBLE frontmatter (an outer wrapper + the inner
+    # synthesis frontmatter) — the "status: stale" wrapper bug. Strip the
+    # synthesis frontmatter here so only ONE frontmatter (injected below)
+    # survives.
+    _synthesis = report.get("synthesis") or "(no corroborated findings extracted)"
+    _synthesis = _strip_frontmatter(_synthesis).strip()
     # Build the body content — frontmatter is injected by note_schema
     lines = [f"# {_topic}", ""]
     if summary:
         lines += ["## Summary", summary, ""]
     lines += [
         "## Key Findings",
-        report["synthesis"] or "(no corroborated findings extracted)",
+        _synthesis,
         "",
         "## Sources",
     ]
