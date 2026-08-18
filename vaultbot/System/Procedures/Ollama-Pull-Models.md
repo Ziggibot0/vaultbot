@@ -5,7 +5,7 @@ baseline: true
 model_cartridge: big
 created: 2026-07-31
 description: Pull Ollama models by tag. Runs ollama pull for each model in the list.
-when_to_use: When Sean wants to download/pull new models onto the local Ollama instance.
+when_to_use: When the user wants to download/pull new models onto the local Ollama instance.
 allowed_tools:
   - code_run
 summary: "Analyze this note and produce:
@@ -33,7 +33,7 @@ Pulls a list of Ollama models by tag. First lists what's already available, then
        print("STDERR:", result.stderr)
    ```
 
-2. [llm: Report what's already pulled to Sean, then proceed to pull the missing models.]
+2. [llm: Report what's already pulled to the user, then proceed to pull the missing models.]
 
 3. ```python
    import subprocess

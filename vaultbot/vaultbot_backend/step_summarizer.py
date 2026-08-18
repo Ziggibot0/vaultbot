@@ -8,7 +8,7 @@ task that's ~7 × (assistant text + thinking + tool_call + tool_result) of
 noise re-processed every turn. The model loses the forest for the trees,
 re-reads its own chatter, and hits the read-loop wall.
 
-This is the consolidation layer Sean asked for (2026-08-02): after each plan
+This is the consolidation layer the user asked for (2026-08-02): after each plan
 step is marked completed, the raw tool/thinking noise for THAT step is
 replaced in the conversation with a compact gist written by the small model
 cartridge. The model's next round sees the shapes (summaries), not the

@@ -5,7 +5,7 @@ baseline: true
 model_cartridge: small
 created: 2026-08-03
 description: Batch-triage multiple research topics at once. Given a list of topics or a note with multiple gaps, the small model classifies each topic by type (factual, conceptual, procedural, controversial) and priority, then fills a research plan template for each. The big model only does the actual research synthesis — all triage and planning is small-cartridge.
-when_to_use: when multiple topics need research, when the vault has 3+ dangling wikilinks that all need research, when Sean gives a list of things to look up, or when a Research-Roadmap phase has multiple remaining topics
+when_to_use: when multiple topics need research, when the vault has 3+ dangling wikilinks that all need research, when the user gives a list of things to look up, or when a Research-Roadmap phase has multiple remaining topics
 falsifiable_if: it misclassifies a topic type (e.g. marks a controversial topic as factual) or produces a plan template that doesn't match the topic's research needs
 applies_to:
   - research
@@ -78,7 +78,7 @@ result = json.dumps({"topic_count": len(topics), "topics": topics[:20]}, indent=
    - "controversial" — multiple viewpoints, needs 6+ sources representing all sides
 
    Priority levels:
-   - "high" — blocks other work, frequently referenced, or Sean asked for it
+   - "high" — blocks other work, frequently referenced, or the user asked for it
    - "medium" — fills a gap but isn't blocking
    - "low" — nice to have, rarely referenced
 
