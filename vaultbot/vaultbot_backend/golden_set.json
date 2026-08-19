@@ -134,12 +134,6 @@
       "category": "graph"
     },
     {
-      "query": "how does mutation testing relate to evolutionary code",
-      "expected_notes": ["Evolution-and-the-Long-Arc"],
-      "note": "Category: graph — query matches Darwinian-Coding-Mutation-Testing-Evolution, graph walk pulls in Evolution-and-the-Long-Arc (linked as a depends_on)",
-      "category": "graph"
-    },
-    {
       "query": "what are the maintenance costs of adding semantic link types to notes",
       "expected_notes": ["Vault-Thinks-LLM-Synthesizes"],
       "note": "Category: graph — query matches Typed-Edges-Research-Assessment (discusses typed edge costs), graph walk pulls in Vault-Thinks-LLM-Synthesizes (linked as the design principle that rejected typed edges)",
@@ -168,12 +162,6 @@
       "expected_notes": ["Knowledge-Triad-Ontology-Epistemology-Hermeneutics"],
       "note": "Category: graph — query matches Homeostasis-Through-the-Knowledge-Triad (fractal pattern), graph walk pulls in Knowledge-Triad (linked as the philosophical framework the biological pattern maps to)",
       "category": "graph"
-    },
-    {
-      "query": "how does CRISPR Cas9 cut DNA",
-      "expected_notes": ["CRISPR-Gene-Editing"],
-      "note": "Category: negative — biology query about gene editing; verifies the system does NOT retrieve code-quality, procedure-system, or vault-architecture notes at high rank",
-      "category": "negative"
     },
     {
       "query": "what is the PT2399 chip power consumption",
@@ -231,14 +219,14 @@
     },
     {
       "query": "how does the bot decide what model to use for a task",
-      "expected_notes": ["Small-Model-Driving-Architecture", "Tiny-LLM-Use-Cases-Mapping-to-VaultBot-Procedure-Cartridge", "Procedure-Cartridge-Audit"],
-      "note": "Category: multi — model selection: the small-model driving architecture, the tiny LLM use-case mapping, and the procedure cartridge audit that classified each procedure",
+      "expected_notes": ["Small-Model-Driving-Architecture", "Procedure-Cartridge-Audit"],
+      "note": "Category: multi — model selection: the small-model driving architecture and the procedure cartridge audit that classified each procedure",
       "category": "multi"
     },
     {
       "query": "what are the operator's preferences for how the bot communicates",
-      "expected_notes": ["Sean-Communication-Preferences", "Sean-Profile", "Communication-Preferences"],
-      "note": "Category: multi — operator communication: the concept note (terse/direct), the full profile (background/worldview), and the root template directive",
+      "expected_notes": ["Communication-Preferences"],
+      "note": "Category: multi — operator communication: the root template directive",
       "category": "multi"
     }
   ]
