@@ -84,6 +84,16 @@ jobs:
       - name: Confirm nomic-embed-text is available
         run: ollama list
 
+      - name: Warm up embedding model
+        # Force nomic-embed-text to load into memory BEFORE the seed-index
+        # fires 8 concurrent embedding requests. Without this, the first
+        # batch races the model load and some requests return empty
+        # embeddings (the "Skipping X: received empty embedding from Ollama"
+        # warnings that skip files from the index).
+        run: |
+          curl -s http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"warmup"}' > /dev/null
+          echo "Embedding model warmed up."
+
       - name: Build index + run golden gate
         working-directory: vaultbot/vaultbot_backend
         env:

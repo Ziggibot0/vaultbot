@@ -64,6 +64,25 @@ def _build_retriever(vault_path: str):
 
     try:
         graph = VaultGraph(vault_path=vault_path)
+        # VaultGraph.__init__ starts a background daemon thread to build
+        # the graph. refresh() returns immediately if the build isn't done
+        # (degraded-but-never-blocking design for the live server). But the
+        # golden gate needs a FULLY built graph — the graph and backlink
+        # channels produce zero candidates on an empty graph, which is the
+        # primary cause of low recall on graph-walk and multi-note queries.
+        # Wait for the background build to finish before proceeding.
+        if hasattr(graph, "_build_thread") and graph._build_thread.is_alive():
+            import time
+
+            timeout_s = 120
+            start = time.monotonic()
+            while graph._build_thread.is_alive() and time.monotonic() - start < timeout_s:
+                time.sleep(0.5)
+            if graph._build_thread.is_alive():
+                print(
+                    f"WARNING: VaultGraph background build did not finish "
+                    f"within {timeout_s}s — graph channel will be degraded."
+                )
         graph.refresh()
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return None, f"graph build failed: {type(e).__name__}: {e}"
