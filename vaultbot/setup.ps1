@@ -111,28 +111,89 @@ $ownerName = Read-Host "  Your name"
 if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
-# ── 3. Download the repo ────────────────────────────────────────────────────
+# ── 3. Get the repo (git fork, so updates merge cleanly) ───────────────────
+# VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
+# This is what makes two things possible:
+#   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
+#   2. Community contributions = the vaultbot's submit_contribution tool
+#      pushes fixes to your fork and opens a PR upstream, with zero manual git.
+# If `gh` is missing or the user declines auth, we fall back to the zip
+# download so a non-sharing user still gets a working vault.
 $vaultPath = Join-Path $PWD $vaultName
 if (Test-Path $vaultPath) {
     Write-Warn2 "Folder '$vaultName' already exists here -- using it."
 } else {
-    Write-Step "Downloading VaultBot..."
-    $zipPath = Join-Path $env:TEMP "vaultbot-setup.zip"
-    & curl.exe -sL -o $zipPath $repoZip
-    if (-not (Test-Path $zipPath) -or (Get-Item $zipPath).Length -lt 1000) {
-        # Fallback to .NET download if curl isn't available
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-        (New-Object System.Net.WebClient).DownloadFile($repoZip, $zipPath)
+    $ghOk = $false
+    try {
+        $gv = & gh --version 2>&1
+        if ($LASTEXITCODE -eq 0) { $ghOk = $true }
+    } catch {}
+
+    if ($ghOk) {
+        Write-Step "Connecting to GitHub (one-time)..."
+
+        # gh auth status exits 0 when already authenticated. If not, run the
+        # interactive browser login. If the user declines, we fall back to zip.
+        $authed = $false
+        & gh auth status *> $null
+        if ($LASTEXITCODE -eq 0) { $authed = $true }
+
+        if (-not $authed) {
+            Write-Host "  A browser window will open so you can sign in to GitHub." -ForegroundColor Cyan
+            Write-Host "  (This lets VaultBot update itself and share fixes with the community.)" -ForegroundColor DarkGray
+            Write-Host "  (Skip it and VaultBot still installs, just without auto-updates.)" -ForegroundColor DarkGray
+            & gh auth login --hostname github.com --git-protocol https --web
+            if ($LASTEXITCODE -ne 0) { $ghOk = $false }
+        }
+
+        if ($ghOk) {
+            # Maintainer (has push access) clones directly; everyone else forks.
+            $hasPush = $false
+            $perm = (& gh api repos/ziggibot-uni/vaultbot --jq .permissions.push 2>$null)
+            if ($perm -eq "true") { $hasPush = $true }
+
+            if ($hasPush) {
+                Write-Step "Cloning VaultBot..."
+                & gh repo clone ziggibot-uni/vaultbot $vaultName
+            } else {
+                Write-Step "Forking VaultBot to your GitHub account..."
+                & gh repo fork ziggibot-uni/vaultbot --clone
+                # gh clones to ./vaultbot (lowercase); rename to $vaultName if
+                # the filesystem is case-sensitive (macOS/Linux). On Windows
+                # they're the same folder, so the rename is a no-op.
+                if ((Test-Path "vaultbot") -and -not (Test-Path $vaultName)) {
+                    Rename-Item "vaultbot" $vaultName
+                }
+            }
+
+            if (-not (Test-Path $vaultPath)) {
+                Write-Warn2 "GitHub clone/fork failed -- falling back to zip download."
+                $ghOk = $false
+            } else {
+                Write-OK "VaultBot installed as a git fork (updates will merge cleanly)"
+            }
+        }
     }
 
-    Write-Step "Extracting..."
-    $extractDir = Join-Path $env:TEMP "vaultbot-extract-$(Get-Random)"
-    Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
-    $inner = Get-ChildItem $extractDir -Directory | Select-Object -First 1
-    Move-Item $inner.FullName $vaultPath
-    Remove-Item $zipPath -Force
-    Remove-Item $extractDir -Recurse -Force
-    Write-OK "Downloaded to $vaultPath"
+    if (-not $ghOk) {
+        Write-Step "Downloading VaultBot..."
+        $zipPath = Join-Path $env:TEMP "vaultbot-setup.zip"
+        & curl.exe -sL -o $zipPath $repoZip
+        if (-not (Test-Path $zipPath) -or (Get-Item $zipPath).Length -lt 1000) {
+            # Fallback to .NET download if curl isn't available
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            (New-Object System.Net.WebClient).DownloadFile($repoZip, $zipPath)
+        }
+
+        Write-Step "Extracting..."
+        $extractDir = Join-Path $env:TEMP "vaultbot-extract-$(Get-Random)"
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+        $inner = Get-ChildItem $extractDir -Directory | Select-Object -First 1
+        Move-Item $inner.FullName $vaultPath
+        Remove-Item $zipPath -Force
+        Remove-Item $extractDir -Recurse -Force
+        Write-OK "Downloaded to $vaultPath"
+    }
 }
 
 # Now that $vaultPath exists, set the install-state file path so steps

@@ -51,20 +51,23 @@ tokens pay for the thinking and contributions — not the maintainer's.
 
 The user must explicitly opt in. Two mechanisms:
 
-1. **GITHUB_TOKEN present** — having a token in `.env` implies consent
+1. **`gh` CLI authenticated** — the installer runs `gh auth login` (a
+   browser flow). Having `gh` authenticated implies consent to *use* the
+   GitHub account, but not to *submit* — see the next gate.
 2. **Plugin setting** — `allow_contributions: true` in `data.json`
-   (future: add a toggle in plugin settings UI)
+   (surfaces as `VAULTBOT_ALLOW_CONTRIBUTIONS=true` in the environment).
 
-The tool checks both. If neither is set, it refuses and explains how to
-opt in.
+The tool checks both. If either is missing, it refuses and explains how to
+opt in. Authentication is handled entirely by `gh` — there is no
+`GITHUB_TOKEN` to manage by hand.
 
 ### Fork-Based PR Flow
 
 When the user does NOT have write access to `ziggibot-uni/vaultbot`:
 
-1. **Fork the repo** — `POST /repos/ziggibot-uni/vaultbot/forks` using
-   the user's GITHUB_TOKEN. If fork already exists, GitHub returns 200
-   instead of 202 — handle both.
+1. **Fork the repo** — `gh api repos/ziggibot-uni/vaultbot/forks -X POST`
+   using the authenticated `gh` session. If fork already exists, GitHub
+   returns 200 instead of 202 — handle both.
 
 2. **Add fork as a remote** — `git remote add fork https://github.com/
    {username}/vaultbot.git` (or update URL if remote exists)
@@ -77,9 +80,9 @@ When the user does NOT have write access to `ziggibot-uni/vaultbot`:
 
 5. **Push to fork** — `git push -u fork {branch}`
 
-6. **Create cross-fork PR** — `POST /repos/ziggibot-uni/vaultbot/pulls`
-   with `head: "{username}:{branch}"` and `base: "main"`. This tells
-   GitHub to compare the fork's branch against the upstream's main.
+6. **Create cross-fork PR** — `gh api repos/ziggibot-uni/vaultbot/pulls
+   -X POST` with `head: "{username}:{branch}"` and `base: "main"`. This
+   tells GitHub to compare the fork's branch against the upstream's main.
 
 7. **Switch back to main** — clean up local state
 
@@ -138,9 +141,9 @@ If any check fails:
 
 ## Permission & Safety Guarantees
 
-1. **Token never leaves .env** — the GITHUB_TOKEN is read from
-   environment, used in API headers, never written to disk or logged
-2. **User opt-in required** — tool refuses without GITHUB_TOKEN or
+1. **No token to leak** — auth is handled by `gh` (OS keychain), never
+   written to disk or logged by VaultBot
+2. **User opt-in required** — tool refuses without `gh` auth or
    `allow_contributions` setting
 3. **Safety scan before push** — the contributor's VaultBot runs the
    same safety checks as the Safe-Commit-Push-Procedure before pushing
@@ -148,7 +151,7 @@ If any check fails:
    every PR before merging
 5. **No direct push to main** — all contributions go through PR review
 6. **Token scope** — contributors only need `repo` scope (for forking
-   and pushing to their fork)
+   and pushing to their fork), granted automatically by `gh auth login`
 
 ## Baseline Membrane
 

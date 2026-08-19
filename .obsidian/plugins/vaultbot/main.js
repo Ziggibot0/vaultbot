@@ -1071,6 +1071,82 @@ class VaultBotPlugin extends Plugin {
 			// Best-effort: make sure nothing is still up holding locks.
 			await new Promise(r => setTimeout(r, 800));
 
+			// ── Git-based update (fork installs) ────────────────────────────
+			// If this vault is a git fork (installed via the fork-based
+			// installer), update via `git pull` so changes MERGE instead of
+			// overwrite. This preserves any local edits the vaultbot made to
+			// tracked files — the old tarball path silently clobbered them.
+			// Legacy zip installs (no .git) fall through to the tarball path.
+			const gitDir = path.join(vaultRoot, '.git');
+			if (fs.existsSync(gitDir)) {
+				notify(`Updating via git (${refSpec})…`);
+				const runGit = (args) => execFileSync('git', args, { cwd: vaultRoot, stdio: 'pipe' });
+				// A fork has an `upstream` remote; a direct clone (maintainer)
+				// only has `origin`. Prefer upstream, fall back to origin.
+				let remote = 'upstream';
+				try { runGit(['remote', 'get-url', 'upstream']); }
+				catch (e) { remote = 'origin'; }
+
+				// Fetch the target ref.
+				runGit(['fetch', remote, refSpec]);
+
+				// Stash local uncommitted changes so the merge is clean.
+				let stashed = false;
+				try {
+					runGit(['stash', 'push', '--include-untracked', '-m', 'vaultbot-self-update']);
+					stashed = true;
+				} catch (e) { /* nothing to stash, or stash failed — continue */ }
+
+				try {
+					// Fast-forward merge; fall back to a regular merge if the
+					// local branch has diverged (e.g. the vaultbot committed).
+					try { runGit(['merge', '--ff-only', 'FETCH_HEAD']); }
+					catch (e) { runGit(['merge', 'FETCH_HEAD']); }
+				} catch (mergeErr) {
+					// Merge conflict — abort and restore the stash, then fail
+					// loudly so the user can use "Restore previous version".
+					try { runGit(['merge', '--abort']); } catch (e) {}
+					if (stashed) { try { runGit(['stash', 'pop']); } catch (e) {} }
+					throw new Error('Update conflicted with local changes. Resolve manually or use "Restore previous version".');
+				}
+
+				if (stashed) {
+					try { runGit(['stash', 'pop']); }
+					catch (e) { notify('Note: local changes could not be auto-restored (kept in git stash).'); }
+				}
+
+				// Read the new version for reporting.
+				let newVersion = '?';
+				try {
+					const man = JSON.parse(fs.readFileSync(path.join(pluginDir, 'manifest.json'), 'utf8'));
+					newVersion = man.version || '?';
+				} catch (e) {}
+
+				// Re-run pip install in case the update added new dependencies.
+				try {
+					const venvPython = this._venvPythonExe(vaultRoot);
+					const reqPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'requirements.txt');
+					if (fs.existsSync(venvPython) && fs.existsSync(reqPath)) {
+						notify('Checking for new dependencies...');
+						execFileSync(venvPython, ['-m', 'pip', 'install', '-r', reqPath, '--quiet'], {
+							cwd: vaultRoot, stdio: 'ignore', timeout: 120000,
+						});
+						notify('Dependencies updated.');
+					}
+				} catch (e) {
+					console.warn('VaultBot: pip install during update failed (non-fatal):', e);
+					notify('Could not check new dependencies - will try starting anyway.');
+				}
+
+				notify(`Update applied (v${newVersion}). Restarting backend…`);
+				await this.startBackendIfNeeded();
+				if (this.settings.autoStartMcpServer) {
+					try { this.startMcpServerIfNeeded(); } catch (e) {}
+				}
+				notify(`VaultBot updated to v${newVersion} and restarted.`);
+				return { ok: true, version: newVersion };
+			}
+
 			notify(`Downloading update from GitHub (${refSpec})…`);
 			// Use curl.exe explicitly: PowerShell aliases `curl` to
 			// Invoke-WebRequest, but we spawn a real shell so we control the

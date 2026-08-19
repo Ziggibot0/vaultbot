@@ -15,7 +15,7 @@ SCHEMA = {
         "Submit uncommitted changes as a GitHub pull request for community review. "
         "If the user has write access to the upstream repo, pushes directly and creates a PR. "
         "If not, forks the repo, pushes to the fork, and creates a cross-fork PR. "
-        "Requires GITHUB_TOKEN in .env with repo scope."
+        "Requires the gh CLI authenticated via 'gh auth login'."
     ),
     "parameters": {
         "type": "object",
@@ -51,13 +51,13 @@ def run(args: dict) -> dict:
     import re
     import sys
     import time
-    import requests
 
-    # Add backend to path for subprocess_utils
+    # Add backend to path for subprocess_utils + gh_client
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
     from subprocess_utils import run as _subprocess_run
+    from custom_tools.gh_client import gh_api, gh_available, GhError
 
     def run_git(git_args, cwd):
         try:
@@ -78,15 +78,14 @@ def run(args: dict) -> dict:
     # Find the vault root (2 levels up from vaultbot_backend/ -> vaultbot/ -> vault root)
     vault_root = os.path.dirname(os.path.dirname(backend_dir))
 
-    # 1. Check for GITHUB_TOKEN
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    if not token:
+    # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
+    if not gh_available():
         return {
-            "error": "GITHUB_TOKEN not found in environment.",
+            "error": "gh CLI not found or not authenticated.",
             "hint": (
-                "Create a GitHub personal access token with 'repo' scope at "
-                "https://github.com/settings/tokens and add it to your .env file "
-                "as GITHUB_TOKEN=ghp_your_token_here"
+                "Install the GitHub CLI from https://cli.github.com and run "
+                "'gh auth login' to sign in. VaultBot uses gh for community "
+                "contributions so you never have to manage a token by hand."
             ),
         }
 
@@ -104,11 +103,6 @@ def run(args: dict) -> dict:
             ),
         }
 
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
     # 2. Get remote URL and parse owner/repo
     ok, remote_url, err = run_git(["remote", "get-url", "origin"], vault_root)
     if not ok:
@@ -123,27 +117,19 @@ def run(args: dict) -> dict:
 
     # 3. Get the authenticated user's GitHub username
     try:
-        resp = requests.get("https://api.github.com/user", headers=headers, timeout=15)
-        if resp.status_code != 200:
-            return {"error": f"Could not get GitHub user info: {resp.status_code}"}
-        gh_username = resp.json().get("login", "")
+        user_data = gh_api("GET", "user")
+        gh_username = user_data.get("login", "")
         if not gh_username:
-            return {"error": "Could not determine GitHub username from token"}
-    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+            return {"error": "Could not determine GitHub username from gh"}
+    except GhError as e:
         return {"error": f"Failed to get GitHub user info: {e}"}
 
     # 4. Check if user has push access to the upstream repo
     try:
-        resp = requests.get(
-            f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}",
-            headers=headers,
-            timeout=15,
-        )
-        if resp.status_code != 200:
-            return {"error": f"Could not access upstream repo: {resp.status_code}"}
-        permissions = resp.json().get("permissions", {})
+        repo_data = gh_api("GET", f"repos/{upstream_owner}/{upstream_repo}")
+        permissions = repo_data.get("permissions", {})
         has_push_access = permissions.get("push", False)
-    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+    except GhError as e:
         return {"error": f"Failed to check repo permissions: {e}"}
 
     # 5. Safety scan — never commit sensitive files
@@ -274,7 +260,7 @@ def run(args: dict) -> dict:
             run_git(["branch", "-D", branch_name], vault_root)
             return {
                 "error": f"Could not push branch to origin: {push_err}",
-                "hint": "Make sure your GITHUB_TOKEN has push access to the repository.",
+                "hint": "Make sure your gh auth has push access to the repository.",
             }
 
         pr_head = branch_name
@@ -282,25 +268,18 @@ def run(args: dict) -> dict:
         # === FORK-BASED FLOW (user does NOT have write access) ===
         # 9a. Fork the upstream repo
         try:
-            resp = requests.post(
-                f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/forks",
-                headers=headers,
+            gh_api(
+                "POST",
+                f"repos/{upstream_owner}/{upstream_repo}/forks",
                 timeout=30,
             )
-            if resp.status_code not in (200, 202):
-                run_git(["checkout", "main"], vault_root)
-                run_git(["branch", "-D", branch_name], vault_root)
-                return {
-                    "error": f"Could not fork repo: {resp.status_code} {resp.text[:200]}"
-                }
-        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        except GhError as e:
             run_git(["checkout", "main"], vault_root)
             run_git(["branch", "-D", branch_name], vault_root)
             return {"error": f"Failed to fork repo: {e}"}
 
-        # 9b. Wait for fork to be ready
-        if resp.status_code == 202:
-            time.sleep(5)
+        # 9b. Wait for fork to be ready (fork creation is async on GitHub)
+        time.sleep(5)
 
         # 9c. Add fork as a remote (or update if exists)
         fork_url = f"https://github.com/{gh_username}/{upstream_repo}.git"
@@ -324,7 +303,7 @@ def run(args: dict) -> dict:
             run_git(["branch", "-D", branch_name], vault_root)
             return {
                 "error": f"Could not push to fork: {push_err}",
-                "hint": f"Make sure your fork exists at {fork_url} and your token has push access to it.",
+                "hint": f"Make sure your fork exists at {fork_url} and your gh auth has push access to it.",
             }
 
         pr_head = f"{gh_username}:{branch_name}"
@@ -352,35 +331,22 @@ def run(args: dict) -> dict:
     }
 
     try:
-        resp = requests.post(
-            f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls",
-            headers=headers,
-            json=pr_payload,
+        pr_data = gh_api(
+            "POST",
+            f"repos/{upstream_owner}/{upstream_repo}/pulls",
+            body=pr_payload,
             timeout=30,
         )
-        if resp.status_code == 201:
-            pr_data = resp.json()
-            pr_url = pr_data.get("html_url", "")
-            run_git(["checkout", "main"], vault_root)
-            return {
-                "status": "success",
-                "pr_url": pr_url,
-                "branch": branch_name,
-                "flow": "direct" if has_push_access else "fork",
-                "message": f"PR created successfully: {pr_url}",
-            }
-        else:
-            error_msg = resp.json().get("message", str(resp.status_code))
-            run_git(["checkout", "main"], vault_root)
-            return {
-                "error": f"GitHub API returned {resp.status_code}: {error_msg}",
-                "hint": (
-                    "The branch was pushed but the PR could not be created. "
-                    f"Create it manually at "
-                    f"https://github.com/{upstream_owner}/{upstream_repo}/compare/main...{pr_head.replace(':', '-')}"
-                ),
-            }
-    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        pr_url = pr_data.get("html_url", "")
+        run_git(["checkout", "main"], vault_root)
+        return {
+            "status": "success",
+            "pr_url": pr_url,
+            "branch": branch_name,
+            "flow": "direct" if has_push_access else "fork",
+            "message": f"PR created successfully: {pr_url}",
+        }
+    except GhError as e:
         run_git(["checkout", "main"], vault_root)
         return {
             "error": f"Failed to create PR: {e}",

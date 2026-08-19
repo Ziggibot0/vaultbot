@@ -4,7 +4,7 @@ Agent-authored tool: review_contributions
 
 SCHEMA = {
     "name": "review_contributions",
-    "description": "List and review open pull requests on the VaultBot GitHub repo. For each PR, fetches the diff, runs a safety scan (checks for secrets, dangerous code patterns, path traversal, .gitignore tampering), and returns a structured report. Requires GITHUB_TOKEN in .env.",
+    "description": "List and review open pull requests on the VaultBot GitHub repo. For each PR, fetches the diff, runs a safety scan (checks for secrets, dangerous code patterns, path traversal, .gitignore tampering), and returns a structured report. Requires the gh CLI authenticated via 'gh auth login'.",
     "parameters": {
         "properties": {
             "merge": {
@@ -34,20 +34,20 @@ def run(args: dict) -> dict:
     """
     import os
     import re
-    import requests
+    import sys
 
-    # 1. Check for GITHUB_TOKEN
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    if not token:
+    # Add backend to path for gh_client
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+    from custom_tools.gh_client import gh_api, gh_available, GhError
+
+    # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
+    if not gh_available():
         return {
-            "error": "GITHUB_TOKEN not found in environment.",
-            "hint": "Add GITHUB_TOKEN=ghp_your_token to .env",
+            "error": "gh CLI not found or not authenticated.",
+            "hint": "Install the GitHub CLI from https://cli.github.com and run 'gh auth login'.",
         }
-
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
 
     # 2. Determine upstream repo
     upstream_owner = "ziggibot-uni"
@@ -82,28 +82,17 @@ def run(args: dict) -> dict:
     if pr_number:
         # Review specific PR
         try:
-            resp = requests.get(
-                f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}",
-                headers=headers,
-                timeout=15,
-            )
-            if resp.status_code != 200:
-                return {"error": f"PR #{pr_number} not found: {resp.status_code}"}
-            prs = [resp.json()]
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            prs = [gh_api("GET", f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}")]
+        except GhError as e:
             return {"error": f"Failed to fetch PR #{pr_number}: {e}"}
     else:
         # List all open PRs
         try:
-            resp = requests.get(
-                f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls?state=open&per_page=30",
-                headers=headers,
-                timeout=15,
+            prs = gh_api(
+                "GET",
+                f"repos/{upstream_owner}/{upstream_repo}/pulls?state=open&per_page=30",
             )
-            if resp.status_code != 200:
-                return {"error": f"Could not list PRs: {resp.status_code}"}
-            prs = resp.json()
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except GhError as e:
             return {"error": f"Failed to list PRs: {e}"}
 
     if not prs:
@@ -334,24 +323,12 @@ def run(args: dict) -> dict:
 
         # Fetch PR files
         try:
-            resp = requests.get(
-                f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/files",
-                headers=headers,
+            files = gh_api(
+                "GET",
+                f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/files",
                 timeout=30,
             )
-            if resp.status_code != 200:
-                results.append(
-                    {
-                        "pr_number": pr_num,
-                        "title": pr_title,
-                        "author": pr_author,
-                        "url": pr_url,
-                        "error": f"Could not fetch PR files: {resp.status_code}",
-                    }
-                )
-                continue
-            files = resp.json()
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except GhError as e:
             results.append(
                 {
                     "pr_number": pr_num,
@@ -417,24 +394,18 @@ def run(args: dict) -> dict:
         # If merging and verdict is PASS, merge the PR
         if do_merge and verdict == "PASS":
             try:
-                merge_resp = requests.put(
-                    f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/merge",
-                    headers=headers,
-                    json={
+                merge_data = gh_api(
+                    "PUT",
+                    f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/merge",
+                    body={
                         "merge_method": "merge",
                         "commit_title": f"Merge PR #{pr_num}: {pr_title}",
                     },
                     timeout=30,
                 )
-                if merge_resp.status_code == 200:
-                    result["merged"] = True
-                    result["merge_message"] = merge_resp.json().get("message", "Merged")
-                else:
-                    result["merged"] = False
-                    result["merge_error"] = merge_resp.json().get(
-                        "message", str(merge_resp.status_code)
-                    )
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                result["merged"] = True
+                result["merge_message"] = merge_data.get("message", "Merged")
+            except GhError as e:
                 result["merged"] = False
                 result["merge_error"] = str(e)
 
@@ -464,13 +435,13 @@ def run(args: dict) -> dict:
         comment_body += "\n---\n*Automated review by VaultBot safety scanner*"
 
         try:
-            requests.post(
-                f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/issues/{pr_num}/comments",
-                headers=headers,
-                json={"body": comment_body},
+            gh_api(
+                "POST",
+                f"repos/{upstream_owner}/{upstream_repo}/issues/{pr_num}/comments",
+                body={"body": comment_body},
                 timeout=15,
             )
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except GhError:
             pass  # Comment is best-effort
 
     return {
