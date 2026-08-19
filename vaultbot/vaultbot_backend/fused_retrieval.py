@@ -45,14 +45,8 @@ class FusedRetriever:
     """Fuse FAISS vector search with the Obsidian link graph."""
 
     # Channel weight multipliers (from the research design).
-    # Graph/backlink boosts were 0.5/0.7 — too low to surface graph-walk
-    # candidates in the top-5 when normalized vector scores cluster in a
-    # tight range (0.3–0.5). A graph neighbor at 0.5 × 0.4 = 0.20 loses to
-    # a direct vector hit at 0.40. Raised to 0.8/0.9 so graph candidates
-    # compete with direct hits, enabling graph-walk retrieval to actually
-    # work (the golden-gate showed all graph queries failing at 0.5/0.7).
-    GRAPH_BOOST = 0.8  # forward-link neighbors
-    BACKLINK_BOOST = 0.9  # backlinks (hubs)
+    GRAPH_BOOST = 0.5  # forward-link neighbors
+    BACKLINK_BOOST = 0.7  # backlinks (hubs)
     ALL_CHANNEL_RERANK = 1.3  # appears in vector + graph + backlink
     HUB_RERANK = 1.1  # high backlink degree
     HUB_DEGREE_THRESHOLD = 3  # min backlinks to count as a hub
