@@ -27,7 +27,7 @@ watchdog==6.0.0
 # 2.5.2 on 3.12); the lower bound is the floor for both.
 numpy==2.5.2 ; python_full_version >= "3.12"
 numpy==2.4.6 ; python_full_version < "3.12"
-python-dotenv==1.0.0
+python-dotenv==1.2.3
 lxml==6.1.1
 PyMuPDF==1.28.2
 # Pillow: used by llm_client.vision_capable() to render a test image.
