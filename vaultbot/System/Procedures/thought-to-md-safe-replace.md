@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-14
 description: "Auto-generated from Behavioral-Pattern-Mine. Wraps the recurring pattern: thought -> md_safe_replace -> md_safe_replace -> md_safe_replace -> md_safe_replace. Observed in 5 sessions (observed in session dbb290f6-b50a-45dd-8981-eaec9c142efd) (priority: 25)."

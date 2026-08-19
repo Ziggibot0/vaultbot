@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-08-14
 summary: "Systematically finds and updates outdated references across vault notes. Searches for a target term, classifies each mention as current-claim vs historical-context, replaces only current-claims, lints, reports."
 description: "Update outdated references vault-wide. Use when a concept name changes, a design target shifts, or terminology needs bulk updating across notes. Classifies each mention as 'update this' vs 'historical context, leave alone' before replacing."
