@@ -213,7 +213,7 @@ def normalize_base_url(url: str, type_: str) -> str:
     return u
 
 
-def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
+def test_provider(prov: Provider, timeout: float = 8.0) -> dict[str, Any]:
     """Probe whether a provider endpoint is reachable and lists models.
 
     Returns a dict: {"ok": bool, "models": [str], "count": int,
@@ -236,11 +236,19 @@ def test_provider(prov: "Provider", timeout: float = 8.0) -> dict[str, Any]:
     if prov.type == "edge-tts":
         try:
             import asyncio
+
             import edge_tts
+
             t0 = time.time()
             voices = asyncio.run(edge_tts.list_voices())
             names = [v["ShortName"] for v in voices if v.get("ShortName")]
-            return {"ok": True, "models": names, "count": len(names), "latency_ms": round((time.time() - t0) * 1000, 1), "error": None}
+            return {
+                "ok": True,
+                "models": names,
+                "count": len(names),
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": None,
+            }
         except Exception as e:  # noqa: BLE001
             return _probe_fail(time.time(), f"edge-tts list_voices failed: {e}")
     base = prov.base_url.rstrip("/")
@@ -644,7 +652,7 @@ class ProviderRegistry:
     # migration from legacy .env
     # ------------------------------------------------------------------
     @classmethod
-    def migrate_from_env(cls, path: Path | None = None) -> "ProviderRegistry":
+    def migrate_from_env(cls, path: Path | None = None) -> ProviderRegistry:
         """Build a registry, migrating legacy .env values if no file exists.
 
         If ``providers.json`` already exists, it wins and migration is skipped.

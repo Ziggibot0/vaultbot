@@ -56,30 +56,175 @@ from vault_graph import VaultGraph
 _DEFAULT_DIVERSITY_WINDOW: int = 5
 # Tokens that carry almost no signal and are dropped before overlap scoring.
 _STOP_TOKENS: set[str] = {
-    "the","a","an","and","or","of","to","in","on","for","with","is","are","be","by","at","as","it","this","that","from",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "be",
+    "by",
+    "at",
+    "as",
+    "it",
+    "this",
+    "that",
+    "from",
 }
 # Single-token common English words that are valid dictionary entries but
 # are NOT worth a research note — researching them yields dictionary-scraping
 # junk. Only rejected when they appear ALONE as the entire topic.
 _SINGLE_WORD_STOPICS: set[str] = {
     # prepositions / conjunctions / articles / particles
-    "from","to","of","in","on","at","by","for","with","about","into","over","under",
-    "after","before","between","through","during","without","within","against","among",
-    "around","above","below","up","down","out","off","than","then","when","where",
-    "while","and","or","but","nor","yet","so","if","as","like","per","via","versus","vs",
+    "from",
+    "to",
+    "of",
+    "in",
+    "on",
+    "at",
+    "by",
+    "for",
+    "with",
+    "about",
+    "into",
+    "over",
+    "under",
+    "after",
+    "before",
+    "between",
+    "through",
+    "during",
+    "without",
+    "within",
+    "against",
+    "among",
+    "around",
+    "above",
+    "below",
+    "up",
+    "down",
+    "out",
+    "off",
+    "than",
+    "then",
+    "when",
+    "where",
+    "while",
+    "and",
+    "or",
+    "but",
+    "nor",
+    "yet",
+    "so",
+    "if",
+    "as",
+    "like",
+    "per",
+    "via",
+    "versus",
+    "vs",
     # pronouns / determiners
-    "i","you","he","she","it","we","they","me","him","her","us","them","my","your",
-    "his","its","our","their","this","that","these","those","who","whom","which","what","whose",
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "me",
+    "him",
+    "her",
+    "us",
+    "them",
+    "my",
+    "your",
+    "his",
+    "its",
+    "our",
+    "their",
+    "this",
+    "that",
+    "these",
+    "those",
+    "who",
+    "whom",
+    "which",
+    "what",
+    "whose",
     # be / auxiliaries
-    "is","are","was","were","be","been","being","am","do","does","did","done","have",
-    "has","had","will","would","can","could","should","shall","may","might","must",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "am",
+    "do",
+    "does",
+    "did",
+    "done",
+    "have",
+    "has",
+    "had",
+    "will",
+    "would",
+    "can",
+    "could",
+    "should",
+    "shall",
+    "may",
+    "might",
+    "must",
     # trivial / UI / placeholder words that yield junk notes when alone
-    "welcome","home","index","readme","notes","note","title","summary","references",
-    "sources","see","also","todo","draft","untitled","new","old","next","prev","previous",
-    "back","top","yes","no","ok","okay","test","example","examples","sample","here",
-    "there","now","today","yesterday","tomorrow",
+    "welcome",
+    "home",
+    "index",
+    "readme",
+    "notes",
+    "note",
+    "title",
+    "summary",
+    "references",
+    "sources",
+    "see",
+    "also",
+    "todo",
+    "draft",
+    "untitled",
+    "new",
+    "old",
+    "next",
+    "prev",
+    "previous",
+    "back",
+    "top",
+    "yes",
+    "no",
+    "ok",
+    "okay",
+    "test",
+    "example",
+    "examples",
+    "sample",
+    "here",
+    "there",
+    "now",
+    "today",
+    "yesterday",
+    "tomorrow",
     # generic illustrative wikilinks from exemplar/chat notes — not research concepts
-    "wikilink","wikilinks","target","chat-name",
+    "wikilink",
+    "wikilinks",
+    "target",
+    "chat-name",
 }
 # Template / placeholder patterns that show up as dangling links from
 # scaffolding or example notes ("Actual-Note-Title", "Note Name", "Topic").
@@ -581,21 +726,34 @@ class KnowledgeCurriculum:
         gaps.extend(self._collect_link_density_anomalies())
         return gaps
 
-    def _collect_dangling_links(self, dangling: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
-        return gap_collectors.collect_dangling_links(self.graph, dangling, self.session_logger)
+    def _collect_dangling_links(
+        self, dangling: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        return gap_collectors.collect_dangling_links(
+            self.graph, dangling, self.session_logger
+        )
 
     def _collect_thin_notes(self) -> list[dict[str, Any]]:
         return gap_collectors.collect_thin_notes(
-            self.graph, self.min_content_length, self.skip_vaultbot_paths, self.session_logger
+            self.graph,
+            self.min_content_length,
+            self.skip_vaultbot_paths,
+            self.session_logger,
         )
 
-    def _collect_missing_entities(self, dangling: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
-        return gap_collectors.collect_missing_entities(self.graph, dangling, self.session_logger)
+    def _collect_missing_entities(
+        self, dangling: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        return gap_collectors.collect_missing_entities(
+            self.graph, dangling, self.session_logger
+        )
 
     def _collect_thin_communities(self) -> list[dict[str, Any]]:
         out, mtime = gap_collectors.collect_thin_communities(
-            self.graph, self.thin_community_min_size,
-            self._thin_communities_cache, self._thin_communities_graph_mtime,
+            self.graph,
+            self.thin_community_min_size,
+            self._thin_communities_cache,
+            self._thin_communities_graph_mtime,
             self.session_logger,
         )
         self._thin_communities_cache = list(out)
@@ -610,7 +768,9 @@ class KnowledgeCurriculum:
     # ------------------------------------------------------------------
     # Filtering + scoring (delegates to gap_collectors.py)
     # ------------------------------------------------------------------
-    def _filter_candidates(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _filter_candidates(
+        self, candidates: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         return gap_collectors.filter_candidates(
             candidates,
             self.state.get("completed_topics") or [],
@@ -620,7 +780,8 @@ class KnowledgeCurriculum:
 
     def _score_gap(self, gap: dict[str, Any]) -> dict[str, Any]:
         return gap_collectors.score_gap(
-            gap, self.graph,
+            gap,
+            self.graph,
             self.state.get("completed_topics") or [],
             self.state.get("failed_topics") or [],
             self.diversity_window,
@@ -628,11 +789,16 @@ class KnowledgeCurriculum:
 
     def _diversity_bonus(self, gap: dict[str, Any]) -> float:
         return gap_collectors.diversity_bonus(
-            gap, self.graph, self.state.get("completed_topics") or [], self.diversity_window
+            gap,
+            self.graph,
+            self.state.get("completed_topics") or [],
+            self.diversity_window,
         )
 
     def _achievability_bonus(self, gap: dict[str, Any]) -> float:
-        return gap_collectors.achievability_bonus(gap, self.state.get("failed_topics") or [])
+        return gap_collectors.achievability_bonus(
+            gap, self.state.get("failed_topics") or []
+        )
 
     def _context_bonus(self, gap: dict[str, Any]) -> float:
         return gap_collectors.context_bonus(gap, self.graph)

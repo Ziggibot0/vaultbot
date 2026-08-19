@@ -9,8 +9,8 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from custom_tools import review_contributions as rc
 from custom_tools import gh_client
+from custom_tools import review_contributions as rc
 
 
 def _make_pr(number=1, sha="abc123"):

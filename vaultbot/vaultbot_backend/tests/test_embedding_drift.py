@@ -13,7 +13,6 @@ Documentation grounding:
 """
 
 import numpy as np
-
 import pytest
 
 pytestmark = pytest.mark.unit

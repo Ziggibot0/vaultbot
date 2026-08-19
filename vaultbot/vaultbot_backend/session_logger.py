@@ -17,7 +17,6 @@ from typing import Any
 
 from config import TUNABLES
 
-
 # ── Secret redaction ──────────────────────────────────────────────────────
 # Session logs persist full WebSocket payloads (user messages, tool inputs,
 # error strings) to JSONL on disk. Any value that looks like an API key or

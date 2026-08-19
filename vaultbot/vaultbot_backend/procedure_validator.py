@@ -44,13 +44,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from subprocess_utils import run as _subprocess_run, scrubbed_env
 import sys
 import textwrap
 from typing import Any
 
 from procedure_compiler import compile_from_text
-
+from subprocess_utils import run as _subprocess_run
+from subprocess_utils import scrubbed_env
 
 # ── Safe functions (builtins + stdlib, not tools) ─────────────────────
 

@@ -35,7 +35,6 @@ from __future__ import annotations
 import json
 import re
 
-
 # ── Stop words for validation (text steps) ──────────────────────────────
 
 _STOP_WORDS = frozenset(

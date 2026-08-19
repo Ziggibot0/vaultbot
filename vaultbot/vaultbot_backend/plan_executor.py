@@ -381,7 +381,7 @@ _BIN_OPS = {
     ast.Mult: lambda a, b: a * b,
     ast.Div: lambda a, b: a / b,
     ast.Mod: lambda a, b: a % b,
-    ast.Pow: lambda a, b: a ** b,
+    ast.Pow: lambda a, b: a**b,
     ast.FloorDiv: lambda a, b: a // b,
     ast.LShift: lambda a, b: a << b,
     ast.RShift: lambda a, b: a >> b,

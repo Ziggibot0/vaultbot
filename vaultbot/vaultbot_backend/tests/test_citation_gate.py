@@ -156,8 +156,14 @@ class TestScoreGrounding:
 class TestBuildReprimand:
     def test_includes_allowed_stems(self):
         allowed = {"Alpha": {}, "Beta": {}}
-        score = {"grounding_score": 0.0, "allowed_cited": 0, "total_wikilinks": 0,
-                 "ungrounded_sentences": 3, "sentences": 3, "missing_from_set": []}
+        score = {
+            "grounding_score": 0.0,
+            "allowed_cited": 0,
+            "total_wikilinks": 0,
+            "ungrounded_sentences": 3,
+            "sentences": 3,
+            "missing_from_set": [],
+        }
         msg = build_reprimand(score, allowed)
         assert "[[Alpha]]" in msg
         assert "[[Beta]]" in msg
@@ -165,43 +171,70 @@ class TestBuildReprimand:
 
     def test_includes_missing_set(self):
         allowed = {"Alpha": {}}
-        score = {"grounding_score": 0.5, "allowed_cited": 1, "total_wikilinks": 2,
-                 "ungrounded_sentences": 1, "sentences": 2,
-                 "missing_from_set": ["Hallucinated"]}
+        score = {
+            "grounding_score": 0.5,
+            "allowed_cited": 1,
+            "total_wikilinks": 2,
+            "ungrounded_sentences": 1,
+            "sentences": 2,
+            "missing_from_set": ["Hallucinated"],
+        }
         msg = build_reprimand(score, allowed)
         assert "[[Hallucinated]]" in msg
 
     def test_empty_allowed_set_says_dont_know(self):
-        score = {"grounding_score": 0.0, "allowed_cited": 0, "total_wikilinks": 0,
-                 "ungrounded_sentences": 2, "sentences": 2, "missing_from_set": []}
+        score = {
+            "grounding_score": 0.0,
+            "allowed_cited": 0,
+            "total_wikilinks": 0,
+            "ungrounded_sentences": 2,
+            "sentences": 2,
+            "missing_from_set": [],
+        }
         msg = build_reprimand(score, {})
         assert "I don't know" in msg or "say 'I don't know'" in msg
 
 
 class TestBuildTrustBadge:
     def test_grounded(self):
-        score = {"total_wikilinks": 2, "allowed_cited": 2,
-                 "failed": False, "grounding_score": 1.0}
+        score = {
+            "total_wikilinks": 2,
+            "allowed_cited": 2,
+            "failed": False,
+            "grounding_score": 1.0,
+        }
         badge = build_trust_badge(score)
         assert "Grounded" in badge
         assert "2" in badge
 
     def test_ungrounded(self):
-        score = {"total_wikilinks": 0, "allowed_cited": 0,
-                 "failed": True, "grounding_score": 0.0}
+        score = {
+            "total_wikilinks": 0,
+            "allowed_cited": 0,
+            "failed": True,
+            "grounding_score": 0.0,
+        }
         badge = build_trust_badge(score)
         assert "Ungrounded" in badge
 
     def test_partial(self):
-        score = {"total_wikilinks": 3, "allowed_cited": 1,
-                 "failed": True, "grounding_score": 0.33}
+        score = {
+            "total_wikilinks": 3,
+            "allowed_cited": 1,
+            "failed": True,
+            "grounding_score": 0.33,
+        }
         badge = build_trust_badge(score)
         assert "Partially grounded" in badge
         assert "1/3" in badge
 
     def test_singular_note(self):
-        score = {"total_wikilinks": 1, "allowed_cited": 1,
-                 "failed": False, "grounding_score": 1.0}
+        score = {
+            "total_wikilinks": 1,
+            "allowed_cited": 1,
+            "failed": False,
+            "grounding_score": 1.0,
+        }
         badge = build_trust_badge(score)
         assert "note" in badge
         assert "notes" not in badge

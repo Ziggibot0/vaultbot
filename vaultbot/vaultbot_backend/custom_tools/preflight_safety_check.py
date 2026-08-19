@@ -14,9 +14,10 @@ SCHEMA = {
 
 import importlib.util
 import shutil
-from subprocess_utils import run as _subprocess_run
 import time
 from pathlib import Path
+
+from subprocess_utils import run as _subprocess_run
 
 # Determine backend directory from this file's location
 # (custom_tools/preflight_safety_check.py -> parent.parent = vaultbot_backend/)

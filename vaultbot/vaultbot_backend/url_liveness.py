@@ -134,7 +134,9 @@ def filter_dead_urls(
 
     def _check(u: str):
         with sem:
-            results[u] = check_url_alive(u, timeout=timeout, session_logger=session_logger)
+            results[u] = check_url_alive(
+                u, timeout=timeout, session_logger=session_logger
+            )
 
     for u in urls:
         th = threading.Thread(target=_check, args=(u,), daemon=True)

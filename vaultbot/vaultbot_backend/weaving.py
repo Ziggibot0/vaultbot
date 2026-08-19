@@ -288,10 +288,7 @@ def cross_link_textbooks(
                     if fp_norm == new_norm:
                         continue
                     # Must be a textbook note.
-                    if (
-                        "vaultbot/Knowledge/Textbooks" + os.sep
-                        not in fp_norm + os.sep
-                    ):
+                    if "vaultbot/Knowledge/Textbooks" + os.sep not in fp_norm + os.sep:
                         continue
                     # Exclude same-book notes if we have source_keys.
                     if source_keys and fp_norm in source_keys:
@@ -626,8 +623,7 @@ async def weave_textbook_notes(
                 )
                 svc.vault_graph.refresh()
                 textbooks_dir = (
-                    Path(os.getenv("VAULT_PATH", "."))
-                    / "vaultbot/Knowledge/Textbooks"
+                    Path(os.getenv("VAULT_PATH", ".")) / "vaultbot/Knowledge/Textbooks"
                 )
                 # Gather ALL L1 cards in the vault (incremental mode needs
                 # the full set to preserve existing cluster assignments;

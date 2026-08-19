@@ -24,7 +24,8 @@ SCHEMA = {
 
 
 def run(args: dict) -> dict:
-    import sys, os
+    import os
+    import sys
 
     backend_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),

@@ -32,18 +32,16 @@ Safe markdown write — backs up, validates, blocks protected files.
 
 import os
 import re
-import time
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 # Determine paths from this file's location
 # custom_tools/vault_safe_write.py -> parent.parent = vaultbot/vaultbot_backend/
 # -> parent.parent.parent = vaultbot/ -> parent.parent.parent.parent = Vault2/ (vault root)
 try:
-    BACKEND_DIR = (
-        Path(__file__).resolve().parent.parent
-    )  # vaultbot/vaultbot_backend/
+    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot/vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root

@@ -159,9 +159,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "format": {
                         "type": "string",
                         "enum": ["bibtex", "ris"],
-                        "description": (
-                            "Citation format (default: bibtex)."
-                        ),
+                        "description": ("Citation format (default: bibtex)."),
                     },
                 },
                 "required": ["file_path"],
@@ -773,9 +771,7 @@ def build_tool_list(
     _all_contextual = set()
     for cat_tools in CONTEXTUAL_TOOLS.values():
         _all_contextual.update(cat_tools)
-    _classified = (
-        CORE_TOOL_NAMES | _all_contextual | PROCEDURE_CANDIDATES
-    )
+    _classified = CORE_TOOL_NAMES | _all_contextual | PROCEDURE_CANDIDATES
 
     if custom_schemas:
         for s in custom_schemas:
@@ -867,7 +863,7 @@ def build_system_prompt_briefing(
         f"is FORBIDDEN. Cite inline as [[Note-Name]] right next to the "
         f"claim, not in a separate footer.\n"
         f"- CLOSED-SET CITATION: you may ONLY cite notes listed in the "
-        f"VAULT CONTEXT's \"Allowed citation targets\" line. A [[wikilink]] "
+        f'VAULT CONTEXT\'s "Allowed citation targets" line. A [[wikilink]] '
         f"to a note NOT in that set is an ungrounded claim (you pulled it "
         f"from your weights). If you need a note that isn't listed, call "
         f"vault_search to retrieve it (it then becomes citable).\n"
@@ -882,7 +878,7 @@ def build_system_prompt_briefing(
         f"answer using ONLY the notes in the VAULT CONTEXT, citing each "
         f"claim inline as [[Note-Name]]. You may NOT introduce facts not "
         f"present in the cited notes.\n"
-        f'- Say "I don\'t know — nothing in the vault covers this. Want me '
+        f"- Say \"I don't know — nothing in the vault covers this. Want me "
         f'to research it?" when the vault context has nothing relevant. '
         f"Offer vault_research; don't answer from weights.\n"
         f"- No Wikipedia. Prefer primary sources, academic papers, specialist "

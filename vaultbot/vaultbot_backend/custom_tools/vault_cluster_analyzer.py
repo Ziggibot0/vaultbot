@@ -25,9 +25,9 @@ SCHEMA = {
 }
 
 import os
-import re
 import random
-from collections import defaultdict, Counter
+import re
+from collections import Counter, defaultdict
 from pathlib import Path
 
 WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")

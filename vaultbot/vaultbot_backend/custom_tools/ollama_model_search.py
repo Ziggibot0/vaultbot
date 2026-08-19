@@ -29,10 +29,10 @@ SCHEMA = {
     },
 }
 
-import urllib.request
-import urllib.parse
 import re
 import subprocess
+import urllib.parse
+import urllib.request
 
 
 def _fetch_url(url: str, timeout: int = 20) -> str:

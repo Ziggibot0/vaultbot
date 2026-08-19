@@ -82,9 +82,7 @@ async def run_research_and_write_note(
         # out the astrophysics papers.
         _vault_titles = []
         try:
-            _vault_titles = svc.research_engine._get_vault_note_titles(
-                svc.vault_path
-            )
+            _vault_titles = svc.research_engine._get_vault_note_titles(svc.vault_path)
         except Exception:  # noqa: BLE001 — best-effort
             pass
         _research_fn = lambda: svc.research_engine.research(
@@ -92,10 +90,10 @@ async def run_research_and_write_note(
             llm_client=svc.ollama_client,
             vault_note_titles=_vault_titles,
         )
-        report = await run_with_heartbeat(
-            svc, websocket, "auto-research", _research_fn
-        ) if websocket is not None else await loop.run_in_executor(
-            None, _research_fn
+        report = (
+            await run_with_heartbeat(svc, websocket, "auto-research", _research_fn)
+            if websocket is not None
+            else await loop.run_in_executor(None, _research_fn)
         )
     except Exception as e:  # noqa: BLE001 — best-effort
         svc.research_engine.progress_callback = prev_cb
@@ -105,9 +103,7 @@ async def run_research_and_write_note(
         svc.research_engine.progress_callback = prev_cb
 
     if not report.get("source_count"):
-        session_logger.log(
-            "auto_research_no_sources", {"topic": topic[:80]}
-        )
+        session_logger.log("auto_research_no_sources", {"topic": topic[:80]})
         return None
 
     research_text = report.get("synthesis", "")
@@ -139,7 +135,11 @@ async def run_research_and_write_note(
             session_logger.log("auto_research_note_md_failed", {"error": str(e)})
         session_logger.log(
             "auto_research_note_created",
-            {"note_path": note_path, "topic": note_topic, "duration_ms": (loop.time() - t0) * 1000},
+            {
+                "note_path": note_path,
+                "topic": note_topic,
+                "duration_ms": (loop.time() - t0) * 1000,
+            },
         )
     except Exception as e:  # noqa: BLE001
         session_logger.log_exception(e, context="auto_research_note_write")
@@ -149,6 +149,7 @@ async def run_research_and_write_note(
     try:
         svc.vault_graph.refresh()
         from vault_indexer import VaultIndexer  # noqa: F401 — type hint only
+
         svc.vault_indexer._add_file(Path(note_path))
         svc.vault_indexer.persist()
     except Exception as e:  # noqa: BLE001
@@ -223,7 +224,7 @@ async def handle_research(
     )
 
     if not report.get("source_count"):
-        from error_types import make_diagnosis, ProblemCategory, Severity
+        from error_types import ProblemCategory, Severity, make_diagnosis
 
         _diag = make_diagnosis(
             ProblemCategory.GENERIC,

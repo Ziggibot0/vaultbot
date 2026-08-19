@@ -1,7 +1,7 @@
 """Tests for note_schema.py — universal frontmatter schema injection + validation."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -10,13 +10,13 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from note_schema import (
-    inject_schema,
-    validate_schema,
-    split_note_if_needed,
-    parse_frontmatter,
-    strip_frontmatter,
     heal_note_on_disk,
     heal_vault_schema,
+    inject_schema,
+    parse_frontmatter,
+    split_note_if_needed,
+    strip_frontmatter,
+    validate_schema,
 )
 
 
@@ -166,9 +166,7 @@ def test_no_split_single_argument():
         "## Evidence\n\n" + "Evidence text. " * 30 + "\n\n"
         "## Conclusion\n\n" + "Conclusion text. " * 30 + "\n\n"
     )
-    result = split_note_if_needed(
-        content, "vaultbot/Knowledge/Research/Single.md"
-    )
+    result = split_note_if_needed(content, "vaultbot/Knowledge/Research/Single.md")
     assert result is None
 
 
@@ -181,9 +179,7 @@ def test_no_split_procedure():
         "## Step 2\n\n" + "Do step 2. " * 30 + "\n\n"
         "## Step 3\n\n" + "Do step 3. " * 30 + "\n\n"
     )
-    result = split_note_if_needed(
-        content, "vaultbot/System/Procedures/My-Proc.md"
-    )
+    result = split_note_if_needed(content, "vaultbot/System/Procedures/My-Proc.md")
     assert result is None
 
 
@@ -216,8 +212,8 @@ def test_empty_frontmatter_error():
 
 # ── Boot-time healing tests ──────────────────────────────────────────
 
-import tempfile
 import shutil
+import tempfile
 
 
 def test_heal_note_adds_missing_fields():
@@ -269,17 +265,13 @@ def test_heal_vault_schema_scans_all():
         os.makedirs(os.path.join(tmp, "vaultbot", "Knowledge", "Research"))
         os.makedirs(os.path.join(tmp, "vaultbot", "Memory", "Chat"))
 
-        with_schema = os.path.join(
-            tmp, "vaultbot", "Knowledge", "Research", "Good.md"
-        )
+        with_schema = os.path.join(tmp, "vaultbot", "Knowledge", "Research", "Good.md")
         with open(with_schema, "w", encoding="utf-8") as f:
             f.write(
                 "---\ntype: research\nstatus: raw\ncreated: 2026-08-03\nsummary: x\ntags: [research]\n---\n# Good\n\nbody"
             )
 
-        without_schema = os.path.join(
-            tmp, "vaultbot", "Memory", "Chat", "Chat-Test.md"
-        )
+        without_schema = os.path.join(tmp, "vaultbot", "Memory", "Chat", "Chat-Test.md")
         with open(without_schema, "w", encoding="utf-8") as f:
             f.write("# Chat Test\n\nNo frontmatter.")
 

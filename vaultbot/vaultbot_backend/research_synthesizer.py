@@ -24,7 +24,11 @@ from citation_exporter import extract_doi as _extract_doi
 from note_schema import strip_frontmatter as _strip_frontmatter
 from text_scoring import (
     score_sentence as _score_sentence,
+)
+from text_scoring import (
     split_sentences as _split_sentences,
+)
+from text_scoring import (
     tokenize_light as _tokenize_light,
 )
 

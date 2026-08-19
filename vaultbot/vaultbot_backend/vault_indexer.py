@@ -37,11 +37,11 @@ _logger = logging.getLogger(__name__)
 
 # Re-export so `from vault_indexer import VaultChangeHandler` etc. keep working.
 __all__ = [
-    "VaultIndexer",
-    "VaultChangeHandler",
-    "IGNORED_DIRS",
-    "_is_ignored_path",
     "EMBEDDING_SCHEMA_VERSION",
+    "IGNORED_DIRS",
+    "VaultChangeHandler",
+    "VaultIndexer",
+    "_is_ignored_path",
 ]
 
 # Embedding schema version. Bumped whenever the text we embed for a note
@@ -113,10 +113,22 @@ class VaultIndexer:
             self._path_to_id[m["file_path"]] = i
         self._next_id = len(value)
 
-    def _log_tool(self, method: str, inputs: dict[str, Any] | None = None, outputs: Any = None, error: str | None = None):
+    def _log_tool(
+        self,
+        method: str,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any = None,
+        error: str | None = None,
+    ):
         if self.session_logger is None:
             return
-        self.session_logger.log_tool_call(tool="vault_indexer", method=method, inputs=inputs, outputs=outputs, error=error)
+        self.session_logger.log_tool_call(
+            tool="vault_indexer",
+            method=method,
+            inputs=inputs,
+            outputs=outputs,
+            error=error,
+        )
 
     def _load_index(self):
         """Load existing index and metadata from disk, or initialize new.
@@ -140,8 +152,12 @@ class VaultIndexer:
                 # Detect format: tuple(3)=v1, tuple(4)=v2+ (schema ver), list=legacy.
                 _stored_schema_version = 1
                 if isinstance(loaded, tuple) and len(loaded) == 4:
-                    (self._metadata, self._path_to_id, self._next_id,
-                     _stored_schema_version) = loaded
+                    (
+                        self._metadata,
+                        self._path_to_id,
+                        self._next_id,
+                        _stored_schema_version,
+                    ) = loaded
                 elif isinstance(loaded, tuple) and len(loaded) == 3:
                     self._metadata, self._path_to_id, self._next_id = loaded
                     # Normalize stale relative paths to absolute.
@@ -155,7 +171,9 @@ class VaultIndexer:
                             self._path_to_id[str(resolved)] = fid
                 else:
                     # Legacy list format — migrate to id-keyed dict + IndexIDMap2.
-                    _logger.info("[migration] Detected legacy list-format; converting to IndexIDMap2...")
+                    _logger.info(
+                        "[migration] Detected legacy list-format; converting to IndexIDMap2..."
+                    )
                     legacy_list = loaded if isinstance(loaded, list) else []
                     self._metadata = {}
                     self._path_to_id = {}
@@ -170,15 +188,21 @@ class VaultIndexer:
                         try:
                             vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
                         except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                            _logger.info(f"[migration] Skipping unreconstructable legacy vector {i} ({meta['file_path']})")
+                            _logger.info(
+                                f"[migration] Skipping unreconstructable legacy vector {i} ({meta['file_path']})"
+                            )
                             continue
                         self._add_embedding_to_index(
-                            fp, vec, meta.get("last_modified", 0.0),
+                            fp,
+                            vec,
+                            meta.get("last_modified", 0.0),
                             meta.get("content_hash", ""),
                             content_preview=meta.get("content_preview", ""),
                         )
                     self.dimension = dim
-                    _logger.info(f"[migration] Migrated {self._next_id} vectors to IndexIDMap2.")
+                    _logger.info(
+                        f"[migration] Migrated {self._next_id} vectors to IndexIDMap2."
+                    )
 
                 # If the embedding schema changed, stored vectors no longer
                 # match the text we now embed — discard and force full rebuild.
@@ -339,8 +363,18 @@ class VaultIndexer:
         """
         embed_dim = len(embedding)
         if embed_dim == 0:
-            _logger.warning(f"Skipping {file_path}: received empty embedding from Ollama.")
-            self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error="empty embedding")
+            _logger.warning(
+                f"Skipping {file_path}: received empty embedding from Ollama."
+            )
+            self._log_tool(
+                "add_file",
+                {
+                    "file_path": str(file_path),
+                    "last_modified": last_modified,
+                    "content_hash": content_hash,
+                },
+                error="empty embedding",
+            )
             return
 
         if self.index is None:
@@ -348,8 +382,18 @@ class VaultIndexer:
             self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
             _logger.info(f"Initialized new IndexIDMap2 with dimension {self.dimension}")
         elif embed_dim != self.index.d:
-            _logger.warning(f"Skipping {file_path}: dim {embed_dim} != index dim {self.index.d}.")
-            self._log_tool("add_file", {"file_path": str(file_path), "last_modified": last_modified, "content_hash": content_hash}, error=f"dimension mismatch: {embed_dim} vs {self.index.d}")
+            _logger.warning(
+                f"Skipping {file_path}: dim {embed_dim} != index dim {self.index.d}."
+            )
+            self._log_tool(
+                "add_file",
+                {
+                    "file_path": str(file_path),
+                    "last_modified": last_modified,
+                    "content_hash": content_hash,
+                },
+                error=f"dimension mismatch: {embed_dim} vs {self.index.d}",
+            )
             return
 
         # Normalize in-place so L2 distance ≡ cosine distance (unit vectors:
@@ -377,7 +421,14 @@ class VaultIndexer:
         self._path_to_id[abs_path_str] = faiss_id
         self.timestamps[abs_path_str] = last_modified
         _logger.debug(f"Added {file_path} to index. Total vectors: {self.index.ntotal}")
-        self._log_tool("add_file", {"file_path": abs_path_str, "last_modified": last_modified, "content_hash": content_hash})
+        self._log_tool(
+            "add_file",
+            {
+                "file_path": abs_path_str,
+                "last_modified": last_modified,
+                "content_hash": content_hash,
+            },
+        )
 
     def batch_add_files(self, file_paths: list[str], return_embeddings: bool = False):
         """Add multiple files to the index using parallel embedding calls.
@@ -427,7 +478,10 @@ class VaultIndexer:
         # Procedures embed description surface (see _embedding_text_for_note).
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        embed_texts = [self._embedding_text_for_note(fp, content) for fp, content in zip(valid_paths, contents)]
+        embed_texts = [
+            self._embedding_text_for_note(fp, content)
+            for fp, content in zip(valid_paths, contents)
+        ]
 
         def _embed_one(text: str):
             if len(text) > 4000:
@@ -494,7 +548,9 @@ class VaultIndexer:
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 self._log_tool("remove_file", {"file_path": key}, error=str(e))
                 raise
-        _logger.debug(f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}")
+        _logger.debug(
+            f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}"
+        )
         self._log_tool("remove_file", {"file_path": key})
 
     def _rebuild_index(self):
@@ -528,7 +584,9 @@ class VaultIndexer:
                 live_vecs.append(vec)
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 dead_keys.append((fid, meta["file_path"]))
-                _logger.warning(f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}")
+                _logger.warning(
+                    f"Pruning unreconstructable id {fid} ({meta['file_path']}): {e}"
+                )
                 continue
 
         for fid, fp_str in dead_keys:
@@ -550,7 +608,9 @@ class VaultIndexer:
         self.dimension = stacked.shape[1]
         self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
         self.index.add_with_ids(stacked, ids_arr)  # type: ignore
-        _logger.info(f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)")
+        _logger.info(
+            f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)"
+        )
 
     def _update_file(self, file_path_str: str):
         """Update a file in the index (called on modification)."""
@@ -684,7 +744,12 @@ class VaultIndexer:
         Returns [{'file_path', 'content', 'score'}] sorted by relevance.
         """
         if self.index is None or self.index.ntotal == 0 or not self._metadata:
-            self._log_tool("search", {"query": query, "k": k}, outputs={"result_count": 0}, error="empty index")
+            self._log_tool(
+                "search",
+                {"query": query, "k": k},
+                outputs={"result_count": 0},
+                error="empty index",
+            )
             return []
 
         try:
@@ -708,13 +773,22 @@ class VaultIndexer:
         try:
             return self.index.reconstruct(faiss_id).astype(np.float32)  # type: ignore
         except RuntimeError as e:  # faiss raises on bad/tombstoned id
-            self._log_tool("reconstruct_embedding", {"file_path": file_path}, error=str(e))
+            self._log_tool(
+                "reconstruct_embedding", {"file_path": file_path}, error=str(e)
+            )
             return None
 
-    def search_by_vector(self, query_embedding: np.ndarray, k: int = 5) -> list[dict[str, Any]]:
+    def search_by_vector(
+        self, query_embedding: np.ndarray, k: int = 5
+    ) -> list[dict[str, Any]]:
         """Search using a pre-computed embedding vector (skips Ollama call)."""
         if self.index is None or self.index.ntotal == 0 or not self._metadata:
-            self._log_tool("search_by_vector", {"k": k}, outputs={"result_count": 0}, error="empty index")
+            self._log_tool(
+                "search_by_vector",
+                {"k": k},
+                outputs={"result_count": 0},
+                error="empty index",
+            )
             return []
 
         # Guard against dimension mismatch (e.g. embed model changed).

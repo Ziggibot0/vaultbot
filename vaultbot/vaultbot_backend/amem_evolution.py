@@ -311,8 +311,9 @@ class AMemeEvolution:
         if self.vault_indexer is None:
             return []
         try:
-            import numpy as _np
             import re as _re
+
+            import numpy as _np
 
             # Embed the new note: title + first 500 chars.
             new_text = (new_title + " " + new_content[:500]).strip()

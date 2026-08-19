@@ -194,7 +194,8 @@ def run(args: dict) -> dict:
 
     # Universal schema validation
     try:
-        import sys, os
+        import os
+        import sys
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if backend_dir not in sys.path:

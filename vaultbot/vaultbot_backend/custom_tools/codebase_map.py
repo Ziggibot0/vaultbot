@@ -50,7 +50,9 @@ def run(args: dict) -> dict:
     # custom_tools/codebase_map.py -> vaultbot_backend -> vaultbot -> vault root.
     backend_dir = Path(__file__).resolve().parent.parent
     vault_root = backend_dir.parent.parent
-    map_path = vault_root / "vaultbot" / "Knowledge" / "Architecture" / "Codebase-Map.md"
+    map_path = (
+        vault_root / "vaultbot" / "Knowledge" / "Architecture" / "Codebase-Map.md"
+    )
 
     if not map_path.exists():
         return {

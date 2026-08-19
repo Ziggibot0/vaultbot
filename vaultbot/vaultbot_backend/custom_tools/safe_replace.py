@@ -23,8 +23,9 @@ SCHEMA = {
 
 
 def run(args: dict) -> dict:
-    from self_improver import SelfImprover
     from pathlib import Path
+
+    from self_improver import SelfImprover
 
     BACKEND_DIR = Path(__file__).parent.parent.resolve()
     BACKEND_ROOT = BACKEND_DIR.parent.parent

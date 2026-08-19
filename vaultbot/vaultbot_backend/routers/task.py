@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-
 from app_state import get_services
+from fastapi import APIRouter, Depends
 from services import Services
 from task_api import create_task, get_task, resume_task
 

@@ -10,8 +10,8 @@ this never modifies or deletes session files.
 
 from __future__ import annotations
 
-import re as _re
 import json as _json
+import re as _re
 from pathlib import Path
 from typing import Any
 

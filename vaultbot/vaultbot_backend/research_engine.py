@@ -25,29 +25,55 @@ import time
 from collections import Counter
 from typing import Any, Optional
 
-from text_scoring import (
-    _GENERIC_TERMS,
-    _STOPWORDS,
-    keyterms as _keyterms,
-    score_sentence as _score_sentence,
-    signal_terms as _signal_terms,
-    tokenize_light as _tokenize_light,
+from research_synthesizer import (
+    extractive_synthesis as _extractive_synthesis_fn,
+)
+from research_synthesizer import (
+    get_vault_note_titles as _get_vault_note_titles_fn,
+)
+from research_synthesizer import (
+    llm_synthesize as _llm_synthesize_fn,
+)
+from research_synthesizer import (
+    repair_wikilinks as _repair_wikilinks_fn,
+)
+from research_synthesizer import (
+    synthesize_note_markdown as _synthesize_note_markdown_fn,
+)
+from research_synthesizer import (
+    synthesize_structured_note as _synthesize_structured_note_fn,
 )
 from source_classification import (
     is_blocked_source as _is_blocked_source,
-    is_low_credibility_domain as _is_low_credibility_domain,
+)
+from source_classification import (
     is_github_issue_or_pr as _is_github_issue_or_pr,
+)
+from source_classification import (
+    is_low_credibility_domain as _is_low_credibility_domain,
+)
+from source_classification import (
     normalize_url as _normalize_url,
+)
+from source_classification import (
     source_relevance as _source_relevance,
 )
 from source_credibility import SourceCredibilityTracker
-from research_synthesizer import (
-    extractive_synthesis as _extractive_synthesis_fn,
-    get_vault_note_titles as _get_vault_note_titles_fn,
-    llm_synthesize as _llm_synthesize_fn,
-    repair_wikilinks as _repair_wikilinks_fn,
-    synthesize_note_markdown as _synthesize_note_markdown_fn,
-    synthesize_structured_note as _synthesize_structured_note_fn,
+from text_scoring import (
+    _GENERIC_TERMS,
+    _STOPWORDS,
+)
+from text_scoring import (
+    keyterms as _keyterms,
+)
+from text_scoring import (
+    score_sentence as _score_sentence,
+)
+from text_scoring import (
+    signal_terms as _signal_terms,
+)
+from text_scoring import (
+    tokenize_light as _tokenize_light,
 )
 
 try:
@@ -78,14 +104,66 @@ except Exception:  # noqa: BLE001 — best-effort import, liveness check is opti
 # pairs (e.g., "sea shells") and adds them as compound signal terms.
 # A source about "shell galaxies" won't contain "sea shells", so it
 # fails the gate — even with a single-signal-term topic.
-_COMPOUND_STOP = frozenset({
-    "what", "are", "is", "the", "a", "an", "of", "in", "on", "at", "to",
-    "for", "with", "by", "from", "and", "or", "but", "how", "why", "when",
-    "who", "where", "which", "this", "that", "these", "those", "it", "its",
-    "was", "were", "be", "been", "being", "have", "has", "had", "do",
-    "does", "did", "can", "could", "should", "would", "will", "may",
-    "might", "about", "into", "than", "then", "so", "if", "just", "also",
-})
+_COMPOUND_STOP = frozenset(
+    {
+        "what",
+        "are",
+        "is",
+        "the",
+        "a",
+        "an",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "with",
+        "by",
+        "from",
+        "and",
+        "or",
+        "but",
+        "how",
+        "why",
+        "when",
+        "who",
+        "where",
+        "which",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "can",
+        "could",
+        "should",
+        "would",
+        "will",
+        "may",
+        "might",
+        "about",
+        "into",
+        "than",
+        "then",
+        "so",
+        "if",
+        "just",
+        "also",
+    }
+)
 
 
 def _compound_signals(topic: str) -> list[str]:
@@ -101,14 +179,33 @@ def _compound_signals(topic: str) -> list[str]:
     sources even when the topic is correctly covered.
     """
     import re as _re
+
     tokens = _re.findall(r"[a-z]{3,}", (topic or "").lower())
     # Common verbs/adjectives that form spurious compounds — they're content
     # words by length but too generic to be useful as compound signal terms.
-    _SPURIOUS = frozenset({
-        "made", "used", "done", "based", "using", "via",
-        "like", "also", "many", "much", "some", "such",
-        "can", "may", "will", "has", "had", "did", "get",
-    })
+    _SPURIOUS = frozenset(
+        {
+            "made",
+            "used",
+            "done",
+            "based",
+            "using",
+            "via",
+            "like",
+            "also",
+            "many",
+            "much",
+            "some",
+            "such",
+            "can",
+            "may",
+            "will",
+            "has",
+            "had",
+            "did",
+            "get",
+        }
+    )
     compounds: list[str] = []
     for i in range(len(tokens) - 1):
         w1, w2 = tokens[i], tokens[i + 1]
@@ -491,7 +588,11 @@ class ResearchEngine:
             # search-result snippet (which the engine ranked relevant).
             gate_text = text if len(text) >= 200 else (f"{snippet}\n{text}")
             rel_score, rel_reason = _source_relevance(
-                hit.get("title", ""), gate_text, signal, topic_terms, url=url,
+                hit.get("title", ""),
+                gate_text,
+                signal,
+                topic_terms,
+                url=url,
                 base_signal_count=base_signal_count,
             )
             if rel_score < 1.0:
@@ -634,9 +735,9 @@ class ResearchEngine:
             # low score (claims frequently unsupported). The score
             # evolves over time as more verifications accumulate.
             _c_weight = self.credibility.get_weight(src.get("url", ""))
-            bucket["score"] += _score_sentence(
-                sentence, keyterms, len(bucket["sources"])
-            ) * _c_weight
+            bucket["score"] += (
+                _score_sentence(sentence, keyterms, len(bucket["sources"])) * _c_weight
+            )
 
         facts = list(fact_buckets.values())
         facts.sort(key=lambda f: f["score"], reverse=True)
@@ -906,8 +1007,12 @@ class ResearchEngine:
                 {
                     "url": s["url"],
                     "title": s["title"],
-                    "credibility": s.get("_credibility", self.credibility.get(s["url"])),
-                    "credibility_label": s.get("_credibility_label", self.credibility.get_label(s["url"])),
+                    "credibility": s.get(
+                        "_credibility", self.credibility.get(s["url"])
+                    ),
+                    "credibility_label": s.get(
+                        "_credibility_label", self.credibility.get_label(s["url"])
+                    ),
                     "low_credibility_domain": s.get("_low_credibility_domain", False),
                 }
                 for s in all_sources

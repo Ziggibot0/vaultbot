@@ -77,8 +77,8 @@ def _gpu_stats() -> dict[str, Any] | None:
 
     # ── Get the GPU name + total VRAM via WMI (always works on Windows)
     try:
-        import subprocess
         import json as _json
+        import subprocess
 
         result = subprocess.run(
             [
@@ -208,7 +208,7 @@ def _gpu_stats() -> dict[str, Any] | None:
 
     # ── NVIDIA via pynvml (fallback if perf counters failed)
     try:
-        import pynvml  # noqa: TRY1 — optional dependency
+        import pynvml
 
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -261,8 +261,9 @@ def _npu_stats() -> dict[str, Any] | None:
 def _disk_io() -> dict[str, Any]:
     """Disk read/write rates (MB/s) computed as delta since last call."""
     try:
-        import psutil
         import time as _time
+
+        import psutil
 
         counters = psutil.disk_io_counters()
         if not counters:
@@ -287,8 +288,9 @@ def _disk_io() -> dict[str, Any]:
 def _net_io() -> dict[str, Any]:
     """Network send/recv rates (KB/s) computed as delta since last call."""
     try:
-        import psutil
         import time as _time
+
+        import psutil
 
         counters = psutil.net_io_counters()
         if not counters:

@@ -39,9 +39,7 @@ class ConsolidationPipeline:
     def __init__(self, vault_path: str = None, backend_path: str = None):
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
         self.backend_path = backend_path or os.path.dirname(os.path.abspath(__file__))
-        self.chat_dir = os.path.join(
-            self.vault_path, "vaultbot", "Memory", "Chat"
-        )
+        self.chat_dir = os.path.join(self.vault_path, "vaultbot", "Memory", "Chat")
         self.semantic_dir = os.path.join(
             self.vault_path, "vaultbot", "Memory", "Build-Log"
         )

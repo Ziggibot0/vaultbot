@@ -15,10 +15,9 @@ Documentation grounding:
   https://docs.pytest.org/en/stable/explanation/anatomy.html
 """
 
+import pytest
 from abstract_context import build_abstract_context
 from vault_graph import VaultGraph
-
-import pytest
 
 pytestmark = pytest.mark.unit
 

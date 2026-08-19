@@ -197,9 +197,10 @@ class TestFileEditGate:
 
     def test_md_allowed_regardless_of_path(self, safe_mode_on):
         """Even .md files inside vaultbot_backend/ should be allowed."""
-        assert safe_mode_on.is_file_edit_allowed(
-            "vaultbot/vaultbot_backend/README.md"
-        ) is True
+        assert (
+            safe_mode_on.is_file_edit_allowed("vaultbot/vaultbot_backend/README.md")
+            is True
+        )
 
 
 # ── edit_lines integration: Safe Mode blocks .py edits ──────────────────
@@ -213,9 +214,7 @@ class TestEditLinesSafeModeIntegration:
         """Make edit_lines importable (it lives in custom_tools/)."""
         import sys
 
-        custom_tools_dir = str(
-            Path(__file__).resolve().parent.parent / "custom_tools"
-        )
+        custom_tools_dir = str(Path(__file__).resolve().parent.parent / "custom_tools")
         if custom_tools_dir not in sys.path:
             sys.path.insert(0, custom_tools_dir)
         yield
@@ -223,7 +222,9 @@ class TestEditLinesSafeModeIntegration:
         if custom_tools_dir in sys.path:
             sys.path.remove(custom_tools_dir)
 
-    def test_edit_lines_blocks_py_in_safe_mode(self, safe_mode_on, tmp_path, monkeypatch):
+    def test_edit_lines_blocks_py_in_safe_mode(
+        self, safe_mode_on, tmp_path, monkeypatch
+    ):
         """edit_lines should refuse to edit a .py file in Safe Mode."""
         # Create a temp .py file inside a fake vault root
         py_file = tmp_path / "test_code.py"
@@ -248,7 +249,9 @@ class TestEditLinesSafeModeIntegration:
         # File should be unchanged
         assert py_file.read_text(encoding="utf-8") == "def foo():\n    return 1\n"
 
-    def test_edit_lines_allows_md_in_safe_mode(self, safe_mode_on, tmp_path, monkeypatch):
+    def test_edit_lines_allows_md_in_safe_mode(
+        self, safe_mode_on, tmp_path, monkeypatch
+    ):
         """edit_lines should allow .md edits in Safe Mode."""
         md_content = (
             "---\n"
@@ -282,7 +285,9 @@ class TestEditLinesSafeModeIntegration:
         assert result.get("status") == "written", f"Expected written, got: {result}"
         assert "safe_mode_blocked" not in result
 
-    def test_edit_lines_allows_py_in_developer_mode(self, developer_mode, tmp_path, monkeypatch):
+    def test_edit_lines_allows_py_in_developer_mode(
+        self, developer_mode, tmp_path, monkeypatch
+    ):
         """edit_lines should allow .py edits in Developer Mode (no safe_mode block)."""
         py_file = tmp_path / "test_code.py"
         py_file.write_text("def foo():\n    return 1\n", encoding="utf-8")
@@ -307,4 +312,7 @@ class TestEditLinesSafeModeIntegration:
         )
         # The key assertion: NOT blocked by safe mode
         assert result.get("safe_mode_blocked") is not True
-        assert result.get("status") != "blocked" or result.get("safe_mode_blocked") is not True
+        assert (
+            result.get("status") != "blocked"
+            or result.get("safe_mode_blocked") is not True
+        )

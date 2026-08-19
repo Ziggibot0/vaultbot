@@ -9,8 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from citation_exporter import extract_doi, to_bibtex, to_ris, export_citations
-
+from citation_exporter import export_citations, extract_doi, to_bibtex, to_ris
 
 # --- DOI extraction ---------------------------------------------------------
 

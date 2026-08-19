@@ -43,8 +43,8 @@ from typing import Any
 
 from procedure_compiler import Step
 from procedure_tool_preamble import _build_tool_preamble
-from subprocess_utils import preexec_fn, run as _subprocess_run, scrubbed_env
-
+from subprocess_utils import preexec_fn, scrubbed_env
+from subprocess_utils import run as _subprocess_run
 
 # ── Subprocess wrapper for code steps ───────────────────────────────────
 

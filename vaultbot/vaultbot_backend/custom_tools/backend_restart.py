@@ -28,9 +28,9 @@ def run(args: dict) -> dict:
     2. Waits 1 second for port release
     3. Spawns a fresh backend process via startBackendIfNeeded()
     """
+    import glob
     import json
     import os
-    import glob
     import time
     import urllib.request
 
@@ -63,6 +63,7 @@ def run(args: dict) -> dict:
         # to mtime only if the pointer is absent.
         try:
             from last_session import read as _read_last_session
+
             _pointer_sid = _read_last_session()
         except Exception:
             _pointer_sid = None

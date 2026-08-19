@@ -21,7 +21,6 @@ inject fakes (see test_endpoints.py).
 
 from __future__ import annotations
 
-
 from services import Services
 
 # Module-level singleton — set once by main.py at startup, read by every

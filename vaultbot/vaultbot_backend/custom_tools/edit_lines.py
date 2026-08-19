@@ -173,9 +173,7 @@ def _apply_line_replacement(
             f"start_line {start_line} is out of range (file has {total} lines)"
         )
     if end_line < start_line:
-        raise ValueError(
-            f"end_line ({end_line}) must be >= start_line ({start_line})"
-        )
+        raise ValueError(f"end_line ({end_line}) must be >= start_line ({start_line})")
     if end_line > total:
         # Allow replacing up to the end of file (clamped), but warn.
         end_line = total
@@ -192,7 +190,9 @@ def _apply_line_replacement(
     new_lines_str = new_content
     if new_lines_str and not new_lines_str.endswith("\n"):
         # Check if the original line at start_line had a newline
-        orig_had_newline = lines[start_line - 1].endswith("\n") if start_line <= total else True
+        orig_had_newline = (
+            lines[start_line - 1].endswith("\n") if start_line <= total else True
+        )
         if orig_had_newline:
             new_lines_str = new_lines_str + "\n"
 
@@ -349,7 +349,10 @@ def run(args: dict) -> dict:
 
     # 2. start_line and end_line must be valid
     if start_line < 1:
-        return {"status": "error", "error": f"start_line must be >= 1 (got {start_line})"}
+        return {
+            "status": "error",
+            "error": f"start_line must be >= 1 (got {start_line})",
+        }
     if end_line < start_line:
         return {
             "status": "error",
@@ -375,7 +378,7 @@ def run(args: dict) -> dict:
     # extensions in Safe Mode while allowing .md and other non-code edits.
     # See safe_mode.py → is_file_edit_allowed().
     try:
-        from safe_mode import is_file_edit_allowed, blocked_file_edit_message
+        from safe_mode import blocked_file_edit_message, is_file_edit_allowed
 
         if not is_file_edit_allowed(file_path_str):
             msg = blocked_file_edit_message(file_path_str)
@@ -424,9 +427,7 @@ def run(args: dict) -> dict:
     if suffix == ".py":
         # Delegate to SelfImprover.safe_write for full syntax + import
         # verification + auto-rollback.
-        backend_dir = str(
-            BACKEND_DIR
-        )
+        backend_dir = str(BACKEND_DIR)
         if backend_dir not in sys.path:
             sys.path.insert(0, backend_dir)
         from self_improver import SelfImprover

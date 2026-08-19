@@ -21,33 +21,33 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ollama_client import OllamaClient
-    from llm_client import LLMClient
-    from vault_indexer import VaultIndexer
-    from vault_graph import VaultGraph
-    from note_creator import NoteCreator
-    from research_engine import ResearchEngine
-    from free_search import FreeSearch
-    from autonomous_researcher import AutonomousResearcher
-    from knowledge_curriculum import KnowledgeCurriculum
-    from checkpointer import Checkpointer
-    from procedure_tracker import ProcedureTracker
-    from self_improver import SelfImprover
-    from identity import Identity
-    from graph_ops import GraphOpRegistry
-    from plan_executor import PlanExecutor
     from amem_evolution import AMemeEvolution
-    from fused_retrieval import FusedRetriever
-    from embedding_drift import EmbeddingDrift
-    from trigger_store import TriggerStore
-    from lazy_condenser import LazyCondenser
-    from context_budgeter import ContextBudgeter
-    from supervision import HealthMonitor
+    from autonomous_researcher import AutonomousResearcher
     from calibration import CalibrationTracker
-    from rag_eval import RAGEvaluator
+    from checkpointer import Checkpointer
     from claim_verifier import ClaimVerifier
+    from context_budgeter import ContextBudgeter
+    from embedding_drift import EmbeddingDrift
+    from free_search import FreeSearch
+    from fused_retrieval import FusedRetriever
+    from graph_ops import GraphOpRegistry
+    from identity import Identity
+    from knowledge_curriculum import KnowledgeCurriculum
+    from lazy_condenser import LazyCondenser
+    from llm_client import LLMClient
+    from note_creator import NoteCreator
+    from ollama_client import OllamaClient
     from pattern_extractor import PatternExtractor
+    from plan_executor import PlanExecutor
+    from procedure_tracker import ProcedureTracker
+    from rag_eval import RAGEvaluator
+    from research_engine import ResearchEngine
+    from self_improver import SelfImprover
     from session_logger import SessionLogger
+    from supervision import HealthMonitor
+    from trigger_store import TriggerStore
+    from vault_graph import VaultGraph
+    from vault_indexer import VaultIndexer
 
 
 @dataclass

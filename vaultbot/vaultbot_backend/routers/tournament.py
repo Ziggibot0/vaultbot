@@ -17,11 +17,10 @@ import json
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-
 from app_state import get_services
-from services import Services
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from providers import ProviderRegistry
+from services import Services
 from tournament_benchmarks import get_benchmarks
 from tournament_runner import run_tournament, run_tournament_streaming
 from tournament_staging import TournamentStaging
@@ -138,6 +137,7 @@ async def tournament_staging_sizes(
     Results are keyed by staging entry id.
     """
     import subprocess
+
     from subprocess_utils import Popen as _popen
 
     reg = _registry(svc)

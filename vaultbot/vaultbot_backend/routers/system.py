@@ -358,7 +358,7 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
             loop.run_in_executor(None, svc.ollama_client.is_running),
             timeout=3.0,
         )
-    except _asyncio.TimeoutError:
+    except TimeoutError:
         ollama_ok = False  # Ollama is busy — don't block the health check
     except Exception:  # noqa: BLE001
         ollama_ok = False
@@ -414,7 +414,7 @@ async def ollama_stats(
             loop.run_in_executor(None, svc.ollama_client.get_ollama_stats),
             timeout=5.0,
         )
-    except _asyncio.TimeoutError:
+    except TimeoutError:
         return {
             "running": False,
             "version": None,

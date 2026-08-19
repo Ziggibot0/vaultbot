@@ -12,7 +12,8 @@ import sys
 import tempfile
 from typing import Any
 
-from subprocess_utils import run as _subprocess_run, scrubbed_env
+from subprocess_utils import run as _subprocess_run
+from subprocess_utils import scrubbed_env
 
 """Subagent context isolation — run verbose tools in a separate process so
 the orchestrator's conversation never balloons.

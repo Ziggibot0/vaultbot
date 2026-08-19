@@ -175,7 +175,11 @@ def normalize_url(url: str) -> str:
 
 
 def source_relevance(
-    title: str, text: str, signal: list[str], all_keyterms: list[str], url: str = "",
+    title: str,
+    text: str,
+    signal: list[str],
+    all_keyterms: list[str],
+    url: str = "",
     base_signal_count: int | None = None,
 ) -> tuple[float, str]:
     """Score how on-topic a source is. Returns (score, reason).

@@ -22,7 +22,6 @@ pytestmark = pytest.mark.unit
 
 import routers.llm as llm
 
-
 # main.py's boot-time dotenv path (replicated from main.py:58):
 #   dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 # __file__ there is vaultbot_backend/main.py, so this resolves to

@@ -150,7 +150,9 @@ def run(
             q_default = "best_practices"  # pre-select "I don't know" by default
         else:
             q_type = "text"
-            q_default = q.get("default", "") if isinstance(q.get("default"), str) else ""
+            q_default = (
+                q.get("default", "") if isinstance(q.get("default"), str) else ""
+            )
             q_options = None
         gui_q = {
             "id": q_id,

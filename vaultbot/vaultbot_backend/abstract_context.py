@@ -368,9 +368,7 @@ def build_abstract_context(
             _extra_text = _extra_text[:EXTRA_DRILL_CAP] + (
                 f"\n\n*[... full section on disk: {_extra_path.name} ...]*"
             )
-        extra_drills.append(
-            f"### [[{_extra_path.stem}]] (drill-down)\n{_extra_text}"
-        )
+        extra_drills.append(f"### [[{_extra_path.stem}]] (drill-down)\n{_extra_text}")
 
     # ---- Assemble the multi-resolution context ----
     lines = [

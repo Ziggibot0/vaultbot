@@ -76,7 +76,9 @@ def _build_retriever(vault_path: str):
 
             timeout_s = 120
             start = time.monotonic()
-            while graph._build_thread.is_alive() and time.monotonic() - start < timeout_s:
+            while (
+                graph._build_thread.is_alive() and time.monotonic() - start < timeout_s
+            ):
                 time.sleep(0.5)
             if graph._build_thread.is_alive():
                 print(
@@ -105,6 +107,7 @@ def _build_retriever(vault_path: str):
     # build the status index from the frontmatter status field.
     proc_status: dict[str, str] = {}
     import re as _re
+
     for meta in indexer.metadata:
         fp = meta.get("file_path", "")
         content_preview = meta.get("content_preview", "")
@@ -150,7 +153,9 @@ def _debug_dump(retriever, golden, k):
             score = r.get("score", 0.0)
             channels = r.get("channels", [])
             hit = " <<< HIT" if _norm(name) in exp_norm else ""
-            print(f"    [{i+1}] {name:50s} score={score:.4f} channels={channels}{hit}")
+            print(
+                f"    [{i + 1}] {name:50s} score={score:.4f} channels={channels}{hit}"
+            )
         # Check if expected is in the graph
         for exp in expected:
             exp_norm_name = _norm(exp)
