@@ -241,6 +241,15 @@ class Tunables:
     #     seeds 2-3 get this smaller cap so multi-note synthesis isn't
     #     limited to one note's full body.
     auto_research_on_empty: bool = True
+    # Categories from Route-Task classification that should trigger
+    # auto-research when retrieval is empty/irrelevant. Messages classified
+    # as other categories (e.g. conversational, code-editing) will NOT
+    # trigger auto-research even if the vault has nothing relevant — the
+    # classification is a stronger signal of user intent than retrieval
+    # scores alone. See issue #25.
+    auto_research_categories: frozenset[str] = field(
+        default_factory=lambda: frozenset({"research", "gap-filling", "unknown"})
+    )
     # How many search rounds the auto-research-then-answer preflight runs
     # when the vault has no coverage for a query. 1 round = 1 query = ~1-2
     # sources (thin, single-source claims). 3 rounds + gap-fill yields
