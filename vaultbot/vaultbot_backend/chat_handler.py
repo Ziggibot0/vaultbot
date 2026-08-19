@@ -67,7 +67,7 @@ async def handle_chat(
 
     # Clear the cancel flag at the start of a new turn so a stale flag
     # from a previous stop doesn't kill the new turn.
-    websocket._cancelled = False
+    setattr(websocket, "_cancelled", False)
 
     # Working memory: per-session structured task list. The model writes a
     # plan via plan_task and updates it via update_task; the harness re-injects
@@ -75,12 +75,9 @@ async def handle_chat(
     # "what's done, what's next." One TaskList per websocket connection,
     # reset on /new. THE MODEL OWNS THIS — the framework never auto-advances
     # or force-completes anything.
-    if (
-        not hasattr(websocket, "working_memory")
-        or getattr(websocket, "working_memory", None) is None
-    ):
-        websocket.working_memory = TaskList()
-    wm = websocket.working_memory
+    if not hasattr(websocket, "working_memory") or getattr(websocket, "working_memory", None) is None:
+        setattr(websocket, "working_memory", TaskList())
+    wm = getattr(websocket, "working_memory")
     # A new user message is a NEW turn. We do NOT clear the working-memory
     # plan automatically — the plan persists across turns so the model can
     # handle interruptions and follow-up questions without losing its
