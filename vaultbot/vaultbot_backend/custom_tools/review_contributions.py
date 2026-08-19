@@ -374,6 +374,44 @@ def run(args: dict) -> dict:
             verdict = "PASS"
             verdict_reason = "All safety checks passed"
 
+        # --- CI gate: only merge when the PR's check-runs are green. ---
+        # A stranger's PR can pass the safety scan but still break the
+        # build (ruff + pytest). Fetch the head commit's check-runs and
+        # require every completed run to be "success" before merging.
+        ci_status = "unknown"
+        ci_detail = ""
+        head_sha = (pr.get("head") or {}).get("sha", "")
+        if head_sha:
+            try:
+                check_runs = gh_api(
+                    "GET",
+                    f"repos/{upstream_owner}/{upstream_repo}/commits/{head_sha}/check-runs",
+                    timeout=30,
+                )
+                runs = check_runs.get("check_runs", []) if isinstance(check_runs, dict) else []
+                if not runs:
+                    ci_status = "none"
+                    ci_detail = "No check-runs found for this commit."
+                else:
+                    conclusions = [r.get("conclusion") for r in runs]
+                    statuses = [r.get("status") for r in runs]
+                    if any(s in ("queued", "in_progress", "pending") for s in statuses):
+                        ci_status = "pending"
+                        ci_detail = "One or more check-runs are still running."
+                    elif any(c in ("failure", "cancelled", "timed_out", "action_required") for c in conclusions):
+                        ci_status = "failure"
+                        failed = [r.get("name") for r in runs if r.get("conclusion") in ("failure", "cancelled", "timed_out", "action_required")]
+                        ci_detail = f"Failing check-runs: {', '.join(failed)}"
+                    elif all(c == "success" for c in conclusions):
+                        ci_status = "success"
+                        ci_detail = f"{len(runs)} check-run(s) passed."
+                    else:
+                        ci_status = "unknown"
+                        ci_detail = f"Conclusions: {conclusions}"
+            except GhError as e:
+                ci_status = "error"
+                ci_detail = f"Failed to fetch check-runs: {e}"
+
         result = {
             "pr_number": pr_num,
             "title": pr_title,
@@ -386,19 +424,23 @@ def run(args: dict) -> dict:
             "deletions": pr.get("deletions", 0),
             "verdict": verdict,
             "verdict_reason": verdict_reason,
+            "ci_status": ci_status,
+            "ci_detail": ci_detail,
             "issues": all_issues,
             "files": file_summaries,
         }
         results.append(result)
 
-        # If merging and verdict is PASS, merge the PR
-        if do_merge and verdict == "PASS":
+        # If merging, require BOTH a PASS safety verdict AND green CI.
+        # A pending/unknown CI status blocks the merge (fail-loud: never
+        # merge a PR whose build state we can't confirm).
+        if do_merge and verdict == "PASS" and ci_status == "success":
             try:
                 merge_data = gh_api(
                     "PUT",
                     f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/merge",
                     body={
-                        "merge_method": "merge",
+                        "merge_method": "squash",
                         "commit_title": f"Merge PR #{pr_num}: {pr_title}",
                     },
                     timeout=30,
@@ -408,9 +450,14 @@ def run(args: dict) -> dict:
             except GhError as e:
                 result["merged"] = False
                 result["merge_error"] = str(e)
+        elif do_merge and verdict == "PASS" and ci_status != "success":
+            result["merged"] = False
+            result["merge_error"] = (
+                f"CI not green (status: {ci_status}). {ci_detail}"
+            )
 
         # Post a comment with the review results
-        comment_body = f"## 🤖 VaultBot Safety Review\n\n**Verdict:** {verdict}\n**Reason:** {verdict_reason}\n\n"
+        comment_body = f"## 🤖 VaultBot Safety Review\n\n**Verdict:** {verdict}\n**Reason:** {verdict_reason}\n**CI:** {ci_status} — {ci_detail}\n\n"
         if all_issues:
             comment_body += "### Issues Found\n\n"
             for issue in all_issues:
@@ -429,7 +476,7 @@ def run(args: dict) -> dict:
                 comment_body += f"\n**Merged:** ✅ {result.get('merge_message', '')}\n"
             else:
                 comment_body += (
-                    f"\n**Merge failed:** {result.get('merge_error', 'unknown')}\n"
+                    f"\n**Merge blocked:** {result.get('merge_error', 'unknown')}\n"
                 )
 
         comment_body += "\n---\n*Automated review by VaultBot safety scanner*"
