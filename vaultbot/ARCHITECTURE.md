@@ -82,7 +82,7 @@ Plugin sends JSON over WebSocket to /ws
         │
         ▼
 chat_handler.handle_chat()
-  ├─ Fused retrieval: vector search + wikilink graph walk
+  ├─ Fused retrieval: vector search + lexical BM25 + wikilink graph walk
   ├─ Build system prompt (identity + procedures + vault context)
   ├─ Agentic loop:
   │   ├─ Send to LLM (Ollama or cloud API)
@@ -97,10 +97,13 @@ chat_handler.handle_chat()
 
 ### Retrieval (`fused_retrieval.py`, `vault_indexer.py`, `vault_graph.py`)
 - **FAISS index**: nomic-embed-text embeddings of all vault notes
+- **Lexical BM25**: keyword channel over note titles + cached content
+  previews, recovering title/keyword matches a small embedding model can't
+  map
 - **Wikilink graph**: Obsidian's `[[links]]` form a graph; retrieval walks
   it to pull connected context
-- **Fused**: combines vector similarity + graph proximity for context that's
-  both relevant AND connected
+- **Fused**: combines vector similarity + lexical keyword + graph proximity
+  for context that's both relevant AND connected
 
 ### Research Engine (`research_engine.py`, `free_search.py`)
 - Multi-engine web search (DuckDuckGo, Marginalia, arXiv) — no API keys
@@ -212,7 +215,7 @@ vaultbot_backend/
 ├── safe_writer.py        # safe_write + js_safe_write with AST + import checks
 ├── vault_indexer.py      # FAISS index management
 ├── vault_graph.py        # Wikilink graph
-├── fused_retrieval.py    # Combined vector + graph retrieval
+├── fused_retrieval.py    # Combined vector + lexical BM25 + graph retrieval
 ├── research_engine.py    # Multi-round web research orchestration
 ├── text_scoring.py       # Pure text scoring (keyterms, sentence scoring)
 ├── source_classification.py # URL classification (blocked, academic, relevance)

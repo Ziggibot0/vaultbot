@@ -20,11 +20,13 @@ immediately localizes regressions to a specific channel.
 ### 1. Direct Retrieval (`direct`)
 Queries where the answer is a specific note by name or a very close
 paraphrase of the note's title. Tests **exact keyword and vector match** —
-the query contains the note's name words.
+the query contains the note's name words. Recovered by the **lexical BM25
+channel** (title/keyword match) as well as the vector channel.
 
 - Example: `"what is the no wikipedia directive"` → `No-Wikipedia-Directive`
 - What it proves: the vector index contains the note and the embedding
-  model recognizes title-level keyword overlap.
+  model recognizes title-level keyword overlap; the lexical channel
+  surfaces title/keyword matches a small embedding model can't map.
 - Failure signal: a direct query can't find the named note → indexing is
   broken or the note was deleted/renamed without reindexing.
 
