@@ -237,6 +237,49 @@ def test_add_then_update_same_path_no_duplicate(tmp_vault):
     assert indexer._metadata[new_id]["content_hash"] != ""
 
 
+def test_empty_file_skipped_zero_embedding_calls(tmp_vault):
+    """An empty (0-byte) file must be skipped WITHOUT an Ollama call.
+
+    Regression for #22: the indexer used to call Ollama with empty text,
+    which returned an empty vector and logged a misleading "received empty
+    embedding from Ollama" warning. Empty content has nothing to embed, so
+    it should be skipped before any embedding call.
+    """
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+
+    empty = _write_note(vault, "empty", "")
+    normal = _write_note(vault, "normal", "Normal note with content.")
+
+    indexer._add_file_to_index(empty)
+    indexer._add_file_to_index(normal)
+
+    # Only the normal note should trigger an embedding call.
+    assert indexer.ollama_client.embeddings_call_count == 1, (
+        f"Empty file should be skipped without an embedding call; "
+        f"got {indexer.ollama_client.embeddings_call_count}"
+    )
+    assert indexer.index.ntotal == 1
+    assert str(empty) not in indexer._path_to_id
+    assert str(normal) in indexer._path_to_id
+
+
+def test_batch_add_files_skips_empty(tmp_vault):
+    """batch_add_files must skip empty files without an Ollama call."""
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+
+    empty = _write_note(vault, "empty", "")
+    normal = _write_note(vault, "normal", "Normal note.")
+
+    indexed = indexer.batch_add_files([str(empty), str(normal)])
+
+    assert indexed == 1
+    assert indexer.ollama_client.embeddings_call_count == 1
+    assert str(empty) not in indexer._path_to_id
+    assert str(normal) in indexer._path_to_id
+
+
 def test_index_missing_or_changed_zero_embedding_on_remove(tmp_vault):
     """index_missing_or_changed with a deleted file should fire zero embedding calls for the removal."""
     vault, index_dir = tmp_vault
