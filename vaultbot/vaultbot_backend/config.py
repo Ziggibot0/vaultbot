@@ -247,8 +247,20 @@ class Tunables:
     # trigger auto-research even if the vault has nothing relevant — the
     # classification is a stronger signal of user intent than retrieval
     # scores alone. See issue #25.
+    #
+    # "question-answering" is included because the Route-Task prompt
+    # distinguishes it from "research" by vault coverage ("vault already
+    # has the info" vs "vault doesn't cover it") — a signal the small
+    # model cannot know at classification time. Excluding it would block
+    # legitimate research on genuine questions when the vault is empty,
+    # leaving the model to answer ungrounded from weights. The
+    # "conversational" category (added in #26) is what actually prevents
+    # backchannel research; question-answering must still be allowed to
+    # research when retrieval comes up empty.
     auto_research_categories: frozenset[str] = field(
-        default_factory=lambda: frozenset({"research", "gap-filling", "unknown"})
+        default_factory=lambda: frozenset(
+            {"research", "gap-filling", "question-answering", "unknown"}
+        )
     )
     # How many search rounds the auto-research-then-answer preflight runs
     # when the vault has no coverage for a query. 1 round = 1 query = ~1-2
