@@ -48,6 +48,9 @@ loop: read → understand → fix → test → submit → review → merge.
 
 ### Step 1: Read the issue and locate the relevant code
 
+This step reads the GitHub issue's title, body, and comments, then
+regenerates the codebase map so the fix step knows where to look.
+
 ```python
 import json
 
@@ -90,6 +93,8 @@ minimal and targeted to the root cause. Do NOT introduce unrelated changes.]
 
 ### Step 4: Run the test suite
 
+This step runs the pytest suite to confirm the fix didn't break anything.
+
 ```python
 import json
 
@@ -99,6 +104,8 @@ print(output)
 ```
 
 ### Step 5: Submit the fix as a PR
+
+This step submits the fix as a pull request for review.
 
 ```python
 import json
@@ -114,6 +121,9 @@ print(output)
 ```
 
 ### Step 6: Review and merge (CI-gated)
+
+This step reviews the PR and merges it only if CI is green and the safety
+scan passes.
 
 ```python
 import json

@@ -47,6 +47,11 @@ line), top-level functions/classes with line numbers, and imports.
 
 ### Step 1: Walk the backend and write the codebase map
 
+This step walks every `.py` file in the backend directory, extracts each
+module's docstring, top-level functions/classes, and imports using Python's
+`ast` module, and writes the result to `Codebase-Map.md`. It's fully
+deterministic — no LLM calls, no embeddings.
+
 ```python
 import ast
 import json
