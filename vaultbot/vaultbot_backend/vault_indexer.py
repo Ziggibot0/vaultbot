@@ -285,6 +285,14 @@ class VaultIndexer:
             _logger.warning(f"Error reading file {file_path}: {e}")
             return
 
+        # Skip empty/whitespace-only content BEFORE embedding. An empty note
+        # has nothing to retrieve, and embedding "" makes nomic-embed-text
+        # return an empty vector — which logs a misleading "received empty
+        # embedding from Ollama" warning (issue #22). Skip it here instead.
+        if not content.strip():
+            _logger.debug(f"Skipping {file_path}: empty content (nothing to embed).")
+            return
+
         content_hash = self._get_file_hash(file_path)
         last_modified = file_path.stat().st_mtime
 
@@ -393,6 +401,11 @@ class VaultIndexer:
             try:
                 content = fp.read_text(encoding="utf-8", errors="replace")
             except OSError:  # file gone between exists() and read — skip
+                continue
+            # Skip empty/whitespace-only content BEFORE embedding (issue #22):
+            # embedding "" returns an empty vector and logs a misleading
+            # "received empty embedding from Ollama" warning.
+            if not content.strip():
                 continue
             # Skip unchanged files (O(1) lookup)
             content_hash = self._get_file_hash(fp)
