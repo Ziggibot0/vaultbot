@@ -32,6 +32,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks needs full history to scan for secrets across all
+          # commits, not just the shallow tip.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
