@@ -180,7 +180,14 @@ def run_golden_eval(
         query = e["query"]
         expected = e["expected_notes"]
         try:
-            out = retriever.retrieve(query, k=k)
+            # Over-fetch 3x the scoring k so graph/backlink candidates have
+            # room to surface. The retriever's internal fusion + reranking
+            # truncates to the requested k, so a larger k gives the graph
+            # channel room to contribute candidates that would be truncated
+            # at k=5. Recall@k is then scored against only the top-k of the
+            # returned results — standard retrieval eval practice.
+            fetch_k = k * 3
+            out = retriever.retrieve(query, k=fetch_k)
             results = out.get("results", []) if isinstance(out, dict) else []
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             results = []
