@@ -6,10 +6,14 @@ while dense embeddings are the opposite (high recall, lower precision). Fusing t
 gives both: semantic neighbors seed the graph walk, and the graph walks back in
 contextually-connected notes that pure similarity may miss.
 
-Three channels are fused:
+Four channels are fused:
   a. Vector channel   — vault_indexer.search() normalized to [0,1]
-  b. Graph channel    — wikilink neighbors of vector hits, score = 0.5 × vector score
-  c. Backlink channel — backlinks of vector hits, score = 0.7 × vector score
+  b. Lexical channel  — BM25 keyword match over note title + cached content
+                       preview, normalized to [0,1] (a peer of the vector
+                       channel, recovering title/keyword matches a small
+                       embedding model can't map)
+  c. Graph channel    — wikilink neighbors of vector hits, score = 0.5 × vector score
+  d. Backlink channel — backlinks of vector hits, score = 0.7 × vector score
                        (backlinks are stronger: someone linked TO this note = hub)
 
 Candidates are merged by file_path (max score across channels), reranked for

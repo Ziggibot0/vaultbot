@@ -72,9 +72,9 @@ For the full strategic vision, see
 
 ## What it does
 
-- **Answers from your vault** — fused retrieval (vector + wikilink graph +
-  backlinks) pulls a connected subgraph of your notes, not just keyword
-  matches. It cites what it finds with ``example-note``.
+- **Answers from your vault** — fused retrieval (vector + lexical BM25 +
+  wikilink graph + backlinks) pulls a connected subgraph of your notes, not
+  just keyword matches. It cites what it finds with ``example-note``.
 - **Researches the web** — when the vault is thin, it digs multiple sources,
   corroborates them, and writes a permanent sourced note. Keyless by default
   (DuckDuckGo + Marginalia + arXiv); optional Tavily/SearXNG backends.
@@ -412,7 +412,7 @@ The backend (~95 modules) is organized into these key areas:
 | `procedure_compiler.py` | Procedure execution engine (code steps + LLM steps) |
 | `agent_tools.py` | Tool schemas + system prompt assembly |
 | `self_improver.py` | Safe self-edit with syntax + import-graph verification |
-| `fused_retrieval.py` | Vector + wikilink graph + backlink retrieval |
+| `fused_retrieval.py` | Vector + lexical BM25 + wikilink graph + backlink retrieval |
 | `research_engine.py` | LLM-free web research (DuckDuckGo + Marginalia + arXiv) |
 | `autonomous_researcher.py` | Background researcher — scans gaps, researches autonomously |
 | `vault_indexer.py` | FAISS index + chunked embeddings |
