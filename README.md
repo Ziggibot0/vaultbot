@@ -396,12 +396,15 @@ and are boot-injected every session.
 VaultBot ships **curious, not opinionated**. It doesn't assume you want
 autonomy, or that you hate certain sources, or that you like bullet points.
 The `baseline/` folder contains starter directive templates you can copy
-into your vault root to set rules:
+into `vaultbot/System/Identity/` to set rules:
 
 - `Autonomy-Directive.md` — act on its own, report after the fact
 - `Vault-Knowledge-Only-Directive.md` — never reference training data
 - `IDK-Fallback-Directive.md` — say "I don't know" when stuck
 - `Communication-Preferences.md` — how you like to be talked to (template)
+
+Do NOT place directives at the vault root — the root is reserved for your
+personal notes. VaultBot's own directives live under `vaultbot/`.
 
 Or just tell VaultBot in chat ("keep your answers short", "don't use
 Wikipedia") and it will store that as a directive note itself.

@@ -15,6 +15,7 @@ import pytest
 _CUSTOM_TOOLS = Path(__file__).resolve().parent.parent / "custom_tools"
 sys.path.insert(0, str(_CUSTOM_TOOLS))
 
+import vault_append  # noqa: E402
 import vault_safe_write  # noqa: E402
 
 
@@ -67,4 +68,29 @@ def test_run_allows_nested_directive(tmp_path, monkeypatch):
         }
     )
     assert result["status"] == "written"
+    assert (target / "Autonomy-Directive.md").exists()
+
+
+def test_vault_append_blocks_root_directive(tmp_path, monkeypatch):
+    """vault_append must also block root-level directive writes."""
+    monkeypatch.setattr(vault_append, "VAULT_ROOT", tmp_path)
+    result = vault_append.run(
+        {"file_path": "Autonomy-Directive.md", "content": "# Autonomy\n"}
+    )
+    assert "Root-level directive blocked" in result["error"]
+    assert not (tmp_path / "Autonomy-Directive.md").exists()
+
+
+def test_vault_append_allows_nested_directive(tmp_path, monkeypatch):
+    """vault_append allows a directive under vaultbot/System/Identity/."""
+    monkeypatch.setattr(vault_append, "VAULT_ROOT", tmp_path)
+    target = tmp_path / "vaultbot" / "System" / "Identity"
+    target.mkdir(parents=True, exist_ok=True)
+    result = vault_append.run(
+        {
+            "file_path": "vaultbot/System/Identity/Autonomy-Directive.md",
+            "content": "# Autonomy\n",
+        }
+    )
+    assert "error" not in result
     assert (target / "Autonomy-Directive.md").exists()
