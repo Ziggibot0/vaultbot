@@ -1096,6 +1096,7 @@ from routers import identity as _identity_router
 from routers import ws as _ws_router
 from routers import tournament as _tournament_router
 from routers import speech as _speech_router
+from routers import oauth_callback as _oauth_callback_router
 
 app.include_router(_system_router.router)
 app.include_router(_llm_router.router)
@@ -1108,6 +1109,7 @@ app.include_router(_identity_router.router)
 app.include_router(_ws_router.router)
 app.include_router(_tournament_router.router)
 app.include_router(_speech_router.router)
+app.include_router(_oauth_callback_router.router)
 
 
 @app.post("/reload-plugin")
