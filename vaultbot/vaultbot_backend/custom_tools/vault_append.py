@@ -4,7 +4,7 @@ Agent-authored tool: vault_append
 
 SCHEMA = {
     "name": "vault_append",
-    "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ or the vault root (e.g. 'Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root.",
+    "description": "Append content to an existing note without overwriting it. Safer than code_write for incremental updates \u2014 preserves all existing content and adds new content at the end. Respects LOCKED notes (standalone line or frontmatter marker) and sacred journal files (date-only filenames). IMPORTANT: VaultBot-generated content lives under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/Research-Roadmap.md'). VaultBot's own directives and identity notes live under vaultbot/System/Identity/ (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, System/, or directive notes at the vault root.",
     "parameters": {
         "properties": {
             "content": {
@@ -12,7 +12,7 @@ SCHEMA = {
                 "type": "string",
             },
             "file_path": {
-                "description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot/ (e.g. 'vaultbot/Memory/Chat/Chat-Topic.md'). User-personal notes may be at the root (e.g. 'Autonomy-Directive.md') or in User/ (e.g. 'User/Research-Roadmap.md').",
+                "description": "Path to the note, relative to vault root. VaultBot notes are under vaultbot/ (e.g. 'vaultbot/Memory/Chat/Chat-Topic.md'). User-personal notes go in User/ (e.g. 'User/Research-Roadmap.md'). VaultBot notes (including its own directives) are under vaultbot/ (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md').",
                 "type": "string",
             },
         },

@@ -11,11 +11,14 @@ tags:
 # Baseline directives
 
 These are **starter templates** for the directives that shape how VaultBot
-behaves. They are NOT active — copy the ones you want into your vault root
-(as `.md` files) and edit them to fit how *you* want your VaultBot to work.
+behaves. They are NOT active — copy the ones you want into
+`vaultbot/System/Identity/` (as `.md` files) and edit them to fit how *you*
+want your VaultBot to work.
 
-VaultBot reads any `.md` file at the vault root as part of its context, so
-once you copy a directive in, it takes effect on the next chat turn.
+VaultBot reads any `.md` file under `vaultbot/System/Identity/` as part of
+its context, so once you copy a directive in, it takes effect on the next
+chat turn. Do NOT place directives at the vault root — the root is reserved
+for your personal notes and repo meta.
 
 ## What's here
 

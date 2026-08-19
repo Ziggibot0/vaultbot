@@ -4,7 +4,7 @@ Agent-authored tool: vault_safe_write
 
 SCHEMA = {
     "name": "vault_safe_write",
-    "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER create Knowledge/, Memory/, or System/ at the vault root \u2014 those are gitignored hygiene zones.",
+    "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). VaultBot's own directives and identity notes live under vaultbot/System/Identity/ (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, System/, or *-Directive.md at the vault root \u2014 those are gitignored hygiene zones.",
     "parameters": {
         "properties": {
             "content": {
@@ -16,7 +16,7 @@ SCHEMA = {
                 "type": "boolean",
             },
             "file_path": {
-                "description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md', 'vaultbot/Memory/Chat/Chat-Topic.md', 'vaultbot/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). NEVER write to root-level Knowledge/, Memory/, or System/ \u2014 always use the vaultbot/ prefix.",
+                "description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md', 'vaultbot/Memory/Chat/Chat-Topic.md', 'vaultbot/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). VaultBot's own directives go under vaultbot/System/Identity/ (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER write to root-level Knowledge/, Memory/, System/, or *-Directive.md \u2014 always use the vaultbot/ prefix.",
                 "type": "string",
             },
         },
@@ -85,6 +85,24 @@ def _is_path_traversal(file_path: str, vault_root: Path) -> bool:
         return True
 
 
+def _is_root_directive(file_path: str) -> bool:
+    """Block VaultBot from writing its own directives to the vault root.
+
+    Directives belong under vaultbot/System/Identity/, never at the root.
+    A root-level directive is a *-Directive.md (or *-Communication-Preferences.md)
+    with no directory component (e.g. 'Autonomy-Directive.md').
+    """
+    normalized = file_path.replace("\\", "/").lstrip("./")
+    if "/" in normalized:
+        return False  # nested under a subdirectory — allowed
+    stem = Path(normalized).stem
+    return (
+        stem.endswith("-Directive")
+        or stem.endswith("-Communication-Preferences")
+        or stem == "Communication-Preferences"
+    )
+
+
 def run(args: dict) -> dict:
     """Safely write a markdown note with backup and validation.
 
@@ -125,6 +143,15 @@ def run(args: dict) -> dict:
     if _is_path_traversal(file_path_str, VAULT_ROOT):
         result["blocked_reason"] = (
             f"Path traversal detected: {file_path_str} resolves outside vault root"
+        )
+        return result
+
+    # 3b. Block root-level directives — VaultBot's directives live under
+    # vaultbot/System/Identity/, never at the vault root.
+    if _is_root_directive(file_path_str):
+        result["blocked_reason"] = (
+            f"Root-level directive blocked: {file_path_str}. "
+            "VaultBot directives belong under vaultbot/System/Identity/."
         )
         return result
 

@@ -8,7 +8,7 @@ SCHEMA = {
     "parameters": {
         "properties": {
             "file_path": {
-                "description": "Path to the note to lint, relative to vault root (e.g. 'Autonomy-Directive.md')",
+                "description": "Path to the note to lint, relative to vault root (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md')",
                 "type": "string",
             }
         },
