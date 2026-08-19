@@ -40,7 +40,7 @@ dependencies = [
     "faiss-cpu>=1.11.0",
     "watchdog>=4.0.1",
     "numpy>=2.0.0",
-    "python-dotenv==1.0.0",
+    "python-dotenv>=1.2.2",
     "lxml>=4.9.0",
     "PyMuPDF>=1.24.0",
     "Pillow>=10.0.0",
@@ -55,6 +55,8 @@ dev = [
     "ruff==0.16.0",
     "pyright>=1.1.350",
     "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pip-audit>=2.7.0",
     "httpx2",
     "uv>=0.4.0",
 ]
@@ -238,3 +240,24 @@ markers = [
     "endpoints: tests needing the FastAPI app (uses __allows_main_import__ opt-in).",
 ]
 addopts = "-q"
+
+# ── coverage ────────────────────────────────────────────────────────────────
+# pytest-cov measures coverage on the unit suite. The floor is a RATCHET:
+# set just below the current measured value so CI fails on regression without
+# requiring a big cleanup first. Exclude test/artifact dirs and the generated
+# index so the number reflects real source coverage.
+[tool.coverage.run]
+branch = true
+source = ["vaultbot_backend"]
+omit = [
+    "*/tests/*",
+    "*/vaultbot_index/*",
+    "*/sessions/*",
+    "*/checkpoints/*",
+    "*/trash/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

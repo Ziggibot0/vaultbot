@@ -2,7 +2,7 @@
 # golden_set.json using a service container running Ollama + nomic-embed-text.
 #
 # Runs on PRs that touch retrieval-affecting code (paths filter) and on
-# manual dispatch. Fails the workflow if aggregate recall@5 < 0.5 on the
+# manual dispatch. Fails the workflow if aggregate recall@5 < 0.7 on the
 # seed golden set.
 #
 # The Ollama model (~270 MB) is cached in the Actions cache so only the

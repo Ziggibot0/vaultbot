@@ -32,6 +32,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks needs full history to scan for secrets across all
+          # commits, not just the shallow tip.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -82,6 +86,17 @@ jobs:
         run: uv run ruff format --check vaultbot_backend/
         continue-on-error: true
 
+      - name: Baseline-marker check (soft gate)
+        # Every committed .md under vaultbot/System/ should carry
+        # "baseline: true" frontmatter. This is the same check the
+        # pre-commit hook runs, but in --all mode it scans the whole
+        # committed tree (CI has no staging area). Soft gate: 13 files
+        # predate the marker convention and need a human decision on
+        # whether they're shippable baseline or personal/bespoke. Flip to
+        # a hard gate once that triage is done.
+        run: python vaultbot/vaultbot_backend/scripts/check_baseline_markers.py --all
+        continue-on-error: true
+
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
         # errors as warnings so the team sees the debt but CI stays green.
@@ -89,6 +104,18 @@ jobs:
         working-directory: vaultbot
         run: uv run pyright --level warning vaultbot_backend/
         continue-on-error: true
+
+      - name: Pyright — hot-path files (HARD GATE)
+        # Enforce type-checking on the hot-path modules where a type error
+        # is a real bug (mirrors the BLE001 hot-path strategy). Narrow scope
+        # first so we don't drown in pre-existing debt; widen incrementally.
+        #
+        # vault_indexer.py is clean (0 errors) and is the hard gate today.
+        # chat_handler.py (4 errors: dynamic WebSocket attrs) and
+        # fused_retrieval.py (8 errors: Any|None handling) have pre-existing
+        # debt — fix those, then add them to this list.
+        working-directory: vaultbot
+        run: uv run pyright --level error vaultbot_backend/vault_indexer.py
 
       - name: Pytest — unit tests (HARD GATE)
         # Pure-logic tests marked with `pytestmark = pytest.mark.unit`.
@@ -104,7 +131,9 @@ jobs:
           mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
           mkdir -p "$VAULT_PATH/vaultbot/Knowledge"
           mkdir -p "$VAULT_PATH/vaultbot/System"
-          uv run pytest -q -m "unit" --tb=short
+          uv run pytest -q -m "unit" --tb=short \
+            --cov=vaultbot_backend --cov-report=term-missing \
+            --cov-fail-under=10
 
       - name: Pytest — integration tests (soft gate)
         # Tests marked `pytestmark = pytest.mark.integration` — these need
@@ -119,3 +148,19 @@ jobs:
         run: |
           uv run pytest -q -m "integration" --tb=short
         continue-on-error: true
+
+      - name: Secret scan (gitleaks)
+        # Hard gate: the backend now handles OAuth tokens (google_workspace).
+        # gitleaks scans the whole repo for leaked secrets/credentials before
+        # anything ships. No config needed — default rules cover common
+        # credential formats.
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency vulnerability audit (pip-audit)
+        # Hard gate: fail if any pinned dependency has a known CVE. Runs
+        # against the locked environment so it reflects exactly what ships.
+        working-directory: vaultbot
+        run: |
+          uv run pip-audit

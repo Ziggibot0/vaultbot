@@ -58,7 +58,7 @@ pymupdf==1.28.0
 pypdf==6.14.2
 pyright==1.1.411
 pytest==9.1.1
-python-dotenv==1.0.0
+python-dotenv==1.2.3
 PyYAML==6.0.3
 requests==2.34.2
 ruff==0.16.1

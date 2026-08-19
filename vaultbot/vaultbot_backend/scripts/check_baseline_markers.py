@@ -87,27 +87,47 @@ def has_baseline_marker(file_path: Path) -> bool:
 
 
 def main() -> int:
-    # Get staged files.
-    try:
+    # --all mode: scan every committed .md file under vaultbot/System/
+    # (used by CI, where there is no staging area). Default: scan staged
+    # files only (used by the pre-commit hook).
+    if "--all" in sys.argv:
         result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+            ["git", "ls-files", "vaultbot/System/"],
             capture_output=True,
             text=True,
             timeout=10,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        print(
-            "check-baseline-markers: could not run git diff --cached", file=sys.stderr
-        )
-        return 0  # don't block the commit on tool failure
+        if result.returncode != 0:
+            print(
+                f"check-baseline-markers: git ls-files failed: {result.stderr}",
+                file=sys.stderr,
+            )
+            return 0  # don't block on git failure
+        staged = [p.strip() for p in result.stdout.split("\n") if p.strip()]
+    else:
+        # Get staged files.
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            print(
+                "check-baseline-markers: could not run git diff --cached",
+                file=sys.stderr,
+            )
+            return 0  # don't block the commit on tool failure
 
-    if result.returncode != 0:
-        print(
-            f"check-baseline-markers: git diff failed: {result.stderr}", file=sys.stderr
-        )
-        return 0  # don't block on git failure
+        if result.returncode != 0:
+            print(
+                f"check-baseline-markers: git diff failed: {result.stderr}",
+                file=sys.stderr,
+            )
+            return 0  # don't block on git failure
 
-    staged = [p.strip() for p in result.stdout.split("\n") if p.strip()]
+        staged = [p.strip() for p in result.stdout.split("\n") if p.strip()]
 
     # Filter to .md files under vaultbot/System/.
     SYSTEM_PREFIX = "vaultbot/System/"
