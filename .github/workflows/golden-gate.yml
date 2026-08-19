@@ -98,14 +98,15 @@ jobs:
           sys.path.insert(0, '.')
           from vault_indexer import VaultIndexer
           idx = VaultIndexer(vault_path=os.environ['VAULT_PATH'])
-          # Seed-index the directive/principle notes the golden set queries.
-          import pathlib
-          md = [str(p) for p in pathlib.Path(os.environ['VAULT_PATH']).rglob('*.md')
-                if 'vaultbot_venv' not in str(p) and 'vaultbot_backend' not in str(p)
-                and 'baseline' in str(p).lower() or 'directive' in str(p).lower()]
+          # Seed-index ALL vault markdown. The golden set spans root
+          # directives, Knowledge/, System/Procedures/, and baseline/, so a
+          # narrow filter (e.g. only 'baseline'/'directive' paths) misses most
+          # expected notes. Use the indexer's own collector so the canonical
+          # ignore rules (_is_ignored_path) apply — this is the same file set
+          # the real indexer would index.
+          md = [str(p) for p in idx._collect_md_files()]
           if md:
             idx.batch_add_files(md)
-            idx.persist()
           print(f'Indexed {len(md)} notes for golden-gate run.')
           "
           python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.7 --k 5
