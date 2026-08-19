@@ -95,6 +95,31 @@ def _build_retriever(vault_path: str):
     retriever = FusedRetriever(
         vault_graph=graph, vault_indexer=indexer, embedding_drift=drift
     )
+
+    # Wire the procedure status index so the procedure retrieval boost
+    # fires. Without this, procedures (which embed only their description
+    # surface) get outranked by full-content notes. The boost is +0.20
+    # additive on the normalized score, enough to lift a procedure past
+    # a similarly-relevant non-procedure without promoting irrelevant ones.
+    # We scan the indexer's metadata for type:procedure frontmatter and
+    # build the status index from the frontmatter status field.
+    proc_status: dict[str, str] = {}
+    import re as _re
+    for meta in indexer.metadata:
+        fp = meta.get("file_path", "")
+        content_preview = meta.get("content_preview", "")
+        if not content_preview:
+            continue
+        if "type: procedure" not in content_preview[:500]:
+            continue
+        # Extract status (default to empty string = unknown status, still
+        # gets the base PROCEDURE_BASE_BOOST).
+        status_match = _re.search(r"status:\s*(\S+)", content_preview[:500])
+        stem = Path(fp).stem
+        proc_status[stem] = status_match.group(1) if status_match else ""
+    if proc_status:
+        retriever.procedure_status_index = proc_status
+
     return retriever, None
 
 
