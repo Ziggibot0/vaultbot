@@ -6,7 +6,7 @@ Tokens are stored in google_workspace_tokens.json and auto-refreshed.
 
 import json
 import webbrowser
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -25,7 +25,9 @@ SCHEMA = {
                 "description": "The action to perform."
             },
             "max_results": {"type": "integer", "description": "Max events to return (calendar_list)."},
-            "summary": {"type": "string", "description": "Event title (calendar_create) or task title (tasks_create)."},
+            "date": {"type": "string", "description": "A specific date (YYYY-MM-DD) to list events for (calendar_list). Sets time_min to 00:00 and time_max to 23:59 in local timezone. Takes precedence over time_min/time_max."},
+            "time_min": {"type": "string", "description": "ISO 8601 datetime — only return events starting after this (calendar_list). Defaults to now."},
+            "time_max": {"type": "string", "description": "ISO 8601 datetime — only return events starting before this (calendar_list). Optional upper bound."},
             "start": {"type": "string", "description": "Event start time ISO 8601 (calendar_create)."},
             "end": {"type": "string", "description": "Event end time ISO 8601 (calendar_create)."},
             "location": {"type": "string", "description": "Event location (calendar_create)."},
@@ -111,7 +113,7 @@ def _refresh_tokens():
             new_tokens["obtained_at"] = datetime.now(timezone.utc).isoformat()
             _save_tokens(new_tokens)
             return new_tokens
-    except Exception as e:
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as e:
         return {"error": f"Token refresh failed: {e}"}
 
 
@@ -164,13 +166,18 @@ def _api_request(method, url, token, data=None):
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
         return {"error": f"HTTP {e.code}: {error_body}"}
-    except Exception as e:
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
         return {"error": str(e)}
 
 
 def run(args):
     """Main entry point for the google_workspace tool."""
     action = args.get("action", "")
+
+    # Reject unknown actions up front so a typo doesn't fall through to the
+    # auth gate and return a misleading "No tokens stored" error.
+    if action not in SCHEMA["parameters"]["properties"]["action"]["enum"]:
+        return {"error": f"Unknown action: {action}"}
 
     # --- Setup: store OAuth credentials ---
     if action == "setup":
@@ -244,7 +251,7 @@ def run(args):
                 tokens["obtained_at"] = datetime.now(timezone.utc).isoformat()
                 _save_tokens(tokens)
                 return {"status": "ok", "message": "Tokens saved successfully."}
-        except Exception as e:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as e:
             return {"error": f"Token exchange failed: {e}"}
 
     # --- Status: check auth state ---
@@ -277,11 +284,34 @@ def run(args):
         return {"error": err}
     if not token:
         return {"error": "Not authenticated. Run 'auth' action first."}
-
     # --- Calendar: list events ---
     if action == "calendar_list":
-        # Filter from now onward so we get upcoming events, not old ones
-        time_min = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # If a specific date is provided, compute local-midnight boundaries
+        # for that date so the LLM doesn't have to do timezone math (which
+        # causes off-by-one errors when UTC vs local time crosses midnight).
+        date = args.get("date", "")
+        time_min = args.get("time_min", "")
+        time_max = args.get("time_max", "")
+
+        if date:
+            # Parse YYYY-MM-DD and set boundaries in LOCAL time
+            from datetime import time as dt_time
+            parsed = datetime.strptime(date, "%Y-%m-%d")
+            local_start = datetime.combine(parsed.date(), dt_time.min)  # 00:00 local
+            local_end = datetime.combine(parsed.date(), dt_time.max)    # 23:59:59.999999 local
+            # Convert to UTC for the API
+            import time as _time
+            # Get local UTC offset
+            utc_offset = _time.timezone if _time.daylight == 0 else _time.altzone
+            tz = timezone(timedelta(seconds=-utc_offset))
+            local_start = local_start.replace(tzinfo=tz)
+            local_end = local_end.replace(tzinfo=tz)
+            time_min = local_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            time_max = local_end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        if not time_min:
+            time_min = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
         max_results = args.get("max_results", 10)
         url = (
             f"https://www.googleapis.com/calendar/v3/calendars/primary/events"
@@ -290,6 +320,8 @@ def run(args):
             f"&singleEvents=true"
             f"&orderBy=startTime"
         )
+        if time_max:
+            url += f"&timeMax={time_max}"
         result = _api_request("GET", url, token)
         if "error" in result:
             return result
@@ -306,7 +338,6 @@ def run(args):
                 "description": ev.get("description", ""),
             })
         return {"events": events}
-
     # --- Calendar: create event ---
     if action == "calendar_create":
         summary = args.get("summary", "")
@@ -417,5 +448,3 @@ def run(args):
         url = "https://docs.googleapis.com/v1/documents"
         result = _api_request("POST", url, token, {"title": title})
         return result
-
-    return {"error": f"Unknown action: {action}"}
