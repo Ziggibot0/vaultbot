@@ -118,7 +118,7 @@ def run(args: dict) -> dict:
 
     # 3. Determine upstream repo (owner/repo) from git remote, with a
     #    sensible default fallback.
-    upstream_owner = "ziggibot-uni"
+    upstream_owner = "Ziggibot0"
     upstream_repo = "vaultbot"
     try:
         import subprocess

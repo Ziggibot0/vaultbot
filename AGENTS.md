@@ -48,7 +48,7 @@ past review. Don't use it silently; it's a deliberate maintainer action.
 ## Gotchas
 
 - `gh` is at `%LOCALAPPDATA%\Programs\gh\bin\gh.exe`, authenticated as
-  `ziggibot-uni`, on the user PATH. Use `gh pr merge`, NOT local squash+push.
+  `Ziggibot0`, on the user PATH. Use `gh pr merge`, NOT local squash+push.
 - `.ps1` files (e.g. `setup.ps1`) need a UTF-8 BOM. Editing tools strip it;
   restore with
   `[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($true))`.

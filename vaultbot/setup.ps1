@@ -2,7 +2,7 @@
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
-#   irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+#   irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 #
 # Downloads the repo, creates a Python venv, installs everything,
 # pulls AI models, asks your name, and opens Obsidian. No terminal
@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 $ErrorActionPreference = "Stop"
-$repoZip   = "https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/main.zip"
+$repoZip   = "https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
 $vaultName = "VaultBot"
 
 function Write-Step  { param($msg) Write-Host "`n>>> $msg" -ForegroundColor Cyan }
@@ -149,15 +149,15 @@ if (Test-Path $vaultPath) {
         if ($ghOk) {
             # Maintainer (has push access) clones directly; everyone else forks.
             $hasPush = $false
-            $perm = (& gh api repos/ziggibot-uni/vaultbot --jq .permissions.push 2>$null)
+            $perm = (& gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>$null)
             if ($perm -eq "true") { $hasPush = $true }
 
             if ($hasPush) {
                 Write-Step "Cloning VaultBot..."
-                & gh repo clone ziggibot-uni/vaultbot $vaultName
+                & gh repo clone Ziggibot0/vaultbot $vaultName
             } else {
                 Write-Step "Forking VaultBot to your GitHub account..."
-                & gh repo fork ziggibot-uni/vaultbot --clone
+                & gh repo fork Ziggibot0/vaultbot --clone
                 # gh clones to ./vaultbot (lowercase); rename to $vaultName if
                 # the filesystem is case-sensitive (macOS/Linux). On Windows
                 # they're the same folder, so the rename is a no-op.

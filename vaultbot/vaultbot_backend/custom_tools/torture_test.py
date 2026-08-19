@@ -49,7 +49,7 @@ def run(args: dict) -> dict:
         }
 
     # 2. Determine upstream repo
-    upstream_owner = "ziggibot-uni"
+    upstream_owner = "Ziggibot0"
     upstream_repo = "vaultbot"
     try:
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

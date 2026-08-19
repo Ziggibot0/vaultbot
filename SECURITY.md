@@ -16,7 +16,7 @@ tags:
 If you find a security vulnerability in VaultBot, please **do not** open a
 public GitHub issue. Report it privately instead:
 
-- **GitHub Security Advisory**: Go to the [Security tab](https://github.com/ziggibot-uni/vaultbot/security/advisories) on the VaultBot repo and click "Report a vulnerability." This is the preferred method — it keeps the report private, notifies the maintainer, and supports coordinated disclosure.
+- **GitHub Security Advisory**: Go to the [Security tab](https://github.com/Ziggibot0/vaultbot/security/advisories) on the VaultBot repo and click "Report a vulnerability." This is the preferred method — it keeps the report private, notifies the maintainer, and supports coordinated disclosure.
 - **Alternative**: If you cannot use GitHub Security Advisories, open a regular issue with the title `[SECURITY] <short summary>` and the maintainer will convert it to a private advisory.
 
 Please include:

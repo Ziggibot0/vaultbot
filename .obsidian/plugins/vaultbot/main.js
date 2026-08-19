@@ -571,8 +571,8 @@ class VaultBotPlugin extends Plugin {
 		modal.titleEl.setText('Welcome to VaultBot');
 		const isWin = process.platform === 'win32';
 		const cmd = isWin
-			? 'irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex'
-			: 'curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash';
+			? 'irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex'
+			: 'curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash';
 
 		// ── Checklist: what's missing? ──────────────────────────────────
 		// /preflight checks Python + Ollama presence, port, and sync folder
@@ -982,7 +982,7 @@ class VaultBotPlugin extends Plugin {
 			}
 		} catch (e) {}
 		// Use the GitHub API (works for branches + tags) to get the manifest.
-		const apiUrl = `https://raw.githubusercontent.com/ziggibot-uni/vaultbot/${encodeURIComponent(refSpec)}/.obsidian/plugins/vaultbot/manifest.json`;
+		const apiUrl = `https://raw.githubusercontent.com/Ziggibot0/vaultbot/${encodeURIComponent(refSpec)}/.obsidian/plugins/vaultbot/manifest.json`;
 		try {
 			const resp = await fetch(apiUrl, { cache: 'no-store' });
 			if (!resp.ok) return { error: `GitHub returned ${resp.status}`, current: currentVersion };
@@ -1047,7 +1047,7 @@ class VaultBotPlugin extends Plugin {
 		// prefix is always "<repo>-<ref-with-slashes-collapsed>/" — but the
 		// safest way to find the prefix is to list the archive and read the
 		// first path component. We do that after download.
-		const tarballUrl = `https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/${encodeURIComponent(refSpec)}.tar.gz`;
+		const tarballUrl = `https://github.com/Ziggibot0/vaultbot/archive/refs/heads/${encodeURIComponent(refSpec)}.tar.gz`;
 		// NOTE: for tags use .../archive/refs/tags/<ref>.tar.gz. We try heads
 		// first; if GitHub 404s, retry as a tag so users can pin a release.
 
@@ -1152,7 +1152,7 @@ class VaultBotPlugin extends Plugin {
 			// Invoke-WebRequest, but we spawn a real shell so we control the
 			// binary. execFileSync throws on non-zero exit, which a 404 is.
 			let lastErr = null;
-			for (const attempt of [tarballUrl, `https://github.com/ziggibot-uni/vaultbot/archive/refs/tags/${encodeURIComponent(refSpec)}.tar.gz`]) {
+			for (const attempt of [tarballUrl, `https://github.com/Ziggibot0/vaultbot/archive/refs/tags/${encodeURIComponent(refSpec)}.tar.gz`]) {
 				try {
 					execFileSync('curl.exe', ['-sL', '-o', tarballPath, attempt], { stdio: 'ignore' });
 					if (fs.existsSync(tarballPath) && fs.statSync(tarballPath).size > 1000) {

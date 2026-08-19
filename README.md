@@ -1,6 +1,6 @@
 # VaultBot
 
-[![CI](https://github.com/ziggibot-uni/vaultbot/workflows/CI/badge.svg)](https://github.com/ziggibot-uni/vaultbot/actions/workflows/ci.yml)
+[![CI](https://github.com/Ziggibot0/vaultbot/workflows/CI/badge.svg)](https://github.com/Ziggibot0/vaultbot/actions/workflows/ci.yml)
 
 > A retrieval-augmented research assistant that lives inside your Obsidian vault.
 > It searches your notes, researches the web when the vault is thin, and writes
@@ -133,7 +133,7 @@ Then open a terminal and paste **one line**:
 ### Windows (PowerShell)
 
 ```powershell
-irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ```
 
 > **Don't know how to open PowerShell?** Press the Windows key, type
@@ -143,7 +143,7 @@ irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash
+curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
 ```
 
 ### What the installer does
@@ -460,7 +460,7 @@ Your personal content stays at the vault root:
 **License:** MIT — see [LICENSE](LICENSE). VaultBot is yours to run,
 modify, and share.
 
-**Project founder & custodian:** ziggibot-uni — project founder and
+**Project founder & custodian:** Ziggibot0 — project founder and
 custodian. Sole merge authority for this repository; final say on project
 direction and what ships.
 

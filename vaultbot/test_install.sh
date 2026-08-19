@@ -6,7 +6,7 @@
 # ============================================================
 set -e
 
-REPO_ZIP="https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/main.zip"
+REPO_ZIP="https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
 VAULT_NAME="VaultBot"
 VAULT_PATH="/home/vaultbotuser/$VAULT_NAME"
 PASS=0

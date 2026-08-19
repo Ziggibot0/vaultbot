@@ -21,7 +21,7 @@ USAGE
     if not gh_available():
         return {"error": "gh CLI not found. Run 'gh auth login' first."}
 
-    data = gh_api("GET", "repos/ziggibot-uni/vaultbot")
+    data = gh_api("GET", "repos/Ziggibot0/vaultbot")
     gh(["pr", "list", "--state", "open"])
 """
 
@@ -100,7 +100,7 @@ def gh_api(
     """Call the GitHub REST API via ``gh api`` and return parsed JSON.
 
     ``method`` is GET/POST/PUT/PATCH/DELETE. ``path`` is the API path without
-    the leading slash (e.g. ``repos/ziggibot-uni/vaultbot``). ``body``, if
+    the leading slash (e.g. ``repos/Ziggibot0/vaultbot``). ``body``, if
     given, is serialized to JSON and sent as the request body (via stdin).
 
     Raises GhError on failure. Returns the parsed JSON (dict or list).
