@@ -119,4 +119,4 @@ jobs:
             idx.batch_add_files(md)
           print(f'Indexed {len(md)} notes for golden-gate run.')
           "
-          python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.7 --k 5
+          python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.7 --k 5 --debug

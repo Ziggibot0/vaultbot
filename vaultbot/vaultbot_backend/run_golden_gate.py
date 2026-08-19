@@ -123,6 +123,53 @@ def _build_retriever(vault_path: str):
     return retriever, None
 
 
+def _debug_dump(retriever, golden, k):
+    """Print top-k results for each query so we can see what's outranking expected notes."""
+    from pathlib import Path as _P
+
+    from golden_eval import _norm
+
+    print("=" * 80)
+    print("DEBUG: top-k results per query")
+    print("=" * 80)
+    for entry in golden:
+        query = entry["query"]
+        expected = entry["expected_notes"]
+        exp_norm = {_norm(n) for n in expected}
+        try:
+            out = retriever.retrieve(query, k=k)
+            results = out.get("results", []) if isinstance(out, dict) else []
+        except Exception as e:  # noqa: BLE001
+            print(f"\n  {query!r}")
+            print(f"    ERROR: {e}")
+            continue
+        print(f"\n  {query!r}")
+        print(f"    expected: {expected}")
+        for i, r in enumerate(results[:k]):
+            name = r.get("name", _P(r.get("file_path", "")).stem)
+            score = r.get("score", 0.0)
+            channels = r.get("channels", [])
+            hit = " <<< HIT" if _norm(name) in exp_norm else ""
+            print(f"    [{i+1}] {name:50s} score={score:.4f} channels={channels}{hit}")
+        # Check if expected is in the graph
+        for exp in expected:
+            exp_norm_name = _norm(exp)
+            node = retriever.vault_graph.nodes.get(exp_norm_name)
+            if node:
+                edges = retriever.vault_graph.edges.get(exp_norm_name, set())
+                backlinks = retriever.vault_graph.backlinks.get(exp_norm_name, set())
+                in_index = any(
+                    m.get("file_path") == node.get("file_path")
+                    for m in retriever.vault_indexer.metadata
+                )
+                print(
+                    f"    [{exp}] in_graph=Y edges={len(edges)} backlinks={len(backlinks)} in_index={'Y' if in_index else 'N'}"
+                )
+            else:
+                print(f"    [{exp}] in_graph=N *** NOT IN GRAPH ***")
+    print("=" * 80)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Live golden-set retrieval gate")
     ap.add_argument(
@@ -148,6 +195,11 @@ def main() -> int:
     ap.add_argument(
         "--report", default=None, help="write the full JSON report to this path"
     )
+    ap.add_argument(
+        "--debug",
+        action="store_true",
+        help="print top-k results (name, score, channels) for each query",
+    )
     args = ap.parse_args()
 
     golden = load_golden_set(args.golden)
@@ -159,6 +211,9 @@ def main() -> int:
     if retriever is None:
         print(f"GATE ERROR: could not build retriever: {err}")
         return 2
+
+    if args.debug:
+        _debug_dump(retriever, golden, args.k)
 
     report = run_golden_eval(retriever, golden_set=golden, k=args.k)
     verdict = check_regression(
