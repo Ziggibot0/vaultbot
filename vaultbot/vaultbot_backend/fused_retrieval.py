@@ -429,14 +429,21 @@ class FusedRetriever:
 
         dists = [h.get("score", 0.0) or 0.0 for h in raw]
         max_d = max(dists) if dists else 0.0
+        min_d = min(dists) if dists else 0.0
         norm: dict[str, float] = {}
         for h, d in zip(raw, dists):
             fp = h.get("file_path")
             if not fp:
                 continue
-            # distance → similarity: 0 distance → 1.0, max distance → 0.0.
-            if max_d > 0:
-                sim = 1.0 - (d / max_d)
+            # distance → similarity: min distance → 1.0, max distance → 0.0.
+            # Min-max normalization (not `1 - d/max_d`) so the BEST hit is
+            # actually 1.0 as the docstring promises.  `1 - d/max_d` maps the
+            # best hit to `1 - min_d/max_d` (~0.24 for nomic-embed-text, whose
+            # L2 distances cluster in 0.5–0.7), compressing every score into a
+            # flat band and starving the graph/backlink channels (which
+            # multiply this score by GRAPH_BOOST/BACKLINK_BOOST) of signal.
+            if max_d > min_d:
+                sim = (max_d - d) / (max_d - min_d)
             else:
                 sim = 1.0
             norm[fp] = max(0.0, min(1.0, sim))
@@ -463,6 +470,20 @@ class FusedRetriever:
         query_emb = idx._get_embedding(query)
         if query_emb is None or query_emb.size == 0:
             return None
+
+        # Normalize the query embedding to unit length.  The stored content
+        # embeddings are L2-normalized (vault_indexer normalizes in-place so
+        # L2 distance ≡ cosine distance), but `_get_embedding` returns the RAW
+        # Ollama embedding (norm ~20 for nomic-embed-text).  Without this, the
+        # drift-adjusted distance `norm(drifted_emb - query_emb)` is ~20× the
+        # raw FAISS distance (~0.7), so one drifted candidate dominates max_d
+        # and every other score collapses to ~0.96 — the vector channel stops
+        # discriminating and graph/backlink seeds inherit a flat, useless
+        # score.  Normalizing here keeps drift distances on the same [0,2]
+        # scale as the raw search.
+        q_norm = float(np.linalg.norm(query_emb))
+        if q_norm > 0:
+            query_emb = query_emb / q_norm
 
         drift = self.embedding_drift
         if drift is None:
