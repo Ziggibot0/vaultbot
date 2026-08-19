@@ -30,6 +30,18 @@ from chat_helpers import (
     run_with_heartbeat,
     send_progress,
 )
+from chat_preflight import (
+    check_cancelled as _check_cancelled,
+)
+from chat_preflight import (
+    classify_trivial as _classify_trivial,
+)
+from chat_preflight import (
+    deterministic_procedure_hint as _deterministic_procedure_hint,
+)
+from chat_preflight import (
+    run_procedure_direct as _run_procedure_direct,
+)
 from citation_gate import build_allowed_citations
 from config import TUNABLES
 from conversation_index import build_conversation_context
@@ -44,13 +56,6 @@ from small_model_filters import (
     rewrite_query_with_history,
 )
 from working_memory import TaskList
-
-from chat_preflight import (
-    check_cancelled as _check_cancelled,
-    classify_trivial as _classify_trivial,
-    deterministic_procedure_hint as _deterministic_procedure_hint,
-    run_procedure_direct as _run_procedure_direct,
-)
 
 
 async def prepare_turn(
@@ -386,25 +391,131 @@ async def prepare_turn(
     # scores, not topical overlap. We now also fire auto-research when ALL
     # results pass the score threshold but have zero content-word overlap
     # with the query — a dead giveaway that the vault has nothing relevant.
-    _STOPWORDS = frozenset({
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "of", "in", "on", "at", "to", "for", "with", "by", "from", "as",
-        "and", "or", "but", "not", "no", "yes", "do", "does", "did", "done",
-        "have", "has", "had", "will", "would", "could", "should", "may",
-        "might", "can", "what", "which", "who", "whom", "whose", "where",
-        "when", "why", "how", "all", "any", "some", "this", "that", "these",
-        "those", "it", "its", "i", "you", "he", "she", "we", "they", "me",
-        "him", "her", "us", "them", "my", "your", "his", "our", "their",
-        "about", "into", "than", "then", "so", "if", "just", "also", "only",
-        "more", "most", "such", "very", "too", "quite", "make", "made",
-        "get", "got", "go", "goes", "went", "gone", "tell", "told", "say",
-        "said", "know", "want", "need", "use", "used", "using", "like",
-        "up", "down", "out", "over", "off", "here", "there", "now",
-    })
+    _STOPWORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "of",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "with",
+            "by",
+            "from",
+            "as",
+            "and",
+            "or",
+            "but",
+            "not",
+            "no",
+            "yes",
+            "do",
+            "does",
+            "did",
+            "done",
+            "have",
+            "has",
+            "had",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "can",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "whose",
+            "where",
+            "when",
+            "why",
+            "how",
+            "all",
+            "any",
+            "some",
+            "this",
+            "that",
+            "these",
+            "those",
+            "it",
+            "its",
+            "i",
+            "you",
+            "he",
+            "she",
+            "we",
+            "they",
+            "me",
+            "him",
+            "her",
+            "us",
+            "them",
+            "my",
+            "your",
+            "his",
+            "our",
+            "their",
+            "about",
+            "into",
+            "than",
+            "then",
+            "so",
+            "if",
+            "just",
+            "also",
+            "only",
+            "more",
+            "most",
+            "such",
+            "very",
+            "too",
+            "quite",
+            "make",
+            "made",
+            "get",
+            "got",
+            "go",
+            "goes",
+            "went",
+            "gone",
+            "tell",
+            "told",
+            "say",
+            "said",
+            "know",
+            "want",
+            "need",
+            "use",
+            "used",
+            "using",
+            "like",
+            "up",
+            "down",
+            "out",
+            "over",
+            "off",
+            "here",
+            "there",
+            "now",
+        }
+    )
 
     def _content_words(text: str) -> set[str]:
         """Extract lowercase content words (len >= 3, not stopwords)."""
         import re as _re
+
         _words = _re.findall(r"[a-z]{3,}", (text or "").lower())
         return {w for w in _words if w not in _STOPWORDS}
 
@@ -429,6 +540,7 @@ async def prepare_turn(
             _stem = ""
             try:
                 from pathlib import Path
+
                 _stem = Path(_fp).stem if _fp else ""
             except Exception:  # noqa: BLE001
                 _stem = ""
@@ -458,16 +570,21 @@ async def prepare_turn(
         and _category_allows_research
     ):
         _usable = [
-            r for r in results
-            if isinstance(r, dict) and r.get("score", 0.0) >= TUNABLES.min_retrieval_score
+            r
+            for r in results
+            if isinstance(r, dict)
+            and r.get("score", 0.0) >= TUNABLES.min_retrieval_score
         ]
         # Topical-relevance gate: even if results pass the score threshold,
         # fire auto-research if none share content words with the query.
         # This catches the "retrieval returned high-similarity-but-irrelevant
         # notes" case (e.g., gecko adhesives for "cat whiskers").
-        _topically_relevant = _is_topically_relevant(_rewritten_query or user_message, _usable)
+        _topically_relevant = _is_topically_relevant(
+            _rewritten_query or user_message, _usable
+        )
         if _usable and not _topically_relevant:
             from pathlib import Path as _Path
+
             _stems = []
             for r in _usable[:5]:
                 _fp = r.get("file_path", "") if isinstance(r, dict) else ""
@@ -482,32 +599,48 @@ async def prepare_turn(
         if not _usable or not _topically_relevant:
             try:
                 await send_progress(
-                    svc, websocket, "auto_research",
+                    svc,
+                    websocket,
+                    "auto_research",
                     {"reason": "empty_retrieval", "query": _rewritten_query[:80]},
                 )
                 await svc.manager.send_personal_message(
-                    json.dumps({
-                        "type": "status",
-                        "content": "Nothing in the vault covers this — researching it now...",
-                    }),
+                    json.dumps(
+                        {
+                            "type": "status",
+                            "content": "Nothing in the vault covers this — researching it now...",
+                        }
+                    ),
                     websocket,
                     session_logger=session_logger,
                 )
                 # Lazy import to avoid any circular dependency.
                 from research_handler import run_research_and_write_note
+
                 _auto_research_note = await run_research_and_write_note(
-                    websocket, _rewritten_query, session_logger, svc,
+                    websocket,
+                    _rewritten_query,
+                    session_logger,
+                    svc,
                     max_rounds=TUNABLES.auto_research_rounds,
                 )
                 if _auto_research_note:
                     session_logger.log(
                         "auto_research_fired",
-                        {"note_path": _auto_research_note, "query": _rewritten_query[:80]},
+                        {
+                            "note_path": _auto_research_note,
+                            "query": _rewritten_query[:80],
+                        },
                     )
                     # Re-retrieve so the new note is in the results set.
                     _fused = await run_with_heartbeat(
-                        svc, websocket, "re-retrieving vault",
-                        svc.fused_retriever.retrieve, _rewritten_query, 15, 1,
+                        svc,
+                        websocket,
+                        "re-retrieving vault",
+                        svc.fused_retriever.retrieve,
+                        _rewritten_query,
+                        15,
+                        1,
                     )
                     _new = (
                         _fused.get("results", [])
@@ -515,14 +648,13 @@ async def prepare_turn(
                         else (_fused or [])
                     )
                     if _new:
-                        results = (
-                            dedup_results(results + _new)
-                            if results
-                            else _new
-                        )
+                        results = dedup_results(results + _new) if results else _new
                         if len(results) > 5:
                             results = await rerank_results(
-                                svc, user_message, results, k=5,
+                                svc,
+                                user_message,
+                                results,
+                                k=5,
                                 session_logger=session_logger,
                             )
                         else:
@@ -924,7 +1056,7 @@ async def prepare_turn(
             "Allowed citation targets (cite ONLY from these):\n"
             + ", ".join(f"[[{s}]]" for s in _allowed_stems)
             + "\n\nIf you cannot support a claim from these notes, say "
-            "\"I don't know — nothing in the vault covers this\" and offer "
+            '"I don\'t know — nothing in the vault covers this" and offer '
             "to call vault_research. Do NOT write from your own knowledge. "
             "A factual sentence with no [[wikilink]] from the allowed set is "
             "an UNCITED claim and is FORBIDDEN."
@@ -942,7 +1074,7 @@ async def prepare_turn(
             "\n\n--- CLOSED-SET CITATION RULE ---\n"
             "NO vault notes were retrieved for this query. You have NOTHING "
             "to cite. Say \"I don't know — nothing in the vault covers this. "
-            "Want me to research it?\" and offer to call vault_research. "
+            'Want me to research it?" and offer to call vault_research. '
             "Do NOT answer from your own knowledge."
         )
         context = context + _allowed_block
@@ -956,8 +1088,7 @@ async def prepare_turn(
         {
             "role": "system",
             "content": (
-                "# VAULT CONTEXT (retrieved for this query; compactable)\n"
-                + context
+                "# VAULT CONTEXT (retrieved for this query; compactable)\n" + context
             ),
         },
         {

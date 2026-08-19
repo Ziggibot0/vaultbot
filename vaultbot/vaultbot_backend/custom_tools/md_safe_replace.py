@@ -61,18 +61,16 @@ SCHEMA = {
 
 import os
 import re
-import time
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 # custom_tools/md_safe_replace.py -> parent.parent = vaultbot/vaultbot_backend/
 # -> parent.parent.parent = vaultbot/
 # -> parent.parent.parent.parent = Vault2/ (vault root)
 try:
-    BACKEND_DIR = (
-        Path(__file__).resolve().parent.parent
-    )  # vaultbot/vaultbot_backend/
+    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot/vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
 VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root

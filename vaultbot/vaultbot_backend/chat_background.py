@@ -187,15 +187,17 @@ async def run_background_tasks(
             import re as _re
 
             _answer_links = set(
-                _re.findall(
-                    r"\[\[([^\]|#]+)(?:[|#][^\]]+)?\]\]", final_answer or ""
-                )
+                _re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]+)?\]\]", final_answer or "")
             )
             _answer_links_lower = {l.strip().lower() for l in _answer_links}
             _tags = []
             for fp in retrieved_paths:
                 stem = Path(fp).stem
-                tag = "useful" if stem.strip().lower() in _answer_links_lower else "neutral"
+                tag = (
+                    "useful"
+                    if stem.strip().lower() in _answer_links_lower
+                    else "neutral"
+                )
                 _tags.append({"path": fp, "stem": stem, "tag": tag})
             session_logger.log(
                 "model_relevance_tags",
@@ -442,7 +444,10 @@ async def run_background_tasks(
             _final = _verify.get("final_output", "")
             session_logger.log(
                 "provenance_verify_done",
-                {"overall_passed": _verify.get("overall_passed"), "output_len": len(_final)},
+                {
+                    "overall_passed": _verify.get("overall_passed"),
+                    "output_len": len(_final),
+                },
             )
             # Emit a lightweight event so the UI can upgrade the badge.
             try:
@@ -457,7 +462,9 @@ async def run_background_tasks(
                     session_logger=session_logger,
                 )
             except Exception as _e:  # noqa: BLE001
-                session_logger.log("provenance_verified_emit_failed", {"error": str(_e)})
+                session_logger.log(
+                    "provenance_verified_emit_failed", {"error": str(_e)}
+                )
         except Exception as e:  # noqa: BLE001
             session_logger.log("provenance_verify_bg_failed", {"error": str(e)})
 

@@ -15,12 +15,11 @@ import os
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
-
 from app_state import get_services
-from services import Services
+from fastapi import APIRouter, Depends, HTTPException
 from llm_client import build_role_client, clear_role_client_cache
 from providers import KNOWN_PROVIDERS, ROLES, ProviderRegistry, test_provider
+from services import Services
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -356,8 +355,9 @@ async def pull_model(
     if not model:
         return {"status": "error", "error": "No model specified"}
     import subprocess
-    from subprocess_utils import Popen as _popen
     import threading
+
+    from subprocess_utils import Popen as _popen
 
     # Capture the running event loop BEFORE starting the thread, so the
     # thread can safely schedule WS broadcasts back onto it via

@@ -131,6 +131,7 @@ def add_citation_target(
 
 # ── Grounding score ───────────────────────────────────────────────────────
 
+
 def _split_sentences(text: str) -> list[str]:
     """Split `text` into sentences on `.!?` followed by whitespace.
 
@@ -210,9 +211,7 @@ def score_grounding(
 
     threshold = TUNABLES.ungrounded_sentence_threshold
     failed = False
-    if total == 0 and n_sent > 1:
-        failed = True
-    elif n_sent > 3 and ungrounded_ratio > threshold:
+    if (total == 0 and n_sent > 1) or (n_sent > 3 and ungrounded_ratio > threshold):
         failed = True
 
     return {
@@ -268,7 +267,10 @@ def detect_idk(answer: str) -> bool:
 
 # ── Reprimand ─────────────────────────────────────────────────────────────
 
-def build_reprimand(score: dict[str, Any], allowed: dict[str, dict[str, str]] | None) -> str:
+
+def build_reprimand(
+    score: dict[str, Any], allowed: dict[str, dict[str, str]] | None
+) -> str:
     """Build the user-role message sent back to the model on a grounding fail.
 
     Lists the allowed citation targets so the model can re-cite, and states
@@ -278,7 +280,11 @@ def build_reprimand(score: dict[str, Any], allowed: dict[str, dict[str, str]] | 
     """
     allowed = allowed or {}
     stems = list(allowed.keys())[:25]
-    stems_block = ", ".join(f"[[{s}]]" for s in stems) if stems else "(no notes were retrieved — say 'I don't know' and offer to research)"
+    stems_block = (
+        ", ".join(f"[[{s}]]" for s in stems)
+        if stems
+        else "(no notes were retrieved — say 'I don't know' and offer to research)"
+    )
     missing = score.get("missing_from_set", [])
     missing_block = ""
     if missing:
@@ -304,7 +310,7 @@ def build_reprimand(score: dict[str, Any], allowed: dict[str, dict[str, str]] | 
         "one [[wikilink]] from the allowed set above.\n\n"
         "IMPORTANT: If none of the allowed notes actually address the user's "
         "question, do NOT cite irrelevant notes just to pass this check. "
-        "Instead say \"I don't know — nothing in the vault covers this\" and "
+        'Instead say "I don\'t know — nothing in the vault covers this" and '
         "offer to call vault_research. Citing an irrelevant note is worse "
         "than admitting ignorance. Do NOT write from your own knowledge."
     )
@@ -338,8 +344,7 @@ def build_trust_badge(score: dict[str, Any]) -> str:
         return "> ✗ **Ungrounded** — no vault notes cited"
     if failed or grounding_score < 0.5:
         return (
-            f"> ⚠ **Partially grounded** — {allowed_cited}/{total} "
-            f"citations verified"
+            f"> ⚠ **Partially grounded** — {allowed_cited}/{total} citations verified"
         )
     return f"> ✓ **Grounded** in {allowed_cited} vault note{'s' if allowed_cited != 1 else ''}"
 

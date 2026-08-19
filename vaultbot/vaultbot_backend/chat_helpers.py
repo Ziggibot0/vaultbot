@@ -106,8 +106,8 @@ async def notify_problem(
     A dead websocket, a missing manager, or a classification failure never
     raises — the problem is always logged to ``session_logger``.
     """
-    from error_types import Diagnosis as _Diagnosis
     from diagnostics import classify_error
+    from error_types import Diagnosis as _Diagnosis
 
     try:
         if isinstance(exc_or_diagnosis, _Diagnosis):
@@ -244,8 +244,8 @@ def notify_problem_broadcast(
     ``manager.broadcast``. Use from background threads that don't own the
     event loop (e.g. the autonomous researcher's crash callback).
     """
-    from error_types import Diagnosis as _Diagnosis
     from diagnostics import classify_error
+    from error_types import Diagnosis as _Diagnosis
 
     try:
         if isinstance(exc_or_diagnosis, _Diagnosis):

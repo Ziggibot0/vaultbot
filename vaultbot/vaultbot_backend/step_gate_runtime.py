@@ -32,11 +32,13 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
-from collections.abc import Callable
 
 from procedure_compiler import Procedure, Step
+from procedure_step_executor import _run_code_step, _run_llm_step
+from procedure_tool_preamble import _build_tool_preamble  # noqa: F401 — re-export
 
 # Re-export helpers from extracted modules so existing
 # ``from step_gate_runtime import ...`` callers (and tests) keep working.
@@ -46,9 +48,6 @@ from procedure_validators import (  # noqa: F401 — re-exported for tests/calle
     _parse_validation,
     _validate_step,
 )
-from procedure_step_executor import _run_code_step, _run_llm_step
-from procedure_tool_preamble import _build_tool_preamble  # noqa: F401 — re-export
-
 
 # ── Data structures ───────────────────────────────────────────────────────
 
@@ -217,9 +216,7 @@ def _empty_procedure_result(
     # there's content UNDER it, not the header itself.
     import re as _re
 
-    _steps_match = _re.search(
-        r"^##\s+Steps\s*$", _body, _re.MULTILINE | _re.IGNORECASE
-    )
+    _steps_match = _re.search(r"^##\s+Steps\s*$", _body, _re.MULTILINE | _re.IGNORECASE)
     if _steps_match:
         _body = _body[_steps_match.end() :].strip()
     if not _body:
@@ -280,9 +277,7 @@ def _build_proc_error_details(
     if not failed_step:
         return ""
     details = f"failed at step {failed_step}"
-    failed_sr = next(
-        (r for r in step_results if r.step_number == failed_step), None
-    )
+    failed_sr = next((r for r in step_results if r.step_number == failed_step), None)
     if failed_sr is not None:
         sr_err = failed_sr.error or failed_sr.validation_error or ""
         if sr_err:

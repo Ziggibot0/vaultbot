@@ -31,7 +31,6 @@ Pure stdlib. No LLM calls. No I/O.
 
 from __future__ import annotations
 
-
 # Read-only tools the model may call during plan-mode (Explore phase). These
 # gather information without changing anything, so they're safe before a plan
 # exists. Everything NOT in this set is an "execution" tool that the gate

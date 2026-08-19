@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-
 from app_state import get_services
-from services import Services
+from fastapi import APIRouter, Depends
 from identity_api import get_identity
+from services import Services
 
 router = APIRouter()
 

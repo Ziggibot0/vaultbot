@@ -16,12 +16,11 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
+import speech as speech_mod
+from app_state import get_services
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-
-from app_state import get_services
 from services import Services
-import speech as speech_mod
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

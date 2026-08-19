@@ -27,16 +27,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-# Leaf-module imports for helpers that were previously deferred-imported
-# from main (circular). These are now direct leaf imports — no main dependency.
-from fastapi import WebSocket
-from services import Services
-from task_api import write_partial
-from working_memory import TaskList
-
-from config import TUNABLES
-
+from chat_agentic_loop import run_agentic_loop
+from chat_background import run_background_tasks as _run_background_tasks
+from chat_loop_state import TurnState
 
 # ---------------------------------------------------------------------------
 # Extracted leaf modules — imported with underscore aliases so all existing
@@ -44,12 +37,16 @@ from config import TUNABLES
 # work unchanged without a mass rename across the 2,000-line handle_chat body.
 # ---------------------------------------------------------------------------
 from chat_tool_dispatch import execute_agent_tool  # noqa: F401 — re-exported
-from chat_turn_prep import prepare_turn as _prepare_turn
 from chat_turn_finalize import finalize_turn as _finalize_turn
-from chat_background import run_background_tasks as _run_background_tasks
-from chat_loop_state import TurnState
-from chat_agentic_loop import run_agentic_loop
+from chat_turn_prep import prepare_turn as _prepare_turn
+from config import TUNABLES
 
+# Leaf-module imports for helpers that were previously deferred-imported
+# from main (circular). These are now direct leaf imports — no main dependency.
+from fastapi import WebSocket
+from services import Services
+from task_api import write_partial
+from working_memory import TaskList
 
 # ---------------------------------------------------------------------------
 # _prepare_turn, _finalize_turn, and _run_background_tasks were extracted
@@ -273,17 +270,17 @@ async def handle_chat(
         # with citations. Capped at TUNABLES.max_grounding_retries (1) —
         # after that, finalize_turn shipped the answer + a ⚠️ caution so
         # the user is never left with no answer.
-        while getattr(st, "_grounding_failed", False) and getattr(
-            st, "_grounding_retry_count", 0
-        ) < TUNABLES.max_grounding_retries:
+        while (
+            getattr(st, "_grounding_failed", False)
+            and getattr(st, "_grounding_retry_count", 0)
+            < TUNABLES.max_grounding_retries
+        ):
             st._grounding_failed = False
             st._grounding_retry_count += 1
             st.final_answer = ""  # reset so the rewrite replaces, not appends
             # Append the reprimand as a user-role turn — Ollama rejects
             # system messages after user/assistant/tool messages.
-            conversation.append(
-                {"role": "user", "content": st._grounding_reprimand}
-            )
+            conversation.append({"role": "user", "content": st._grounding_reprimand})
             session_logger.log(
                 "grounding_retry_reenter",
                 {"retry_count": st._grounding_retry_count},

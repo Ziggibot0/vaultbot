@@ -86,7 +86,7 @@ async def finalize_turn(
         _graph_lookup = None
     if final_answer and len(final_answer) > 50:
         try:
-            from citation_gate import score_grounding, build_reprimand, detect_idk
+            from citation_gate import build_reprimand, detect_idk, score_grounding
 
             # Check IDK BEFORE scoring — skip the grounding retry for
             # admissions of ignorance. We still score (for logging) but
@@ -118,7 +118,10 @@ async def finalize_turn(
                     st._grounding_reprimand = build_reprimand(_score, _allowed)
                     session_logger.log(
                         "grounding_retry_requested",
-                        {"retry_count": _retries, "max": TUNABLES.max_grounding_retries},
+                        {
+                            "retry_count": _retries,
+                            "max": TUNABLES.max_grounding_retries,
+                        },
                     )
                     return final_answer  # caller re-enters the loop
                 else:

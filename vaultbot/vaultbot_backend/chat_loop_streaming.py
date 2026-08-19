@@ -118,31 +118,22 @@ async def stream_llm_round(
                         _es["prompt_eval_duration"] / 1e9
                     )
                 if _es.get("eval_duration", 0) > 0:
-                    _gen_tps = _es["eval_count"] / (
-                        _es["eval_duration"] / 1e9
-                    )
+                    _gen_tps = _es["eval_count"] / (_es["eval_duration"] / 1e9)
                 await svc.manager.send_personal_message(
                     json.dumps(
                         {
                             "type": "ollama_stats",
-                            "load_duration_ms": _es.get("load_duration", 0)
-                            / 1e6,
-                            "prompt_eval_count": _es.get(
-                                "prompt_eval_count", 0
-                            ),
+                            "load_duration_ms": _es.get("load_duration", 0) / 1e6,
+                            "prompt_eval_count": _es.get("prompt_eval_count", 0),
                             "prompt_eval_duration_ms": _es.get(
                                 "prompt_eval_duration", 0
                             )
                             / 1e6,
                             "prompt_tokens_per_s": round(_prompt_tps, 1),
                             "eval_count": _es.get("eval_count", 0),
-                            "eval_duration_ms": _es.get("eval_duration", 0)
-                            / 1e6,
+                            "eval_duration_ms": _es.get("eval_duration", 0) / 1e6,
                             "gen_tokens_per_s": round(_gen_tps, 1),
-                            "total_duration_ms": _es.get(
-                                "total_duration", 0
-                            )
-                            / 1e6,
+                            "total_duration_ms": _es.get("total_duration", 0) / 1e6,
                         }
                     ),
                     websocket,
@@ -152,9 +143,7 @@ async def stream_llm_round(
                 st._turn_token_totals["prompt_tokens"] += _es.get(
                     "prompt_eval_count", 0
                 )
-                st._turn_token_totals["completion_tokens"] += _es.get(
-                    "eval_count", 0
-                )
+                st._turn_token_totals["completion_tokens"] += _es.get("eval_count", 0)
                 continue
             chunk_count += 1
             st.total_chunks += 1
@@ -210,5 +199,10 @@ async def stream_llm_round(
         )
         raise
 
-
-    return round_text, round_thinking, round_tool_calls, round_finish_reason, chunk_count
+    return (
+        round_text,
+        round_thinking,
+        round_tool_calls,
+        round_finish_reason,
+        chunk_count,
+    )

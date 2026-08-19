@@ -11,8 +11,8 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from custom_tools import github_issues as gi
 from custom_tools import gh_client
+from custom_tools import github_issues as gi
 
 
 @pytest.fixture
@@ -31,24 +31,42 @@ def fake_gh(monkeypatch):
         # Return canned data based on the path.
         if "/issues?" in path:
             return [
-                {"number": 1, "title": "Bug A", "state": "open",
-                 "labels": [{"name": "bug"}], "comments": 2,
-                 "created_at": "2026-01-01", "html_url": "http://x/1"},
-                {"number": 2, "title": "PR B", "state": "open",
-                 "labels": [], "comments": 0,
-                 "created_at": "2026-01-02", "html_url": "http://x/2",
-                 "pull_request": {}},
+                {
+                    "number": 1,
+                    "title": "Bug A",
+                    "state": "open",
+                    "labels": [{"name": "bug"}],
+                    "comments": 2,
+                    "created_at": "2026-01-01",
+                    "html_url": "http://x/1",
+                },
+                {
+                    "number": 2,
+                    "title": "PR B",
+                    "state": "open",
+                    "labels": [],
+                    "comments": 0,
+                    "created_at": "2026-01-02",
+                    "html_url": "http://x/2",
+                    "pull_request": {},
+                },
             ]
         if path.endswith("/issues/1/comments") and method == "POST":
             return {"html_url": "http://x/comment"}
         if "/issues/1" in path and path.endswith("/comments"):
-            return [{"user": {"login": "alice"}, "body": "hi",
-                     "created_at": "2026-01-03"}]
+            return [
+                {"user": {"login": "alice"}, "body": "hi", "created_at": "2026-01-03"}
+            ]
         if path.endswith("/issues/1"):
-            return {"number": 1, "title": "Bug A", "state": "open",
-                    "user": {"login": "bob"},
-                    "labels": [{"name": "bug"}], "body": "the body",
-                    "html_url": "http://x/1"}
+            return {
+                "number": 1,
+                "title": "Bug A",
+                "state": "open",
+                "user": {"login": "bob"},
+                "labels": [{"name": "bug"}],
+                "body": "the body",
+                "html_url": "http://x/1",
+            }
         if path.endswith("/issues/1/labels"):
             return [{"name": "bug"}, {"name": "fixed"}]
         return {}

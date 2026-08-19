@@ -48,8 +48,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -134,8 +135,16 @@ class TriggerStore:
         a note that lost its trigger/inhibitor fields must not keep a stale
         gate.
         """
-        triggers = [p.strip() for p in trigger_phrases if p and len(p.strip()) >= _MIN_PHRASE_LEN]
-        inhibitors = [p.strip() for p in inhibitor_phrases if p and len(p.strip()) >= _MIN_PHRASE_LEN]
+        triggers = [
+            p.strip()
+            for p in trigger_phrases
+            if p and len(p.strip()) >= _MIN_PHRASE_LEN
+        ]
+        inhibitors = [
+            p.strip()
+            for p in inhibitor_phrases
+            if p and len(p.strip()) >= _MIN_PHRASE_LEN
+        ]
         if not triggers and not inhibitors:
             self.remove_note(file_path)
             return

@@ -422,7 +422,9 @@ def enforce_token_cap(
     _call_stub = "[Old tool call arguments cleared to stay within token cap.]"
     for i in range(_skip, _cutoff):
         m = conv[i]
-        if not (isinstance(m, dict) and m.get("role") == "assistant" and m.get("tool_calls")):
+        if not (
+            isinstance(m, dict) and m.get("role") == "assistant" and m.get("tool_calls")
+        ):
             continue
         tcs = m.get("tool_calls")
         if not isinstance(tcs, list):

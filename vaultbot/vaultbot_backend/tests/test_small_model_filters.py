@@ -25,12 +25,12 @@ if "faiss" not in sys.modules:
 
 
 from small_model_filters import (
-    dedup_results,
-    expand_query,
-    filter_context,
     _content_words,
     _parse_json_array,
     _split_context_sections,
+    dedup_results,
+    expand_query,
+    filter_context,
 )
 
 pytestmark = pytest.mark.unit
@@ -123,6 +123,7 @@ def _make_fake_svc(embeddings_map: dict, query_vec=None):
 def test_rerank_reorders_by_relevance():
     """High-relevance note should be promoted to front via embedding cosine."""
     import asyncio
+
     import numpy as np
     from small_model_filters import rerank_results
 
@@ -154,8 +155,9 @@ def test_rerank_reorders_by_relevance():
 
 def test_rerank_noop_when_few_results():
     """When results <= k, reranking is skipped (returns as-is)."""
-    from small_model_filters import rerank_results
     import asyncio
+
+    from small_model_filters import rerank_results
 
     results = _make_results(3)
     out = asyncio.run(
@@ -174,8 +176,9 @@ def test_rerank_noop_when_few_results():
 
 def test_rerank_fallback_on_no_indexer():
     """When svc has no vault_indexer, original order is preserved."""
-    from small_model_filters import rerank_results
     import asyncio
+
+    from small_model_filters import rerank_results
 
     results = _make_results(10)
 
@@ -198,8 +201,9 @@ def test_rerank_fallback_on_no_indexer():
 
 def test_rerank_fallback_on_embedding_failure():
     """When _get_embedding raises, original FUSED order is preserved."""
-    from small_model_filters import rerank_results
     import asyncio
+
+    from small_model_filters import rerank_results
 
     results = _make_results(10)
 

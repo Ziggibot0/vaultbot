@@ -24,7 +24,6 @@ from procedure_surface import status_allows_execution
 from services import Services
 from working_memory import TaskList  # noqa: F401 — re-exported for backward compat
 
-
 # ---------------------------------------------------------------------------
 # Cancel check — called at every phase boundary so the stop button works
 # at ANY point in the agentic loop, not just at await points.
@@ -84,9 +83,7 @@ def classify_trivial(
         return False
 
     # Exact match check.
-    if msg in _TRIVIAL_EXACT:
-        pass  # trivial
-    elif any(msg.startswith(p) for p in _TRIVIAL_PREFIXES):
+    if msg in _TRIVIAL_EXACT or any(msg.startswith(p) for p in _TRIVIAL_PREFIXES):
         pass  # trivial
     else:
         return False
@@ -310,7 +307,7 @@ def small_model_digest(
     if not isinstance(content, str) or len(content) < 200:
         return result  # too short to need digesting
 
-    from small_model_filters import _breaker_tripped, _breaker_trip, _breaker_reset
+    from small_model_filters import _breaker_reset, _breaker_trip, _breaker_tripped
 
     if _breaker_tripped("digest"):
         return result

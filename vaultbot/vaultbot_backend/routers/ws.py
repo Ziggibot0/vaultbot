@@ -16,17 +16,18 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-
 from app_state import get_services, get_startup_reindex_failed
+from chat_handler import handle_chat
+from conversation_state import clear_history, clear_trail_tracker, load_history
+from diagnostics import classify_error
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from last_session import clear as clear_last_session
+from last_session import read as read_last_session
+from last_session import touch as touch_last_session
+from research_handler import handle_research
 from services import Services
 from session_logger import SessionLogger
-from chat_handler import handle_chat
-from research_handler import handle_research
-from conversation_state import load_history, clear_history, clear_trail_tracker
-from diagnostics import classify_error
 from working_memory import TaskList
-from last_session import touch as touch_last_session, read as read_last_session, clear as clear_last_session
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -221,10 +222,7 @@ async def websocket_endpoint(
     if _is_restart_resume:
         try:
             _pointer_sid = read_last_session()
-            if (
-                _pointer_sid
-                and _pointer_sid != session_logger.session_id
-            ):
+            if _pointer_sid and _pointer_sid != session_logger.session_id:
                 _old_sid = _pointer_sid
                 _adopted_old_session_id = _old_sid
                 # Adopt the working memory under the new session_id.
@@ -694,7 +692,6 @@ async def websocket_endpoint(
                         session_logger=session_logger,
                     )
                     try:
-
                         if svc.manager:
                             await svc.manager.broadcast(
                                 json.dumps(

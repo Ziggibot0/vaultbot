@@ -140,7 +140,9 @@ class SearxngManager:
                 self._log_tool("ensure_daemon", {"action": "daemon_up"})
                 return True
             time.sleep(2)
-        self._log_tool("ensure_daemon", {"action": "daemon_timeout", "seconds": timeout})
+        self._log_tool(
+            "ensure_daemon", {"action": "daemon_timeout", "seconds": timeout}
+        )
         return False
 
     def start(self):

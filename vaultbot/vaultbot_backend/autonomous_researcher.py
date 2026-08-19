@@ -24,15 +24,9 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
-
-from note_creator import NoteCreator
-from research_engine import ResearchEngine
-from session_logger import SessionLogger
-from vault_graph import VaultGraph
-from vault_indexer import VaultIndexer
 
 # Reuse the curriculum's structural filters so the researcher's second-layer
 # gate and the curriculum's first-layer gate apply the SAME rules — no
@@ -40,9 +34,18 @@ from vault_indexer import VaultIndexer
 # of placeholder patterns, single-word stopics, and template-var patterns.
 from knowledge_curriculum import (
     _PLACEHOLDER_RE as _CURRICULUM_PLACEHOLDER_RE,
+)
+from knowledge_curriculum import (
     _SINGLE_WORD_STOPICS as _CURRICULUM_SINGLE_WORD_STOPICS,
+)
+from knowledge_curriculum import (
     _TEMPLATE_VAR_RE as _CURRICULUM_TEMPLATE_VAR_RE,
 )
+from note_creator import NoteCreator
+from research_engine import ResearchEngine
+from session_logger import SessionLogger
+from vault_graph import VaultGraph
+from vault_indexer import VaultIndexer
 
 # ---------------------------------------------------------------------------
 # Gap quality gate — prevents the researcher from wasting cycles on topics
@@ -349,6 +352,7 @@ class AutonomousResearcher:
         """
         self._chat_active.clear()
         self._idle_trigger.set()
+
     def _identify_gaps(self) -> list[dict[str, Any]]:
         """Identify knowledge gaps in the vault.
 
@@ -674,8 +678,9 @@ class AutonomousResearcher:
         if self.checkpointer is None:
             return
         try:
-            from checkpointer import ResearchCheckpoint
             from datetime import UTC, datetime
+
+            from checkpointer import ResearchCheckpoint
 
             now = datetime.now(UTC).isoformat()
             checkpoints = [
@@ -723,8 +728,8 @@ class AutonomousResearcher:
         procedure, and mechanically executes whatever the procedure returns.
         Edit the procedure note to change behavior — no backend restart needed.
         """
-        import json
         import importlib
+        import json
 
         self._cycle_count += 1
         cycle_count = self._cycle_count
@@ -735,7 +740,10 @@ class AutonomousResearcher:
         if recovered_gaps:
             self._log(
                 "autonomous_recovered_gaps",
-                {"count": len(recovered_gaps), "topics": [g.get("topic") for g in recovered_gaps]},
+                {
+                    "count": len(recovered_gaps),
+                    "topics": [g.get("topic") for g in recovered_gaps],
+                },
             )
 
         procedure_gaps: list[dict[str, Any]] = []
@@ -794,7 +802,9 @@ class AutonomousResearcher:
         # recomputed on the next idle cycle.
         if action != "skip" and self._chat_active.is_set():
             self._log("autonomous_plan_aborted_chat", {"action": action})
-            self._record_last_run(cycle_t0, "skip", {"reason": "chat became active during procedure call"})
+            self._record_last_run(
+                cycle_t0, "skip", {"reason": "chat became active during procedure call"}
+            )
             return
 
         # --- 3. Mechanically execute the plan ---
@@ -862,7 +872,11 @@ class AutonomousResearcher:
                     "autonomous_cycle_interrupted",
                     {"gap_index": i, "remaining": len(gaps) - i},
                 )
-                self._record_last_run(cycle_t0, "interrupted", {"gap_index": i, "remaining": len(gaps) - i})
+                self._record_last_run(
+                    cycle_t0,
+                    "interrupted",
+                    {"gap_index": i, "remaining": len(gaps) - i},
+                )
                 return
 
             self._log(
@@ -901,6 +915,7 @@ class AutonomousResearcher:
         self._record_last_run(cycle_t0, "research", {"gaps_researched": len(gaps)})
         if len(self.history) > 50:
             self.history = self.history[-50:]
+
     async def _run(self):
         """Event-driven idle-filler loop.
 
@@ -941,9 +956,7 @@ class AutonomousResearcher:
                     # or fall through after the interval backstop.
                     # The trigger is cleared after waiting so we don't
                     # spin in a tight loop.
-                    triggered = self._idle_trigger.wait(
-                        timeout=self.interval_seconds
-                    )
+                    triggered = self._idle_trigger.wait(timeout=self.interval_seconds)
                     if triggered:
                         self._idle_trigger.clear()
                     # If chat is still active (user sent a new message
@@ -974,6 +987,7 @@ class AutonomousResearcher:
             except Exception as e:  # noqa: BLE001 — best-effort, logged
                 self._log("autonomous_researcher_error", {"error": str(e)})
         self._log("autonomous_researcher_stop", {})
+
     def start(self):
         """Start the background researcher thread."""
         if self._thread and self._thread.is_alive():

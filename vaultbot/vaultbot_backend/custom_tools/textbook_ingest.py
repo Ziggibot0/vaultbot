@@ -417,7 +417,10 @@ from custom_tools.parsers.markdown_parser import (  # noqa: F401 — re-exported
     _section_sort_key,
     parse_markdown,
 )
-from custom_tools.parsers.pdf_parser import _parse_pdf_regex, parse_pdf  # noqa: F401 — _parse_pdf_regex re-exported for backward compat
+from custom_tools.parsers.pdf_parser import (  # noqa: F401 — _parse_pdf_regex re-exported for backward compat
+    _parse_pdf_regex,
+    parse_pdf,
+)
 from custom_tools.parsers.text_parser import (  # noqa: F401 — re-exported for backward compat
     _split_on_paragraphs,
     _split_on_subheadings,
@@ -425,7 +428,6 @@ from custom_tools.parsers.text_parser import (  # noqa: F401 — re-exported for
     fragment_sections,
     parse_plain_text,
 )
-
 
 # ---------------------------------------------------------------------------
 # Note writing

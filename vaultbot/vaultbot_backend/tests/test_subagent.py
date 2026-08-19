@@ -16,17 +16,15 @@ pytestmark = pytest.mark.unit
 
 
 # conftest adds the backend dir to sys.path so leaf modules import.
+# Sentinel used to detect the fallback path.
+import subagent as _subagent_mod
 from subagent import (
     _build_research_wrapper,
+    _run_subprocess,
     run_research_subagent,
     run_subagent,
     subagent_enabled,
-    _run_subprocess,
 )
-
-# Sentinel used to detect the fallback path.
-import subagent as _subagent_mod
-
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 

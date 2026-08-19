@@ -46,6 +46,7 @@ def _resolve(svc, role: str):
     reg = getattr(svc, "registry", None)
     if reg is None:
         from providers import ProviderRegistry
+
         reg = ProviderRegistry.migrate_from_env()
         svc.registry = reg
     mid = reg.get_role(role)
@@ -75,16 +76,24 @@ def transcribe(svc, audio_bytes: bytes, filename: str = "audio.webm") -> dict[st
     """
     entry, prov = _resolve(svc, "stt")
     if entry is None or prov is None:
-        return {"error": "No STT model configured. Pick one in Settings → Speech Models."}
+        return {
+            "error": "No STT model configured. Pick one in Settings → Speech Models."
+        }
     if prov.type == "browser":
-        return {**BROWSER_SENTINEL, "error": "STT is browser-handled; use the in-browser recognizer."}
+        return {
+            **BROWSER_SENTINEL,
+            "error": "STT is browser-handled; use the in-browser recognizer.",
+        }
     if prov.type == "openai":
         return _transcribe_openai(prov, entry, audio_bytes, filename)
     return {"error": f"Provider type '{prov.type}' does not support STT."}
 
 
-def _transcribe_openai(prov, entry, audio_bytes: bytes, filename: str) -> dict[str, Any]:
+def _transcribe_openai(
+    prov, entry, audio_bytes: bytes, filename: str
+) -> dict[str, Any]:
     import requests
+
     base = prov.base_url.rstrip("/")
     url = f"{base}/v1/audio/transcriptions"
     headers = {}
@@ -97,7 +106,9 @@ def _transcribe_openai(prov, entry, audio_bytes: bytes, filename: str) -> dict[s
         if r.status_code in (401, 403):
             return {"error": f"auth rejected (check the API key) — {r.status_code}"}
         if r.status_code == 404:
-            return {"error": f"no /v1/audio/transcriptions at {base} (status 404). Does this endpoint support speech?"}
+            return {
+                "error": f"no /v1/audio/transcriptions at {base} (status 404). Does this endpoint support speech?"
+            }
         r.raise_for_status()
         text = r.json().get("text", "").strip()
         return {"text": text}
@@ -117,7 +128,9 @@ async def synthesize(svc, text: str) -> dict[str, Any]:
     """
     entry, prov = _resolve(svc, "tts")
     if entry is None or prov is None:
-        return {"error": "No TTS model configured. Pick one in Settings → Speech Models."}
+        return {
+            "error": "No TTS model configured. Pick one in Settings → Speech Models."
+        }
     if not text.strip():
         return {"error": "empty text"}
     if prov.type == "browser":
@@ -133,6 +146,7 @@ async def _synthesize_edge_tts(entry, text: str) -> dict[str, Any]:
     """Free Microsoft Edge TTS via the edge-tts websocket relay."""
     try:
         import edge_tts
+
         voice = entry.model  # e.g. "en-US-GuyNeural"
         communicate = edge_tts.Communicate(text, voice)
         buf = io.BytesIO()
@@ -151,6 +165,7 @@ async def _synthesize_edge_tts(entry, text: str) -> dict[str, Any]:
 async def _synthesize_openai(prov, entry, text: str) -> dict[str, Any]:
     """OpenAI-compatible /v1/audio/speech."""
     import httpx
+
     base = prov.base_url.rstrip("/")
     url = f"{base}/v1/audio/speech"
     headers = {"Content-Type": "application/json"}
@@ -164,7 +179,18 @@ async def _synthesize_openai(prov, entry, text: str) -> dict[str, Any]:
     model = entry.model
     payload: dict[str, Any] = {"model": model, "input": text}
     # If the model id looks like a voice name, set model=tts-1 + voice=model.
-    _TTS_VOICES = ("alloy", "echo", "fable", "onyx", "nova", "shimmer", "coral", "sage", "ash", "ballad")
+    _TTS_VOICES = (
+        "alloy",
+        "echo",
+        "fable",
+        "onyx",
+        "nova",
+        "shimmer",
+        "coral",
+        "sage",
+        "ash",
+        "ballad",
+    )
     if model.lower() in _TTS_VOICES:
         payload["model"] = "tts-1"
         payload["voice"] = model
@@ -177,7 +203,9 @@ async def _synthesize_openai(prov, entry, text: str) -> dict[str, Any]:
         if r.status_code in (401, 403):
             return {"error": f"auth rejected (check the API key) — {r.status_code}"}
         if r.status_code == 404:
-            return {"error": f"no /v1/audio/speech at {base} (status 404). Does this endpoint support TTS?"}
+            return {
+                "error": f"no /v1/audio/speech at {base} (status 404). Does this endpoint support TTS?"
+            }
         r.raise_for_status()
         ct = r.headers.get("content-type", "audio/mpeg")
         return {"audio": r.content, "content_type": ct}
@@ -202,8 +230,19 @@ async def list_tts_voices(svc) -> dict[str, Any]:
     if prov.type == "edge-tts":
         try:
             import edge_tts
+
             voices = await edge_tts.list_voices()
-            return {"voices": [{"id": v["ShortName"], "label": v["FriendlyName"], "lang": v.get("Locale", "")} for v in voices], "provider_type": "edge-tts"}
+            return {
+                "voices": [
+                    {
+                        "id": v["ShortName"],
+                        "label": v["FriendlyName"],
+                        "lang": v.get("Locale", ""),
+                    }
+                    for v in voices
+                ],
+                "provider_type": "edge-tts",
+            }
         except Exception as e:  # noqa: BLE001
             return {"voices": [], "error": str(e)}
     if prov.type == "browser":
@@ -211,6 +250,20 @@ async def list_tts_voices(svc) -> dict[str, Any]:
     if prov.type == "openai":
         # OpenAI's /v1/models doesn't list voices; return the known set so the
         # user can pick one (it becomes the model id for that role).
-        _V = ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "coral", "sage", "ash", "ballad"]
-        return {"voices": [{"id": v, "label": v, "lang": ""} for v in _V], "provider_type": "openai"}
+        _V = [
+            "alloy",
+            "echo",
+            "fable",
+            "onyx",
+            "nova",
+            "shimmer",
+            "coral",
+            "sage",
+            "ash",
+            "ballad",
+        ]
+        return {
+            "voices": [{"id": v, "label": v, "lang": ""} for v in _V],
+            "provider_type": "openai",
+        }
     return {"voices": []}

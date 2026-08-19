@@ -599,9 +599,7 @@ class FusedRetriever:
                     }
         return candidates
 
-    def _lexical_channel(
-        self, query: str, k: int
-    ) -> dict[str, dict[str, Any]]:
+    def _lexical_channel(self, query: str, k: int) -> dict[str, dict[str, Any]]:
         """BM25-style keyword channel over note titles + cached content.
 
         The 'FUSED' retriever historically fused only dense (vector) + graph
@@ -635,7 +633,11 @@ class FusedRetriever:
         # every query (the live vault has ~1700 files).  Invalidate when the
         # metadata list changes shape (len + first/last file_path is a cheap
         # signature that catches index rebuilds and appends).
-        sig = (len(metadata), metadata[0].get("file_path", ""), metadata[-1].get("file_path", ""))
+        sig = (
+            len(metadata),
+            metadata[0].get("file_path", ""),
+            metadata[-1].get("file_path", ""),
+        )
         cached = getattr(self, "_lexical_cache", None)
         if cached is not None and cached[0] == sig:
             tokenized = cached[1]
@@ -654,7 +656,9 @@ class FusedRetriever:
         if not tokenized:
             return candidates
 
-        avgdl = sum(len(t) for _, _, t in tokenized) / len(tokenized) if tokenized else 0.0
+        avgdl = (
+            sum(len(t) for _, _, t in tokenized) / len(tokenized) if tokenized else 0.0
+        )
         n_docs = len(tokenized)
 
         # Document frequency per query term.

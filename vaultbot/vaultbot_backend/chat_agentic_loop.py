@@ -18,18 +18,26 @@ import json
 import os
 
 from chat_checkpoint import snapshot_working_memory
-from conversation_state import save_history
 from chat_context import (
     age_old_tool_results as _age_old_tool_results,
+)
+from chat_context import (
     enforce_token_cap as _enforce_token_cap,
+)
+from chat_context import (
     estimate_conv_tokens as _estimate_conv_tokens,
+)
+from chat_context import (
     sanitize_tool_history as _sanitize_tool_history,
+)
+from chat_context import (
     tool_actually_wrote as _tool_actually_wrote,
 )
-from chat_preflight import check_cancelled as _check_cancelled
 from chat_loop_state import TurnState
 from chat_loop_streaming import stream_llm_round
 from chat_loop_tools import execute_round_tools
+from chat_preflight import check_cancelled as _check_cancelled
+from conversation_state import save_history
 from error_types import AgentSilentError
 from services import Services
 from task_api import write_partial
@@ -99,9 +107,7 @@ async def run_agentic_loop(
         # Threshold: 5 consecutive thought-only rounds. At ~4s per round,
         # that's ~20s of zero progress — enough to be confident it's stuck,
         # not enough to waste the user's money on a long spiral.
-        _THOUGHT_LOOP_THRESHOLD = int(
-            os.getenv("VAULTBOT_THOUGHT_LOOP_LIMIT", "5")
-        )
+        _THOUGHT_LOOP_THRESHOLD = int(os.getenv("VAULTBOT_THOUGHT_LOOP_LIMIT", "5"))
         while st.round_idx < _MAX_ROUNDS:
             _check_cancelled(websocket)
             # --- Break condition 1: 3+ consecutive failed writes ---
@@ -288,17 +294,13 @@ async def run_agentic_loop(
             # (returns True) for cloud backends, so this only loads
             # local Ollama models.
             _model_wait_t0 = loop.time()
-            _model_wait_max = float(
-                os.environ.get("VAULTBOT_MODEL_LOAD_WAIT_S", "300")
-            )
+            _model_wait_max = float(os.environ.get("VAULTBOT_MODEL_LOAD_WAIT_S", "300"))
             # Kick off an ACTIVE preload in the executor. It returns
             # immediately if the model is already resident; otherwise it
             # blocks (up to 600s) while Ollama loads the model from disk.
             # We poll is_model_loaded() below with a heartbeat so the
             # user sees progress instead of a silent stall.
-            _preload_task = loop.run_in_executor(
-                None, svc.ollama_client.preload_model
-            )
+            _preload_task = loop.run_in_executor(None, svc.ollama_client.preload_model)
             while True:
                 _loaded = await loop.run_in_executor(
                     None, svc.ollama_client.is_model_loaded
@@ -373,8 +375,7 @@ async def run_agentic_loop(
                             else 0
                         ),
                         "cacheable_prefix_chars": sum(
-                            len(str(m.get("content", "") or ""))
-                            for m in _sys_msgs
+                            len(str(m.get("content", "") or "")) for m in _sys_msgs
                         ),
                     },
                 )
@@ -397,7 +398,13 @@ async def run_agentic_loop(
                 else conversation
             )
 
-            round_text, round_thinking, round_tool_calls, round_finish_reason, chunk_count = await stream_llm_round(
+            (
+                round_text,
+                round_thinking,
+                round_tool_calls,
+                round_finish_reason,
+                chunk_count,
+            ) = await stream_llm_round(
                 svc,
                 websocket,
                 session_logger,
@@ -406,7 +413,6 @@ async def run_agentic_loop(
                 _round_tools,
                 st,
             )
-
 
             session_logger.log(
                 "agent_round",
@@ -467,9 +473,7 @@ async def run_agentic_loop(
                 else:
                     if not st._double_silent_once:
                         st._double_silent_once = True
-                        session_logger.log(
-                            "silent_turn_retry", {"round": st.round_idx}
-                        )
+                        session_logger.log("silent_turn_retry", {"round": st.round_idx})
                         conversation.append(
                             {
                                 "role": "user",
@@ -486,8 +490,7 @@ async def run_agentic_loop(
                         },
                     )
                     raise AgentSilentError(
-                        "Model returned nothing on two consecutive turns. "
-                        "Please retry."
+                        "Model returned nothing on two consecutive turns. Please retry."
                     )
 
             # Model called tools →’ execute them and feed results back.
@@ -512,7 +515,6 @@ async def run_agentic_loop(
                 wm,
                 procedures_in_context,
             )
-
 
             # --- Failed-write tracking (the ONLY safety net) ---
             # Count failed writes. 3 consecutive failed writes = genuine
@@ -610,12 +612,9 @@ async def run_agentic_loop(
             # (the model took action) or if no tools were called (the
             # model produced a text answer — the turn is ending).
             _round_tool_names = [
-                tc.get("function", {}).get("name", "?")
-                for tc in round_tool_calls
+                tc.get("function", {}).get("name", "?") for tc in round_tool_calls
             ]
-            if _round_tool_names and all(
-                t == "thought" for t in _round_tool_names
-            ):
+            if _round_tool_names and all(t == "thought" for t in _round_tool_names):
                 st._consecutive_thought_rounds += 1
             else:
                 st._consecutive_thought_rounds = 0
@@ -649,9 +648,7 @@ async def run_agentic_loop(
                         },
                     )
                 except Exception as e:  # noqa: BLE001 — checkpoint is best-effort; the chat loop must not crash on save failure
-                    session_logger.log(
-                        "chat_checkpoint_save_failed", {"error": str(e)}
-                    )
+                    session_logger.log("chat_checkpoint_save_failed", {"error": str(e)})
 
             # Stream history persistence: save the conversation-so-far to
             # disk after each tool round so a crash mid-turn doesn't lose
@@ -751,5 +748,3 @@ async def run_agentic_loop(
                     st.partial_path.unlink()
             except Exception as e:  # noqa: BLE001
                 session_logger.log("partial_cleanup_failed", {"error": str(e)})
-
-

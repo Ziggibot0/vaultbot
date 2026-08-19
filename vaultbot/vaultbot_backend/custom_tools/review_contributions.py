@@ -40,7 +40,7 @@ def run(args: dict) -> dict:
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
-    from custom_tools.gh_client import gh_api, gh_available, GhError
+    from custom_tools.gh_client import GhError, gh_api, gh_available
 
     # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
     if not gh_available():
@@ -82,7 +82,11 @@ def run(args: dict) -> dict:
     if pr_number:
         # Review specific PR
         try:
-            prs = [gh_api("GET", f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}")]
+            prs = [
+                gh_api(
+                    "GET", f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}"
+                )
+            ]
         except GhError as e:
             return {"error": f"Failed to fetch PR #{pr_number}: {e}"}
     else:
@@ -388,7 +392,11 @@ def run(args: dict) -> dict:
                     f"repos/{upstream_owner}/{upstream_repo}/commits/{head_sha}/check-runs",
                     timeout=30,
                 )
-                runs = check_runs.get("check_runs", []) if isinstance(check_runs, dict) else []
+                runs = (
+                    check_runs.get("check_runs", [])
+                    if isinstance(check_runs, dict)
+                    else []
+                )
                 if not runs:
                     ci_status = "none"
                     ci_detail = "No check-runs found for this commit."
@@ -398,9 +406,17 @@ def run(args: dict) -> dict:
                     if any(s in ("queued", "in_progress", "pending") for s in statuses):
                         ci_status = "pending"
                         ci_detail = "One or more check-runs are still running."
-                    elif any(c in ("failure", "cancelled", "timed_out", "action_required") for c in conclusions):
+                    elif any(
+                        c in ("failure", "cancelled", "timed_out", "action_required")
+                        for c in conclusions
+                    ):
                         ci_status = "failure"
-                        failed = [r.get("name") for r in runs if r.get("conclusion") in ("failure", "cancelled", "timed_out", "action_required")]
+                        failed = [
+                            r.get("name")
+                            for r in runs
+                            if r.get("conclusion")
+                            in ("failure", "cancelled", "timed_out", "action_required")
+                        ]
                         ci_detail = f"Failing check-runs: {', '.join(failed)}"
                     elif all(c == "success" for c in conclusions):
                         ci_status = "success"
@@ -452,9 +468,7 @@ def run(args: dict) -> dict:
                 result["merge_error"] = str(e)
         elif do_merge and verdict == "PASS" and ci_status != "success":
             result["merged"] = False
-            result["merge_error"] = (
-                f"CI not green (status: {ci_status}). {ci_detail}"
-            )
+            result["merge_error"] = f"CI not green (status: {ci_status}). {ci_detail}"
 
         # Post a comment with the review results
         comment_body = f"## 🤖 VaultBot Safety Review\n\n**Verdict:** {verdict}\n**Reason:** {verdict_reason}\n**CI:** {ci_status} — {ci_detail}\n\n"

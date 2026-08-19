@@ -383,7 +383,7 @@ class TaskList:
     @classmethod
     def load_from_disk(
         cls, path: str | None = None, session_id: str | None = None
-    ) -> "TaskList | None":
+    ) -> TaskList | None:
         """Load a persisted working-memory state from disk.
 
         Returns a TaskList with the restored plan, or None when the file

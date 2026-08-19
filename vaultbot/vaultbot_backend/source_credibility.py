@@ -70,7 +70,7 @@ def _extract_domain(url: str) -> str:
         # Strip common prefixes.
         for prefix in ("www.", "en.", "m.", "lite."):
             if host.startswith(prefix):
-                host = host[len(prefix):]
+                host = host[len(prefix) :]
         # Keep the last two labels (e.g., nature.com, github.com).
         # For co.uk / co.jp etc., keep three.
         parts = host.split(".")
@@ -218,9 +218,7 @@ class SourceCredibilityTracker:
             self._save()
             return self._score_unlocked(domain)
 
-    def record_verifications(
-        self, verifications: list[dict]
-    ) -> dict[str, float]:
+    def record_verifications(self, verifications: list[dict]) -> dict[str, float]:
         """Batch-update credibility from a list of verification results.
 
         Each dict should have "url" and "verdict" keys. Returns a mapping

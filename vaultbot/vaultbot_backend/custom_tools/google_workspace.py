@@ -6,7 +6,7 @@ Tokens are stored in google_workspace_tokens.json and auto-refreshed.
 
 import json
 import webbrowser
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -21,28 +21,84 @@ SCHEMA = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["setup", "auth", "callback", "calendar_list", "calendar_create", "tasks_list", "tasks_create", "docs_get", "docs_create", "status"],
-                "description": "The action to perform."
+                "enum": [
+                    "setup",
+                    "auth",
+                    "callback",
+                    "calendar_list",
+                    "calendar_create",
+                    "tasks_list",
+                    "tasks_create",
+                    "docs_get",
+                    "docs_create",
+                    "status",
+                ],
+                "description": "The action to perform.",
             },
-            "max_results": {"type": "integer", "description": "Max events to return (calendar_list)."},
-            "date": {"type": "string", "description": "A specific date (YYYY-MM-DD) to list events for (calendar_list). Sets time_min to 00:00 and time_max to 23:59 in local timezone. Takes precedence over time_min/time_max."},
-            "time_min": {"type": "string", "description": "ISO 8601 datetime — only return events starting after this (calendar_list). Defaults to now."},
-            "time_max": {"type": "string", "description": "ISO 8601 datetime — only return events starting before this (calendar_list). Optional upper bound."},
-            "start": {"type": "string", "description": "Event start time ISO 8601 (calendar_create)."},
-            "end": {"type": "string", "description": "Event end time ISO 8601 (calendar_create)."},
-            "location": {"type": "string", "description": "Event location (calendar_create)."},
-            "description": {"type": "string", "description": "Event description (calendar_create)."},
-            "tasklist_id": {"type": "string", "description": "Task list ID (tasks_list, tasks_create)."},
+            "max_results": {
+                "type": "integer",
+                "description": "Max events to return (calendar_list).",
+            },
+            "date": {
+                "type": "string",
+                "description": "A specific date (YYYY-MM-DD) to list events for (calendar_list). Sets time_min to 00:00 and time_max to 23:59 in local timezone. Takes precedence over time_min/time_max.",
+            },
+            "time_min": {
+                "type": "string",
+                "description": "ISO 8601 datetime — only return events starting after this (calendar_list). Defaults to now.",
+            },
+            "time_max": {
+                "type": "string",
+                "description": "ISO 8601 datetime — only return events starting before this (calendar_list). Optional upper bound.",
+            },
+            "start": {
+                "type": "string",
+                "description": "Event start time ISO 8601 (calendar_create).",
+            },
+            "end": {
+                "type": "string",
+                "description": "Event end time ISO 8601 (calendar_create).",
+            },
+            "location": {
+                "type": "string",
+                "description": "Event location (calendar_create).",
+            },
+            "description": {
+                "type": "string",
+                "description": "Event description (calendar_create).",
+            },
+            "tasklist_id": {
+                "type": "string",
+                "description": "Task list ID (tasks_list, tasks_create).",
+            },
             "notes": {"type": "string", "description": "Task notes (tasks_create)."},
-            "due": {"type": "string", "description": "Task due date ISO 8601 (tasks_create)."},
-            "document_id": {"type": "string", "description": "Google Doc ID (docs_get)."},
-            "title": {"type": "string", "description": "Doc title (docs_create) or task title."},
-            "client_id": {"type": "string", "description": "OAuth client ID (for 'setup' action)."},
-            "client_secret": {"type": "string", "description": "OAuth client secret (for 'setup' action)."},
-            "code": {"type": "string", "description": "Authorization code from Google redirect (for 'callback' action)."}
+            "due": {
+                "type": "string",
+                "description": "Task due date ISO 8601 (tasks_create).",
+            },
+            "document_id": {
+                "type": "string",
+                "description": "Google Doc ID (docs_get).",
+            },
+            "title": {
+                "type": "string",
+                "description": "Doc title (docs_create) or task title.",
+            },
+            "client_id": {
+                "type": "string",
+                "description": "OAuth client ID (for 'setup' action).",
+            },
+            "client_secret": {
+                "type": "string",
+                "description": "OAuth client secret (for 'setup' action).",
+            },
+            "code": {
+                "type": "string",
+                "description": "Authorization code from Google redirect (for 'callback' action).",
+            },
         },
-        "required": ["action"]
-    }
+        "required": ["action"],
+    },
 }
 
 REDIRECT_URI = "http://localhost:8000/callback"
@@ -91,12 +147,14 @@ def _refresh_tokens():
     if not client_id:
         return None
 
-    data = urlencode({
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": tokens["refresh_token"],
-        "grant_type": "refresh_token",
-    }).encode()
+    data = urlencode(
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": tokens["refresh_token"],
+            "grant_type": "refresh_token",
+        }
+    ).encode()
 
     req = urllib.request.Request(
         "https://oauth2.googleapis.com/token",
@@ -110,10 +168,15 @@ def _refresh_tokens():
             new_tokens = json.loads(resp.read())
             # Preserve refresh_token (not always returned on refresh)
             new_tokens["refresh_token"] = tokens["refresh_token"]
-            new_tokens["obtained_at"] = datetime.now(timezone.utc).isoformat()
+            new_tokens["obtained_at"] = datetime.now(UTC).isoformat()
             _save_tokens(new_tokens)
             return new_tokens
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as e:
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ) as e:
         return {"error": f"Token refresh failed: {e}"}
 
 
@@ -129,7 +192,7 @@ def _get_access_token():
     if obtained:
         try:
             obt_time = datetime.fromisoformat(obtained)
-            elapsed = (datetime.now(timezone.utc) - obt_time).total_seconds()
+            elapsed = (datetime.now(UTC) - obt_time).total_seconds()
             if elapsed >= expires_in - 60:  # Refresh 60s before expiry
                 refreshed = _refresh_tokens()
                 if refreshed and "access_token" in refreshed:
@@ -230,13 +293,15 @@ def run(args):
         if not client_id:
             return {"error": "No credentials configured."}
 
-        data = urlencode({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": code,
-            "redirect_uri": REDIRECT_URI,
-            "grant_type": "authorization_code",
-        }).encode()
+        data = urlencode(
+            {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "grant_type": "authorization_code",
+            }
+        ).encode()
 
         req = urllib.request.Request(
             "https://oauth2.googleapis.com/token",
@@ -248,10 +313,15 @@ def run(args):
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 tokens = json.loads(resp.read())
-                tokens["obtained_at"] = datetime.now(timezone.utc).isoformat()
+                tokens["obtained_at"] = datetime.now(UTC).isoformat()
                 _save_tokens(tokens)
                 return {"status": "ok", "message": "Tokens saved successfully."}
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as e:
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+            json.JSONDecodeError,
+        ) as e:
             return {"error": f"Token exchange failed: {e}"}
 
     # --- Status: check auth state ---
@@ -267,7 +337,7 @@ def run(args):
             try:
                 obt_time = datetime.fromisoformat(tokens["obtained_at"])
                 expires_in = tokens.get("expires_in", 3600)
-                token_expires = (obt_time.timestamp() + expires_in)
+                token_expires = obt_time.timestamp() + expires_in
             except Exception:  # noqa: BLE001 — best-effort: malformed timestamp leaves token_expires None
                 pass
 
@@ -296,21 +366,25 @@ def run(args):
         if date:
             # Parse YYYY-MM-DD and set boundaries in LOCAL time
             from datetime import time as dt_time
+
             parsed = datetime.strptime(date, "%Y-%m-%d")
             local_start = datetime.combine(parsed.date(), dt_time.min)  # 00:00 local
-            local_end = datetime.combine(parsed.date(), dt_time.max)    # 23:59:59.999999 local
+            local_end = datetime.combine(
+                parsed.date(), dt_time.max
+            )  # 23:59:59.999999 local
             # Convert to UTC for the API
             import time as _time
+
             # Get local UTC offset
             utc_offset = _time.timezone if _time.daylight == 0 else _time.altzone
             tz = timezone(timedelta(seconds=-utc_offset))
             local_start = local_start.replace(tzinfo=tz)
             local_end = local_end.replace(tzinfo=tz)
-            time_min = local_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            time_max = local_end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            time_min = local_start.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            time_max = local_end.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if not time_min:
-            time_min = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            time_min = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         max_results = args.get("max_results", 10)
         url = (
@@ -327,16 +401,20 @@ def run(args):
             return result
         events = []
         for ev in result.get("items", []):
-            start = ev.get("start", {}).get("dateTime", ev.get("start", {}).get("date", ""))
+            start = ev.get("start", {}).get(
+                "dateTime", ev.get("start", {}).get("date", "")
+            )
             end = ev.get("end", {}).get("dateTime", ev.get("end", {}).get("date", ""))
-            events.append({
-                "id": ev.get("id", ""),
-                "summary": ev.get("summary", "(no title)"),
-                "start": start,
-                "end": end,
-                "location": ev.get("location", ""),
-                "description": ev.get("description", ""),
-            })
+            events.append(
+                {
+                    "id": ev.get("id", ""),
+                    "summary": ev.get("summary", "(no title)"),
+                    "start": start,
+                    "end": end,
+                    "location": ev.get("location", ""),
+                    "description": ev.get("description", ""),
+                }
+            )
         return {"events": events}
     # --- Calendar: create event ---
     if action == "calendar_create":
@@ -344,7 +422,9 @@ def run(args):
         start = args.get("start", "")
         end = args.get("end", "")
         if not summary or not start or not end:
-            return {"error": "summary, start, and end are required for calendar_create."}
+            return {
+                "error": "summary, start, and end are required for calendar_create."
+            }
 
         event_data = {
             "summary": summary,
@@ -371,10 +451,12 @@ def run(args):
                 return result
             lists = []
             for tl in result.get("items", []):
-                lists.append({
-                    "id": tl.get("id", ""),
-                    "title": tl.get("title", ""),
-                })
+                lists.append(
+                    {
+                        "id": tl.get("id", ""),
+                        "title": tl.get("title", ""),
+                    }
+                )
             return {"task_lists": lists}
         else:
             # List tasks in a specific task list
@@ -384,13 +466,15 @@ def run(args):
                 return result
             tasks = []
             for t in result.get("items", []):
-                tasks.append({
-                    "id": t.get("id", ""),
-                    "title": t.get("title", ""),
-                    "status": t.get("status", ""),
-                    "due": t.get("due", ""),
-                    "notes": t.get("notes", ""),
-                })
+                tasks.append(
+                    {
+                        "id": t.get("id", ""),
+                        "title": t.get("title", ""),
+                        "status": t.get("status", ""),
+                        "due": t.get("due", ""),
+                        "notes": t.get("notes", ""),
+                    }
+                )
             return {"tasks": tasks}
 
     # --- Tasks: create task ---
@@ -407,7 +491,9 @@ def run(args):
                 return result
             items = result.get("items", [])
             if not items:
-                return {"error": "No task lists found. Create one in Google Tasks first."}
+                return {
+                    "error": "No task lists found. Create one in Google Tasks first."
+                }
             tasklist_id = items[0].get("id", "")
 
         task_data = {"title": title}

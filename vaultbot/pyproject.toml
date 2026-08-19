@@ -114,7 +114,11 @@ target-version = "py311"
 # FAST002 (non-annotated dependency) is useful once Phase 3 starts.
 # The rest (E, F, W, I, B, UP, SIM, RUF) are the standard sane superset.
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE001", "FAST"]
-ignore = []
+# RUF100 (unused-noqa) is disabled: `# noqa: BLE001` comments are NOT unused —
+# test_no_silent_swallow.py AST-scans for them as the justification marker that
+# makes a bare `except Exception: pass` legal. Ruff can't see that consumer, so
+# it would strip them and break the fail-loud gate.
+ignore = ["RUF100"]
 
 # Allow fix for all enabled rules (when `--fix` is provided).
 fixable = ["ALL"]

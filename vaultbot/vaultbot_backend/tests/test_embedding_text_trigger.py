@@ -46,7 +46,7 @@ def test_trigger_list_preferred_over_when_to_use():
     content = _procedure(
         "Body text.",
         fm_suffix=(
-            "when_to_use: \"legacy when clause\"\n"
+            'when_to_use: "legacy when clause"\n'
             "trigger:\n"
             '  - "when checking syntax"\n'
             '  - "when verifying imports"\n'
@@ -98,13 +98,7 @@ def test_no_trigger_no_when_degrades_to_full_content():
     body = "This is the full body of the procedure."
     # No description, no when_to_use, no trigger → degraded path returns
     # the full content (which includes the body).
-    content = (
-        "---\n"
-        "type: procedure\n"
-        "status: verified\n"
-        "---\n\n"
-        + body
-    )
+    content = "---\ntype: procedure\nstatus: verified\n---\n\n" + body
     surface = _embedding_text(content, stem="NoDesc")
     assert body in surface
 
@@ -123,10 +117,7 @@ def test_description_always_included():
     """The description is always in the embedding surface."""
     content = _procedure(
         "Body text.",
-        fm_suffix=(
-            "trigger:\n"
-            '  - "when checking syntax"\n'
-        ),
+        fm_suffix=('trigger:\n  - "when checking syntax"\n'),
     )
     surface = _embedding_text(content)
     assert "Check a note's claims against its sources" in surface

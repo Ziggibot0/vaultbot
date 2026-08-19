@@ -14,8 +14,8 @@ Only the leaf module `custom_tools.google_workspace` is imported — never
 """
 
 import json
-from datetime import datetime, timezone
 import urllib.request
+from datetime import UTC, datetime
 
 import pytest
 
@@ -72,9 +72,7 @@ def test_setup_requires_both_credentials(patched_paths):
 
 
 def test_setup_saves_credentials(patched_paths):
-    result = gw.run(
-        {"action": "setup", "client_id": "cid", "client_secret": "csec"}
-    )
+    result = gw.run({"action": "setup", "client_id": "cid", "client_secret": "csec"})
     assert result["status"] == "ok"
     assert gw._load_config() == {"client_id": "cid", "client_secret": "csec"}
 
@@ -125,7 +123,7 @@ def test_status_authenticated(patched_paths):
     gw._save_tokens(
         {
             "access_token": "tok",
-            "obtained_at": datetime.now(timezone.utc).isoformat(),
+            "obtained_at": datetime.now(UTC).isoformat(),
             "expires_in": 3600,
         }
     )
@@ -151,7 +149,7 @@ def test_get_access_token_returns_stored(patched_paths):
     gw._save_tokens(
         {
             "access_token": "tok",
-            "obtained_at": datetime.now(timezone.utc).isoformat(),
+            "obtained_at": datetime.now(UTC).isoformat(),
             "expires_in": 3600,
         }
     )
@@ -191,9 +189,7 @@ def test_refresh_tokens_success(patched_paths, monkeypatch):
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr(
-        urllib.request, "urlopen", lambda req, timeout=10: FakeResp()
-    )
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=10: FakeResp())
     result = gw._refresh_tokens()
     assert result["access_token"] == "new"
     # refresh_token is preserved across refresh
@@ -230,9 +226,7 @@ def test_api_request_success(patched_paths, monkeypatch):
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr(
-        urllib.request, "urlopen", lambda req, timeout=30: FakeResp()
-    )
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30: FakeResp())
     result = gw._api_request("GET", "https://example.com", "tok")
     assert result == {"items": []}
 
@@ -248,7 +242,9 @@ def test_api_request_http_error(patched_paths, monkeypatch):
             return b'{"error": "invalid_token"}'
 
     monkeypatch.setattr(
-        urllib.request, "urlopen", lambda req, timeout=30: (_ for _ in ()).throw(FakeHTTPError())
+        urllib.request,
+        "urlopen",
+        lambda req, timeout=30: (_ for _ in ()).throw(FakeHTTPError()),
     )
     result = gw._api_request("GET", "https://example.com", "tok")
     assert "error" in result

@@ -21,7 +21,6 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from procedure_compiler import compile_from_text
-from subprocess_utils import run as _subprocess_run
 from step_gate_runtime import (
     _count_thing,
     _evaluate_condition,
@@ -29,7 +28,7 @@ from step_gate_runtime import (
     _validate_step,
     execute_procedure,
 )
-
+from subprocess_utils import run as _subprocess_run
 
 # ── Fake LLM client (for v1 text steps) ─────────────────────────────────
 
@@ -334,8 +333,9 @@ def _fixture_procedures(tmp_path):
 def test_run_procedure_cycle_detection(_fixture_procedures, monkeypatch):
     """A procedure that calls itself should be caught as a cycle."""
     import os
-    from subprocess_utils import run as _subprocess_run
     import sys as _sys
+
+    from subprocess_utils import run as _subprocess_run
 
     cycle_proc = _fixture_procedures / "Cycle-Proc.md"
     cycle_proc.write_text(

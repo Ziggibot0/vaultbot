@@ -19,7 +19,7 @@ SCHEMA = {
 
 import os
 import re
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 
 VAULT_ROOT = Path(
@@ -174,9 +174,7 @@ def run(args: dict) -> dict:
     incoming_links = _find_incoming_links(stem)
 
     # Check if file is already in trash — skip re-backup
-    is_in_trash = (
-        "vaultbot/vaultbot_backend" in file_path and "trash" in file_path
-    )
+    is_in_trash = "vaultbot/vaultbot_backend" in file_path and "trash" in file_path
 
     if is_in_trash:
         # Already a backup — delete permanently without re-backing-up

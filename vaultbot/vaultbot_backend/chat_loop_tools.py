@@ -18,15 +18,15 @@ import os
 from pathlib import Path
 
 from agent_tools import build_tool_list
+from chat_context import dedup_seen_results as _dedup_seen_results
 from chat_helpers import (
     notify_console_failure,
     tool_result_summary,
     truncate_tool_result,
 )
-from chat_context import dedup_seen_results as _dedup_seen_results
+from chat_loop_state import TurnState
 from chat_preflight import check_cancelled as _check_cancelled
 from chat_tool_dispatch import execute_agent_tool
-from chat_loop_state import TurnState
 from config import TUNABLES
 from procedure_tracker import interpret_validation_result
 from services import Services
@@ -77,9 +77,7 @@ async def execute_round_tools(
             st._last_search_query = tool_args.get("query", "")
 
         await svc.manager.send_personal_message(
-            json.dumps(
-                {"type": "tool_call", "tool": tool_name, "args": tool_args}
-            ),
+            json.dumps({"type": "tool_call", "tool": tool_name, "args": tool_args}),
             websocket,
             session_logger=session_logger,
         )
@@ -240,8 +238,7 @@ async def execute_round_tools(
                         "already_seen": len(_already_seen),
                         "new_results": len(_annotated) - len(_already_seen),
                         "seen_files": [
-                            Path(o["file_path"]).stem
-                            for o in _already_seen[:10]
+                            Path(o["file_path"]).stem for o in _already_seen[:10]
                         ],
                     },
                 )
@@ -272,9 +269,7 @@ async def execute_round_tools(
                         # comes back, producing zero-source research.
                         # The model's own search query is a proper
                         # research topic that the engines can handle.
-                        _research_topic = (
-                            st._last_search_query or user_message[:200]
-                        )
+                        _research_topic = st._last_search_query or user_message[:200]
                         session_logger.log(
                             "go_find_out_triggered",
                             {
@@ -312,9 +307,7 @@ async def execute_round_tools(
                             # result for the system message.
                             _research_brief = ""
                             if isinstance(_research_result, dict):
-                                _rb = _research_result.get(
-                                    "synthesis_brief", ""
-                                )
+                                _rb = _research_result.get("synthesis_brief", "")
                                 _kf = _research_result.get("key_facts", "")
                                 _np = _research_result.get("note_path", "")
                                 _parts = []
@@ -324,8 +317,7 @@ async def execute_round_tools(
                                     _parts.append(f"Key facts:\n{_kf}")
                                 if _np:
                                     _parts.append(
-                                        f"A permanent note was "
-                                        f"created at {_np}."
+                                        f"A permanent note was created at {_np}."
                                     )
                                 _research_brief = "\n\n".join(_parts)
                             # Store the system message for injection
@@ -359,9 +351,7 @@ async def execute_round_tools(
                                 "research": _research_result,
                             }
                         except Exception as e:  # noqa: BLE001
-                            session_logger.log(
-                                "go_find_out_failed", {"error": str(e)}
-                            )
+                            session_logger.log("go_find_out_failed", {"error": str(e)})
                             tool_result["message"] = (
                                 f"All search results are files you "
                                 f"already have, and auto-research "
@@ -414,8 +404,8 @@ async def execute_round_tools(
         # Procedure tracking: log validation results.
         if tool_name in ("vault_lint", "safe_write", "code_run"):
             try:
-                v_result, v_category, v_details = (
-                    interpret_validation_result(tool_name, tool_result)
+                v_result, v_category, v_details = interpret_validation_result(
+                    tool_name, tool_result
                 )
                 proc_name = (
                     procedures_in_context[0]
@@ -432,9 +422,7 @@ async def execute_round_tools(
                     category=v_category,
                 )
             except Exception as e:  # noqa: BLE001
-                session_logger.log(
-                    "procedure_tracking_failed", {"error": str(e)}
-                )
+                session_logger.log("procedure_tracking_failed", {"error": str(e)})
                 await notify_console_failure(
                     svc,
                     websocket,
@@ -463,14 +451,10 @@ async def execute_round_tools(
         # cap (_enforce_token_cap) is the final guarantee, and it
         # also exempts read tools from stubbing.
         _READ_CAP = int(
-            os.getenv(
-                "VAULTBOT_READ_RESULT_CAP", str(TUNABLES.read_result_cap)
-            )
+            os.getenv("VAULTBOT_READ_RESULT_CAP", str(TUNABLES.read_result_cap))
         )
         if tool_name in ("code_read", "vault_read_note"):
-            capped_result = truncate_tool_result(
-                tool_result, max_chars=_READ_CAP
-            )
+            capped_result = truncate_tool_result(tool_result, max_chars=_READ_CAP)
         else:
             capped_result = truncate_tool_result(tool_result)
         # All models get the SAME treatment: raw tool results,
@@ -493,11 +477,10 @@ async def execute_round_tools(
             {
                 "round": st.round_idx,
                 "tool": tool_name,
-                "result_summary": (
-                    tool_result_summary(tool_name, tool_result) or ""
-                )[:200],
+                "result_summary": (tool_result_summary(tool_name, tool_result) or "")[
+                    :200
+                ],
             }
         )
-
 
     return all_tools, custom_schemas

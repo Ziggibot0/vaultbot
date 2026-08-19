@@ -122,7 +122,6 @@ _LIST_FIELDS: frozenset[str] = frozenset(
         "tags",
         "scope",
         "applies_to",
-        "evidence_sources",
     }
 )
 

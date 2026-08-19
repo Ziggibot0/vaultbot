@@ -34,7 +34,6 @@ import os
 import re
 import shutil
 import subprocess
-from subprocess_utils import run as _subprocess_run, scrubbed_env, preexec_fn
 import sys
 import tempfile
 import time
@@ -45,6 +44,8 @@ from typing import Any
 import code_verify
 import safe_writer
 from config import TUNABLES
+from subprocess_utils import preexec_fn, scrubbed_env
+from subprocess_utils import run as _subprocess_run
 
 BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"

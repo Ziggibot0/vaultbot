@@ -27,8 +27,8 @@ from chat_helpers import (
 from chat_preflight import check_cancelled, dispatch_procedure_core
 from fastapi import WebSocket
 from services import Services
-from working_memory import TaskList
 from weaving import weave_textbook_notes
+from working_memory import TaskList
 
 
 async def execute_agent_tool(
@@ -64,7 +64,7 @@ async def execute_agent_tool(
     # In Safe Mode (default), dangerous tools (code_write, code_run,
     # tool_create, vault_delete, etc.) are blocked. The user must explicitly
     # opt into Developer Mode to enable self-modification. See safe_mode.py.
-    from safe_mode import is_tool_allowed, blocked_tool_message
+    from safe_mode import blocked_tool_message, is_tool_allowed
 
     if not is_tool_allowed(tool_name):
         msg = blocked_tool_message(tool_name)
@@ -106,7 +106,7 @@ async def execute_agent_tool(
         # either way. The subagent path is strictly safer (hard process
         # isolation); the in-process path is the safety net.
         try:
-            from subagent import subagent_enabled, run_research_subagent
+            from subagent import run_research_subagent, subagent_enabled
 
             _use_subagent = subagent_enabled()
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -810,9 +810,7 @@ async def execute_agent_tool(
             status=args.get("status", "pending"),
             notes=args.get("notes", ""),
         )
-        websocket._last_plan_progress_round = getattr(
-            websocket, "_chat_round_idx", 0
-        )
+        websocket._last_plan_progress_round = getattr(websocket, "_chat_round_idx", 0)
         session_logger.log("plan_task_added", {"content": content[:80]})
         return snap
 

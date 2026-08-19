@@ -49,7 +49,6 @@ from bs4 import BeautifulSoup
 # (see source_quality()) rather than blocked.
 from source_classification import is_blocked_source as _is_blocked_source
 
-
 # Realistic browser headers — many sites 403 the python-requests default UA.
 _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -229,9 +228,7 @@ class DuckDuckGoLite(_Backend):
         # class marks a failure and enters cooldown so other backends carry
         # the load and the ban self-heals.
         _forms = soup.find_all("form")
-        if _forms and any(
-            "anomaly.js" in (f.get("action") or "") for f in _forms
-        ):
+        if _forms and any("anomaly.js" in (f.get("action") or "") for f in _forms):
             raise requests.HTTPError(
                 "duckduckgo botnet challenge page (anomaly.js)",
                 response=resp,

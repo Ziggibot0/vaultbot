@@ -23,7 +23,7 @@ pytestmark = pytest.mark.integration
 # conversation_state: per-session load/save/clear
 # ---------------------------------------------------------------------------
 def test_save_load_roundtrip_per_session(tmp_path):
-    from conversation_state import save_history, load_history
+    from conversation_state import load_history, save_history
 
     sid = "11111111-1111-1111-1111-111111111111"
     # Patch the session directory to use tmp_path.
@@ -39,7 +39,7 @@ def test_save_load_roundtrip_per_session(tmp_path):
 
 def test_two_sessions_are_isolated(tmp_path):
     """Saving to session A does not affect session B's file."""
-    from conversation_state import save_history, load_history
+    from conversation_state import load_history, save_history
 
     sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -54,7 +54,7 @@ def test_two_sessions_are_isolated(tmp_path):
 
 def test_clear_only_affects_specified_session(tmp_path):
     """clear_history(session_id=A) does not delete session B's file."""
-    from conversation_state import save_history, load_history, clear_history
+    from conversation_state import clear_history, load_history, save_history
 
     sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -214,7 +214,7 @@ def test_conversation_index_registry_isolated():
 
 def test_conversation_index_registry_lru_eviction():
     """Opening more than MAX_CONCURRENT_SESSIONS evicts the oldest."""
-    from conversation_index import ConversationIndexRegistry, MAX_CONCURRENT_SESSIONS
+    from conversation_index import MAX_CONCURRENT_SESSIONS, ConversationIndexRegistry
 
     registry = ConversationIndexRegistry(ollama_client=None)
     sids = [f"sid-{i}" for i in range(MAX_CONCURRENT_SESSIONS + 2)]
@@ -252,6 +252,7 @@ def test_conversation_index_registry_clear_isolated():
 def test_ask_user_pending_requests_has_websocket_ref():
     """The _pending_requests entry should be a 3-tuple with a websocket ref."""
     import threading
+
     from custom_tools.ask_user import _pending_requests
 
     # Simulate registering a request with a websocket ref.

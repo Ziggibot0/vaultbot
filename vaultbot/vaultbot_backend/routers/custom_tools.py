@@ -8,9 +8,8 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
-
 from app_state import get_services
+from fastapi import APIRouter, Depends
 from services import Services
 
 router = APIRouter()

@@ -29,7 +29,11 @@ class ClaimVerifier:
     ERROR = "error"
 
     def __init__(
-        self, llm_client=None, log_path=None, vault_root=None, max_source_chars=8000,
+        self,
+        llm_client=None,
+        log_path=None,
+        vault_root=None,
+        max_source_chars=8000,
         credibility_tracker=None,
     ):
         self.llm_client = llm_client
@@ -48,6 +52,7 @@ class ClaimVerifier:
         else:
             try:
                 from source_credibility import SourceCredibilityTracker
+
                 self.credibility = SourceCredibilityTracker()
             except Exception:  # noqa: BLE001 — best-effort
                 self.credibility = None
@@ -467,13 +472,13 @@ class ClaimVerifier:
                 if verdict in (self.SUPPORTED, self.UNSUPPORTED, self.CONTRADICTED):
                     # Find the source URL for this claim.
                     source_title = vc.get("source", "")
-                    source_info = sources_index.get(
-                        (source_title or "").lower()
-                    )
+                    source_info = sources_index.get((source_title or "").lower())
                     if not source_info:
                         # Try fuzzy match (same as above).
                         for key, info in sources_index.items():
-                            if (source_title or "").lower() in key or key in (source_title or "").lower():
+                            if (source_title or "").lower() in key or key in (
+                                source_title or ""
+                            ).lower():
                                 source_info = info
                                 break
                     if source_info and source_info.get("url"):

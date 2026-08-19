@@ -77,7 +77,7 @@ def run(args: dict) -> dict:
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
-    from custom_tools.gh_client import gh_api, gh_available, GhError
+    from custom_tools.gh_client import GhError, gh_api, gh_available
 
     action = args.get("action", "").strip()
     if not action:

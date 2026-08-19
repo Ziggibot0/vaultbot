@@ -8,9 +8,9 @@ the query.  No Ollama; uses tmp_path for isolation.
 See [[Procedure-Subprocess-Architecture]] grading-loop section.
 """
 
-import numpy as np
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.unit

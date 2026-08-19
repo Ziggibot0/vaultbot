@@ -38,25 +38,24 @@ from dotenv import load_dotenv
 from embedding_drift import EmbeddingDrift
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from forum_backends import ForumEnhancedFreeSearch
 from fused_retrieval import FusedRetriever
 from graph_ops import GraphOpRegistry
 from identity import Identity
 from knowledge_curriculum import KnowledgeCurriculum
 from lazy_condenser import LazyCondenser
 from llm_client import LLMClient, build_role_client
-from providers import ProviderRegistry
 from note_creator import NoteCreator
 
 # Import our modules
 from plan_executor import PlanExecutor
+from providers import ProviderRegistry
 from research_engine import ResearchEngine
 from self_improver import SelfImprover
 from session_logger import SessionLogger
 from supervision import HealthMonitor
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
-
-from forum_backends import ForumEnhancedFreeSearch
 
 # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
 # backends, skips arXiv for technical queries, prioritizes forum results.
@@ -472,9 +471,9 @@ app.add_middleware(
 # requests are also rate-limited). Per-endpoint limits prevent a buggy
 # agentic loop or malicious local process from hammering the backend.
 # See rate_limit.py for the full design.
+from rate_limit import is_rate_allowed
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-from rate_limit import is_rate_allowed
 
 
 class _RateLimitMiddleware(BaseHTTPMiddleware):
@@ -521,14 +520,19 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
             return await call_next(request)
         if token is None:
-            return JSONResponse(status_code=401, content={"detail": "missing auth token"})
+            return JSONResponse(
+                status_code=401, content={"detail": "missing auth token"}
+            )
         try:
             expected = get_or_create_token()
         except Exception:
             return JSONResponse(status_code=503, content={"detail": "auth unavailable"})
         import secrets as _secrets
+
         if not _secrets.compare_digest(token, expected):
-            return JSONResponse(status_code=401, content={"detail": "invalid auth token"})
+            return JSONResponse(
+                status_code=401, content={"detail": "invalid auth token"}
+            )
         return await call_next(request)
 
 
@@ -681,6 +685,7 @@ def _researcher_crash_callback(error: str) -> None:
     still logged to the default session logger.
     """
     import json as _json
+
     from diagnostics import classify_error
 
     try:
@@ -916,7 +921,9 @@ rag_evaluator = RAGEvaluator()
 # from research notes, loads cited sources, checks entailment. Uses LLM when
 # available, falls back to deterministic string matching.
 # See [[Claim-Verification-for-Vault-Notes]].
-claim_verifier = ClaimVerifier(llm_client=ollama_client, credibility_tracker=source_credibility)
+claim_verifier = ClaimVerifier(
+    llm_client=ollama_client, credibility_tracker=source_credibility
+)
 
 # Pattern extractor: deterministic extraction of cross-session patterns from
 # chat logs. Scans episodic memory, finds recurring topics, sentiment
@@ -988,9 +995,9 @@ manager = ConnectionManager()
 # parameter instead of reading these globals as free variables. See
 # services.py. The globals above stay in place; only the extracted
 # functions change to `svc.<name>` access.
-from services import Services
 from app_state import set_services  # Phase 3: DI surface for routers
 from conversation_index import ConversationIndexRegistry
+from services import Services
 
 # Conversation-aware retrieval: a per-session registry of searchable indexes
 # of recent conversation turns.  Each tab gets its own index so cross-tab
@@ -1085,18 +1092,18 @@ set_services(svc)
 # instead of main.py's module-level globals.  Migrated routes are deleted
 # from main.py as they move into routers/.  See routers/__init__.py for the
 # migration order.
-from routers import system as _system_router
-from routers import llm as _llm_router
-from routers import config as _config_router
-from routers import research as _research_router
 from routers import autonomous as _autonomous_router
+from routers import config as _config_router
 from routers import custom_tools as _custom_tools_router
-from routers import task as _task_router
 from routers import identity as _identity_router
-from routers import ws as _ws_router
-from routers import tournament as _tournament_router
-from routers import speech as _speech_router
+from routers import llm as _llm_router
 from routers import oauth_callback as _oauth_callback_router
+from routers import research as _research_router
+from routers import speech as _speech_router
+from routers import system as _system_router
+from routers import task as _task_router
+from routers import tournament as _tournament_router
+from routers import ws as _ws_router
 
 app.include_router(_system_router.router)
 app.include_router(_llm_router.router)

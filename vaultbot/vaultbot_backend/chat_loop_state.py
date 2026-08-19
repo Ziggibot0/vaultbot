@@ -50,7 +50,11 @@ class TurnState:
 
     # Per-turn token cost accumulator (prompt/completion/rounds).
     _turn_token_totals: dict = field(
-        default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0, "rounds": 0}
+        default_factory=lambda: {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "rounds": 0,
+        }
     )
 
     # Seen-content tracker: {file_path: {"source", "lines", "round"}}.

@@ -181,9 +181,7 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
 # frontmatter pipeline. Chat logs are conversation traces, not knowledge
 # notes — they get consolidated by the semantic consolidation pipeline
 # (hippocampal replay), not QA'd for frontmatter quality.
-_QA_EXCLUDE_DIRS = (
-    "vaultbot/Memory/Chat",
-)
+_QA_EXCLUDE_DIRS = ("vaultbot/Memory/Chat",)
 
 # Cap the QA queue so it actually drains. Without a cap, a large vault fills
 # the queue with every note (thousands), the QA worker processes 50 per idle
@@ -380,6 +378,7 @@ def _run_procedure_sync(
     """
     import subprocess
     import sys
+
     from subprocess_utils import scrubbed_env
 
     venv_py = sys.executable
@@ -498,10 +497,10 @@ def _fix_note(
     3. If tags are weak and ollama_client is available, generate them.
     """
     from note_schema import (
+        _format_frontmatter,
+        _split_frontmatter,
         inject_schema,
         parse_frontmatter,
-        _split_frontmatter,
-        _format_frontmatter,
     )
 
     changes: list[str] = []

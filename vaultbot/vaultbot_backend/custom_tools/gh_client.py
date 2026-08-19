@@ -64,7 +64,9 @@ def gh_available() -> bool:
         return False
 
 
-def gh(args: list[str], cwd: str | None = None, timeout: int = 60) -> subprocess.CompletedProcess:
+def gh(
+    args: list[str], cwd: str | None = None, timeout: int = 60
+) -> subprocess.CompletedProcess:
     """Run an arbitrary ``gh`` subcommand and return the CompletedProcess.
 
     Raises GhError on non-zero exit. ``args`` is the list of tokens AFTER
@@ -79,7 +81,9 @@ def gh(args: list[str], cwd: str | None = None, timeout: int = 60) -> subprocess
             cwd=cwd,
         )
     except FileNotFoundError:
-        raise GhError("gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'.")
+        raise GhError(
+            "gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'."
+        )
     except subprocess.TimeoutExpired:
         raise GhError(f"gh command timed out: {' '.join(args)}")
 
@@ -118,7 +122,9 @@ def gh_api(
             timeout=timeout,
         )
     except FileNotFoundError:
-        raise GhError("gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'.")
+        raise GhError(
+            "gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'."
+        )
     except subprocess.TimeoutExpired:
         raise GhError(f"gh api {method} {path} timed out")
 
@@ -158,7 +164,9 @@ def gh_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 30) -> str
             timeout=timeout,
         )
     except FileNotFoundError:
-        raise GhError("gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'.")
+        raise GhError(
+            "gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'."
+        )
     except subprocess.TimeoutExpired:
         raise GhError(f"gh raw {owner}/{repo}/{path}@{ref} timed out")
 
