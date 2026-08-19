@@ -6,18 +6,20 @@ while dense embeddings are the opposite (high recall, lower precision). Fusing t
 gives both: semantic neighbors seed the graph walk, and the graph walks back in
 contextually-connected notes that pure similarity may miss.
 
-Four channels are fused:
-  a. Vector channel   — vault_indexer.search() normalized to [0,1]
-  b. Lexical channel  — BM25 keyword match over note title + cached content
+Three channels are fused:
+  a. Vector channel  — vault_indexer.search() normalized to [0,1]
+  b. Lexical channel — BM25 keyword match over note title + cached content
                        preview, normalized to [0,1] (a peer of the vector
                        channel, recovering title/keyword matches a small
                        embedding model can't map)
-  c. Graph channel    — wikilink neighbors of vector hits, score = 0.5 × vector score
-  d. Backlink channel — backlinks of vector hits, score = 0.7 × vector score
-                       (backlinks are stronger: someone linked TO this note = hub)
+  c. Graph channel   — wikilink neighbors of vector hits (forward + backlinks,
+                       via direction="both"), score = GRAPH_BOOST × vector score
 
-Candidates are merged by file_path (max score across channels), reranked for
-multi-channel agreement (×1.3) and hub-ness (×1.1), then truncated to top-k.
+Candidates are merged by file_path (max score across channels), then reranked by
+two signals: procedure status (authoritative tools float up) and trigger/inhibitor
+feedback (a note whose trigger phrases match the query floats up; a note whose
+inhibitor phrases match more strongly than any trigger is dropped). Finally
+truncated to top-k.
 
 Future work: this is a lightweight stand-in for the hybrid/community-augmented
 retrieval described in GraphRAG (arXiv:2404.16130), which builds a community
@@ -35,7 +37,6 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 
@@ -50,8 +51,8 @@ class FusedRetriever:
 
     # Channel weight multipliers (from the research design).
     GRAPH_BOOST = 0.5  # forward-link neighbors
-    BACKLINK_BOOST = 0.7  # backlinks (hubs)
-    ALL_CHANNEL_RERANK = 1.3  # appears in vector + graph + backlink
+    BACKLINK_BOOST = 0.7  # backlinks (hubs — someone linked TO this note)
+    ALL_CHANNEL_RERANK = 1.3  # appears in vector + graph (multi-channel agreement)
     HUB_RERANK = 1.1  # high backlink degree
     HUB_DEGREE_THRESHOLD = 3  # min backlinks to count as a hub
     # Lexical (BM25) channel tuning.  The 'FUSED' retriever historically
@@ -63,18 +64,17 @@ class FusedRetriever:
     # Lexical is a PEER of the vector channel, not a discounted add-on.  A
     # title/keyword match is the single most reliable relevance signal, so
     # lexical scores normalize to [0,1] with top=1.0 (same ceiling as the
-    # vector channel's top hit).  The rerank boosts (×1.3 all-channel, ×1.1
-    # hub) can push a well-connected vector hit to ~1.43, so a lexical
-    # title match must be able to reach a comparable ceiling to win the
-    # 'direct' category.  1.3 matches the all-channel rerank ceiling.
+    # vector channel's top hit).  The procedure + trigger boosts are additive
+    # and can push a note above 1.0, so a lexical title match needs a
+    # comparable ceiling to win the 'direct' category.  1.3 gives lexical
+    # that headroom.
     LEXICAL_SCORE_WEIGHT = 1.3
-    # Graph/backlink seed over-fetch.  The graph channel walks from the
-    # vector hits, but if the vector channel truncates to top-k first, a
-    # graph-walk query whose seed note ranked just outside top-k never
-    # starts its walk.  Over-fetching the vector pool (and NOT truncating
-    # before the graph/backlink channels seed) lets neighbors of
-    # lower-ranked-but-relevant notes surface.  Final top-k truncation
-    # happens in retrieve() after merge.
+    # Graph seed over-fetch.  The graph channel walks from the vector hits,
+    # but if the vector channel truncates to top-k first, a graph-walk query
+    # whose seed note ranked just outside top-k never starts its walk.
+    # Over-fetching the vector pool (and NOT truncating before the graph
+    # channel seeds) lets neighbors of lower-ranked-but-relevant notes
+    # surface.  Final top-k truncation happens in retrieve() after merge.
     GRAPH_OVERFETCH = 8
     # Minimum normalized score to be included in results. Results below
     # this threshold are dropped — they're semantically too distant from
@@ -83,22 +83,11 @@ class FusedRetriever:
     # 0.15 is conservative — drops the bottom ~20% that are barely above
     # random for a 768-dim embedding space.
     MIN_SCORE_THRESHOLD = 0.15
-    # Drift re-ranking: over-fetch this many candidates from the vector
-    # channel, then re-rank with drifted embeddings. 3x gives the drift
-    # layer room to promote a note that raw similarity ranked lower but
-    # has accumulated helpful feedback for similar queries.
-    DRIFT_OVERFETCH = 3
-    # How much the drift-adjusted distance can move a candidate's
-    # normalized score, as a fraction of the score range.  Keeps drift
-    # as a tie-breaker/booster, not a wholesale override of content
-    # similarity — a note with strong drift but weak content similarity
-    # won't leapfrog a note that's genuinely a better content match.
-    DRIFT_SCORE_WEIGHT = 0.25
     # Verified-procedure retrieval boost.  A procedure note whose
     # frontmatter ``status`` is ``verified`` (set by
     # procedure_tracker.run_promotion_cycle) gets this fractional score
-    # bump, BELOW DRIFT_SCORE_WEIGHT so verified status only breaks ties
-    # near the margin and never overrides content similarity.  See
+    # bump, small enough that verified status only breaks ties near the
+    # margin and never overrides content similarity.  See
     # [[Procedure-Subprocess-Architecture]] grading loop.
     VERIFIED_BOOST = 0.05
     # Base procedure retrieval boost.  ANY note with ``type: procedure``
@@ -122,11 +111,15 @@ class FusedRetriever:
     # multiplied by this factor so it sinks below usable notes — it should
     # not crowd the procedure surface when it can't be run.
     FLAGGED_PENALTY = 0.5
-    # Trigger/inhibitor gate margin: a note is dropped when its inhibitor
-    # phrase match score exceeds its trigger phrase match score by more
-    # than this margin.  Conservative start (0.05) — only drop when the
-    # inhibitor clearly dominates.  See trigger_store.py.
-    TRIGGER_GATE_MARGIN = 0.05
+    # Trigger/inhibitor retrieval signal.  A note's trigger phrases create a
+    # continuous ranking gradient: the closer the query is to a trigger
+    # phrase, the more the note floats up (additive boost).  Inhibitor
+    # phrases are a hard "no" (like a DNA inhibitor): if the query is closer
+    # to an inhibitor than to ANY trigger, the note is dropped from recall
+    # (still findable via other searches — just not in the first context
+    # pop).  See trigger_store.py.
+    TRIGGER_BOOST = 0.2  # additive score bump, scaled by trigger cosine
+    TRIGGER_GATE_MARGIN = 0.0  # drop when inhibitor > trigger (no slack)
 
     def __init__(
         self,
@@ -139,17 +132,18 @@ class FusedRetriever:
         self.vault_graph = vault_graph
         self.vault_indexer = vault_indexer
         self.session_logger = session_logger
-        # Optional EmbeddingDrift layer (relevance feedback). When wired in,
-        # main.py records helpful/unhelpful signals on it directly after
-        # each chat; the retriever stores the reference so future work can
-        # over-fetch + re-rank with drifted embeddings. Accepting it here
-        # keeps the constructor call in main.py valid even when the
-        # retriever-side re-ranking isn't active.
+        # EmbeddingDrift is accepted for API compatibility (main.py still
+        # passes it) but is NO LONGER consumed by the retriever — drift
+        # re-ranking was removed in the retrieval simplification.  The drift
+        # layer remains wired elsewhere (chat_background / chat_preflight
+        # record feedback on it directly), but retrieval no longer re-ranks
+        # by drift.  Kept as an attribute so callers that read it don't break.
         self.embedding_drift = embedding_drift
         # Optional TriggerStore (trigger/inhibitor phrase embeddings). When
-        # wired, the retrieval gate drops notes whose inhibitors match the
-        # query more strongly than their triggers.  None = no gate (the
-        # store is a bonus layer — see trigger_store.py).
+        # wired, trigger phrases create a continuous ranking gradient and
+        # inhibitor phrases hard-drop notes whose inhibitors match the query
+        # more strongly than any trigger.  None = no signal (the store is a
+        # bonus layer — see trigger_store.py).
         self.trigger_store = trigger_store
         # Optional stem -> frontmatter-status map for verified-procedure
         # retrieval boost (Phase 3 grading loop).  Populated by main.py
@@ -164,14 +158,14 @@ class FusedRetriever:
     # ------------------------------------------------------------------
     def retrieve(self, query: str, k: int = 10, depth: int = 1) -> dict[str, Any]:
         """
-        Fuse vector + graph + backlink retrieval.
+        Fuse vector + lexical + graph retrieval.
 
         Returns:
             {
               "results": [
                 {"file_path", "name", "score", "channels": [str], "snippet"}, ...
               ],
-              "channels": {"vector": N, "graph": N, "backlink": N},
+              "channels": {"vector": N, "graph": N, "lexical": N},
               "count": int,
             }
         """
@@ -209,30 +203,11 @@ class FusedRetriever:
                         },
                     )
 
-            # ---- channel (c): backlinks ----
-            backlink_candidates: dict[str, dict[str, Any]] = {}
-            try:
-                backlink_candidates = self._backlink_channel(vector_hits, norm_scores)
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                self._log(
-                    "backlink.channel_failed",
-                    f"{type(e).__name__}: {e} — backlink channel skipped",
-                )
-                if self.session_logger is not None:
-                    self.session_logger.log(
-                        "retrieval_channel_failed",
-                        {
-                            "channel": "backlink",
-                            "error": str(e),
-                        },
-                    )
-
-            # ---- (c2): lexical (BM25 keyword) ----
-            # The 'FUSED' retriever historically fused only dense + graph
-            # channels.  A lexical channel recovers title/keyword matches
-            # that a small embedding model can't map (the golden set's
-            # 'direct' category, and paraphrase queries whose note bodies
-            # share vocabulary with the query).
+            # ---- channel (b): lexical (BM25 keyword) ----
+            # A lexical channel recovers title/keyword matches that a small
+            # embedding model can't map (the golden set's 'direct' category,
+            # and paraphrase queries whose note bodies share vocabulary with
+            # the query).
             lexical_candidates: dict[str, dict[str, Any]] = {}
             try:
                 lexical_candidates = self._lexical_channel(query, k)
@@ -250,16 +225,15 @@ class FusedRetriever:
                         },
                     )
 
-            # ---- (d) merge + dedup ----
+            # ---- (c) merge + dedup ----
             merged = self._merge(
                 vector_hits=vector_hits,
                 norm_scores=norm_scores,
                 graph_candidates=graph_candidates,
-                backlink_candidates=backlink_candidates,
                 lexical_candidates=lexical_candidates,
             )
 
-            # ---- (e) rerank ----
+            # ---- (d) rerank ----
             # Rerank is a post-processing boost; if it fails (e.g. graph
             # access for hub detection), return unreranked results rather
             # than losing everything. Log loudly so it's visible.
@@ -278,7 +252,7 @@ class FusedRetriever:
                         },
                     )
 
-            # ---- (f) filter by minimum score + truncate to top-k ----
+            # ---- (e) filter by minimum score + truncate to top-k ----
             ranked = sorted(merged.values(), key=lambda c: c["score"], reverse=True)
             # Drop results below the relevance threshold — they waste
             # context budget with semantically distant noise.  But only
@@ -304,33 +278,27 @@ class FusedRetriever:
 
             results = [self._finalize(c, query) for c in top_k]
 
-            # ---- (g) trigger/inhibitor gate ----
-            # Drop notes whose inhibitor phrases match the query more
-            # strongly than their trigger phrases (by a margin).  A note
-            # with no trigger/inhibitor entry passes through (the gate is
-            # a no-op until notes acquire the fields).  This is the
-            # feedback-driven "do not show me this here" signal: the Dream
-            # Pass writes inhibitor phrases after observing that a note was
-            # unhelpful for a given kind of query.  The gate reuses the
-            # query embedding already computed for the vector channel —
-            # zero extra embedding calls.
+            # ---- (f) trigger/inhibitor signal ----
+            # Triggers create a continuous ranking gradient (additive boost
+            # scaled by trigger cosine); inhibitors are a hard drop (like a
+            # DNA inhibitor).  A note whose inhibitor phrases match the query
+            # more strongly than ANY trigger phrase is dropped from recall —
+            # still findable via other searches, just not in the first context
+            # pop.  A note with no trigger/inhibitor entry passes through
+            # (no boost, no drop).  Reuses the query embedding already
+            # computed for the vector channel — zero extra embedding calls.
             if self.trigger_store is not None and results:
-                # Compute the query embedding once for the gate (reuses the
-                # same embedding the vector channel already computed, but
-                # that one is local to _vector_channel).  Only paid when the
-                # store is wired AND there are results to gate — zero cost
-                # for the common no-store / no-results paths.
                 _gate_q_emb: Any = None
                 try:
                     _gate_q_emb = self.vault_indexer._get_embedding(query)
                 except Exception as e:  # noqa: BLE001 — best-effort
                     self._log("trigger_gate.embed_failed", f"{e}")
-                _gated: list[dict[str, Any]] = []
+                _kept: list[dict[str, Any]] = []
                 _dropped: list[dict[str, Any]] = []
                 for r in results:
                     fp = r.get("file_path", "")
                     if not fp or _gate_q_emb is None:
-                        _gated.append(r)
+                        _kept.append(r)
                         continue
                     try:
                         should_drop, trig_s, inib_s = self.trigger_store.check(
@@ -346,21 +314,29 @@ class FusedRetriever:
                                 "inhibitor_score": round(inib_s, 4),
                             }
                         )
-                    else:
-                        _gated.append(r)
+                        continue
+                    # Trigger gradient: boost the note's score by the trigger
+                    # cosine (scaled).  A note closer to its trigger phrases
+                    # floats up the top-k.  No trigger signal → no boost.
+                    if trig_s > 0.0:
+                        r["score"] = r["score"] + self.TRIGGER_BOOST * trig_s
+                    _kept.append(r)
                 if _dropped and self.session_logger is not None:
                     self.session_logger.log(
                         "trigger_gate_drop",
-                        {"dropped": _dropped, "kept": len(_gated)},
+                        {"dropped": _dropped, "kept": len(_kept)},
                     )
-                results = _gated
+                # Re-sort by the (possibly trigger-boosted) score so the
+                # trigger gradient actually reorders the top-k, not just
+                # relabels scores.
+                _kept.sort(key=lambda r: r.get("score", 0.0), reverse=True)
+                results = _kept
 
             return {
                 "results": results,
                 "channels": {
                     "vector": len(vector_hits),
                     "graph": len(graph_candidates),
-                    "backlink": len(backlink_candidates),
                     "lexical": len(lexical_candidates),
                 },
                 "count": len(results),
@@ -390,42 +366,18 @@ class FusedRetriever:
         Run the vector search and normalize scores to [0,1].
 
         VaultIndexer.search() returns L2 *distance* (smaller = more similar),
-        so we convert distance → similarity via `1 - d/max_d` and then normalize
-        to [0,1] so the best hit is 1.0. The caller treats higher score = better.
-
-        DRIFT RE-RANKING: when an EmbeddingDrift layer is wired in, this
-        over-fetches DRIFT_OVERFETCH × k candidates, reconstructs each one's
-        content embedding straight from the FAISS index (zero Oollama calls),
-        applies the note's accumulated drift vector, and recomputes the L2
-        distance to the query embedding.  A note that proved helpful for
-        similar past queries drifts TOWARD the query (smaller distance →
-        higher score); one that proved unhelpful drifts AWAY.  This re-ranks
-        by "what is this note good FOR" (feedback) on top of "what is it
-        similar to" (content).  The drift signal is LLM-free — derived from
-        the agent's own behavior in handle_chat.
+        so we convert distance → similarity via min-max normalization so the
+        best hit is 1.0. The caller treats higher score = better.
         """
-        # Over-fetch so drift has room to promote a lower-ranked note AND
-        # so the graph/backlink channels can seed from a broader pool (a
+        # Over-fetch so the graph channel can seed from a broader pool (a
         # graph-walk query whose seed note ranked just outside top-k would
         # otherwise never start its walk).  Final top-k truncation happens
         # in retrieve() after merge.
         fetch_k = k * self.GRAPH_OVERFETCH
-        if self.embedding_drift is not None:
-            fetch_k = max(fetch_k, k * self.DRIFT_OVERFETCH)
         raw = self.vault_indexer.search(query, k=fetch_k)
 
         if not raw:
             return [], {}
-
-        # --- Drift re-ranking (LLM-free) ---
-        # Reconstruct each candidate's content embedding from FAISS, apply
-        # its drift vector, recompute L2 distance to the query embedding.
-        # If drift is configured, it IS the ranking mechanism — raise on
-        # failure instead of falling back to raw distances.
-        if self.embedding_drift is not None:
-            drifted = self._drift_rerank(raw, query)
-            if drifted is not None:
-                raw = drifted
 
         dists = [h.get("score", 0.0) or 0.0 for h in raw]
         max_d = max(dists) if dists else 0.0
@@ -440,87 +392,16 @@ class FusedRetriever:
             # actually 1.0 as the docstring promises.  `1 - d/max_d` maps the
             # best hit to `1 - min_d/max_d` (~0.24 for nomic-embed-text, whose
             # L2 distances cluster in 0.5–0.7), compressing every score into a
-            # flat band and starving the graph/backlink channels (which
-            # multiply this score by GRAPH_BOOST/BACKLINK_BOOST) of signal.
+            # flat band and starving the graph channel (which multiplies this
+            # score by GRAPH_BOOST) of signal.
             if max_d > min_d:
                 sim = (max_d - d) / (max_d - min_d)
             else:
                 sim = 1.0
             norm[fp] = max(0.0, min(1.0, sim))
-        # Do NOT truncate to k here — the graph/backlink channels seed from
-        # this full over-fetched pool.  retrieve() truncates to top-k after
-        # merge + rerank.
+        # Do NOT truncate to k here — the graph channel seeds from this full
+        # over-fetched pool.  retrieve() truncates to top-k after merge.
         return raw, norm
-
-    def _drift_rerank(
-        self, raw: list[dict[str, Any]], query: str
-    ) -> list[dict[str, Any]] | None:
-        """Re-rank `raw` hits by drift-adjusted L2 distance to the query.
-
-        For each candidate: reconstruct its content embedding from the
-        FAISS index (zero Ollama calls), apply drift, recompute distance.
-        Returns a new list sorted by drift-adjusted distance (ascending =
-        most relevant first), or None if drift could not be applied (e.g.
-        no query embedding available, index missing) so the caller falls
-        back to raw distances.
-        """
-        idx = self.vault_indexer
-        # Get the query embedding ONCE (one Ollama call, reused for all
-        # candidates — not one per candidate).
-        query_emb = idx._get_embedding(query)
-        if query_emb is None or query_emb.size == 0:
-            return None
-
-        # Normalize the query embedding to unit length.  The stored content
-        # embeddings are L2-normalized (vault_indexer normalizes in-place so
-        # L2 distance ≡ cosine distance), but `_get_embedding` returns the RAW
-        # Ollama embedding (norm ~20 for nomic-embed-text).  Without this, the
-        # drift-adjusted distance `norm(drifted_emb - query_emb)` is ~20× the
-        # raw FAISS distance (~0.7), so one drifted candidate dominates max_d
-        # and every other score collapses to ~0.96 — the vector channel stops
-        # discriminating and graph/backlink seeds inherit a flat, useless
-        # score.  Normalizing here keeps drift distances on the same [0,2]
-        # scale as the raw search.
-        q_norm = float(np.linalg.norm(query_emb))
-        if q_norm > 0:
-            query_emb = query_emb / q_norm
-
-        drift = self.embedding_drift
-        if drift is None:
-            return None
-
-        drifted_hits: list[dict[str, Any]] = []
-        any_drifted = False
-        for h in raw:
-            fp = h.get("file_path", "")
-            if not fp:
-                continue
-            content_emb = idx.reconstruct_embedding(fp)
-            if content_emb is None:
-                # Can't reconstruct — keep raw distance, no drift applied.
-                drifted_hits.append(h)
-                continue
-            drifted_emb = drift.apply_drift(fp, content_emb)
-            if drifted_emb is content_emb:
-                # No drift recorded for this note — keep raw distance.
-                drifted_hits.append(h)
-                continue
-            # Recompute L2 distance to the query with the drifted embedding.
-            new_dist = float(np.linalg.norm(drifted_emb - query_emb))
-            any_drifted = True
-            drifted_hits.append({**h, "score": new_dist})
-
-        if not any_drifted:
-            return None  # nothing actually drifted — keep raw order
-
-        # Sort by the (possibly drift-adjusted) distance, ascending.
-        drifted_hits.sort(key=lambda h: h.get("score", 0.0))
-        self._log(
-            "vector.drift_rerank",
-            f"re-ranked {len(drifted_hits)} hits, drift applied to "
-            f"{sum(1 for h in drifted_hits if h.get('_drifted'))}",
-        )
-        return drifted_hits
 
     def _graph_channel(
         self,
@@ -528,9 +409,15 @@ class FusedRetriever:
         norm_scores: dict[str, float],
         depth: int,
     ) -> dict[str, dict[str, Any]]:
-        """1-hop wikilink neighbors of vector hits. Score = GRAPH_BOOST × vector score.
+        """Wikilink neighbors of vector hits, direction-aware.
 
-        Raises on failure — the caller (retrieve) catches and logs loudly."""
+        Forward links (outgoing) score = GRAPH_BOOST × vector score; backlinks
+        (incoming — someone linked TO this note = hub) score = BACKLINK_BOOST ×
+        vector score.  This folds the old separate backlink channel into a
+        single walk so backlinks keep their stronger weight without a second
+        channel.  Raises on failure — the caller (retrieve) catches and logs
+        loudly.
+        """
         candidates: dict[str, dict[str, Any]] = {}
         for hit in vector_hits:
             fp = hit.get("file_path")
@@ -540,17 +427,21 @@ class FusedRetriever:
             if not base:
                 continue
             name = self._name_from_hit(hit, fp)
-            neighbors = self._neighbors(name, direction="both")
-            # limited walk of `depth` hops
-            frontier = [(n, 0) for n in neighbors]
+            # Forward links (outgoing) and backlinks (incoming) get different
+            # weights.  Walk `depth` hops, decaying each hop.
+            frontier: list[tuple[str, int, float]] = [
+                (n, 0, self.GRAPH_BOOST) for n in self._neighbors(name, "out")
+            ] + [
+                (n, 0, self.BACKLINK_BOOST) for n in self._neighbors(name, "in")
+            ]
             while frontier:
-                node, d = frontier.pop(0)
+                node, d, weight = frontier.pop(0)
                 if d >= depth:
                     continue
                 nfp = self._file_path_for_node(node)
                 if not nfp or nfp == fp:
                     continue
-                score = self.GRAPH_BOOST * base * (0.85**d)
+                score = weight * base * (0.85**d)
                 existing = candidates.get(nfp)
                 if existing is None or score > existing["score"]:
                     candidates[nfp] = {
@@ -560,43 +451,9 @@ class FusedRetriever:
                         "channels": {"graph"},
                     }
                 if d + 1 < depth:
-                    frontier.extend((n, d + 1) for n in self._neighbors(node, "both"))
-        return candidates
-
-    def _backlink_channel(
-        self,
-        vector_hits: list[dict[str, Any]],
-        norm_scores: dict[str, float],
-    ) -> dict[str, dict[str, Any]]:
-        """Backlinks of vector hits. Score = BACKLINK_BOOST × vector score.
-
-        Raises on failure — the caller (retrieve) catches and logs loudly."""
-        candidates: dict[str, dict[str, Any]] = {}
-        graph = self.vault_graph
-        backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
-        for hit in vector_hits:
-            fp = hit.get("file_path")
-            if not fp:
-                continue
-            base = norm_scores.get(fp, 0.0)
-            if not base:
-                continue
-            name = self._name_from_hit(hit, fp)
-            # who links TO this note?
-            linked_from = backlinks.get(name, set())
-            for src in linked_from:
-                src_fp = self._file_path_for_node(src)
-                if not src_fp or src_fp == fp:
-                    continue
-                score = self.BACKLINK_BOOST * base
-                existing = candidates.get(src_fp)
-                if existing is None or score > existing["score"]:
-                    candidates[src_fp] = {
-                        "file_path": src_fp,
-                        "name": src,
-                        "score": score,
-                        "channels": {"backlink"},
-                    }
+                    frontier.extend(
+                        (n, d + 1, weight) for n in self._neighbors(node, "both")
+                    )
         return candidates
 
     def _lexical_channel(self, query: str, k: int) -> dict[str, dict[str, Any]]:
@@ -707,7 +564,6 @@ class FusedRetriever:
         vector_hits: list[dict[str, Any]],
         norm_scores: dict[str, float],
         graph_candidates: dict[str, dict[str, Any]],
-        backlink_candidates: dict[str, dict[str, Any]],
         lexical_candidates: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Merge all channels by file_path, taking the MAX score across channels."""
@@ -726,8 +582,8 @@ class FusedRetriever:
                 "content": hit.get("content", ""),
             }
 
-        # fold in graph + backlink + lexical, keeping max score and unioning channel tags
-        for bucket in (graph_candidates, backlink_candidates, lexical_candidates or {}):
+        # fold in graph + lexical, keeping max score and unioning channel tags
+        for bucket in (graph_candidates, lexical_candidates or {}):
             for fp, cand in bucket.items():
                 existing = merged.get(fp)
                 if existing is None:
@@ -747,8 +603,9 @@ class FusedRetriever:
     def _rerank(self, merged: dict[str, dict[str, Any]]) -> None:
         """
         Apply reranking boosts:
-          - notes present in all 3 channels → ×ALL_CHANNEL_RERANK
+          - notes present in vector + graph → ×ALL_CHANNEL_RERANK
           - high-degree hubs (many backlinks) → ×HUB_RERANK
+          - procedure status-aware boost (tri-state, additive)
         Mutates `merged` in place.
         """
         graph = self.vault_graph
@@ -757,14 +614,13 @@ class FusedRetriever:
         for fp, cand in merged.items():
             boost = 1.0
             channels = cand.get("channels", set())
-            if {"vector", "graph", "backlink"} <= channels:
+            if {"vector", "graph"} <= channels:
                 boost *= self.ALL_CHANNEL_RERANK
             name = cand.get("name")
             if name and len(backlinks.get(name, set())) >= self.HUB_DEGREE_THRESHOLD:
                 boost *= self.HUB_RERANK
-            # Procedure status-aware boost (tri-state).  This is the second
-            # half of the "scooch over time" grading loop: drift moves the
-            # vector, status moves the rank.
+            # Procedure status-aware boost (tri-state).  This is the "scooch
+            # over time" grading loop: status moves the rank.
             #   verified    -> base +0.20 + small additive bump (surface it)
             #   experimental-> base +0.20 only (no extra boost, no penalty)
             #   unknown     -> base +0.20 (treated like experimental)
@@ -773,8 +629,8 @@ class FusedRetriever:
             #                  from execution, so it shouldn't crowd out
             #                  usable notes at the top of the surface)
             # The base PROCEDURE_BASE_BOOST is ADDITIVE on the normalized
-            # score because normalized scores cluster in a tight range —
-            # a multiplicative boost is too small to break ties there.
+            # score because normalized scores cluster in a tight range — a
+            # multiplicative boost is too small to break ties there.
             # Procedures are the tools the model should reach for, not
             # just memories.
             #
@@ -945,7 +801,7 @@ class FusedRetriever:
     def _empty() -> dict[str, Any]:
         return {
             "results": [],
-            "channels": {"vector": 0, "graph": 0, "backlink": 0, "lexical": 0},
+            "channels": {"vector": 0, "graph": 0, "lexical": 0},
             "count": 0,
         }
 

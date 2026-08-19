@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -38,8 +39,8 @@ pytestmark = pytest.mark.unit
 class _NoEdgeGraph:
     """Graph stub with no edges — isolates the vector channel."""
 
-    nodes = {}
-    backlinks = {}
+    nodes: ClassVar[dict] = {}
+    backlinks: ClassVar[dict] = {}
 
     def neighbors(self, name, direction="both"):
         return []
@@ -150,3 +151,32 @@ def test_gate_keeps_trigger_match(tmp_path):
     )
     out = fused.retrieve("query", k=5)
     assert note_a in [r["file_path"] for r in out["results"]]
+
+
+def test_trigger_boost_reorders_top_k(tmp_path):
+    """A note with a strong trigger match floats above a note with no trigger.
+
+    Two notes start with the same vector score; the one whose trigger phrase
+    matches the query gets an additive boost and reorders to rank 1.
+    """
+    note_a = str(tmp_path / "a.md")  # has a trigger match → boosted
+    note_b = str(tmp_path / "b.md")  # no trigger entry → passthrough
+    query_emb = np.array([1.0, 0.0], dtype=np.float32)
+    hits = [
+        {"file_path": note_a, "score": 0.9},
+        {"file_path": note_b, "score": 0.9},
+    ]
+    indexer = _StubIndexer(hits, query_emb)
+    # note_a: trigger_score 0.9, inhibitor 0.0 → kept + boosted.
+    # note_b: no entry → passthrough, no boost.
+    store = _StubTriggerStore({note_a: (False, 0.9, 0.0)})
+    fused = FusedRetriever(
+        vault_graph=_NoEdgeGraph(),
+        vault_indexer=indexer,
+        trigger_store=store,
+    )
+    out = fused.retrieve("query", k=5)
+    paths = [r["file_path"] for r in out["results"]]
+    # Both notes are kept, but note_a (trigger-boosted) ranks first.
+    assert note_a in paths and note_b in paths
+    assert paths[0] == note_a, "trigger-boosted note should reorder to rank 1"

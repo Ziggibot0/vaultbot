@@ -19,8 +19,8 @@ Leaf-module imports only — `import main` is hard-fenced by conftest.py
 
 import sys
 import types
+from typing import ClassVar
 
-import numpy as np
 import pytest
 
 # fused_retrieval imports vault_indexer, which imports `faiss`.  The
@@ -37,7 +37,6 @@ if "faiss" not in sys.modules:
     _faiss_stub.write_index = lambda *a, **k: None
     sys.modules["faiss"] = _faiss_stub
 
-from embedding_drift import EmbeddingDrift
 from fused_retrieval import FusedRetriever
 
 pytestmark = pytest.mark.unit
@@ -129,11 +128,11 @@ def test_merge_dedups_by_file_path(tmp_path):
     ]
 
     class _OverlapGraph:
-        nodes = {
+        nodes: ClassVar[dict] = {
             "dup": {"file_path": dup_path, "content": ""},
             "b": {"file_path": "other.md", "content": ""},
         }
-        backlinks = {}  # no backlink channel contribution
+        backlinks: ClassVar[dict] = {}  # no backlink channel contribution
 
         def neighbors(self, name, direction="both"):
             # The graph walk starts from the second vector hit ("other.md"),
@@ -162,105 +161,12 @@ def test_merge_dedups_by_file_path(tmp_path):
     assert dup_rows[0]["score"] > 0.0
 
 
-# ---------------------------------------------------------------------------
-# Test 3: drift re-ranking promotes a helpful note
-# ---------------------------------------------------------------------------
-def test_drift_rerank_promotes_helpful_note(tmp_path, monkeypatch):
-    # Arrange: three notes with content embeddings at increasing distance
-    # from the query.  Baseline (no drift): note1 is the WORST match
-    # (largest distance → lowest normalized score → ranked LAST).  After
-    # recording a helpful signal on note1, its drifted embedding moves
-    # TOWARD the query, shrinking its L2 distance below the other two —
-    # so drift re-ranking promotes it to FIRST.
-    #
-    # We monkeypatch the indexer to:
-    #   - return a fixed query embedding from _get_embedding()
-    #   - return each note's fixed content embedding from
-    #     reconstruct_embedding(file_path)
-    # so the drift path is deterministic and Ollama-free.
-    dim = 4
-    query_emb = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
-    # Content embeddings chosen so the three notes are CLOSE in distance,
-    # with the helped note only *slightly* farther than the other two.
-    # A single DRIFT_STEP (0.05) toward the query then tips the helped
-    # note from last → first, which is exactly the promotion we assert.
-    #   baseline distances:  best 0.106 < mid 0.128 < helped 0.150
-    #   drifted  distance:  helped 0.100  (< best 0.106) → rank 0
-    c_helped = np.array([0.85, 0.01, 0.0, 0.0], dtype=np.float32)  # dist≈0.150
-    c_mid = np.array([0.92, 0.10, 0.0, 0.0], dtype=np.float32)  # dist≈0.128
-    c_best = np.array([0.93, 0.08, 0.0, 0.0], dtype=np.float32)  # dist≈0.106
-    helped_path = str(tmp_path / "helped.md")
-    mid_path = str(tmp_path / "mid.md")
-    best_path = str(tmp_path / "best.md")
-    emb_map = {helped_path: c_helped, mid_path: c_mid, best_path: c_best}
-
-    # vector hits: raw "score" is L2 DISTANCE (smaller = better).
-    # helped is worst (largest distance), so baseline rank is last.
-    vector_hits = [
-        {"file_path": best_path, "score": float(np.linalg.norm(c_best - query_emb))},
-        {"file_path": mid_path, "score": float(np.linalg.norm(c_mid - query_emb))},
-        {
-            "file_path": helped_path,
-            "score": float(np.linalg.norm(c_helped - query_emb)),
-        },
-    ]
-
-    class _DriftIndexer:
-        def search(self, query, k=10):
-            # Return all hits regardless of k so the drift over-fetch
-            # (DRIFT_OVERFETCH * k) still sees every candidate.
-            return [dict(h) for h in vector_hits]
-
-        def _get_embedding(self, text):
-            return query_emb
-
-        def reconstruct_embedding(self, file_path):
-            return emb_map.get(file_path)
-
-    # EmbeddingDrift with a helpful signal on helped.md only.
-    drift_state = tmp_path / "drift.json"
-    ed = EmbeddingDrift(state_path=drift_state, embedding_dim=dim)
-    # Record a helpful signal so helped.md's drift vector points toward q.
-    ed.record_feedback(helped_path, query_emb, helpful=True)
-
-    # Two retrievers: one WITHOUT drift (baseline), one WITH drift.
-    fused_baseline = FusedRetriever(
-        vault_graph=_NoEdgeGraph(), vault_indexer=_DriftIndexer()
-    )
-    fused_drift = FusedRetriever(
-        vault_graph=_NoEdgeGraph(),
-        vault_indexer=_DriftIndexer(),
-        embedding_drift=ed,
-    )
-
-    # Act: retrieve both with the same k.
-    out_baseline = fused_baseline.retrieve("query", k=3)
-    out_drift = fused_drift.retrieve("query", k=3)
-
-    # Assert: the helped note's rank (0-based index) is better (lower)
-    # with drift than without.
-    def _rank(results, file_path):
-        for i, r in enumerate(results):
-            if r["file_path"] == file_path:
-                return i
-        return -1
-
-    baseline_rank = _rank(out_baseline["results"], helped_path)
-    drift_rank = _rank(out_drift["results"], helped_path)
-    assert baseline_rank >= 0, "helped note missing from baseline results"
-    assert drift_rank >= 0, "helped note missing from drift results"
-    assert drift_rank < baseline_rank, (
-        f"drift did not promote helped note: "
-        f"baseline={baseline_rank}, drift={drift_rank}"
-    )
-
-
 class _NoEdgeGraph:
-    """Graph stub with no edges — isolates the vector/drift channel so the
-    test only observes drift re-ranking, not graph boosts."""
+    """Graph stub with no edges — isolates the vector channel so the
+    test only observes vector ranking, not graph boosts."""
 
-    nodes = {}
-    backlinks = {}
+    nodes: ClassVar[dict] = {}
+    backlinks: ClassVar[dict] = {}
 
     def neighbors(self, name, direction="both"):
         return []
