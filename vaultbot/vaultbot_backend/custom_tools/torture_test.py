@@ -4,7 +4,7 @@ Agent-authored tool: torture_test
 
 SCHEMA = {
     "name": "torture_test",
-    "description": "Run torture tests on a pull request before merging. Downloads changed files from the PR branch and runs: Python syntax check, JS syntax check, .gitignore tampering check, malware/exfiltration pattern scan, path whitelist check. Returns a structured pass/fail report. Requires GITHUB_TOKEN in .env.",
+    "description": "Run torture tests on a pull request before merging. Downloads changed files from the PR branch and runs: Python syntax check, JS syntax check, .gitignore tampering check, malware/exfiltration pattern scan, path whitelist check. Returns a structured pass/fail report. Requires the gh CLI authenticated via 'gh auth login'.",
     "parameters": {
         "properties": {
             "pr_number": {
@@ -34,17 +34,19 @@ def run(args: dict) -> dict:
     import sys
     import subprocess
     import tempfile
-    import requests
 
-    # 1. Check for GITHUB_TOKEN
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    if not token:
-        return {"error": "GITHUB_TOKEN not found in environment."}
+    # Add backend to path for gh_client
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+    from custom_tools.gh_client import gh_api, gh_raw, gh_available, GhError
 
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
+    # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
+    if not gh_available():
+        return {
+            "error": "gh CLI not found or not authenticated.",
+            "hint": "Install the GitHub CLI from https://cli.github.com and run 'gh auth login'.",
+        }
 
     # 2. Determine upstream repo
     upstream_owner = "ziggibot-uni"
@@ -74,15 +76,10 @@ def run(args: dict) -> dict:
 
     # 3. Fetch PR info
     try:
-        resp = requests.get(
-            f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}",
-            headers=headers,
-            timeout=15,
+        pr_data = gh_api(
+            "GET", f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}"
         )
-        if resp.status_code != 200:
-            return {"error": f"PR #{pr_number} not found: {resp.status_code}"}
-        pr_data = resp.json()
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except GhError as e:
         return {"error": f"Failed to fetch PR: {e}"}
 
     pr_title = pr_data["title"]
@@ -93,15 +90,12 @@ def run(args: dict) -> dict:
 
     # 4. Fetch PR files
     try:
-        resp = requests.get(
-            f"https://api.github.com/repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}/files?per_page=100",
-            headers=headers,
+        pr_files = gh_api(
+            "GET",
+            f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}/files?per_page=100",
             timeout=30,
         )
-        if resp.status_code != 200:
-            return {"error": f"Could not fetch PR files: {resp.status_code}"}
-        pr_files = resp.json()
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except GhError as e:
         return {"error": f"Failed to fetch PR files: {e}"}
 
     # 5. Run tests
@@ -113,27 +107,13 @@ def run(args: dict) -> dict:
     if py_files:
         syntax_results = []
         for f in py_files:
-            # Download the raw file content from the PR branch
-            raw_url = f"https://raw.githubusercontent.com/{head_owner}/{head_repo_name}/{head_ref}/{f['filename']}"
-            if not head_owner or not head_repo_name:
-                # Try the upstream if it's a same-repo branch
-                raw_url = f"https://raw.githubusercontent.com/{upstream_owner}/{upstream_repo}/{head_ref}/{f['filename']}"
-
             try:
-                raw_resp = requests.get(
-                    raw_url, headers={"Authorization": f"token {token}"}, timeout=15
+                content = gh_raw(
+                    head_owner or upstream_owner,
+                    head_repo_name or upstream_repo,
+                    head_ref,
+                    f["filename"],
                 )
-                if raw_resp.status_code != 200:
-                    syntax_results.append(
-                        {
-                            "file": f["filename"],
-                            "status": "skip",
-                            "message": f"Could not download file: {raw_resp.status_code}",
-                        }
-                    )
-                    continue
-
-                content = raw_resp.text
                 # Write to temp file and syntax check
                 with tempfile.NamedTemporaryFile(
                     mode="w", suffix=".py", delete=False, encoding="utf-8"
@@ -208,25 +188,13 @@ def run(args: dict) -> dict:
     if js_files:
         js_results = []
         for f in js_files:
-            raw_url = f"https://raw.githubusercontent.com/{head_owner}/{head_repo_name}/{head_ref}/{f['filename']}"
-            if not head_owner or not head_repo_name:
-                raw_url = f"https://raw.githubusercontent.com/{upstream_owner}/{upstream_repo}/{head_ref}/{f['filename']}"
-
             try:
-                raw_resp = requests.get(
-                    raw_url, headers={"Authorization": f"token {token}"}, timeout=15
+                content = gh_raw(
+                    head_owner or upstream_owner,
+                    head_repo_name or upstream_repo,
+                    head_ref,
+                    f["filename"],
                 )
-                if raw_resp.status_code != 200:
-                    js_results.append(
-                        {
-                            "file": f["filename"],
-                            "status": "skip",
-                            "message": f"Download failed: {raw_resp.status_code}",
-                        }
-                    )
-                    continue
-
-                content = raw_resp.text
                 with tempfile.NamedTemporaryFile(
                     mode="w", suffix=".js", delete=False, encoding="utf-8"
                 ) as tmp:

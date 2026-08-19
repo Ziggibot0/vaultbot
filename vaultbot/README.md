@@ -295,9 +295,16 @@ VaultBot can update itself from inside Obsidian — no terminal needed.
    an update — only the code files change. Your `data.json`, `.env`, and
    all `.md` files are preserved.
 
-If you prefer the manual route: `git pull` (if you cloned), or re-download
-the ZIP and copy over the `vaultbot_backend/` and `.obsidian/plugins/vaultbot/`
-folders. Then restart the backend.
+**How updates work (fork installs).** If you installed via the one-click
+installer, your vault is a git fork of `ziggibot-uni/vaultbot`. Updates
+merge via `git pull upstream main`, so any local edits your VaultBot made
+to its own code are *merged*, not overwritten. If you prefer the manual
+route: `git pull upstream main` (or `git pull origin main` for maintainers).
+
+**Legacy zip installs.** If you installed before the fork-based installer
+(no `.git` folder), the updater falls back to downloading a tarball and
+copying code files over the live vault. To get the cleaner merge-based
+updates, re-run the installer — it will set up a fork for you.
 
 ---
 

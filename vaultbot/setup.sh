@@ -100,28 +100,91 @@ read -p "  Your name: " OWNER_NAME
 OWNER_NAME="${OWNER_NAME:-friend}"
 echo ""
 
-# ── 3. Download the repo ────────────────────────────────────────────────────
+# ── 3. Get the repo (git fork, so updates merge cleanly) ───────────────────
+# VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
+# This is what makes two things possible:
+#   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
+#   2. Community contributions = the vaultbot's submit_contribution tool
+#      pushes fixes to your fork and opens a PR upstream, with zero manual git.
+# If `gh` is missing or the user declines auth, we fall back to the zip
+# download so a non-sharing user still gets a working vault.
 VAULT_PATH="$(pwd)/$VAULT_NAME"
 if [ -d "$VAULT_PATH" ]; then
     echo "  [!]  Folder '$VAULT_NAME' already exists -- using it."
 else
-    echo ">>> Downloading VaultBot..."
-    TMP_ZIP="/tmp/vaultbot-setup-$$.zip"
-    TMP_EXTRACT="/tmp/vaultbot-extract-$$"
-    curl -fsSL -o "$TMP_ZIP" "$REPO_ZIP"
-    echo ">>> Extracting..."
-    mkdir -p "$TMP_EXTRACT"
-    # macOS tar auto-detects zip; Linux tar needs -xzf
-    if [[ "$(uname)" == "Darwin" ]]; then
-        tar -xf "$TMP_ZIP" -C "$TMP_EXTRACT"
-    else
-        tar -xzf "$TMP_ZIP" -C "$TMP_EXTRACT"
+    GH_OK=false
+    if command -v gh &>/dev/null; then
+        GH_OK=true
     fi
-    INNER=$(ls -d "$TMP_EXTRACT"/*/ | head -1)
-    mv "$INNER" "$VAULT_PATH"
-    rm -f "$TMP_ZIP"
-    rm -rf "$TMP_EXTRACT"
-    echo "  [OK] Downloaded to $VAULT_PATH"
+
+    if [ "$GH_OK" = true ]; then
+        echo ">>> Connecting to GitHub (one-time)..."
+
+        # gh auth status exits 0 when already authenticated. If not, run the
+        # interactive browser login. If the user declines, fall back to zip.
+        AUTHD=false
+        if gh auth status >/dev/null 2>&1; then
+            AUTHD=true
+        fi
+
+        if [ "$AUTHD" = false ]; then
+            echo "  A browser window will open so you can sign in to GitHub."
+            echo "  (This lets VaultBot update itself and share fixes with the community.)"
+            echo "  (Skip it and VaultBot still installs, just without auto-updates.)"
+            if ! gh auth login --hostname github.com --git-protocol https --web; then
+                GH_OK=false
+            fi
+        fi
+
+        if [ "$GH_OK" = true ]; then
+            # Maintainer (has push access) clones directly; everyone else forks.
+            HAS_PUSH=false
+            PERM=$(gh api repos/ziggibot-uni/vaultbot --jq .permissions.push 2>/dev/null)
+            if [ "$PERM" = "true" ]; then
+                HAS_PUSH=true
+            fi
+
+            if [ "$HAS_PUSH" = true ]; then
+                echo ">>> Cloning VaultBot..."
+                gh repo clone ziggibot-uni/vaultbot "$VAULT_NAME"
+            else
+                echo ">>> Forking VaultBot to your GitHub account..."
+                gh repo fork ziggibot-uni/vaultbot --clone
+                # gh clones to ./vaultbot (lowercase); rename to $VAULT_NAME if
+                # the filesystem is case-sensitive (macOS/Linux).
+                if [ -d "vaultbot" ] && [ ! -d "$VAULT_NAME" ]; then
+                    mv "vaultbot" "$VAULT_NAME"
+                fi
+            fi
+
+            if [ ! -d "$VAULT_PATH" ]; then
+                echo "  [!]  GitHub clone/fork failed -- falling back to zip download."
+                GH_OK=false
+            else
+                echo "  [OK] VaultBot installed as a git fork (updates will merge cleanly)"
+            fi
+        fi
+    fi
+
+    if [ "$GH_OK" = false ]; then
+        echo ">>> Downloading VaultBot..."
+        TMP_ZIP="/tmp/vaultbot-setup-$$.zip"
+        TMP_EXTRACT="/tmp/vaultbot-extract-$$"
+        curl -fsSL -o "$TMP_ZIP" "$REPO_ZIP"
+        echo ">>> Extracting..."
+        mkdir -p "$TMP_EXTRACT"
+        # macOS tar auto-detects zip; Linux tar needs -xzf
+        if [[ "$(uname)" == "Darwin" ]]; then
+            tar -xf "$TMP_ZIP" -C "$TMP_EXTRACT"
+        else
+            tar -xzf "$TMP_ZIP" -C "$TMP_EXTRACT"
+        fi
+        INNER=$(ls -d "$TMP_EXTRACT"/*/ | head -1)
+        mv "$INNER" "$VAULT_PATH"
+        rm -f "$TMP_ZIP"
+        rm -rf "$TMP_EXTRACT"
+        echo "  [OK] Downloaded to $VAULT_PATH"
+    fi
 fi
 
 # Now that $VAULT_PATH exists, set the install-state file path so steps
