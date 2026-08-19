@@ -46,6 +46,7 @@ _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
         "/health",
         "/preflight",
         "/",
+        "/callback",  # Google OAuth redirect — Google sends the code without our auth token
     }
 )
 
