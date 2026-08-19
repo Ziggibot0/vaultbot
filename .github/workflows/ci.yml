@@ -111,12 +111,10 @@ jobs:
         # is a real bug (mirrors the BLE001 hot-path strategy). Narrow scope
         # first so we don't drown in pre-existing debt; widen incrementally.
         #
-        # vault_indexer.py is clean (0 errors) and is the hard gate today.
-        # chat_handler.py (4 errors: dynamic WebSocket attrs) and
-        # fused_retrieval.py (8 errors: Any|None handling) have pre-existing
-        # debt — fix those, then add them to this list.
+        # vault_indexer.py, chat_handler.py, and fused_retrieval.py are all
+        # clean (0 errors) and are the hard gate today (issue #20).
         working-directory: vaultbot
-        run: uv run pyright --level error vaultbot_backend/vault_indexer.py
+        run: uv run pyright --level error vaultbot_backend/vault_indexer.py vaultbot_backend/chat_handler.py vaultbot_backend/fused_retrieval.py
 
       - name: Pytest — unit tests (HARD GATE)
         # Pure-logic tests marked with `pytestmark = pytest.mark.unit`.

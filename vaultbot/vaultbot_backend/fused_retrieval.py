@@ -33,7 +33,7 @@ import logging
 import math
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from vault_graph import VaultGraph
@@ -41,10 +41,8 @@ from vault_indexer import VaultIndexer
 
 _frlog = logging.getLogger(__name__)
 
-try:
+if TYPE_CHECKING:
     from session_logger import SessionLogger
-except Exception:  # pragma: no cover - logger is optional
-    SessionLogger = None  # type: ignore
 
 
 class FusedRetriever:
@@ -466,6 +464,10 @@ class FusedRetriever:
         if query_emb is None or query_emb.size == 0:
             return None
 
+        drift = self.embedding_drift
+        if drift is None:
+            return None
+
         drifted_hits: list[dict[str, Any]] = []
         any_drifted = False
         for h in raw:
@@ -477,7 +479,7 @@ class FusedRetriever:
                 # Can't reconstruct — keep raw distance, no drift applied.
                 drifted_hits.append(h)
                 continue
-            drifted_emb = self.embedding_drift.apply_drift(fp, content_emb)
+            drifted_emb = drift.apply_drift(fp, content_emb)
             if drifted_emb is content_emb:
                 # No drift recorded for this note — keep raw distance.
                 drifted_hits.append(h)
@@ -511,6 +513,8 @@ class FusedRetriever:
         candidates: dict[str, dict[str, Any]] = {}
         for hit in vector_hits:
             fp = hit.get("file_path")
+            if not fp:
+                continue
             base = norm_scores.get(fp, 0.0)
             if not base:
                 continue
@@ -551,6 +555,8 @@ class FusedRetriever:
         backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
         for hit in vector_hits:
             fp = hit.get("file_path")
+            if not fp:
+                continue
             base = norm_scores.get(fp, 0.0)
             if not base:
                 continue
