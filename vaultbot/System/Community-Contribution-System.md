@@ -39,7 +39,7 @@ tokens pay for the thinking and contributions — not the maintainer's.
 │         ▼                │     │     - Functional test     │
 │  ┌─────────────────┐     │     │  4. Merge or reject       │
 │  │  GitHub          │     │     │     - Comment with result │
-│  │  ziggibot-uni/   │◄────┼─────┼──►  PR review + merge     │
+│  │  Ziggibot0/   │◄────┼─────┼──►  PR review + merge     │
 │  │  vaultbot        │     │     │                          │
 │  └─────────────────┘     │     └──────────────────────────┘
 └──────────────────────────┘
@@ -63,9 +63,9 @@ opt in. Authentication is handled entirely by `gh` — there is no
 
 ### Fork-Based PR Flow
 
-When the user does NOT have write access to `ziggibot-uni/vaultbot`:
+When the user does NOT have write access to `Ziggibot0/vaultbot`:
 
-1. **Fork the repo** — `gh api repos/ziggibot-uni/vaultbot/forks -X POST`
+1. **Fork the repo** — `gh api repos/Ziggibot0/vaultbot/forks -X POST`
    using the authenticated `gh` session. If fork already exists, GitHub
    returns 200 instead of 202 — handle both.
 
@@ -80,7 +80,7 @@ When the user does NOT have write access to `ziggibot-uni/vaultbot`:
 
 5. **Push to fork** — `git push -u fork {branch}`
 
-6. **Create cross-fork PR** — `gh api repos/ziggibot-uni/vaultbot/pulls
+6. **Create cross-fork PR** — `gh api repos/Ziggibot0/vaultbot/pulls
    -X POST` with `head: "{username}:{branch}"` and `base: "main"`. This
    tells GitHub to compare the fork's branch against the upstream's main.
 
@@ -96,7 +96,7 @@ checking if `git push origin {branch}` succeeds.
 
 ### review_contributions tool
 
-Lists all open PRs on `ziggibot-uni/vaultbot` and for each PR:
+Lists all open PRs on `Ziggibot0/vaultbot` and for each PR:
 
 1. **Fetch PR metadata** — title, body, author, branch, files changed
 2. **Fetch the diff** — `GET /repos/{owner}/{repo}/pulls/{number}/files`
@@ -199,7 +199,7 @@ baseline: true   # ← this procedure ships to everyone
 
 ## Upstream Repo
 
-- Owner: `ziggibot-uni`
+- Owner: `Ziggibot0`
 - Repo: `vaultbot`
 - Main branch: `main`
-- URL: https://github.com/ziggibot-uni/vaultbot
+- URL: https://github.com/Ziggibot0/vaultbot

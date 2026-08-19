@@ -46,7 +46,7 @@ ok "User content created"
 
 section "2. Download update tarball"
 TARBALL="/tmp/vaultbot-update-test.tar.gz"
-curl -fsSL -o "$TARBALL" "https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/main.tar.gz"
+curl -fsSL -o "$TARBALL" "https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.tar.gz"
 
 if [ -f "$TARBALL" ] && [ $(stat -c%s "$TARBALL") -gt 1000 ]; then
     ok "Tarball downloaded ($(stat -c%s "$TARBALL") bytes)"

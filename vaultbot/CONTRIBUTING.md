@@ -22,8 +22,8 @@ private.
 authority for this repository. He has final say on what ships and on
 project direction. He does **not** claim ownership of your contributions —
 see the licensing section below. The best way to reach the project is
-through [GitHub Issues](https://github.com/ziggibot-uni/vaultbot/issues) or
-[GitHub Discussions](https://github.com/ziggibot-uni/vaultbot/discussions).
+through [GitHub Issues](https://github.com/Ziggibot0/vaultbot/issues) or
+[GitHub Discussions](https://github.com/Ziggibot0/vaultbot/discussions).
 
 ## The golden rule
 
@@ -47,11 +47,11 @@ The fastest way to get a dev environment running is the one-liner installer:
 
 ```powershell
 # Windows
-irm https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ```
 ```bash
 # macOS / Linux
-curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash
+curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
 ```
 
 This creates a `VaultBot/` folder with a fully set-up venv, deps, models,
@@ -236,7 +236,7 @@ To keep this safe for everyone, every automated contribution **must**:
 The maintainer will reject — without merging — any contribution that
 contains personal data, vault contents, or anything that looks like a
 leaked secret. If you realize a report you filed contains private
-material, open a [GitHub Issue](https://github.com/ziggibot-uni/vaultbot/issues) and the maintainer will take it down.
+material, open a [GitHub Issue](https://github.com/Ziggibot0/vaultbot/issues) and the maintainer will take it down.
 
 ## Further reading
 

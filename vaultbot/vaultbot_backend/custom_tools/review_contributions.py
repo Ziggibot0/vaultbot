@@ -50,7 +50,7 @@ def run(args: dict) -> dict:
         }
 
     # 2. Determine upstream repo
-    upstream_owner = "ziggibot-uni"
+    upstream_owner = "Ziggibot0"
     upstream_repo = "vaultbot"
 
     # Try to get it from git remote (in case it changes)

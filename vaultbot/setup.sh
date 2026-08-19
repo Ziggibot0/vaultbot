@@ -3,11 +3,11 @@
 # VaultBot one-click installer for macOS / Linux
 #
 # Run from any folder:
-#   curl -fsSL https://github.com/ziggibot-uni/vaultbot/raw/main/vaultbot/setup.sh | bash
+#   curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
 # ═══════════════════════════════════════════════════════════════════════════
 set -e
 
-REPO_ZIP="https://github.com/ziggibot-uni/vaultbot/archive/refs/heads/main.zip"
+REPO_ZIP="https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
 VAULT_NAME="VaultBot"
 
 # ── Install-state resume helpers ──────────────────────────────────────────
@@ -139,17 +139,17 @@ else
         if [ "$GH_OK" = true ]; then
             # Maintainer (has push access) clones directly; everyone else forks.
             HAS_PUSH=false
-            PERM=$(gh api repos/ziggibot-uni/vaultbot --jq .permissions.push 2>/dev/null)
+            PERM=$(gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>/dev/null)
             if [ "$PERM" = "true" ]; then
                 HAS_PUSH=true
             fi
 
             if [ "$HAS_PUSH" = true ]; then
                 echo ">>> Cloning VaultBot..."
-                gh repo clone ziggibot-uni/vaultbot "$VAULT_NAME"
+                gh repo clone Ziggibot0/vaultbot "$VAULT_NAME"
             else
                 echo ">>> Forking VaultBot to your GitHub account..."
-                gh repo fork ziggibot-uni/vaultbot --clone
+                gh repo fork Ziggibot0/vaultbot --clone
                 # gh clones to ./vaultbot (lowercase); rename to $VAULT_NAME if
                 # the filesystem is case-sensitive (macOS/Linux).
                 if [ -d "vaultbot" ] && [ ! -d "$VAULT_NAME" ]; then
