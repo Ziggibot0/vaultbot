@@ -26,7 +26,9 @@ mirrors the low-level path and leaves the community path as a drop-in extension.
 from __future__ import annotations
 
 import logging
+import math
 import re
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -50,6 +52,28 @@ class FusedRetriever:
     ALL_CHANNEL_RERANK = 1.3  # appears in vector + graph + backlink
     HUB_RERANK = 1.1  # high backlink degree
     HUB_DEGREE_THRESHOLD = 3  # min backlinks to count as a hub
+    # Lexical (BM25) channel tuning.  The 'FUSED' retriever historically
+    # fused only dense (vector) + graph channels — no keyword channel.  A
+    # lexical channel recovers title/keyword matches that a small embedding
+    # model can't map (the golden set's 'direct' category, and paraphrase
+    # queries whose note bodies share vocabulary with the query).
+    LEXICAL_TOP_K = 20  # over-fetch lexical candidates before merge
+    # Lexical is a PEER of the vector channel, not a discounted add-on.  A
+    # title/keyword match is the single most reliable relevance signal, so
+    # lexical scores normalize to [0,1] with top=1.0 (same ceiling as the
+    # vector channel's top hit).  The rerank boosts (×1.3 all-channel, ×1.1
+    # hub) can push a well-connected vector hit to ~1.43, so a lexical
+    # title match must be able to reach a comparable ceiling to win the
+    # 'direct' category.  1.3 matches the all-channel rerank ceiling.
+    LEXICAL_SCORE_WEIGHT = 1.3
+    # Graph/backlink seed over-fetch.  The graph channel walks from the
+    # vector hits, but if the vector channel truncates to top-k first, a
+    # graph-walk query whose seed note ranked just outside top-k never
+    # starts its walk.  Over-fetching the vector pool (and NOT truncating
+    # before the graph/backlink channels seed) lets neighbors of
+    # lower-ranked-but-relevant notes surface.  Final top-k truncation
+    # happens in retrieve() after merge.
+    GRAPH_OVERFETCH = 8
     # Minimum normalized score to be included in results. Results below
     # this threshold are dropped — they're semantically too distant from
     # the query to be useful and just waste context budget with noise.
@@ -201,12 +225,36 @@ class FusedRetriever:
                         },
                     )
 
+            # ---- (c2): lexical (BM25 keyword) ----
+            # The 'FUSED' retriever historically fused only dense + graph
+            # channels.  A lexical channel recovers title/keyword matches
+            # that a small embedding model can't map (the golden set's
+            # 'direct' category, and paraphrase queries whose note bodies
+            # share vocabulary with the query).
+            lexical_candidates: dict[str, dict[str, Any]] = {}
+            try:
+                lexical_candidates = self._lexical_channel(query, k)
+            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                self._log(
+                    "lexical.channel_failed",
+                    f"{type(e).__name__}: {e} — lexical channel skipped",
+                )
+                if self.session_logger is not None:
+                    self.session_logger.log(
+                        "retrieval_channel_failed",
+                        {
+                            "channel": "lexical",
+                            "error": str(e),
+                        },
+                    )
+
             # ---- (d) merge + dedup ----
             merged = self._merge(
                 vector_hits=vector_hits,
                 norm_scores=norm_scores,
                 graph_candidates=graph_candidates,
                 backlink_candidates=backlink_candidates,
+                lexical_candidates=lexical_candidates,
             )
 
             # ---- (e) rerank ----
@@ -311,6 +359,7 @@ class FusedRetriever:
                     "vector": len(vector_hits),
                     "graph": len(graph_candidates),
                     "backlink": len(backlink_candidates),
+                    "lexical": len(lexical_candidates),
                 },
                 "count": len(results),
             }
@@ -353,10 +402,14 @@ class FusedRetriever:
         similar to" (content).  The drift signal is LLM-free — derived from
         the agent's own behavior in handle_chat.
         """
-        # Over-fetch so drift has room to promote a lower-ranked note.
-        fetch_k = k
+        # Over-fetch so drift has room to promote a lower-ranked note AND
+        # so the graph/backlink channels can seed from a broader pool (a
+        # graph-walk query whose seed note ranked just outside top-k would
+        # otherwise never start its walk).  Final top-k truncation happens
+        # in retrieve() after merge.
+        fetch_k = k * self.GRAPH_OVERFETCH
         if self.embedding_drift is not None:
-            fetch_k = k * self.DRIFT_OVERFETCH
+            fetch_k = max(fetch_k, k * self.DRIFT_OVERFETCH)
         raw = self.vault_indexer.search(query, k=fetch_k)
 
         if not raw:
@@ -385,14 +438,9 @@ class FusedRetriever:
             else:
                 sim = 1.0
             norm[fp] = max(0.0, min(1.0, sim))
-        # Truncate to the requested k AFTER drift re-ranking so the promoted
-        # notes actually make it into the returned set.
-        raw = raw[:k]
-        norm = {
-            fp: norm[fp]
-            for fp in (h.get("file_path") for h in raw)
-            if fp and fp in norm
-        }
+        # Do NOT truncate to k here — the graph/backlink channels seed from
+        # this full over-fetched pool.  retrieve() truncates to top-k after
+        # merge + rerank.
         return raw, norm
 
     def _drift_rerank(
@@ -520,6 +568,102 @@ class FusedRetriever:
                     }
         return candidates
 
+    def _lexical_channel(
+        self, query: str, k: int
+    ) -> dict[str, dict[str, Any]]:
+        """BM25-style keyword channel over note titles + cached content.
+
+        The 'FUSED' retriever historically fused only dense (vector) + graph
+        channels — no keyword channel.  This recovers title/keyword matches
+        that a small embedding model can't map: the golden set's 'direct'
+        category (title-level keyword match) and paraphrase queries whose
+        note bodies share vocabulary with the query.
+
+        Scores are BM25 over the note's title (weighted) + body, normalized
+        to [0,1] by the top score, then discounted by LEXICAL_SCORE_WEIGHT
+        so lexical can lift a note into the top-k without dominating a
+        strongly-relevant vector hit.  Raises on failure — the caller
+        (retrieve) catches and logs loudly.
+        """
+        candidates: dict[str, dict[str, Any]] = {}
+        idx = self.vault_indexer
+        metadata = getattr(idx, "metadata", None) or []
+        if not metadata:
+            return candidates
+
+        # Tokenize the query into lowercase alphanumeric terms (len >= 2).
+        q_terms = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if len(t) >= 2]
+        if not q_terms:
+            return candidates
+
+        # BM25 constants (standard defaults).
+        k1 = 1.5
+        b = 0.75
+
+        # Cache the tokenized corpus so we don't re-tokenize every note on
+        # every query (the live vault has ~1700 files).  Invalidate when the
+        # metadata list changes shape (len + first/last file_path is a cheap
+        # signature that catches index rebuilds and appends).
+        sig = (len(metadata), metadata[0].get("file_path", ""), metadata[-1].get("file_path", ""))
+        cached = getattr(self, "_lexical_cache", None)
+        if cached is not None and cached[0] == sig:
+            tokenized = cached[1]
+        else:
+            tokenized = []
+            for meta in metadata:
+                fp = meta.get("file_path", "")
+                if not fp:
+                    continue
+                name = Path(fp).stem
+                body = meta.get("content_preview", "") or ""
+                toks = re.findall(r"[a-z0-9]+", f"{name} {body}".lower())
+                tokenized.append((fp, name, toks))
+            self._lexical_cache = (sig, tokenized)
+
+        if not tokenized:
+            return candidates
+
+        avgdl = sum(len(t) for _, _, t in tokenized) / len(tokenized) if tokenized else 0.0
+        n_docs = len(tokenized)
+
+        # Document frequency per query term.
+        df: dict[str, int] = {}
+        for term in q_terms:
+            df[term] = sum(1 for _, _, toks in tokenized if term in toks)
+
+        # Score each doc.
+        scored: list[tuple[float, str, str]] = []
+        for fp, name, toks in tokenized:
+            dl = len(toks)
+            score = 0.0
+            for term in q_terms:
+                tf = toks.count(term)
+                if tf == 0:
+                    continue
+                dft = df.get(term, 0)
+                # BM25 term weight (idf with smoothing).
+                idf = math.log(1.0 + (n_docs - dft + 0.5) / (dft + 0.5))
+                denom = tf + k1 * (1.0 - b + b * (dl / avgdl if avgdl else 1.0))
+                score += idf * (tf * (k1 + 1.0)) / denom
+            if score > 0.0:
+                scored.append((score, fp, name))
+
+        if not scored:
+            return candidates
+
+        # Normalize to [0,1] by the top score, discount, keep top LEXICAL_TOP_K.
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_score = scored[0][0]
+        for score, fp, name in scored[: self.LEXICAL_TOP_K]:
+            norm = (score / top_score) * self.LEXICAL_SCORE_WEIGHT
+            candidates[fp] = {
+                "file_path": fp,
+                "name": self._normalize_name(name),
+                "score": norm,
+                "channels": {"lexical"},
+            }
+        return candidates
+
     # ------------------------------------------------------------------
     # Merge / rerank
     # ------------------------------------------------------------------
@@ -529,6 +673,7 @@ class FusedRetriever:
         norm_scores: dict[str, float],
         graph_candidates: dict[str, dict[str, Any]],
         backlink_candidates: dict[str, dict[str, Any]],
+        lexical_candidates: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Merge all channels by file_path, taking the MAX score across channels."""
         merged: dict[str, dict[str, Any]] = {}
@@ -546,8 +691,8 @@ class FusedRetriever:
                 "content": hit.get("content", ""),
             }
 
-        # fold in graph + backlink, keeping max score and unioning channel tags
-        for bucket in (graph_candidates, backlink_candidates):
+        # fold in graph + backlink + lexical, keeping max score and unioning channel tags
+        for bucket in (graph_candidates, backlink_candidates, lexical_candidates or {}):
             for fp, cand in bucket.items():
                 existing = merged.get(fp)
                 if existing is None:
@@ -765,7 +910,7 @@ class FusedRetriever:
     def _empty() -> dict[str, Any]:
         return {
             "results": [],
-            "channels": {"vector": 0, "graph": 0, "backlink": 0},
+            "channels": {"vector": 0, "graph": 0, "backlink": 0, "lexical": 0},
             "count": 0,
         }
 
