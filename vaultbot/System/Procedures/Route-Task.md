@@ -52,6 +52,7 @@ Route-Task (small cartridge, thin orchestrator)
 │   ├── question-answering → Filter-Context-For-Query
 │   ├── code-editing → Safe-Write → Proc-Step-Summary
 │   ├── fact-checking → Cross-Check-Claims → Find-Contradictions
+│   ├── conversational → (no chain — respond naturally, no research needed)
 │   └── default → Small-Model-Route
 ```
 
@@ -70,6 +71,7 @@ Categories (match by keyword or meaning):
 - question-answering: answer a question, explain something (when vault already has the info)
 - code-editing: edit code, fix a bug, modify .py or .js, safe_write, backend change
 - fact-checking: verify claims, check sources, find contradictions, cross-check
+- conversational: casual chat, greetings, confirmations, agreements, backchannels (yeah, ok, sure, sounds good, pretty good, go ahead, do that, let's do it), social responses that don't require tools or research
 - unknown: none of the above clearly match
 
 Return JSON in this exact format:
@@ -84,6 +86,7 @@ Chain mappings (use these exact procedure names):
 - question-answering: ["Filter-Context-For-Query"]
 - code-editing: ["Safe-Write", "Proc-Step-Summary"]
 - fact-checking: ["Cross-Check-Claims", "Find-Contradictions"]
+- conversational: []
 - unknown: ["Small-Model-Route"]
 
 User request: {{ intent }}]
@@ -114,7 +117,12 @@ chain = dispatch.get("chain", ["Small-Model-Route"])
 
 # Validate: every procedure in the chain must be a non-empty string
 chain = [p for p in chain if isinstance(p, str) and p.strip()]
-if not chain:
+
+# Conversational messages need no procedure chain — the model just
+# responds naturally. An empty chain is correct here, not a fallback.
+if not chain and category == "conversational":
+    chain = []
+elif not chain:
     chain = ["Small-Model-Route"]
 
 # Research backing for each branch
@@ -127,6 +135,7 @@ backing = {
     "question-answering": "RAG-evaluation-metrics: context relevance and answer relevance metrics",
     "code-editing": "Deterministic scaffolding: syntax check and auto-rollback ensure code safety",
     "fact-checking": "Calibrating-quality-assessment-gates: rubric design and calibration convert verification into reliable quality signals",
+    "conversational": "No procedure chain needed — the model responds naturally without tools or research",
     "unknown": "Fallback to single-procedure routing when category is unclear",
 }
 

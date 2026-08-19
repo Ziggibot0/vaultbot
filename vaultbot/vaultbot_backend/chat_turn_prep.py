@@ -248,6 +248,124 @@ async def prepare_turn(
         },
     )
 
+    # --- Route-Task preflight (intent classifier) ---------------------
+    # Runs BEFORE the auto-research gate (issue #25) so the classification
+    # result can prevent unnecessary web scraping on conversational
+    # backchannels ("yeah do that", "pretty good"). Only categories in
+    # TUNABLES.auto_researchclasses trigger auto-research.
+    #
+    # Route-Task classifies intent and returns a procedure chain. It's
+    # cheap (1 small-model LLM call). Think (the BS detector / premise
+    # gate) is NOT run here — it's an opt-in tool the big model can call
+    # via execute_procedure("Think") if it decides a question needs
+    # structured premise checking.
+    #
+    # Skipped for: trivial messages (uses _classify_trivial patterns),
+    # resumed turns (model is mid-task).
+    _preflight_chain: list[str] = []
+    _preflight_results: list[dict[str, Any]] = []
+    _preflight_category = ""
+    _is_trivial = _classify_trivial(
+        user_message, getattr(websocket, "conversation_history", []), wm
+    )
+    if not _is_trivial and not _resumed_tool_history:
+
+        async def _run_route() -> dict[str, Any]:
+            """Run Route-Task. Returns {"error": ...} on failure."""
+            try:
+                await send_progress(svc, websocket, "routing", {})
+                _result = await _run_procedure_direct(
+                    svc,
+                    "Route-Task",
+                    proc_args={"intent": user_message},
+                    session_logger=session_logger,
+                    user_message=user_message,
+                    websocket=websocket,
+                )
+                await send_progress(svc, websocket, "routing_done", {})
+                return _result
+            except Exception as e:  # noqa: BLE001
+                session_logger.log("preflight_route_failed", {"error": str(e)})
+                await notify_console_failure(
+                    svc,
+                    websocket,
+                    f"Route-Task procedure failed: {e}",
+                    context="preflight_route",
+                )
+                return {"error": str(e)}
+
+        # Run Route-Task (the sole preflight router).
+        _route_result = await _run_route()
+
+        # --- Process Route-Task result ---
+        if not _route_result.get("error"):
+            _route_output = _route_result.get("final_output", "")
+            if _route_output:
+                try:
+                    _parsed = json.loads(_route_output)
+                except (json.JSONDecodeError, TypeError):
+                    _parsed = {}
+                _preflight_category = _parsed.get("category", "")
+                _preflight_chain = _parsed.get("procedure_chain", [])
+                if isinstance(_preflight_chain, list) and _preflight_chain:
+                    session_logger.log(
+                        "preflight_route",
+                        {
+                            "category": _preflight_category,
+                            "chain": _preflight_chain,
+                        },
+                    )
+                    # Auto-execute small-cartridge chain steps.
+                    # Big-cartridge steps are left for the big model.
+                    for _chain_proc in _preflight_chain:
+                        # Check cartridge before running.
+                        _chain_cartridge = "big"
+                        try:
+                            _idx = (
+                                getattr(svc.procedure_tracker, "_stem_index", None)
+                                or {}
+                            )
+                            _entry = _idx.get(_chain_proc) or {}
+                            _fm = _entry.get("frontmatter") or {}
+                            _chain_cartridge = (
+                                str(_fm.get("model_cartridge", "big")).strip().lower()
+                                or "big"
+                            )
+                        except Exception:  # noqa: BLE001
+                            pass
+                        if _chain_cartridge == "small":
+                            await send_progress(
+                                svc, websocket, f"running {_chain_proc}", {}
+                            )
+                            _chain_result = await _run_procedure_direct(
+                                svc,
+                                _chain_proc,
+                                proc_args={"intent": user_message},
+                                session_logger=session_logger,
+                                user_message=user_message,
+                                websocket=websocket,
+                            )
+                            _preflight_results.append(_chain_result)
+                            session_logger.log(
+                                "preflight_chain_step",
+                                {
+                                    "procedure": _chain_proc,
+                                    "cartridge": _chain_cartridge,
+                                    "passed": _chain_result.get("overall_passed"),
+                                },
+                            )
+                        else:
+                            # Big-cartridge: stop here, let the
+                            # big model handle the rest.
+                            _preflight_results.append(
+                                {
+                                    "procedure": _chain_proc,
+                                    "cartridge": _chain_cartridge,
+                                    "pending": True,
+                                }
+                            )
+                            break
+
     # --- Auto-research-then-answer preflight gate (vault-centric) -------
     # When FUSED retrieval returns nothing usable (empty OR all results
     # below TUNABLES.min_retrieval_score), the vault has no answer. Rather
@@ -321,12 +439,23 @@ async def prepare_turn(
         return False
 
     _auto_research_note: str | None = None
+    # Category gate (issue #25): only fire auto-research if Route-Task
+    # classified the message as a research-worthy category. This prevents
+    # conversational backchannels ("yeah do that", "pretty good") from
+    # triggering web scraping just because the vault has no relevant notes.
+    # When _preflight_category is empty (trivial message, resumed turn, or
+    # Route-Task failure), fall back to the old behavior for safety.
+    _category_allows_research = (
+        not _preflight_category
+        or _preflight_category in TUNABLES.auto_research_categories
+    )
     if (
         TUNABLES.auto_research_on_empty
         and not _resumed_tool_history
         and not _classify_trivial(
             user_message, getattr(websocket, "conversation_history", []), wm
         )
+        and _category_allows_research
     ):
         _usable = [
             r for r in results
@@ -409,6 +538,17 @@ async def prepare_turn(
                     )
             except Exception as e:  # noqa: BLE001 — best-effort, never break chat
                 session_logger.log("auto_research_failed", {"error": str(e)})
+    elif not _category_allows_research and not _resumed_tool_history:
+        # Log when auto-research was skipped due to the category gate
+        # (issue #25). This makes the gate's effect visible in session
+        # logs without adding latency.
+        session_logger.log(
+            "auto_research_category_skipped",
+            {
+                "query": user_message[:80],
+                "category": _preflight_category,
+            },
+        )
 
     # Conversation-aware retrieval: search the conversation index for
     # prior turns relevant to this query. This is what lets the bot
@@ -683,119 +823,13 @@ async def prepare_turn(
             context="procedure_surface",
         )
 
-    # --- Route-Task preflight (intent classifier) ---------------------
-    # Route-Task classifies intent and returns a procedure chain. It's
-    # cheap (1 LLM call) and doesn't need a timeout. Think (the BS
-    # detector / premise gate) is NOT run here — it's an opt-in tool
-    # the big model can call via execute_procedure("Think") if it
-    # decides a question needs structured premise checking. Running it
-    # on every turn added 60-180s of latency for no benefit.
-    #
-    # Skipped for: trivial messages (uses _classify_trivial patterns),
-    # resumed turns (model is mid-task).
-    _preflight_chain: list[str] = []
-    _preflight_results: list[dict[str, Any]] = []
-    _preflight_category = ""
-    _is_trivial = _classify_trivial(
-        user_message, getattr(websocket, "conversation_history", []), wm
-    )
-    if not _is_trivial and not _resumed_tool_history:
-
-        async def _run_route() -> dict[str, Any]:
-            """Run Route-Task. Returns {"error": ...} on failure."""
-            try:
-                await send_progress(svc, websocket, "routing", {})
-                _result = await _run_procedure_direct(
-                    svc,
-                    "Route-Task",
-                    proc_args={"intent": user_message},
-                    session_logger=session_logger,
-                    user_message=user_message,
-                    websocket=websocket,
-                )
-                await send_progress(svc, websocket, "routing_done", {})
-                return _result
-            except Exception as e:  # noqa: BLE001
-                session_logger.log("preflight_route_failed", {"error": str(e)})
-                await notify_console_failure(
-                    svc,
-                    websocket,
-                    f"Route-Task procedure failed: {e}",
-                    context="preflight_route",
-                )
-                return {"error": str(e)}
-
-        # Run Route-Task (the sole preflight router).
-        _route_result = await _run_route()
-
-        # --- Process Route-Task result ---
-        if not _route_result.get("error"):
-            _route_output = _route_result.get("final_output", "")
-            if _route_output:
-                try:
-                    _parsed = json.loads(_route_output)
-                except (json.JSONDecodeError, TypeError):
-                    _parsed = {}
-                _preflight_category = _parsed.get("category", "")
-                _preflight_chain = _parsed.get("procedure_chain", [])
-                if isinstance(_preflight_chain, list) and _preflight_chain:
-                    session_logger.log(
-                        "preflight_route",
-                        {
-                            "category": _preflight_category,
-                            "chain": _preflight_chain,
-                        },
-                    )
-                    # Auto-execute small-cartridge chain steps.
-                    # Big-cartridge steps are left for the big model.
-                    for _chain_proc in _preflight_chain:
-                        # Check cartridge before running.
-                        _chain_cartridge = "big"
-                        try:
-                            _idx = (
-                                getattr(svc.procedure_tracker, "_stem_index", None)
-                                or {}
-                            )
-                            _entry = _idx.get(_chain_proc) or {}
-                            _fm = _entry.get("frontmatter") or {}
-                            _chain_cartridge = (
-                                str(_fm.get("model_cartridge", "big")).strip().lower()
-                                or "big"
-                            )
-                        except Exception:  # noqa: BLE001
-                            pass
-                        if _chain_cartridge == "small":
-                            await send_progress(
-                                svc, websocket, f"running {_chain_proc}", {}
-                            )
-                            _chain_result = await _run_procedure_direct(
-                                svc,
-                                _chain_proc,
-                                proc_args={"intent": user_message},
-                                session_logger=session_logger,
-                                user_message=user_message,
-                                websocket=websocket,
-                            )
-                            _preflight_results.append(_chain_result)
-                            session_logger.log(
-                                "preflight_chain_step",
-                                {
-                                    "procedure": _chain_proc,
-                                    "cartridge": _chain_cartridge,
-                                    "passed": _chain_result.get("overall_passed"),
-                                },
-                            )
-                        else:
-                            # Big-cartridge: stop here, let the
-                            # big model handle the rest.
-                            _preflight_results.append(
-                                {
-                                    "procedure": _chain_proc,
-                                    "cartridge": _chain_cartridge,
-                                    "pending": True,
-                                }
-                            )
-                            break
+    # --- Route-Task preflight runs earlier now (before auto-research) ---
+    # The Route-Task block was moved to BEFORE the auto-research gate so
+    # its classification result can prevent unnecessary web scraping on
+    # conversational messages. See issue #25. The variables
+    # _preflight_chain, _preflight_results, _preflight_category, and
+    # _is_trivial are set in the earlier block and used here for the
+    # auto-research gate condition and later for preflight chain injection.
 
     # If we're resuming an interrupted turn, tell the model what it already
     # did so it continues instead of re-running tools.
