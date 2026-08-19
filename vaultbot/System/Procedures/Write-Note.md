@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: active
+baseline: true
 created: 2026-08-06
 description: Create a new vault note with automatic YAML frontmatter, path validation, and directory routing. Use this INSTEAD of vault_safe_write for note creation.
 when_to_use: when creating a new vault note, when the user asks to "write a note", "create a note", or "save this as a note"

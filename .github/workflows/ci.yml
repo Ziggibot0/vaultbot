@@ -86,16 +86,17 @@ jobs:
         run: uv run ruff format --check vaultbot_backend/
         continue-on-error: true
 
-      - name: Baseline-marker check (soft gate)
-        # Every committed .md under vaultbot/System/ should carry
+      - name: Baseline-marker check (HARD GATE)
+        # Every committed .md under vaultbot/System/ must carry
         # "baseline: true" frontmatter. This is the same check the
         # pre-commit hook runs, but in --all mode it scans the whole
-        # committed tree (CI has no staging area). Soft gate: 13 files
-        # predate the marker convention and need a human decision on
-        # whether they're shippable baseline or personal/bespoke. Flip to
-        # a hard gate once that triage is done.
+        # committed tree (CI has no staging area). Hard gate: the 11
+        # files that predated the marker convention have been triaged
+        # (all are shippable baseline procedures) and now carry the
+        # marker. This gate enforces the baseline membrane — the safety
+        # rail that keeps personal/bespoke content out of community PRs
+        # and out of `git pull` updates (see issue #28).
         run: python vaultbot/vaultbot_backend/scripts/check_baseline_markers.py --all
-        continue-on-error: true
 
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type

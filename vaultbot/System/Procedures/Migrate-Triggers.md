@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: small
 created: 2026-08-15
 description: "One-time migration: split each procedure's existing when_to_use string into a trigger frontmatter list (one item per clause) and add an empty inhibitor list. No LLM calls — pure text splitting. Idempotent: skips procedures that already have a trigger field. Leaves when_to_use in place for human readability and backward compatibility."

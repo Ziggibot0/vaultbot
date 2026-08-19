@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 model_cartridge: big
 created: 2026-08-14
 description: Scan all procedure notes for missing or thin when_to_use fields, generate better trigger language via LLM, and patch them in place. Self-improving retrieval feedback loop for Dream Pass.

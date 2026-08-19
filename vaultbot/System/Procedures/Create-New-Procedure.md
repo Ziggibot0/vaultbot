@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: draft
+baseline: true
 created: 2023-10-25
 summary: Generates a new markdown file for a standard operating procedure (SOP) or machine-executable procedure, ensuring it follows a consistent structure with required sections.
 tags: [procedure, documentation, sop, vaultbot]
