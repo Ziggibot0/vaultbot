@@ -42,12 +42,15 @@ class TestAutoResearchCategoryGate:
 
         assert "unknown" in TUNABLES.auto_research_categories
 
-    def test_question_answering_not_in_research_categories(self):
-        """'question-answering' should NOT trigger auto-research —
-        the vault already has the info, we just need to answer."""
+    def test_question_answering_in_research_categories(self):
+        """'question-answering' MUST trigger auto-research — the
+        Route-Task prompt distinguishes it from 'research' by vault
+        coverage, which the small model can't know at classification
+        time. Excluding it would block legitimate research on genuine
+        questions when the vault is empty."""
         from config import TUNABLES
 
-        assert "question-answering" not in TUNABLES.auto_research_categories
+        assert "question-answering" in TUNABLES.auto_research_categories
 
     def test_code_editing_not_in_research_categories(self):
         """'code-editing' should NOT trigger auto-research."""
@@ -72,11 +75,11 @@ class TestAutoResearchCategoryGate:
         # Research-worthy categories → allow
         assert _category_allows_research("research") is True
         assert _category_allows_research("gap-filling") is True
+        assert _category_allows_research("question-answering") is True
         assert _category_allows_research("unknown") is True
 
         # Non-research categories → block
         assert _category_allows_research("conversational") is False
-        assert _category_allows_research("question-answering") is False
         assert _category_allows_research("code-editing") is False
         assert _category_allows_research("fact-checking") is False
         assert _category_allows_research("vault-maintenance") is False
