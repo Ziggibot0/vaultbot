@@ -4,7 +4,7 @@ status: active
 baseline: true
 model_cartridge: small
 created: 2026-08-06
-description: "Build a complete, tested, verified procedure from a task description. This is the one-shot procedure factory: give it a task, get back a working procedure on disk. It composes drafting (LLM step), big-model quality review (code step with llm_generate), vault_safe_write (disk), Verify-Procedure-Args (static checks), vault_lint (link/frontmatter quality), and Test-Procedure-Until-Pass (dynamic test→fix→retest loop). The result is a procedure that has been drafted, reviewed, written, statically verified, dynamically tested, auto-fixed if broken, and linted. Use this whenever you need a new procedure — it replaces the manual draft→review→write→test→fix→lint workflow with a single call."
+description: "Build a complete, tested, verified procedure from a task description. This is the one-shot procedure factory: give it a task, get back a working procedure on disk. It composes drafting (LLM step), big-model quality review (code step with llm_generate), vault_safe_write (disk), Verify-Procedure-Args (static checks), vault_lint (link/frontmatter quality), and Test-Procedure-Until-Pass (dynamic test→fix→retest loop). The result is a procedure that has been drafted, reviewed, written, statically verified, dynamically tested, auto-fixed if broken, and linted. It also inventories the existing procedure library and composes pre-existing procedures (via run_procedure + provides) with new glue steps, so complex procedures are built by orchestration rather than reinvention. Use this whenever you need a new procedure — it replaces the manual draft→review→write→test→fix→lint workflow with a single call."
 when_to_use: "When the user says 'make a procedure for X', when you identify a gap that needs a new procedure, when you want to create a procedure and know it actually works before trusting it, when you're tired of the manual draft→review→write→test→fix→lint cycle, when you want a procedure built strong from the start, when you need to build a new skill as a procedure, when you want to automate a workflow you just did manually, when you realize you're doing something repetitive that should be proceduralized, when you need a one-shot procedure factory, when someone says 'create a procedure', 'build a procedure', 'make a procedure', 'automate this', 'proceduralize this', or 'turn this into a procedure'"
 falsifiable_if: the built procedure passes all checks but produces wrong output on real use, the review step approves a draft with obvious flaws, or the test loop reports success when the procedure actually fails (verifiable by running the procedure manually)
 applies_to:
@@ -77,14 +77,58 @@ else:
     # Build prompt in parts to avoid nested triple-quote issues
     _task_line = f"TASK: The procedure you write must accomplish this specific task: {task}"
     _tools_line = f"Available tools for allowed_tools: {tools_available}"
-    
+
+    # Inventory existing procedures so the writer can COMPOSE instead of
+    # reinventing. We read every procedure's frontmatter (description +
+    # when_to_use) so the model sees the full capability surface and can
+    # orchestrate pre-existing procedures with new glue steps in between.
+    _inventory = ""
+    try:
+        from procedure_tracker import ProcedureTracker
+        _tracker = ProcedureTracker(
+            log_path=os.path.join(vault_path, "vaultbot", "vaultbot_backend", "procedure_failure_log.json"),
+            vault_path=vault_path,
+        )
+        _idx = _tracker.get_procedure_index(vault_path)
+        _lines = []
+        for _stem in sorted(_idx):
+            _fm = _idx[_stem].get("frontmatter", {})
+            _desc = str(_fm.get("description", "")).strip()
+            _status = str(_fm.get("status", "")).strip()
+            # Truncate to keep the inventory compact (the small model has a
+            # bounded context; the full body is available via run_procedure).
+            if len(_desc) > 150:
+                _desc = _desc[:150] + "..."
+            _line = f"- {_stem} [{_status}]"
+            if _desc:
+                _line += f" — {_desc}"
+            _lines.append(_line)
+        _inventory = "\n".join(_lines)
+    except Exception:
+        _inventory = ""
+
+    _inventory_line = (
+        "## Existing Procedures (COMPOSE — do not reinvent)\n"
+        "Below is the full library of procedures already on disk, with their "
+        "descriptions and trigger conditions. Your job is to ORCHESTRATE: "
+        "reuse these as sub-procedures via run_procedure(\"Name\") in code steps, "
+        "and write NEW steps only for the glue that is genuinely missing.\n"
+        "For a complex task, decompose it into sub-goals, map each sub-goal to "
+        "an existing procedure where one fits, and chain them with new steps in "
+        "between. Add every procedure you compose to the `provides:` frontmatter "
+        "list so the composition graph is discoverable.\n"
+        + (_inventory if _inventory else "(no existing procedures found)")
+        + "\n\n"
+    )
+
     prompt = (
         "You are a VaultBot procedure writer. Write a procedure that DOES the task below.\n"
         "The procedure must be ABOUT accomplishing the task — NOT about how to write procedures.\n"
         "Do NOT write a meta-procedure about procedure creation. Write a procedure that actually does the work described.\n\n"
         + _task_line + "\n\n"
         + _tools_line + "\n\n"
-        "## Required Frontmatter (all fields mandatory)\n"
+        + _inventory_line
+        + "## Required Frontmatter (all fields mandatory)\n"
         "type: procedure\n"
         "status: experimental\n"
         "model_cartridge: small  # or big, or vision\n"
@@ -170,9 +214,10 @@ Check:
 6. INPUTS: all args.get() calls have corresponding docs?
 7. NO_CODE_FENCE_WRAP: the draft must NOT be wrapped in ```markdown or any outer code fence. It must be raw markdown starting with --- frontmatter.
 8. FRONTMATTER: has type, status, created, summary, tags fields?
+9. COMPOSITION: does the draft REUSE existing procedures via run_procedure() where a sub-goal matches an existing procedure, instead of reinventing them inline? Does it declare every composed sub-procedure in a `provides:` frontmatter list? For a complex task, is it decomposed into sub-goals that are orchestrated (existing procs + new glue steps) rather than written as one monolithic procedure? If a sub-goal has no existing procedure, a new inline step is correct — but if one exists and was ignored, that's a failure.
 
 Return JSON:
-{{"verdict": "APPROVED" or "NEEDS_FIXES", "suggested_name": "Name-Here", "checks": {{"description": {{"pass": true/false, "fix": "rewrite if failed"}}, "when_to_use": {{"pass": true/false, "fix": "rewrite if failed"}}, "falsifiable_if": {{"pass": true/false, "fix": "rewrite if failed"}}, "steps": {{"pass": true/false, "issues": []}}, "model_cartridge": {{"pass": true/false, "fix": ""}}, "inputs": {{"pass": true/false, "missing": []}}}}, "fixed_draft": "FULL FIXED MARKDOWN if NEEDS_FIXES, else empty"}}
+{{"verdict": "APPROVED" or "NEEDS_FIXES", "suggested_name": "Name-Here", "checks": {{"description": {{"pass": true/false, "fix": "rewrite if failed"}}, "when_to_use": {{"pass": true/false, "fix": "rewrite if failed"}}, "falsifiable_if": {{"pass": true/false, "fix": "rewrite if failed"}}, "steps": {{"pass": true/false, "issues": []}}, "model_cartridge": {{"pass": true/false, "fix": ""}}, "inputs": {{"pass": true/false, "missing": []}}, "composition": {{"pass": true/false, "fix": "rewrite if failed"}}}}, "fixed_draft": "FULL FIXED MARKDOWN if NEEDS_FIXES, else empty"}}
 
 Return ONLY the JSON."""
 
