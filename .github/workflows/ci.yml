@@ -80,6 +80,17 @@ jobs:
         # and out of `git pull` updates (see issue #28).
         run: python vaultbot/vaultbot_backend/scripts/check_baseline_markers.py --all
 
+      - name: Procedure-frontmatter check (HARD GATE)
+        # Every committed procedure note (type: procedure in frontmatter)
+        # must carry the full required frontmatter set — type, description,
+        # when_to_use, allowed_tools, falsifiable_if, status,
+        # model_cartridge, created, summary, tags. This is the same gate
+        # Procedure-Creator applies at publication time, enforced here so a
+        # hand-edited or tool-bypassed procedure can't ship with incomplete
+        # frontmatter and silently break RAG retrieval / subprocess
+        # execution. Reuses procedure_validator (no duplicated logic).
+        run: python vaultbot/vaultbot_backend/scripts/check_procedure_frontmatter.py --all
+
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
         # errors as warnings so the team sees the debt but CI stays green.

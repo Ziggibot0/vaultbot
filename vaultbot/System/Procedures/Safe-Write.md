@@ -13,6 +13,7 @@ summary: Safe-Write
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Safe-Write

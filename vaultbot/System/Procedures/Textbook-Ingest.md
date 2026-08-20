@@ -13,6 +13,7 @@ summary: Download textbooks and upload them to VaultBot's system as structured n
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Textbook-Ingest

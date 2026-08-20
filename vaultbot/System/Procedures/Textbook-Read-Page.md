@@ -14,6 +14,7 @@ summary: TEXTBOOK_READ_PAGE_TOOL_VISION_EXACT_TEXT_SIMULATION
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Textbook-Read-Page

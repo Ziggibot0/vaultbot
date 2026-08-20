@@ -12,6 +12,7 @@ summary: The note instructs users to create a `capability_audit` function that u
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Capability-Audit

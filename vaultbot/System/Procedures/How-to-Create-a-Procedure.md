@@ -11,6 +11,9 @@ summary: "1. A procedure guide for deciding between tools and workflows to creat
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools:
+  - vault_search
 ---
 
 # How to Create a Procedure

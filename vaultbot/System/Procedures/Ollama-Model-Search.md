@@ -15,6 +15,7 @@ summary: Dispatching an ollama_model_search action with the 'search' payload scr
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Ollama Model Search

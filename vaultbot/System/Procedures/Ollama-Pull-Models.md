@@ -14,6 +14,7 @@ summary: "Analyze this note and produce:
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Ollama-Pull-Models
