@@ -170,9 +170,7 @@ def test_validate_golden_set_all_present():
             "seed_notes": ["Seed"],
         }
     ]
-    result = validate_golden_set(
-        golden_set=golden, available_stems={"Target", "Seed"}
-    )
+    result = validate_golden_set(golden_set=golden, available_stems={"Target", "Seed"})
     assert result["valid"] is True
     assert result["problems"] == []
 
