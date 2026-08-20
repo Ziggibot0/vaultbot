@@ -158,6 +158,42 @@ def test_sync_to_latest_tag(monkeypatch):
     assert result["new_head"] == "def456"
 
 
+# ─── --abbrev=0 returns clean tag, not describe string ────────────────────────
+
+
+def test_describe_uses_abbrev0_for_clean_tag(monkeypatch):
+    """Regression test for the bug where --tags without --abbrev=0 returned
+    a describe string like 'v0.1.0-14-ge06ff84' (which points to the tip of
+    main, not the stable tag). With --abbrev=0, git returns just 'v0.1.0'.
+    """
+    _make_git_root(monkeypatch)
+    call_log = _make_git_results(
+        monkeypatch,
+        [
+            (True, "", ""),  # status (clean)
+            (True, "origin\nupstream\n", ""),  # remote
+            (True, "Fetching upstream\n", ""),  # fetch
+            (True, "main\n", ""),  # branch --show-current
+            (True, "v0.1.0\n", ""),  # describe --tags --abbrev=0 (clean tag)
+            (True, "2\n", ""),  # rev-list count (2 behind)
+            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
+            (True, "Merge made\n", ""),  # merge
+            (True, "def456 Fix bug\nxyz789 Add feature\n", ""),  # log
+            (True, " 2 files changed\n", ""),  # diff --stat
+            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
+        ],
+    )
+    result = vs.run({})
+    assert result["status"] == "success"
+    # The merge ref must be the clean tag, not a describe string.
+    assert result["merge_ref"] == "v0.1.0"
+    assert "-14-" not in result["merge_ref"]
+    # Verify the git call used --abbrev=0.
+    describe_calls = [c for c in call_log if "describe" in c[0]]
+    assert len(describe_calls) == 1
+    assert "--abbrev=0" in describe_calls[0][0]
+
+
 # ─── Sync to main explicitly ──────────────────────────────────────────────────
 
 

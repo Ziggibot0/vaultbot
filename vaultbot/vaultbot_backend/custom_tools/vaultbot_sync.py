@@ -85,6 +85,8 @@ def _find_git_root(start_dir: str) -> str | None:
 
 def _run_git(git_args: list[str], cwd: str) -> tuple[bool, str, str]:
     """Run a git command, return (success, stdout, stderr)."""
+    import subprocess
+
     try:
         from subprocess_utils import run as _subprocess_run
 
@@ -96,7 +98,10 @@ def _run_git(git_args: list[str], cwd: str) -> tuple[bool, str, str]:
             cwd=cwd,
         )
         return r.returncode == 0, r.stdout.strip(), r.stderr.strip()
-    except Exception as e:  # noqa: BLE001 — best-effort
+    except (OSError, subprocess.SubprocessError) as e:
+        # FileNotFoundError (git not on PATH), PermissionError, or a
+        # subprocess timeout/error. The error string is returned to the
+        # caller — this is not a silent swallow.
         return False, "", str(e)
 
 
@@ -182,8 +187,12 @@ def run(args: dict) -> dict:
         merge_ref = "upstream/main"
         target_desc = "upstream/main (bleeding edge)"
     else:
-        # Find the latest tag on upstream.
-        ok, latest_tag, _ = _run_git(["describe", "--tags", "upstream/main"], git_root)
+        # Find the latest tag on upstream. --abbrev=0 returns just the tag
+        # name (e.g. "v0.1.0"), not a describe string like "v0.1.0-14-ge06ff846"
+        # which would point at the tip of main (bleeding edge, not stable).
+        ok, latest_tag, _ = _run_git(
+            ["describe", "--tags", "--abbrev=0", "upstream/main"], git_root
+        )
         if ok and latest_tag:
             merge_ref = latest_tag.strip()
             target_desc = f"release tag {merge_ref} (stable)"
