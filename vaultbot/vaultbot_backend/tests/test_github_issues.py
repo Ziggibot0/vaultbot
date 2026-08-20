@@ -25,6 +25,10 @@ def fake_gh(monkeypatch):
     calls = {"api": []}
 
     monkeypatch.setattr(gh_client, "gh_available", lambda: True)
+    # Contributions must be on for any action to pass the gate. Individual
+    # tests that exercise the contributions-off path override this via the
+    # contributions_off fixture.
+    monkeypatch.setenv("VAULTBOT_ALLOW_CONTRIBUTIONS", "true")
 
     def _fake_gh_api(method, path, body=None, timeout=60):
         calls["api"].append((method, path, body))
@@ -69,6 +73,12 @@ def fake_gh(monkeypatch):
             }
         if path.endswith("/issues/1/labels"):
             return [{"name": "bug"}, {"name": "fixed"}]
+        if path.endswith("/issues") and method == "POST":
+            return {
+                "number": 42,
+                "title": body.get("title", "") if isinstance(body, dict) else "",
+                "html_url": "http://x/42",
+            }
         return {}
 
     monkeypatch.setattr(gh_client, "gh_api", _fake_gh_api)
@@ -78,6 +88,7 @@ def fake_gh(monkeypatch):
 @pytest.fixture
 def developer_mode(monkeypatch):
     monkeypatch.setenv("VAULTBOT_SAFE_MODE", "0")
+    monkeypatch.setenv("VAULTBOT_ALLOW_CONTRIBUTIONS", "true")
     import safe_mode
 
     importlib.reload(safe_mode)
@@ -87,6 +98,18 @@ def developer_mode(monkeypatch):
 @pytest.fixture
 def safe_mode_on(monkeypatch):
     monkeypatch.setenv("VAULTBOT_SAFE_MODE", "true")
+    monkeypatch.setenv("VAULTBOT_ALLOW_CONTRIBUTIONS", "true")
+    import safe_mode
+
+    importlib.reload(safe_mode)
+    return safe_mode
+
+
+@pytest.fixture
+def contributions_off(monkeypatch):
+    """Contributions disabled — the whole tool should refuse."""
+    monkeypatch.setenv("VAULTBOT_ALLOW_CONTRIBUTIONS", "false")
+    monkeypatch.setenv("VAULTBOT_SAFE_MODE", "0")
     import safe_mode
 
     importlib.reload(safe_mode)
@@ -162,3 +185,45 @@ def test_missing_action_returns_error(fake_gh):
 def test_unknown_action_returns_error(fake_gh):
     result = gi.run({"action": "bogus"})
     assert "error" in result
+
+
+# --- create action ----------------------------------------------------------
+
+
+def test_create_requires_title(fake_gh, developer_mode):
+    result = gi.run({"action": "create", "body": "some body"})
+    assert "error" in result
+    assert "title" in result["error"]
+
+
+def test_create_blocked_in_safe_mode(fake_gh, safe_mode_on):
+    result = gi.run({"action": "create", "title": "New bug", "body": "x"})
+    assert result.get("safe_mode_blocked") is True
+
+
+def test_create_allowed_in_developer_mode(fake_gh, developer_mode):
+    result = gi.run({"action": "create", "title": "New bug", "body": "details"})
+    assert result["status"] == "success"
+    assert result["number"] == 42
+    assert result["html_url"] == "http://x/42"
+
+
+# --- contributions gate -----------------------------------------------------
+
+
+def test_list_blocked_when_contributions_off(fake_gh, contributions_off):
+    result = gi.run({"action": "list"})
+    assert "error" in result
+    assert "Contributions are not enabled" in result["error"]
+
+
+def test_read_blocked_when_contributions_off(fake_gh, contributions_off):
+    result = gi.run({"action": "read", "issue_number": 1})
+    assert "error" in result
+    assert "Contributions are not enabled" in result["error"]
+
+
+def test_create_blocked_when_contributions_off(fake_gh, contributions_off):
+    result = gi.run({"action": "create", "title": "New bug"})
+    assert "error" in result
+    assert "Contributions are not enabled" in result["error"]

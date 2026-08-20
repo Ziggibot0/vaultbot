@@ -12,9 +12,18 @@ the other contribution tools.
 
 SAFE-MODE GATING (content-aware, mirrors edit_lines):
   - ``list`` / ``read`` are READ-ONLY and allowed in Safe Mode.
-  - ``comment`` / ``close`` / ``label`` MUTATE the repo and are blocked in
-    Safe Mode (they require Developer Mode). This keeps a non-technical
-    user's VaultBot from mutating GitHub while still letting it *see* issues.
+  - ``comment`` / ``close`` / ``label`` / ``create`` MUTATE the repo and are
+    blocked in Safe Mode (they require Developer Mode). This keeps a
+    non-technical user's VaultBot from mutating GitHub while still letting
+    it *see* issues.
+
+CONTRIBUTIONS GATE (opt-in, mirrors submit_contribution):
+  The entire tool is gated behind ``VAULTBOT_ALLOW_CONTRIBUTIONS=true``. If
+  the setting is off, every action refuses — including ``list`` / ``read``.
+  This keeps the tool out of the LLM's context when the user hasn't opted
+  into community contributions (no context bloat from a tool that will
+  never be used). The load-time gate in ``self_improver.load_custom_tools``
+  additionally prevents the schema from being advertised at all.
 """
 
 SCHEMA = {
@@ -23,27 +32,33 @@ SCHEMA = {
         "Read and act on GitHub issues for the VaultBot repo. Actions: "
         "'list' (open issues), 'read' (issue body + comments), 'comment' "
         "(post a comment), 'close' (close an issue with a comment), "
-        "'label' (add/remove labels). 'list' and 'read' are read-only and "
-        "always allowed; 'comment', 'close', and 'label' mutate the repo "
-        "and require Developer Mode. Requires the gh CLI authenticated via "
-        "'gh auth login'."
+        "'label' (add/remove labels), 'create' (open a new issue). "
+        "'list' and 'read' are read-only; 'comment', 'close', 'label', and "
+        "'create' mutate the repo and require Developer Mode. The entire "
+        "tool requires the 'Allow contributions' setting to be enabled. "
+        "Requires the gh CLI authenticated via 'gh auth login'."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["list", "read", "comment", "close", "label"],
+                "enum": ["list", "read", "comment", "close", "label", "create"],
                 "description": "Which action to perform.",
             },
             "issue_number": {
                 "type": "integer",
-                "description": "Issue number. Required for read/comment/close/label.",
+                "description": ("Issue number. Required for read/comment/close/label."),
+            },
+            "title": {
+                "type": "string",
+                "description": "Title for the new issue (for 'create').",
             },
             "body": {
                 "type": "string",
                 "description": (
-                    "Comment text (for 'comment') or closing note (for 'close')."
+                    "Comment text (for 'comment'), closing note (for "
+                    "'close'), or issue body (for 'create')."
                 ),
             },
             "labels": {
@@ -63,7 +78,7 @@ SCHEMA = {
 
 
 # Actions that mutate the repo and are blocked in Safe Mode.
-_MUTATING_ACTIONS = frozenset({"comment", "close", "label"})
+_MUTATING_ACTIONS = frozenset({"comment", "close", "label", "create"})
 
 
 def run(args: dict) -> dict:
@@ -86,6 +101,7 @@ def run(args: dict) -> dict:
         return {"error": "action is required (list/read/comment/close/label)"}
 
     issue_number = args.get("issue_number")
+    title = args.get("title", "").strip()
     body = args.get("body", "").strip()
     labels = args.get("labels", [])
     state = args.get("state", "open")
@@ -97,6 +113,26 @@ def run(args: dict) -> dict:
             "hint": (
                 "Install the GitHub CLI from https://cli.github.com and run "
                 "'gh auth login' to sign in."
+            ),
+        }
+
+    # 1b. Contributions opt-in gate (mirrors submit_contribution). The entire
+    #     tool is disabled when the user hasn't opted in — including read
+    #     actions — so the tool never appears in a vault where contributions
+    #     are off. The load-time gate in self_improver.load_custom_tools also
+    #     keeps the schema out of the LLM context, but this call-time check is
+    #     a defence-in-depth for direct/programmatic calls.
+    allow_contributions = (
+        os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
+    )
+    if allow_contributions != "true":
+        return {
+            "error": "Contributions are not enabled.",
+            "hint": (
+                "Enable 'Allow contributions' in VaultBot settings (under "
+                "Community contributions), or ask your operator to enable "
+                "it. This is an opt-in feature — VaultBot will never read or "
+                "mutate GitHub issues without explicit permission."
             ),
         }
 
@@ -253,6 +289,23 @@ def run(args: dict) -> dict:
                 "status": "success",
                 "labels": [lbl.get("name") for lbl in data],
                 "message": f"Labels added to issue #{issue_number}",
+            }
+
+        if action == "create":
+            if not title:
+                return {"error": "title is required for 'create'"}
+            data = gh_api(
+                "POST",
+                f"{repo_path}/issues",
+                body={"title": title, "body": body},
+                timeout=30,
+            )
+            return {
+                "status": "success",
+                "number": data.get("number"),
+                "title": data.get("title"),
+                "html_url": data.get("html_url"),
+                "message": f"Issue #{data.get('number')} created",
             }
 
         return {"error": f"Unknown action: {action}"}
