@@ -13,6 +13,7 @@ instances are). This module only holds the schemas + a registry so the
 system prompt and the handler share a single source of truth.
 """
 
+from datetime import datetime
 from typing import Any
 
 # Ollama tool schema format mirrors OpenAI function-calling.
@@ -804,6 +805,20 @@ def build_tool_list(
     return deduped
 
 
+def _local_now() -> datetime:
+    """Return the current local wall-clock time (naive, local timezone).
+
+    The model needs a reliable "now" anchor for time-relative questions
+    ("today", "tomorrow", "yesterday"). ``datetime.now()`` gives local
+    time on the host, which matches the operator's wall clock and the
+    calendar tool's local-time handling. Best-effort: never raises.
+    """
+    try:
+        return datetime.now().astimezone()
+    except Exception:  # noqa: BLE001 — best-effort date anchor
+        return datetime.now()
+
+
 def build_system_prompt_briefing(
     autonomous_state: dict[str, Any],
     gaps_summary: str,
@@ -863,7 +878,18 @@ def build_system_prompt_briefing(
                     + ", ".join(topics)
                 )
 
+    # Current date/time in LOCAL time, so the model has a reliable anchor
+    # for "today", "tomorrow", "yesterday", and any time-relative question.
+    # Without this the model guesses the date from its weights (which are
+    # frozen at training time) and gets "tomorrow" wrong — see issue #127.
+    _now_local = _local_now()
+
     return (
+        f"# CURRENT DATE & TIME\n"
+        f"It is now {_now_local.strftime('%A, %B %d, %Y at %I:%M %p %Z')}. "
+        f"Use this as your anchor for 'today', 'tomorrow', 'yesterday', and "
+        f"any time-relative question. Do NOT guess the date from your "
+        f"training data — it is frozen and will be wrong.\n\n"
         f"# RULES\n"
         f"- Vault knowledge only. If it's not in the vault, it doesn't exist. "
         f"Research it; don't guess from training data.\n"
@@ -896,7 +922,8 @@ def build_system_prompt_briefing(
         f"- Keep it short. Bottom line up front. Bullets over paragraphs. "
         f"Lead with outcome.\n"
         f"- Never touch date-only journal files. LOCKED notes are read-only.\n"
-        f'- TEMPORAL AWARENESS: when the user asks about recent work, "what '
+        f'- TEMPORAL AWARENESS: the CURRENT DATE & TIME block above is your '
+        f'authoritative "now". When the user asks about recent work, "what '
         f'were we doing last", or anything time-relative, prioritize the '
         f"PRIOR CONVERSATION section (its turns carry timestamps) over vault "
         f'notes. Do NOT cite an old chat note as "the last thing" if more '
