@@ -24,7 +24,7 @@ _BACKEND = Path(__file__).parent.resolve()
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-from golden_eval import load_golden_set, validate_golden_set
+from golden_eval import load_golden_set, validate_golden_set  # noqa: E402
 
 
 def _committed_note_stems(repo_root: Path) -> set[str]:
