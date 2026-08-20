@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -678,13 +679,58 @@ class FusedRetriever:
         content = cand.get("content", "") or self._content_for_node(
             cand.get("name", "")
         )
-        return {
+        result = {
             "file_path": cand.get("file_path", ""),
             "name": cand.get("name", ""),
             "score": round(float(cand.get("score", 0.0)), 4),
             "channels": channels,
             "snippet": self._snippet(content, query),
         }
+        # Temporal metadata (issue #85 — temporal awareness): surface the
+        # note's creation date (frontmatter `created`) and last-modified
+        # time (file mtime) so the LLM can tell a 3-week-old note from a
+        # note edited today. Best-effort — never raises, never blocks.
+        try:
+            _created, _modified = self._temporal_metadata(
+                cand.get("file_path", ""), content
+            )
+            if _created:
+                result["created"] = _created
+            if _modified:
+                result["modified"] = _modified
+        except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+            pass
+        return result
+
+    @staticmethod
+    def _temporal_metadata(
+        file_path: str, content: str
+    ) -> tuple[str | None, str | None]:
+        """Return (created, modified) ISO strings for a note, or (None, None).
+
+        ``created`` comes from the note's YAML frontmatter ``created`` field
+        (already an ISO date string in most notes). ``modified`` comes from
+        the file's mtime. Both are best-effort — any failure returns None
+        for that field rather than raising.
+        """
+        created: str | None = None
+        modified: str | None = None
+        # created: parse frontmatter `created:` field.
+        if content:
+            m = re.search(r"(?m)^created:\s*(.+?)\s*$", content)
+            if m:
+                created = m.group(1).strip().strip("\"'")
+        # modified: stat the file's mtime.
+        if file_path:
+            try:
+                p = Path(file_path)
+                if p.exists():
+                    modified = datetime.fromtimestamp(
+                        p.stat().st_mtime, tz=UTC
+                    ).strftime("%Y-%m-%d")
+            except OSError:
+                modified = None
+        return created, modified
 
     # ------------------------------------------------------------------
     # Helpers

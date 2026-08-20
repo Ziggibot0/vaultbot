@@ -427,7 +427,14 @@ async def run_agentic_loop(
             )
 
             # Append the assistant's turn to the conversation.
-            assistant_msg = {"role": "assistant", "content": round_text}
+            # Timestamp (issue #85 — temporal awareness): persisted so the
+            # conversation index can surface recency and the LLM can tell
+            # how old a turn is. Backward-compatible (missing = legacy turn).
+            assistant_msg = {
+                "role": "assistant",
+                "content": round_text,
+                "timestamp": loop.time(),
+            }
             if round_thinking:
                 assistant_msg["thinking"] = round_thinking
             if round_tool_calls:

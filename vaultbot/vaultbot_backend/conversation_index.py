@@ -34,10 +34,12 @@ DESIGN
 from __future__ import annotations
 
 import logging
+import math
 import re
 import threading
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -55,6 +57,12 @@ MAX_TURN_CHARS = 2000
 DEFAULT_K = 3
 # Minimum similarity score to include a turn (normalized [0,1]).
 MIN_SCORE = 0.10
+# Recency boost for conversation search (issue #85 — temporal awareness).
+# A turn's score gets a small time-decay bonus so a recent turn that is
+# semantically close can outrank an older turn that is marginally more
+# similar. Bounded so it never overwhelms genuine semantic relevance.
+RECENCY_BOOST = 0.05
+RECENCY_HALF_LIFE_HOURS = 24.0
 
 
 @dataclass
@@ -137,7 +145,13 @@ class ConversationIndex:
                         break  # next user message without an answer -- skip
                     j += 1
                 if user_text.strip() or assistant_text.strip():
-                    turns_to_add.append((user_text, assistant_text, time.time()))
+                    # Preserve the turn's real timestamp when the history
+                    # carries one (issue #85). Falls back to now() for
+                    # legacy history that predates timestamp persistence.
+                    ts = msg.get("timestamp")
+                    if not isinstance(ts, (int, float)):
+                        ts = time.time()
+                    turns_to_add.append((user_text, assistant_text, ts))
                 i = j + 1
             else:
                 i += 1
@@ -352,6 +366,24 @@ class ConversationIndex:
                         r["score"] = max(r["score"], ent_r["score"])
                         break
 
+        # Recency boost (issue #85 — temporal awareness): a recent turn
+        # that is semantically close should outrank an older turn that is
+        # marginally more similar. Apply a small time-decay bonus to each
+        # score before the final sort so "what were we working on last?"
+        # surfaces the most recent relevant turn rather than a
+        # semantically-similar turn from weeks ago.
+        _now = time.time()
+        for r in results:
+            _ts = r.get("timestamp")
+            if not isinstance(_ts, (int, float)):
+                _ts = _now
+            _age_hours = max(0.0, (_now - _ts) / 3600.0)
+            r["score"] = round(
+                r["score"]
+                + RECENCY_BOOST * math.exp(-_age_hours / RECENCY_HALF_LIFE_HOURS),
+                4,
+            )
+
         # Sort by score descending, take top k.
         results.sort(key=lambda r: r["score"], reverse=True)
         return results[:k]
@@ -461,7 +493,12 @@ def build_conversation_context(
     for r in results:
         user = r.get("user_message", "")[:300]
         answer = r.get("assistant_answer", "")[:800]
-        block = f"## Turn {r['turn_id']}\nUser: {user}\nYou said: {answer}"
+        ts = r.get("timestamp")
+        if isinstance(ts, (int, float)):
+            when = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
+            block = f"## Turn {r['turn_id']} ({when})\nUser: {user}\nYou said: {answer}"
+        else:
+            block = f"## Turn {r['turn_id']}\nUser: {user}\nYou said: {answer}"
         if total + len(block) > max_chars:
             break
         lines.append(block)

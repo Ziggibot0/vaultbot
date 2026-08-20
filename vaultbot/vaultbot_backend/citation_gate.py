@@ -265,6 +265,53 @@ def detect_idk(answer: str) -> bool:
     return any(p in _low for p in _IDK_PATTERNS)
 
 
+# ── Temporal-question detection ──────────────────────────────────────────
+# Recency/continuity questions ("what were we working on last?") must be
+# grounded in the PRIOR CONVERSATION section (which carries timestamps),
+# NOT the closed-set vault citation gate. The closed set is built from
+# vault search results only, so a temporal question would otherwise be
+# forced to cite a stale vault note as "the last thing". We detect these
+# questions and exempt them from the grounding gate (same escape hatch as
+# IDK), letting the model answer from conversation history it can already
+# see. See issue #85.
+_TEMPORAL_PATTERNS: list[str] = [
+    "what were we working on",
+    "what were we doing",
+    "what did we do",
+    "what was the last",
+    "what's the last",
+    "what is the last",
+    "last thing",
+    "most recent",
+    "recently",
+    "what have we",
+    "what have you been",
+    "where did we leave off",
+    "where were we",
+    "what was i doing",
+    "what was i working on",
+    "what did i ask",
+    "what did i say",
+    "earlier",
+    "before this",
+    "what happened last",
+]
+
+
+def detect_temporal_question(text: str) -> bool:
+    """Return True if ``text`` is a temporal/recency question.
+
+    Used to exempt recency questions from the closed-set citation gate so
+    the model can ground "what were we working on last?" in the PRIOR
+    CONVERSATION section rather than being forced to cite a stale vault
+    note. Fast string scan — no LLM call, no I/O.
+    """
+    if not text:
+        return False
+    _low = text.lower()
+    return any(p in _low for p in _TEMPORAL_PATTERNS)
+
+
 # ── Reprimand ─────────────────────────────────────────────────────────────
 
 

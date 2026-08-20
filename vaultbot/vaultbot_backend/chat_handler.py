@@ -168,6 +168,16 @@ async def handle_chat(
         # vault_read_note (see chat_loop_tools). Used by the grounding
         # gate in finalize_turn to reject uncited claims.
         st._allowed_citations = allowed_citations
+        # Temporal/recency question exemption (issue #85): "what were we
+        # working on last?" must be grounded in conversation history, not
+        # the closed-set vault citation gate. Flag it so finalize_turn
+        # skips the grounding retry (same escape hatch as IDK).
+        try:
+            from citation_gate import detect_temporal_question
+
+            st._is_temporal_question = detect_temporal_question(user_message)
+        except Exception:  # noqa: BLE001 — best-effort
+            st._is_temporal_question = False
         t0 = loop.time()
 
         # Working-memory signature cache. conversation[0] is rebuilt only
