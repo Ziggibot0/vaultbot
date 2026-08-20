@@ -440,6 +440,28 @@ def run(args: dict) -> dict:
                 ci_status = "error"
                 ci_detail = f"Failed to fetch check-runs: {e}"
 
+        # --- Approval gate: require a code-owner approval before merging. ---
+        # Branch protection on main requires the code owner (@Ziggibot0) to
+        # approve before merge. The vaultbot must NOT force-merge past this —
+        # it pauses and reports "awaiting approval" so the operator can sign
+        # off. This mirrors the CI gate: an unknown/error approval state
+        # blocks the merge (fail-loud, never merge what we can't confirm).
+        approval_state = "unknown"
+        approvers: list[str] = []
+        if do_merge:
+            try:
+                reviews = gh_api(
+                    "GET",
+                    f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_num}/reviews",
+                    timeout=30,
+                )
+                for rv in reviews:
+                    if rv.get("state") == "APPROVED":
+                        approvers.append(rv.get("user", {}).get("login", "?"))
+                approval_state = "approved" if approvers else "pending"
+            except GhError:
+                approval_state = "error"
+
         result = {
             "pr_number": pr_num,
             "title": pr_title,
@@ -454,15 +476,22 @@ def run(args: dict) -> dict:
             "verdict_reason": verdict_reason,
             "ci_status": ci_status,
             "ci_detail": ci_detail,
+            "approval_state": approval_state,
+            "approvers": approvers,
             "issues": all_issues,
             "files": file_summaries,
         }
         results.append(result)
 
-        # If merging, require BOTH a PASS safety verdict AND green CI.
-        # A pending/unknown CI status blocks the merge (fail-loud: never
-        # merge a PR whose build state we can't confirm).
-        if do_merge and verdict == "PASS" and ci_status == "success":
+        # If merging, require a PASS safety verdict, green CI, AND a code-owner
+        # approval. A pending/unknown CI or approval state blocks the merge
+        # (fail-loud: never merge a PR whose build or approval we can't confirm).
+        if (
+            do_merge
+            and verdict == "PASS"
+            and ci_status == "success"
+            and approval_state == "approved"
+        ):
             try:
                 merge_data = gh_api(
                     "PUT",
@@ -481,13 +510,31 @@ def run(args: dict) -> dict:
         elif do_merge and verdict == "PASS" and ci_status != "success":
             result["merged"] = False
             result["merge_error"] = f"CI not green (status: {ci_status}). {ci_detail}"
+        elif (
+            do_merge
+            and verdict == "PASS"
+            and ci_status == "success"
+            and approval_state != "approved"
+        ):
+            result["merged"] = False
+            if approval_state == "pending":
+                result["merge_error"] = (
+                    "Awaiting code-owner approval (no APPROVED review yet)."
+                )
+            else:
+                result["merge_error"] = (
+                    f"Could not confirm approval (state: {approval_state})."
+                )
 
         # Post a comment with the review results
         comment_body = (
             f"## 🤖 VaultBot Safety Review\n\n**Verdict:** {verdict}\n"
             f"**Reason:** {verdict_reason}\n**CI:** {ci_status} — "
-            f"{ci_detail}\n\n"
+            f"{ci_detail}\n**Approval:** {approval_state}"
         )
+        if approvers:
+            comment_body += f" (by {', '.join(approvers)})"
+        comment_body += "\n\n"
         if all_issues:
             comment_body += "### Issues Found\n\n"
             for issue in all_issues:
