@@ -25,10 +25,11 @@ Safety:
 SCHEMA = {
     "name": "textbook_ingest",
     "description": (
-        "Download or read a textbook/reference resource and ingest it into the vault as "
-        "linked notes. Accepts URLs (HTTP/HTTPS) or local file paths. Supports HTML, PDF, "
-        "plain text, and Markdown. Each section becomes a linked vault note with navigation. "
-        "This is how VaultBot learns systematically -- ingesting a textbook is literally adding "
+        "Download or read a textbook/reference resource and ingest it into "
+        "the vault as linked notes. Accepts URLs (HTTP/HTTPS) or local file "
+        "paths. Supports HTML, PDF, plain text, and Markdown. Each section "
+        "becomes a linked vault note with navigation. This is how VaultBot "
+        "learns systematically -- ingesting a textbook is literally adding "
         "knowledge to its mind."
     ),
     "parameters": {
@@ -44,17 +45,25 @@ SCHEMA = {
             },
             "subject": {
                 "type": "string",
-                "description": "Subject tag for the notes (e.g., 'physics', 'biology', 'thermodynamics'). Used in filenames and tags.",
+                "description": (
+                    "Subject tag for the notes (e.g., 'physics', 'biology', "
+                    "'thermodynamics'). Used in filenames and tags."
+                ),
                 "default": "",
             },
             "max_sections": {
                 "type": "integer",
-                "description": "Maximum number of sections to ingest. Default 50. Use a smaller number for testing.",
+                "description": (
+                    "Maximum number of sections to ingest. Default 50. Use a "
+                    "smaller number for testing."
+                ),
                 "default": 50,
             },
             "title": {
                 "type": "string",
-                "description": "Override the auto-detected title for the table of contents note.",
+                "description": (
+                    "Override the auto-detected title for the table of contents note."
+                ),
                 "default": "",
             },
             # NOTE: force_ocr was for the old marker-pdf OCR fallback.
@@ -66,13 +75,14 @@ SCHEMA = {
     },
 }
 
-import hashlib
-import os
-import re
-import time
-from pathlib import Path
+import contextlib  # noqa: E402
+import hashlib  # noqa: E402
+import os  # noqa: E402
+import re  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-import requests
+import requests  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Path setup -- resolve from this file's location, never assume CWD
@@ -91,7 +101,7 @@ MAX_SECTIONS = 1000
 # 10K cap (which was cutting off ~90% of a chapter and losing both info and
 # wikilink opportunities).  The 200K safety cap only catches pathological
 # mega-sections (e.g. a PDF parsing error that merges a whole book into one
-# section); real sections run 2K–80K chars.  Retrieval quality is preserved
+# section); real sections run 2K-80K chars.  Retrieval quality is preserved
 # for long notes by chunked embedding in vault_indexer._get_chunked_embedding.
 MAX_SECTION_CHARS = 200_000
 MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -149,7 +159,7 @@ def truncate_content(content, max_chars=MAX_SECTION_CHARS):
 def is_toc_entry(content):
     """Check if a section's content is just a table of contents entry."""
     stripped = content.strip()
-    lines = [l for l in stripped.split("\n") if l.strip()]
+    lines = [ln for ln in stripped.split("\n") if ln.strip()]
 
     # TOC entries are typically 1-3 lines
     if len(lines) > 3:
@@ -160,10 +170,7 @@ def is_toc_entry(content):
         return True
 
     # Also check: 5+ consecutive dots (no spaces)
-    if re.search(r"\.{5,}", stripped):
-        return True
-
-    return False
+    return bool(re.search(r"\.{5,}", stripped))
 
 
 def safe_filename(slug):
@@ -190,7 +197,7 @@ def source_key(source):
 
 def _source_key_line(key):
     """The hidden marker line written into the TOC note."""
-    return "<!-- vaultbot:textbook-source-key %s -->" % key
+    return f"<!-- vaultbot:textbook-source-key {key} -->"
 
 
 def _max_sections_line(max_sections):
@@ -201,7 +208,7 @@ def _max_sections_line(max_sections):
     with a higher cap (the ingester's stale-note replacement makes this a
     clean append, not a duplication).
     """
-    return "<!-- vaultbot:textbook-max-sections %d -->" % int(max_sections or 0)
+    return f"<!-- vaultbot:textbook-max-sections {int(max_sections or 0)} -->"
 
 
 def find_prior_max_sections(toc_path):
@@ -358,7 +365,7 @@ def fetch_url(url, timeout=30):
         content += chunk
         if len(content) > MAX_DOWNLOAD_BYTES:
             raise ValueError(
-                "Download exceeds %d MB limit" % (MAX_DOWNLOAD_BYTES // (1024 * 1024))
+                f"Download exceeds {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB limit"
             )
 
     # Detect encoding
@@ -387,8 +394,8 @@ def fetch_pdf_url(url, timeout=60):
                 f.close()
                 os.unlink(f.name)
                 raise ValueError(
-                    "PDF download exceeds %d MB limit"
-                    % (MAX_DOWNLOAD_BYTES // (1024 * 1024))
+                    f"PDF download exceeds "
+                    f"{MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB limit"
                 )
         return f.name
 
@@ -406,8 +413,8 @@ def fetch_pdf_url(url, timeout=60):
 # avoid a circular import: this module imports the parsers, and the
 # parsers need is_toc_entry from this module.
 
-from custom_tools.parsers.html_parser import parse_html
-from custom_tools.parsers.markdown_parser import (  # noqa: F401 — re-exported for backward compat
+from custom_tools.parsers.html_parser import parse_html  # noqa: E402
+from custom_tools.parsers.markdown_parser import (  # noqa: E402, F401 — re-exported for backward compat
     _assign_level,
     _clean_heading,
     _detect_headings,
@@ -417,11 +424,11 @@ from custom_tools.parsers.markdown_parser import (  # noqa: F401 — re-exported
     _section_sort_key,
     parse_markdown,
 )
-from custom_tools.parsers.pdf_parser import (  # noqa: F401 — _parse_pdf_regex re-exported for backward compat
+from custom_tools.parsers.pdf_parser import (  # noqa: E402, F401 — _parse_pdf_regex re-exported for backward compat
     _parse_pdf_regex,
     parse_pdf,
 )
-from custom_tools.parsers.text_parser import (  # noqa: F401 — re-exported for backward compat
+from custom_tools.parsers.text_parser import (  # noqa: E402, F401 — re-exported for backward compat
     _split_on_paragraphs,
     _split_on_subheadings,
     fragment_section,
@@ -463,24 +470,24 @@ def create_section_note(
     # Build navigation (wikilinks without .md)
     nav_parts = []
     if prev_slug:
-        nav_parts.append("[[%s|Previous]]" % prev_slug)
-    nav_parts.append("[[%s|Table of Contents]]" % toc_slug)
+        nav_parts.append(f"[[{prev_slug}|Previous]]")
+    nav_parts.append(f"[[{toc_slug}|Table of Contents]]")
     if next_slug:
-        nav_parts.append("[[%s|Next]]" % next_slug)
+        nav_parts.append(f"[[{next_slug}|Next]]")
     # Fragment children link back up to their parent index page.
     parent_slug = section.get("parent_slug")
     if parent_slug:
-        nav_parts.append("[[%s|Up]]" % parent_slug)
+        nav_parts.append(f"[[{parent_slug}|Up]]")
     nav = " | ".join(nav_parts)
 
     # Build tags
     tags = ["#textbook", "#ingested"]
     if subject:
-        tags.append("#%s" % slugify(subject))
+        tags.append(f"#{slugify(subject)}")
 
     # Source attribution
     source_line = (
-        "> **Source:** %s" % source_url if source_url else "> **Source:** local file"
+        f"> **Source:** {source_url}" if source_url else "> **Source:** local file"
     )
 
     # --- Fragment parent: thin index page linking to its children ----------
@@ -488,24 +495,25 @@ def create_section_note(
         child_slugs = section.get("fragment_child_slugs", [])
         child_headings = [c["heading"] for c in section.get("fragment_children", [])]
         list_lines = []
-        for cslug, chead in zip(child_slugs, child_headings):
-            list_lines.append("- [[%s|%s]]" % (cslug, chead))
+        for cslug, chead in zip(child_slugs, child_headings, strict=False):
+            list_lines.append(f"- [[{cslug}|{chead}]]")
+        list_body = "\n".join(list_lines)
         body = (
             "This section was long enough that it was split into smaller "
-            "linked pages so each stays a clean file-sized unit:\n\n%s\n"
-            % "\n".join(list_lines)
+            f"linked pages so each stays a clean file-sized unit:\n\n"
+            f"{list_body}\n"
         )
         note = (
-            "# %s\n\n%s\n> **Part of:** [[%s]]\n\n%s\n\n---\n**Navigation:** %s\n\n%s\n"
-            % (heading, source_line, toc_slug, body, nav, " ".join(tags))
+            f"# {heading}\n\n{source_line}\n> **Part of:** [[{toc_slug}]]\n\n"
+            f"{body}\n\n---\n**Navigation:** {nav}\n\n{' '.join(tags)}\n"
         )
         return note
 
     # --- Normal note or fragment child: the actual content ----------------
     content = truncate_content(section["content"])
     note = (
-        "# %s\n\n%s\n> **Part of:** [[%s]]\n\n%s\n\n---\n**Navigation:** %s\n\n%s\n"
-        % (heading, source_line, toc_slug, content, nav, " ".join(tags))
+        f"# {heading}\n\n{source_line}\n> **Part of:** [[{toc_slug}]]\n\n"
+        f"{content}\n\n---\n**Navigation:** {nav}\n\n{' '.join(tags)}\n"
     )
     return note
 
@@ -522,35 +530,31 @@ def create_toc_note(
     """
     tags = ["#textbook", "#ingested", "#table-of-contents"]
     if subject:
-        tags.append("#%s" % slugify(subject))
+        tags.append(f"#{slugify(subject)}")
 
     source_line = (
-        "> **Source:** %s" % source_url if source_url else "> **Source:** local file"
+        f"> **Source:** {source_url}" if source_url else "> **Source:** local file"
     )
 
     # Build TOC entries with indentation based on heading level
     toc_lines = []
-    for i, (section, slug) in enumerate(zip(sections, section_slugs)):
+    for _i, (section, slug) in enumerate(zip(sections, section_slugs, strict=False)):
         level = section.get("level", 2)
         indent = "  " * (level - 1) if level > 1 else ""
-        toc_lines.append("%s- [[%s|%s]]" % (indent, slug, section["heading"]))
+        toc_lines.append(f"{indent}- [[{slug}|{section['heading']}]]")
 
     marker = ("\n" + _source_key_line(skey)) if skey else ""
     max_sections_marker = (
         ("\n" + _max_sections_line(max_sections)) if max_sections else ""
     )
+    toc_body = "\n".join(toc_lines)
+    tag_str = " ".join(tags)
     toc_content = (
-        "# %s - Table of Contents\n\n%s\n> **Ingested:** %s\n> **Sections:** %d\n\n## Contents\n\n%s\n\n%s%s%s\n"
-        % (
-            title,
-            source_line,
-            time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
-            len(sections),
-            "\n".join(toc_lines),
-            " ".join(tags),
-            marker,
-            max_sections_marker,
-        )
+        f"# {title} - Table of Contents\n\n{source_line}\n"
+        f"> **Ingested:** {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}\n"
+        f"> **Sections:** {len(sections)}\n\n## Contents\n\n"
+        f"{toc_body}\n\n{tag_str}{marker}"
+        f"{max_sections_marker}\n"
     )
     return toc_content
 
@@ -640,7 +644,7 @@ def run(args):
         ):
             file_path = Path(source)
             if not file_path.exists():
-                return {"status": "error", "error": "File not found: %s" % source}
+                return {"status": "error", "error": f"File not found: {source}"}
 
             if source_type == "pdf_file":
                 # PyMuPDF font-metadata extraction builds the TOC index
@@ -675,14 +679,15 @@ def run(args):
                     title, sections = parse_plain_text(content_text)
 
         else:
-            return {"status": "error", "error": "Unknown source type: %s" % source_type}
+            return {
+                "status": "error",
+                "error": f"Unknown source type: {source_type}",
+            }
 
         # Clean up temp PDF
         if temp_pdf_path:
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(temp_pdf_path)
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
 
         # Apply overrides
         if override_title:
@@ -717,8 +722,7 @@ def run(args):
         if len(sections) > max_sections:
             sections = sections[:max_sections]
             result["errors"].append(
-                "Limited to %d sections (found %d)"
-                % (max_sections, result["sections_found"])
+                f"Limited to {max_sections} sections (found {result['sections_found']})"
             )
 
         # Fragment any oversized sections into linked child pages so every
@@ -736,16 +740,16 @@ def run(args):
 
         # Generate slugs (WITHOUT .md -- these are wikilink references)
         subject_slug = slugify(subject) if subject else slugify(title)
-        toc_slug = "%s-toc" % subject_slug
+        toc_slug = f"{subject_slug}-toc"
 
         section_slugs = []
-        for i, s in enumerate(sections):
-            slug = "%s-%s" % (subject_slug, slugify(s["heading"]))
+        for _i, s in enumerate(sections):
+            slug = f"{subject_slug}-{slugify(s['heading'])}"
             # Ensure uniqueness
             base_slug = slug
             counter = 2
             while slug in section_slugs:
-                slug = "%s-%d" % (base_slug, counter)
+                slug = f"{base_slug}-{counter}"
                 counter += 1
             section_slugs.append(slug)
 
@@ -797,7 +801,7 @@ def run(args):
 
         # Write section notes (filename = slug + ".md", wikilink = slug).
         # Same slug => same filename => overwrites the old note in place.
-        for i, (section, slug) in enumerate(zip(sections, section_slugs)):
+        for i, (section, slug) in enumerate(zip(sections, section_slugs, strict=False)):
             prev_slug = section_slugs[i - 1] if i > 0 else None
             next_slug = section_slugs[i + 1] if i + 1 < len(section_slugs) else None
 

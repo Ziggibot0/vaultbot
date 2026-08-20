@@ -44,6 +44,7 @@ in the system prompt.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -372,10 +373,8 @@ class TaskList:
                         fh.write(payload)
                     os.replace(tmp, p)
                 except Exception:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(tmp)
-                    except OSError:
-                        pass
                     raise
         except Exception as e:  # noqa: BLE001
             logger.debug("working_memory save_to_disk failed: %s", e)
@@ -408,10 +407,8 @@ class TaskList:
                     tl.restore_snapshot(data)
                     if tl.has_plan():
                         tl.save_to_disk(session_id=session_id)
-                        try:
+                        with contextlib.suppress(OSError):
                             os.remove(_DEFAULT_DISK_PATH)
-                        except OSError:
-                            pass
                         return tl
             except Exception as e:  # noqa: BLE001
                 logger.debug("working_memory legacy migration failed: %s", e)

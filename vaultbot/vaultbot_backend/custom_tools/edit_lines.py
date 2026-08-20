@@ -363,7 +363,9 @@ def run(args: dict) -> dict:
     if _is_path_traversal(file_path_str, VAULT_ROOT):
         return {
             "status": "error",
-            "error": f"Path traversal detected: {file_path_str} resolves outside vault root",
+            "error": (
+                f"Path traversal detected: {file_path_str} resolves outside vault root"
+            ),
         }
 
     full_path = (VAULT_ROOT / file_path_str).resolve()
@@ -398,7 +400,9 @@ def run(args: dict) -> dict:
     if start_line > total_lines:
         return {
             "status": "error",
-            "error": f"start_line ({start_line}) exceeds file length ({total_lines} lines)",
+            "error": (
+                f"start_line ({start_line}) exceeds file length ({total_lines} lines)"
+            ),
         }
 
     # 7. Clamp end_line to file length
@@ -417,7 +421,10 @@ def run(args: dict) -> dict:
     if new_full_content == existing_content:
         return {
             "status": "no_change",
-            "error": "The edit produces no change to the file (new_content is identical to the original lines)",
+            "error": (
+                "The edit produces no change to the file (new_content is "
+                "identical to the original lines)"
+            ),
         }
 
     # --- Delegate to the appropriate safe-write pipeline ---

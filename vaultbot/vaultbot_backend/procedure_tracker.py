@@ -23,6 +23,7 @@ failure detection and re-research targeting. See
 ``step_gate_runtime.py`` and [[Procedural-Bootstrap-and-Evolution-Plan]].
 """
 
+import contextlib
 import json
 import os
 import re
@@ -72,9 +73,7 @@ def _is_valid_task_name(task: str) -> bool:
     if _TASK_PROSE_RE.search(t):
         return False
     words = t.split()
-    if len(words) > _MAX_TASK_WORDS:
-        return False
-    return True
+    return not len(words) > _MAX_TASK_WORDS
 
 
 # --- Structured failure categories (not free-text) ---
@@ -553,15 +552,11 @@ class ProcedureTracker:
                 for line in fm.split("\n"):
                     if line.strip().startswith("last_reviewed:"):
                         date_str = line.split(":", 1)[1].strip().strip('"').strip("'")
-                        try:
+                        with contextlib.suppress(Exception):
                             last_reviewed = datetime.fromisoformat(date_str)
-                        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                            pass
                     elif line.strip().startswith("review_interval_days:"):
-                        try:
+                        with contextlib.suppress(Exception):
                             interval = int(line.split(":", 1)[1].strip())
-                        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                            pass
                 if last_reviewed is None:
                     continue
                 if last_reviewed.tzinfo is None:
@@ -874,7 +869,7 @@ class ProcedureTracker:
 
         # Find the procedural note file by stem. The shared iterator walks
         # the vault once with the ignore-dir filter; we early-exit on match.
-        for md, fm, _text in self._iter_procedural_notes(vault_path):
+        for md, _fm, _text in self._iter_procedural_notes(vault_path):
             if md.stem != procedure:
                 continue
             try:

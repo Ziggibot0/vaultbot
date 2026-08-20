@@ -4,23 +4,35 @@ Agent-authored tool: vault_graph_analyzer
 
 SCHEMA = {
     "name": "vault_graph_analyzer",
-    "description": "Analyze the connectedness of the vault's .md files. Finds islands (connected components), measures hop distances, identifies isolated nodes, and suggests bridge edges to connect disconnected islands. Excludes LICENSE.md by default. Use this to find where the graph is fragmented and what edges to build.",
+    "description": (
+        "Analyze the connectedness of the vault's .md files. Finds islands "
+        "(connected components), measures hop distances, identifies isolated "
+        "nodes, and suggests bridge edges to connect disconnected islands. "
+        "Excludes LICENSE.md by default. Use this to find where the graph is "
+        "fragmented and what edges to build."
+    ),
     "parameters": {
         "properties": {
             "exclude_patterns": {
                 "default": ["LICENSE.md"],
-                "description": "Filenames to exclude from analysis (default: LICENSE.md)",
+                "description": (
+                    "Filenames to exclude from analysis (default: LICENSE.md)"
+                ),
                 "items": {"type": "string"},
                 "type": "array",
             },
             "max_hops": {
                 "default": 6,
-                "description": "Maximum hop distance to measure connectivity (default 6)",
+                "description": (
+                    "Maximum hop distance to measure connectivity (default 6)"
+                ),
                 "type": "integer",
             },
             "vault_path": {
                 "default": "",
-                "description": "Path to vault root. Defaults to parent of vaultbot_backend/.",
+                "description": (
+                    "Path to vault root. Defaults to parent of vaultbot_backend/."
+                ),
                 "type": "string",
             },
         },
@@ -28,9 +40,9 @@ SCHEMA = {
     },
 }
 
-import os
-import re
-from collections import defaultdict, deque
+import os  # noqa: E402
+import re  # noqa: E402
+from collections import defaultdict, deque  # noqa: E402
 
 # Directories that contain .md files but are NOT vault knowledge content
 EXCLUDE_DIRS = {
@@ -173,7 +185,7 @@ def suggest_bridges(components, adj, all_nodes):
 def analyze_graph(vault_path, exclude_patterns=None, max_hops=6):
     if exclude_patterns is None:
         exclude_patterns = ["LICENSE.md"]
-    adj, all_nodes, name_to_nodes, md_files = build_graph(vault_path, exclude_patterns)
+    adj, all_nodes, _name_to_nodes, md_files = build_graph(vault_path, exclude_patterns)
     components = find_components(adj, all_nodes)
     total_nodes = len(all_nodes)
     total_edges = sum(len(neighbors) for neighbors in adj.values()) // 2

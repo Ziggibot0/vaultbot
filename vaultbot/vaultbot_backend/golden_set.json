@@ -1,5 +1,5 @@
 {
-  "description": "Golden set for the FUSED-retrieval eval gate. Each entry maps a realistic vault query to the note(s) that SHOULD be retrieved. Hand-curated across 5 categories (direct, semantic, graph, negative, multi). Grow this over time from real queries + operator corrections. Keep expected_notes as note stems or paths — normalization strips path/case/.md. See golden_set.README.md for methodology.",
+  "description": "Golden set for the FUSED-retrieval eval gate. Each entry maps a realistic vault query to the note(s) that SHOULD be retrieved. Hand-curated across 5 categories (direct, semantic, graph, negative, multi). Grow this over time from real queries + operator corrections. Keep expected_notes as note stems or paths — normalization strips path/case/.md. Graph entries carry seed_notes (the note the query semantically matches, whose wikilinks lead to expected_notes) so the validator can confirm the walk is reachable in CI. See golden_set.README.md for methodology.",
   "queries": [
     {
       "query": "what is the no wikipedia directive",
@@ -124,43 +124,49 @@
     {
       "query": "why did the operator correct vaultbot about making itself redundant",
       "expected_notes": ["Vault-Longevity-Architecture"],
+      "seed_notes": ["VaultBot-Is-the-Vault"],
       "note": "Category: graph — query matches VaultBot-Is-the-Vault (the correction story), graph walk pulls in Vault-Longevity-Architecture (linked as 'the vault IS the mind, the model is swappable')",
       "category": "graph"
     },
     {
       "query": "what is the philosophical framework behind the vault's interpretation layer",
       "expected_notes": ["Knowledge-Triad-Ontology-Epistemology-Hermeneutics"],
+      "seed_notes": ["Vault-Thinks-LLM-Synthesizes"],
       "note": "Category: graph — query matches Vault-Thinks-LLM-Synthesizes (mentions hermeneutics/interpretation), graph walk pulls in Knowledge-Triad (linked as the philosophical grounding)",
       "category": "graph"
     },
     {
       "query": "what are the maintenance costs of adding semantic link types to notes",
       "expected_notes": ["Vault-Thinks-LLM-Synthesizes"],
+      "seed_notes": ["Typed-Edges-Research-Assessment"],
       "note": "Category: graph — query matches Typed-Edges-Research-Assessment (discusses typed edge costs), graph walk pulls in Vault-Thinks-LLM-Synthesizes (linked as the design principle that rejected typed edges)",
       "category": "graph"
     },
     {
-      "query": "how does the vault maintain stable internal conditions like a living organism",
+      "query": "how do animals keep their internal environment stable",
       "expected_notes": ["Homeostasis-and-Animal-Regulation"],
-      "note": "Category: graph — query matches Artificial-Homeostasis-and-VaultBot-Regulation, graph walk pulls in Homeostasis-and-Animal-Regulation (linked as a depends_on — the biological basis)",
-      "category": "graph"
+      "note": "Category: semantic — paraphrase: 'keep their internal environment stable' instead of 'homeostasis'. Reclassified from graph: the original seed (Artificial-Homeostasis-and-VaultBot-Regulation) is gitignored and no committed note links to Homeostasis-and-Animal-Regulation, so the graph walk was unreachable in CI.",
+      "category": "semantic"
     },
     {
       "query": "how do you decide between building a reusable capability vs a specific workflow",
       "expected_notes": ["Write-Python-Tool"],
+      "seed_notes": ["Tool-vs-Procedure-Decision-Guide"],
       "note": "Category: graph — query matches Tool-vs-Procedure-Decision-Guide, graph walk pulls in Write-Python-Tool (linked as the canonical tool-creation procedure)",
       "category": "graph"
     },
     {
       "query": "what are the isolated notes in the vault graph called and how do you find them",
       "expected_notes": ["Vault-Cluster-Analysis"],
+      "seed_notes": ["Vault-Graph-Analysis"],
       "note": "Category: graph — query matches Vault-Graph-Analysis (islands/connectedness), graph walk pulls in Vault-Cluster-Analysis (linked as the finer-grained community detection follow-up)",
       "category": "graph"
     },
     {
-      "query": "what pattern connects biological feedback loops to the structure of knowledge",
+      "query": "what philosophical framework grounds the vault's typed-edge proposal",
       "expected_notes": ["Knowledge-Triad-Ontology-Epistemology-Hermeneutics"],
-      "note": "Category: graph — query matches Homeostasis-Through-the-Knowledge-Triad (fractal pattern), graph walk pulls in Knowledge-Triad (linked as the philosophical framework the biological pattern maps to)",
+      "seed_notes": ["Pre-Thought-Information-Shapes"],
+      "note": "Category: graph — query matches Pre-Thought-Information-Shapes (typed edges/ontology), graph walk pulls in Knowledge-Triad (linked as the philosophical grounding). Re-seeded from Homeostasis-Through-the-Knowledge-Triad (gitignored) to a committed seed.",
       "category": "graph"
     },
     {

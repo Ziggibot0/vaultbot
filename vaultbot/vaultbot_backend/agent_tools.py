@@ -231,7 +231,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "task_id": {
                         "type": "string",
-                        "description": "The task id (from plan_task response or working memory display).",
+                        "description": "The task id (from plan_task response "
+                        "or working memory display).",
                     },
                     "status": {
                         "type": "string",
@@ -240,7 +241,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     },
                     "notes": {
                         "type": "string",
-                        "description": "Optional annotation — what you found or why the status changed.",
+                        "description": "Optional annotation — what you found "
+                        "or why the status changed.",
                     },
                 },
                 "required": ["task_id", "status"],
@@ -262,7 +264,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "The new task content (a concrete, verifiable step).",
+                        "description": "The new task content (a concrete, "
+                        "verifiable step).",
                     },
                     "status": {
                         "type": "string",
@@ -414,13 +417,15 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "Path relative to vault root (e.g. 'vaultbot/vaultbot_backend/fused_retrieval.py').",
+                        "description": "Path relative to vault root "
+                        "(e.g. 'vaultbot/vaultbot_backend/fused_retrieval.py').",
                     },
                     "content": {"type": "string"},
                     "dry_run": {
                         "type": "boolean",
                         "default": False,
-                        "description": "If true, verify the edit would be safe but do not write to disk.",
+                        "description": "If true, verify the edit would be safe "
+                        "but do not write to disk.",
                     },
                 },
                 "required": ["file_path", "content"],
@@ -446,13 +451,15 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "Path relative to vault root (e.g. .obsidian/plugins/vaultbot/main.js).",
+                        "description": "Path relative to vault root "
+                        "(e.g. .obsidian/plugins/vaultbot/main.js).",
                     },
                     "content": {"type": "string"},
                     "dry_run": {
                         "type": "boolean",
                         "default": False,
-                        "description": "If true, validate JS syntax only; do not write to disk.",
+                        "description": "If true, validate JS syntax only; "
+                        "do not write to disk.",
                     },
                 },
                 "required": ["file_path", "content"],
@@ -466,7 +473,8 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": (
                 "Execute a procedure written in a markdown note. The procedure "
                 "runs as a blocking subprocess: code steps execute deterministically "
-                "(zero LLM cost) and LLM steps use minimal context via get_llm_client(). "
+                "(zero LLM cost) and LLM steps use minimal context "
+                "via get_llm_client(). "
                 "Returns the procedure step-by-step output. Use this when a procedure "
                 "note surfaces in vault context and applies to the current task. "
                 "The procedure must have type: procedure in its frontmatter. "
@@ -489,7 +497,8 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {
                     "procedure_name": {
                         "type": "string",
-                        "description": "The note title (stem) of the procedure to execute, e.g. Verify-Claims or Dream-Pass",
+                        "description": "The note title (stem) of the procedure "
+                        "to execute, e.g. Verify-Claims or Dream-Pass",
                     },
                     "args": {
                         "type": "object",
@@ -499,7 +508,8 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "procedure's 'Inputs' section documents. Common keys: "
                             "file_path (a Python file to audit), procedure_name "
                             "(a procedure to fix), note_path (a note to read). "
-                            'Example: {"file_path": "vaultbot/vaultbot_backend/main.py"}'
+                            'Example: {"file_path": '
+                            '"vaultbot/vaultbot_backend/main.py"}'
                         ),
                         "additionalProperties": True,
                     },
@@ -798,7 +808,7 @@ def build_system_prompt_briefing(
     autonomous_state: dict[str, Any],
     gaps_summary: str,
     custom_tools: str = "",
-    custom_tool_names: list[str] = None,
+    custom_tool_names: list[str] | None = None,
 ) -> str:
     """Build the DYNAMIC per-turn system prompt WITHOUT the vault context.
 

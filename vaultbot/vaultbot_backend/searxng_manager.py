@@ -4,6 +4,7 @@ Used by the research engine as one of several search backends. Manages the
 SearXNG Docker container lifecycle and health checks.
 """
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -238,14 +239,13 @@ class SearxngManager:
                     has_tuning = False
                 if not has_tuning:
                     _logger.info(
-                        "Searxng container has stale settings — recreating with tuned mount."
+                        "Searxng container has stale settings — recreating "
+                        "with tuned mount."
                     )
-                    try:
+                    with contextlib.suppress(docker.errors.NotFound):
                         self.client.containers.get(self.container_name).remove(
                             force=True
                         )
-                    except docker.errors.NotFound:
-                        pass
                     self.start()
         else:
             self.start()
@@ -361,8 +361,11 @@ class SearxngManager:
         # Realistic browser header set — many sites 403 anything missing these.
         headerss = [
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 "
+                "Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;"
+                "q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Connection": "keep-alive",
@@ -373,8 +376,11 @@ class SearxngManager:
                 "Sec-Fetch-User": "?1",
             },
             {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X "
+                "10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Version/17.4.1 Safari/605.1.15",
+                "Accept": "text/html,application/xhtml+xml,application/xml;"
+                "q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
                 "Connection": "keep-alive",
             },

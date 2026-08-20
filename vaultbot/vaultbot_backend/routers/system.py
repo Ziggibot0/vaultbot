@@ -8,6 +8,7 @@ mutation, no websocket state). Handlers read singletons via
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -21,6 +22,10 @@ from services import Services
 from supervision import generate_nssm_install, generate_nssm_uninstall
 
 router = APIRouter()
+
+# Strong references to fire-and-forget tasks so they aren't garbage-collected
+# mid-flight (RUF006).
+_background_tasks: set[asyncio.Task] = set()
 
 # Include sub-routers for extracted endpoints.
 from routers.sessions import router as _sessions_router  # noqa: E402
@@ -205,13 +210,12 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
 
     # 3) Vault not inside a sync folder?
     vault_path = ""
-    try:
-        # The vault root is 4 levels up from routers/ (vaultbot/vaultbot_backend/routers/ -> vault root)
+    with contextlib.suppress(Exception):
+        # The vault root is 4 levels up from routers/
+        # (vaultbot/vaultbot_backend/routers/ -> vault root)
         vault_path = str(
             Path(__file__).resolve().parent.parent.parent
         )  # vault root (3 levels up from vaultbot/vaultbot_backend/routers/)
-    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-        pass
     sync_diag = _check_synced_folder(vault_path)
     if sync_diag is not None:
         problems.append(sync_diag)
@@ -292,7 +296,8 @@ async def preflight(request: Request) -> dict[str, Any]:
     """
     problems: list[Diagnosis] = []
 
-    # Vault root = 4 levels up from routers/ (vaultbot/vaultbot_backend/routers/ -> vault root)
+    # Vault root = 4 levels up from routers/
+    # (vaultbot/vaultbot_backend/routers/ -> vault root)
     vault_path = str(
         Path(__file__).resolve().parent.parent.parent
     )  # vault root (3 levels up from vaultbot/vaultbot_backend/routers/)
@@ -457,16 +462,24 @@ async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
             json.dumps(
                 {
                     "type": "restart",
-                    "content": "Backend is restarting. This is the same code path as the restart button.",
+                    "content": (
+                        "Backend is restarting. This is the same code path "
+                        "as the restart button."
+                    ),
                 }
             ),
             session_logger=svc.session_logger,
         )
 
-    asyncio.ensure_future(_delayed_broadcast())
+    _restart_task = asyncio.create_task(_delayed_broadcast())
+    _background_tasks.add(_restart_task)
+    _restart_task.add_done_callback(_background_tasks.discard)
     return {
         "status": "restart_requested",
-        "message": "Restart scheduled in 3 seconds. Chat loop will finish first, then plugin will restart the backend.",
+        "message": (
+            "Restart scheduled in 3 seconds. Chat loop will finish first, "
+            "then plugin will restart the backend."
+        ),
     }
 
 
@@ -490,14 +503,20 @@ async def reload_plugin_endpoint(svc: Annotated[Services, Depends(get_services)]
         json.dumps(
             {
                 "type": "reload_plugin",
-                "content": "Plugin reload requested. The plugin will disable and re-enable itself.",
+                "content": (
+                    "Plugin reload requested. The plugin will disable "
+                    "and re-enable itself."
+                ),
             }
         ),
         session_logger=svc.session_logger,
     )
     return {
         "status": "reload_requested",
-        "message": "WebSocket broadcast sent. Plugin will reload itself (disable + re-enable). Backend stays running.",
+        "message": (
+            "WebSocket broadcast sent. Plugin will reload itself "
+            "(disable + re-enable). Backend stays running."
+        ),
     }
 
 

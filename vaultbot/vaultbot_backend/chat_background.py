@@ -35,6 +35,10 @@ from weaving import (
 )
 from working_memory import TaskList
 
+# Fire-and-forget task registry: keeps strong references to background
+# tasks so they aren't garbage-collected mid-flight.
+_background_tasks: set[asyncio.Task] = set()
+
 
 async def run_background_tasks(
     svc: Services,
@@ -189,7 +193,7 @@ async def run_background_tasks(
             _answer_links = set(
                 _re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]+)?\]\]", final_answer or "")
             )
-            _answer_links_lower = {l.strip().lower() for l in _answer_links}
+            _answer_links_lower = {link.strip().lower() for link in _answer_links}
             _tags = []
             for fp in retrieved_paths:
                 stem = Path(fp).stem
@@ -360,7 +364,9 @@ async def run_background_tasks(
                     remedy_hint="",
                 )
 
-        asyncio.create_task(_run_lazy_condense_bg())
+        _task = asyncio.create_task(_run_lazy_condense_bg())
+        _background_tasks.add(_task)
+        _task.add_done_callback(_background_tasks.discard)
 
     # --- QA idle worker: fix note frontmatter while the user reads ---
     # After the answer is delivered, the user spends time reading and
@@ -396,7 +402,9 @@ async def run_background_tasks(
                 context="qa_worker",
             )
 
-    asyncio.create_task(_run_qa_idle_bg())
+    _task = asyncio.create_task(_run_qa_idle_bg())
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
 
     # --- Provenance verification: entailment check on cited claims -------
     # After the answer is delivered, verify that each cited claim is
@@ -468,7 +476,9 @@ async def run_background_tasks(
         except Exception as e:  # noqa: BLE001
             session_logger.log("provenance_verify_bg_failed", {"error": str(e)})
 
-    asyncio.create_task(_run_provenance_verify_bg())
+    _task = asyncio.create_task(_run_provenance_verify_bg())
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
 
     # Persist this turn into the per-session history.
     try:

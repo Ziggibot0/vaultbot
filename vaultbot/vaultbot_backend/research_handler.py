@@ -17,6 +17,7 @@ inside the function body to avoid an import cycle with main.py.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 
@@ -81,15 +82,16 @@ async def run_research_and_write_note(
         # synthesizer understands "sea shells" = mollusk shells and filters
         # out the astrophysics papers.
         _vault_titles = []
-        try:
+        with contextlib.suppress(Exception):
             _vault_titles = svc.research_engine._get_vault_note_titles(svc.vault_path)
-        except Exception:  # noqa: BLE001 — best-effort
-            pass
-        _research_fn = lambda: svc.research_engine.research(
-            topic,
-            llm_client=svc.ollama_client,
-            vault_note_titles=_vault_titles,
-        )
+
+        def _research_fn():
+            return svc.research_engine.research(
+                topic,
+                llm_client=svc.ollama_client,
+                vault_note_titles=_vault_titles,
+            )
+
         report = (
             await run_with_heartbeat(svc, websocket, "auto-research", _research_fn)
             if websocket is not None

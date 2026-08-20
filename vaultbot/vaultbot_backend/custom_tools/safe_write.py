@@ -4,7 +4,11 @@ Agent-authored tool: safe_write
 
 SCHEMA = {
     "name": "safe_write",
-    "description": "Safely edit backend Python source code with syntax check and auto-rollback. Wraps SelfImprover.safe_write(). Pass file_path (relative to vault root) and content (full file content).",
+    "description": (
+        "Safely edit backend Python source code with syntax check and "
+        "auto-rollback. Wraps SelfImprover.safe_write(). Pass file_path "
+        "(relative to vault root) and content (full file content)."
+    ),
     "parameters": {
         "properties": {
             "content": {"description": "Full file content to write", "type": "string"},

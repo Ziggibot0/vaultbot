@@ -20,6 +20,7 @@ academic papers for technical queries — GitHub issues and SO answers are the
 search fleet.
 """
 
+import contextlib
 import re
 import threading
 import time
@@ -570,7 +571,7 @@ class ForumEnhancedFreeSearch(FreeSearch):
 
         out = merged[:max_results]
         if self.session_logger is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.session_logger.log_tool_call(
                     tool="freesearch",
                     method="search",
@@ -586,6 +587,4 @@ class ForumEnhancedFreeSearch(FreeSearch):
                     },
                     duration_ms=(time.time() - t0) * 1000,
                 )
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
         return {"results": out, "unresponsive_engines": unresponsive}

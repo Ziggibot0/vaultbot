@@ -5,6 +5,7 @@ the subprocess; the orchestrator receives only a compact JSON brief. This
 prevents conversation context from ballooning during multi-round research.
 """
 
+import contextlib
 import json
 import os
 import subprocess
@@ -90,7 +91,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "    try:\n"
         "        from searxng_manager import SearxngManager\n"
         "        searxng_manager = SearxngManager()\n"
-        "    except Exception as _e:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        "    except Exception as _e:  # noqa: BLE001 — best-effort, "
+        "returns error to caller\n"
         "        _log(f'[subagent] SearXNG disabled: {_e}')\n"
         "    try:\n"
         "        from forum_backends import ForumEnhancedFreeSearch as FreeSearch\n"
@@ -101,8 +103,10 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "    from research_engine import ResearchEngine\n"
         "    engine = ResearchEngine(\n"
         "        max_rounds=int(os.environ.get('VAULTBOT_RESEARCH_ROUNDS', '4')),\n"
-        "        max_sources_per_round=int(os.environ.get('VAULTBOT_RESEARCH_SOURCES', '5')),\n"
-        "        max_follow_ups=int(os.environ.get('VAULTBOT_RESEARCH_FOLLOWUPS', '3')),\n"
+        "        max_sources_per_round=int(os.environ.get("
+        "'VAULTBOT_RESEARCH_SOURCES', '5')),\n"
+        "        max_follow_ups=int(os.environ.get("
+        "'VAULTBOT_RESEARCH_FOLLOWUPS', '3')),\n"
         "        search_client=search_client,\n"
         "    )\n"
         "    if depth == 'quick':\n"
@@ -126,7 +130,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "    try:\n"
         "        _vault_titles = engine._get_vault_note_titles(vault_path)\n"
         "        _log(f'[subagent] loaded {len(_vault_titles)} vault note titles')\n"
-        "    except Exception as _te:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        "    except Exception as _te:  # noqa: BLE001 — best-effort, "
+        "returns error to caller\n"
         "        _log(f'[subagent] title loading failed: {_te}')\n"
         "\n"
         "    report = engine.research(topic, llm_client=_oc,\n"
@@ -138,7 +143,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "                          'source_count': 0, 'error': 'no sources found'}))\n"
         "        sys.exit(0)\n"
         "\n"
-        '    _log(f\'[subagent] {report["source_count"]} sources, {report.get("fact_count", 0)} facts\')\n'
+        '    _log(f\'[subagent] {report["source_count"]} sources, '
+        '{report.get("fact_count", 0)} facts\')\n'
         "\n"
         "    # --- Create the linked note ---\n"
         "    from vault_indexer import VaultIndexer\n"
@@ -171,7 +177,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "            vault_note_titles=_vault_titles)\n"
         "        if _structured and len(_structured) >= engine._STRUCTURED_MIN_CHARS:\n"
         "            Path(note_path).write_text(_structured, encoding='utf-8')\n"
-        "            _log(f'[subagent] structured note written ({len(_structured)} chars)')\n"
+        "            _log(f'[subagent] structured note written "
+        "({len(_structured)} chars)')\n"
         "\n"
         "    # --- A-MEM evolution (best-effort, LLM-free) ---\n"
         "    try:\n"
@@ -181,13 +188,15 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "        amem = AMemeEvolution(graph=graph, ollama_client=None)\n"
         "        amem.evolve_on_create(note_path, report.get('synthesis', ''),\n"
         "                              heuristic_only=True, skip_refresh=True)\n"
-        "    except Exception as _e:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        "    except Exception as _e:  # noqa: BLE001 — best-effort, "
+        "returns error to caller\n"
         "        _log(f'[subagent] A-MEM evolution skipped: {_e}')\n"
         "\n"
         "    # --- Index the new note ---\n"
         "    try:\n"
         "        indexer._add_file_to_index(Path(note_path))\n"
-        "    except Exception as _e:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        "    except Exception as _e:  # noqa: BLE001 — best-effort, "
+        "returns error to caller\n"
         "        _log(f'[subagent] index failed (note still on disk): {_e}')\n"
         "\n"
         "    # --- Build the compact brief (the ONLY thing on stdout) ---\n"
@@ -213,7 +222,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "    }\n"
         "    print(json.dumps(_brief))\n"
         "\n"
-        "except Exception as _e:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        "except Exception as _e:  # noqa: BLE001 — best-effort, "
+        "returns error to caller\n"
         "    try:\n"
         "        sys.stdout = sys.stderr\n"
         "    except Exception:  # noqa: BLE001 — best-effort, returns error to caller\n"
@@ -247,7 +257,8 @@ def _run_subprocess(
     - timeout → ``{"status":"error","error":"...timed out...","subagent":True}``
     - no stdout → ``{"status":"error","error":"...no stdout...","subagent":True}``
     - child error brief → returned as-is (child's own error handling preserved)
-    - non-JSON stdout → ``{"status":"error","error":"...not valid JSON...","subagent":True}``
+    - non-JSON stdout → ``{"status":"error","error":"...not valid JSON...",
+      "subagent":True}``
 
     Session logger (if given) receives ``<log_tag>_start`` and
     ``<log_tag>_done`` events.
@@ -356,10 +367,8 @@ def _run_subprocess(
             "subagent": True,
         }
     finally:
-        try:
+        with contextlib.suppress(Exception):
             os.unlink(script_path)
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass
 
 
 # Default timeout for the dispatcher (seconds).

@@ -63,9 +63,9 @@ SCHEMA = {
 # parent = custom_tools, parent.parent = vaultbot_backend, parent.parent.parent
 # = vaultbot/ (the framework root).
 try:
-    VAULT_DIR = (
-        Path(__file__).resolve().parent.parent.parent
-    )  # vaultbot/ (framework root, 3 levels up from vaultbot/vaultbot_backend/custom_tools/)
+    # vaultbot/ (framework root, 3 levels up from
+    # vaultbot/vaultbot_backend/custom_tools/)
+    VAULT_DIR = Path(__file__).resolve().parent.parent.parent
 except NameError:
     VAULT_DIR = Path(".").resolve()
 BACKEND_DIR = VAULT_DIR / "vaultbot_backend"
@@ -85,7 +85,7 @@ def _resolve_pdf(pdf_name: str) -> Path | None:
         pdf_name = pdf_name[: -len("-index.md")]
     if pdf_name.endswith("-index"):
         # Find the TOC note, read its Source PDF line.
-        toc = TEXTBOOKS_DIR / ("%s.md" % pdf_name) if TEXTBOOKS_DIR.exists() else None
+        toc = TEXTBOOKS_DIR / f"{pdf_name}.md" if TEXTBOOKS_DIR.exists() else None
         if toc and toc.exists():
             import re
 
@@ -163,11 +163,11 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
 
     pdf_path = _resolve_pdf(pdf_ref)
     if pdf_path is None or not pdf_path.exists():
-        return {"error": "PDF not found: %s (looked in learningMaterial/)" % pdf_ref}
+        return {"error": f"PDF not found: {pdf_ref} (looked in learningMaterial/)"}
 
     img_b64 = _render_page_image(pdf_path, page)
     if img_b64 is None:
-        return {"error": "could not render page %d of %s" % (page, pdf_path.name)}
+        return {"error": f"could not render page {page} of {pdf_path.name}"}
 
     # Try the vision path first (precise — sees equations).
     if llm_client is not None:
@@ -184,7 +184,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
                     "page": page,
                     "content": content,
                     "method": "vision",
-                    "provenance": "%s page %d" % (pdf_path.name, page),
+                    "provenance": f"{pdf_path.name} page {page}",
                 }
         # Vision unavailable — fall through to text layer with a caveat.
         text = _extract_page_text(pdf_path, page)
@@ -200,7 +200,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
                 "may be MISSING from this text. Pick a vision model "
                 "in Settings for complete page reads."
             ),
-            "provenance": "%s page %d" % (pdf_path.name, page),
+            "provenance": f"{pdf_path.name} page {page}",
         }
 
     # No llm_client at all — text layer only.
@@ -212,7 +212,7 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
         "content": text or "(no text on this page)",
         "method": "text_layer",
         "caveat": "No vision model configured; equations may be missing.",
-        "provenance": "%s page %d" % (pdf_path.name, page),
+        "provenance": f"{pdf_path.name} page {page}",
     }
 
 
@@ -224,12 +224,12 @@ def _read_with_vision(llm_client, img_b64: str, pdf_name: str, page: int) -> str
     images via the per-message `images` field).
     """
     prompt = (
-        "This is page %d of the textbook '%s'. Transcribe the page content "
-        "faithfully as clean markdown — preserve all equations (use LaTeX "
-        "$...$ for inline and $$...$$ for display math), headings, tables, "
-        "and figure captions. Do not summarize; transcribe. If a figure is "
-        "purely decorative, note '[figure]' but keep its caption."
-    ) % (page, pdf_name)
+        f"This is page {page} of the textbook '{pdf_name}'. Transcribe the "
+        "page content faithfully as clean markdown — preserve all equations "
+        "(use LaTeX $...$ for inline and $$...$$ for display math), headings, "
+        "tables, and figure captions. Do not summarize; transcribe. If a "
+        "figure is purely decorative, note '[figure]' but keep its caption."
+    )
 
     # Ollama uses the `images` field on the message; OpenAI uses image_url
     # content parts. Detect which by the client type.
@@ -243,7 +243,7 @@ def _read_with_vision(llm_client, img_b64: str, pdf_name: str, page: int) -> str
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {"url": "data:image/png;base64,%s" % img_b64},
+                        "image_url": {"url": f"data:image/png;base64,{img_b64}"},
                     },
                 ],
             }

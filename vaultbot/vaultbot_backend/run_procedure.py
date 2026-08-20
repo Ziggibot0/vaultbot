@@ -39,8 +39,8 @@ _BACKEND = Path(__file__).parent.resolve()
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-from procedure_compiler import compile_procedure
-from step_gate_runtime import MAX_PROC_DEPTH, execute_procedure
+from procedure_compiler import compile_procedure  # noqa: E402
+from step_gate_runtime import MAX_PROC_DEPTH, execute_procedure  # noqa: E402
 
 # --- Stem index cache (avoids full-vault rglob on every invocation) ---
 # Built once per process via a pruned os.walk (same pattern as
@@ -290,7 +290,7 @@ def main() -> int:
                 context="",
                 llm_client=llm_client,
                 vault_path=args.vault_path,
-                call_stack=call_stack + [args.procedure_name],
+                call_stack=[*call_stack, args.procedure_name],
                 procedure_args=procedure_args,
                 procedure_tracker=procedure_tracker,
             )

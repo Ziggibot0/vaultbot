@@ -28,6 +28,7 @@ Safety:
 """
 
 import ast
+import contextlib
 import importlib
 import json
 import os
@@ -39,7 +40,7 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import code_verify
 import safe_writer
@@ -229,10 +230,8 @@ class SelfImprover:
             full.write_text(content, encoding="utf-8")
             # Clean up backup on success — the write is verified.
             if had_backup:
-                try:
+                with contextlib.suppress(Exception):
                     bak.unlink()
-                except Exception:  # noqa: BLE001 — non-critical cleanup
-                    pass
             self._log("code_write", {"file_path": str(full), "length": len(content)})
             return {"file_path": str(full), "bytes": len(content)}
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
@@ -251,7 +250,7 @@ class SelfImprover:
     # these triggers a full import-graph verification in a subprocess that
     # imports main.py (the entry point) — if that subprocess can't import
     # main, the edit is rejected and the original is restored.
-    _CORE_FILES = {
+    _CORE_FILES: ClassVar[set[str]] = {
         "main.py",
         "agent_tools.py",
         "self_improver.py",
@@ -323,7 +322,8 @@ class SelfImprover:
     def _copy_backend_for_check(
         self, tmpdir: str, target_name: str, new_content: str
     ) -> None:
-        """Copy the backend dir into tmpdir for subprocess checks (delegates to code_verify)."""
+        """Copy the backend dir into tmpdir for subprocess checks (delegates
+        to code_verify)."""
         code_verify.copy_backend_for_check(
             tmpdir, target_name, new_content, BACKEND_DIR
         )
@@ -347,7 +347,8 @@ class SelfImprover:
     def _verify_startup_smoke(
         self, backend_dir: str, timeout_s: int = 40
     ) -> tuple[bool, str | None]:
-        """Start the backend in a subprocess and hit /health (delegates to code_verify)."""
+        """Start the backend in a subprocess and hit /health (delegates to
+        code_verify)."""
         return code_verify.verify_startup_smoke(backend_dir, timeout_s, BACKEND_ROOT)
 
     def _run_pytest_in_subprocess(
@@ -501,12 +502,10 @@ class SelfImprover:
             stdout_tail = _tail(out_path, TUNABLES.code_run_stdout_tail)
             stderr_tail = _tail(err_path, TUNABLES.code_run_stderr_tail)
             truncated = False
-            try:
+            with contextlib.suppress(OSError):
                 truncated = (
                     os.path.getsize(out_path) > TUNABLES.code_run_stdout_tail
                 ) or (os.path.getsize(err_path) > TUNABLES.code_run_stderr_tail)
-            except OSError:
-                pass
             result = {
                 "stdout": stdout_tail,
                 "stderr": stderr_tail,
@@ -522,10 +521,8 @@ class SelfImprover:
         finally:
             for tmp in (out_path, err_path):
                 if tmp:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(tmp)
-                    except OSError:
-                        pass
 
     # --- tool_create -----------------------------------------------------
 
@@ -584,7 +581,8 @@ class SelfImprover:
             "status": "created_but_import_failed",
             "tool_name": tool_name,
             "file_path": str(file_path),
-            "hint": "Check code_run to debug; the file exists but has a syntax/runtime error.",
+            "hint": "Check code_run to debug; the file exists but has a "
+            "syntax/runtime error.",
         }
 
     # --- self_reflect ----------------------------------------------------

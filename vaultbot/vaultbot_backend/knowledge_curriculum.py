@@ -37,6 +37,7 @@ new dependencies.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -396,8 +397,9 @@ class KnowledgeCurriculum:
                 link-density sink signal (default 5).
             diversity_window: how many recently-completed topics the diversity
                 bonus penalizes against (default 5).
-            skip_vaultbot_paths: drop thin notes under Memory/Chat/ or Knowledge/Research/ (the bot's
-                own outputs) so the curriculum doesn't chase its own drafts.
+            skip_vaultbot_paths: drop thin notes under Memory/Chat/ or
+                Knowledge/Research/ (the bot's own outputs) so the
+                curriculum doesn't chase its own drafts.
         """
         self.graph: VaultGraph = vault_graph
         self.session_logger = session_logger
@@ -531,7 +533,7 @@ class KnowledgeCurriculum:
             and (time.time() - self._gaps_cache_ts) < self._GAPS_TTL
         ):
             if self.session_logger is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self.session_logger.log(
                         "gaps_cache_hit",
                         {
@@ -539,8 +541,6 @@ class KnowledgeCurriculum:
                             "returned": min(len(self._gaps_cache), max(0, int(n))),
                         },
                     )
-                except Exception:  # noqa: BLE001 â€” best-effort, returns error/empty to caller â€” see CONTRIBUTING.md no-silent-fallbacks
-                    pass
             return self._gaps_cache[: max(0, int(n))] if self._gaps_cache else []
 
         try:

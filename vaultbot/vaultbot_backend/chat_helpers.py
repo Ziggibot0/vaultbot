@@ -17,6 +17,7 @@ built-ins) and needs no ``svc`` param.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import time
@@ -30,14 +31,12 @@ async def send_progress(
     svc: Services, websocket, stage: str, detail: dict[str, Any] | None = None
 ) -> None:
     """Send a structured progress event to the live UI."""
-    try:
+    with contextlib.suppress(Exception):  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         await svc.manager.send_personal_message(
             json.dumps({"type": "progress", "stage": stage, "detail": detail or {}}),
             websocket,
             session_logger=svc.session_logger,
         )
-    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-        pass
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -384,7 +383,8 @@ def truncate_tool_result(result: Any, max_chars: int = 0) -> Any:
                     dropped = len(v) - per_key
                     capped[k] = (
                         v[:per_key]
-                        + f"\n[...truncated: {dropped} chars dropped from '{k}' — re-read with narrower parameters if needed...]"
+                        + f"\n[...truncated: {dropped} chars dropped from '{k}' — "
+                        "re-read with narrower parameters if needed...]"
                     )
                     truncated_keys.append(k)
                 elif (
@@ -404,19 +404,23 @@ def truncate_tool_result(result: Any, max_chars: int = 0) -> Any:
             if len(s2) <= max_chars:
                 if truncated_keys:
                     capped["_truncation_notice"] = (
-                        f"Result was truncated. Keys affected: {truncated_keys}. Total original size: {len(serialized)} chars, cap: {max_chars} chars."
+                        f"Result was truncated. Keys affected: {truncated_keys}. "
+                        f"Total original size: {len(serialized)} chars, "
+                        f"cap: {max_chars} chars."
                     )
                 return capped
             dropped = len(s2) - max_chars
             return (
                 s2[:max_chars]
-                + f"\n[...truncated: {dropped} chars dropped from overall result — original size was {len(serialized)} chars...]"
+                + f"\n[...truncated: {dropped} chars dropped from overall result "
+                f"— original size was {len(serialized)} chars...]"
             )
         # Non-dict: cap the serialized form.
         dropped = len(serialized) - max_chars
         return (
             serialized[:max_chars]
-            + f"\n[...truncated: {dropped} chars dropped — original size was {len(serialized)} chars...]"
+            + f"\n[...truncated: {dropped} chars dropped — original size was "
+            f"{len(serialized)} chars...]"
         )
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return str(result)[:max_chars]
@@ -458,7 +462,10 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
             f"{result.get('total_lines', 0)} lines from {result.get('file_path', '?')}"
         )
     if tool_name == "code_run":
-        return f"exit {result.get('exit_code', '?')}: {str(result.get('stdout', ''))[:80]!r}"
+        return (
+            f"exit {result.get('exit_code', '?')}: "
+            f"{str(result.get('stdout', ''))[:80]!r}"
+        )
     if tool_name == "tool_create":
         return f"{result.get('status', '?')}: {result.get('tool_name', '?')}"
     if tool_name == "self_reflect":
@@ -468,14 +475,20 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
     if tool_name == "safe_write":
         st = result.get("status", "?")
         if st == "written":
-            return f"safe_write: wrote {result.get('bytes', 0)} bytes to {result.get('file_path', '?')} (verified)"
+            return (
+                f"safe_write: wrote {result.get('bytes', 0)} bytes to "
+                f"{result.get('file_path', '?')} (verified)"
+            )
         if st == "dry_run_ok":
             return "safe_write dry_run: OK — would write safely"
         return f"safe_write {st}: {str(result.get('error', ''))[:80]}"
     if tool_name == "js_safe_write":
         st = result.get("status", "?")
         if st == "written":
-            return f"js_safe_write: wrote {result.get('bytes', 0)} bytes to {result.get('file_path', '?')} (node --check passed)"
+            return (
+                f"js_safe_write: wrote {result.get('bytes', 0)} bytes to "
+                f"{result.get('file_path', '?')} (node --check passed)"
+            )
         if st == "dry_run_ok":
             return "js_safe_write dry_run: OK — node --check passed"
         return f"js_safe_write {st}: {str(result.get('error', ''))[:80]}"

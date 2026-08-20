@@ -289,7 +289,8 @@ def source_relevance(
     if len(matched) < min_matches:
         return (
             0.5,
-            f"insufficient_signal:{len(matched)}/{min_matches}{' (non-academic)' if not is_academic else ''}",
+            f"insufficient_signal:{len(matched)}/{min_matches}"
+            f"{' (non-academic)' if not is_academic else ''}",
         )
     return (
         score,

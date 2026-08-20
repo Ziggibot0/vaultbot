@@ -64,7 +64,7 @@ class TournamentStaging:
                 for e in data.get("entries", []):
                     entry = StagingEntry(**e)
                     self._entries[entry.id] = entry
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, starts empty on load failure
                 print(f"[WARN] TournamentStaging.load failed ({e}); starting empty.")
 
     def save(self) -> None:
@@ -74,7 +74,7 @@ class TournamentStaging:
             try:
                 tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 os.replace(tmp, self._path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, logs save failure
                 print(f"[WARN] TournamentStaging.save failed: {e}")
 
     # ------------------------------------------------------------------

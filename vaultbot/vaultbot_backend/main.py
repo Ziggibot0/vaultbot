@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -29,43 +29,47 @@ logger = logging.getLogger(__name__)
 # coroutines on the main loop via run_coroutine_threadsafe.
 main_event_loop: asyncio.AbstractEventLoop | None = None
 
-import app_state
-import uvicorn
-from amem_evolution import AMemeEvolution
-from autonomous_researcher import AutonomousResearcher
-from checkpointer import Checkpointer
-from dotenv import load_dotenv
-from embedding_drift import EmbeddingDrift
-from fastapi import FastAPI, Request, WebSocket
-from fastapi.middleware.cors import CORSMiddleware
-from forum_backends import ForumEnhancedFreeSearch
-from fused_retrieval import FusedRetriever
-from graph_ops import GraphOpRegistry
-from identity import Identity
-from knowledge_curriculum import KnowledgeCurriculum
-from lazy_condenser import LazyCondenser
-from llm_client import LLMClient, build_role_client
-from note_creator import NoteCreator
+# Strong references to background tasks so they aren't garbage-collected
+# mid-flight (RUF006). Tasks are added here and discarded on completion.
+_background_tasks: set[asyncio.Task] = set()
+
+import app_state  # noqa: E402
+import uvicorn  # noqa: E402
+from amem_evolution import AMemeEvolution  # noqa: E402
+from autonomous_researcher import AutonomousResearcher  # noqa: E402
+from checkpointer import Checkpointer  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
+from embedding_drift import EmbeddingDrift  # noqa: E402
+from fastapi import FastAPI, Request, WebSocket  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from forum_backends import ForumEnhancedFreeSearch  # noqa: E402
+from fused_retrieval import FusedRetriever  # noqa: E402
+from graph_ops import GraphOpRegistry  # noqa: E402
+from identity import Identity  # noqa: E402
+from knowledge_curriculum import KnowledgeCurriculum  # noqa: E402
+from lazy_condenser import LazyCondenser  # noqa: E402
+from llm_client import LLMClient, build_role_client  # noqa: E402
+from note_creator import NoteCreator  # noqa: E402
 
 # Import our modules
-from plan_executor import PlanExecutor
-from providers import ProviderRegistry
-from research_engine import ResearchEngine
-from self_improver import SelfImprover
-from session_logger import SessionLogger
-from supervision import HealthMonitor
-from vault_graph import VaultGraph
-from vault_indexer import VaultIndexer
+from plan_executor import PlanExecutor  # noqa: E402
+from providers import ProviderRegistry  # noqa: E402
+from research_engine import ResearchEngine  # noqa: E402
+from self_improver import SelfImprover  # noqa: E402
+from session_logger import SessionLogger  # noqa: E402
+from supervision import HealthMonitor  # noqa: E402
+from vault_graph import VaultGraph  # noqa: E402
+from vault_indexer import VaultIndexer  # noqa: E402
 
 # Use the forum-enhanced version: adds GitHub Issues + StackOverflow
 # backends, skips arXiv for technical queries, prioritizes forum results.
 FreeSearch = ForumEnhancedFreeSearch  # noqa: F811  — intentional override of the base class
-from calibration import CalibrationTracker
-from claim_verifier import ClaimVerifier
-from context_budgeter import ContextBudgeter
-from pattern_extractor import PatternExtractor
-from procedure_tracker import ProcedureTracker
-from rag_eval import RAGEvaluator
+from calibration import CalibrationTracker  # noqa: E402
+from claim_verifier import ClaimVerifier  # noqa: E402
+from context_budgeter import ContextBudgeter  # noqa: E402
+from pattern_extractor import PatternExtractor  # noqa: E402
+from procedure_tracker import ProcedureTracker  # noqa: E402
+from rag_eval import RAGEvaluator  # noqa: E402
 
 # Load environment variables from the parent directory (Vault2 root).
 # override=True ensures .env values win over any stale env passed by the
@@ -146,10 +150,8 @@ def acquire_lock() -> None:
         # Stale lock file (process gone) -> unlink and loop to retry the
         # exclusive create. If the unlink itself races another starter, the
         # second iteration's O_EXCL will settle it.
-        try:
+        with suppress(OSError):
             PID_FILE.unlink()
-        except OSError:
-            pass
     # Could not claim after retry (extreme race) -> exit rather than
     # risk a duplicate.
     print("VaultBot backend lock contention; another starter won. Exiting.")
@@ -220,7 +222,8 @@ async def lifespan(app: FastAPI):
         await loop.run_in_executor(None, vault_indexer.load)
         await loop.run_in_executor(None, vault_indexer.start_watching)
 
-        # Kick off background re-indexing of only new/changed notes after the server is up.
+        # Kick off background re-indexing of only new/changed notes after
+        # the server is up.
         async def background_index():
             try:
                 await loop.run_in_executor(None, vault_indexer.index_missing_or_changed)
@@ -228,7 +231,9 @@ async def lifespan(app: FastAPI):
                 startup_logger.log_exception(e, context="background_index")
                 app_state.set_startup_reindex_failed(str(e))
 
-        asyncio.create_task(background_index())
+        background_index_task = asyncio.create_task(background_index())
+        _background_tasks.add(background_index_task)
+        background_index_task.add_done_callback(_background_tasks.discard)
 
         # ── Schema self-heal ──────────────────────────────────────────
         # On every boot, scan all vault .md files and auto-inject missing
@@ -264,7 +269,9 @@ async def lifespan(app: FastAPI):
             except Exception as e:  # noqa: BLE001 — best-effort
                 startup_logger.log_exception(e, context="schema_heal")
 
-        asyncio.create_task(background_schema_heal())
+        background_schema_heal_task = asyncio.create_task(background_schema_heal())
+        _background_tasks.add(background_schema_heal_task)
+        background_schema_heal_task.add_done_callback(_background_tasks.discard)
 
         # ── Build initial QA queue ────────────────────────────────────
         # On boot, build the priority-ordered QA queue (most-used notes
@@ -288,7 +295,9 @@ async def lifespan(app: FastAPI):
             except Exception as e:  # noqa: BLE001 — best-effort
                 startup_logger.log_exception(e, context="build_qa_queue")
 
-        asyncio.create_task(background_build_qa_queue())
+        background_build_qa_task = asyncio.create_task(background_build_qa_queue())
+        _background_tasks.add(background_build_qa_task)
+        background_build_qa_task.add_done_callback(_background_tasks.discard)
 
         startup_logger.log(
             "server_startup",
@@ -471,9 +480,9 @@ app.add_middleware(
 # requests are also rate-limited). Per-endpoint limits prevent a buggy
 # agentic loop or malicious local process from hammering the backend.
 # See rate_limit.py for the full design.
-from rate_limit import is_rate_allowed
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from rate_limit import is_rate_allowed  # noqa: E402
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+from starlette.responses import JSONResponse  # noqa: E402
 
 
 class _RateLimitMiddleware(BaseHTTPMiddleware):
@@ -483,7 +492,8 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=429,
                 content={
-                    "detail": "Rate limit exceeded. Please wait before sending more requests."
+                    "detail": "Rate limit exceeded. Please wait before "
+                    "sending more requests."
                 },
             )
         return await call_next(request)
@@ -501,7 +511,7 @@ app.add_middleware(_RateLimitMiddleware)
 # Health/preflight endpoints are exempt (the plugin needs them before it
 # can read the token file). When VAULTBOT_SKIP_LOCK=1 (test mode), auth is
 # bypassed entirely so the test client can call endpoints without a token.
-from auth import get_or_create_token, is_auth_exempt, is_auth_required
+from auth import get_or_create_token, is_auth_exempt, is_auth_required  # noqa: E402
 
 
 class _AuthMiddleware(BaseHTTPMiddleware):
@@ -607,7 +617,8 @@ try:
     searxng_manager = SearxngManager(session_logger=default_session_logger)
 except Exception as _searxng_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     print(
-        f"[startup] SearXNG backend disabled (Docker/SearxngManager unavailable: {_searxng_err})"
+        f"[startup] SearXNG backend disabled (Docker/SearxngManager "
+        f"unavailable: {_searxng_err})"
     )
 
 search_client = FreeSearch(
@@ -632,7 +643,7 @@ note_creator = NoteCreator(
 # based on how often its claims hold up under verification. Both the
 # research engine (uses scores as synthesis weights) and the claim verifier
 # (updates scores after verification) share this one instance.
-from source_credibility import SourceCredibilityTracker
+from source_credibility import SourceCredibilityTracker  # noqa: E402
 
 source_credibility = SourceCredibilityTracker()
 research_engine = ResearchEngine(
@@ -699,11 +710,15 @@ def _researcher_crash_callback(error: str) -> None:
         payload = _json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
         # manager is module-level (defined below); at call time (crash) it
         # will already be assigned. The researcher thread outlives startup.
-        if manager is not None and manager.active_connections:
-            if main_event_loop is not None and main_event_loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    manager.broadcast(payload), main_event_loop
-                )
+        if (
+            manager is not None
+            and manager.active_connections
+            and main_event_loop is not None
+            and main_event_loop.is_running()
+        ):
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast(payload), main_event_loop
+            )
         default_session_logger.log(
             "problem_notified",
             {
@@ -801,7 +816,7 @@ embedding_drift = EmbeddingDrift(
 # accumulate from user-sentiment feedback (Dream-Pass writes the phrases).
 # Wired into the vault_indexer (populated at add/update time) and the
 # fused_retriever (gate at retrieval time).  See trigger_store.py.
-from trigger_store import TriggerStore
+from trigger_store import TriggerStore  # noqa: E402
 
 trigger_store = TriggerStore(
     state_path=Path(__file__).with_name("trigger_embeddings.json"),
@@ -827,7 +842,7 @@ fused_retriever = FusedRetriever(
 # crash/restart RESUMES mid-turn instead of restarting it. Distinct from the
 # research `checkpointer` (which snapshots the autonomous researcher's gap
 # list). One file, atomic writes, cleared on normal completion.
-from chat_checkpoint import ChatLoopCheckpointer
+from chat_checkpoint import ChatLoopCheckpointer  # noqa: E402
 
 # Legacy singleton for back-compat (non-session callers). Per-session
 # checkpoints are created via ChatLoopCheckpointer.for_session(session_id)
@@ -995,9 +1010,9 @@ manager = ConnectionManager()
 # parameter instead of reading these globals as free variables. See
 # services.py. The globals above stay in place; only the extracted
 # functions change to `svc.<name>` access.
-from app_state import set_services  # Phase 3: DI surface for routers
-from conversation_index import ConversationIndexRegistry
-from services import Services
+from app_state import set_services  # noqa: E402  # Phase 3: DI surface for routers
+from conversation_index import ConversationIndexRegistry  # noqa: E402
+from services import Services  # noqa: E402
 
 # Conversation-aware retrieval: a per-session registry of searchable indexes
 # of recent conversation turns.  Each tab gets its own index so cross-tab
@@ -1092,18 +1107,18 @@ set_services(svc)
 # instead of main.py's module-level globals.  Migrated routes are deleted
 # from main.py as they move into routers/.  See routers/__init__.py for the
 # migration order.
-from routers import autonomous as _autonomous_router
-from routers import config as _config_router
-from routers import custom_tools as _custom_tools_router
-from routers import identity as _identity_router
-from routers import llm as _llm_router
-from routers import oauth_callback as _oauth_callback_router
-from routers import research as _research_router
-from routers import speech as _speech_router
-from routers import system as _system_router
-from routers import task as _task_router
-from routers import tournament as _tournament_router
-from routers import ws as _ws_router
+from routers import autonomous as _autonomous_router  # noqa: E402
+from routers import config as _config_router  # noqa: E402
+from routers import custom_tools as _custom_tools_router  # noqa: E402
+from routers import identity as _identity_router  # noqa: E402
+from routers import llm as _llm_router  # noqa: E402
+from routers import oauth_callback as _oauth_callback_router  # noqa: E402
+from routers import research as _research_router  # noqa: E402
+from routers import speech as _speech_router  # noqa: E402
+from routers import system as _system_router  # noqa: E402
+from routers import task as _task_router  # noqa: E402
+from routers import tournament as _tournament_router  # noqa: E402
+from routers import ws as _ws_router  # noqa: E402
 
 app.include_router(_system_router.router)
 app.include_router(_llm_router.router)
@@ -1128,9 +1143,11 @@ async def reload_plugin_endpoint():
     """
     import asyncio
 
-    asyncio.ensure_future(
+    reload_task = asyncio.ensure_future(
         manager.broadcast(json.dumps({"type": "reload_plugin"})), main_event_loop
     )
+    _background_tasks.add(reload_task)
+    reload_task.add_done_callback(_background_tasks.discard)
     return {"status": "reload_broadcast"}
 
 

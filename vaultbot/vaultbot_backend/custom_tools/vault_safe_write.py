@@ -4,7 +4,22 @@ Agent-authored tool: vault_safe_write
 
 SCHEMA = {
     "name": "vault_safe_write",
-    "description": "SAFE self-edit of markdown notes (.md files) in the vault. Backs up existing content to vaultbot_backend/trash/ before overwriting. Validates content is non-empty markdown. Blocks writes to LOCKED notes and sacred journal files (date-only filenames). Blocks path traversal attempts. Writes atomically (temp file + rename). Use this INSTEAD of code_run with open() for any markdown note write \u2014 it's the safety layer for knowledge, just as safe_write is for code. IMPORTANT: VaultBot-generated content MUST go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). VaultBot's own directives and identity notes live under vaultbot/System/Identity/ (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER create Knowledge/, Memory/, System/, or *-Directive.md at the vault root \u2014 those are gitignored hygiene zones.",
+    "description": (
+        "SAFE self-edit of markdown notes (.md files) in the vault. Backs up "
+        "existing content to vaultbot_backend/trash/ before overwriting. "
+        "Validates content is non-empty markdown. Blocks writes to LOCKED "
+        "notes and sacred journal files (date-only filenames). Blocks path "
+        "traversal attempts. Writes atomically (temp file + rename). Use this "
+        "INSTEAD of code_run with open() for any markdown note write — it's "
+        "the safety layer for knowledge, just as safe_write is for code. "
+        "IMPORTANT: VaultBot-generated content MUST go under vaultbot/ (e.g. "
+        "'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes "
+        "go in User/ (e.g. 'User/VaultBot Issues.md'). VaultBot's own "
+        "directives and identity notes live under vaultbot/System/Identity/ "
+        "(e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER create "
+        "Knowledge/, Memory/, System/, or *-Directive.md at the vault root — "
+        "those are gitignored hygiene zones."
+    ),
     "parameters": {
         "properties": {
             "content": {
@@ -12,11 +27,26 @@ SCHEMA = {
                 "type": "string",
             },
             "dry_run": {
-                "description": "If true, validate and report what would happen but do not write to disk.",
+                "description": (
+                    "If true, validate and report what would happen but do "
+                    "not write to disk."
+                ),
                 "type": "boolean",
             },
             "file_path": {
-                "description": "Path to the note, relative to vault root. VaultBot notes go under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md', 'vaultbot/Memory/Chat/Chat-Topic.md', 'vaultbot/System/Procedures/My-Procedure.md'). User-personal notes go in User/ (e.g. 'User/VaultBot Issues.md'). VaultBot's own directives go under vaultbot/System/Identity/ (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER write to root-level Knowledge/, Memory/, System/, or *-Directive.md \u2014 always use the vaultbot/ prefix.",
+                "description": (
+                    "Path to the note, relative to vault root. VaultBot notes "
+                    "go under vaultbot/ (e.g. "
+                    "'vaultbot/Knowledge/Research/My-Note.md', "
+                    "'vaultbot/Memory/Chat/Chat-Topic.md', "
+                    "'vaultbot/System/Procedures/My-Procedure.md'). "
+                    "User-personal notes go in User/ (e.g. 'User/VaultBot "
+                    "Issues.md'). VaultBot's own directives go under "
+                    "vaultbot/System/Identity/ (e.g. "
+                    "'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER "
+                    "write to root-level Knowledge/, Memory/, System/, or "
+                    "*-Directive.md — always use the vaultbot/ prefix."
+                ),
                 "type": "string",
             },
         },
@@ -30,16 +60,17 @@ Agent-authored tool: vault_safe_write
 Safe markdown write — backs up, validates, blocks protected files.
 """
 
-import os
-import re
-import shutil
-import tempfile
-import time
-from pathlib import Path
+import os  # noqa: E402
+import re  # noqa: E402
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 # Determine paths from this file's location
 # custom_tools/vault_safe_write.py -> parent.parent = vaultbot/vaultbot_backend/
-# -> parent.parent.parent = vaultbot/ -> parent.parent.parent.parent = Vault2/ (vault root)
+# -> parent.parent.parent = vaultbot/ -> parent.parent.parent.parent = Vault2/
+# (vault root)
 try:
     BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot/vaultbot_backend/
 except NameError:
@@ -49,7 +80,8 @@ TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
 
 
 def _is_sacred_journal(file_path: Path) -> bool:
-    """Check if the filename is a date-only filename (the operator's personal journal)."""
+    """Check if the filename is a date-only filename (the operator's personal
+    journal)."""
     stem = file_path.stem
     return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem))
 

@@ -4,7 +4,7 @@ THE PROBLEM THIS SOLVES
 -----------------------
 The agentic chat loop sent the full verbatim transcript of every tool call,
 tool result, and thinking pass back to the model on every round. For a 7-step
-task that's ~7 × (assistant text + thinking + tool_call + tool_result) of
+task that's ~7 x (assistant text + thinking + tool_call + tool_result) of
 noise re-processed every turn. The model loses the forest for the trees,
 re-reads its own chatter, and hits the read-loop wall.
 
@@ -88,7 +88,7 @@ def _build_raw_material(
     The small model only needs the shape, not the full payload.
     """
     parts: list[str] = []
-    for i, (call, result) in enumerate(zip(tool_calls, tool_results)):
+    for i, (call, result) in enumerate(zip(tool_calls, tool_results, strict=False)):
         name = (
             call.get("function", {}).get("name", "?") if isinstance(call, dict) else "?"
         )

@@ -4,7 +4,13 @@ Agent-authored tool: torture_test
 
 SCHEMA = {
     "name": "torture_test",
-    "description": "Run torture tests on a pull request before merging. Downloads changed files from the PR branch and runs: Python syntax check, JS syntax check, .gitignore tampering check, malware/exfiltration pattern scan, path whitelist check. Returns a structured pass/fail report. Requires the gh CLI authenticated via 'gh auth login'.",
+    "description": (
+        "Run torture tests on a pull request before merging. Downloads "
+        "changed files from the PR branch and runs: Python syntax check, JS "
+        "syntax check, .gitignore tampering check, malware/exfiltration "
+        "pattern scan, path whitelist check. Returns a structured pass/fail "
+        "report. Requires the gh CLI authenticated via 'gh auth login'."
+    ),
     "parameters": {
         "properties": {
             "pr_number": {
@@ -45,7 +51,10 @@ def run(args: dict) -> dict:
     if not gh_available():
         return {
             "error": "gh CLI not found or not authenticated.",
-            "hint": "Install the GitHub CLI from https://cli.github.com and run 'gh auth login'.",
+            "hint": (
+                "Install the GitHub CLI from https://cli.github.com and run "
+                "'gh auth login'."
+            ),
         }
 
     # 2. Determine upstream repo
@@ -272,7 +281,8 @@ def run(args: dict) -> dict:
                 for sp in sensitive_paths:
                     if sp in removed:
                         tampering.append(
-                            f"Removed ignore rule for '{removed}' (matches sensitive path '{sp}')"
+                            f"Removed ignore rule for '{removed}' (matches "
+                            f"sensitive path '{sp}')"
                         )
 
         if tampering:
@@ -321,7 +331,8 @@ def run(args: dict) -> dict:
         if not patch:
             continue
         fname = f["filename"]
-        # Skip markdown files — documentation mentioning patterns is not dangerous code
+        # Skip markdown files — documentation mentioning patterns is not
+        # dangerous code
         if fname.endswith(".md"):
             continue
         for line in patch.split("\n"):
@@ -331,23 +342,22 @@ def run(args: dict) -> dict:
             # Skip comments
             if code.strip().startswith("#") or code.strip().startswith("//"):
                 continue
-            # Skip lines that are regex pattern definitions (defining detection patterns, not using them)
-            # These look like: (r"pattern", "description"),
-            if (code.strip().startswith("(") and 'r"' in code) or (
-                code.strip().startswith("(") and 'r"' in code
-            ):
+            # Skip lines that are regex pattern definitions (defining
+            # detection patterns, not using them). These look like:
+            # (r"pattern", "description"),
+            if code.strip().startswith("(") and 'r"' in code:
                 continue
-            # Skip lines that are string assignments containing pattern descriptions
+            # Skip lines that are string assignments containing pattern
+            # descriptions
             if code.strip().startswith('"') or code.strip().startswith("'"):
                 continue
             for pattern, desc in MALWARE_PATTERNS:
                 if re.search(pattern, code):
                     # Filter false positives: URLs in strings/comments
-                    if "non-GitHub host" in desc:
-                        # Check if it's in a string that contains github.com
-                        if "github.com" in code:
-                            continue
-                    # Filter: if the line itself is defining a regex pattern (contains r" prefix)
+                    if "non-GitHub host" in desc and "github.com" in code:
+                        continue
+                    # Filter: if the line itself is defining a regex pattern
+                    # (contains r" prefix)
                     if 'r"' in code and (
                         "\\" in code or "\\s" in code or "\\." in code
                     ):

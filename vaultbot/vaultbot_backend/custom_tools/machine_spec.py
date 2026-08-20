@@ -4,7 +4,11 @@ Agent-authored tool: machine_spec
 
 SCHEMA = {
     "name": "machine_spec",
-    "description": "Report machine specs relevant to local LLM inference: CPU, RAM, GPU/iGPU status, Ollama config, loaded models, and environment variables.",
+    "description": (
+        "Report machine specs relevant to local LLM inference: CPU, RAM, "
+        "GPU/iGPU status, Ollama config, loaded models, and environment "
+        "variables."
+    ),
     "parameters": {
         "properties": {
             "ollama_host": {
@@ -17,12 +21,12 @@ SCHEMA = {
     },
 }
 
-import os
-import re
-import subprocess
-import sys
-from pathlib import Path
-from typing import Any
+import os  # noqa: E402
+import re  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
 
 def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
@@ -31,14 +35,14 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
             cmd, capture_output=True, text=True, timeout=timeout, errors="replace"
         )
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: returns error string to caller
         return -1, "", str(e)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort: returns default on parse failure
         return default
 
 
@@ -164,21 +168,21 @@ def get_ollama_info(host: str = "http://localhost:11434") -> dict:
     try:
         with urllib.request.urlopen(f"{host}/api/version", timeout=5) as resp:
             info["version"] = resp.read().decode().strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: records error string in result
         info["version_error"] = str(e)
 
     try:
         with urllib.request.urlopen(f"{host}/api/ps", timeout=5) as resp:
             data = json.loads(resp.read().decode())
             info["loaded_models"] = data.get("models", [])
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: records error string in result
         info["loaded_models_error"] = str(e)
 
     try:
         with urllib.request.urlopen(f"{host}/api/tags", timeout=5) as resp:
             data = json.loads(resp.read().decode())
             info["installed_models"] = [m.get("name") for m in data.get("models", [])]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: records error string in result
         info["installed_models_error"] = str(e)
 
     return info

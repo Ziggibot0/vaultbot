@@ -32,7 +32,7 @@ class RAGEvaluator:
 
     def __init__(
         self,
-        log_path: str = None,
+        log_path: str | None = None,
         regression_window: int = 10,
         regression_threshold: float = 0.1,
     ):
@@ -74,7 +74,11 @@ class RAGEvaluator:
     # ─── Logging (always on, cheap) ───
 
     def log_retrieval(
-        self, query: str, retrieved: list[dict], k: int = 5, timestamp: str = None
+        self,
+        query: str,
+        retrieved: list[dict],
+        k: int = 5,
+        timestamp: str | None = None,
     ) -> None:
         """Log a retrieval event. Called after every FUSED retrieve.
 
@@ -242,7 +246,11 @@ class RAGEvaluator:
         return 0.0
 
     def evaluate_retrieval(
-        self, query: str, retrieved: list[dict], relevant: list[str] = None, k: int = 5
+        self,
+        query: str,
+        retrieved: list[dict],
+        relevant: list[str] | None = None,
+        k: int = 5,
     ) -> dict:
         """Compute retrieval metrics for a single query.
 
@@ -329,7 +337,8 @@ class RAGEvaluator:
         if len(history) < self.regression_window * 2:
             return {
                 "status": "insufficient_data",
-                "message": f"Need {self.regression_window * 2} evaluated queries, have {len(history)}",
+                "message": f"Need {self.regression_window * 2} evaluated "
+                f"queries, have {len(history)}",
                 "total_evaluated": len(history),
             }
 

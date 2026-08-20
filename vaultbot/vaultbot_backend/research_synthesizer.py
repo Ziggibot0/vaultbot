@@ -212,10 +212,7 @@ def llm_synthesize(
             {"role": "user", "content": user},
         ]
         result = llm_client.chat(messages, temperature=0.3, stream=False)
-        if isinstance(result, dict):
-            synthesis = result.get("response", "")
-        else:
-            synthesis = ""
+        synthesis = result.get("response", "") if isinstance(result, dict) else ""
 
         synthesis = (synthesis or "").strip()
         if len(synthesis) < 200:

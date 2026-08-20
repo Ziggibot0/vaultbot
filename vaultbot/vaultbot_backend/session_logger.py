@@ -6,6 +6,7 @@ before writing. The log is the single source of truth for debugging and
 calibration.
 """
 
+import contextlib
 import json
 import re
 import time
@@ -105,15 +106,14 @@ class SessionLogger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         # Retention: cap session log accumulation so a non-technical user's
         # disk doesn't fill over months. Defaults live in config.TUNABLES.
-        try:
+        with contextlib.suppress(Exception):
+            # cleanup must never crash the backend
             sweep_old_sessions(
                 self.log_dir,
                 max_files=TUNABLES.session_log_retention_count,
                 max_age_days=TUNABLES.session_log_retention_days,
                 max_file_mb=TUNABLES.session_log_max_file_mb,
             )
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass  # cleanup must never crash the backend
 
         self.session_id: str = session_id or str(uuid.uuid4())
         self.started_at: str = datetime.now(UTC).isoformat()

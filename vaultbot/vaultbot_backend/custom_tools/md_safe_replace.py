@@ -51,7 +51,9 @@ SCHEMA = {
             "dry_run": {
                 "type": "boolean",
                 "default": False,
-                "description": "If true, verify the replace would work but do not write.",
+                "description": (
+                    "If true, verify the replace would work but do not write."
+                ),
             },
         },
         "required": ["file_path", "old_str", "new_str"],
@@ -59,12 +61,12 @@ SCHEMA = {
 }
 
 
-import os
-import re
-import shutil
-import tempfile
-import time
-from pathlib import Path
+import os  # noqa: E402
+import re  # noqa: E402
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 # custom_tools/md_safe_replace.py -> parent.parent = vaultbot/vaultbot_backend/
 # -> parent.parent.parent = vaultbot/
@@ -78,7 +80,8 @@ TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
 
 
 def _is_sacred_journal(file_path: Path) -> bool:
-    """Check if the filename is a date-only filename (the operator's personal journal)."""
+    """Check if the filename is a date-only filename (the operator's personal
+    journal)."""
     stem = file_path.stem
     return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", stem))
 

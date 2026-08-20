@@ -13,6 +13,7 @@ This is a leaf module in the chat-handler family (see ``chat_context.py``,
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -78,10 +79,13 @@ async def finalize_turn(
     _is_idk = False
     _graph_lookup = None
     try:
-        _graph_lookup = lambda _wl: bool(
-            svc.vault_graph.get_note(_wl)
-            and svc.vault_graph.get_note(_wl).get("file_path")
-        )
+
+        def _graph_lookup(_wl):
+            return bool(
+                svc.vault_graph.get_note(_wl)
+                and svc.vault_graph.get_note(_wl).get("file_path")
+            )
+
     except Exception:  # noqa: BLE001 — best-effort
         _graph_lookup = None
     if final_answer and len(final_answer) > 50:
@@ -203,16 +207,11 @@ async def finalize_turn(
     _turn_token_totals["total_tokens"] = (
         _turn_token_totals["prompt_tokens"] + _turn_token_totals["completion_tokens"]
     )
-    _turn_token_totals["estimated"] = True  # flag that these are estimates
-    session_logger.log("token_usage", _turn_token_totals)
-    # Persist to the session-level accumulator for cross-turn totals.
-    try:
+    with contextlib.suppress(Exception):  # noqa: BLE001 — best-effort
         session_logger.add_token_usage(
             _turn_token_totals["prompt_tokens"],
             _turn_token_totals["completion_tokens"],
         )
-    except Exception:  # noqa: BLE001 — best-effort
-        pass
     try:
         await svc.manager.send_personal_message(
             json.dumps(

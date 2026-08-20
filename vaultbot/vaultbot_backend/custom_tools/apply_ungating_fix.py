@@ -4,12 +4,17 @@ Agent-authored tool: apply_ungating_fix
 
 SCHEMA = {
     "name": "apply_ungating_fix",
-    "description": "One-shot fixer: (1) copies identity.py.tmp over identity.py to fix the stale seed text bug, (2) modifies agent_tools.py to remove keyword gating and make all tools always available. Run once, then restart backend.",
+    "description": (
+        "One-shot fixer: (1) copies identity.py.tmp over identity.py to fix "
+        "the stale seed text bug, (2) modifies agent_tools.py to remove "
+        "keyword gating and make all tools always available. Run once, then "
+        "restart backend."
+    ),
     "parameters": {"properties": {}, "type": "object"},
 }
 
-import shutil
-from pathlib import Path
+import shutil  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 
 def run(args: dict) -> dict:
@@ -97,26 +102,33 @@ def run(args: dict) -> dict:
     "self_improvement": ["tool_create"],
 }"""
 
-        new_cats = """# Contextual tool categories removed — all tools are now core (always
+        new_cats = (
+            """# Contextual tool categories removed — all tools are now core """
+            """(always
 # available). Keyword gating was fragile: if the user's message didn't
 # contain the right keywords, critical tools like safe_write and code_run
 # were invisible to the LLM, making it impossible to fix code problems.
 # Tools that should be gated are now procedures (see PROCEDURE_CANDIDATE_NAMES).
 CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
+        )
 
         if old_cats in content:
             content = content.replace(old_cats, new_cats)
             results.append(
-                "agent_tools.py: emptied CONTEXTUAL_TOOL_CATEGORIES (no more keyword gating)"
+                "agent_tools.py: emptied CONTEXTUAL_TOOL_CATEGORIES "
+                "(no more keyword gating)"
             )
         else:
             errors.append(
-                "agent_tools.py: could not find CONTEXTUAL_TOOL_CATEGORIES block to replace"
+                "agent_tools.py: could not find CONTEXTUAL_TOOL_CATEGORIES "
+                "block to replace"
             )
 
         # 2c: Simplify build_tool_list to not use category selection
-        old_build = '''def build_tool_list(user_message: str, plan_text: str = "",
-                    custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        old_build = (
+            """def build_tool_list(user_message: str, plan_text: str = "",
+                    custom_schemas: list[dict[str, Any]] | None = None) -> """
+            '''list[dict[str, Any]]:
     """Build the tool list for the LLM call using progressive disclosure.
 
     Core tools are always included. Contextual tools are added based on
@@ -130,9 +142,12 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
         tools.extend(get_contextual_tools(cat))
 
     if custom_schemas:'''
+        )
 
-        new_build = '''def build_tool_list(user_message: str, plan_text: str = "",
-                    custom_schemas: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        new_build = (
+            """def build_tool_list(user_message: str, plan_text: str = "",
+                    custom_schemas: list[dict[str, Any]] | None = None) -> """
+            '''list[dict[str, Any]]:
     """Build the tool list for the LLM call.
 
     All built-in tools are always included (keyword gating removed).
@@ -142,11 +157,13 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
     tools = get_core_tools()
 
     if custom_schemas:'''
+        )
 
         if old_build in content:
             content = content.replace(old_build, new_build)
             results.append(
-                "agent_tools.py: simplified build_tool_list (removed category selection)"
+                "agent_tools.py: simplified build_tool_list "
+                "(removed category selection)"
             )
         else:
             errors.append(
@@ -154,7 +171,9 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
             )
 
         # 2d: Make select_contextual_categories return empty set (backward compat)
-        old_select = '''def select_contextual_categories(user_message: str, plan_text: str = "") -> set[str]:
+        old_select = (
+            """def select_contextual_categories(user_message: str, """
+            '''plan_text: str = "") -> set[str]:
     """Deterministic keyword-based selection of which contextual tool
     categories are relevant for the current task.
 
@@ -191,8 +210,11 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
         selected.add("self_improvement")
 
     return selected'''
+        )
 
-        new_select = '''def select_contextual_categories(user_message: str, plan_text: str = "") -> set[str]:
+        new_select = (
+            """def select_contextual_categories(user_message: str, """
+            '''plan_text: str = "") -> set[str]:
     """Deprecated — all tools are now core (always available).
 
     Returns an empty set for backward compatibility. Kept as a no-op so
@@ -200,6 +222,7 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
     future cleanup.
     """
     return set()'''
+        )
 
         if old_select in content:
             content = content.replace(old_select, new_select)
@@ -208,7 +231,8 @@ CONTEXTUAL_TOOL_CATEGORIES: dict[str, list[str]] = {}"""
             )
         else:
             errors.append(
-                "agent_tools.py: could not find select_contextual_categories block to replace"
+                "agent_tools.py: could not find select_contextual_categories "
+                "block to replace"
             )
 
         # Write the modified file if any changes were made

@@ -5,7 +5,8 @@ Dream-Pass creation process (see [[Dream-Pass]] and the chat log
 "Chat-have-a-look-at-the-WOLE-process-of-creating-the-dream-pass-procedure").
 
 Checks (all aligned with the unified procedure format from
-[[Procedural-Bootstrap-and-Evolution-Plan#Part 3 Procedural Note Schema (UNIFIED — 2026-08-10)]]):
+[[Procedural-Bootstrap-and-Evolution-Plan#Part 3 Procedural Note Schema
+(UNIFIED — 2026-08-10)]]):
 
 1. **Frontmatter** — type, description, when_to_use, allowed_tools,
    falsifiable_if, status, model_cartridge, created, summary, tags
@@ -544,13 +545,15 @@ def validate_procedure_text(
         checks_run.append("no_direct_endpoints")
         for i, code_block in enumerate(code_blocks):
             for pattern, name in _ENDPOINT_PATTERNS:
-                if re.search(pattern, code_block):
-                    if "get_llm_client" not in code_block:
-                        warnings.append(
-                            f"Code block {i + 1} uses direct endpoint "
-                            f"({name}) — should use get_llm_client() "
-                            f"instead"
-                        )
+                if (
+                    re.search(pattern, code_block)
+                    and "get_llm_client" not in code_block
+                ):
+                    warnings.append(
+                        f"Code block {i + 1} uses direct endpoint "
+                        f"({name}) — should use get_llm_client() "
+                        f"instead"
+                    )
 
     # --- 4. Validation predicates ---
     checks_run.append("validation_predicates")
@@ -583,14 +586,17 @@ def validate_procedure_text(
     checks_run.append("result_variable")
     code_steps = [s for s in proc.steps if s.step_type == "code"]
     for step in code_steps:
-        if step.code:
-            if "result = " not in step.code and "result=" not in step.code:
-                if "vault_delete" not in step.code and "vault_append" not in step.code:
-                    warnings.append(
-                        f"Step {step.number} (code) has no "
-                        f"'result = ' assignment — runtime expects "
-                        f"'result' in namespace"
-                    )
+        if step.code and (
+            "result = " not in step.code
+            and "result=" not in step.code
+            and "vault_delete" not in step.code
+            and "vault_append" not in step.code
+        ):
+            warnings.append(
+                f"Step {step.number} (code) has no "
+                f"'result = ' assignment — runtime expects "
+                f"'result' in namespace"
+            )
 
     # --- 7. Syntax check ---
     checks_run.append("syntax_check")

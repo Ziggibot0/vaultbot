@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -38,8 +39,8 @@ pytestmark = pytest.mark.unit
 class _NoEdgeGraph:
     """Graph stub with no edges — isolates the vector channel."""
 
-    nodes = {}
-    backlinks = {}
+    nodes: ClassVar[dict] = {}
+    backlinks: ClassVar[dict] = {}
 
     def neighbors(self, name, direction="both"):
         return []

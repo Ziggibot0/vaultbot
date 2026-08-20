@@ -52,10 +52,9 @@ async def stream_llm_round(
                     "t_ms": time.time() * 1000,
                 },
             )
-            for chunk in svc.ollama_client.chat(
+            yield from svc.ollama_client.chat(
                 st._model_conversation, tools=_round_tools, stream=True
-            ):
-                yield chunk
+            )
             session_logger.log(
                 "ollama_chat_call_exit",
                 {

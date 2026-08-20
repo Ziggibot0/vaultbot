@@ -363,7 +363,7 @@ def score_sentence(sentence: str, keyterms: list[str], source_count: int) -> flo
     """Extractive score: keyword density * corroboration boost.
 
     Signal terms (proper nouns, API names, multi-word phrases — the terms
-    that actually disambiguate the topic) are weighted 5× higher than
+    that actually disambiguate the topic) are weighted 5x higher than
     generic single-word keyterms. A sentence that mentions "FAISS" and
     "remove_ids" is almost certainly on-topic; one that only mentions
     "python" and "index" is not, even if those are in the keyterm list.

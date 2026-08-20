@@ -4,7 +4,14 @@ Agent-authored tool: plugin_reload
 
 SCHEMA = {
     "name": "plugin_reload",
-    "description": "Reload the Obsidian plugin (disable + re-enable) without killing the backend. Sends a WebSocket message to the plugin which calls reloadSelf() \u2014 Obsidian's plugin API handles the disable/re-enable cycle. The backend stays running throughout. Use this after editing main.js or styles.css to pick up changes without the operator having to manually toggle the plugin in Settings.",
+    "description": (
+        "Reload the Obsidian plugin (disable + re-enable) without killing the "
+        "backend. Sends a WebSocket message to the plugin which calls "
+        "reloadSelf() — Obsidian's plugin API handles the disable/re-enable "
+        "cycle. The backend stays running throughout. Use this after editing "
+        "main.js or styles.css to pick up changes without the operator having "
+        "to manually toggle the plugin in Settings."
+    ),
     "parameters": {"properties": {}, "required": [], "type": "object"},
 }
 
@@ -37,12 +44,18 @@ def run(args: dict) -> dict:
         result = json.loads(resp.read())
         return {
             "status": "reload_requested",
-            "message": "Plugin reload signal sent. The plugin will disable and re-enable itself in ~1s. Backend stays running.",
+            "message": (
+                "Plugin reload signal sent. The plugin will disable and "
+                "re-enable itself in ~1s. Backend stays running."
+            ),
             "response": result,
         }
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {
             "status": "error",
-            "message": f"Could not reach /reload-plugin endpoint: {e}. Make sure the backend is running and the plugin is connected.",
+            "message": (
+                f"Could not reach /reload-plugin endpoint: {e}. Make sure the "
+                f"backend is running and the plugin is connected."
+            ),
             "error": str(e),
         }

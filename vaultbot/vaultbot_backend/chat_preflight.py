@@ -97,9 +97,10 @@ def classify_trivial(
     # the user might be reacting to tool results and needs full context.
     if conversation_history:
         for _m in conversation_history[-4:]:
-            if isinstance(_m, dict):
-                if _m.get("tool_calls") or _m.get("role") == "tool":
-                    return False
+            if isinstance(_m, dict) and (
+                _m.get("tool_calls") or _m.get("role") == "tool"
+            ):
+                return False
 
     return True
 
@@ -248,7 +249,7 @@ def small_model_procedure_hint(
                     },
                 )
         return ""
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort, returns "" on any error
         if session_logger:
             session_logger.log(
                 "procedure_hint_error", {"error": "exception in _match_procedure"}
@@ -418,7 +419,7 @@ def small_model_digest(
         new["original_chars"] = len(content)
         _breaker_reset("digest")
         return new
-    except Exception:
+    except Exception:  # noqa: BLE001 — fall back to raw result on any error
         _breaker_trip("digest")
         return result  # fall back to raw result on any error
 

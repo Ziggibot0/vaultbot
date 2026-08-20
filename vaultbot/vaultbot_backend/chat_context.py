@@ -1,6 +1,6 @@
 """Context management helpers for the agentic chat loop.
 
-Extracted from ``chat_handler.py`` — these functions operate on the
+Extracted from ``chat_handler.py`` -- these functions operate on the
 ``conversation`` list: deduplication of seen search results, proactive
 tool-result aging, hard token-cap enforcement, code-read digesting, and
 Ollama tool-call history sanitization.
@@ -23,7 +23,7 @@ def _leading_system_count(conversation: list[dict[str, Any]]) -> int:
 
     The prompt-caching structure (2026-08-15) splits the prefix into up to
     3 separate system messages (stable prompt, vault context, wm block).
-    All pruning/aging functions must skip ALL of them — touching any
+    All pruning/aging functions must skip ALL of them -- touching any
     system message in the prefix invalidates the provider's prompt cache.
 
     Returns the count of consecutive ``role: system`` messages at the start
@@ -70,7 +70,7 @@ def dedup_seen_results(
     A result is "already seen" if its file_path is in the seen dict with:
       - source "vault_search" or "initial_context" (already in context)
       - source "code_read" with lines=None (full file read)
-      - source "code_read" with lines=(s,e) (partial — annotated with
+      - source "code_read" with lines=(s,e) (partial -- annotated with
         which lines were already read)
     """
     annotated: list[dict[str, Any]] = []
@@ -82,10 +82,10 @@ def dedup_seen_results(
             continue
         entry = seen.get(fp)
         if entry is None:
-            # Never seen — keep it as-is.
+            # Never seen -- keep it as-is.
             annotated.append(r)
             continue
-        # Already seen — annotate it but KEEP it so the model can see
+        # Already seen -- annotate it but KEEP it so the model can see
         # that its search returned things it already has.
         r = dict(r)
         if entry.get("source") == "code_read" and entry.get("lines") is not None:
@@ -109,7 +109,7 @@ def tool_actually_wrote(tool_name: str, result: Any) -> bool:
 
     This is the core fix for the read-loop detector: a "write" tool that
     failed (execute_procedure returning 0 steps, vault_safe_write rejected,
-    code_run with an error) is NOT a successful write — it's a failed read.
+    code_run with an error) is NOT a successful write -- it's a failed read.
     Counting it as a write resets the read-loop detector and lets the model
     loop forever calling a broken tool.
 
@@ -140,22 +140,22 @@ def tool_actually_wrote(tool_name: str, result: Any) -> bool:
         return result.get("status") == "ok" and not result.get("error")
     if tool_name == "vault_research":
         return result.get("source_count", 0) > 0 or result.get("note_path")
-    # Unknown write tool — be conservative: treat as write only if no error.
+    # Unknown write tool -- be conservative: treat as write only if no error.
     return not result.get("error")
 
 
 # ---------------------------------------------------------------------------
-# Proactive tool-result aging — keep the model focused on recent results
+# Proactive tool-result aging -- keep the model focused on recent results
 # ---------------------------------------------------------------------------
 # The token cap (enforce_token_cap) only fires when total tokens exceed
 # ~60K. Below that, old tool results accumulate full-size across rounds and
-# the model re-processes them every round — bloating the prompt and
+# the model re-processes them every round -- bloating the prompt and
 # distracting the model from the current task. This function runs EVERY
 # round (before the token cap check) and stubs tool results older than N
 # rounds back to a 1-line summary, regardless of total token count.
 #
 # Why age-based, not size-based: the model already processed those results
-# in prior rounds. It doesn't need the full payload again — just a reminder
+# in prior rounds. It doesn't need the full payload again -- just a reminder
 # of what it did. The findings ledger (in the system prompt) already tracks
 # round-level outcomes; this complements it by shrinking the heavy payloads
 # that sit in conversation history. Together they keep the model aware of
@@ -232,7 +232,7 @@ def age_old_tool_results(
         _preview = _content[:120].replace("\n", " ").strip()
         conv[i] = dict(m)
         conv[i]["content"] = (
-            f"[Old tool output from {_tool_name} (rounds ago) — "
+            f"[Old tool output from {_tool_name} (rounds ago) -- "
             f"cleared to keep context focused on the current task. "
             f"Preview: {_preview}… Re-call the tool if you need the "
             f"raw data again.]"
@@ -253,20 +253,20 @@ def age_old_tool_results(
 
 
 # ---------------------------------------------------------------------------
-# Hard token cap — the GUARANTEED ceiling on what's sent to the big LLM
+# Hard token cap -- the GUARANTEED ceiling on what's sent to the big LLM
 # ---------------------------------------------------------------------------
 # Every other budgeting mechanism (context_budgeter, preflight compression,
 # truncate_tool_result) is advisory and piecemeal. This function is the
 # enforcement layer: right before the LLM call, it estimates the total
 # token count of the entire conversation and, if it exceeds the cap,
-# prunes from the oldest/heaviest content first — without ever breaking
+# prunes from the oldest/heaviest content first -- without ever breaking
 # tool_call/tool_result pairs.
 #
 # Pruning strategy (in order, stop when under cap):
 #   1. Stub old tool-result CONTENT (not the message, not the pairing).
 #      Tool results from 2+ rounds ago that are still large get their
 #      content replaced with a 1-line stub. The tool_call_id and message
-#      index stay intact — the provider sees a valid pair, just with
+#      index stay intact -- the provider sees a valid pair, just with
 #      shrunk payload. The model already processed those results.
 #   2. If still over, stub ALL remaining old tool results (even small
 #      ones) outside the protected tail.
@@ -304,7 +304,7 @@ def enforce_token_cap(
     """Guarantee the conversation fits within the hard token cap.
 
     Mutates a COPY of conversation in place (the caller's list is not
-    affected — we return the trimmed copy). Never removes messages or
+    affected -- we return the trimmed copy). Never removes messages or
     breaks tool_call/tool_result pairing; only shrinks content of old
     tool results and, as a last resort, drops old middle messages.
 
@@ -316,7 +316,7 @@ def enforce_token_cap(
 
     _est = estimate_conv_tokens(conversation)
     if _est <= _cap:
-        return conversation  # already under — no action
+        return conversation  # already under -- no action
 
     # Work on a shallow copy so we don't mutate the caller's list.
     conv = [dict(m) if isinstance(m, dict) else m for m in conversation]
@@ -325,12 +325,12 @@ def enforce_token_cap(
     _stub_min_chars = int(os.getenv("VAULTBOT_CAP_STUB_MIN_CHARS", "2000"))
 
     # Skip all leading system messages (prompt-caching structure: up to 3
-    # system messages — stable prompt, vault context, wm block). Touching
+    # system messages -- stable prompt, vault context, wm block). Touching
     # any of them would invalidate the provider's prefix cache.
     _skip = _leading_system_count(conv)
 
     # ── Phase 1: Stub large old tool results (2+ rounds back) ──
-    # Read tools (code_read, vault_read_note) are EXEMPT — the user wants
+    # Read tools (code_read, vault_read_note) are EXEMPT -- the user wants
     # the model to read the whole file, and the read_result_cap already
     # bounds the initial size. Stubbing a read result the model is still
     # reasoning over forces a re-read, wasting a round-trip.
@@ -375,7 +375,7 @@ def enforce_token_cap(
         return conv
 
     # ── Phase 2: Stub ALL old tool results (even small ones) ──
-    # Read tools are still exempt here — see Phase 1 comment.
+    # Read tools are still exempt here -- see Phase 1 comment.
     _pruned2 = 0
     for i in range(_skip, _cutoff):
         m = conv[i]
@@ -416,7 +416,7 @@ def enforce_token_cap(
     # its argument, and those accumulate forever because phases 1-2 only
     # stub tool RESULTS, not tool CALLS. This phase truncates old tool_call
     # arguments to a short stub, preserving the call structure (name, id,
-    # tool_call_id) so pairings stay valid — only the heavy argument payload
+    # tool_call_id) so pairings stay valid -- only the heavy argument payload
     # is replaced with a 1-line note.
     _pruned_calls = 0
     _call_stub = "[Old tool call arguments cleared to stay within token cap.]"
@@ -463,7 +463,7 @@ def enforce_token_cap(
 
     # ── Phase 2c: Unprotect read tool results (last-resort before drop) ──
     # code_read and vault_read_note results were exempt in phases 1-2. If
-    # we're still over cap, stub them too — keeping a 100KB old file dump in
+    # we're still over cap, stub them too -- keeping a 100KB old file dump in
     # context is worse than forcing a re-read later.
     _pruned3 = 0
     for i in range(_skip, _cutoff):
@@ -475,7 +475,7 @@ def enforce_token_cap(
             and len(m["content"]) > 200
         ):
             continue
-        # No read-tool exemption here — stub everything.
+        # No read-tool exemption here -- stub everything.
         conv[i] = dict(m)
         conv[i]["content"] = "[Old tool output cleared to stay within token cap.]"
         _pruned3 += 1
@@ -545,7 +545,7 @@ def digest_code_read(result: dict[str, Any]) -> dict[str, Any]:
 
     A thinking model (nemotron, o1, qwq, etc.) handed a ~35KB raw file dump
     tends to ECHO it char-by-char inside its reasoning field, burning its
-    whole output budget before it ever writes the answer — the "cut out"
+    whole output budget before it ever writes the answer -- the "cut out"
     failure seen in session 9450d6ad. This digest keeps the ACTIONABLE parts
     (which file, how big, what it imports, its top-level structure) and drops
     the raw body, so the model reasons over the gist instead of echoing text.
@@ -564,27 +564,30 @@ def digest_code_read(result: dict[str, Any]) -> dict[str, Any]:
 
     lines = content.splitlines()
     # Pull the import/include block (the most useful structural signal for
-    # "I read my own code" — what this file depends on).
+    # "I read my own code" -- what this file depends on).
     imports = [
-        l
-        for l in lines
-        if l.strip().startswith(("import ", "from ", "require(", "#include", "using "))
+        line
+        for line in lines
+        if line.strip().startswith(
+            ("import ", "from ", "require(", "#include", "using ")
+        )
     ]
     # Pull top-level definition names (def/class/function) for structure.
     import re as _re
 
     defs = []
-    for l in lines:
+    for line in lines:
         m = _re.match(
-            r"\s*(?:def|class|function|const|async def)\s+([A-Za-z_][\w]*)", l
+            r"\s*(?:def|class|function|const|async def)\s+([A-Za-z_][\w]*)", line
         )
         if m:
             defs.append(m.group(1))
 
     digest_lines = [
-        "[DIGESTED code_read — full body omitted to protect your reasoning budget]",
+        "[DIGESTED code_read -- full body omitted to protect your reasoning budget]",
         f"file: {file_path}",
-        f"size: {total} total lines; you read lines {start}–{end} ({len(lines)} lines).",
+        f"size: {total} total lines; you read lines {start}-{end} "
+        f"({len(lines)} lines).",
     ]
     if imports:
         digest_lines.append(
@@ -628,11 +631,11 @@ def sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str, 
       with the tool result (from the tool message) so the model sees the
       full context of what it called and what it got back.
 
-    The original conversation is NOT modified — the loop logic still needs
+    The original conversation is NOT modified -- the loop logic still needs
     the ``tool_calls`` field for round tracking. Only the copy sent to
     Ollama is sanitized.
 
-    This is the fix for "VaultBot stops after a few tool calls" — the model
+    This is the fix for "VaultBot stops after a few tool calls" -- the model
     goes empty on every round after the first tool call because it sees
     ``tool_calls`` in the history.
     """
@@ -661,7 +664,7 @@ def sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str, 
             try:
                 args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
                 args_str = json.dumps(args, default=str)[:300]
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
                 args_str = str(args_raw)[:300]
             # Build the combined system message
             result_text = tool_content
@@ -693,7 +696,7 @@ def sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str, 
             content = msg.get("content", "") or ""
             thinking = msg.get("thinking", "") or ""
             # Keep the model's actual text. If empty (tool-only round), use
-            # empty string — the system message with the tool result provides
+            # empty string -- the system message with the tool result provides
             # the context. Using a placeholder like "(working...)" or "." caused
             # the model to echo it back in subsequent rounds.
             if not content.strip():

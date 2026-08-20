@@ -18,8 +18,9 @@ class CalibrationTracker:
     """Tracks operator corrections and quality-gate decisions to compute
     calibration metrics over time.
 
-    the operator's corrections are ground truth. Every time the operator says "that's wrong"
-    or "you missed X", that's a labeled data point. We log it with full context
+    the operator's corrections are ground truth. Every time the operator says
+    "that's wrong" or "you missed X", that's a labeled data point. We log it
+    with full context
     (what was retrieved, what gates passed, what procedures were in context)
     so we can later compute: are the automated gates actually measuring what
     we think they're measuring?
@@ -27,7 +28,7 @@ class CalibrationTracker:
 
     # --- Correction detection patterns ---
 
-    CORRECTION_PATTERNS = [
+    CORRECTION_PATTERNS = (
         r"\bno\b",
         r"\bwrong\b",
         r"\bactually\b",
@@ -42,10 +43,10 @@ class CalibrationTracker:
         r"\bthat isn'?t\b",
         r"\bnot what i (asked|meant|wanted)\b",
         r"\bthat'?s incorrect\b",
-    ]
+    )
 
     # Phrases that look like corrections but aren't (false positive guards)
-    FALSE_POSITIVE_PATTERNS = [
+    FALSE_POSITIVE_PATTERNS = (
         r"\bno worries\b",
         r"\bno problem\b",
         r"\bno rush\b",
@@ -60,9 +61,9 @@ class CalibrationTracker:
         r"\bnot just\b",
         r"\bactually (good|great|nice|cool|yeah|yes)\b",
         r"\bno,?\s*i (think|believe|want|need|mean)\b",
-    ]
+    )
 
-    def __init__(self, log_path: str = None):
+    def __init__(self, log_path: str | None = None):
         self.log_path = log_path or os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "calibration_log.json"
         )
@@ -84,7 +85,9 @@ class CalibrationTracker:
 
     # --- Correction detection ---
 
-    def detect_correction(self, user_message: str, prev_answer: str = None) -> bool:
+    def detect_correction(
+        self, user_message: str, prev_answer: str | None = None
+    ) -> bool:
         """Heuristic: does this message look like a correction of the previous answer?
 
         Conservative — false negatives just mean we miss calibration data,
@@ -116,8 +119,8 @@ class CalibrationTracker:
     def classify_failure(
         self,
         user_message: str,
-        prev_answer: str = None,
-        retrieved_notes: list[str] = None,
+        prev_answer: str | None = None,
+        retrieved_notes: list[str] | None = None,
     ) -> str:
         """Classify the type of failure based on the correction message.
 
@@ -188,10 +191,10 @@ class CalibrationTracker:
         self,
         user_message: str,
         prev_answer: str,
-        procedures_in_context: list[str] = None,
-        validation_results: list[dict] = None,
-        retrieved_notes: list[str] = None,
-        failure_type: str = None,
+        procedures_in_context: list[str] | None = None,
+        validation_results: list[dict] | None = None,
+        retrieved_notes: list[str] | None = None,
+        failure_type: str | None = None,
     ) -> dict:
         """Log a correction event with full context.
 
@@ -220,13 +223,14 @@ class CalibrationTracker:
         return entry
 
     def log_gate_decision(
-        self, gate_name: str, note_path: str, decision: str, details: dict = None
+        self, gate_name: str, note_path: str, decision: str, details: dict | None = None
     ):
         """Log a quality gate decision (pass/fail) for a note.
 
         This lets us later compute: of the notes the operator corrected,
         how many did the gate pass? (false positives)
-        Of the notes the operator approved, how many did the gate fail? (false negatives)
+        Of the notes the operator approved, how many did the gate fail?
+        (false negatives)
         """
         entry = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -291,7 +295,8 @@ class CalibrationTracker:
         """Return gaps for the autonomous researcher: gates with poor calibration.
 
         A gate has poor calibration if:
-        - Pass rate > 95% AND corrections exist → potential false positives (gate too lenient)
+        - Pass rate > 95% AND corrections exist → potential false positives
+          (gate too lenient)
         - Pass rate < 20% → potential false negatives (gate too strict)
 
         These gaps feed into the autonomous researcher so it can research
@@ -321,7 +326,9 @@ class CalibrationTracker:
                         "issue": "potential_false_positives",
                         "pass_rate": pass_rate,
                         "corrections": corrections_count,
-                        "suggestion": "Gate passes almost everything but the operator has corrected outputs. Consider tightening thresholds.",
+                        "suggestion": "Gate passes almost everything but the "
+                        "operator has corrected outputs. Consider tightening "
+                        "thresholds.",
                     }
                 )
             elif pass_rate < 0.20:
@@ -330,7 +337,8 @@ class CalibrationTracker:
                         "gate": gate_name,
                         "issue": "potential_false_negatives",
                         "pass_rate": pass_rate,
-                        "suggestion": "Gate fails almost everything. Consider loosening thresholds.",
+                        "suggestion": "Gate fails almost everything. Consider "
+                        "loosening thresholds.",
                     }
                 )
 

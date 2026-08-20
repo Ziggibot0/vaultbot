@@ -4,7 +4,11 @@ Agent-authored tool: safe_replace
 
 SCHEMA = {
     "name": "safe_replace",
-    "description": "Safely replace a string in a backend Python file. Reads the file, replaces old_str with new_str, and writes via SelfImprover.safe_write(). Use for targeted edits to large files.",
+    "description": (
+        "Safely replace a string in a backend Python file. Reads the file, "
+        "replaces old_str with new_str, and writes via "
+        "SelfImprover.safe_write(). Use for targeted edits to large files."
+    ),
     "parameters": {
         "properties": {
             "file_path": {

@@ -73,7 +73,7 @@ def _source_key(source: str) -> str:
 
 
 def _source_key_line(key: str) -> str:
-    return "<!-- vaultbot:textbook-source-key %s -->" % key
+    return f"<!-- vaultbot:textbook-source-key {key} -->"
 
 
 def _slugify(text: str, max_len: int = 80) -> str:
@@ -122,9 +122,7 @@ def _is_real_heading(text: str) -> bool:
         return False
     # Printed-TOC lines: end in a number (e.g. "Limits 105", "Derivatives 187").
     # Real section headings don't end in a bare page number.
-    if re.search(r"\s\d{1,4}$", text) and len(text.split()) <= 6:
-        return False
-    return True
+    return not (re.search(r"\s\d{1,4}$", text) and len(text.split()) <= 6)
 
 
 def build_pdf_index(pdf_path: str) -> tuple[str, list[dict[str, Any]]]:
@@ -316,11 +314,11 @@ def write_index_toc(
     """
     rel_pdf = os.path.relpath(source_path, VAULT_DIR).replace("\\", "/")
     lines = [
-        "# %s — Index" % title,
+        f"# {title} — Index",
         "",
-        "> **Source PDF:** %s" % rel_pdf,
-        "> **Pages:** %d" % (max((e["page"] for e in entries), default=0)),
-        "> **Indexed:** %s" % time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
+        f"> **Source PDF:** {rel_pdf}",
+        f"> **Pages:** {max((e['page'] for e in entries), default=0)}",
+        f"> **Indexed:** {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}",
         "> This is an index, not a copy. Each entry points to a page in the "
         "source PDF. Ask me about a topic and I'll read the page and write "
         "what I learn into the vault with provenance.",
@@ -329,7 +327,7 @@ def write_index_toc(
         "",
     ]
     for e in entries:
-        lines.append("- **%s** — page %d" % (e["heading"], e["page"]))
+        lines.append(f"- **{e['heading']}** — page {e['page']}")
     lines.append("")
     lines.append("#textbook #index #ingested")
     if skey:
@@ -383,8 +381,8 @@ def index_one_pdf(pdf_path: str) -> dict[str, Any]:
 
     TEXTBOOKS_DIR.mkdir(parents=True, exist_ok=True)
     slug = _slugify(title)
-    toc_slug = "%s-index" % slug
-    toc_filename = "%s.md" % toc_slug
+    toc_slug = f"{slug}-index"
+    toc_filename = f"{toc_slug}.md"
     toc_path = TEXTBOOKS_DIR / toc_filename
     toc_content = write_index_toc(title, pdf_path, entries, skey=skey)
     toc_path.write_text(toc_content, encoding="utf-8")
@@ -406,7 +404,7 @@ def index_learning_material(learning_dir: str) -> dict[str, Any]:
     learning_dir = Path(learning_dir)
     if not learning_dir.exists():
         return {
-            "error": "learningMaterial/ not found at %s" % learning_dir,
+            "error": f"learningMaterial/ not found at {learning_dir}",
             "indexed": 0,
             "skipped": 0,
             "errors": 0,
@@ -438,6 +436,7 @@ def index_learning_material(learning_dir: str) -> dict[str, Any]:
         "skipped": skipped,
         "errors": errors,
         "details": details,
-        "message": "Indexed %d new textbook(s); %d skipped, %d errors."
-        % (indexed, skipped, errors),
+        "message": (
+            f"Indexed {indexed} new textbook(s); {skipped} skipped, {errors} errors."
+        ),
     }

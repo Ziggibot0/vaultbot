@@ -94,7 +94,7 @@ class TestGetModelCapabilities:
     def test_error_raises(self):
         """On any error (Ollama down, 404), raise — no silent defaults."""
         client = self._make_client(show_error=ConnectionError("refused"))
-        with pytest.raises(Exception):
+        with pytest.raises(ConnectionError):
             client.get_model_capabilities("some-model:latest")
 
     def test_empty_model_returns_defaults(self):

@@ -19,7 +19,8 @@ file, the `patched_improver` fixture monkeypatches ALL THREE globals
 
   - ``self_improver.BACKEND_ROOT``  -> ``tmp_path``            (acts as vault root)
   - ``self_improver.BACKEND_DIR``   -> ``tmp_path / "vaultbot_backend"``
-  - ``self_improver.CUSTOM_TOOLS_DIR`` -> ``tmp_path / "vaultbot_backend" / "custom_tools"``
+  - ``self_improver.CUSTOM_TOOLS_DIR`` -> ``tmp_path / "vaultbot_backend" /
+    "custom_tools"``
 
 Because `_resolve_path` resolves every path relative to `BACKEND_ROOT`,
 every target file lands under ``tmp_path``. Because `is_core` compares
@@ -60,7 +61,8 @@ def patched_improver(tmp_path, monkeypatch):
 
         tmp_path/                          # == BACKEND_ROOT
           vaultbot_backend/                # == BACKEND_DIR
-            custom_tools/__init__.py       # empty package -> load_custom_tools is a no-op
+            custom_tools/__init__.py       # empty package -> load_custom_tools
+                                           # is a no-op
     """
     backend_dir = tmp_path / "vaultbot_backend"
     backend_dir.mkdir()

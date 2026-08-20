@@ -83,7 +83,7 @@ def _run(proc, client=None, vault_path="."):
 
 def test_condition_count_lt():
     outputs = [(1, "[[A]] [[B]] [[C]]")]
-    ok, reason = _evaluate_condition("if < 3 notes", [], outputs)
+    ok, _reason = _evaluate_condition("if < 3 notes", [], outputs)
     assert not ok  # 3 notes, not < 3
 
 

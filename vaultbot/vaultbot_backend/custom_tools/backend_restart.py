@@ -4,7 +4,15 @@ Agent-authored tool: backend_restart
 
 SCHEMA = {
     "name": "backend_restart",
-    "description": "Restart the VaultBot backend process and reconnect. Sends a WebSocket message to the Obsidian plugin, which calls restartBackend() — the exact same code path as the GUI restart button. The plugin handles shutdown + respawn. Before restarting, this tool automatically caches recent chat history to RESTART_CONTEXT.md so the next session boots with full context — no manual resume needed. Use this after self-edits that require a backend restart, or to recover from a stale state.",
+    "description": (
+        "Restart the VaultBot backend process and reconnect. Sends a WebSocket "
+        "message to the Obsidian plugin, which calls restartBackend() — the "
+        "exact same code path as the GUI restart button. The plugin handles "
+        "shutdown + respawn. Before restarting, this tool automatically caches "
+        "recent chat history to RESTART_CONTEXT.md so the next session boots "
+        "with full context — no manual resume needed. Use this after self-edits "
+        "that require a backend restart, or to recover from a stale state."
+    ),
     "parameters": {"properties": {}, "required": [], "type": "object"},
 }
 
@@ -65,7 +73,7 @@ def run(args: dict) -> dict:
             from last_session import read as _read_last_session
 
             _pointer_sid = _read_last_session()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort: pointer read failure falls back to mtime
             _pointer_sid = None
         wm_files = []
         if os.path.isdir(session_state_dir):
@@ -208,7 +216,12 @@ def run(args: dict) -> dict:
         result = json.loads(resp.read())
         return {
             "status": "restart_requested",
-            "message": "Restart scheduled. Backend will restart in ~3 seconds — the chat loop will finish processing this tool result first, then the plugin will kill and respawn the backend. MCP client reconnects automatically.",
+            "message": (
+                "Restart scheduled. Backend will restart in ~3 seconds — the "
+                "chat loop will finish processing this tool result first, then "
+                "the plugin will kill and respawn the backend. MCP client "
+                "reconnects automatically."
+            ),
             "context_cached": cached,
             "cache_message": cache_msg,
             "response": result,
@@ -216,7 +229,10 @@ def run(args: dict) -> dict:
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         return {
             "status": "error",
-            "message": f"Could not reach /restart endpoint: {e}. Make sure the backend is running and the plugin is connected.",
+            "message": (
+                f"Could not reach /restart endpoint: {e}. Make sure the "
+                f"backend is running and the plugin is connected."
+            ),
             "context_cached": cached,
             "cache_message": cache_msg,
             "error": str(e),

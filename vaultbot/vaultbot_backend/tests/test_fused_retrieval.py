@@ -19,6 +19,7 @@ Leaf-module imports only — `import main` is hard-fenced by conftest.py
 
 import sys
 import types
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -129,11 +130,11 @@ def test_merge_dedups_by_file_path(tmp_path):
     ]
 
     class _OverlapGraph:
-        nodes = {
+        nodes: ClassVar[dict] = {
             "dup": {"file_path": dup_path, "content": ""},
             "b": {"file_path": "other.md", "content": ""},
         }
-        backlinks = {}  # no backlink channel contribution
+        backlinks: ClassVar[dict] = {}  # no backlink channel contribution
 
         def neighbors(self, name, direction="both"):
             # The graph walk starts from the second vector hit ("other.md"),
@@ -259,8 +260,8 @@ class _NoEdgeGraph:
     """Graph stub with no edges — isolates the vector/drift channel so the
     test only observes drift re-ranking, not graph boosts."""
 
-    nodes = {}
-    backlinks = {}
+    nodes: ClassVar[dict] = {}
+    backlinks: ClassVar[dict] = {}
 
     def neighbors(self, name, direction="both"):
         return []

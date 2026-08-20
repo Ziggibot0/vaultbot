@@ -1,6 +1,6 @@
 """Agentic loop: the model-driven tool-calling while-loop.
 
-Extracted from ``chat_handler.py`` — ``run_agentic_loop`` is the core
+Extracted from ``chat_handler.py`` -- ``run_agentic_loop`` is the core
 ``while round_idx < _MAX_ROUNDS`` loop. It streams the LLM response each
 round, executes any tool calls, tracks seen-content / findings / failed-write
 / thought-loop state, and breaks when the model produces a text answer with
@@ -71,7 +71,7 @@ async def run_agentic_loop(
         # ends when the model produces a turn with no tool calls.
         # NO read-loop detector, NO identical-call detector, NO stale-plan
         # detector, NO plan-enforcement gate, NO convergence nudge. The
-        # model decides when it's done — same as Copilot's harness.
+        # model decides when it's done -- same as Copilot's harness.
         _MAX_ROUNDS = int(os.getenv("VAULTBOT_MAX_ROUNDS", "10000"))
         # Only two safety nets: failed-write streak (genuine thrash) and
         # the MAX_ROUNDS cap (runaway loop). Everything else is the model's
@@ -79,7 +79,7 @@ async def run_agentic_loop(
         # 10000 rounds allows multi-day autonomous work sessions. At ~12s
         # per round (typical for cloud models), 10K rounds ≈ 33 hours of
         # continuous work. The failed-write streak detector (3 consecutive
-        # failed writes) is the primary anti-thrash guard — MAX_ROUNDS is
+        # failed writes) is the primary anti-thrash guard -- MAX_ROUNDS is
         # just a last-resort cap to prevent a truly infinite loop.
         _WRITE_TOOLS = frozenset(
             {
@@ -96,16 +96,16 @@ async def run_agentic_loop(
         )
         # --- Thought-loop detector (2026-08-15) ---
         # Counts consecutive rounds where the ONLY tool called is "thought".
-        # The thought tool is a no-op scratchpad — it changes nothing in the
+        # The thought tool is a no-op scratchpad -- it changes nothing in the
         # world. If the model calls it N times in a row without any other
         # tool, it's stuck in a thinking loop ("I need to stop thinking and
-        # ACT" — but it never acts). This was observed in session 15e346b7
+        # ACT" -- but it never acts). This was observed in session 15e346b7
         # where the model called thought 20 consecutive times (R30-R47)
         # saying "I'll write the file next time" but never calling a write
         # tool, until the user manually hit Stop.
         #
         # Threshold: 5 consecutive thought-only rounds. At ~4s per round,
-        # that's ~20s of zero progress — enough to be confident it's stuck,
+        # that's ~20s of zero progress -- enough to be confident it's stuck,
         # not enough to waste the user's money on a long spiral.
         _THOUGHT_LOOP_THRESHOLD = int(os.getenv("VAULTBOT_THOUGHT_LOOP_LIMIT", "5"))
         while st.round_idx < _MAX_ROUNDS:
@@ -113,7 +113,7 @@ async def run_agentic_loop(
             # --- Break condition 1: 3+ consecutive failed writes ---
             # A model hammering a broken tool is genuine thrash. Everything
             # else (reading, searching, planning, thinking) is the model's
-            # business — the framework does not second-guess it.
+            # business -- the framework does not second-guess it.
             if st._turn_failed_write_count >= 3:
                 session_logger.log(
                     "loop_exit",
@@ -144,7 +144,7 @@ async def run_agentic_loop(
                         "consecutive_thought_rounds": st._consecutive_thought_rounds,
                     },
                 )
-                # Inject a firm nudge. 'user' role, NOT 'system' — Ollama's
+                # Inject a firm nudge. 'user' role, NOT 'system' -- Ollama's
                 # /v1/chat/completions rejects system messages that appear
                 # after user/assistant messages ("system message must be at
                 # the beginning"), returning a 500. Same rule as the
@@ -176,7 +176,9 @@ async def run_agentic_loop(
                         {
                             "reason": "thought_loop",
                             "round": st.round_idx,
-                            "consecutive_thought_rounds": st._consecutive_thought_rounds,
+                            "consecutive_thought_rounds": (
+                                st._consecutive_thought_rounds
+                            ),
                         },
                     )
                     st.final_answer += (
@@ -188,7 +190,7 @@ async def run_agentic_loop(
                     )
                     break
 
-            # All tools available every round — no masking, no gate.
+            # All tools available every round -- no masking, no gate.
             _round_tools = all_tools
 
             session_logger.log(
@@ -219,7 +221,7 @@ async def run_agentic_loop(
             # conversation[0] = stable system prompt (NEVER touched here)
             # conversation[1] = per-query vault context (NEVER touched here)
             # conversation[2] = wm block (updated ONLY when the task list
-            #   changes — when it's unchanged, the entire 3-message prefix
+            #   changes -- when it's unchanged, the entire 3-message prefix
             #   is a cache hit, costing zero input tokens on the cached
             #   portion). This is the key: by NOT rebuilding conversation[0]
             #   every round, the stable prefix stays byte-identical and
@@ -246,13 +248,13 @@ async def run_agentic_loop(
             round_finish_reason: str | None = None
             chunk_count = 0
 
-            # —€—€ Proactive tool-result aging —€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€
+            # --€--€ Proactive tool-result aging ---------------------------------------
             # Runs EVERY round, before the token cap. Stubs tool results
             # older than N rounds back to a 1-line summary so they don't
             # bloat the prompt and distract the model from the current
             # task. Unlike the token cap (which only fires when total
             # tokens exceed 60K), this is age-based and fires regardless
-            # of total size — the model already processed those results
+            # of total size -- the model already processed those results
             # in prior rounds and doesn't need the full payload again.
             # Never breaks tool_call/tool_result pairing (stubs content
             # only); never touches the most recent N rounds.
@@ -263,7 +265,7 @@ async def run_agentic_loop(
             )
             _post_age_tokens = _estimate_conv_tokens(conversation)
 
-            # —€—€ Hard token cap: GUARANTEED ceiling on prompt size —€—€—€—€—€—€
+            # --€--€ Hard token cap: GUARANTEED ceiling on prompt size -----------------
             # This runs EVERY round, right before the LLM call. Unlike
             # the context_budgeter (which only budgets vault context) and
             # preflight compression (which only fires once per turn at
@@ -271,7 +273,7 @@ async def run_agentic_loop(
             # guarantees the TOTAL conversation never exceeds the cap.
             # It prunes old tool-result content (never breaking pairs)
             # and, as a last resort, drops old middle messages.
-            # The cap is set to 800K tokens by default — large enough for
+            # The cap is set to 800K tokens by default -- large enough for
             # cloud models with 1M context to work through long multi-round
             # tasks without losing context. For local models with smaller
             # context windows, the cap still applies as a hard ceiling.
@@ -282,11 +284,11 @@ async def run_agentic_loop(
             )
             _post_cap_tokens = _estimate_conv_tokens(conversation)
 
-            # —€—€ Wait for model to finish loading —€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€
+            # --€--€ Wait for model to finish loading ----------------------------------
             # The startup-preload thread warms the model configured AT
             # BOOT. If the user switched models via the GUI since then
             # (or the model was evicted after keep_alive expired), the
-            # current model is cold and NOTHING is loading it — polling
+            # current model is cold and NOTHING is loading it -- polling
             # is_model_loaded() alone would spin the full timeout doing
             # nothing. So we ACTIVELY preload (a 1-token generate that
             # forces Ollama to load the model now), then poll with a
@@ -384,7 +386,7 @@ async def run_agentic_loop(
             # sees ANY prior tool_calls / tool-role messages). Every other
             # provider (OpenAI-compatible, Anthropic, direct GLM cloud, real
             # Ollama models like qwen/llama/nemotron) gets NATIVE tool
-            # protocol — the sanitizer corrupts it into flat system messages
+            # protocol -- the sanitizer corrupts it into flat system messages
             # and destroys tool_call IDs the model expects to reference.
             # See /memories/glm-ollama-tool-calls-broken.md.
             _model_name = (svc.ollama_client.llm_model or "").lower()
@@ -432,20 +434,20 @@ async def run_agentic_loop(
                 assistant_msg["tool_calls"] = round_tool_calls
             conversation.append(assistant_msg)
 
-            # —€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€
-            # Model produced text (no tool calls) →’ accept as final answer.
+            # --------------------------------------------------------------------------
+            # Model produced text (no tool calls) →' accept as final answer.
             # No dangling detection, no plan-continuation nudge, no text
             # inspection. The model decides when it's done.
-            # —€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€—€
+            # --------------------------------------------------------------------------
             if not round_tool_calls:
                 if round_text.strip():
-                    # —€—€ Plan-continuation guard —€—€
+                    # --€--€ Plan-continuation guard --€--€
                     # The model produced text without tool calls. Under the
                     # "model drives" architecture, the framework does NOT
                     # intervene when the model stops with unfinished tasks.
                     # The model is responsible for deciding when it's done.
                     # (test_no_framework_intervention_on_unfinished_plan
-                    #  enforces this — no plan-completion checks here.)
+                    #  enforces this -- no plan-completion checks here.)
                     st.final_answer += round_text
                     session_logger.log(
                         "turn_done",
@@ -477,7 +479,7 @@ async def run_agentic_loop(
                         conversation.append(
                             {
                                 "role": "user",
-                                "content": "(no response received — please reply)",
+                                "content": "(no response received -- please reply)",
                             }
                         )
                         st.round_idx += 1
@@ -493,11 +495,12 @@ async def run_agentic_loop(
                         "Model returned nothing on two consecutive turns. Please retry."
                     )
 
-            # Model called tools →’ execute them and feed results back.
+            # Model called tools →' execute them and feed results back.
             st._tool_rounds_executed += 1
             st._double_silent_once = False
 
-            # Accumulate non-final round text so partial file captures all streamed text.
+            # Accumulate non-final round text so partial file captures all
+            # streamed text.
             if round_text.strip() and round_text.strip() != ".":
                 st.final_answer += round_text
 
@@ -559,7 +562,7 @@ async def run_agentic_loop(
             )
             _round_outcome = "write_failed" if _round_failed_write else "ok"
             _finding_entry = (
-                f"R{st.round_idx}: {_round_tools_summary} →’ {_round_outcome}"
+                f"R{st.round_idx}: {_round_tools_summary} →' {_round_outcome}"
             )
             if round_text.strip():
                 _finding_entry += f" | text: {round_text.strip()[:80]}"
@@ -576,7 +579,7 @@ async def run_agentic_loop(
             # --- Go-find-out system message injection ------------------------
             # If go-find-out fired this round, inject the research results as a
             # user message AFTER the tool results are appended.
-            # NOTE: 'user' role, not 'system' — Ollama's /v1/chat/completions
+            # NOTE: 'user' role, not 'system' -- Ollama's /v1/chat/completions
             # rejects system messages that appear after user/assistant/tool
             # messages ("system message must be at the beginning"). Using
             # 'user' role still conveys the instruction effectively.
@@ -598,7 +601,7 @@ async def run_agentic_loop(
                 st._go_find_out_msg = ""
 
             # NO mid-loop truncation. Compression/pruning is a preflight
-            # event (once per turn, before the first LLM call) — never
+            # event (once per turn, before the first LLM call) -- never
             # inside the tool-call loop. Mid-loop truncation destroys the
             # tool results the model JUST received and drops
             # tool_call/tool_result pairs the provider expects to be
@@ -610,7 +613,7 @@ async def run_agentic_loop(
             # Count consecutive rounds where the ONLY tool called is
             # "thought". Reset to 0 if any non-thought tool was called
             # (the model took action) or if no tools were called (the
-            # model produced a text answer — the turn is ending).
+            # model produced a text answer -- the turn is ending).
             _round_tool_names = [
                 tc.get("function", {}).get("name", "?") for tc in round_tool_calls
             ]
@@ -647,14 +650,14 @@ async def run_agentic_loop(
                             "plan_has_tasks": wm.has_plan(),
                         },
                     )
-                except Exception as e:  # noqa: BLE001 — checkpoint is best-effort; the chat loop must not crash on save failure
+                except Exception as e:  # noqa: BLE001 -- checkpoint is best-effort; the chat loop must not crash on save failure
                     session_logger.log("chat_checkpoint_save_failed", {"error": str(e)})
 
             # Stream history persistence: save the conversation-so-far to
             # disk after each tool round so a crash mid-turn doesn't lose
             # the entire turn's context. Best-effort: never breaks the loop.
             try:
-                # Per-message content cap for on-disk history. Was 4000 —
+                # Per-message content cap for on-disk history. Was 4000 --
                 # too aggressive: a vault_read_note or code_read result gets
                 # chopped in the persisted copy, so the model on the NEXT
                 # round (or after a restart) sees a stub where its own read
@@ -677,7 +680,7 @@ async def run_agentic_loop(
                         _hist_so_far,
                         session_id=getattr(websocket, "session_id", None),
                     )
-            except Exception as _e:  # noqa: BLE001 — stream history is best-effort; the loop must not crash on save failure
+            except Exception as _e:  # noqa: BLE001 -- stream history is best-effort; the loop must not crash on save failure
                 session_logger.log("stream_history_save_failed", {"error": str(_e)})
 
             # --- Round summary (diagnostic logging) ---
