@@ -21,7 +21,9 @@ USAGE
     if not gh_available():
         return {"error": "gh CLI not found. Run 'gh auth login' first."}
 
-    data = gh_api("GET", "repos/Ziggibot0/vaultbot")
+    from upstream_identity import resolve_upstream
+    owner, repo = resolve_upstream()
+    data = gh_api("GET", f"repos/{owner}/{repo}")
     gh(["pr", "list", "--state", "open"])
 """
 

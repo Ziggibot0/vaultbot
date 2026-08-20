@@ -199,7 +199,25 @@ baseline: true   # ← this procedure ships to everyone
 
 ## Upstream Repo
 
-- Owner: `Ziggibot0`
-- Repo: `vaultbot`
+The upstream repo is resolved at runtime by `upstream_identity.resolve_upstream()`
+— the **single source of truth** shared by `submit_contribution`,
+`review_contributions`, `torture_test`, and `github_issues`. Resolution order:
+
+1. **Env vars** — `UPSTREAM_OWNER` + `UPSTREAM_REPO` in `.env`. Set these
+   when your `origin` differs from the canonical upstream (e.g. a personal
+   fork contributing back to the parent). Example:
+   ```
+   UPSTREAM_OWNER=cadenKel
+   UPSTREAM_REPO=vaultbot
+   ```
+2. **git remote** — `git remote get-url origin` from the nearest `.git`
+   directory (found by walking up from `vaultbot_backend/`).
+3. **No silent fallback.** If neither yields an answer the tool raises an
+   actionable error instead of guessing a wrong default.
+
 - Main branch: `main`
-- URL: https://github.com/Ziggibot0/vaultbot
+- Canonical URL: https://github.com/Ziggibot0/vaultbot
+
+**Why no hardcoded default:** previous versions hardcoded different owners
+(`ziggibot-uni`, `Ziggibot0`, `seakel`) in different tools, which splintered
+into 404s and cross-tool disagreement. One resolver, one answer.

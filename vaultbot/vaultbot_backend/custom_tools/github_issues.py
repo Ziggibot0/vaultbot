@@ -72,7 +72,6 @@ def run(args: dict) -> dict:
     Returns a dict with the action result, or an error message.
     """
     import os
-    import re
     import sys
 
     # Add backend to path for gh_client.
@@ -118,29 +117,14 @@ def run(args: dict) -> dict:
         except ImportError:
             pass  # safe_mode not available — don't block (shouldn't happen)
 
-    # 3. Determine upstream repo (owner/repo) from git remote, with a
-    #    sensible default fallback.
-    upstream_owner = "Ziggibot0"
-    upstream_repo = "vaultbot"
-    try:
-        import subprocess
+    # 3. Determine upstream repo — single source of truth
+    #    (env vars > git remote > loud error; no silent hardcoded fallback)
+    from upstream_identity import UpstreamIdentityError, resolve_upstream
 
-        vault_root = os.path.dirname(os.path.dirname(backend_dir))
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=vault_root,
-            timeout=10,
-        )
-        if r.returncode == 0:
-            m = re.search(
-                r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", r.stdout.strip()
-            )
-            if m:
-                upstream_owner, upstream_repo = m.group(1), m.group(2)
-    except Exception:  # noqa: BLE001 — best-effort, falls back to defaults
-        pass
+    try:
+        upstream_owner, upstream_repo = resolve_upstream(backend_dir)
+    except UpstreamIdentityError as e:
+        return {"error": str(e)}
 
     repo_path = f"repos/{upstream_owner}/{upstream_repo}"
 
