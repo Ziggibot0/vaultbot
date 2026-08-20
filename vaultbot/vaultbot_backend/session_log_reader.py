@@ -211,7 +211,7 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
     started_at = ""
     token_totals: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
     turns: list[dict[str, Any]] = []
-    tool_calls: list[dict[str, Any]] = {}
+    tool_calls: dict[Any, dict[str, Any]] = {}
     exceptions: list[dict[str, Any]] = []
     console_errors: list[str] = []
     event_count = 0
