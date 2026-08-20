@@ -138,6 +138,7 @@ def test_sync_to_latest_tag(monkeypatch):
             (True, "3\n", ""),  # rev-list count (3 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (True, "Merge made\n", ""),  # merge
+            (True, "", ""),  # push origin main (fork sync)
             (
                 True,
                 "def456 Fix bug\n789abc Add feature\n012def Update docs\n",
@@ -156,6 +157,8 @@ def test_sync_to_latest_tag(monkeypatch):
     assert len(result["new_commits"]) == 3
     assert result["previous_head"] == "abc123"
     assert result["new_head"] == "def456"
+    assert result["fork_synced"] is True
+    assert result["fork_sync_error"] == ""
 
 
 # ─── --abbrev=0 returns clean tag, not describe string ────────────────────────
@@ -178,6 +181,7 @@ def test_describe_uses_abbrev0_for_clean_tag(monkeypatch):
             (True, "2\n", ""),  # rev-list count (2 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (True, "Merge made\n", ""),  # merge
+            (True, "", ""),  # push origin main (fork sync)
             (True, "def456 Fix bug\nxyz789 Add feature\n", ""),  # log
             (True, " 2 files changed\n", ""),  # diff --stat
             (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
@@ -210,6 +214,7 @@ def test_sync_to_main_explicit(monkeypatch):
             (True, "5\n", ""),  # rev-list count (5 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (True, "Merge made\n", ""),  # merge
+            (True, "", ""),  # push origin main (fork sync)
             (True, "def456 Fix bug\n", ""),  # log (1 commit)
             (True, " 1 file changed\n", ""),  # diff --stat
             (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
@@ -237,6 +242,7 @@ def test_no_tags_falls_back_to_main(monkeypatch):
             (True, "2\n", ""),  # rev-list count (2 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (True, "Merge made\n", ""),  # merge
+            (True, "", ""),  # push origin main (fork sync)
             (True, "def456 Fix bug\nxyz789 Add feature\n", ""),  # log
             (True, " 2 files changed\n", ""),  # diff --stat
             (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
@@ -272,6 +278,38 @@ def test_merge_conflict_reports_files(monkeypatch):
     assert "conflict" in result["error"].lower()
     assert "conflicted_files" in result
     assert len(result["conflicted_files"]) == 2
+
+
+# ─── Fork sync failure (non-blocking) ─────────────────────────────────────────
+
+
+def test_fork_sync_failure_does_not_fail_sync(monkeypatch):
+    """If the push to origin fails, the sync should still succeed — the
+    local repo is already updated. The failure is reported as a warning.
+    """
+    _make_git_root(monkeypatch)
+    _make_git_results(
+        monkeypatch,
+        [
+            (True, "", ""),  # status (clean)
+            (True, "origin\nupstream\n", ""),  # remote
+            (True, "Fetching upstream\n", ""),  # fetch
+            (True, "main\n", ""),  # branch --show-current
+            (True, "v0.2.0\n", ""),  # describe --tags --abbrev=0
+            (True, "1\n", ""),  # rev-list count (1 behind)
+            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
+            (True, "Merge made\n", ""),  # merge
+            (False, "", "non-fast-forward"),  # push origin fails
+            (True, "def456 Fix bug\n", ""),  # log
+            (True, " 1 file changed\n", ""),  # diff --stat
+            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
+        ],
+    )
+    result = vs.run({})
+    assert result["status"] == "success"
+    assert result["fork_synced"] is False
+    assert "non-fast-forward" in result["fork_sync_error"]
+    assert "Fork sync failed" in result["message"]
 
 
 # ─── _find_git_root (real, no monkeypatch) ────────────────────────────────────
