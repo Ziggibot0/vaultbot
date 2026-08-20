@@ -272,3 +272,46 @@ def test_ask_user_pending_requests_has_websocket_ref():
 
     # Cleanup.
     _pending_requests.pop(rid, None)
+
+
+# ---------------------------------------------------------------------------
+# last_session: the deterministic last-active-session pointer
+# ---------------------------------------------------------------------------
+def test_last_session_pointer_roundtrip(tmp_path):
+    """touch() then read() returns the same session_id."""
+    from last_session import read, touch
+
+    sid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    with patch("last_session._POINTER_PATH", tmp_path / "last_active_session.json"):
+        touch(sid, title="test session")
+        assert read() == sid
+
+
+def test_last_session_pointer_clear(tmp_path):
+    """clear() removes the pointer so read() returns None."""
+    from last_session import clear, read, touch
+
+    sid = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    with patch("last_session._POINTER_PATH", tmp_path / "last_active_session.json"):
+        touch(sid)
+        assert read() == sid
+        clear()
+        assert read() is None
+
+
+def test_last_session_pointer_overwrite(tmp_path):
+    """A later touch() overwrites the pointer — the single-slot global.
+
+    This is the exact failure mode behind issue #77: with multiple tabs,
+    the pointer is overwritten to point at a DIFFERENT session, so a
+    reconnect without an explicit ?sid adopts the wrong history. The
+    frontend fix (sending ?sid) bypasses this global entirely.
+    """
+    from last_session import read, touch
+
+    sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    with patch("last_session._POINTER_PATH", tmp_path / "last_active_session.json"):
+        touch(sid_a)
+        touch(sid_b)  # tab B becomes active
+        assert read() == sid_b  # NOT sid_a — the global was clobbered
