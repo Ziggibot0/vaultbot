@@ -205,28 +205,86 @@ if (Test-Path $vaultPath) {
         if ($LASTEXITCODE -eq 0) { $ghOk = $true }
     } catch {}
 
+    if (-not $ghOk) {
+        # gh CLI is missing. Offer to install it so VaultBot can update itself
+        # and share fixes. If the user declines, fall back to the zip download.
+        Write-Step "GitHub CLI not found"
+        Write-Host "  VaultBot uses the GitHub CLI ('gh') to update itself and" -ForegroundColor Cyan
+        Write-Host "  share fixes with the community. It's optional but recommended." -ForegroundColor Cyan
+        Write-Host ""
+        $installGh = Read-Host "  Install GitHub CLI now? (y/n)"
+        if ($installGh -match "^(y|yes)$") {
+            Write-Step "Installing GitHub CLI..."
+            try {
+                & winget install --id GitHub.cli --silent --accept-package-agreements --accept-source-agreements
+                if ($LASTEXITCODE -eq 0) {
+                    # winget installs to a path that may not be on the current
+                    # session's PATH. Refresh PATH from the registry.
+                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                    $gv = & gh --version 2>&1
+                    if ($LASTEXITCODE -eq 0) { $ghOk = $true; Write-OK "GitHub CLI installed" }
+                }
+            } catch {
+                Write-Warn2 "Could not install GitHub CLI automatically."
+            }
+        }
+    }
+
     if ($ghOk) {
         Write-Step "Connecting to GitHub (one-time)..."
 
-        # gh auth status exits 0 when already authenticated. If not, run the
-        # interactive browser login. If the user declines, we fall back to zip.
+        # gh auth status exits 0 when already authenticated. If not, walk the
+        # user through the browser login, then VERIFY it actually completed
+        # (gh auth login can exit 0 even if the user closed the browser early).
         $authed = $false
         & gh auth status *> $null
         if ($LASTEXITCODE -eq 0) { $authed = $true }
 
         if (-not $authed) {
-            Write-Host "  A browser window will open so you can sign in to GitHub." -ForegroundColor Cyan
-            Write-Host "  (This lets VaultBot update itself and share fixes with the community.)" -ForegroundColor DarkGray
-            Write-Host "  (Skip it and VaultBot still installs, just without auto-updates.)" -ForegroundColor DarkGray
-            & gh auth login --hostname github.com --git-protocol https --web
-            if ($LASTEXITCODE -ne 0) { $ghOk = $false }
+            Write-Host ""
+            Write-Host "  VaultBot needs a GitHub account so it can update itself" -ForegroundColor Cyan
+            Write-Host "  and share fixes with the community." -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "  A browser window will open. Sign in to GitHub, then" -ForegroundColor Yellow
+            Write-Host "  copy the one-time code back into this window." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  (No GitHub account? Just close the browser — VaultBot" -ForegroundColor DarkGray
+            Write-Host "   will still install, just without auto-updates.)" -ForegroundColor DarkGray
+            Write-Host ""
+
+            $retry = $true
+            while (-not $authed -and $retry) {
+                try {
+                    & gh auth login --hostname github.com --git-protocol https --web
+                } catch {
+                    Write-Warn2 "GitHub sign-in failed: $_"
+                }
+                & gh auth status *> $null
+                if ($LASTEXITCODE -eq 0) {
+                    $authed = $true
+                } else {
+                    $again = Read-Host "  Sign-in didn't complete. Try again? (y/n)"
+                    if ($again -notmatch "^(y|yes)$") { $retry = $false }
+                }
+            }
+
+            if (-not $authed) {
+                $ghOk = $false
+                Write-Warn2 "GitHub sign-in was skipped or didn't complete."
+                Write-Host "  VaultBot will install without auto-updates." -ForegroundColor DarkGray
+                Write-Host "  You can connect GitHub later by running:  gh auth login" -ForegroundColor DarkGray
+            } else {
+                Write-OK "Signed in to GitHub"
+            }
         }
 
         if ($ghOk) {
             # Maintainer (has push access) clones directly; everyone else forks.
             $hasPush = $false
-            $perm = (& gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>$null)
-            if ($perm -eq "true") { $hasPush = $true }
+            try {
+                $perm = (& gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>$null)
+                if ($perm -eq "true") { $hasPush = $true }
+            } catch {}
 
             if ($hasPush) {
                 Write-Step "Cloning VaultBot..."
