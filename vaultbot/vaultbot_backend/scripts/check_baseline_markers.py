@@ -207,7 +207,7 @@ def main() -> int:
         )
         print("", file=sys.stderr)
         print(
-            "See CONTRIBUTING.md → \"Baseline vs. emergent content\" for the",
+            'See CONTRIBUTING.md → "Baseline vs. emergent content" for the',
             file=sys.stderr,
         )
         print("full policy.", file=sys.stderr)
