@@ -490,7 +490,11 @@ def validate_procedure_text(
 
     compiled_steps = len(proc.steps)
     step_types = [s.step_type for s in proc.steps]
-    step_numbers = [int(s.number) for s in proc.steps]
+    # Keep raw float numbers — decimal steps (1.5, 2.5) are explicitly
+    # allowed for inserting steps between existing ones without renumbering.
+    # Truncating to int here would collapse 1.5 -> 1 and produce false
+    # "duplicate step number" errors (see Dream-Pass, which uses 1.5/2.5/...).
+    step_numbers = [s.number for s in proc.steps]
 
     if compiled_steps == 0:
         errors.append(

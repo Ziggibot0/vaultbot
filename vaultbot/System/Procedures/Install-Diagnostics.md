@@ -51,7 +51,7 @@ print(json.dumps(ollama_status, indent=2))
 
 ### Step 2: Check vault index and file count
 
-1. ```python
+2. ```python
 # Check vault file count and structure
 files = vault_list()
 md_count = sum(1 for f in files if f.endswith(".md"))
@@ -62,7 +62,7 @@ print(f"Procedures: {proc_count}")
 
 ### Step 3: Check backend source files exist
 
-1. ```python
+3. ```python
 import os
 
 backend_files = [
@@ -86,7 +86,7 @@ else:
 
 ### Step 4: Compile diagnostic report
 
-1. [llm: Given the structured diagnostic data from steps 1-3, produce a concise pass/fail report. Format as a table with columns: Component | Status | Notes. Flag any failures with ⚠️ and suggest what to check. Keep it under 200 words. Do NOT add commentary beyond what the data shows.]
+4. [llm: Given the structured diagnostic data from steps 1-3, produce a concise pass/fail report. Format as a table with columns: Component | Status | Notes. Flag any failures with ⚠️ and suggest what to check. Keep it under 200 words. Do NOT add commentary beyond what the data shows.]
 
 ## What This Replaces
 
