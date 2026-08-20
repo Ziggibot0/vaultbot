@@ -473,6 +473,41 @@ def validate_procedure_text(
     else:
         warnings.append("No title heading found — cannot check naming convention")
 
+    # --- 1d. Provenance (issue #64) ---
+    # A procedure that cites no source, declares no dependency, and links to
+    # no vault document is an unverifiable assertion. Warn when a procedure
+    # has none of: sources:, depends_on:/research_sources:, or a
+    # ``## Related`` section containing at least one wikilink.
+    checks_run.append("provenance")
+    has_sources = bool(fm.get("sources"))
+    has_depends = bool(fm.get("depends_on") or fm.get("research_sources"))
+    related_match = re.search(
+        r"^##\s+Related\b.*?(?=^##\s|\Z)", body, re.MULTILINE | re.DOTALL
+    )
+    has_related_wikilink = bool(
+        related_match and re.search(r"\[\[[^\]]+\]\]", related_match.group(0))
+    )
+    if not (has_sources or has_depends or has_related_wikilink):
+        warnings.append(
+            "No provenance — add at least one of: 'sources:' frontmatter, "
+            "'depends_on:'/'research_sources:' frontmatter, or a "
+            "'## Related' section with wikilinks (issue #64)"
+        )
+
+    # --- 1e. Rationale (issue #63) ---
+    # A procedure that states *what* to do but never *why* is a black box.
+    # Warn when there is no ``## Why This Exists`` section (or equivalent
+    # rationale header) explaining the failure/gap that spawned it.
+    checks_run.append("rationale")
+    has_rationale = re.search(
+        r"^##\s+Why This Exists\b", body, re.MULTILINE | re.IGNORECASE
+    )
+    if not has_rationale:
+        warnings.append(
+            "No '## Why This Exists' section — add the failure/gap that "
+            "spawned this procedure and its key design tradeoffs (issue #63)"
+        )
+
     # --- 2. Compile test (compiler is source of truth) ---
     checks_run.append("compile_test")
     proc = compile_from_text("draft", text)

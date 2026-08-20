@@ -91,6 +91,14 @@ jobs:
         # execution. Reuses procedure_validator (no duplicated logic).
         run: python vaultbot/vaultbot_backend/scripts/check_procedure_frontmatter.py --all
 
+      - name: Procedure provenance/rationale report (soft gate)
+        # Report-only (issues #63 + #64): counts how many procedures lack
+        # provenance (sources/depends_on/## Related) and a ## Why This Exists
+        # rationale section. Not a hard gate — the ~200 existing procedures
+        # predate the convention, so this surfaces the gap for incremental
+        # pay-down rather than blocking a mass-edit flag-day.
+        run: python vaultbot/vaultbot_backend/scripts/check_procedure_provenance.py
+
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
         # errors as warnings so the team sees the debt but CI stays green.
