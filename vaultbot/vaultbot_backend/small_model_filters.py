@@ -91,9 +91,9 @@ _STOP_WORDS = frozenset(
 # short-circuits subsequent calls to the fail-safe return path, so a broken
 # helper costs zero latency after its first failure instead of 60s/turn.
 #
-# Per-helper keys: ("expand", 0), ("rerank", 0), ("filter", 0),
-# ("query", 0), ("digest", 0).  Value is the monotonic
-# timestamp of the last failure; entries expire after the cooldown.
+# Per-helper keys: "expand", "rerank", "filter", "query",
+# "digest", "relevance".  Value is the monotonic timestamp of the last
+# failure; entries expire after the cooldown.
 _BREAKER_COOLDOWN_SECONDS = float(
     os.environ.get("VAULTBOT_SMALL_BREAKER_COOLDOWN", "1800")
 )  # 30 min

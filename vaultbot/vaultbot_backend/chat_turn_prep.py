@@ -377,173 +377,83 @@ async def prepare_turn(
     # Gated behind TUNABLES.auto_research_on_empty. Skipped for trivial
     # messages and resumed turns (those don't need fresh research).
     #
-    # Topical-relevance check (2026-08-17): even when results pass the
-    # score threshold, they may be topically irrelevant -- e.g., the vault
-    # returns gecko-adhesives and slime-molds notes for "what are cat
-    # whiskers made of?" because their FUSED similarity scores are above
-    # min_retrieval_score. In that case, the model correctly says "I don't
-    # know" but auto-research never fires because the gate only checks
-    # scores, not topical overlap. We now also fire auto-research when ALL
-    # results pass the score threshold but have zero content-word overlap
-    # with the query -- a dead giveaway that the vault has nothing relevant.
-    _STOPWORDS = frozenset(
-        {
-            "the",
-            "a",
-            "an",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "been",
-            "being",
-            "of",
-            "in",
-            "on",
-            "at",
-            "to",
-            "for",
-            "with",
-            "by",
-            "from",
-            "as",
-            "and",
-            "or",
-            "but",
-            "not",
-            "no",
-            "yes",
-            "do",
-            "does",
-            "did",
-            "done",
-            "have",
-            "has",
-            "had",
-            "will",
-            "would",
-            "could",
-            "should",
-            "may",
-            "might",
-            "can",
-            "what",
-            "which",
-            "who",
-            "whom",
-            "whose",
-            "where",
-            "when",
-            "why",
-            "how",
-            "all",
-            "any",
-            "some",
-            "this",
-            "that",
-            "these",
-            "those",
-            "it",
-            "its",
-            "i",
-            "you",
-            "he",
-            "she",
-            "we",
-            "they",
-            "me",
-            "him",
-            "her",
-            "us",
-            "them",
-            "my",
-            "your",
-            "his",
-            "our",
-            "their",
-            "about",
-            "into",
-            "than",
-            "then",
-            "so",
-            "if",
-            "just",
-            "also",
-            "only",
-            "more",
-            "most",
-            "such",
-            "very",
-            "too",
-            "quite",
-            "make",
-            "made",
-            "get",
-            "got",
-            "go",
-            "goes",
-            "went",
-            "gone",
-            "tell",
-            "told",
-            "say",
-            "said",
-            "know",
-            "want",
-            "need",
-            "use",
-            "used",
-            "using",
-            "like",
-            "up",
-            "down",
-            "out",
-            "over",
-            "off",
-            "here",
-            "there",
-            "now",
-        }
-    )
-
-    def _content_words(text: str) -> set[str]:
-        """Extract lowercase content words (len >= 3, not stopwords)."""
-        import re as _re
-
-        _words = _re.findall(r"[a-z]{3,}", (text or "").lower())
-        return {w for w in _words if w not in _STOPWORDS}
+    # Topical-relevance check: even when results pass the score threshold,
+    # they may be topically irrelevant -- e.g., the vault returns
+    # gecko-adhesives and slime-molds notes for "what are cat whiskers
+    # made of?" because their FUSED similarity scores are above
+    # min_retrieval_score. We ask the small model to make a semantic
+    # relevance judgment (does any result actually answer the query?)
+    # instead of relying on lexical word overlap, which has an unbounded
+    # edge-case surface (synonyms, paraphrase, multi-word concepts,
+    # stopwords, morphology). The small model understands "sea shells" =
+    # mollusk shells and "cat whiskers" ≠ gecko adhesives -- a lexical
+    # heuristic never will.
+    #
+    # Fail-safe: on any error, timeout, or circuit-breaker trip, returns
+    # True (assume relevant) so we never block legitimate auto-research
+    # due to a broken helper -- the category gate is the primary guard.
 
     def _is_topically_relevant(query: str, results: list[dict]) -> bool:
-        """Check if any result has content-word overlap with the query.
+        """Ask the small model whether any result is relevant to the query.
 
-        Returns True if at least one result shares at least one content
-        word with the query. Returns False if results are empty or if
-        zero content words overlap -- a strong signal that the vault has
-        nothing relevant (e.g., gecko-adhesives notes for "cat whiskers").
+        Returns True if the small model says at least one result is
+        relevant. Returns False if the model says none are relevant.
+        Returns True (fail-safe) on any error, empty results, or circuit
+        breaker trip -- never block auto-research due to a broken helper.
         """
         if not results:
             return False
-        _q_words = _content_words(query)
-        if not _q_words:
-            return True  # can't tell -- don't block auto-research on empty queries
+        # Build a compact summary of each result (title + first 200 chars).
+        from pathlib import Path
+
+        _candidates = []
         for r in results:
             if not isinstance(r, dict):
                 continue
-            # Check the file stem + content snippet for word overlap.
             _fp = r.get("file_path", "") or ""
             _stem = ""
             try:
-                from pathlib import Path
-
                 _stem = Path(_fp).stem if _fp else ""
             except Exception:  # noqa: BLE001
                 _stem = ""
-            _snippet = (r.get("content", "") or "")[:500]
-            _r_words = _content_words(_stem + " " + _snippet)
-            if _q_words & _r_words:
+            _snippet = (r.get("content", "") or "")[:200].replace("\n", " ")
+            _candidates.append(f"- {_stem}: {_snippet}")
+        if not _candidates:
+            return True  # nothing to check -- don't block
+        _prompt = (
+            "You are a relevance judge. The user asked a question and the "
+            "vault returned these notes. Do ANY of them contain information "
+            "that would help answer the question? Answer ONLY 'yes' or 'no'.\n\n"
+            f"Question: {query[:400]}\n\n"
+            "Notes:\n" + "\n".join(_candidates[:5]) + "\n\n"
+            "Relevant?"
+        )
+        try:
+            from llm_client import get_small_client_or_big
+            from small_model_filters import _breaker_trip, _client_chat
+
+            _client = get_small_client_or_big(session_logger)
+            if _client is None:
+                return True  # no model available -- fail-safe
+            _text = _client_chat(
+                _client,
+                _prompt,
+                temperature=0.1,
+                max_predict=8,  # "yes" or "no" -- 8 tokens is generous
+                breaker_key="relevance",
+            )
+            if not _text:
+                # Circuit breaker tripped or empty response -- fail-safe.
                 return True
-        return False
+            _first = _text.strip().lower().split()[0] if _text.strip() else ""
+            _relevant = _first.startswith("y")
+            if not _relevant and not _first.startswith("n"):
+                # Garbled output -- can't trust it, fail-safe.
+                _breaker_trip("relevance")
+                return True
+            return _relevant
+        except Exception:  # noqa: BLE001 -- best-effort, never break chat
+            return True
 
     _auto_research_note: str | None = None
     # Category gate (issue #25): only fire auto-research if Route-Task
@@ -570,10 +480,10 @@ async def prepare_turn(
             if isinstance(r, dict)
             and r.get("score", 0.0) >= TUNABLES.min_retrieval_score
         ]
-        # Topical-relevance gate: even if results pass the score threshold,
-        # fire auto-research if none share content words with the query.
-        # This catches the "retrieval returned high-similarity-but-irrelevant
-        # notes" case (e.g., gecko adhesives for "cat whiskers").
+        # Semantic topical-relevance gate: ask the small model whether
+        # any result is relevant to the query. This catches the case where
+        # retrieval returned high-score-but-irrelevant notes (e.g., gecko
+        # adhesives for "cat whiskers") without relying on lexical overlap.
         _topically_relevant = _is_topically_relevant(
             _rewritten_query or user_message, _usable
         )
@@ -589,6 +499,7 @@ async def prepare_turn(
                 {
                     "query": (_rewritten_query or user_message)[:80],
                     "result_stems": _stems,
+                    "judge": "small_model",
                 },
             )
         if not _usable or not _topically_relevant:
