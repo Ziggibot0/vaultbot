@@ -555,6 +555,45 @@ if (Test-StepDone "env_written") {
     Set-StepDone "env_written"
 }
 
+# ── 7b. Configure Obsidian (hide repo-hygiene docs) ─────────────────────────
+# The repo root carries GitHub-facing docs (AGENTS.md, README.md, SECURITY.md,
+# LICENSE, CONTRIBUTING.md) that must stay at the root for GitHub to see them,
+# but they should not clutter the user's Obsidian file explorer. Obsidian's
+# userIgnoreFilters (in .obsidian/app.json) hides them. We MERGE into any
+# existing filters so we never clobber a user's own ignore list.
+$obsidianDir = Join-Path $vaultPath ".obsidian"
+$appJson = Join-Path $obsidianDir "app.json"
+$repoDocs = @("AGENTS.md", "README.md", "SECURITY.md", "LICENSE", "CONTRIBUTING.md")
+if (Test-StepDone "obsidian_ignore_configured") {
+    Write-Warn2 "Obsidian ignore filters already configured -- skipping."
+} else {
+    if (-not (Test-Path $obsidianDir)) { New-Item -ItemType Directory -Path $obsidianDir | Out-Null }
+    $app = @{}
+    if (Test-Path $appJson) {
+        try {
+            # ConvertFrom-Json returns a PSCustomObject in PS 5.1, not a
+            # hashtable. Copy its properties into a real hashtable so we can
+            # add/overwrite keys (same pattern as Set-StepDone above).
+            $obj = Get-Content $appJson -Raw | ConvertFrom-Json
+            foreach ($prop in $obj.PSObject.Properties) {
+                $app[$prop.Name] = $prop.Value
+            }
+        } catch { $app = @{} }
+    }
+    $filters = @()
+    if ($app.ContainsKey("userIgnoreFilters") -and $app["userIgnoreFilters"]) {
+        $filters = @($app["userIgnoreFilters"])
+    }
+    foreach ($doc in $repoDocs) {
+        if ($filters -notcontains $doc) { $filters += $doc }
+    }
+    $app["userIgnoreFilters"] = $filters
+    # Write UTF-8 WITHOUT BOM (BOM breaks JSON parsers).
+    [System.IO.File]::WriteAllText($appJson, ($app | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))
+    Write-OK "Obsidian configured to hide repo docs from the file explorer"
+    Set-StepDone "obsidian_ignore_configured"
+}
+
 # ── 8. Done -- open Obsidian ────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Green
