@@ -20,6 +20,17 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Submit uncommitted changes as a GitHub pull request for community review. If the user has write access to the upstream repo, pushes directly and creates a PR. If not, forks the repo, pushes to the fork, and creates a cross-fork PR.
 
+## Pre-flight CI gate (enforced)
+
+Before pushing, the `submit_contribution` tool runs the CI hard gates
+locally — `ruff check` (full rule set), `ruff format --check`, and
+`pytest -m unit` — and **refuses to push** if any fail. This prevents
+VaultBot from submitting a PR that will fail CI on a mechanical
+lint/format/test error (see issue #80). If the gates fail, fix the
+failures (use the [[Run-CI-Gates]] procedure to reproduce them), then
+re-run. The `skip_ci=true` argument bypasses this check and should only
+be used when the tree is already known to be CI-clean.
+
 ## Steps
 
 ### Step 1: Submit changes as a GitHub pull request

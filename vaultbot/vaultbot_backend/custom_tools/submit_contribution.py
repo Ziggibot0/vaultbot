@@ -44,10 +44,152 @@ SCHEMA = {
                     "all uncommitted changes are included."
                 ),
             },
+            "skip_ci": {
+                "type": "boolean",
+                "description": (
+                    "Skip the pre-flight CI gate check. Defaults to false — "
+                    "the tool runs ruff check, ruff format --check, and "
+                    "pytest unit tests locally and refuses to push if any "
+                    "hard gate fails. Set to true only if you are certain "
+                    "the changes are CI-clean."
+                ),
+            },
         },
         "required": ["title"],
     },
 }
+
+
+def _failed_gates(gates: dict) -> dict:
+    """Return the subset of gate results whose status is fail/error.
+
+    Pure helper — unit-testable without running any subprocess. A gate is
+    "failed" if its status is "fail" (the check ran and reported a problem)
+    or "error" (the check itself could not run). "pass" and "skipped" are
+    not failures.
+    """
+    return {
+        name: g for name, g in gates.items() if g.get("status") in ("fail", "error")
+    }
+
+
+def _run_preflight_ci_gates(vault_root: str) -> dict:
+    """Run the CI hard gates locally before pushing a PR.
+
+    Mirrors the hard gates in .github/workflows/ci.yml: ruff check (full
+    rule set), ruff format --check, and pytest unit tests. Returns a dict
+    keyed by gate name with a "status" (pass/fail/error/skipped) and an
+    "output" tail. This is the enforcement mechanism that prevents VaultBot
+    from submitting a PR that will fail CI on a mechanical lint/format/test
+    error.
+    """
+    import os
+    import shutil
+    import sys
+
+    from subprocess_utils import run as _subprocess_run
+
+    backend_dir = os.path.join(vault_root, "vaultbot", "vaultbot_backend")
+    if not os.path.isdir(backend_dir):
+        backend_dir = vault_root
+
+    # Locate ruff (venv first, then PATH).
+    ruff_bin = None
+    for candidate in (
+        os.path.join(vault_root, ".venv", "Scripts", "ruff.exe"),
+        os.path.join(vault_root, ".venv", "bin", "ruff"),
+    ):
+        if os.path.exists(candidate):
+            ruff_bin = candidate
+            break
+    if ruff_bin is None:
+        ruff_bin = shutil.which("ruff")
+
+    # Locate the venv python for pytest.
+    venv_python = None
+    for candidate in (
+        os.path.join(vault_root, ".venv", "Scripts", "python.exe"),
+        os.path.join(vault_root, ".venv", "bin", "python"),
+    ):
+        if os.path.exists(candidate):
+            venv_python = candidate
+            break
+    if venv_python is None:
+        venv_python = sys.executable
+
+    # Match the env CI sets for the pytest hard gate.
+    test_env = dict(os.environ)
+    test_env["VAULTBOT_SKIP_LOCK"] = "1"
+    test_env["VAULTBOT_SKIP_WATCHER"] = "1"
+    test_env["VAULT_PATH"] = vault_root
+
+    gates: dict = {}
+
+    # Gate 1: ruff check (full rule set) — HARD GATE
+    if ruff_bin:
+        try:
+            r = _subprocess_run(
+                [ruff_bin, "check", "."],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                cwd=backend_dir,
+            )
+            gates["ruff_check"] = {
+                "status": "pass" if r.returncode == 0 else "fail",
+                "output": (r.stdout + r.stderr)[-2000:],
+            }
+        except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+            gates["ruff_check"] = {"status": "error", "output": str(e)}
+    else:
+        gates["ruff_check"] = {"status": "skipped", "output": "ruff not found"}
+
+    # Gate 2: ruff format --check — HARD GATE
+    if ruff_bin:
+        try:
+            r = _subprocess_run(
+                [ruff_bin, "format", "--check", "."],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                cwd=backend_dir,
+            )
+            gates["ruff_format"] = {
+                "status": "pass" if r.returncode == 0 else "fail",
+                "output": (r.stdout + r.stderr)[-2000:],
+            }
+        except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+            gates["ruff_format"] = {"status": "error", "output": str(e)}
+    else:
+        gates["ruff_format"] = {"status": "skipped", "output": "ruff not found"}
+
+    # Gate 3: pytest unit tests — HARD GATE
+    try:
+        r = _subprocess_run(
+            [
+                venv_python,
+                "-m",
+                "pytest",
+                "tests/",
+                "-q",
+                "-m",
+                "unit",
+                "--tb=short",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            cwd=backend_dir,
+            env=test_env,
+        )
+        gates["pytest"] = {
+            "status": "pass" if r.returncode == 0 else "fail",
+            "output": (r.stdout + r.stderr)[-2000:],
+        }
+    except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+        gates["pytest"] = {"status": "error", "output": str(e)}
+
+    return gates
 
 
 def run(args: dict) -> dict:
@@ -258,6 +400,37 @@ def run(args: dict) -> dict:
             ),
             "excluded_files": _excluded,
         }
+
+    # 5c. Pre-flight CI gates — refuse to push a PR that will fail CI.
+    # This is the enforcement mechanism that prevents VaultBot from
+    # submitting a PR that fails the CI hard gates on a mechanical
+    # lint/format/test error (see issue #80). Runs ruff check, ruff
+    # format --check, and pytest unit tests locally — the same hard gates
+    # .github/workflows/ci.yml runs — and blocks the push if any fail.
+    # skip_ci=true bypasses this (for maintainers who know the tree is clean).
+    skip_ci = bool(args.get("skip_ci", False))
+    if not skip_ci:
+        _gates = _run_preflight_ci_gates(vault_root)
+        _failed = _failed_gates(_gates)
+        if _failed:
+            _detail = "\n\n".join(
+                f"### {name}\n{g.get('output', '').strip()}"
+                for name, g in _failed.items()
+            )
+            return {
+                "error": (
+                    "Pre-flight CI gates failed. Refusing to submit a PR "
+                    "that would fail CI."
+                ),
+                "failed_gates": list(_failed.keys()),
+                "detail": _detail,
+                "hint": (
+                    "Fix the failures above, then re-run submit_contribution. "
+                    "Run the Run-CI-Gates procedure to reproduce them locally. "
+                    "If you are certain the changes are CI-clean, pass "
+                    "skip_ci=true to bypass this check."
+                ),
+            }
 
     # 6. Stage changes (only the baseline-filtered set)
     for f in _filtered_files:

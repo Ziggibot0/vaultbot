@@ -165,26 +165,52 @@ def main() -> int:
             print(f"  • {f}", file=sys.stderr)
         print("", file=sys.stderr)
         print(
-            "Add this to the YAML frontmatter of each file to mark it as",
+            "Every committed file under vaultbot/System/ must be baseline:",
             file=sys.stderr,
         )
-        print("shippable baseline content:", file=sys.stderr)
+        print(
+            "true — curated, reviewed, universal content that ships to every",
+            file=sys.stderr,
+        )
+        print(
+            "user. There is no baseline: false in the committed tree.",
+            file=sys.stderr,
+        )
+        print("", file=sys.stderr)
+        print(
+            "If this file IS baseline (curated, reviewed, universal), add to",
+            file=sys.stderr,
+        )
+        print("its YAML frontmatter:", file=sys.stderr)
         print("", file=sys.stderr)
         print("  baseline: true", file=sys.stderr)
         print("", file=sys.stderr)
         print(
-            "If this file is personal/bespoke and should NOT ship, move it",
+            "If this file is emergent/personal (e.g. Dream-Pass output, a",
             file=sys.stderr,
         )
         print(
-            "outside vaultbot/System/ or add it to .gitignore.",
+            "procedure learned from your own usage), it must NOT ship. Move it",
+            file=sys.stderr,
+        )
+        print(
+            "outside vaultbot/System/ (e.g. vaultbot/Memory/Procedures/) or",
+            file=sys.stderr,
+        )
+        print(
+            "add it to .gitignore. Promoting emergent content to baseline is",
+            file=sys.stderr,
+        )
+        print(
+            "a deliberate, reviewed act — not a side effect of a commit.",
             file=sys.stderr,
         )
         print("", file=sys.stderr)
         print(
-            "See CONTRIBUTING.md → Baseline markers for the full policy.",
+            'See CONTRIBUTING.md → "Baseline vs. emergent content" for the',
             file=sys.stderr,
         )
+        print("full policy.", file=sys.stderr)
         print("", file=sys.stderr)
         return 1
 
