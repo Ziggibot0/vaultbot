@@ -38,11 +38,11 @@ def test_redact_preserves_non_secret_keys():
 def test_redact_provider_key_values():
     # The tightened regex (issue #86 Fix #4) only matches strings with
     # a known provider key prefix — not bare 24+ char alnum.
-    assert _redact({"x": "sk-abcdef1234567890"}) == {"x": "[REDACTED]"}
-    assert _redact({"x": "tvly-abcdef1234567890xyz"}) == {"x": "[REDACTED]"}
-    assert _redact({"x": "sk-or-v1-abcdef1234567890xyz"}) == {"x": "[REDACTED]"}
-    assert _redact({"x": "xai-abcdef1234567890"}) == {"x": "[REDACTED]"}
-    assert _redact({"x": "sk-ant-abcdef1234567890"}) == {"x": "[REDACTED]"}
+    assert _redact({"x": "sk-aaaaaaaaaaaaaaaa"}) == {"x": "[REDACTED]"}
+    assert _redact({"x": "tvly-bbbbbbbbbbbbbbbbbb"}) == {"x": "[REDACTED]"}
+    assert _redact({"x": "sk-or-v1-cccccccccccccccc"}) == {"x": "[REDACTED]"}
+    assert _redact({"x": "xai-dddddddddddddddd"}) == {"x": "[REDACTED]"}
+    assert _redact({"x": "sk-ant-eeeeeeeeeeeeeeee"}) == {"x": "[REDACTED]"}
 
 
 def test_redact_no_longer_matches_bare_alnum_24_plus():
@@ -86,7 +86,7 @@ def test_redact_safe_field_allowlist():
 def test_redact_safe_field_still_redacts_secret_key_suffix():
     """Even safe-named fields are redacted if the KEY has a secret suffix."""
     # ``api_key`` is caught by _SECRET_KEY_RE regardless of allowlist
-    assert _redact({"api_key": "sk-abcdef1234567890"}) == {"api_key": "[REDACTED]"}
+    assert _redact({"api_key": "sk-aaaaaaaaaaaaaaaa"}) == {"api_key": "[REDACTED]"}
 
 
 def test_redact_preserves_normal_strings():
