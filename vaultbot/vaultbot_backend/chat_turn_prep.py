@@ -440,7 +440,7 @@ async def prepare_turn(
                 _prompt,
                 temperature=0.1,
                 max_predict=8,  # "yes" or "no" -- 8 tokens is generous
-                breaker_key=("relevance", 0),
+                breaker_key="relevance",
             )
             if not _text:
                 # Circuit breaker tripped or empty response -- fail-safe.
@@ -449,7 +449,7 @@ async def prepare_turn(
             _relevant = _first.startswith("y")
             if not _relevant and not _first.startswith("n"):
                 # Garbled output -- can't trust it, fail-safe.
-                _breaker_trip(("relevance", 0))
+                _breaker_trip("relevance")
                 return True
             return _relevant
         except Exception:  # noqa: BLE001 -- best-effort, never break chat
