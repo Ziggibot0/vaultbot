@@ -896,6 +896,13 @@ def build_system_prompt_briefing(
         f"- Keep it short. Bottom line up front. Bullets over paragraphs. "
         f"Lead with outcome.\n"
         f"- Never touch date-only journal files. LOCKED notes are read-only.\n"
+        f'- TEMPORAL AWARENESS: when the user asks about recent work, "what '
+        f'were we doing last", or anything time-relative, prioritize the '
+        f"PRIOR CONVERSATION section (its turns carry timestamps) over vault "
+        f'notes. Do NOT cite an old chat note as "the last thing" if more '
+        f"recent conversation turns exist. Vault notes show their created/"
+        f"modified dates — treat a note from weeks ago as stale context for "
+        f"a recency question.\n"
         f"- Every turn ends with a direct response to the user. No "
         f"thinking-only turns.\n"
         f"- Vocalize every problem you hit. Don't silently work around "

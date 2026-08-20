@@ -1010,7 +1010,9 @@ async def prepare_turn(
         },
     ]
     conversation.extend(getattr(websocket, "conversation_history", []))
-    conversation.append({"role": "user", "content": user_message})
+    conversation.append(
+        {"role": "user", "content": user_message, "timestamp": loop.time()}
+    )
 
     # --- Preflight chain results injection ----------------------------
     # If the framework already ran Route-Task and auto-executed small-

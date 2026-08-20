@@ -13,9 +13,34 @@ from citation_gate import (
     build_reprimand,
     build_sources_block,
     build_trust_badge,
+    detect_temporal_question,
     extract_wikilinks,
     score_grounding,
 )
+
+
+class TestDetectTemporalQuestion:
+    def test_recency_question(self):
+        assert detect_temporal_question("what were we working on last?") is True
+
+    def test_what_were_we_doing(self):
+        assert detect_temporal_question("what were we doing earlier?") is True
+
+    def test_most_recent(self):
+        assert detect_temporal_question("what's the most recent thing?") is True
+
+    def test_where_did_we_leave_off(self):
+        assert detect_temporal_question("where did we leave off?") is True
+
+    def test_non_temporal(self):
+        assert detect_temporal_question("explain the FAISS index") is False
+
+    def test_empty(self):
+        assert detect_temporal_question("") is False
+        assert detect_temporal_question(None) is False
+
+    def test_case_insensitive(self):
+        assert detect_temporal_question("WHAT WERE WE WORKING ON LAST?") is True
 
 
 class TestExtractWikilinks:

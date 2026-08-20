@@ -77,6 +77,7 @@ async def finalize_turn(
     _score: dict = {}
     _grounding_caution = ""
     _is_idk = False
+    _is_temporal = bool(getattr(st, "_is_temporal_question", False))
     _graph_lookup = None
     try:
 
@@ -112,9 +113,10 @@ async def finalize_turn(
                     "allowed_set_size": len(_allowed),
                     "retry_count": getattr(st, "_grounding_retry_count", 0),
                     "is_idk": _is_idk,
+                    "is_temporal": _is_temporal,
                 },
             )
-            if _score["failed"] and not _is_idk:
+            if _score["failed"] and not _is_idk and not _is_temporal:
                 # Hard gate: flag for retry if under the cap.
                 _retries = getattr(st, "_grounding_retry_count", 0)
                 if _retries < TUNABLES.max_grounding_retries:
@@ -140,14 +142,23 @@ async def finalize_turn(
                         f"this topic."
                     )
                     final_answer += _grounding_caution
-            elif _score["failed"] and _is_idk:
+            elif _score["failed"] and (_is_idk or _is_temporal):
                 # IDK answer failed grounding (expected — it has no factual
-                # claims to cite). Log and skip — don't retry, don't caution.
+                # claims to cite), or a temporal/recency question (grounded
+                # in conversation history, not the vault closed set). Log
+                # and skip — don't retry, don't caution.
                 session_logger.log(
                     "grounding_skipped_idk",
-                    {"retry_count": getattr(st, "_grounding_retry_count", 0)},
+                    {
+                        "retry_count": getattr(st, "_grounding_retry_count", 0),
+                        "is_temporal": _is_temporal,
+                    },
                 )
-            elif _score["grounding_score"] < 0.5 and _score["total_wikilinks"] > 0:
+            elif (
+                _score["grounding_score"] < 0.5
+                and _score["total_wikilinks"] > 0
+                and not _is_temporal
+            ):
                 # Some citations but many missing from the set/vault — soft warn.
                 _grounding_caution = (
                     f"\n\n> ⚠️ **Grounding check**: Only "
@@ -169,7 +180,7 @@ async def finalize_turn(
     # "I don't know" gets no block — the citations in an IDK answer are
     # just the irrelevant notes the model was told it could cite, not
     # real provenance for a factual claim).
-    if not _is_idk:
+    if not _is_idk and not _is_temporal:
         try:
             from citation_gate import build_sources_block, build_trust_badge
 
@@ -184,7 +195,9 @@ async def finalize_turn(
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("provenance_surface_failed", {"error": str(_e)})
     else:
-        session_logger.log("provenance_surface_skipped_idk", {})
+        session_logger.log(
+            "provenance_surface_skipped_idk", {"is_temporal": _is_temporal}
+        )
 
     # --- Token cost tracking: log and emit cumulative per-turn totals ---
     _turn_token_totals["rounds"] = round_idx + 1
