@@ -432,5 +432,7 @@ def test_relevance_judge_garbled_trips_breaker():
     # Neither 'y' nor 'n' — this would trigger the breaker trip path
     assert not _first.startswith("y")
     assert not _first.startswith("n")
-    # Verify the breaker mechanism exists and can be tripped
-    _breaker_tripped  # just confirm the function is accessible
+    # The breaker mechanism is imported at module level; the garbled-response
+    # path in _is_topically_relevant will trip it.  We assert the helper is
+    # callable to satisfy ruff B018 (bare names are no-ops).
+    assert callable(_breaker_tripped)

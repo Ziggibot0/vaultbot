@@ -405,6 +405,7 @@ async def prepare_turn(
             return False
         # Build a compact summary of each result (title + first 200 chars).
         from pathlib import Path
+
         _candidates = []
         for r in results:
             if not isinstance(r, dict):
@@ -429,7 +430,8 @@ async def prepare_turn(
         )
         try:
             from llm_client import get_small_client_or_big
-            from small_model_filters import _client_chat, _breaker_trip
+            from small_model_filters import _breaker_trip, _client_chat
+
             _client = get_small_client_or_big(session_logger)
             if _client is None:
                 return True  # no model available -- fail-safe
