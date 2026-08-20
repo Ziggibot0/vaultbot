@@ -1,6 +1,6 @@
 """Small-model pre-filters — sit between retrieval and the big model.
 
-Each function uses the small model cartridge (qwen3.5:0.8b when configured)
+Each function uses the small model cartridge (qwen3.5:4b when configured)
 to filter, rerank, or compress data BEFORE the big model sees it. This cuts
 the big model's input token cost on every turn.
 

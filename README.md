@@ -96,9 +96,9 @@ For the full strategic vision, see
 - **Plan-first execution** — multi-step tasks are decomposed into concrete,
   verifiable steps before execution. The plan is re-injected into working
   memory each turn, keeping small local models on track across long tasks.
-- **Small model cartridge** — a tiny local model (~1 GB, auto-pulled by
-  the installer) handles cheap classification, tagging, and routing so the
-  large model is only used for reasoning.
+- **Small model cartridge** — a small local model (~4 GB) handles cheap
+  classification, tagging, and routing so the large model is only used for
+  reasoning.
 - **Context budgeting** — token-aware context management keeps the vault
   usable as it grows. Notes are compacted, truncated, and prioritized so
   the model always sees the most relevant subgraph without context flood.
@@ -228,7 +228,7 @@ close and reopen Obsidian) for changes to take effect.
 | `SEARXNG_PORT` | Port for the optional self-hosted SearXNG container | `8080` |
 | `OLLAMA_HOST` | Ollama server host (only used when `LLM_BACKEND=ollama`) | `http://localhost:11434` |
 | `VISION_MODEL` | Vision-capable model for textbook pages with figures/equations (can be local or cloud) | (empty — falls back to chat model) |
-| `SMALL_MODEL` | Tiny local-only Ollama model for cheap classification/routing (auto-pulled by installer, ~1 GB) | `qwen3.5:0.8b` |
+| `SMALL_MODEL` | Small local-only Ollama model for cheap classification/routing (~4 GB) | `qwen3.5:4b` |
 | `VAULTBOT_OLLAMA_KEEP_ALIVE` | How long Ollama keeps models resident after last request (`30m`, `2h`, `-1` forever, `0` evict) | `30m` |
 | `VAULTBOT_PRELOAD_ON_STARTUP` | Preload models when the backend starts to reduce first-chat latency (`1`/`0`) | `1` |
 | `VAULTBOT_PRELOAD_ON_CONNECT` | Preload when a chat WebSocket opens (`1`/`0`) | `1` |
