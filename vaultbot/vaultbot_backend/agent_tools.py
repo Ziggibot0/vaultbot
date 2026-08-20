@@ -922,7 +922,7 @@ def build_system_prompt_briefing(
         f"- Keep it short. Bottom line up front. Bullets over paragraphs. "
         f"Lead with outcome.\n"
         f"- Never touch date-only journal files. LOCKED notes are read-only.\n"
-        f'- TEMPORAL AWARENESS: the CURRENT DATE & TIME block above is your '
+        f"- TEMPORAL AWARENESS: the CURRENT DATE & TIME block above is your "
         f'authoritative "now". When the user asks about recent work, "what '
         f'were we doing last", or anything time-relative, prioritize the '
         f"PRIOR CONVERSATION section (its turns carry timestamps) over vault "
