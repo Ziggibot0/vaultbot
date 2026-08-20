@@ -545,6 +545,32 @@ with open(path, 'w') as f:
     mark_step_done "obsidian_ignore_configured"
 fi
 
+# ── 7c. Configure Obsidian (dark mode) ──────────────────────────────────────
+# Obsidian's appearance.json controls the theme. "baseTheme": "obsidian" is
+# the built-in dark theme. We write it so a fresh install opens in dark mode
+# without the user having to toggle it manually. We MERGE into any existing
+# appearance.json so we never clobber a user's cssTheme or other settings.
+APPEARANCE_JSON="$OBSIDIAN_DIR/appearance.json"
+if step_done "obsidian_dark_mode"; then
+    echo "  [!]  Obsidian dark mode already configured -- skipping."
+else
+    mkdir -p "$OBSIDIAN_DIR"
+    python3 -c "
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        appearance = json.load(f)
+except Exception:
+    appearance = {}
+appearance['baseTheme'] = 'obsidian'
+with open(path, 'w') as f:
+    json.dump(appearance, f, indent=2)
+" "$APPEARANCE_JSON"
+    echo "  [OK] Obsidian configured to open in dark mode"
+    mark_step_done "obsidian_dark_mode"
+fi
+
 # ── 8. Done -- open Obsidian ─────────────────────────────────────────────────
 echo ""
 echo "  ============================="
