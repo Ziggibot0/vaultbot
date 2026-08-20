@@ -122,8 +122,7 @@ def run(args: dict) -> dict:
         ):
             return {
                 "error": (
-                    "date-only filenames are sacred journal entries — "
-                    "cannot append"
+                    "date-only filenames are sacred journal entries — cannot append"
                 )
             }
         new_content = existing.rstrip() + "\n\n" + content + "\n"

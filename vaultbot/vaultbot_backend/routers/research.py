@@ -107,8 +107,10 @@ async def research_tool_endpoint(
             ):
                 svc.session_logger.log(
                     "claim_verification",
-                    f"Note {note_path}: {verification['verified']}/{verification['total_claims']} verified, "
-                    f"{verification['unsupported']} unsupported, {verification['contradicted']} contradicted",
+                    f"Note {note_path}: {verification['verified']}/"
+                    f"{verification['total_claims']} verified, "
+                    f"{verification['unsupported']} unsupported, "
+                    f"{verification['contradicted']} contradicted",
                 )
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
             svc.session_logger.log_exception(e, context="claim_verification")

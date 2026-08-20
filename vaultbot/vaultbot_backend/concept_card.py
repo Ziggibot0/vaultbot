@@ -174,7 +174,7 @@ def l0_path_for_card(card_abs_path: str | Path) -> Path | None:
     p = Path(card_abs_path)
     l0 = p.with_name(p.stem[:-3] if p.stem.endswith("-L1") else p.stem + ".md")
     # ensure .md
-    if not l0.suffix == ".md":
+    if l0.suffix != ".md":
         l0 = l0.with_suffix(".md")
     if l0.exists():
         return l0
@@ -198,11 +198,9 @@ def l0_path_for_card(card_abs_path: str | Path) -> Path | None:
 
 def is_card(path: str | Path) -> bool:
     p = Path(path)
-    if not p.suffix == ".md":
+    if p.suffix != ".md":
         return False
-    if not p.stem.endswith("-L1"):
-        return False
-    return True
+    return p.stem.endswith("-L1")
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +494,8 @@ def build_cards_batch(
 ) -> dict[str, Any]:
     """Build L1 cards for many L0 sections.  LLM-free.
 
-    Returns {"cards_built": int, "cards_skipped": int, "cards_failed": int, "card_paths": [...]}.
+    Returns {"cards_built": int, "cards_skipped": int, "cards_failed": int,
+    "card_paths": [...]}.
     """
     built = 0
     skipped = 0
@@ -562,9 +561,7 @@ def needs_refine(card_path: str | Path, touch_count: int) -> bool:
         return False
     if REFINED_MARKER in text:
         return False  # already refined
-    if len(text) < REFINE_MIN_CHARS:
-        return False
-    return True
+    return not len(text) < REFINE_MIN_CHARS
 
 
 def refine_card(

@@ -55,7 +55,8 @@ def test_main_imports_without_name_error():
         "print('main imported OK'); "
         # Verify the extracted handler modules import (the shims are gone).
         "from chat_handler import handle_chat; assert callable(handle_chat); "
-        "from research_handler import handle_research; assert callable(handle_research); "
+        "from research_handler import handle_research; "
+        "assert callable(handle_research); "
         "from task_api import create_task; assert callable(create_task); "
         "from identity_api import get_identity; assert callable(get_identity); "
         "print('handlers verified OK')"

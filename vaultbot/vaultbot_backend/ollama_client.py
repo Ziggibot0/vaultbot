@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from collections.abc import Generator
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 
@@ -60,7 +60,7 @@ def merge_leading_system_messages(
     parts = [str(m.get("content", "") or "") for m in messages[:n]]
     parts = [p for p in parts if p.strip()]
     merged = {"role": "system", "content": "\n\n".join(parts)}
-    return [merged] + messages[n:]
+    return [merged, *messages[n:]]
 
 
 class OllamaClient(_BASE):
@@ -279,7 +279,7 @@ class OllamaClient(_BASE):
     # HTTP call that takes 1-5s for cloud models.  Caching it saves 7-10
     # round-trips per chat turn (called from chat(), generate(), preflight
     # compression, and the token meter).
-    _ctx_win_cache: dict[str, int] = {}
+    _ctx_win_cache: ClassVar[dict[str, int]] = {}
 
     def context_window(self, model: str | None = None) -> int:
         """Return the model's native context-window size in tokens.
@@ -321,14 +321,14 @@ class OllamaClient(_BASE):
             params = data.get("parameters") or ""
             if isinstance(params, str):
                 for tok in params.split():
-                    if tok.startswith("num_ctx"):
+                    if tok.startswith("num_ctx") and ":" in tok:
                         # "num_ctx" or "num_ctx:262144"
-                        if ":" in tok:
-                            result = int(tok.split(":")[-1])
-                            self._ctx_win_cache[model] = result
-                            return result
+                        result = int(tok.split(":")[-1])
+                        self._ctx_win_cache[model] = result
+                        return result
             raise RuntimeError(
-                f"context_window: /api/show returned no context_length for model {model!r}"
+                f"context_window: /api/show returned no context_length "
+                f"for model {model!r}"
             )
         except Exception as e:
             self._log_tool("context_window", {"model": model}, error=str(e))
@@ -393,12 +393,15 @@ class OllamaClient(_BASE):
             # Ollama exposes templates; if there's no chat template, it's
             # likely a base model. We check the templates field.
             templates = data.get("templates") or {}
-            if isinstance(templates, dict) and not templates.get("chat"):
+            if (
+                isinstance(templates, dict)
+                and not templates.get("chat")
+                and "base" in name_lower
+            ):
                 # No chat template → probably a base/completion model.
                 # But some models use a different template key, so only
                 # flag as non-instruct if we also see "base" in the name.
-                if "base" in name_lower:
-                    instruct = False
+                instruct = False
             return {"vision": vision, "instruct": instruct}
         except Exception as e:
             self._log_tool("get_model_capabilities", {"model": model}, error=str(e))
@@ -464,7 +467,8 @@ class OllamaClient(_BASE):
         """
         Generate text from the LLM.
         If stream=True, returns a generator that yields chunks.
-        Each chunk is a dict with keys: 'response' (the text chunk) and optionally 'thinking' (the reasoning chunk).
+        Each chunk is a dict with keys: 'response' (the text chunk) and
+        optionally 'thinking' (the reasoning chunk).
 
         ``think=False`` disables chain-of-thought reasoning for this call —
         use it for bounded small-model tasks (query rewrite, rerank,
@@ -643,7 +647,7 @@ class OllamaClient(_BASE):
         try:
             response = self._session.get(f"{self.base_url}/api/tags", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception:  # noqa: BLE001 — best-effort health check, returns False to caller
             return False
 
     def get_ollama_stats(self) -> dict:
@@ -710,7 +714,8 @@ class OllamaClient(_BASE):
             "messages": [
                 {
                     "role": "user",
-                    "content": "What color is the square in this image? Reply with one word.",
+                    "content": "What color is the square in this image? "
+                    "Reply with one word.",
                     "images": [img_b64],
                 }
             ],
@@ -875,7 +880,9 @@ class OllamaClient(_BASE):
             _ctx = self.context_window(self.llm_model)
             _cap = int(os.environ.get("VAULTBOT_NUM_CTX_CAP", "32768"))
             if _cap > 0 and _ctx and _ctx > _cap:
-                _ctx = _cap  # cap KV buffer: native 128k ctx allocates a 128k-token KV even for short turns
+                # cap KV buffer: native 128k ctx allocates a 128k-token KV
+                # even for short turns
+                _ctx = _cap
             if _ctx and _ctx > 0:
                 _extra_opts["num_ctx"] = _ctx
         except Exception:  # noqa: BLE001 — best-effort context detection

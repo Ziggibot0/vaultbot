@@ -528,7 +528,7 @@ def compile_from_text(note_name: str, text: str) -> Procedure | None:
         note_name: The note stem (title without ``.md``).
         text: The full markdown text including frontmatter.
     """
-    fm, fm_str, body = _parse_frontmatter(text)
+    fm, _fm_str, body = _parse_frontmatter(text)
     if not fm:
         return None
     is_proc = fm.get("type", "").lower() == "procedure"
@@ -588,7 +588,7 @@ def compile_procedure(file_path: str) -> Procedure | None:
         file_path: Path to the ``.md`` file.
     """
     p = Path(file_path)
-    if not p.exists() or not p.suffix == ".md":
+    if not p.exists() or p.suffix != ".md":
         return None
     try:
         text = p.read_text(encoding="utf-8")

@@ -20,6 +20,7 @@ topic. The deterministic pipeline ensures search/fetch/clean is
 model-independent and cacheable.
 """
 
+import contextlib
 import re
 import time
 from collections import Counter
@@ -451,11 +452,9 @@ class ResearchEngine:
         """Emit a progress event to the live UI (if a callback is wired)."""
         if self.progress_callback is None:
             return
-        try:
-            self.progress_callback(stage, detail or {})
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        with contextlib.suppress(Exception):
             # A UI callback failure must never break research.
-            pass
+            self.progress_callback(stage, detail or {})
 
     def _search_round(
         self, query: str, round_idx: int, topic: str = ""
@@ -538,7 +537,8 @@ class ResearchEngine:
             url = hit.get("url")
             if not url:
                 continue
-            # Defense-in-depth: skip blocked sources (Wikipedia per the operator's directive)
+            # Defense-in-depth: skip blocked sources (Wikipedia per the
+            # operator's directive)
             if _is_blocked_source(url):
                 self._log("research_source_blocked", {"round": round_idx, "url": url})
                 continue
@@ -934,7 +934,7 @@ class ResearchEngine:
         if gaps:
             self._log("research_gap_fill", {"gaps": gaps})
             self._progress("gap_fill", {"queries": len(gaps), "gaps": gaps})
-            for gq_idx, gq in enumerate(gaps):
+            for _gq_idx, gq in enumerate(gaps):
                 gsrc = self._search_round(
                     gq, round_idx=self.max_rounds, topic=search_topic
                 )
@@ -977,9 +977,9 @@ class ResearchEngine:
                     range(
                         len(
                             [
-                                l
-                                for l in llm_synth.split("\n")
-                                if l.strip().startswith("-")
+                                line
+                                for line in llm_synth.split("\n")
+                                if line.strip().startswith("-")
                             ]
                         )
                     )

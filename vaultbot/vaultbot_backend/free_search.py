@@ -35,6 +35,7 @@ or "" if it must be fetched via scrape()).
 Wikipedia is blocked at every layer per [[No-Wikipedia-Directive]].
 """
 
+import contextlib
 import re
 import threading
 import time
@@ -102,7 +103,7 @@ class _Backend:
     ):
         if self.session_logger is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             self.session_logger.log_tool_call(
                 tool=self.name,
                 method=method,
@@ -111,8 +112,6 @@ class _Backend:
                 duration_ms=duration_ms,
                 error=error,
             )
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass
 
     # -- throttle ---------------------------------------------------------
     def _throttle(self) -> None:
@@ -667,7 +666,7 @@ class FreeSearch:
 
         out = merged[:max_results]
         if self.session_logger is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.session_logger.log_tool_call(
                     tool="freesearch",
                     method="search",
@@ -679,8 +678,6 @@ class FreeSearch:
                     },
                     duration_ms=(time.time() - t0) * 1000,
                 )
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
         return {"results": out, "unresponsive_engines": unresponsive}
 
     # -- scrape (direct docs fetch) ---------------------------------------

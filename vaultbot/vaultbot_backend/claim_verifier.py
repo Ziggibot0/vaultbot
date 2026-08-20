@@ -10,9 +10,9 @@ from collections import defaultdict
 from datetime import datetime
 
 # --- Token-economy claim-verification mode ---
-# det     = deterministic only (default) — zero LLM calls
+# det     = deterministic only (default) -- zero LLM calls
 # llm     = LLM only (fails if no LLM)
-# hybrid  = deterministic first, LLM only for borderline (match ratio 0.1–0.3)
+# hybrid  = deterministic first, LLM only for borderline (match ratio 0.1-0.3)
 _CLAIM_VERIFY_MODE = os.getenv("VAULTBOT_CLAIM_VERIFY_MODE", "det").lower()
 
 # Borderline match-ratio zone for hybrid entailment (between these → use LLM).
@@ -44,7 +44,7 @@ class ClaimVerifier:
             os.path.dirname(os.path.abspath(__file__)), ".."
         )
         self.max_source_chars = max_source_chars
-        # Empirical credibility tracker — updated after each verify_note
+        # Empirical credibility tracker -- updated after each verify_note
         # call based on whether the source's claims held up. If no tracker
         # is passed in, create one (shared file in the backend dir).
         if credibility_tracker is not None:
@@ -54,7 +54,7 @@ class ClaimVerifier:
                 from source_credibility import SourceCredibilityTracker
 
                 self.credibility = SourceCredibilityTracker()
-            except Exception:  # noqa: BLE001 — best-effort
+            except Exception:  # noqa: BLE001 -- best-effort
                 self.credibility = None
         self._ensure_log()
 
@@ -74,7 +74,7 @@ class ClaimVerifier:
             logs.append(entry)
             data["verification_logs"] = logs[-200:]  # cap at 200 entries
             self._save_log(data)
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
             pass  # logging must never crash verification
 
     def _ensure_log(self):
@@ -86,14 +86,14 @@ class ClaimVerifier:
         try:
             with open(self.log_path, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
             return {"verification_logs": []}
 
     def _save_log(self, data):
         try:
             with open(self.log_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def _parse_sources_section(self, note_content):
@@ -137,7 +137,7 @@ class ClaimVerifier:
     def _load_source_text(self, source_info):
         """Load source text from the archive. Returns None if not available.
 
-        Logs failures loudly instead of silently swallowing — if the web
+        Logs failures loudly instead of silently swallowing -- if the web
         source store is broken, the operator needs to know claims can't
         be verified, not discover it from empty results.
         """
@@ -148,7 +148,7 @@ class ClaimVerifier:
                 text = read_source_text(source_info["archived_filename"])
                 if text and len(text) > 50:
                     return text
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
                 self._log_error("source_load_archived_failed", e, source_info)
         if source_info.get("url"):
             try:
@@ -159,21 +159,21 @@ class ClaimVerifier:
                     text = read_source_text(entry["file"])
                     if text and len(text) > 50:
                         return text
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
                 self._log_error("source_load_url_failed", e, source_info)
         return None
 
     def _llm_available(self):
         """Check if the LLM client is running. Returns False if unavailable.
 
-        Logs the error instead of silently swallowing — if the LLM health
+        Logs the error instead of silently swallowing -- if the LLM health
         check itself is broken, that's visible.
         """
         if not self.llm_client:
             return False
         try:
             return self.llm_client.is_running()
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
             self._log_error("llm_health_check_failed", e)
             return False
 
@@ -186,7 +186,7 @@ class ClaimVerifier:
             "Text:\n" + synthesis_text[:6000] + "\n\nReturn ONLY the JSON array."
         )
         try:
-            # Use the SMALL model — claim extraction is a simple structured
+            # Use the SMALL model -- claim extraction is a simple structured
             # task (return JSON array) that doesn't need big-model reasoning.
             from llm_client import get_small_client_or_big
 
@@ -271,7 +271,7 @@ class ClaimVerifier:
             + "\n\nReturn ONLY the JSON."
         )
         try:
-            # Use the SMALL model — entailment checking is a simple
+            # Use the SMALL model -- entailment checking is a simple
             # classification (supported/unsupported/contradicted) that
             # doesn't need big-model reasoning.
             from llm_client import get_small_client_or_big
@@ -359,7 +359,7 @@ class ClaimVerifier:
             if ratio_match:
                 ratio = int(ratio_match.group(1)) / 100.0
                 if _BORDERLINE_LOW < ratio < _BORDERLINE_HIGH and self._llm_available():
-                    # LLM escalation for borderline cases — if it fails,
+                    # LLM escalation for borderline cases -- if it fails,
                     # raise so the operator knows. The deterministic result
                     # is available but the LLM path is broken.
                     return self._llm_check_entailment(claim, source_text)
@@ -372,7 +372,7 @@ class ClaimVerifier:
         try:
             with open(note_path, encoding="utf-8") as f:
                 note_content = f.read()
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
             return {"error": f"Could not read note: {e}"}
         sources_index = self._parse_sources_section(note_content)
         claims = self.extract_claims(note_content)
@@ -499,8 +499,10 @@ class ClaimVerifier:
                 content = f.read()
             verification_yaml = (
                 f"verification:\n  total_claims: {report['total_claims']}\n"
-                f"  verified: {report['verified']}\n  unsupported: {report['unsupported']}\n"
-                f"  contradicted: {report['contradicted']}\n  unsourced: {report['unsourced']}\n"
+                f"  verified: {report['verified']}\n"
+                f"  unsupported: {report['unsupported']}\n"
+                f"  contradicted: {report['contradicted']}\n"
+                f"  unsourced: {report['unsourced']}\n"
                 f"  source_not_found: {report['source_not_found']}\n"
                 f'  last_verified: "{report["timestamp"]}"'
             )
@@ -521,7 +523,7 @@ class ClaimVerifier:
                 new_content = f"---\n{verification_yaml}\n---\n" + content
             with open(note_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+        except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
             pass
 
     def _log_verification(self, report):
@@ -555,12 +557,12 @@ class ClaimVerifier:
         logs = data.get("verification_logs", [])
         if not logs:
             return {"total_notes_verified": 0}
-        total_claims = sum(l.get("total_claims", 0) for l in logs)
-        total_verified = sum(l.get("verified", 0) for l in logs)
-        total_unsupported = sum(l.get("unsupported", 0) for l in logs)
-        total_contradicted = sum(l.get("contradicted", 0) for l in logs)
-        total_unsourced = sum(l.get("unsourced", 0) for l in logs)
-        total_not_found = sum(l.get("source_not_found", 0) for l in logs)
+        total_claims = sum(log.get("total_claims", 0) for log in logs)
+        total_verified = sum(log.get("verified", 0) for log in logs)
+        total_unsupported = sum(log.get("unsupported", 0) for log in logs)
+        total_contradicted = sum(log.get("contradicted", 0) for log in logs)
+        total_unsourced = sum(log.get("unsourced", 0) for log in logs)
+        total_not_found = sum(log.get("source_not_found", 0) for log in logs)
         return {
             "total_notes_verified": len(logs),
             "total_claims": total_claims,
@@ -600,7 +602,10 @@ class ClaimVerifier:
                 gaps.append(
                     {
                         "note_path": log["note_path"],
-                        "issue": f"{unsupported}/{total} claims unsupported ({unsupported / total:.0%})",
+                        "issue": (
+                            f"{unsupported}/{total} claims unsupported "
+                            f"({unsupported / total:.0%})"
+                        ),
                         "severity": "medium",
                         "failed_claims": log.get("failed_claims", []),
                     }

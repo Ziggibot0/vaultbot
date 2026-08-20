@@ -33,6 +33,7 @@ Pure stdlib. No new dependencies.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 from pathlib import Path
@@ -46,7 +47,8 @@ _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
         "/health",
         "/preflight",
         "/",
-        "/callback",  # Google OAuth redirect — Google sends the code without our auth token
+        "/callback",  # Google OAuth redirect — Google sends the code without
+        # our auth token
     }
 )
 
@@ -58,7 +60,8 @@ _AUTH_REQUIRED_PATHS: frozenset[str] = frozenset(
     {
         "/custom_tools/call",
         "/ws",
-        "/shutdown",  # sendBeacon can't set custom headers; accept ?token= query param instead
+        "/shutdown",  # sendBeacon can't set custom headers; accept ?token=
+        # query param instead
     }
 )
 
@@ -92,13 +95,10 @@ def get_or_create_token() -> str:
         tmp_path.write_text(token, encoding="utf-8")
         # On POSIX, restrict permissions before renaming into place.
         if os.name != "nt":
-            try:
+            with contextlib.suppress(OSError):
                 os.chmod(tmp_path, 0o600)
-            except OSError:
-                pass
         tmp_path.replace(_TOKEN_FILE)
-    except Exception:
-        # Last resort: direct write.
+    except Exception:  # noqa: BLE001 — last-resort direct write if atomic write fails
         _TOKEN_FILE.write_text(token, encoding="utf-8")
 
     return token

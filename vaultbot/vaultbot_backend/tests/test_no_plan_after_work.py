@@ -70,9 +70,7 @@ def _raise_matches_agent_silent(node: ast.Raise) -> bool:
         func = exc.func
         if isinstance(func, ast.Name) and func.id == "AgentSilentError":
             return True
-    if isinstance(exc, ast.Name) and exc.id == "AgentSilentError":
-        return True
-    return False
+    return isinstance(exc, ast.Name) and exc.id == "AgentSilentError"
 
 
 # ---------------------------------------------------------------------------

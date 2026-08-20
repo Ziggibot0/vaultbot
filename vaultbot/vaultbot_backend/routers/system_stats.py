@@ -8,6 +8,7 @@ isn't present, the field is None and the frontend silently omits it.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from fastapi import APIRouter
@@ -132,10 +133,8 @@ def _gpu_stats() -> dict[str, Any] | None:
         )
         gpu_util = None
         if result.returncode == 0 and result.stdout.strip():
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 gpu_util = round(float(result.stdout.strip()), 1)
-            except (ValueError, TypeError):
-                pass
 
         # GPU memory (dedicated + shared VRAM usage).
         # For iGPUs, "Dedicated Usage" includes system RAM allocated to

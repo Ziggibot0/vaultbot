@@ -27,6 +27,7 @@ cleared on explicit ``/new``. Best-effort: never raises.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -61,11 +62,9 @@ def touch(session_id: str, title: str | None = None) -> None:
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     fh.write(json.dumps(payload, ensure_ascii=False))
                 os.replace(tmp, str(_POINTER_PATH))
-            except Exception:
-                try:
+            except Exception:  # noqa: BLE001 — best-effort cleanup of temp file
+                with contextlib.suppress(OSError):
                     os.unlink(tmp)
-                except OSError:
-                    pass
     except Exception as exc:  # noqa: BLE001 — best-effort
         logger.debug("last_session.touch failed: %s", exc)
 

@@ -4,7 +4,13 @@ Agent-authored tool: ollama_model_search
 
 SCHEMA = {
     "name": "ollama_model_search",
-    "description": "Search Ollama's model library (https://ollama.com/search), list available tags for a model, list installed models, or pull a model. Actions: 'search' (query the web library), 'tags' (get available tags for a model), 'installed' (list locally installed models), 'pull' (pull a model via ollama pull).",
+    "description": (
+        "Search Ollama's model library (https://ollama.com/search), list "
+        "available tags for a model, list installed models, or pull a model. "
+        "Actions: 'search' (query the web library), 'tags' (get available "
+        "tags for a model), 'installed' (list locally installed models), "
+        "'pull' (pull a model via ollama pull)."
+    ),
     "parameters": {
         "properties": {
             "action": {
@@ -12,15 +18,23 @@ SCHEMA = {
                 "type": "string",
             },
             "category": {
-                "description": "Category filter for search (e.g. vision, tools, embedding, reasoning). Optional.",
+                "description": (
+                    "Category filter for search (e.g. vision, tools, "
+                    "embedding, reasoning). Optional."
+                ),
                 "type": "string",
             },
             "query": {
-                "description": "Search query (for action=search) or model name (for action=tags or action=pull)",
+                "description": (
+                    "Search query (for action=search) or model name (for "
+                    "action=tags or action=pull)"
+                ),
                 "type": "string",
             },
             "tag": {
-                "description": "Specific tag to pull (for action=pull). If omitted, pulls :latest.",
+                "description": (
+                    "Specific tag to pull (for action=pull). If omitted, pulls :latest."
+                ),
                 "type": "string",
             },
         },
@@ -29,10 +43,10 @@ SCHEMA = {
     },
 }
 
-import re
-import subprocess
-import urllib.parse
-import urllib.request
+import re  # noqa: E402
+import subprocess  # noqa: E402
+import urllib.parse  # noqa: E402
+import urllib.request  # noqa: E402
 
 
 def _fetch_url(url: str, timeout: int = 20) -> str:
@@ -46,7 +60,8 @@ def _parse_search_results(html: str) -> list:
     """Parse Ollama search page HTML into model cards."""
     models = []
     # Model cards are in <li> elements with model links
-    # Pattern: <a href="/library/<model>" ...> ... title="<model>" ... <p ...>description</p> ... updated ... </a>
+    # Pattern: <a href="/library/<model>" ...> ... title="<model>" ...
+    # <p ...>description</p> ... updated ... </a>
     blocks = re.split(r'<li\s+class="flex items-baseline', html)
     for block in blocks[1:]:  # skip first (before first <li>)
         # Extract model name from href
@@ -180,7 +195,7 @@ def run(args: dict) -> dict:
             html = _fetch_url(url)
             models = _parse_search_results(html)
             return {"status": "ok", "url": url, "count": len(models), "models": models}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort: returns error to caller
             return {"status": "error", "message": str(e)}
 
     elif action == "tags":
@@ -201,14 +216,14 @@ def run(args: dict) -> dict:
                 "tags": tags,
                 "count": len(tags),
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort: returns error to caller
             return {"status": "error", "message": str(e)}
 
     elif action == "installed":
         try:
             models = _parse_installed()
             return {"status": "ok", "count": len(models), "models": models}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort: returns error to caller
             return {"status": "error", "message": str(e)}
 
     elif action == "pull":

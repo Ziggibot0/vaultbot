@@ -55,7 +55,7 @@ _CROSS_LINK_HEADER = "## Related sections"
 # Relative distance threshold for cross-linking.  We use a RELATIVE
 # threshold (not absolute) because raw L2 distances in 768-dim
 # nomic-embed-text space run 45-195, not 0-1.  A cross-book candidate
-# is linked if its distance is within _CROSS_LINK_DISTANCE_RATIO × the
+# is linked if its distance is within _CROSS_LINK_DISTANCE_RATIO x the
 # nearest cross-book candidate's distance.  With nearest=45 and ratio=2.0,
 # that's ≤90 — catches genuine concept overlap (thermo sections at 45-60)
 # while excluding unrelated notes (kinematics at 195).  Adapts to any
@@ -275,7 +275,7 @@ def cross_link_textbooks(
                 # Filter to: textbook notes, not self, not same book.
                 # We collect ALL cross-book textbook candidates first, then
                 # apply the relative distance threshold (link to candidates
-                # within _CROSS_LINK_DISTANCE_RATIO × the nearest candidate's
+                # within _CROSS_LINK_DISTANCE_RATIO x the nearest candidate's
                 # distance).  This adapts to any embedding model's distance
                 # scale — raw L2 in 768-dim space runs 45-195, not 0-1.
                 candidates: list = []
@@ -305,7 +305,7 @@ def cross_link_textbooks(
                 if nearest > _CROSS_LINK_MAX_ABS_DISTANCE:
                     continue
                 # Relative threshold: keep candidates within
-                # _CROSS_LINK_DISTANCE_RATIO × nearest.
+                # _CROSS_LINK_DISTANCE_RATIO x nearest.
                 cutoff = nearest * _CROSS_LINK_DISTANCE_RATIO
                 links = [(fp, d) for fp, d in candidates if d <= cutoff]
                 links = links[:_CROSS_LINK_MAX_PER_NOTE]
@@ -486,7 +486,7 @@ async def weave_textbook_notes(
         # vault_research path still uses the LLM).  The heuristic adds the
         # new note's title as a tag + inserts a backlink — most of A-MEM's
         # value for textbook sections, which have unambiguous titles.
-        for idx, (rel, abs_path) in enumerate(zip(note_rels, abs_paths)):
+        for idx, (rel, abs_path) in enumerate(zip(note_rels, abs_paths, strict=False)):
             if websocket is not None and (idx % 10 == 0 or idx == total - 1):
                 await _send_progress(
                     svc,
@@ -611,7 +611,10 @@ async def weave_textbook_notes(
                     {
                         "note": total,
                         "total": total,
-                        "message": f"Clustering {len(card_paths)} new cards into maps of content...",
+                        "message": (
+                            f"Clustering {len(card_paths)} new cards "
+                            "into maps of content..."
+                        ),
                     },
                 )
             # Index the new cards so they're in the FAISS index + get their

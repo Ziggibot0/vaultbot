@@ -17,6 +17,7 @@ the search engine returns candidate URLs.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 
 import requests
@@ -153,7 +154,7 @@ def filter_dead_urls(
             dead.append((u, reason))
 
     if session_logger is not None:
-        try:
+        with contextlib.suppress(Exception):
             session_logger.log(
                 "url_liveness_check",
                 {
@@ -163,7 +164,5 @@ def filter_dead_urls(
                     "dead_details": [(u, r) for u, r in dead[:10]],
                 },
             )
-        except Exception:  # noqa: BLE001 — best-effort logging, liveness result still returned to caller
-            pass
 
     return alive, dead

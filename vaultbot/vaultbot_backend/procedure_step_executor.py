@@ -87,7 +87,8 @@ def _run_code_step(
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
         'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
         'procedure_name = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
-        '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", "vaultbot_index", "sessions", "partials", "__pycache__"}\n'
+        '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", '
+        '"vaultbot_index", "sessions", "partials", "__pycache__"}\n'
         "\n"
         "namespace = {\n"
         '    "__builtins__": __builtins__,\n'
@@ -120,8 +121,10 @@ def _run_code_step(
         '    _pr = namespace.get("prior_results", {})\n'
         "    if not isinstance(_pr, dict):\n"
         "        _pr = {}\n"
-        '    print(json.dumps({"status": "ok", "result": result, "prior_results": _pr}))\n'
-        "except Exception as e:  # noqa: BLE001 — best-effort, returns error to caller\n"
+        '    print(json.dumps({"status": "ok", "result": result, '
+        '"prior_results": _pr}))\n'
+        "except Exception as e:  # noqa: BLE001 — best-effort, returns "
+        "error to caller\n"
         "    print(json.dumps({\n"
         '        "status": "error",\n'
         '        "error": str(e),\n'
@@ -186,7 +189,7 @@ def _run_code_step(
         return False, "", f"no stdout from subprocess. stderr: {stderr}", "", {}
 
     # Take the last non-empty line as the envelope
-    lines = [l for l in stdout.split("\n") if l.strip()]
+    lines = [line for line in stdout.split("\n") if line.strip()]
     envelope_line = lines[-1] if lines else stdout
 
     try:

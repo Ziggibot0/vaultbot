@@ -15,7 +15,12 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from golden_eval import check_regression, load_golden_set, run_golden_eval
+from golden_eval import (
+    check_regression,
+    load_golden_set,
+    run_golden_eval,
+    validate_golden_set,
+)
 
 
 class _StubRetriever:
@@ -125,3 +130,55 @@ def test_empty_golden_set_fails_gate():
     verdict = check_regression(report, min_recall=0.0)
     assert verdict["passed"] is False
     assert any("empty" in r for r in verdict["reasons"])
+
+
+def test_validate_golden_set_phantom_expected_note():
+    # An expected note that isn't in the available set must be flagged, not
+    # silently scored 0 at gate time.
+    golden = [
+        {"query": "wiki", "expected_notes": ["No-Wikipedia-Directive"]},
+        {"query": "ghost", "expected_notes": ["Does-Not-Exist"]},
+    ]
+    result = validate_golden_set(
+        golden_set=golden, available_stems={"No-Wikipedia-Directive"}
+    )
+    assert result["checked"] is True
+    assert result["valid"] is False
+    assert any("Does-Not-Exist" in p for p in result["problems"])
+
+
+def test_validate_golden_set_phantom_seed_note():
+    # A graph seed that isn't committed makes the walk unreachable in CI.
+    golden = [
+        {
+            "query": "graph walk",
+            "expected_notes": ["Target"],
+            "seed_notes": ["Gitignored-Seed"],
+        }
+    ]
+    result = validate_golden_set(golden_set=golden, available_stems={"Target"})
+    assert result["valid"] is False
+    assert any("Gitignored-Seed" in p for p in result["problems"])
+
+
+def test_validate_golden_set_all_present():
+    # When every expected + seed note is available, validation passes.
+    golden = [
+        {
+            "query": "graph walk",
+            "expected_notes": ["Target"],
+            "seed_notes": ["Seed"],
+        }
+    ]
+    result = validate_golden_set(golden_set=golden, available_stems={"Target", "Seed"})
+    assert result["valid"] is True
+    assert result["problems"] == []
+
+
+def test_validate_golden_set_skips_when_no_available():
+    # Without an available-stem list, validation degrades to checked=False
+    # rather than falsely passing or crashing.
+    golden = [{"query": "wiki", "expected_notes": ["No-Wikipedia-Directive"]}]
+    result = validate_golden_set(golden_set=golden, available_stems=None)
+    assert result["checked"] is False
+    assert result["valid"] is True  # nothing to check against

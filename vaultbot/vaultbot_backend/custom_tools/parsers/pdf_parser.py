@@ -91,7 +91,7 @@ def parse_pdf(file_path):
             parts = [text]
             j = i + 1
             while j < len(spans):
-                p2, t2, s2, b2, y2 = spans[j]
+                p2, t2, s2, b2, _y2 = spans[j]
                 if s2 > body_size and b2 and p2 == page_num:
                     parts.append(t2)
                     j += 1
@@ -245,7 +245,7 @@ def _parse_pdf_regex(file_path):
             if len(current_text) + len(page_text) > 3000 and current_text:
                 sections.append(
                     {
-                        "heading": "Section %d" % section_num,
+                        "heading": f"Section {section_num}",
                         "level": 2,
                         "content": current_text,
                     }
@@ -257,7 +257,7 @@ def _parse_pdf_regex(file_path):
         if current_text.strip():
             sections.append(
                 {
-                    "heading": "Section %d" % section_num,
+                    "heading": f"Section {section_num}",
                     "level": 2,
                     "content": current_text,
                 }

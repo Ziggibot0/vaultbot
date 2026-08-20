@@ -22,13 +22,18 @@ async def google_oauth_callback(request: Request):
 
     if error:
         return HTMLResponse(
-            content=f"<h2>Authorization failed</h2><p>Google returned error: {error}</p>",
+            content=(
+                f"<h2>Authorization failed</h2><p>Google returned error: {error}</p>"
+            ),
             status_code=400,
         )
 
     if not code:
         return HTMLResponse(
-            content="<h2>Missing authorization code</h2><p>No 'code' parameter in the callback URL.</p>",
+            content=(
+                "<h2>Missing authorization code</h2>"
+                "<p>No 'code' parameter in the callback URL.</p>"
+            ),
             status_code=400,
         )
 

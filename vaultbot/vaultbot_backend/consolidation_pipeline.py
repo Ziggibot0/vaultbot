@@ -21,7 +21,7 @@ import os
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 # --- Token-economy consolidation mode ---
 # llm        = always LLM synthesis (old behavior)
@@ -30,13 +30,14 @@ _CONSOLIDATION_MODE = os.getenv("VAULTBOT_CONSOLIDATION_MODE", "template").lower
 
 
 class ConsolidationPipeline:
-    """The full consolidation pipeline: extract → cluster → synthesize → validate → store.
+    """The full consolidation pipeline: extract → cluster → synthesize →
+    validate → store.
 
     Phase 1-2 are delegated to PatternExtractor (already exists).
     Phases 3-6 are implemented here.
     """
 
-    def __init__(self, vault_path: str = None, backend_path: str = None):
+    def __init__(self, vault_path: str | None = None, backend_path: str | None = None):
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
         self.backend_path = backend_path or os.path.dirname(os.path.abspath(__file__))
         self.chat_dir = os.path.join(self.vault_path, "vaultbot", "Memory", "Chat")
@@ -209,7 +210,7 @@ class ConsolidationPipeline:
     # Phase 4: Synthesize (LLM-Assisted or Template)
     # ------------------------------------------------------------------
 
-    _TEMPLATE_IMPLICATIONS = {
+    _TEMPLATE_IMPLICATIONS: ClassVar[dict[str, str]] = {
         "recurring_topic": (
             "This topic has appeared across multiple sessions, suggesting it "
             "is a recurring focus area for the operator. Consider whether "
@@ -477,7 +478,7 @@ class ConsolidationPipeline:
     # Full Pipeline
     # ------------------------------------------------------------------
 
-    def run(self, since_timestamp: str = None) -> dict:
+    def run(self, since_timestamp: str | None = None) -> dict:
         """Run the full consolidation pipeline (Phases 1-4).
 
         Phases 1-2: Extract patterns (PatternExtractor)

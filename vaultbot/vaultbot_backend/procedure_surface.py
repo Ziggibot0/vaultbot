@@ -106,7 +106,8 @@ def procedure_surface_line(
 
     Example outputs:
       ``- Verify-Claims — check a note's claims against its sources [verified]``
-      ``- Dream-Pass — consolidate episodic logs into semantic knowledge [⚠ experimental]``
+      ``- Dream-Pass — consolidate episodic logs into semantic knowledge
+      [⚠ experimental]``
       ``- Stale-Proc — ... [⛔ FLAGGED — do not use]``
 
     When ``frontmatter`` contains a ``provides`` list (sub-procedures this
@@ -115,7 +116,9 @@ def procedure_surface_line(
     so the model can see what the orchestrator *brings to the table* without
     reading each child:
 
-      ``- Dream-Pass — biomimetic dream pass orchestrator (composes: Dream-Scan — scan for orphans, Dream-Analyze — analyze links, ...) [verified]``
+      ``- Dream-Pass — biomimetic dream pass orchestrator (composes:
+      Dream-Scan — scan for orphans, Dream-Analyze — analyze links, ...)
+      [verified]``
 
     Only one level is expanded inline (to avoid context bloat).  The full
     recursive tree is available via :func:`build_procedure_tree` for the
@@ -341,7 +344,8 @@ def build_procedure_surface(
     Returns:
         A markdown block like::
 
-            # RELEVANT PROCEDURES (deterministic subagents — call execute_procedure(name) to run)
+            # RELEVANT PROCEDURES (deterministic subagents — call
+            # execute_procedure(name) to run)
             - Verify-Claims — ... [verified]
             - Dream-Pass — ... [⚠ experimental]
 

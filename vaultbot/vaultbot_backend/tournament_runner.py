@@ -181,7 +181,7 @@ async def _judge_response(
             0.5 if pre is None else (1.0 if pre else 0.0),
             "judge returned non-JSON; used keyword fallback",
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns judge error to caller
         return False, 0.0, f"judge error: {e}"
 
 
@@ -219,7 +219,7 @@ async def _run_model_benchmarks(
         role=role,
     )
 
-    for i, bench in enumerate(benchmarks):
+    for _i, bench in enumerate(benchmarks):
         if progress_callback:
             await progress_callback(bench.id, "running")
 
@@ -278,7 +278,7 @@ async def _run_model_benchmarks(
             if progress_callback:
                 await progress_callback(bench.id, "done")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, records benchmark error
             latency = (time.time() - t0) * 1000
             br = BenchmarkResult(
                 benchmark_id=bench.id,
@@ -310,7 +310,7 @@ async def _run_model_benchmarks(
 def _compute_combined_scores(models: list[ModelResult]) -> None:
     """Compute combined score (accuracy + speed) for all models in a tournament.
 
-    Combined = 0.7 × accuracy + 0.3 × speed_score
+    Combined = 0.7 x accuracy + 0.3 x speed_score
     Speed score is normalized: fastest model gets 1.0, slowest gets 0.0.
     Models with errors get speed_score = 0.0.
     """
@@ -406,7 +406,7 @@ async def run_tournament(
         # Build a client for this specific model
         try:
             contestant = _client_for_model_entry(entry, provider)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, records model error
             mr = ModelResult(
                 model_id=mid,
                 model_name=model_name,
@@ -512,7 +512,7 @@ async def run_tournament_streaming(
 
         try:
             contestant = _client_for_model_entry(entry, provider)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, yields model error event
             yield {
                 "type": "model_error",
                 "model_id": mid,

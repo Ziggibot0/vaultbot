@@ -37,7 +37,7 @@ if str(_BACKEND) not in sys.path:
 os.environ.setdefault("VAULTBOT_SKIP_LOCK", "1")
 os.environ.setdefault("VAULTBOT_SKIP_WATCHER", "1")
 
-from golden_eval import check_regression, load_golden_set, run_golden_eval
+from golden_eval import check_regression, load_golden_set, run_golden_eval  # noqa: E402
 
 
 def _build_retriever(vault_path: str):
@@ -127,7 +127,8 @@ def _build_retriever(vault_path: str):
 
 
 def _debug_dump(retriever, golden, k):
-    """Print top-k results for each query so we can see what's outranking expected notes."""
+    """Print top-k results for each query so we can see what's outranking
+    expected notes."""
     from pathlib import Path as _P
 
     from golden_eval import _norm
@@ -168,7 +169,9 @@ def _debug_dump(retriever, golden, k):
                     for m in retriever.vault_indexer.metadata
                 )
                 print(
-                    f"    [{exp}] in_graph=Y edges={len(edges)} backlinks={len(backlinks)} in_index={'Y' if in_index else 'N'}"
+                    f"    [{exp}] in_graph=Y edges={len(edges)} "
+                    f"backlinks={len(backlinks)} "
+                    f"in_index={'Y' if in_index else 'N'}"
                 )
             else:
                 print(f"    [{exp}] in_graph=N *** NOT IN GRAPH ***")

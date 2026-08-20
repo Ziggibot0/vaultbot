@@ -4,23 +4,46 @@ Agent-authored tool: ask_user
 
 SCHEMA = {
     "name": "ask_user",
-    "description": "Send an interactive questionnaire to the user via the Obsidian plugin GUI and block until the user responds. The user can answer each question, pick \"I don't know\" for any question, and add free-text comments for nuance. Use this when you need the user's input to crystallize an idea or make a decision.",
+    "description": (
+        "Send an interactive questionnaire to the user via the Obsidian plugin "
+        "GUI and block until the user responds. The user can answer each "
+        'question, pick "I don\'t know" for any question, and add free-text '
+        "comments for nuance. Use this when you need the user's input to "
+        "crystallize an idea or make a decision."
+    ),
     "parameters": {
         "properties": {
             "context": {
-                "description": "Background context explaining what you're trying to decide or what information you need",
+                "description": (
+                    "Background context explaining what you're trying to "
+                    "decide or what information you need"
+                ),
                 "type": "string",
             },
             "questions": {
-                "description": "List of simple question objects. Each has 'question' (the text to display) and optionally 'options' (a list of strings — if present, the question is single-choice radio; if absent, it's free-form text). Optionally 'id' (a unique key for the answer; auto-generated as q1, q2... if omitted).",
+                "description": (
+                    "List of simple question objects. Each has 'question' (the "
+                    "text to display) and optionally 'options' (a list of "
+                    "strings — if present, the question is single-choice radio; "
+                    "if absent, it's free-form text). Optionally 'id' (a unique "
+                    "key for the answer; auto-generated as q1, q2... if omitted)."
+                ),
                 "items": {
                     "properties": {
                         "id": {
-                            "description": "Unique key for this question (used as the key in the returned dict). Auto-generated as q1, q2... if omitted.",
+                            "description": (
+                                "Unique key for this question (used as the key "
+                                "in the returned dict). Auto-generated as q1, "
+                                "q2... if omitted."
+                            ),
                             "type": "string",
                         },
                         "options": {
-                            "description": "List of option strings for single-choice. If present, the question is radio (pick one). If absent, the question is free-form text.",
+                            "description": (
+                                "List of option strings for single-choice. If "
+                                "present, the question is radio (pick one). If "
+                                "absent, the question is free-form text."
+                            ),
                             "items": {"type": "string"},
                             "type": "array",
                         },
@@ -35,7 +58,9 @@ SCHEMA = {
                 "type": "array",
             },
             "title": {
-                "description": "Short title for the question card (e.g. 'Research approach')",
+                "description": (
+                    "Short title for the question card (e.g. 'Research approach')"
+                ),
                 "type": "string",
             },
         },
@@ -57,11 +82,11 @@ This is the tool that lets VaultBot extract ideas from the user — the user
 dreams of all the parts, VaultBot crystallizes them into a finished product.
 """
 
-import json
-import threading
-import time
-import urllib.request
-import uuid
+import json  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+import urllib.request  # noqa: E402
+import uuid  # noqa: E402
 
 # Module-level registry: request_id -> (event, response_dict, websocket_ref)
 # The /user_response HTTP endpoint reads this to unblock the waiting tool.
@@ -188,7 +213,7 @@ def run(
             headers={"Content-Type": "application/json"},
         )
         urllib.request.urlopen(req, timeout=30)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: send failure returns error to caller
         _pending_requests.pop(request_id, None)
         return {"error": f"Failed to send questionnaire to GUI: {e}"}
 

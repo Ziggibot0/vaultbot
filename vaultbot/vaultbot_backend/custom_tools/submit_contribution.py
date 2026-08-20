@@ -3,7 +3,8 @@ Agent-authored tool: submit_contribution
 
 Supports two flows:
 1. Direct push (user has write access to upstream) — push to origin, create PR
-2. Fork-based push (user does NOT have write access) — fork upstream, push to fork, create cross-fork PR
+2. Fork-based push (user does NOT have write access) — fork upstream, push to
+   fork, create cross-fork PR
 
 The tool auto-detects which flow to use by checking the user's permissions
 on the upstream repo via the GitHub API.
@@ -13,7 +14,8 @@ SCHEMA = {
     "name": "submit_contribution",
     "description": (
         "Submit uncommitted changes as a GitHub pull request for community review. "
-        "If the user has write access to the upstream repo, pushes directly and creates a PR. "
+        "If the user has write access to the upstream repo, pushes directly and "
+        "creates a PR. "
         "If not, forks the repo, pushes to the fork, and creates a cross-fork PR. "
         "Requires the gh CLI authenticated via 'gh auth login'."
     ),
@@ -22,16 +24,25 @@ SCHEMA = {
         "properties": {
             "title": {
                 "type": "string",
-                "description": "Short title for the pull request (e.g. 'Fix subprocess window popup on Windows')",
+                "description": (
+                    "Short title for the pull request (e.g. 'Fix subprocess "
+                    "window popup on Windows')"
+                ),
             },
             "description": {
                 "type": "string",
-                "description": "Description of what the changes do and why. Will be used as the PR body.",
+                "description": (
+                    "Description of what the changes do and why. Will be used "
+                    "as the PR body."
+                ),
             },
             "files": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Optional list of specific files to include. If omitted, all uncommitted changes are included.",
+                "description": (
+                    "Optional list of specific files to include. If omitted, "
+                    "all uncommitted changes are included."
+                ),
             },
         },
         "required": ["title"],
@@ -62,7 +73,11 @@ def run(args: dict) -> dict:
     def run_git(git_args, cwd):
         try:
             r = _subprocess_run(
-                ["git"] + git_args, capture_output=True, text=True, timeout=60, cwd=cwd
+                ["git", *git_args],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=cwd,
             )
             return r.returncode == 0, r.stdout.strip(), r.stderr.strip()
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
@@ -75,7 +90,8 @@ def run(args: dict) -> dict:
     description = args.get("description", "").strip()
     specific_files = args.get("files", [])
 
-    # Find the vault root (2 levels up from vaultbot_backend/ -> vaultbot/ -> vault root)
+    # Find the vault root (2 levels up from vaultbot_backend/ -> vaultbot/ ->
+    # vault root)
     vault_root = os.path.dirname(os.path.dirname(backend_dir))
 
     # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
@@ -97,9 +113,10 @@ def run(args: dict) -> dict:
         return {
             "error": "Contributions are not enabled.",
             "hint": (
-                "Enable 'Allow contributions' in VaultBot settings (under Community contributions), "
-                "or ask your operator to enable it. This is an opt-in feature \u2014 "
-                "VaultBot will never submit PRs without explicit permission."
+                "Enable 'Allow contributions' in VaultBot settings (under "
+                "Community contributions), "
+                "or ask your operator to enable it. This is an opt-in feature "
+                "— VaultBot will never submit PRs without explicit permission."
             ),
         }
 
@@ -149,8 +166,12 @@ def run(args: dict) -> dict:
             for line in staged_preview.split("\n"):
                 if pat.strip("'") in line and not line.startswith("remove"):
                     return {
-                        "error": f"Refusing to commit: sensitive file would be staged: {pat}",
-                        "hint": "Check your .gitignore. This file should not be committed.",
+                        "error": (
+                            f"Refusing to commit: sensitive file would be staged: {pat}"
+                        ),
+                        "hint": (
+                            "Check your .gitignore. This file should not be committed."
+                        ),
                     }
 
     # 5b. Baseline-marker filter — exclude non-baseline System/ .md files.
@@ -187,7 +208,7 @@ def run(args: dict) -> dict:
         try:
             with open(_abs, encoding="utf-8", errors="replace") as _fh:
                 _text = _fh.read()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort: unreadable file is excluded from PR
             _excluded.append(_fp)
             continue
         _fm, _fm_str, _body = _parse_fm(_text)
@@ -232,7 +253,10 @@ def run(args: dict) -> dict:
     ok, diff_stat, _ = run_git(["diff", "--cached", "--stat"], vault_root)
     if not diff_stat.strip():
         return {
-            "error": "No staged changes to submit. Make your changes first, then run this tool."
+            "error": (
+                "No staged changes to submit. Make your changes first, then "
+                "run this tool."
+            )
         }
 
     # 7. Create a contribution branch
@@ -252,7 +276,7 @@ def run(args: dict) -> dict:
     # 9. Push — fork-based or direct
     if has_push_access:
         # === DIRECT PUSH FLOW (user has write access) ===
-        ok, push_out, push_err = run_git(
+        ok, _push_out, push_err = run_git(
             ["push", "-u", "origin", branch_name], vault_root
         )
         if not ok:
@@ -290,12 +314,12 @@ def run(args: dict) -> dict:
             run_git(["remote", "add", "fork", fork_url], vault_root)
 
         # 9d. Push to fork
-        ok, push_out, push_err = run_git(
+        ok, _push_out, push_err = run_git(
             ["push", "-u", "fork", branch_name], vault_root
         )
         if not ok:
             time.sleep(10)
-            ok, push_out, push_err = run_git(
+            ok, _push_out, push_err = run_git(
                 ["push", "-u", "fork", branch_name], vault_root
             )
         if not ok:
@@ -303,7 +327,10 @@ def run(args: dict) -> dict:
             run_git(["branch", "-D", branch_name], vault_root)
             return {
                 "error": f"Could not push to fork: {push_err}",
-                "hint": f"Make sure your fork exists at {fork_url} and your gh auth has push access to it.",
+                "hint": (
+                    f"Make sure your fork exists at {fork_url} and your gh "
+                    f"auth has push access to it."
+                ),
             }
 
         pr_head = f"{gh_username}:{branch_name}"
@@ -353,6 +380,7 @@ def run(args: dict) -> dict:
             "hint": (
                 "The branch was pushed but the PR could not be created. "
                 f"Create it manually at "
-                f"https://github.com/{upstream_owner}/{upstream_repo}/compare/main...{pr_head.replace(':', '-')}"
+                f"https://github.com/{upstream_owner}/{upstream_repo}/"
+                f"compare/main...{pr_head.replace(':', '-')}"
             ),
         }

@@ -1,11 +1,11 @@
-"""Agentic chat loop — Copilot-style, simple.
+"""Agentic chat loop -- Copilot-style, simple.
 
 The model drives. It can use plan_task / update_task to track its own state
 (the harness re-injects the working-memory block every round so the model
 always sees its todo list). The framework enforces ONE rule: if the model
 works 3+ tool rounds without a plan, execution tools are masked until it
 calls plan_task. No phase state machine, no auto-advance, no forced
-convergence, no consolidation, no step summaries — just the one-rule plan
+convergence, no consolidation, no step summaries -- just the one-rule plan
 gate plus the read-loop detector that observes actual tool results.
 
 What we keep:
@@ -17,7 +17,7 @@ What we keep:
 - tool dispatch: execute_agent_tool unchanged (plan_task / update_task /
   custom tools / code tools / etc.)
 
-2026-08-13: removed Hermes-style preflight compression — the small-model
+2026-08-13: removed Hermes-style preflight compression -- the small-model
 summarization latency cost outweighed the token savings. The hard token cap
 (_enforce_token_cap) and proactive tool-result aging (_age_old_tool_results)
 remain as the primary context-bounding mechanisms.
@@ -32,17 +32,17 @@ from chat_background import run_background_tasks as _run_background_tasks
 from chat_loop_state import TurnState
 
 # ---------------------------------------------------------------------------
-# Extracted leaf modules — imported with underscore aliases so all existing
+# Extracted leaf modules -- imported with underscore aliases so all existing
 # call sites (e.g. _check_cancelled, _enforce_token_cap, _sanitize_tool_history)
 # work unchanged without a mass rename across the 2,000-line handle_chat body.
 # ---------------------------------------------------------------------------
-from chat_tool_dispatch import execute_agent_tool  # noqa: F401 — re-exported
+from chat_tool_dispatch import execute_agent_tool  # noqa: F401 -- re-exported
 from chat_turn_finalize import finalize_turn as _finalize_turn
 from chat_turn_prep import prepare_turn as _prepare_turn
 from config import TUNABLES
 
 # Leaf-module imports for helpers that were previously deferred-imported
-# from main (circular). These are now direct leaf imports — no main dependency.
+# from main (circular). These are now direct leaf imports -- no main dependency.
 from fastapi import WebSocket
 from services import Services
 from task_api import write_partial
@@ -60,7 +60,7 @@ async def handle_chat(
     svc: Services, websocket: WebSocket, user_message: str, session_logger
 ) -> None:
     """Agentic chat: the LLM reasons over the vault, calls tools when it hits
-    a gap, and produces a grounded answer. The model drives — no framework
+    a gap, and produces a grounded answer. The model drives -- no framework
     enforcement, no phases, no auto-planning.
     """
     session_logger.log("chat_begin", {"user_message": user_message})
@@ -73,13 +73,16 @@ async def handle_chat(
     # plan via plan_task and updates it via update_task; the harness re-injects
     # the list into the system prompt every round so the model always sees
     # "what's done, what's next." One TaskList per websocket connection,
-    # reset on /new. THE MODEL OWNS THIS — the framework never auto-advances
+    # reset on /new. THE MODEL OWNS THIS -- the framework never auto-advances
     # or force-completes anything.
-    if not hasattr(websocket, "working_memory") or getattr(websocket, "working_memory", None) is None:
+    if (
+        not hasattr(websocket, "working_memory")
+        or getattr(websocket, "working_memory", None) is None
+    ):
         setattr(websocket, "working_memory", TaskList())
     wm = getattr(websocket, "working_memory")
     # A new user message is a NEW turn. We do NOT clear the working-memory
-    # plan automatically — the plan persists across turns so the model can
+    # plan automatically -- the plan persists across turns so the model can
     # handle interruptions and follow-up questions without losing its
     # place. The plan is cleared when:
     #   - the model explicitly calls plan_task with a new plan (set_plan
@@ -99,7 +102,7 @@ async def handle_chat(
         wm.clear()
 
     # Chat-loop checkpoint/resume: if a prior turn was interrupted mid-loop
-    # and left a fresh checkpoint, resume it — restore the working-memory plan
+    # and left a fresh checkpoint, resume it -- restore the working-memory plan
     # and tell the model what it already did so it doesn't re-run tools.
     # Cleared on normal completion and /new.  Per-session: each tab gets its
     # own checkpoint file so concurrent sessions don't interfere.
@@ -120,7 +123,7 @@ async def handle_chat(
                 if _wm_snap and not wm.has_plan():
                     try:
                         wm.restore_snapshot(_wm_snap)
-                    except Exception as e:  # noqa: BLE001 — best-effort
+                    except Exception as e:  # noqa: BLE001 -- best-effort
                         session_logger.log("wm_restore_failed", {"error": str(e)})
                 session_logger.log(
                     "chat_checkpoint_resumed",
@@ -129,7 +132,7 @@ async def handle_chat(
                         "tools_already_run": len(_resumed_tool_history),
                     },
                 )
-        except Exception as e:  # noqa: BLE001 — best-effort
+        except Exception as e:  # noqa: BLE001 -- best-effort
             session_logger.log("chat_checkpoint_resume_failed", {"error": str(e)})
 
     # Chat-priority: pause the autonomous researcher so it doesn't compete
@@ -145,7 +148,7 @@ async def handle_chat(
         (
             conversation,
             results,
-            system_prompt,
+            _system_prompt,
             all_tools,
             custom_schemas,
             procedures_in_context,
@@ -155,7 +158,7 @@ async def handle_chat(
             allowed_citations,
         ) = _prep
 
-        # --- Agentic loop: model speaks →’ tool calls (if any) →’ repeat →’ final ---
+        # --- Agentic loop: model speaks →' tool calls (if any) →' repeat →' final ---
         # The model decides to call tools, when, and when to stop. The framework
         # NEVER blocks, rejects, or auto-marks anything.
         st = TurnState()
@@ -174,12 +177,12 @@ async def handle_chat(
         # always fires and installs the wm block if present.
         # Token cost tracking: accumulate per-round ollama_stats token counts
         # so we can log and emit a cumulative total per turn. This is the lever
-        # for measuring cost-reduction changes — without it, we're tuning blind.
+        # for measuring cost-reduction changes -- without it, we're tuning blind.
         # Seen-content tracker: per-turn set of {file_path: {"source": str,
         # "lines": (start, end)|None, "round": int}}. Populated by vault_search
         # and code_read. Used to dedup vault_search results so the model doesn't
         # re-search for files it already has, breaking the search loop.
-        # Seed with the initial FUSED retrieval results — those files are
+        # Seed with the initial FUSED retrieval results -- those files are
         # already in the vault context (conversation[1]) so the model has
         # already "seen" them. This prevents the first vault_search from
         # returning the same files that are already in context.
@@ -192,7 +195,7 @@ async def handle_chat(
                     "round": -1,
                 }
         # --- Findings ledger (anti-amnesia) ---
-        # A per-turn list of 1-line entries: "R{n}: {tool} →’ {summary}".
+        # A per-turn list of 1-line entries: "R{n}: {tool} →' {summary}".
         # Injected into the system prompt every round as "# FINDINGS SO FAR".
         # This survives history budget truncation because it lives in the
         # system prompt, not the conversation history. The model always sees
@@ -204,13 +207,13 @@ async def handle_chat(
         # find the missing information on the web instead of looping.
         # Track the last vault_search query so go-find-out uses it as the
         # research topic instead of the raw user message. The user message
-        # is a conversational instruction ("dude fix the researcher") — not
+        # is a conversational instruction ("dude fix the researcher") -- not
         # a web search query. The model's own vault_search query is a
         # focused research topic that the search engines can actually use.
         # When go-find-out fires, the research summary is stored here so it
         # can be injected as a system message after the tool results are
         # appended. A system message is more authoritative than a tool result
-        # — the model treats it as framework-level instruction, not optional data.
+        # -- the model treats it as framework-level instruction, not optional data.
 
         # Partial-answer crash protection: write the streamed-so-far answer to a
         # temp file so a crash mid-stream doesn't lose it.
@@ -267,7 +270,7 @@ async def handle_chat(
         # finalize_turn flagged the answer as ungrounded (uncited claims
         # against the closed-set). Re-enter the agentic loop ONCE with a
         # reprimand as a user-role turn so the model rewrites the answer
-        # with citations. Capped at TUNABLES.max_grounding_retries (1) —
+        # with citations. Capped at TUNABLES.max_grounding_retries (1) --
         # after that, finalize_turn shipped the answer + a ⚠️ caution so
         # the user is never left with no answer.
         while (
@@ -278,7 +281,7 @@ async def handle_chat(
             st._grounding_failed = False
             st._grounding_retry_count += 1
             st.final_answer = ""  # reset so the rewrite replaces, not appends
-            # Append the reprimand as a user-role turn — Ollama rejects
+            # Append the reprimand as a user-role turn -- Ollama rejects
             # system messages after user/assistant/tool messages.
             conversation.append({"role": "user", "content": st._grounding_reprimand})
             session_logger.log(

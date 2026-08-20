@@ -218,10 +218,13 @@ def _looks_like_heading(text, start, line, require_blank=True):
     )
     if _SENTENCE_MARKERS.search(body):
         return False
-    if require_blank and start > 0:
-        if not _blank_before(text, start) and not _blank_after(text, start, line):
-            return False  # embedded in a paragraph -> not a heading
-    return True
+    # embedded in a paragraph -> not a heading
+    return not (
+        require_blank
+        and start > 0
+        and not _blank_before(text, start)
+        and not _blank_after(text, start, line)
+    )
 
 
 def _blank_before(text, start):
@@ -275,7 +278,7 @@ def _section_sort_key(heading):
         parts = tuple(int(x) for x in m.group(1).split("."))
         # "Section 1.1 Exercises" sorts right after "1.1" by appending a 0.
         if re.match(r"^(?:Chapter|Section|Part)\b", s, re.IGNORECASE):
-            return parts + (0,)
+            return (*parts, 0)
         return parts
     return (float("inf"),)
 
@@ -420,7 +423,7 @@ def _detect_headings(text):
     # Reject lines containing PDF running-header artifacts (bullets, page
     # markers).  These appear in repeated page headers like "4.10 •
     # Antiderivatives     419" and are never real section titles.
-    found = [(s, l) for s, l in found if "•" not in l]
+    found = [(s, ln) for s, ln in found if "•" not in ln]
 
     # Drop learning objectives (level-3+ imperative sentences like
     # "1.2.1 Calculate the slope of a line").  These are sub-items within a
@@ -429,9 +432,9 @@ def _detect_headings(text):
     # that happen to start with an imperative ('Calculate ...' as a section
     # title is rare but possible -- we only filter at depth 3+).
     found = [
-        (s, l)
-        for s, l in found
-        if not (re.match(r"^\d+\.\d+\.\d", l.strip()) and _is_learning_objective(l))
+        (s, ln)
+        for s, ln in found
+        if not (re.match(r"^\d+\.\d+\.\d", ln.strip()) and _is_learning_objective(ln))
     ]
 
     # Deduplicate by position.
@@ -469,7 +472,7 @@ def _detect_headings(text):
             for k in range(i, j):
                 drop.add(found[k][0])
         i = max(j, i + 1)
-    found = [(s, l) for s, l in found if s not in drop]
+    found = [(s, ln) for s, ln in found if s not in drop]
     return found
 
 

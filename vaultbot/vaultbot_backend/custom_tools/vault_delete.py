@@ -4,11 +4,20 @@ Agent-authored tool: vault_delete
 
 SCHEMA = {
     "name": "vault_delete",
-    "description": "Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals (except empty past-day journals), LOCKED notes, and core identity files. Reports incoming wikilinks that will become broken after deletion. Use this to clean up junk files without risk.",
+    "description": (
+        "Safely delete a note from the vault. Backs up content to "
+        "vaultbot_backend/trash/ before deleting. Hard-blocks sacred journals "
+        "(except empty past-day journals), LOCKED notes, and core identity "
+        "files. Reports incoming wikilinks that will become broken after "
+        "deletion. Use this to clean up junk files without risk."
+    ),
     "parameters": {
         "properties": {
             "file_path": {
-                "description": "Path to the note to delete, relative to vault root (e.g. 'Other post.md')",
+                "description": (
+                    "Path to the note to delete, relative to vault root "
+                    "(e.g. 'Other post.md')"
+                ),
                 "type": "string",
             }
         },
@@ -17,14 +26,14 @@ SCHEMA = {
     },
 }
 
-import os
-import re
-from datetime import date, datetime
-from pathlib import Path
+import os  # noqa: E402
+import re  # noqa: E402
+from datetime import date, datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-VAULT_ROOT = Path(
-    __file__
-).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
+# 4 levels up for vault root
+# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
+VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",
@@ -114,7 +123,7 @@ def _find_incoming_links(target_stem: str) -> list:
                 continue
             try:
                 content = full.read_text(encoding="utf-8")
-            except:
+            except Exception:  # noqa: BLE001 — best-effort: unreadable file is skipped
                 continue
             wikilinks = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", content)
             for link in wikilinks:
@@ -185,7 +194,9 @@ def run(args: dict) -> dict:
             "bytes_deleted": len(content),
             "incoming_links": incoming_links,
             "incoming_link_count": len(incoming_links),
-            "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]"
+            "warning": (
+                f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]"
+            )
             if incoming_links
             else None,
             "note": "file was already in trash — deleted permanently without re-backup",
@@ -207,7 +218,9 @@ def run(args: dict) -> dict:
         "bytes_deleted": len(content),
         "incoming_links": incoming_links,
         "incoming_link_count": len(incoming_links),
-        "warning": f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]"
+        "warning": (
+            f"{len(incoming_links)} note(s) now have broken wikilinks to [[{stem}]]"
+        )
         if incoming_links
         else None,
     }

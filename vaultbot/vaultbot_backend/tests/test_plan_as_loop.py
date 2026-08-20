@@ -75,7 +75,8 @@ def test_no_step_summarizer_in_chat_handler():
 
 
 def test_no_consolidation_in_chat_handler():
-    """chat_handler has no consolidation logic — no step summaries, no forced synthesis."""
+    """chat_handler has no consolidation logic — no step summaries, no forced
+    synthesis."""
     src = _src()
     assert "step_summary_built" not in src, "no step_summary_built logging"
     assert "step_consolidated" not in src, "no step_consolidated logging"

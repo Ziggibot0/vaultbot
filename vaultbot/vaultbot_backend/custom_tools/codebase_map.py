@@ -35,7 +35,10 @@ SCHEMA = {
         "properties": {
             "module": {
                 "type": "string",
-                "description": "Optional module name (e.g. 'chat_handler') to return just that module's section. Omit for the full map.",
+                "description": (
+                    "Optional module name (e.g. 'chat_handler') to return just "
+                    "that module's section. Omit for the full map."
+                ),
             },
         },
     },

@@ -69,7 +69,7 @@ def parse_plain_text(content_text):
             if len(current_text) + len(chunk) > 3000 and current_text:
                 sections.append(
                     {
-                        "heading": "Section %d" % section_num,
+                        "heading": f"Section {section_num}",
                         "level": 2,
                         "content": current_text,
                     }
@@ -81,7 +81,7 @@ def parse_plain_text(content_text):
         if current_text.strip():
             sections.append(
                 {
-                    "heading": "Section %d" % section_num,
+                    "heading": f"Section {section_num}",
                     "level": 2,
                     "content": current_text,
                 }
@@ -195,7 +195,7 @@ def _split_on_paragraphs(content, target_lines=FRAGMENT_TARGET_LINES):
             continue
         plines = para.count("\n") + 1
         if current and current_lines + plines > target_lines:
-            chunks.append(("Part %d" % part, joiner.join(current)))
+            chunks.append((f"Part {part}", joiner.join(current)))
             part += 1
             current = [para]
             current_lines = plines
@@ -203,7 +203,7 @@ def _split_on_paragraphs(content, target_lines=FRAGMENT_TARGET_LINES):
             current.append(para)
             current_lines += plines
     if current:
-        chunks.append(("Part %d" % part, joiner.join(current)))
+        chunks.append((f"Part {part}", joiner.join(current)))
     return chunks
 
 
@@ -252,14 +252,14 @@ def fragment_section(section):
     children = []
     for sub_h, body in pieces:
         child = {
-            "heading": "%s — %s" % (section["heading"], sub_h),
+            "heading": f"{section['heading']} — {sub_h}",
             "level": (section.get("level", 2) + 1),
             "content": body,
             "is_fragment_child": True,
         }
         children.append(child)
     parent["fragment_children"] = children
-    return [parent] + children
+    return [parent, *children]
 
 
 def fragment_sections(sections):

@@ -31,10 +31,7 @@ _IGNORED_DIRS = {
 
 
 def _is_ignored_path(path: Path) -> bool:
-    for part in path.parts:
-        if part in _IGNORED_DIRS:
-            return True
-    return False
+    return any(part in _IGNORED_DIRS for part in path.parts)
 
 
 class VaultGraph:
@@ -576,7 +573,7 @@ def build_graph_context(
     Given flat search results, turn them into a rich graph context prompt.
 
     BOUNDED (the "context flood" fix): the legacy dump appended
-    node["content"][:2000] for EVERY walked node. At 5 seeds × depth 2 that is
+    node["content"][:2000] for EVERY walked node. At 5 seeds x depth 2 that is
     20-40+ notes — a 40-50K-char blob that got pinned as the sacred head of
     the conversation and re-sent verbatim every agentic round, inflating the
     remote model's TTFT into the 13-32s "read-loop wall" where the agent
@@ -614,7 +611,8 @@ def build_graph_context(
         "VAULT CONTEXT — relevant sub-vault graph",
         f"Query: {query}",
         f"Graph stats: {subgraph['stats']['selected']} connected notes "
-        f"from {subgraph['stats']['seeds']} seed(s), depth {subgraph['stats']['depth']}.",
+        f"from {subgraph['stats']['seeds']} seed(s), "
+        f"depth {subgraph['stats']['depth']}.",
         "",
         "--- CONNECTED NOTES ---",
     ]

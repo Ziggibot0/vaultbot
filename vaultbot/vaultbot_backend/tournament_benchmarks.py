@@ -298,7 +298,8 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         description="Can the model check if a claim is supported by evidence?",
         category="classification",
         prompt=(
-            "Evidence: 'Python 3.12 is 15% faster than 3.11 on the pyperformance benchmark suite.'\n"
+            "Evidence: 'Python 3.12 is 15% faster than 3.11 on the "
+            "pyperformance benchmark suite.'\n"
             "Claim: 'Python 3.12 is faster than 3.11.'\n\n"
             "Does the evidence SUPPORT, CONTRADICT, or is NEUTRAL to the claim? "
             "Reply with exactly one word."
@@ -316,7 +317,8 @@ SMALL_BENCHMARKS: list[Benchmark] = [
         description="Can the model detect when evidence contradicts a claim?",
         category="classification",
         prompt=(
-            "Evidence: 'Python 3.12 is 5% slower than 3.11 on the pyperformance benchmark suite.'\n"
+            "Evidence: 'Python 3.12 is 5% slower than 3.11 on the "
+            "pyperformance benchmark suite.'\n"
             "Claim: 'Python 3.12 is faster than 3.11.'\n\n"
             "Does the evidence SUPPORT, CONTRADICT, or is NEUTRAL to the claim? "
             "Reply with exactly one word."

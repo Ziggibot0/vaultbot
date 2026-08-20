@@ -82,7 +82,10 @@ def test_compile_from_text_carries_allowed_tools():
 
 
 def test_extract_annotations_all_three():
-    text = "Search the vault [validate: mention 2 note titles] [condition: if < 3 notes] [branch: step 4]"
+    text = (
+        "Search the vault [validate: mention 2 note titles] "
+        "[condition: if < 3 notes] [branch: step 4]"
+    )
     clean, val, cond, branch = _extract_annotations(text)
     assert "validate" not in clean.lower()
     assert val == "mention 2 note titles"
@@ -99,7 +102,7 @@ def test_extract_annotations_none():
 
 
 def test_extract_annotations_validation_only():
-    clean, val, cond, branch = _extract_annotations(
+    _clean, val, cond, branch = _extract_annotations(
         "Check sources [validate: at_least 2 sources]"
     )
     assert val == "at_least 2 sources"

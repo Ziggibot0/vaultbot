@@ -223,7 +223,7 @@ async def rerank_results(
         # machinery.)
         try:
             query_vec = indexer._get_embedding(query)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort, falls back to FUSED order
             # If the embedding service is down, fall back to FUSED order.
             return results[:k]
 
@@ -273,7 +273,7 @@ async def rerank_results(
                 },
             )
         return reranked
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, falls back to FUSED order
         if session_logger:
             session_logger.log("deterministic_rerank_failed", {"error": str(e)})
         return results[:k]
@@ -346,7 +346,7 @@ def expand_query(
             )
         _breaker_reset("expand")
         return queries
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, falls back to original query
         if session_logger:
             session_logger.log("small_model_expand_failed", {"error": str(e)})
         _breaker_trip("expand")
@@ -446,7 +446,7 @@ async def filter_context(
                 },
             )
         return filtered
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort, returns unfiltered context
         if session_logger:
             session_logger.log("deterministic_filter_failed", {"error": str(e)})
         return context

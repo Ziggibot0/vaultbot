@@ -4,15 +4,24 @@ Agent-authored tool: vault_list
 
 SCHEMA = {
     "name": "vault_list",
-    "description": "List all .md files in the vault. Optionally filter by directory or tag. Returns filenames relative to vault root. Use this to see what notes exist \u2014 complements semantic search when you need to know what's actually in the vault.",
+    "description": (
+        "List all .md files in the vault. Optionally filter by directory or "
+        "tag. Returns filenames relative to vault root. Use this to see what "
+        "notes exist — complements semantic search when you need to know "
+        "what's actually in the vault."
+    ),
     "parameters": {
         "properties": {
             "directory": {
-                "description": "Optional subdirectory to search within (e.g. 'vaultbot/chat')",
+                "description": (
+                    "Optional subdirectory to search within (e.g. 'vaultbot/chat')"
+                ),
                 "type": "string",
             },
             "tag": {
-                "description": "Optional tag to filter by (checks for #tag in note content)",
+                "description": (
+                    "Optional tag to filter by (checks for #tag in note content)"
+                ),
                 "type": "string",
             },
         },
@@ -21,12 +30,12 @@ SCHEMA = {
     },
 }
 
-import os
-from pathlib import Path
+import os  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-VAULT_ROOT = Path(
-    __file__
-).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
+# 4 levels up for vault root
+# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
+VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",
@@ -64,7 +73,7 @@ def run(args: dict) -> dict:
                 content = (VAULT_ROOT / f).read_text(encoding="utf-8")
                 if f"#{tag}" in content:
                     filtered.append(f)
-            except:
+            except Exception:  # noqa: BLE001 — best-effort: unreadable file is skipped
                 pass
         md_files = filtered
 

@@ -5,7 +5,7 @@ The problem this solves
 -----------------------
 `build_graph_context` (vault_graph.py) walked the L0 link graph and
 dumped `node["content"][:2_000]` for every connected note. With 5 seeds
-× depth 2 that's 20+ notes × 2000 chars = 40K+ chars of first-2000
+x depth 2 that's 20+ notes x 2000 chars = 40K+ chars of first-2000
 chunks flooding the LLM context — most of it low-density detail, and
 ~90% of each note invisible past the 2000 cut. The model saw MORE
 context but LESS of each note's actual content.
@@ -23,7 +23,7 @@ The fix: a three-resolution context, biomimetic cortical hierarchy:
                        disk if it exceeds the cap. The model gets the one
                        note that matters most, nearly verbatim.
 
-Net context drops ~4-6× while the model sees MORE of the vault's shape
+Net context drops ~4-6x while the model sees MORE of the vault's shape
 (the L1 highway) AND more of the one note that counts (the L0 drill-down).
 No content is lost to truncation — the full note is on disk, reachable
 via the L1 `> source: [[...]]` pointer (the L0 context itself is capped

@@ -141,7 +141,8 @@ def _scan_file(filepath: Path) -> list[tuple[int, str]]:
                 violations.append(
                     (
                         node.lineno,
-                        "silent swallow: except Exception returns empty without logging/raising",
+                        "silent swallow: except Exception returns empty "
+                        "without logging/raising",
                     )
                 )
 

@@ -346,7 +346,8 @@ def build_trust_badge(score: dict[str, Any]) -> str:
         return (
             f"> ⚠ **Partially grounded** — {allowed_cited}/{total} citations verified"
         )
-    return f"> ✓ **Grounded** in {allowed_cited} vault note{'s' if allowed_cited != 1 else ''}"
+    plural = "s" if allowed_cited != 1 else ""
+    return f"> ✓ **Grounded** in {allowed_cited} vault note{plural}"
 
 
 def build_sources_block(
