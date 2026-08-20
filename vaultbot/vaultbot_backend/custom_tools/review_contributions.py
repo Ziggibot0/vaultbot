@@ -440,14 +440,18 @@ def run(args: dict) -> dict:
                 ci_status = "error"
                 ci_detail = f"Failed to fetch check-runs: {e}"
 
-        # --- Approval gate: require a code-owner approval before merging. ---
-        # Branch protection on main requires the code owner (@Ziggibot0) to
-        # approve before merge. The vaultbot must NOT force-merge past this —
-        # it pauses and reports "awaiting approval" so the operator can sign
-        # off. This mirrors the CI gate: an unknown/error approval state
-        # blocks the merge (fail-loud, never merge what we can't confirm).
+        # --- Approval gate: require a CODE-OWNER approval before merging. ---
+        # Branch protection on main requires the code owner (the upstream
+        # owner, @Ziggibot0) to approve before merge. The vaultbot must NOT
+        # force-merge past this, and must NOT treat a non-owner approval
+        # (e.g. the bot account ziggibot-uni, which has write access) as
+        # sufficient — that would let the bot approve a stranger's PR and
+        # then merge it. Only the code owner's APPROVED review counts. This
+        # mirrors the CI gate: an unknown/error approval state blocks the
+        # merge (fail-loud, never merge what we can't confirm).
         approval_state = "unknown"
         approvers: list[str] = []
+        code_owner_approved = False
         if do_merge:
             try:
                 reviews = gh_api(
@@ -457,8 +461,11 @@ def run(args: dict) -> dict:
                 )
                 for rv in reviews:
                     if rv.get("state") == "APPROVED":
-                        approvers.append(rv.get("user", {}).get("login", "?"))
-                approval_state = "approved" if approvers else "pending"
+                        login = rv.get("user", {}).get("login", "?")
+                        approvers.append(login)
+                        if login == upstream_owner:
+                            code_owner_approved = True
+                approval_state = "approved" if code_owner_approved else "pending"
             except GhError:
                 approval_state = "error"
 
@@ -518,9 +525,15 @@ def run(args: dict) -> dict:
         ):
             result["merged"] = False
             if approval_state == "pending":
-                result["merge_error"] = (
-                    "Awaiting code-owner approval (no APPROVED review yet)."
-                )
+                if approvers:
+                    result["merge_error"] = (
+                        "Awaiting code-owner approval (only non-owner "
+                        f"approvals so far: {', '.join(approvers)})."
+                    )
+                else:
+                    result["merge_error"] = (
+                        "Awaiting code-owner approval (no APPROVED review yet)."
+                    )
             else:
                 result["merge_error"] = (
                     f"Could not confirm approval (state: {approval_state})."
