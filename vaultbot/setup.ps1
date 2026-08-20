@@ -46,9 +46,16 @@ function Set-StepDone {
     try {
         $state = @{}
         if (Test-Path $script:stateFile) {
-            $state = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+            # ConvertFrom-Json returns a PSCustomObject, not a hashtable.
+            # On PowerShell 5.1, assigning a NEW property to a PSCustomObject
+            # throws "The property 'X' cannot be found on this object."
+            # Copy the existing properties into a real hashtable first.
+            $obj = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+            foreach ($prop in $obj.PSObject.Properties) {
+                $state[$prop.Name] = $prop.Value
+            }
         }
-        $state.$step = $true
+        $state[$step] = $true
         # Write UTF-8 WITHOUT BOM (BOM breaks JSON parsers).
         [System.IO.File]::WriteAllText($script:stateFile, ($state | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
     } catch {
@@ -62,9 +69,13 @@ function Set-StateValue {
     try {
         $state = @{}
         if (Test-Path $script:stateFile) {
-            $state = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+            # Same PSCustomObject -> hashtable copy as Set-StepDone above.
+            $obj = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+            foreach ($prop in $obj.PSObject.Properties) {
+                $state[$prop.Name] = $prop.Value
+            }
         }
-        $state.$key = $value
+        $state[$key] = $value
         [System.IO.File]::WriteAllText($script:stateFile, ($state | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
     } catch {
         Write-Warn2 "Could not write install state (non-fatal): $_"
@@ -315,53 +326,76 @@ if (Test-StepDone "searxng_setup") {
     Write-Warn2 "SearXNG search container already set up -- skipping."
 } else {
     $dockerOk = $false
+    $dockerDaemonOk = $false
     try {
         $dv = & docker --version 2>&1
         if ($LASTEXITCODE -eq 0) { $dockerOk = $true; Write-OK "Docker: $dv" }
     } catch {}
 
     if ($dockerOk) {
+        # `docker --version` only proves the CLI is installed. Probe the
+        # daemon with `docker info` — on Windows the daemon lives in Docker
+        # Desktop, and if the app isn't running every `docker ps`/`run` call
+        # fails with a pipe-not-found error.
+        try {
+            & docker info *> $null
+            if ($LASTEXITCODE -eq 0) { $dockerDaemonOk = $true }
+        } catch {}
+    }
+
+    if ($dockerOk -and -not $dockerDaemonOk) {
+        Write-Warn2 "Docker is installed but the Docker daemon isn't running."
+        Write-Host "  Start Docker Desktop, wait for it to finish starting, then" -ForegroundColor DarkGray
+        Write-Host "  re-run setup to enable SearXNG web search." -ForegroundColor DarkGray
+        # Do NOT mark searxng_setup done so the next run retries.
+    } elseif ($dockerDaemonOk) {
         Write-Step "Starting SearXNG search container (one-time, ~30 seconds)..."
 
-        # Check if the container is already running
-        $existing = & docker ps -a --filter "name=vaultbot_searxng" --format "{{.Names}}" 2>$null
-        if ($existing -eq "vaultbot_searxng") {
-            Write-Warn2 "SearXNG container already exists -- starting it."
-            & docker start vaultbot_searxng 2>$null | Out-Null
-        } else {
-            # Run the container with the bundled settings file mounted.
-            $settingsPath = Join-Path $vaultPath "vaultbot\vaultbot_backend\searxng_settings.yml"
-            # Convert to Windows-style absolute path for Docker bind mount
-            $settingsPath = (Get-Item $settingsPath -ErrorAction SilentlyContinue).FullName
-            if ($settingsPath) {
-                # Docker on Windows needs forward-slash or escaped backslashes
-                $mountPath = $settingsPath -replace '\\', '/'
-                $runArgs = @("run","-d","--name","vaultbot_searxng","-p","8080:8080","-v","${mountPath}:/etc/searxng/settings.yml:ro","searxng/searxng")
-                & docker @runArgs 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        try {
+            # Check if the container is already running
+            $existing = & docker ps -a --filter "name=vaultbot_searxng" --format "{{.Names}}" 2>$null
+            if ($existing -eq "vaultbot_searxng") {
+                Write-Warn2 "SearXNG container already exists -- starting it."
+                & docker start vaultbot_searxng 2>$null | Out-Null
             } else {
-                # No settings file -- run without the mount (uses SearXNG defaults)
-                & docker run -d --name vaultbot_searxng -p 8080:8080 searxng/searxng 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+                # Run the container with the bundled settings file mounted.
+                $settingsPath = Join-Path $vaultPath "vaultbot\vaultbot_backend\searxng_settings.yml"
+                # Convert to Windows-style absolute path for Docker bind mount
+                $settingsPath = (Get-Item $settingsPath -ErrorAction SilentlyContinue).FullName
+                if ($settingsPath) {
+                    # Docker on Windows needs forward-slash or escaped backslashes
+                    $mountPath = $settingsPath -replace '\\', '/'
+                    $runArgs = @("run","-d","--name","vaultbot_searxng","-p","8080:8080","-v","${mountPath}:/etc/searxng/settings.yml:ro","searxng/searxng")
+                    & docker @runArgs 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+                } else {
+                    # No settings file -- run without the mount (uses SearXNG defaults)
+                    & docker run -d --name vaultbot_searxng -p 8080:8080 searxng/searxng 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+                }
             }
-        }
 
-        # Wait for the container to be ready (up to 30 seconds)
-        $ready = $false
-        for ($i = 0; $i -lt 15; $i++) {
-            Start-Sleep -Seconds 2
-            try {
-                $resp = Invoke-WebRequest -Uri "http://localhost:8080" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-                if ($resp.StatusCode -eq 200) { $ready = $true; break }
-            } catch {}
-        }
+            # Wait for the container to be ready (up to 30 seconds)
+            $ready = $false
+            for ($i = 0; $i -lt 15; $i++) {
+                Start-Sleep -Seconds 2
+                try {
+                    $resp = Invoke-WebRequest -Uri "http://localhost:8080" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+                    if ($resp.StatusCode -eq 200) { $ready = $true; break }
+                } catch {}
+            }
 
-        if ($ready) {
-            Write-OK "SearXNG search container is running on port 8080"
-            Write-Host "  VaultBot's research feature can now search Google, Brave, and more." -ForegroundColor DarkGray
-        } else {
-            Write-Warn2 "SearXNG container started but not responding yet."
-            Write-Host "  It may need a few more seconds. Research will work once it's ready." -ForegroundColor DarkGray
+            if ($ready) {
+                Write-OK "SearXNG search container is running on port 8080"
+                Write-Host "  VaultBot's research feature can now search Google, Brave, and more." -ForegroundColor DarkGray
+            } else {
+                Write-Warn2 "SearXNG container started but not responding yet."
+                Write-Host "  It may need a few more seconds. Research will work once it's ready." -ForegroundColor DarkGray
+            }
+            Set-StepDone "searxng_setup"
+        } catch {
+            Write-Warn2 "SearXNG container setup failed: $_"
+            Write-Host "  Research will fall back to keyless backends. Re-run setup to retry." -ForegroundColor DarkGray
+            # Do NOT mark searxng_setup done so the next run retries.
         }
-        Set-StepDone "searxng_setup"
     } else {
         Write-Warn2 "Docker not found -- SearXNG search container skipped."
         Write-Host "  Without Docker, VaultBot's research feature uses keyless backends" -ForegroundColor DarkGray
