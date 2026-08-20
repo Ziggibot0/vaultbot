@@ -13,7 +13,7 @@ Three channels are fused:
                        channel, recovering title/keyword matches a small
                        embedding model can't map)
   c. Graph channel   — wikilink neighbors of vector hits (forward + backlinks,
-                       via direction="both"), score = GRAPH_BOOST × vector score
+                       via direction="both"), score = GRAPH_BOOST x vector score
 
 Candidates are merged by file_path (max score across channels), then reranked by
 two signals: procedure status (authoritative tools float up) and trigger/inhibitor
@@ -99,7 +99,7 @@ class FusedRetriever:
     # procedure whose description says the same thing, because the chat
     # note's entire body is about that query while the procedure's
     # description is a meta-statement.  ADDITIVE (not multiplicative)
-    # because normalized scores cluster in a tight range — a ×1.15 boost
+    # because normalized scores cluster in a tight range — a x1.15 boost
     # on a 0.05 score adds only 0.007, too small to break ties.  0.10
     # additive is enough to lift a procedure past a similarly-relevant
     # non-procedure note without promoting an irrelevant procedure above
@@ -270,7 +270,8 @@ class FusedRetriever:
                     filtered = [ranked[0]]
                     self._log(
                         "retrieve.threshold_fallback",
-                        f"All {len(ranked)} results below threshold {self.MIN_SCORE_THRESHOLD} — keeping top result",
+                        f"All {len(ranked)} results below threshold "
+                        f"{self.MIN_SCORE_THRESHOLD} — keeping top result",
                     )
             else:
                 filtered = ranked
@@ -383,7 +384,7 @@ class FusedRetriever:
         max_d = max(dists) if dists else 0.0
         min_d = min(dists) if dists else 0.0
         norm: dict[str, float] = {}
-        for h, d in zip(raw, dists):
+        for h, d in zip(raw, dists, strict=False):
             fp = h.get("file_path")
             if not fp:
                 continue
@@ -391,13 +392,10 @@ class FusedRetriever:
             # Min-max normalization (not `1 - d/max_d`) so the BEST hit is
             # actually 1.0 as the docstring promises.  `1 - d/max_d` maps the
             # best hit to `1 - min_d/max_d` (~0.24 for nomic-embed-text, whose
-            # L2 distances cluster in 0.5–0.7), compressing every score into a
+            # L2 distances cluster in 0.5-0.7), compressing every score into a
             # flat band and starving the graph channel (which multiplies this
             # score by GRAPH_BOOST) of signal.
-            if max_d > min_d:
-                sim = (max_d - d) / (max_d - min_d)
-            else:
-                sim = 1.0
+            sim = (max_d - d) / (max_d - min_d) if max_d > min_d else 1.0
             norm[fp] = max(0.0, min(1.0, sim))
         # Do NOT truncate to k here — the graph channel seeds from this full
         # over-fetched pool.  retrieve() truncates to top-k after merge.
@@ -411,8 +409,8 @@ class FusedRetriever:
     ) -> dict[str, dict[str, Any]]:
         """Wikilink neighbors of vector hits, direction-aware.
 
-        Forward links (outgoing) score = GRAPH_BOOST × vector score; backlinks
-        (incoming — someone linked TO this note = hub) score = BACKLINK_BOOST ×
+        Forward links (outgoing) score = GRAPH_BOOST x vector score; backlinks
+        (incoming — someone linked TO this note = hub) score = BACKLINK_BOOST x
         vector score.  This folds the old separate backlink channel into a
         single walk so backlinks keep their stronger weight without a second
         channel.  Raises on failure — the caller (retrieve) catches and logs
@@ -603,15 +601,15 @@ class FusedRetriever:
     def _rerank(self, merged: dict[str, dict[str, Any]]) -> None:
         """
         Apply reranking boosts:
-          - notes present in vector + graph → ×ALL_CHANNEL_RERANK
-          - high-degree hubs (many backlinks) → ×HUB_RERANK
+          - notes present in vector + graph → xALL_CHANNEL_RERANK
+          - high-degree hubs (many backlinks) → xHUB_RERANK
           - procedure status-aware boost (tri-state, additive)
         Mutates `merged` in place.
         """
         graph = self.vault_graph
         backlinks: dict[str, set[str]] = getattr(graph, "backlinks", {}) or {}
 
-        for fp, cand in merged.items():
+        for _fp, cand in merged.items():
             boost = 1.0
             channels = cand.get("channels", set())
             if {"vector", "graph"} <= channels:
@@ -751,8 +749,9 @@ class FusedRetriever:
     def _snippet(content: str, query: str, length: int = 500) -> str:
         """Extract a window around the first query-term match in content.
 
-        Default length is 500 chars (was 200) — the [[Why-Vault-Knowledge-Loses-to-Model-Weights]]
-        diagnostic identified 200-char snippets as Problem #4: "snippet
+        Default length is 500 chars (was 200) — the
+        [[Why-Vault-Knowledge-Loses-to-Model-Weights]] diagnostic identified
+        200-char snippets as Problem #4: "snippet
         truncation shreds arguments into useless fragments." 500 chars
         gives the model enough context to understand a claim + its
         reasoning, not just a keyword match.
