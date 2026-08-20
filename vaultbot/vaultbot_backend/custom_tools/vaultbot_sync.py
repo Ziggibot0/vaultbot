@@ -23,7 +23,14 @@ handles:
   4. **Merging cleanly** — uses ``git merge`` (not reset/checkout) so local
      vault notes and personal data are preserved. If there are merge
      conflicts, it reports them rather than silently overwriting.
-  5. **Reporting what changed** — returns the list of files that changed
+  5. **Pushing to origin (fork sync)** — after a successful merge, pushes
+     the current branch to ``origin`` so the fork stays in sync with
+     upstream. This eliminates the manual ``git push origin main`` step
+     that was easy to forget — a stale fork causes spurious merge
+     conflicts on the next PR branch. If the push fails (e.g. no origin
+     remote, or network error), it reports a warning but does NOT fail
+     the sync — the local repo is already updated.
+  6. **Reporting what changed** — returns the list of files that changed
      and a summary of new commits, so the agent (or user) can see what
      the update brought.
 
@@ -33,8 +40,10 @@ updates. It requires only ``git`` on PATH (no ``gh`` auth needed for a
 read-only fetch+merge).
 
 Safety:
-  - Read-only fetch + merge. Never force-pushes, never resets, never deletes
-    untracked files.
+  - Never force-pushes, never resets, never deletes untracked files.
+  - The push to origin is a normal ``git push`` (no --force). If the fork
+    has diverged (e.g. someone committed directly to the fork's main), the
+    push fails with a warning — the local sync still succeeded.
   - If the working tree has uncommitted changes, it refuses and tells the
     user to commit or stash first (prevents losing work).
   - If a merge conflict occurs, it reports the conflicted files and leaves
@@ -242,7 +251,20 @@ def run(args: dict) -> dict:
             "stderr": merge_err,
         }
 
-    # 9. Gather what changed.
+    # 9. Push to origin (fork sync) so the fork stays current with upstream.
+    #    This eliminates the manual `git push origin main` step that was
+    #    easy to forget. A stale fork causes spurious merge conflicts on
+    #    the next PR branch. If the push fails, we warn but don't fail —
+    #    the local repo is already updated.
+    fork_synced = False
+    fork_sync_error = ""
+    ok, push_out, push_err = _run_git(["push", "origin", current_branch], git_root)
+    if ok:
+        fork_synced = True
+    else:
+        fork_sync_error = push_err or push_out or "unknown push error"
+
+    # 10. Gather what changed.
     ok, log_out, _ = _run_git(["log", "--oneline", f"{pre_head}..HEAD"], git_root)
     new_commits = (
         [line for line in log_out.splitlines() if line.strip()]
@@ -266,5 +288,14 @@ def run(args: dict) -> dict:
         "commits_pulled": len(new_commits),
         "new_commits": new_commits[:20],  # cap at 20 for context
         "files_changed_summary": files_changed_summary,
-        "message": (f"Synced to {target_desc}. {len(new_commits)} new commit(s)."),
+        "fork_synced": fork_synced,
+        "fork_sync_error": fork_sync_error,
+        "message": (
+            f"Synced to {target_desc}. {len(new_commits)} new commit(s)."
+            + (
+                " Fork synced."
+                if fork_synced
+                else " Fork sync failed — see fork_sync_error."
+            )
+        ),
     }
