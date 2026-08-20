@@ -143,10 +143,11 @@
       "category": "graph"
     },
     {
-      "query": "how do animals keep their internal environment stable",
+      "query": "how does the vault maintain stable internal conditions like a living organism",
       "expected_notes": ["Homeostasis-and-Animal-Regulation"],
-      "note": "Category: semantic — paraphrase: 'keep their internal environment stable' instead of 'homeostasis'. Reclassified from graph: the original seed (Artificial-Homeostasis-and-VaultBot-Regulation) is gitignored and no committed note links to Homeostasis-and-Animal-Regulation, so the graph walk was unreachable in CI.",
-      "category": "semantic"
+      "seed_notes": ["Artificial-Homeostasis-and-VaultBot-Regulation"],
+      "note": "Category: graph — query matches Artificial-Homeostasis-and-VaultBot-Regulation, graph walk pulls in Homeostasis-and-Animal-Regulation (linked as a depends_on — the biological basis)",
+      "category": "graph"
     },
     {
       "query": "how do you decide between building a reusable capability vs a specific workflow",
@@ -163,10 +164,10 @@
       "category": "graph"
     },
     {
-      "query": "what philosophical framework grounds the vault's typed-edge proposal",
+      "query": "what pattern connects biological feedback loops to the structure of knowledge",
       "expected_notes": ["Knowledge-Triad-Ontology-Epistemology-Hermeneutics"],
-      "seed_notes": ["Pre-Thought-Information-Shapes"],
-      "note": "Category: graph — query matches Pre-Thought-Information-Shapes (typed edges/ontology), graph walk pulls in Knowledge-Triad (linked as the philosophical grounding). Re-seeded from Homeostasis-Through-the-Knowledge-Triad (gitignored) to a committed seed.",
+      "seed_notes": ["Homeostasis-Through-the-Knowledge-Triad"],
+      "note": "Category: graph — query matches Homeostasis-Through-the-Knowledge-Triad (fractal pattern), graph walk pulls in Knowledge-Triad (linked as the philosophical framework the biological pattern maps to)",
       "category": "graph"
     },
     {

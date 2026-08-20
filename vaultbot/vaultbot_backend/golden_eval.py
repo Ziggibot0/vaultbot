@@ -85,6 +85,8 @@ def load_golden_set(path: str | Path | None = None) -> list[dict[str, Any]]:
                     "query": q,
                     "expected_notes": list(exp),
                     "note": e.get("note", ""),
+                    "category": e.get("category", ""),
+                    "seed_notes": list(e.get("seed_notes") or []),
                 }
             )
     return out

@@ -1,6 +1,7 @@
 ---
 type: research
 status: raw
+baseline: true
 created: 2026-08-03
 recreated: 2026-08-15
 summary: "How VaultBot's vault architecture ensures knowledge permanence across model swaps, software updates, and long-term use. The vault is the mind — models are expendable plumbing."

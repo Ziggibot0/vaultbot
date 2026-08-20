@@ -1,6 +1,7 @@
 ---
 type: research
 status: deprecated
+baseline: true
 created: 2026-08-03
 summary: "How to implement OAuth2 authentication in an Express.js application: passport strategies, token validation, authorization code flow"
 tags:

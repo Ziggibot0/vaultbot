@@ -174,6 +174,38 @@ vaultbot/Memory/
 vaultbot/Knowledge/
 User/
 
+# Baseline-marked Knowledge/ notes (baseline: true in frontmatter) are
+# shippable and must NOT be gitignored. Git can't read frontmatter, so
+# these are un-ignored explicitly. Keep in sync with golden_set.json —
+# every expected/seed note must resolve to a committed file or the golden
+# gate scores 0 recall in CI.
+!vaultbot/Knowledge/
+vaultbot/Knowledge/*
+!vaultbot/Knowledge/Concepts/
+vaultbot/Knowledge/Concepts/*
+!vaultbot/Knowledge/Concepts/FUSED-Retrieval.md
+!vaultbot/Knowledge/Concepts/Vault-Cluster-Analysis.md
+!vaultbot/Knowledge/Concepts/Vault-Graph-Analysis.md
+!vaultbot/Knowledge/Concepts/Low-Power-Pedal-Assumption.md
+!vaultbot/Knowledge/Concepts/Self-Edit-Verification-Directive.md
+!vaultbot/Knowledge/Concepts/Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec.md
+!vaultbot/Knowledge/Research/
+vaultbot/Knowledge/Research/*
+!vaultbot/Knowledge/Research/Vault-Longevity-Architecture.md
+!vaultbot/Knowledge/Research/how-bacteria-communicate.md
+!vaultbot/Knowledge/Research/How-to-implement-OAuth2-authentication-in-an-Expressjs-application-passport-stra.md
+!vaultbot/Knowledge/Research/hermeneutics-theory-of-interpretation-the-hermeneutic-circle-how-meaning-is-deri.md
+!vaultbot/Knowledge/Research/RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g.md
+!vaultbot/Knowledge/Research/Small-Model-Driving-Architecture.md
+!vaultbot/Knowledge/Biology/
+vaultbot/Knowledge/Biology/*
+!vaultbot/Knowledge/Biology/Homeostasis-and-Animal-Regulation.md
+!vaultbot/Knowledge/Biology/Artificial-Homeostasis-and-VaultBot-Regulation.md
+!vaultbot/Knowledge/Biology/Homeostasis-Through-the-Knowledge-Triad.md
+!vaultbot/Knowledge/Architecture/
+vaultbot/Knowledge/Architecture/*
+!vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md
+
 # Personal files inside the shippable System/ framework tree
 vaultbot/System/Identity/Sean-Communication-Preferences.md
 vaultbot/System/Identity/Auto-Resume-Directive.md

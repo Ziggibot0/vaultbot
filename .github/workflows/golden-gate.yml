@@ -23,6 +23,7 @@ on:
       - "vaultbot/vaultbot_backend/golden_eval.py"
       - "vaultbot/vaultbot_backend/golden_set.json"
       - "vaultbot/vaultbot_backend/run_golden_gate.py"
+      - "vaultbot/vaultbot_backend/validate_golden_set.py"
       - ".github/workflows/golden-gate.yml"
 
 concurrency:
@@ -93,6 +94,11 @@ jobs:
         run: |
           curl -s http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"warmup"}' > /dev/null
           echo "Embedding model warmed up."
+
+      - name: Validate golden set against committed notes
+        working-directory: vaultbot/vaultbot_backend
+        run: |
+          python validate_golden_set.py --repo-root "${{ github.workspace }}"
 
       - name: Build index + run golden gate
         working-directory: vaultbot/vaultbot_backend
