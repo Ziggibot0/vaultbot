@@ -429,9 +429,7 @@ class FusedRetriever:
             # weights.  Walk `depth` hops, decaying each hop.
             frontier: list[tuple[str, int, float]] = [
                 (n, 0, self.GRAPH_BOOST) for n in self._neighbors(name, "out")
-            ] + [
-                (n, 0, self.BACKLINK_BOOST) for n in self._neighbors(name, "in")
-            ]
+            ] + [(n, 0, self.BACKLINK_BOOST) for n in self._neighbors(name, "in")]
             while frontier:
                 node, d, weight = frontier.pop(0)
                 if d >= depth:
