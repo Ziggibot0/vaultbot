@@ -478,16 +478,28 @@ if (Test-StepDone "searxng_setup") {
     }
 }
 
-# ── 6. Pull embedding model via Ollama ─────────────────────────────────────
-# Only the lightweight embedding model (nomic-embed-text, ~270 MB) is
-# auto-pulled. The chat/synthesis LLM is handled in step 6b based on the
-# user's choice (local Ollama vs cloud API).
+# ── 6. Pull embedding + small models via Ollama ───────────────────────────
+# The lightweight embedding model (nomic-embed-text, ~270 MB) and the small
+# classification model (qwen3.5:4b, ~4 GB) are auto-pulled. The chat/synthesis
+# LLM is handled in step 6b based on the user's choice (local vs cloud API).
 if (Test-StepDone "models_pulled") {
-    Write-Warn2 "Embedding model already downloaded -- skipping."
+    Write-Warn2 "Embedding + small models already downloaded -- skipping."
 } else {
     Write-Step "Downloading embedding model (~270 MB, one-time only)..."
     & ollama pull nomic-embed-text
     Write-OK "Embedding model ready"
+    # The small model (qwen3.5:4b) drives the small cartridge: cheap
+    # classification, tagging, and routing. It MUST be >= ~3-4B — a sub-1B
+    # model (like the old qwen3.5:0.8b) can't reliably classify or route,
+    # which makes VaultBot feel broken. Pull it here so the one-liner is
+    # truly all a user needs (no manual `ollama pull` afterward).
+    Write-Step "Downloading small model (qwen3.5:4b, ~4 GB) for classification/routing..."
+    & ollama pull qwen3.5:4b
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn2 "Small model pull failed. You can run 'ollama pull qwen3.5:4b' manually later."
+    } else {
+        Write-OK "Small model ready"
+    }
     Set-StepDone "models_pulled"
 }
 

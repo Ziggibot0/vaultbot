@@ -150,8 +150,8 @@ curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | ba
 
 The installer asks for your name, downloads the VaultBot files, creates a
 Python environment, installs all dependencies, pulls the lightweight embedding
-model (~270 MB, always local), and asks whether you want a local or cloud chat
-model. If you pick **cloud** (recommended for most users — a free OpenRouter
+model (~270 MB) and the small classification model (~4 GB, both always local),
+and asks whether you want a local or cloud chat model. If you pick **cloud** (recommended for most users — a free OpenRouter
 key works), you'll add your API key to `.env` after setup (the installer tells
 you exactly what to write). If you pick **local**, the installer pulls a
 local chat model for you — but note that a capable LLM for the agentic loop
@@ -283,8 +283,9 @@ one-liner install command to finish setup.
 
 **Model download is slow or fails.** `ollama pull` can be flaky on slow
 connections. Just re-run the same `ollama pull` command — it resumes where
-it left off. Note: the installer only auto-pulls the embedding model
-(`nomic-embed-text`, ~270 MB). If you chose local LLM mode
+it left off. Note: the installer auto-pulls the embedding model
+(`nomic-embed-text`, ~270 MB) and the small classification model
+(`qwen3.5:4b`, ~4 GB). If you chose local LLM mode
 (`LLM_BACKEND=ollama`), you'll need to `ollama pull` your chat model
 manually.
 
