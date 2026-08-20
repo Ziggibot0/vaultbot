@@ -3,7 +3,7 @@ type: claim
 status: raw
 baseline: true
 created: 2026-08-03
-summary: SUMMARY
+summary: "The vault is the ONLY knowledge source. VaultBot never references training data or anything outside the vault. If the vault has nothing on a topic, it says 'I don't know' and offers to research it — no hedging, no leakage, no fabrication."
 tags:
   - knowledge_management
   - integrity
