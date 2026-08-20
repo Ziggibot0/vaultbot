@@ -20,6 +20,8 @@ model_cartridge: small
 
 ## Steps
 
+### Step 1: Verify chat_handler.py compiles without errors
+
 1. ```python
    import py_compile
    import sys

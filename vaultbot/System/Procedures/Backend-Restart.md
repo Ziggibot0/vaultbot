@@ -21,10 +21,14 @@ Restart the VaultBot backend process. Sends a WebSocket message to the Obsidian 
 
 ## Steps
 
+### Step 1: Restart the backend process
+
 1. ```python
    from custom_tools.backend_restart import run as _restart
    result = _restart({})
    print(result)
    ```
+
+### Step 2: Wait for the backend to come back up
 
 2. [llm: The backend is restarting. Wait for it to come back up and verify it's healthy before proceeding.]

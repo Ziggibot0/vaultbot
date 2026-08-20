@@ -30,6 +30,8 @@ claim carry its own frontmatter (supports, contradicts, confidence).
 
 ## Steps
 
+### Step 1: Scan the vault for split candidates
+
 1. ```python
 import json, os, re, sys
 from pathlib import Path
@@ -91,6 +93,8 @@ for md_file in vault.rglob("*.md"):
 
 print(json.dumps({"candidates": candidates, "count": len(candidates)}, indent=2))
 ```
+
+### Step 2: Write each part as its own note
 
 2. ```python
 import json, os, re, sys

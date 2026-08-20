@@ -20,6 +20,8 @@ model_cartridge: small
 
 ## Steps
 
+### Step 1: Fix the indentation error in chat_handler.py
+
 1. ```python
    import os
    filepath = r"C:\Users\skell\Desktop\Vault2\vaultbot\vaultbot_backend\chat_handler.py"

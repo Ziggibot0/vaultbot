@@ -22,6 +22,8 @@ Download or read a textbook/reference resource and ingest it into the vault as l
 
 ## Steps
 
+### Step 1: Ingest the textbook into the vault as linked notes
+
 1. ```python
    # Call the textbook_ingest tool's run() function
    from custom_tools.textbook_ingest import run as _ingest

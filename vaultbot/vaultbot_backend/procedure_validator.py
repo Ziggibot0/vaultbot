@@ -503,6 +503,19 @@ def validate_procedure_text(
             "```python fence or [llm: ...] tag inside a ## Steps section"
         )
     else:
+        checks_run.append("step_instruction_present")
+        # Every step must carry a human-readable instruction header
+        # (the "### Step N: short-summary" line). A step with an empty
+        # instruction is opaque to a non-programmer — they can't tell
+        # what it does. This is the enforcement of issue #62.
+        headerless = [s.number for s in proc.steps if not s.instruction.strip()]
+        if headerless:
+            errors.append(
+                f"Steps {headerless} have no human-readable instruction "
+                "header — add a '### Step N: short-summary' line above "
+                "each bare ```python fence or [llm: ...] tag"
+            )
+
         checks_run.append("sequential_numbering")
         # Only check sequential for integer steps — decimal steps
         # (e.g. 1.5, 2.5) are explicitly allowed for inserting steps

@@ -48,6 +48,8 @@ Returns a JSON object with:
 
 ## Steps
 
+### Step 0: Load the draft answer
+
 0. ```python
 import json
 draft = args.get("draft_answer", "")
@@ -55,6 +57,8 @@ if not draft:
     raise RuntimeError("draft_answer argument required")
 result = json.dumps({"draft_answer": draft})
 ```
+
+### Step 1: Run the 7-question self-audit
 
 1. [llm: Run the 7-question self-audit on this draft answer. For each question, answer only YES (problem found) or NO (clean).
 
@@ -75,6 +79,8 @@ Q2: YES/NO
 Q7: YES/NO
 PASSED: true/false
 FLAGS: [list of Q numbers that were YES, or "none"]]
+
+### Step 2: Run the Steelman Self-Test
 
 2. [llm: Run the Steelman Self-Test on this draft answer.
 

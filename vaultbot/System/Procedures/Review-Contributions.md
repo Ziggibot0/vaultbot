@@ -24,6 +24,8 @@ List and review open pull requests on the VaultBot GitHub repo. For each PR, fet
 
 ## Steps
 
+### Step 1: List and review open pull requests
+
 1. ```python
    # Call the review_contributions tool's run() function
    from custom_tools.review_contributions import run as _review

@@ -51,6 +51,8 @@ No inputs required. All values are seeded by the dispatch pipeline itself.
 args = {"test_data": {"items": [{"name": "alpha", "value": 1}, {"name": "beta", "value": 2}]}}
 ```
 
+### Step 2: Validate the dispatch output contains the chain
+
 2. [validate: contains "chain"]
 
 ## Validation

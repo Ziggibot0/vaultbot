@@ -21,9 +21,13 @@ Analyze the connectedness of the vault's .md files. Finds islands (connected com
 
 ## Steps
 
+### Step 1: Analyze the vault graph's connectedness
+
 1. ```python
    result = vault_graph_analyzer()
    print(result)
    ```
+
+### Step 2: Review the analysis for islands
 
 2. [llm: Review the analysis. Islands indicate notes that need linking to the rest of the vault.]

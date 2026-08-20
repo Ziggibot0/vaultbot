@@ -52,6 +52,8 @@ The `final_output` is the generated procedure as markdown. The calling code hand
 
 ## Steps
 
+### Step 1: Generate a procedure from the pattern mine report
+
 1. ```python
 import json
 from pathlib import Path

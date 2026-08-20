@@ -57,6 +57,8 @@ Human-readable summary is printed as the final output.
 
 ## Steps
 
+### Step 1: Mine recurring tool-call sequences from session logs
+
 1. ```python
 import json, os
 from pathlib import Path

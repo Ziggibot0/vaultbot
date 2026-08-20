@@ -25,6 +25,8 @@ Run torture tests on a pull request before merging. Downloads changed files from
 
 ## Steps
 
+### Step 1: Run torture tests on the pull request
+
 1. ```python
    # Call the torture_test tool's run() function
    from custom_tools.torture_test import run as _torture

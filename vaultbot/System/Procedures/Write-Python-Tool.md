@@ -23,7 +23,11 @@ Create a new tool that is written to custom_tools/ and immediately loaded/regist
 
 ## Steps
 
+### Step 1: Design the tool and write its code
+
 1. [llm: Think about what the tool should do. Write the Python code that defines `def run(args: dict) -> dict:`. Test it with code_run first.]
+
+### Step 2: Test the tool code
 
 2. ```python
    from self_improver import SelfImprover
@@ -32,7 +36,11 @@ Create a new tool that is written to custom_tools/ and immediately loaded/regist
    print("Test result:", result)
    ```
 
+### Step 3: Decide whether to proceed or fix
+
 3. [llm: If the test passed, proceed to create the tool. If it failed, fix the code and re-test.]
+
+### Step 4: Create and register the tool
 
 4. ```python
    from self_improver import SelfImprover
@@ -45,5 +53,7 @@ Create a new tool that is written to custom_tools/ and immediately loaded/regist
    )
    print(result)
    ```
+
+### Step 5: Confirm the tool was created and registered
 
 5. [llm: Confirm the tool was created and registered. The tool is now callable in the next turn.]

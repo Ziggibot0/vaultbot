@@ -21,6 +21,8 @@ Pre-flight safety check before self-modifying operations. Verifies git clean sta
 
 ## Steps
 
+### Step 1: Run the preflight safety check
+
 1. ```python
    # Call the preflight_safety_check tool's run() function
    from custom_tools.preflight_safety_check import run as _preflight
