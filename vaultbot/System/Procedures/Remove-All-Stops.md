@@ -23,6 +23,8 @@ model_cartridge: small
 
 ## Steps
 
+### Step 1: Remove turn caps and loop-detector nudges from chat_handler.py
+
 1. ```python
    # Read chat_handler.py and make targeted replacements:
    # 1. Change cap defaults from 25/30 to 999999
@@ -92,6 +94,8 @@ model_cartridge: small
    if not changes:
        print("WARNING: No changes made - patterns not found. The file may have already been modified.")
    ```
+
+### Step 2: Verify the changes by reading back the modified sections
 
 2. ```python
    # Verify the changes by reading back the modified sections

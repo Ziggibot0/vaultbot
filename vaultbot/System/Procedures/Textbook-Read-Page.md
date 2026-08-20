@@ -23,6 +23,8 @@ Read one page of an ingested textbook PDF and get its content as text. The page 
 
 ## Steps
 
+### Step 1: Read one page of the textbook as text
+
 1. ```python
    # Call the textbook_read_page tool's run() function. It needs an
    # (optional) vision-capable llm_client for the precise image path;

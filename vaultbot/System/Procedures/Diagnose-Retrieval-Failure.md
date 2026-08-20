@@ -50,6 +50,8 @@ Read-only — runs retrieval queries, never modifies anything.
 
 ## Steps
 
+### Step 1: Walk the retrieval pipeline to find where the note falls out
+
 1. ```python
    import json, pathlib, sys
    from pathlib import Path

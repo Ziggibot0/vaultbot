@@ -168,6 +168,8 @@ else:
     result = draft_md
 ```
 
+### Step 2: Save the draft to a temp file
+
 2. ```python
 import json, os
 
@@ -184,6 +186,8 @@ else:
         f.write(draft_md)
     result = json.dumps({"s": "saved", "p": temp_path, "l": len(draft_md)})
 ```
+
+### Step 3: Big-model quality review of the draft
 
 3. ```python
 import json, os
@@ -224,6 +228,8 @@ Return ONLY the JSON."""
     review = llm_generate(prompt)
     result = review
 ```
+
+### Step 4: Apply review fixes and write to disk
 
 4. ```python
 import json, os, re
@@ -278,6 +284,8 @@ else:
         })
 ```
 
+### Step 5: Static verify via Verify-Procedure-Args
+
 5. ```python
 import json
 
@@ -314,6 +322,8 @@ else:
     })
 ```
 
+### Step 6: Lint the procedure
+
 6. ```python
 import json
 
@@ -329,6 +339,8 @@ result = json.dumps({
     "broken_links": lint_result.get("broken_wikilinks", []) if isinstance(lint_result, dict) else []
 })
 ```
+
+### Step 7: Dynamic test via Test-Procedure-Until-Pass
 
 7. ```python
 import json
@@ -371,6 +383,8 @@ result = json.dumps({
 })
 ```
 
+### Step 8: Final lint
+
 8. ```python
 import json
 
@@ -386,6 +400,8 @@ result = json.dumps({
     "broken": len(lint_result.get("broken_wikilinks", [])) if isinstance(lint_result, dict) else 0
 })
 ```
+
+### Step 9: Report the build results
 
 9. [llm: Report the results of this procedure build. Use the prior step outputs provided above.
 

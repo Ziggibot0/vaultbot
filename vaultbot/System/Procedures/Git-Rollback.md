@@ -21,11 +21,15 @@ Restore files from git HEAD. If file_path is given, restore just that file; othe
 
 ## Steps
 
+### Step 1: Restore files from git HEAD
+
 1. ```python
    from self_improver import SelfImprover
    _si = SelfImprover(session_logger=None)
    result = _si.git_rollback(file_path=args.get("file_path", ""))
    print(result)
    ```
+
+### Step 2: Confirm the rollback succeeded
 
 2. [llm: Confirm the rollback succeeded. If a specific file was restored, verify it's back to the original state by reading it with code_read.]

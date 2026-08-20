@@ -48,6 +48,8 @@ Returns a JSON object with:
 
 ## Steps
 
+### Step 1: Pattern-match the text against fallacy signatures
+
 1. ```python
 import json, re
 
@@ -199,6 +201,8 @@ result = json.dumps({
     "text_length": len(text),
 })
 ```
+
+### Step 2: Format the detected fallacies into a readable report
 
 2. ```python
 import json

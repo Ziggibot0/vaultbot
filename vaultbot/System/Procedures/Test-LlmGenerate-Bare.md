@@ -19,6 +19,8 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 ## Steps
 
+### Step 1: Test that llm_generate works in a code step
+
 1. ```python
 result = llm_generate("Say 'hello world' and nothing else.")
 ```

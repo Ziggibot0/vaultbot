@@ -59,6 +59,21 @@ def _frontmatter_errors(text: str) -> list[str]:
     return [e for e in result.get("errors", []) if e.startswith("Frontmatter")]
 
 
+def _instruction_header_errors(text: str) -> list[str]:
+    """Return the empty-instruction-header errors from the validator.
+
+    Enforces issue #62: every step must carry a human-readable
+    ``### Step N: short-summary`` header. A step with an empty
+    instruction is opaque to a non-programmer.
+    """
+    result = validate_procedure_text(text)
+    return [
+        e
+        for e in result.get("errors", [])
+        if "no human-readable instruction header" in e
+    ]
+
+
 def main() -> int:
     # --all mode: scan every committed .md file under vaultbot/System/
     # (used by CI, where there is no staging area). Default: scan staged
@@ -126,6 +141,7 @@ def main() -> int:
             continue  # not a procedure note — skip
 
         errors = _frontmatter_errors(text)
+        errors += _instruction_header_errors(text)
         if errors:
             blocked.append((rel_path, errors))
 
@@ -141,7 +157,11 @@ def main() -> int:
         )
         print("fields (type, description, when_to_use, allowed_tools,", file=sys.stderr)
         print(
-            "falsifiable_if, status, model_cartridge, created, summary, tags):",
+            "falsifiable_if, status, model_cartridge, created, summary, tags),",
+            file=sys.stderr,
+        )
+        print(
+            "or have steps with no human-readable instruction header:",
             file=sys.stderr,
         )
         print("", file=sys.stderr)
@@ -151,14 +171,18 @@ def main() -> int:
                 print(f"      - {err}", file=sys.stderr)
         print("", file=sys.stderr)
         print(
-            "Add the missing fields to each file's YAML frontmatter. See",
+            "Add the missing fields to each file's YAML frontmatter, or add a",
             file=sys.stderr,
         )
         print(
-            "[[Procedural-Bootstrap-and-Evolution-Plan]] and [[Procedure-Creator]]",
+            "'### Step N: short-summary' header above each bare ```python fence",
             file=sys.stderr,
         )
-        print("for the full schema.", file=sys.stderr)
+        print(
+            "or [llm: ...] tag. See [[Procedural-Bootstrap-and-Evolution-Plan]]",
+            file=sys.stderr,
+        )
+        print("and [[Procedure-Creator]] for the full schema.", file=sys.stderr)
         print("", file=sys.stderr)
         return 1
 

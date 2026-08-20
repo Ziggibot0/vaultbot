@@ -54,6 +54,8 @@ Human-readable summary is printed as the final output.
 
 ## Steps
 
+### Step 1: Aggregate token and tool usage across all chat logs
+
 1. ```python
 import json, os, re, datetime
 from pathlib import Path

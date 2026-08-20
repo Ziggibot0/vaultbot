@@ -22,6 +22,8 @@ Submit uncommitted changes as a GitHub pull request for community review. If the
 
 ## Steps
 
+### Step 1: Submit changes as a GitHub pull request
+
 1. ```python
    # Call the submit_contribution tool's run() function
    from custom_tools.submit_contribution import run as _submit

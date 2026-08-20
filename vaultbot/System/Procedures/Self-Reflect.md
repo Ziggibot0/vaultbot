@@ -22,6 +22,8 @@ Reflect on a topic and propose 1-3 new tool abilities you could create for yours
 
 ## Steps
 
+### Step 1: Reflect and propose new tool abilities
+
 1. ```python
    # self_reflect is a SelfImprover method — instantiate it standalone.
    from self_improver import SelfImprover
@@ -29,5 +31,7 @@ Reflect on a topic and propose 1-3 new tool abilities you could create for yours
    result = _si.self_reflect(topic=args.get("topic", ""), vault_context=args.get("vault_context", ""))
    print(result)
    ```
+
+### Step 2: Identify which abilities to implement first
 
 2. [llm: Based on the reflection results, identify which proposed abilities are most valuable and should be implemented first.]
