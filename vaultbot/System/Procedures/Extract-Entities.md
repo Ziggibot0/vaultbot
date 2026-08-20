@@ -26,6 +26,10 @@ last_reviewed: 2026-08-15
 
 Run this procedure when you need to extract structured entities and key facts from a text passage. This is the enrichment step for the graph_ops extract operation — it pulls named entities and factual statements out of raw text so they can be linked into the vault's knowledge graph.
 
+## Why This Exists
+
+Raw text holds named entities and key facts that must be pulled out as structured JSON before they can be linked into the knowledge graph. This procedure exists as the enrichment step for the graph_ops extract operation. The key tradeoff is that it uses the small model — entity extraction is simple structured parsing, not reasoning.
+
 ## Steps
 
 ### Step 1: Extract entities and facts with the small model
@@ -52,3 +56,8 @@ except Exception:
     key_facts = []
 result = json.dumps({"entities": entities, "key_facts": key_facts, "entity_count": len(entities), "fact_count": len(key_facts)})
 ```
+
+## Related
+
+- [[Extract-Claims]] — sibling extraction for factual claims
+- [[Extract-Procedures-From-Note]] — sibling extraction for procedural content

@@ -31,6 +31,10 @@ context string. The small model reads section titles + previews and picks
 which sections the big model actually needs. This cuts big-model input
 token cost.
 
+## Why This Exists
+
+Vault context can be large, and feeding all of it to the big model wastes input tokens on irrelevant sections. This procedure exists to filter context sections by relevance to the query before the big model processes them. The key tradeoff is a fail-safe fallback — if parsing fails, it keeps all sections rather than dropping relevant content.
+
 ## Steps
 
 ### Step 1: Format sections as a numbered list
@@ -96,3 +100,8 @@ except Exception:
 
 result = _json.dumps({"keep_ids": keep_ids})
 ```
+
+## Related
+
+- [[Smart-Vault-Search]] — the retrieval step that produces the context this filters
+- [[Evaluate-Retrieval]] — measures whether the filtered retrieval is accurate

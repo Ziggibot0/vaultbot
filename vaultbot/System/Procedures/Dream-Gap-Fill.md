@@ -29,6 +29,10 @@ tags:
 
 Creates missing notes for dangling wikilinks that [[Dream-Dangle-Fix]] couldn't fuzzy-match to any existing vault note. These are genuine knowledge gaps — notes that are referenced but were never written.
 
+## Why This Exists
+
+Some dangling wikilinks point at notes that were genuinely never written, and leaving them unresolved degrades graph connectivity and retrieval. This procedure exists to generate stub notes for those gaps, grounded in the context of the referencing notes. The key tradeoff is that it must not fabricate — each stub is written only from what can be inferred from the referencing notes' context, and thin context is marked as a placeholder.
+
 ## Inputs
 
 - `gaps`: list of `{dangling, best_guess, best_score, referenced_by}` from Dream-Dangle-Fix (passed via `args` or `prior_results`)
@@ -191,3 +195,9 @@ result = json.dumps({
 ## Step 4: Validate
 
 4. [validate: contains "stubs_written"]
+
+## Related
+
+- [[Dream-Dangle-Fix]] — flags the gaps this fills
+- [[Dream-Link]] — sibling linking step for orphaned notes
+- [[Dream-Pass]] — the orchestrator that calls this

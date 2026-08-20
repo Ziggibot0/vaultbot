@@ -46,6 +46,10 @@ This procedure reads those conversations, uses the LLM to semantically identify 
 - **Auto-batching:** When the corpus is large (100+ notes), the procedure chunks it into batches of 30 and processes each batch through steps 2-3 independently, then merges results in step 4. No manual batching needed.
 - **Deduplication:** A processed-notes manifest (`critical-path-mine-processed.json`) tracks which notes have already been analyzed. Re-runs skip already-processed notes and only pick up new ones.
 
+## Why This Exists
+
+Conversations contain the training data for what reasoning actually worked, but that signal was buried in chat logs and re-derived from scratch each time. This procedure mines the minimal critical path from past conversations and turns it into a procedure so the model walks straight down the path next time. The key tradeoff is that all pattern detection is done by the LLM semantically — no regex or keyword heuristics — which costs more but avoids brittle matching.
+
 ## Inputs
 
 - `chat_note_paths` (optional): Specific chat note paths to analyze. If not provided, collects ALL chat notes automatically, skipping any already in the processed-notes manifest.

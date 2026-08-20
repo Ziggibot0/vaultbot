@@ -28,6 +28,10 @@ Splits verbose notes into multiple smaller notes — one idea per note.
 This makes each idea equally discoverable by retrieval, and lets each
 claim carry its own frontmatter (supports, contradicts, confidence).
 
+## Why This Exists
+
+Verbose notes that bundle multiple distinct claims bury individual ideas and make them hard to retrieve. This procedure closes that gap by splitting them into one-idea-per-note files, with the original becoming a hub note. The tradeoff is that it must distinguish notes that should stay together (one coherent argument) from those with genuinely distinct claims.
+
 ## Steps
 
 ### Step 1: Scan the vault for split candidates
@@ -198,3 +202,9 @@ This note was split into separate notes for better discoverability.
 
 print(json.dumps({"results": results, "total_splits": len([r for r in results if r.get("status") == "ok"])}, indent=2))
 ```
+
+## Related
+
+- [[Note-Merge-Candidates]] — the inverse operation (merge, not split)
+- [[Find-Thin-Notes]] — finds thin notes that may need expansion
+- [[Smart-Note-Compare]] — compares notes before deciding to split or merge

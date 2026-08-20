@@ -31,6 +31,10 @@ Solve a GitHub issue end-to-end. This is the orchestrator that chains the
 community-contribution tools and existing procedures into one autonomous
 loop: read → understand → fix → test → submit → review → merge.
 
+## Why This Exists
+
+Solving a GitHub issue requires many steps (read, locate, fix, test, submit, merge) that would otherwise be done manually and inconsistently. This procedure closes that gap by orchestrating existing procedures into one autonomous loop. The tradeoff is that it adds no duplicated logic — it only chains existing tools and procedures, and the merge is gated on both a PASS safety scan and green CI.
+
 ## When to Run
 
 - When asked "solve issue #N" or "fix the GitHub issue"
@@ -135,3 +139,9 @@ result = _review({"merge": True})
 output = json.dumps(result, default=str) if isinstance(result, (dict, list)) else str(result)
 print(output)
 ```
+
+## Related
+
+- [[Submit-Contribution]] — the PR submission step this procedure calls
+- [[Review-Contributions]] — the review-and-merge step this procedure calls
+- [[Run-Test-Suite]] — the test gate before the PR is opened

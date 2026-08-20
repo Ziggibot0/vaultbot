@@ -25,6 +25,10 @@ tags:
 
 Run this when the user asks for a status check or when you need to verify the system is healthy. This procedure gathers key signals and formats them into a concise report.
 
+## Why This Exists
+
+Status checks were previously ad-hoc and could drift from the actual backend/tool state. This procedure exists to gather key signals (backend, tools, researcher, gaps) and format them into a concise report. The key tradeoff: it uses the small model only to format already-gathered signals, not to reason about them, so the report stays cheap and grounded.
+
 ## What This Procedure Checks
 
 1. **Backend**: Is the backend process running? (Check via tool availability — if tools respond, backend is up.)

@@ -29,6 +29,13 @@ When you need the ONE best note for a topic. Not a list — the single
 definitive note. The small model reads the top search results and picks
 the best one.
 
+## Why This Exists
+
+Sometimes you need the single definitive note for a topic, not a list of
+candidates. This procedure searches, reads the top results, and picks the
+one best note. The tradeoff: it only reads the top 5 search results, so a
+better note outside the top 5 won't be selected.
+
 ## Steps
 
 ### Step 1: Search and read top candidates
@@ -95,3 +102,9 @@ except Exception:
     parsed = {"best_note": None}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Index-Notes-By-Topic]] — builds a topic index for a directory
+- [[Note-Similarity-Cluster]] — clusters notes by topic
+- [[Smart-Vault-Search]] — semantic vault search

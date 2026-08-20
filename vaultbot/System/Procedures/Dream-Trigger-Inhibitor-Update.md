@@ -47,6 +47,10 @@ Session JSONL (chronological lines):
 
 Each `model_relevance_tags` event is paired with the **next** `websocket_message` (direction "in") in the same session file. That message's text is classified for sentiment. The pairing is the feedback signal.
 
+## Why This Exists
+
+The retrieval gate drops notes whose `inhibitor` phrases match the query, but those inhibitors have to come from somewhere — they're earned from real user reactions. This procedure exists as the offline half of that feedback loop, reading `model_relevance_tags` logs and writing trigger/inhibitor phrases back into note frontmatter. The key tradeoff is an evidence threshold (default 2) so a single noisy turn can't poison a note's trigger/inhibitor list.
+
 ## Inputs
 
 - `evidence_threshold`: Minimum consistent signals before writing a phrase (default: 2). A single noisy turn (sarcasm, terse "ok") cannot poison a trigger/inhibitor.
@@ -522,3 +526,9 @@ print("\n".join(summary_lines))
 ```
 
 [validate: contains "Trigger/Inhibitor Update Complete"]
+
+## Related
+
+- [[Dream-Pass]] — the orchestrator that calls this
+- [[Dream-When-To-Use-Update]] — sibling retrieval-feedback loop for when_to_use fields
+- [[Migrate-Triggers]] — seeds trigger lists from existing when_to_use fields

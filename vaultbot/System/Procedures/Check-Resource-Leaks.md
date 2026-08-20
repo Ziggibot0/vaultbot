@@ -30,6 +30,10 @@ Run this to check if a backend file has resource-leak patterns:
 missing `finally` cleanup. Catches leaks before they exhaust file
 descriptors or connections in production.
 
+## Why This Exists
+
+Unclosed files, sockets, and DB connections exhaust file descriptors and connections in production, but leaks are easy to miss in review. This procedure scans a file for resource-leak patterns. The key tradeoff is that detection is deterministic (regex), while severity assessment and fix suggestions are delegated to the small model.
+
 ## Steps
 
 ### Step 1: Read the file and scan for resource-leak patterns deterministically
@@ -115,3 +119,9 @@ except Exception:
     parsed = {"assessment": "error", "leaks": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — orchestrator that calls this check
+- [[Check-Error-Handling]] — sibling code-audit probe
+- [[Code-Structure-Check]] — sibling convention check

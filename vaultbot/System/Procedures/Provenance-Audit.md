@@ -22,6 +22,10 @@ model_cartridge: big
 
 Systematically check a procedure note for missing research provenance. Every design decision, cognitive science claim, and architectural choice should cite a vault research note via wikilink or have an inline `[sources: ...]` citation. This procedure finds the gaps.
 
+## Why This Exists
+
+Procedure notes accumulate design decisions and claims that lack any citation to the research that backs them, making them un-auditable. This procedure closes that gap by extracting claims and checking each for a wikilink or citation. The tradeoff is a split design: claim extraction is semantic (the LLM identifies what counts as a claim), while citation checking is structural (deterministic code verifies wikilinks resolve).
+
 ## Design Principle
 
 Claim extraction is **semantic** — the LLM identifies what counts as a claim needing provenance. Citation checking is **structural** — deterministic code verifies wikilinks resolve and citations exist. No regex trying to understand what a claim is.
@@ -375,3 +379,9 @@ print(result)
 
 [validate: contains "PROVENANCE AUDIT REPORT"]
 [validate: contains "Coverage"]
+
+## Related
+
+- [[Record-Provenance-Trace]] — stores the provenance chain this audit checks for
+- [[Cite-Provenance]] — forces every claim to cite a vault note
+- [[Verify-Answer-Entailment]] — produces per-claim verdicts that feed provenance

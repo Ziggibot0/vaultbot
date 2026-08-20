@@ -26,6 +26,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Run this when you want to find recurring workflows in your chat history that could be turned into procedures. The goal: each time you run this, you find patterns you repeat manually and draft procedures to automate them. Over time, you do less and less manually.
 
+## Why This Exists
+
+Manual workflows that recur 3+ times in chat history are automation candidates, but spotting them by hand is unreliable and doesn't scale as history accumulates. This procedure exists to deterministically extract tool co-occurrence and recurring topics, then draft candidate procedure specs for each uncovered pattern. The key tradeoff is that the small model is sufficient for all steps — classification, extraction, and formatting — so no big-cartridge reasoning is needed.
+
 ## What It Does
 
 1. Runs `pattern_extractor.py` deterministically to extract tool co-occurrence and recurring topic data from all chat logs

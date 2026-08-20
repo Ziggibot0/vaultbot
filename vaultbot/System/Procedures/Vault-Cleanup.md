@@ -32,6 +32,10 @@ table — orphans, broken links, duplicates, stubs, stale load-bearing
 notes. It does NOT re-run each Find-* scanner separately (that would
 rescan the vault 5×); it reads the shared JSON.
 
+## Why This Exists
+
+Cleanup work was scattered across separate Find-* scanners, each rescanning the vault and producing its own report. This procedure exists to run Pattern-Scan once and derive every cleanup category from that single table. The key tradeoff: all filtering is deterministic — zero big-model reasoning over raw notes — so the report is cheap and consistent.
+
 ## Steps
 
 ### Step 1: Run Pattern-Scan and derive every cleanup category from one table
@@ -96,3 +100,9 @@ result = json.dumps(queue)
 ### Step 3: Validate
 
 3. [validate: contains "cleanup" or contains "priority"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this meta-procedure reads from
+- [[Vault-Health-Check]] — the fast health snapshot that points here
+- [[Vault-Gaps]] — derives gaps from the same Pattern-Scan table

@@ -33,6 +33,10 @@ tags:
 
 Runs the 7-question self-audit and Steelman Self-Test from [[Critical-Thinking-Paths-and-Logical-Fallacy-Detection]] before presenting any conclusion. Each question is a simple YES/NO check — the model only needs to answer "does my reasoning match this pattern?"
 
+## Why This Exists
+
+Conclusions get presented with fallacies and biases that a pre-response audit could catch. This procedure closes that gap by running the 7-question self-audit and Steelman Self-Test before any conclusion is presented. The tradeoff is that each question is a simple binary YES/NO check, so the model only needs to match its reasoning against a pattern rather than reason from scratch.
+
 ## Inputs
 
 - `draft_answer` (string, required): The draft answer or reasoning to audit.
@@ -95,3 +99,9 @@ CONCLUSION: [one sentence]
 STEELMAN: [strongest counterargument]
 WEAKNESS: YES/NO
 DESCRIPTION: [if YES, what needs revision]
+
+## Related
+
+- [[Critical-Thinking-Paths-and-Logical-Fallacy-Detection]] — the knowledge note this audit is drawn from
+- [[Detect-Fallacies]] — the sibling fallacy-detection procedure
+- [[Self-Reflect]] — the sibling self-improvement procedure

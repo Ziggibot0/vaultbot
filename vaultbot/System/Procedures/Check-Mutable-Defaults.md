@@ -28,6 +28,10 @@ Run this to catch mutable default arguments (`[]`, `{}`, `set()`) in
 function signatures. These are a classic Python footgun: the default
 object is shared across all calls, leading to state leakage.
 
+## Why This Exists
+
+Mutable default arguments are a classic Python footgun — the default object is shared across all calls, causing subtle state-leakage bugs. This procedure scans function signatures for them. The key tradeoff is that detection is deterministic (AST, with a regex fallback), while severity assessment and fix suggestions are delegated to the small model.
+
 ## Steps
 
 ### Step 1: Read the file and scan for mutable defaults deterministically
@@ -130,3 +134,9 @@ except Exception:
     parsed = {"assessment": "error", "findings": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — orchestrator that calls this check
+- [[Check-Complexity]] — sibling code-audit probe
+- [[Code-Structure-Check]] — sibling convention check

@@ -33,6 +33,10 @@ tags:
 
 Deterministically detects logical fallacies in input text by pattern-matching against 30+ fallacy signatures from [[Critical-Thinking-Paths-and-Logical-Fallacy-Detection]]. All classification happens in a code step — the small model only formats the output. This replaces the old DAG version where the small model hallucinated on classification steps.
 
+## Why This Exists
+
+The old DAG version had the small model classify fallacies, and it hallucinated on classification steps. This procedure replaces that with deterministic pattern-matching against 30+ fallacy signatures, so detection needs no LLM. The key tradeoff is that the small model only formats the output, keeping detection reliable at the cost of missing nuanced fallacies that regex can't catch.
+
 ## Inputs
 
 - `text` (string, required): The argument or reasoning text to check for fallacies.
@@ -273,3 +277,9 @@ result = json.dumps({
 ```
 
 [validate: contains "FALLACIES" or contains "NO FALLACIES"]
+
+## Related
+
+- [[Cross-Check-Claims]] — verifies claims against sources
+- [[Self-Check-Reasoning]] — checks reasoning for errors
+- [[Evidence-Weighing]] — weighs evidence for a conclusion

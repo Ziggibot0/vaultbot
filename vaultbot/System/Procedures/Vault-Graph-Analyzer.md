@@ -19,6 +19,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Analyze the connectedness of the vault's .md files. Finds islands (connected components), measures hub-and-spoke structure, and identifies isolated notes with no links.
 
+## Why This Exists
+
+Disconnected note clusters and isolated notes weren't visible without a graph analysis. This procedure exists to find islands, measure hub-and-spoke structure, and identify notes with no links. The key tradeoff: it delegates to the vault_graph_analyzer tool and uses the LLM only to review the results for islands that need linking.
+
 ## Steps
 
 ### Step 1: Analyze the vault graph's connectedness
@@ -31,3 +35,9 @@ Analyze the connectedness of the vault's .md files. Finds islands (connected com
 ### Step 2: Review the analysis for islands
 
 2. [llm: Review the analysis. Islands indicate notes that need linking to the rest of the vault.]
+
+## Related
+
+- [[Vault-Cluster-Analyzer]] — analyzes cluster structure and communities
+- [[Vault-Health-Check]] — combines graph analysis into a health report
+- [[Find-Orphans]] — finds orphan notes

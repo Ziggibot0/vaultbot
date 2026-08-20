@@ -31,6 +31,10 @@ can "understand any part of its own code in an instant." The map is a single
 note that the `codebase_map` tool reads back in one call — no per-file
 `code_read` round-trips.
 
+## Why This Exists
+
+Understanding any part of the backend required per-file `code_read` round-trips, which is slow and scattered. This procedure generates a single map note that the `codebase_map` tool reads back in one call. The key tradeoff is that the map is a deterministic AST walk — no LLM, no embeddings — so it is cheap but must be regenerated when the code changes.
+
 ## When to Run
 
 - Before editing backend code (to locate the right module/function)
@@ -152,3 +156,9 @@ result = json.dumps({
 })
 print(result)
 ```
+
+## Related
+
+- [[Analyze-Function-Flow]] — traces a function's call graph through the map
+- [[Code-Pattern-Extract]] — searches the backend for patterns
+- [[Code-Structure-Check]] — checks a file's conventions

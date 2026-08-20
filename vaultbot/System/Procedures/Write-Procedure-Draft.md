@@ -29,6 +29,10 @@ When you need a new procedure, run this to get a complete draft. The small
 model writes the frontmatter and step structure. The big model reviews it
 and writes it to disk with `vault_safe_write`.
 
+## Why This Exists
+
+Creating a new procedure needed a draft to review before committing it to the library. This procedure exists to have the small model draft a complete procedure note from a task description. The key tradeoff: it does NOT write to disk — it returns the markdown for the big model to review and write, so a bad draft can't silently enter the library.
+
 ## Steps
 
 ### Step 1: List existing procedures for context (avoid duplicates)
@@ -87,3 +91,9 @@ Write the FULL markdown including frontmatter. Return ONLY the markdown."""
 # The draft is the LLM output from step 2
 result = output
 ```
+
+## Related
+
+- [[Create-New-Procedure]] — creates a new procedure
+- [[Tool-Usage-Report]] — identifies procedure candidates to draft
+- [[Write-Note]] — writes the drafted note to disk

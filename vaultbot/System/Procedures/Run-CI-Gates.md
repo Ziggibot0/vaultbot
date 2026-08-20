@@ -46,6 +46,10 @@ same gates in the same order:
 If any HARD GATE fails, the procedure reports which gate failed and
 the exact errors, so the fix can be applied immediately.
 
+## Why This Exists
+
+Pushing a PR that fails CI wastes a full GitHub Actions round-trip when the same failures could be caught locally in seconds. This procedure closes that gap by running the same gates (ruff check, ruff format, pyright, pytest) in the same order as CI. The tradeoff is that pyright is a soft, opt-in gate because it is slow on the full repo and carries pre-existing debt.
+
 ## What It Does
 
 1. Discovers the backend directory and venv Python
@@ -421,3 +425,9 @@ result = json.dumps({
     "gates": gates,
 })
 ```
+
+## Related
+
+- [[Submit-Contribution]] — enforces these gates before pushing a PR
+- [[Run-Test-Suite]] — the pytest gate this procedure runs
+- [[Verify-Backend-Change]] — restarts and checks health after a change

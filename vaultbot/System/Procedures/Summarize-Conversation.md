@@ -26,6 +26,10 @@ last_reviewed: 2026-08-15
 
 Run this procedure when the conversation history is getting too long and needs to be compacted. Summarizes the middle portion while keeping the head and tail verbatim. This is the OpenHands Condenser pattern — summarize early at a conservative threshold rather than waiting until the context window overflows.
 
+## Why This Exists
+
+Conversation history grows until it overflows the context window, and waiting until overflow loses information. This procedure closes that gap by summarizing the middle portion while keeping the head and tail verbatim. The tradeoff is that it summarizes early at a conservative threshold (the OpenHands Condenser pattern) rather than waiting for overflow, and it must preserve the user's goal and key decisions.
+
 ## Steps
 
 ### Step 1: Receive the transcript and summarize
@@ -37,3 +41,9 @@ Run this procedure when the conversation history is getting too long and needs t
 2. ```python
 result = json.dumps({"summary": output.strip(), "length": len(output.strip())})
 ```
+
+## Related
+
+- [[Condense-Note]] — the sibling condensation procedure
+- [[Chat-Consolidation]] — consolidates chat history into permanent notes
+- [[Smart-Note-Read]] — the sibling summarization procedure

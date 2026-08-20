@@ -15,6 +15,10 @@ allowed_tools:
   - run_procedure
 ---
 
+## Why This Exists
+
+It was unclear what shape `run_procedure` returns inside a code step — a dict, a JSON string, or something else — which made downstream parsing fragile. This debug test exists to inspect the return value's type, keys, and repr. The tradeoff: it's a one-shot diagnostic, not a reusable procedure, so it hardcodes Dream-Scan as the target.
+
 ## Step 1: Inspect run_procedure return value
 
 1. ```python
@@ -31,3 +35,9 @@ output = json.dumps({
     "repr": result_repr[:500]
 })
 ```
+
+## Related
+
+- [[Test-Procedure-Until-Pass]] — the automated test→fix→retest loop
+- [[Test-LlmGenerate-Bare]] — the bare llm_generate smoke test
+- [[Test-Dispatch-DSL]] — the DSL smoke test

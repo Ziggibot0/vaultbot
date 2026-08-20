@@ -29,6 +29,13 @@ When a note has no tags or could use better ones. The small model reads
 the content and suggests tags that match what the note is about, checking
 existing vault tags for consistency.
 
+## Why This Exists
+
+An untagged note is hard to discover. This procedure suggests tags from the
+note's content, preferring existing vault tags for consistency. The
+tradeoff: the suggestions are small-model judgment, so they may be too
+generic to be useful.
+
 ## Steps
 
 ### Step 1: Read the note and collect existing tags in the vault
@@ -111,3 +118,9 @@ except Exception:
     parsed = {"tags": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Note-Topic-Classifier]] — finds the best note for a topic
+- [[Index-Notes-By-Topic]] — builds a topic index for a directory
+- [[Note-Quality-Score]] — scores a note on 5 quality dimensions

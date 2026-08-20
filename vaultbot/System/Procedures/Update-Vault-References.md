@@ -47,6 +47,10 @@ model_cartridge: big
 - Fixing broken wikilinks (use Dream-Pass or vault_lint instead)
 - Updating procedure code/steps (edit the procedure directly)
 
+## Why This Exists
+
+When a concept name changes or a design target shifts, outdated references linger across many notes, and blind find-and-replace would corrupt historical context. This procedure exists to search for a target term, classify each mention as current-claim vs historical-context, and replace only the current-claims. The key tradeoff: it uses the LLM for semantic classification (update vs keep) and code for the deterministic search/replace/lint, so historical references are preserved.
+
 ## Inputs
 
 - `old_term`: The term to search for and replace (e.g., "0.8B")

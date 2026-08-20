@@ -30,6 +30,10 @@ It reads the relevant code, finds the exact functions that need to change,
 and returns a numbered list of minimal edits. The big model then executes
 each edit with [[Safe-Write]].
 
+## Why This Exists
+
+Multi-file self-modification fails when the model edits blindly without knowing exactly which functions to touch. This procedure closes that gap by reading the target file and returning a numbered list of surgical edits before any code is written. The key tradeoff is that it only plans — it does not write code, so the big model executes each edit one at a time.
+
 ## Steps
 
 ### Step 1: Read the target file(s) and understand current structure
@@ -102,3 +106,9 @@ except Exception:
     parsed = {"steps": [], "error": "could not parse plan"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Safe-Write]] — executes the edits this procedure plans
+- [[Proc-Step-Summary]] — verifies each edit still imports cleanly
+- [[Smart-Code-Read]] — maps a file's structure before planning edits

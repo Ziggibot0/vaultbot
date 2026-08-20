@@ -31,6 +31,10 @@ The design follows the dichotomous key pattern from [[Phylogenetic-Trees-and-Dic
 
 **Why three layers?** Because the three questions — "what is this?", "do we already have it?", and "did it work?" — are orthogonal. They cover different failure modes and each can be improved independently. Layer 1 was already built as [[Route-Task]]; this procedure adds Layers 2 and 3 without duplicating Layer 1's logic.
 
+## Why This Exists
+
+A single-layer intent classifier ([[Route-Task]]) can route a request but cannot tell whether the vault already covers it or whether the output is good enough to keep. This procedure closes that gap by stacking two more deterministic binary questions — coverage and quality — on top of intent classification. The tradeoff is that each layer is a bounded, framework-evaluated check, so the small model never has to reason across layers; it only executes leaf-node steps.
+
 ## Architecture
 
 ```
@@ -181,3 +185,9 @@ The procedure validates that:
 - The procedure calls [[Route-Task]] for Layer 1, `vault_search` for Layer 2, and records the chain for Layer 3. It does NOT duplicate the logic of any procedure it calls.
 - The `model_cartridge: small` setting means any `[llm:]` steps in called procedures use the small local model, not the big cloud model.
 - See [[Deterministic-Scaffolding-for-Small-Models]] for the architecture rationale and [[Phylogenetic-Trees-and-Dichotomous-Keys]] for the dichotomous key pattern.
+
+## Related
+
+- [[Route-Task]] — Layer 1 intent classification this calls
+- [[Smart-Vault-Search]] — Layer 2 coverage search this calls
+- [[Vault-Lint]] — Layer 3 quality gate this calls

@@ -55,3 +55,13 @@ if note is None:
 
 body = note["body"] if isinstance(note, dict) else note
 ```
+
+## Why This Exists
+
+Wikilinks can point to notes that don't exist, leaving broken links that degrade the vault's navigability. This procedure counts a note's wikilinks and classifies each as broken or valid by checking the vault. The key tradeoff is that the core counting is deterministic — no LLM needed — so the report is cheap and exact.
+
+## Related
+
+- [[Find-Broken-Links]] — vault-wide broken link scan
+- [[Vault-Lint]] — link and frontmatter quality check
+- [[Find-One-Way-Links]] — finds links with no backlink

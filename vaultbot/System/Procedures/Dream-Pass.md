@@ -54,6 +54,10 @@ tags:
 
 A biomimetic offline processing cycle inspired by how the brain consolidates memories during sleep. This is a **thin orchestrator** that calls 7 modular sub-procedures in sequence. Each sub-procedure is a standalone Lego brick that can be run independently or recombined.
 
+## Why This Exists
+
+Vault maintenance (consolidating memories, fixing broken wikilinks, pruning junk, mining patterns) was originally a monolithic 560-line file with all logic inline, which was unmaintainable and couldn't be run piecemeal. This procedure exists as a thin orchestrator that sequences modular sub-procedures so each phase can run independently or recombined. The key tradeoff is that the orchestrator itself uses the `small` cartridge with zero LLM steps — all reasoning lives in the sub-procedures, so the big cartridge is only spent where it's actually needed.
+
 ## Cartridge Note
 
 This orchestrator uses the **small** model cartridge. It contains zero `[llm:]` steps — every step is a `run_procedure()` call. The heavy reasoning lives in [[Dream-Consolidate]], which carries its own **big** cartridge and is invoked as a sub-procedure in Step 3.
@@ -652,5 +656,11 @@ On 2026-08-15 [[Dream-Trigger-Inhibitor-Update]] replaced [[Dream-When-To-Use-Up
 ## Integration with Session-Effort-Analysis and Behavioral-Pattern-Mine
 
 Session-Effort-Analysis is now a built-in step (2.6) in the Dream-Pass pipeline. It runs automatically after Chat-Consolidation. Behavioral-Pattern-Mine (step 2.7) complements it by detecting recurring tool sequences that should be automated as procedures.
+
+## Related
+
+- [[Dream-Scan]] — first sub-procedure in the chain
+- [[Dream-Consolidate]] — the big-cartridge memory-writing step
+- [[Dream-Evaluate]] — final scoring step of the pass
 
 

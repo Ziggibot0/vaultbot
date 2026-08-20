@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Edit backend Python source code safely. The tool syntax-checks, writes as UTF-8, and for core modules imports the whole backend in a subprocess — if the import fails, the edit is rejected and the original is auto-restored.
 
+## Why This Exists
+
+Editing backend Python source directly can break the backend with no way to recover. This procedure closes that gap by syntax-checking, writing as UTF-8, and importing the whole backend in a subprocess for core modules — rejecting the edit and auto-restoring the original if the import fails. The tradeoff is that it is a big-cartridge procedure because the import-graph verification is expensive.
+
 ## Steps
 
 ### Step 1: Read the file to understand its current state
@@ -42,3 +46,9 @@ Edit backend Python source code safely. The tool syntax-checks, writes as UTF-8,
 ### Step 3: Apply the edit or fix the import error
 
 3. [llm: If dry_run was used and passed, re-run with dry_run=False to apply. If the edit was rejected, diagnose the import error and fix the code before retrying.]
+
+## Related
+
+- [[Preflight-Safety-Check]] — verifies the system is healthy before editing
+- [[Proc-Step-Summary]] — verifies the edit still imports cleanly
+- [[Run-Test-Suite]] — the fuller verification gate after the edit

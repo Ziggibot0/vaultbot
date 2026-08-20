@@ -36,6 +36,10 @@ This lens implements **means-ends analysis** and **problem decomposition**, core
 
 - **Hierarchical decomposition**: Research shows that hierarchical decomposition (breaking into 3-7 sub-problems, then recursing) is more effective than flat decomposition. This aligns with Miller's law (7±2 items in working memory). [sources: [[cognitive-psychology-of-reasoning-dual-process-theory-System-1-System-2-thinking]]]
 
+## Why This Exists
+
+Complex problems overwhelm working memory and stall the model when tackled as a single undifferentiated task. This lens breaks a problem into 3-7 sub-problems via means-ends analysis and orders them topologically. The key tradeoff is that v4 collapsed the earlier triple-try and multi-step design down to ~3 LLM calls, accepting single-call consistency from the 4B model in exchange for far lower cost.
+
 ## What Changed in v4
 
 | Problem in v3 | Fix in v4 |

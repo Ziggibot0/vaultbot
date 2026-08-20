@@ -34,6 +34,14 @@ session, named by UUID, append-only.
 
 Read-only — never modifies a session file.
 
+## Why This Exists
+
+After a restart or crash, the context of what happened in a past session
+is lost. This procedure is the single read-only entry point for
+reconstructing any session — turns, tool calls, exceptions, and thinking —
+from its JSONL log. The key tradeoff is that it is strictly read-only, so
+it can never corrupt the append-only session files it inspects.
+
 ## When to Run This
 
 - "What happened in the last session" / "the session about X"
@@ -197,3 +205,9 @@ Read-only — never modifies a session file.
                    out.append(f"- {e}")
            result = "\n".join(out)
    ```
+
+## Related
+
+- [[Find-Recent-Errors]] — composes this to diagnose failures
+- [[Analyze-Failure-Log]] — aggregates failure patterns across procedures
+- [[Session-Effort-Analysis]] — analyzes token consumption across sessions

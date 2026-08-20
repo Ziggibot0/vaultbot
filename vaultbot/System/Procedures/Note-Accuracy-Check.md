@@ -29,6 +29,13 @@ Run this when you want to verify a note's claims against the rest of the
 vault. Unlike checking against a single source, this searches the whole
 vault for supporting or contradicting evidence.
 
+## Why This Exists
+
+A note's factual claims may be unsupported or contradicted by other vault
+notes. This procedure extracts claims and searches the vault for supporting
+or contradicting evidence. The tradeoff: it caps at 20 claims, so very
+claim-dense notes are only partially checked.
+
 ## Steps
 
 ### Step 1: Read the note and extract claims

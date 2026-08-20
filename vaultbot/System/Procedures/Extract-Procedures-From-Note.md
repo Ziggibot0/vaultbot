@@ -29,6 +29,10 @@ Run this when a vault note describes a how-to, checklist, or workflow that
 could be proceduralized. The small model extracts the actionable steps and
 drafts a procedure spec.
 
+## Why This Exists
+
+Step-by-step instructions and workflows are often buried in prose notes, where they can't be executed or reused as procedures. This procedure exists to mine notes for proceduralizable content and draft a procedure spec for each candidate. The key tradeoff is that it uses the small model — identifying actionable sequences is structured extraction, not reasoning.
+
 ## Steps
 
 ### Step 1: Read the note
@@ -91,3 +95,9 @@ except Exception:
 result = _json.dumps({"candidates": parsed, "note": data.get("note"),
                       "candidate_count": len(parsed)})
 ```
+
+## Related
+
+- [[Discover-Procedures]] — sibling procedure-discovery from chat history
+- [[Extract-Claims]] — sibling extraction for factual claims
+- [[Draft-New-Procedure]] — turns a candidate spec into a full procedure

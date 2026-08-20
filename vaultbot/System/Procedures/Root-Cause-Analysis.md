@@ -31,6 +31,10 @@ model_cartridge: big
 
 Called by [[Think]] when the problem type is classified as `WHY` — i.e., something is broken, failing, or behaving unexpectedly, and the task is to find WHY.
 
+## Why This Exists
+
+Debugging tends to jump to the first plausible cause and stop (System 1), missing the true root cause. This lens closes that gap by scaffolding abductive reasoning and a 5-Whys causal chain that forces each "why" to be answered explicitly and checked against evidence. The tradeoff is that it is a big-cartridge lens with several LLM calls, though v4.1 batched the 5-Whys into a single call to cut the total from ~8-10 down to ~4-5.
+
 ## What Changed in v4.1
 
 | Problem in v4 | Fix in v4.1 |

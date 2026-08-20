@@ -18,6 +18,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 model_cartridge: small
 ---
 
+## Why This Exists
+
+Restarting the backend after editing Python files risked a crash from a syntax error. This procedure exists to verify a Python file compiles before restart. The key tradeoff: it's a minimal py_compile check on a single hardcoded file (chat_handler.py), not a full test run.
+
 ## Steps
 
 ### Step 1: Verify chat_handler.py compiles without errors
@@ -33,3 +37,9 @@ model_cartridge: small
        print(f"SYNTAX ERROR: {e}")
        sys.exit(1)
    ```
+
+## Related
+
+- [[Verify-Backend-Change]] — the full verify-and-deploy chain
+- [[Backend-Restart]] — the restart this check precedes
+- [[Run-Test-Suite]] — the full test suite

@@ -28,6 +28,10 @@ tags:
 
 Run this after [[Verify-Answer-Entailment]] produces per-claim verdicts, to store them as a permanent, human-readable provenance manifest. This turns "the answer cites a source" into "the answer cites a source, and here is the exact claim→source→verdict chain, stored in the vault."
 
+## Why This Exists
+
+Entailment verdicts are transient unless they are stored somewhere permanent, so the reasoning chain from source to claim is lost after the answer is produced. This procedure closes that gap by appending a structured provenance block to the answer's chat note frontmatter. The tradeoff is that the block is structured frontmatter (machine-checkable) but human-readable, so it serves both the audit layer and a human reader.
+
 ## Design Principle
 
 The provenance block is **structured frontmatter** (machine-checkable) but **human-readable** (a scholar can open the note and read the chain). It is the data structure every other verification layer runs on — without it, entailment verdicts are transient and un-auditable.

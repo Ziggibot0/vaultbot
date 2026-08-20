@@ -33,6 +33,14 @@ procedure is almost entirely deterministic — it checks each system
 component and reports pass/fail. The small model only formats the
 structured results into a readable report.
 
+## Why This Exists
+
+When something feels off, the operator needs a pass/fail report of every
+system component without burning tokens on manual reasoning. This procedure
+checks Ollama, models, the vault index, the backend process, and tool
+registration deterministically. The tradeoff: it is pure status-checking, so
+the small model only formats the report — no reasoning is needed.
+
 ## Steps
 
 ### Step 1: Check Ollama and model availability

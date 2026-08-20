@@ -25,6 +25,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Execute Python code in a sandboxed subprocess. Returns stdout, stderr, and exit code.
 
+## Why This Exists
+
+Code needs to be tested or run before it is trusted, but running it in-process risks polluting the backend. This procedure executes Python in a sandboxed subprocess and returns stdout, stderr, and exit code. The key tradeoff is that the sandbox isolates execution, but the LLM must still diagnose failures from the captured output.
+
 ## Steps
 
 ### Step 1: Execute the Python code in a sandboxed subprocess
@@ -39,3 +43,9 @@ Execute Python code in a sandboxed subprocess. Returns stdout, stderr, and exit 
 ### Step 2: Analyze the output and decide next action
 
 2. [llm: Analyze the output. If the code failed, diagnose the error and decide whether to fix the code or report the issue.]
+
+## Related
+
+- [[Test-Procedure-Until-Pass]] — runs a procedure until it passes
+- [[Verify-Syntax]] — static syntax check before running
+- [[Run-Test-Suite]] — runs the full test suite

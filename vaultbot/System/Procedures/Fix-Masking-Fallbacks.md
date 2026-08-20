@@ -21,6 +21,14 @@ targeted have already been removed (see the fail-loud refactor audit) and its
 What it did: each step safely edited a Python file with backup + syntax check
 + import test, restoring the backup on failure.
 
+## Why This Exists
+
+Backend Python files had silent `return []` / `pass` fallbacks that masked
+failures instead of surfacing them. This spec removed those masking fallbacks
+as part of the fail-loud refactor. The tradeoff: it is a one-time migration
+kept as history, not an executable procedure — re-running it would assert-fail
+because the fallbacks are already gone.
+
 ## Step 1: Fix knowledge_curriculum.py — remove silent [] returns
 
 ```python
@@ -298,3 +306,9 @@ content = original
 # Around line 410 — need to identify exact pattern
 print("main.py needs targeted inspection — will identify exact pattern via code_read")
 ```
+
+## Related
+
+- [[Remove-All-Stops]] — sibling fail-loud refactor procedure
+- [[Safe-Write]] — the safe-edit pattern (backup + syntax check + rollback) this spec used
+- [[Check-Error-Handling]] — audits error handling for silent swallows

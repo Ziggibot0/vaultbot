@@ -41,6 +41,10 @@ When you need to create a new vault note. This procedure handles:
 3. **Locked-note protection** — blocks writes to LOCKED or sacred journal files
 4. **Name deduplication** — checks if a note with the same name already exists (anywhere in the vault)
 
+## Why This Exists
+
+Creating notes directly with vault_safe_write skipped directory routing, frontmatter injection, and duplicate-name protection. This procedure exists to wrap note creation with those safeguards. The key tradeoff: it blocks duplicate names by default (unless allow_suffix is set) and protects locked/sacred files, so a bad write can't silently clobber an existing note.
+
 ## Inputs
 
 | Key | Required | Description |
@@ -181,3 +185,9 @@ This procedure is designed to be called by higher-level procedures:
 - `Link-Notes` can call `Write-Note` to create placeholder notes
 - `Profile-User` can call `Write-Note` to create profile notes
 - `Connect-Concepts` can call `Write-Note` to create new concept notes
+
+## Related
+
+- [[Vault-Lint]] — lints a note after writing
+- [[Write-Procedure-Draft]] — drafts a procedure note for review
+- [[Safe-Write]] — the safe-write primitive this procedure builds on

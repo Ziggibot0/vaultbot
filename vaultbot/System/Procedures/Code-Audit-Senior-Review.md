@@ -45,6 +45,10 @@ summary with prioritized recommendations.
 - [[Check-Complexity]] — function length >50 lines, nesting depth >4
 - [[Check-Dead-Code]] — unused imports, unreachable branches
 
+## Why This Exists
+
+A single monolithic code-audit bundle covered unrelated concerns and was hard to maintain. This orchestrator calls five granular check procedures and aggregates their findings into one senior-level review. The key tradeoff is that it is pure orchestration — it never duplicates check logic, only collects and synthesizes the granular results.
+
 ## Steps
 
 ### Step 1: Run all five granular check procedures on the target file
@@ -166,3 +170,9 @@ Produce a senior-level review with these sections:
 4. **Positive Observations** — what the code does well (checks that returned zero violations).
 
 Format as clean markdown. Be specific — reference line numbers and check names. Do not hallucinate violations not present in the data.]
+
+## Related
+
+- [[Code-Audit-Architecture]] — the directive that specifies this orchestrator
+- [[Check-Error-Handling]] — granular check this orchestrates
+- [[Check-Complexity]] — granular check this orchestrates

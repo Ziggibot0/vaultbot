@@ -28,6 +28,13 @@ tags:
 When you want to know how two notes connect through the wikilink graph.
 Finds the shortest path and identifies missing links that would shorten it.
 
+## Why This Exists
+
+Understanding how two concepts connect requires tracing the wikilink path
+between them. This procedure uses BFS to find the shortest path and suggests
+missing links that would shorten it. The tradeoff: it only finds paths via
+resolved wikilinks, so unlinked-but-related notes appear disconnected.
+
 ## Steps
 
 ### Step 1: Build the graph and find the shortest path via BFS
@@ -114,3 +121,9 @@ result = _json.dumps({"path": data.get("path"), "path_length": data.get("path_le
                       "suggested_shortcuts": parsed.get("suggested_links", []),
                       "path_summary": parsed.get("path_summary", "")})
 ```
+
+## Related
+
+- [[Note-Dependency-Depth]] — measures load-bearing vs dependent notes
+- [[Vault-Graph-Analyzer]] — graph analysis of the vault topology
+- [[Note-Linker]] — suggests links to weave the graph tighter

@@ -33,6 +33,10 @@ the deterministic counters the framework already maintains (frontmatter
 stats + `procedure_failure_log.json`) and classifies — the small model
 only formats/labels, it does not judge from scratch.
 
+## Why This Exists
+
+Procedures degrade silently over time, and without scoring there is no signal for which ones need review, demotion, or retirement. This procedure closes that gap by reading the deterministic counters the framework already maintains and classifying each procedure as healthy/degraded/broken/untested. The tradeoff is that the small model only formats and labels — it does not judge from scratch, so the classification is grounded in real counters rather than opinion.
+
 ## Data sources
 
 - **Per-procedure frontmatter:** `success_count`, `failure_count`,
@@ -171,3 +175,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "procedure"]
+
+## Related
+
+- [[Dream-Pass]] — calls this procedure each cycle to self-score the library
+- [[Procedure-Fixer]] — repairs procedures this evaluation flags as broken
+- [[Procedure-Library-Health]] — aggregates this and other probes into one report

@@ -33,6 +33,13 @@ just touched) and finds (a) existing notes this note should link to, and
 The deterministic scan finds candidates; the small model ranks which are
 genuinely related — so it's cheap enough to run after every write.
 
+## Why This Exists
+
+A freshly written note becomes an orphan unless it's woven into the graph.
+This procedure finds existing notes the new note should link to (and notes
+that mention it but don't link it). The tradeoff: it targets only the most
+recently modified notes, so older orphans aren't revisited.
+
 ## Steps
 
 ### Step 1: Identify recently modified notes and gather candidate link targets
@@ -113,3 +120,9 @@ result = json.dumps({"recently_modified": per_note})
 ### Step 3: Validate
 
 3. [validate: contains "link"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this procedure filters
+- [[Find-Unlinked-Mentions]] — finds unlinked mentions this can apply
+- [[Smart-Suggest-Links]] — semantic link suggestion (LLM-based)

@@ -244,3 +244,10 @@ result = json.dumps({
 ### Step 4: Validate output
 
 4. [validate: contains "notes"]
+
+## Related
+
+- [[Vault-Walk]] — the foundation layer that reads every note
+- [[Find-Orphans]] — domain scanner that filters this for orphans
+- [[Find-Stale-Notes]] — domain scanner that filters this for stale notes
+- [[Find-Stubs]] — domain scanner that filters this for thin/stub notes

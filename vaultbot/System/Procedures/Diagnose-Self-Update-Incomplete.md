@@ -26,6 +26,10 @@ stale.** Symptom: the user clicks "Update from GitHub" and it reports success,
 but new procedures, identity rules, architecture docs, setup scripts, or other
 repo-tracked files don't appear — the bot keeps running with old knowledge.
 
+## Why This Exists
+
+A self-updater that downloads a full repo archive but only copies a subset of it to the live installation silently leaves the rest stale, so the button reports success while the bot keeps running old knowledge. This procedure exists to enumerate every copy path and compare it against `git ls-files` to find the silent gaps. The key tradeoff is that `copyCodeTree` only overwrites files present in the archive and never deletes live-only files, so user content must be confirmed gitignored before broadening the copy scope.
+
 ## Root cause pattern
 
 The updater in `main.js` `performSelfUpdate()` downloads the full GitHub
@@ -99,3 +103,8 @@ architecture) is still running the old version.
   copy list.
 - The "What gets updated" comment block in `performSelfUpdate()` must list
   every synced path so future maintainers can see the scope at a glance.
+
+## Related
+
+- [[Diagnose-GUI-Setting-Not-Sticking]] — sibling silent-failure diagnosis
+- [[Diagnose-System-Health]] — triage the backend before deep-diving the updater

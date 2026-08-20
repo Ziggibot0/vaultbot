@@ -30,7 +30,13 @@ Run to find notes that haven't been touched in over 30 days. Stale
 factual notes may be outdated; stale plans may be abandoned. Thin filter
 over [[Pattern-Scan]] (`is_stale == true`), excluding daily journal notes
 (which are meant to be immutable snapshots).
+## Why This Exists
 
+Notes that haven't been touched in 30+ days may carry outdated facts that
+propagate through the graph. This procedure surfaces them as a thin filter
+over Pattern-Scan's `is_stale` signal rather than re-walking the vault. The
+tradeoff: it excludes daily journal notes by design, since those are meant
+to be immutable snapshots, not living knowledge.
 ## Steps
 
 ### Step 1: Run Pattern-Scan and filter to stale notes
@@ -74,3 +80,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "stale"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this procedure filters
+- [[Check-Staleness]] — the standalone staleness signal probe
+- [[Update-Stale-Note]] — acts on the stale notes this finds

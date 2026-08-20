@@ -40,6 +40,10 @@ Produce a comprehensive health report for the entire procedure library by
 running six maintenance probes and aggregating their results into a single
 structured report.
 
+## Why This Exists
+
+Individual maintenance probes (redundancy, underuse, staleness, failure, drift, coverage) each answer one narrow question, but no single view aggregates them. This procedure closes that gap by orchestrating all six probes into one unified health report. The tradeoff is that it is a pure orchestrator — it adds no new analysis, only aggregation and a single output file.
+
 ## Inputs
 
 - `vault_path` (string, default: ".") — path to the vault root
@@ -106,3 +110,9 @@ Write to `Memory/Build-Log/procedure-library-health.json` using
 - The output file exists and is valid JSON
 - The summary counts are non-negative integers
 - The timestamp is a valid ISO-8601 string
+
+## Related
+
+- [[Procedure-Eval]] — scores individual procedure health from counters
+- [[Procedure-Coverage-Check]] — the coverage probe this procedure runs
+- [[Find-Redundant-Procedures]] — the redundancy probe this procedure runs

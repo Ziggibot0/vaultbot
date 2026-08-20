@@ -45,6 +45,10 @@ see what breaks, fix it, try again. The whole point is that **procedures
 should be tested before they're trusted**, and broken procedures should
 be iterated on until they actually deliver what they promise.
 
+## Why This Exists
+
+Procedures were being trusted without being tested, and broken procedures were left broken. This procedure exists to automate the test→diagnose→fix→retest loop, composing run_procedure with Procedure-Fixer into a self-healing cycle. The key tradeoff: it caps retries at max_iterations (default 3) so a fundamentally broken procedure fails loudly rather than looping forever.
+
 ## Inputs
 
 - `procedure_name` (required): The wikilink title of the procedure to test.
@@ -399,3 +403,9 @@ This procedure is falsifiable if:
   the previous iteration are picked up automatically.
 - **Safety:** All fixes go through [[Procedure-Fixer]], which uses safe
   writes with backups. The original procedure note is never destroyed.
+
+## Related
+
+- [[Procedure-Fixer]] — the diagnose+fix procedure this loop delegates to
+- [[Test-RunProcedure-Return]] — inspects what run_procedure returns
+- [[Verify-Procedure-Args]] — checks a procedure's code steps for runtime issues

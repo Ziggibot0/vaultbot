@@ -32,6 +32,10 @@ tags:
 
 Curates the backlog of raw research notes (type: research, status: raw) that accumulate from the autonomous researcher. Evaluates each note on quality signals, upgrades status where warranted, adds missing wikilinks, and flags thin/duplicate notes for merge or deletion.
 
+## Why This Exists
+
+Raw research notes accumulate from the autonomous researcher and sit unconnected and ungraded, so the vault fills with thin or duplicate notes that degrade retrieval. This procedure exists to evaluate each raw note on quality signals and upgrade the curatable ones while flagging the rest. The key tradeoff is a fixed quality bar — at least 3 wikilinks, 500 chars, and 3 sources — so promotion from `raw` to `active` is deterministic rather than subjective.
+
 ## Quality Signals
 
 A research note is "curatable" (ready to upgrade from `raw` to `active`) when it has:
@@ -185,3 +189,9 @@ result = json.dumps({
 ## Step 4: Validate
 
 4. [validate: contains "upgraded"]
+
+## Related
+
+- [[Dream-Pass]] — the orchestrator that calls this
+- [[Dream-Prune]] — removes the thin/junk notes this flags
+- [[Dream-Consolidate]] — writes new semantic notes, complementing this curation

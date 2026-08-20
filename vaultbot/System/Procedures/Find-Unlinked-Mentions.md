@@ -33,6 +33,14 @@ needed. Imports [[Pattern-Scan]] for the note list, then does a targeted
 text search (only for titles worth checking — hubs and well-linked
 notes), keeping cost bounded.
 
+## Why This Exists
+
+A note's title often appears as plain text in other notes without being
+wrapped in a wikilink. Converting these is the cheapest way to grow graph
+connectivity without creating new notes. The tradeoff: it only checks titles
+worth linking (hubs and well-linked notes) to keep cost bounded, so it may
+miss low-value mentions.
+
 ## Steps
 
 ### Step 1: Run Pattern-Scan, then scan for raw (unbracketed) mentions of note titles
@@ -101,3 +109,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "link"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this procedure filters
+- [[Note-Linker]] — applies the best link suggestions this finds
+- [[Smart-Suggest-Links]] — semantic link suggestion (LLM-based)

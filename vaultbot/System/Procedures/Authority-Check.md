@@ -113,3 +113,8 @@ print(result)
 ## Why This Exists
 
 This procedure was created after a failure on 2026-08-06: the model added a SMALL_MODEL_MODE gate because [[Small-Model-Driving-Architecture]] said it was needed, despite the user explicitly saying "NO SMALL MODEL GATE." The model prioritized a design document over a live directive. This procedure encodes the fix: the user's words are the highest authority, always.
+
+## Related
+
+- [[User-Directive-Override-Check]] — sibling check for when a directive overrides a note
+- [[Self-Reflect]] — self-correction loop this procedure feeds into

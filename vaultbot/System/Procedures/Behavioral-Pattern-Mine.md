@@ -43,6 +43,10 @@ Scans all session JSONL logs for recurring tool-call sequences that VaultBot per
 
 Unlike [[Session-Effort-Analysis]] (which counts token consumption and bigram frequencies), this procedure mines for **behavioral sequences** of length 2-5 that appear in 3+ distinct sessions. A sequence like `code_read -> safe_replace -> backend_restart` appearing 13 times across different sessions is a strong signal that this workflow should be a procedure.
 
+## Why This Exists
+
+VaultBot performs the same tool-call sequences manually across many sessions, re-deriving workflows the big model should not have to rebuild each time. This procedure mines recurring sequences from session logs to surface automation candidates. The key tradeoff is that it only counts sequences appearing in 3+ distinct sessions, trading recall for signal quality.
+
 ## Inputs
 
 No explicit arguments. The procedure scans `vaultbot/vaultbot_backend/sessions/` and `vaultbot/System/Procedures/`.
@@ -197,6 +201,12 @@ for i, cand in enumerate(report["top_candidates"][:10], 1):
 print(f"\nFull JSON report written to {out_file}")
 result = json.dumps(report)
 ```
+
+## Related
+
+- [[Critical-Path-Mine]] — mines reasoning patterns (complementary)
+- [[Session-Effort-Analysis]] — counts token consumption across sessions
+- [[Dream-Pattern-To-Procedure]] — converts mined patterns into procedures
 
 [validate: at_least 1 candidates in report["top_candidates"] OR report["total_patterns_found"] == 0]
 

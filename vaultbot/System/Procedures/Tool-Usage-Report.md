@@ -30,6 +30,10 @@ It finds recurring tool-call sequences in chat history and suggests
 procedures to automate them. This is how the procedure library grows
 toward covering everything.
 
+## Why This Exists
+
+The vaultbot was doing the same multi-step workflows manually over and over, with no systematic way to discover what to proceduralize next. This procedure exists to scan recent chat logs for recurring tool-call sequences (3+ times) and propose procedure names for each. The key tradeoff: it only flags sequences that recur 3+ times, so one-off workflows are deliberately ignored to avoid noise.
+
 ## Steps
 
 ### Step 1: Scan chat logs for tool-call sequences
@@ -111,3 +115,9 @@ except Exception:
 result = _json.dumps({"procedure_candidates": parsed,
                       "tool_frequency": data.get("tool_frequency", {})})
 ```
+
+## Related
+
+- [[Discover-Procedures]] — discovers procedures from vault content
+- [[Write-Procedure-Draft]] — drafts a new procedure from a candidate
+- [[Behavioral-Pattern-Mine]] — mines behavioral patterns from logs

@@ -35,6 +35,13 @@ The output also includes a topic-level overview map showing what topics the
 vault covers and where knowledge is concentrated or thin. This absorbs the
 former Vault-Topic-Map procedure.
 
+## Why This Exists
+
+Multiple notes can cover the same topic using different words, which exact
+title matching misses. This procedure clusters notes semantically and
+produces a topic-level coverage map. The tradeoff: it replaced the former
+Vault-Topic-Map procedure, absorbing its topic-mapping role.
+
 ## Steps
 
 ### Step 1: Collect note titles and first-paragraph summaries
@@ -112,3 +119,9 @@ result = _json.dumps({"clusters": clusters,
                       "high_overlap_count": len(high_overlap),
                       "total_notes": data.get("count", 0)})
 ```
+
+## Related
+
+- [[Find-Duplicates]] — catches exact title duplicates
+- [[Note-Merge-Candidates]] — suggests merges for overlapping notes
+- [[Index-Notes-By-Topic]] — builds a topic index for a directory

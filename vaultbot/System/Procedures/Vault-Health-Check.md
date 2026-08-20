@@ -31,6 +31,10 @@ Combines [[Pattern-Scan]] (per-note signals) with `vault_graph_analyzer`
 step only turns structured data into readable prose — cheap to run on the
 small cartridge.
 
+## Why This Exists
+
+There was no fast, cheap way to get a vault health snapshot at session start. This procedure exists to combine Pattern-Scan with the graph analyzer into a concise health report. The key tradeoff: the LLM only formats structured graph data into prose — no reasoning over raw notes — so it runs cheaply on the small cartridge.
+
 ## Steps
 
 ### Step 1: Gather Pattern-Scan summary + graph analysis
@@ -68,3 +72,9 @@ result = json.dumps(health)
 ### Step 3: Validate
 
 3. [validate: contains "vault" or contains "health"]
+
+## Related
+
+- [[Vault-Cleanup]] — the full prioritized to-do list this snapshot points to
+- [[Vault-Graph-Analyzer]] — the graph analysis this procedure consumes
+- [[Pattern-Scan]] — the per-note signal engine

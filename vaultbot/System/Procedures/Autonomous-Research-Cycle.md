@@ -33,6 +33,10 @@ AutonomousResearcher._cycle_impl()
   └── Mechanically execute the plan (research / consolidate / skip)
 ```
 
+## Why This Exists
+
+The autonomous researcher's decision logic was embedded in Python, so changing what gets researched required a backend restart. This procedure moves all decision logic into an editable note that `autonomous_researcher.py` calls each cycle. The key tradeoff is that the Python class becomes a thin executor while all gap filtering, prioritization, and scheduling live here — editable without restart.
+
 ## Inputs
 
 Passed as `procedure_args` (the `args` dict in code steps):
@@ -338,3 +342,9 @@ else:
         "total_gaps_found": len(recovered_gaps) + len(procedure_gaps) + len(curriculum_gaps),
     })
 ```
+
+## Related
+
+- [[Research-Batch]] — executes the research this cycle plans
+- [[Find-Redundant-Procedures]] — a procedure this cycle can reset
+- [[Dream-Pass]] — the sleep cycle that also drives research

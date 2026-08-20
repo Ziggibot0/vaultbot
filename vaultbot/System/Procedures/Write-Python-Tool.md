@@ -21,6 +21,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Create a new tool that is written to custom_tools/ and immediately loaded/registered. You (and external MCP clients) can call it in the very next turn.
 
+## Why This Exists
+
+When VaultBot lacks a capability, it needs a way to build a new tool for itself rather than waiting for a human. This procedure exists to design, test, and register a new custom tool for immediate use. The key tradeoff: it tests the tool code with code_run before creating it, so a broken tool isn't registered.
+
 ## Steps
 
 ### Step 1: Design the tool and write its code
@@ -57,3 +61,9 @@ Create a new tool that is written to custom_tools/ and immediately loaded/regist
 ### Step 5: Confirm the tool was created and registered
 
 5. [llm: Confirm the tool was created and registered. The tool is now callable in the next turn.]
+
+## Related
+
+- [[Write-Procedure-Draft]] — drafts a procedure note for review
+- [[Capability-Audit]] — audits capabilities to find gaps
+- [[Check-Tool-Coverage]] — checks tool coverage

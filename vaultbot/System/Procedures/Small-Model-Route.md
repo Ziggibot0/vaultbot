@@ -30,6 +30,10 @@ When the big model is about to do something and the procedure surface didn't
 obviously surface a match, call this. It scans the procedure library and picks
 the best one. Uses the small model (cheap, local) for the routing decision.
 
+## Why This Exists
+
+When the procedure surface doesn't obviously surface a match, the big model needs a way to find the single best procedure for a task. This procedure closes that gap by scanning the library and using the small model to pick the best match by comparing the task intent to each procedure's when_to_use. The tradeoff is that it returns a single best match or 'none' — it is a routing decision, not a full chain like [[Route-Task]].
+
 ## Steps
 
 ### Step 1: List all procedures with their when_to_use
@@ -108,3 +112,9 @@ except Exception:
     parsed = {"best_match": "none", "reason": "could not parse route"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Route-Task]] — the master dispatcher that returns full procedure chains
+- [[Procedure-Coverage-Check]] — the lighter yes/no coverage check
+- [[Small-Model-Bootstrap]] — the session-start orientation that routes here

@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Tests that the Dispatch DSL compiler produces clean, runnable Python from YAML entries. Uses `condition` with the operator inside `{{ }}` braces and `extract` from a namespace list.
 
+## Why This Exists
+
+The Dispatch DSL compiles YAML `condition`/`extract` entries into Python, and a malformed entry can silently produce broken output. This procedure exists as a minimal smoke test that the compiler handles the operator-inside-braces form and list extraction correctly. The key tradeoff is that it takes no inputs — all values are seeded by the dispatch pipeline itself — so it is a self-contained regression check.
+
 ## Inputs
 
 No inputs required. All values are seeded by the dispatch pipeline itself.
@@ -58,3 +62,8 @@ args = {"test_data": {"items": [{"name": "alpha", "value": 1}, {"name": "beta", 
 ## Validation
 
 The procedure validates that the dispatch pipeline produces output containing "chain".
+
+## Related
+
+- [[Test-Dispatch-DSL]] — fuller dispatch DSL test
+- [[Test-Run-DSL]] — runs the DSL end-to-end

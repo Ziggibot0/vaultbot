@@ -18,6 +18,14 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 model_cartridge: small
 ---
 
+## Why This Exists
+
+Running Remove-All-Stops can leave `chat_handler.py` with indentation
+errors from the edits. This procedure fixes the specific known indentation
+regression (the `_MAX_READ_ONLY_STREAK` line) and verifies syntax. The
+tradeoff: it targets one hardcoded pattern, so a differently-formatted
+regression won't be caught.
+
 ## Steps
 
 ### Step 1: Fix the indentation error in chat_handler.py
@@ -48,3 +56,9 @@ model_cartridge: small
    except py_compile.PyCompileError as e:
        print(f"SYNTAX ERROR: {e}")
    ```
+
+## Related
+
+- [[Remove-All-Stops]] — the procedure whose edits cause the indentation regression
+- [[Verify-Syntax]] — syntax verification for backend changes
+- [[Safe-Write]] — safe file editing with rollback

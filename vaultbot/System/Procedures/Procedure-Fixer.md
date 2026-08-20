@@ -40,6 +40,10 @@ procedure **delegates** to existing meta-procedures for diagnosis rather than
 duplicating their logic. It only adds the glue: orchestration, patch
 application, and verification.
 
+## Why This Exists
+
+A broken procedure needs diagnosis across multiple dimensions (failure log, tool coverage, step coverage, drift), but duplicating each diagnostic's logic would bloat the library. This procedure closes that gap by composing existing meta-procedures as diagnostic sub-tasks and only adding the glue: orchestration, patch application, and verification. The tradeoff is that it delegates rather than reimplements, so it depends on those sub-procedures being correct.
+
 ## Inputs
 
 - `procedure_name`: The wikilink title of the broken procedure (e.g. `Post-Copilot-Audit`)
@@ -485,3 +489,9 @@ This procedure is falsifiable if:
   the actual failure log entries)
 - It breaks a previously-working procedure by applying an incorrect patch
   (verifiable via Procedure-Eval before and after)
+
+## Related
+
+- [[Procedure-Eval]] — flags broken procedures and verifies the fix
+- [[Analyze-Failure-Log]] — the root-cause diagnostic this procedure delegates to
+- [[Check-Tool-Coverage]] — the missing-tool diagnostic this procedure delegates to

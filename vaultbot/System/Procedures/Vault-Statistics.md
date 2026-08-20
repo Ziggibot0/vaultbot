@@ -28,6 +28,10 @@ tags:
 Run this for a quick statistical snapshot of the vault. Useful for
 tracking growth over time or assessing overall health.
 
+## Why This Exists
+
+Assessing vault health or tracking growth needed a compact statistical summary — note counts, lengths, link density, orphan rate, procedure coverage. This procedure exists to compute those statistics deterministically. The key tradeoff: it computes stats in code and uses the small model only to write a brief health summary, so the numbers are exact and reproducible.
+
 ## Steps
 
 ### Step 1: Compute vault statistics deterministically
@@ -132,3 +136,9 @@ except Exception:
     parsed = {"health": "unknown"}
 result = _json.dumps({"statistics": data, "health_assessment": parsed})
 ```
+
+## Related
+
+- [[Vault-Health-Check]] — the fast health snapshot
+- [[Vault-List]] — lists notes by directory/tag
+- [[Pattern-Scan]] — the per-note signal engine this complements

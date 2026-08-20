@@ -43,6 +43,10 @@ Read-only — calling these endpoints has no side effects.
 - Before a restart, to capture the pre-restart state
 - When something feels broken and you need a quick read
 
+## Why This Exists
+
+Answering "is everything okay?" requires hitting several backend endpoints and consolidating their answers, which is tedious to do by hand and easy to get wrong. This procedure exists to call `/health`, `/diagnose`, `/system/stats`, and `/ollama/stats` in one pass and return a single consolidated report. The key tradeoff is that it is read-only — calling these endpoints has no side effects, so it is safe as a first triage step before any restart or repair.
+
 ## Inputs
 
 None.
@@ -127,3 +131,9 @@ None.
 
    result = "\n".join(lines)
    ```
+
+## Related
+
+- [[Diagnose-Preflight-Stall]] — deep-dive a specific preflight stall after triage
+- [[Find-Recent-Errors]] — sweep session logs for failures this health check might miss
+- [[Vault-Health-Check]] — graph-level health, complementary to this endpoint-level check

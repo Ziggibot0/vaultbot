@@ -29,6 +29,10 @@ Run this after ANY code change to the vaultbot backend to verify nothing
 broke. This runs the actual pytest suite (not just a syntax check) and
 reports the results. Use it as a gate before restarting the backend.
 
+## Why This Exists
+
+A code change can break tests without being caught by a syntax check, and restarting the backend on broken code is costly. This procedure closes that gap by running the actual pytest suite and reporting pass/fail. The tradeoff is that it distinguishes pre-existing failures from new ones by comparing against a known baseline, so only new failures block.
+
 ## What It Does
 
 1. Runs `pytest` in the backend directory with an optional `-k` filter
@@ -104,3 +108,9 @@ print(result)
     - PRE-EXISTING (unrelated to this change, e.g., an LLM client issue) — note it but don't block
   - If status is "timeout" or "error": report the infrastructure issue.
 Output a verdict: "PASS" (all tests green) or "FAIL" (new failures found) with the list of new failures.]
+
+## Related
+
+- [[Safe-Write]] — the edit step this test suite verifies
+- [[Proc-Step-Summary]] — the lighter import check before the full suite
+- [[Run-CI-Gates]] — the full CI mirror that includes this pytest gate

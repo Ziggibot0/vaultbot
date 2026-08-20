@@ -29,6 +29,14 @@ Run this to find direct contradictions between vault notes — note A says
 something is true, note B says it's false. This is the vault-wide version
 of single-concept comparison — it scans all notes for contradictions.
 
+## Why This Exists
+
+As the vault grows organically, notes can directly contradict each other
+(one says X is true, another says X is false). This procedure extracts
+assertive statements and has the small model check pairs for direct
+contradictions. The tradeoff: it caps at 100 statements to keep context
+manageable, so it samples rather than exhaustively checks the whole vault.
+
 ## Steps
 
 ### Step 1: Extract assertive statements from all notes
@@ -120,3 +128,9 @@ result = _json.dumps({
     "statements_checked": data.get("statements_checked", 0),
 })
 ```
+
+## Related
+
+- [[Find-Contradictions]] — note-vs-code contradiction detection
+- [[Find-Tensions]] — claim-vs-claim tension detection (sibling probe)
+- [[Cross-Check-Claims]] — verifies claims against external sources

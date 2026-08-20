@@ -54,6 +54,10 @@ The Socratic method operates through six types of questioning: clarification, pr
 
 This lens is the **Epistemology** of the triad applied within a lens: it asks "how do we know what we know?" and "what don't we know?" — the fundamental epistemological questions.
 
+## Why This Exists
+
+Open-ended exploration problems need structured questioning rather than a single lookup answer. This lens exists to map a question space through Socratic questioning — probing assumptions, evidence, perspectives, and implications. The key tradeoff: it batches independent steps into fewer LLM calls (v4.1) to keep the small model's call count low while preserving the structured reasoning that makes Socratic inquiry effective.
+
 ## Inputs
 
 - `problem`: The question or problem to explore

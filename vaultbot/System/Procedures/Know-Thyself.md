@@ -58,6 +58,14 @@ tags:
 - **Debugging** \u2014 "why did that fail?" → check current health/capabilities
 - **Curiosity** \u2014 instant answer to model availability, procedure count, etc.
 
+## Why This Exists
+
+VaultBot needs a single entry point to answer "what am I right now?" with
+live data, not remembered state. This procedure orchestrates 8 independent
+probes into one snapshot. The tradeoff: probes run independently and failures
+are isolated and reported, not fatal — so a broken probe degrades the report
+rather than aborting it.
+
 ## Architecture: Probe Orchestration
 
 ```
@@ -300,4 +308,11 @@ run_procedure("Know-Thyself", args={"depth": "deep"})
 # Custom output path
 run_procedure("Know-Thyself", args={"output_file": "vaultbot/Memory/Build-Log/know-thyself-session-start.json"})
 ```
+
+## Related
+
+- [[Capability-Audit]] — the capability probe this orchestrates
+- [[Diagnose-System-Health]] — the health probe this orchestrates
+- [[Vault-Health-Check]] — the vault probe this orchestrates
+- [[Procedure-Eval]] — the procedure probe this orchestrates
 

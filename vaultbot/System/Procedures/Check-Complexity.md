@@ -29,6 +29,10 @@ Run this to check if a Python file has complexity issues — functions
 that are too long, deeply nested, or have too many branches. These
 make code hard to maintain and test.
 
+## Why This Exists
+
+Long, deeply nested, or branch-heavy functions are hard to maintain and test, but there was no single check to flag them before a commit. This procedure AST-scans a file for function length, nesting depth, and branch count. The key tradeoff is that detection is deterministic (AST), while severity assessment and refactoring suggestions are delegated to the small model.
+
 ## Steps
 
 ### Step 1: AST-scan for function length, nesting depth, and branch count
@@ -153,3 +157,9 @@ except Exception:
     parsed = {"assessment": "error", "findings": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — orchestrator that calls this check
+- [[Check-Dead-Code]] — sibling code-audit probe
+- [[Code-Structure-Check]] — sibling convention check

@@ -29,6 +29,10 @@ unreachable statements after return/break/continue/raise, and
 variables that are assigned but never referenced. Dead code adds
 maintenance burden and obscures intent.
 
+## Why This Exists
+
+Dead code — unused imports, unreachable statements, and never-referenced variables — adds maintenance burden and obscures intent, but it accumulates silently. This procedure AST-scans a file to surface it with line numbers. The key tradeoff is that detection is deterministic (AST), while severity assessment and fix suggestions are delegated to the small model.
+
 ## Steps
 
 ### Step 1: AST scan for unused imports and unreachable code
@@ -174,3 +178,9 @@ except Exception:
     parsed = {"assessment": "error", "findings": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — orchestrator that calls this check
+- [[Check-Complexity]] — sibling code-audit probe
+- [[Find-Dead-Code]] — vault-wide dead code scan

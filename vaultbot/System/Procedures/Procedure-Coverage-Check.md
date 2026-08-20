@@ -36,6 +36,10 @@ In `full_audit` mode, this also replaces the former Procedure-Library-Audit:
 it walks every procedure, extracts its coverage scope, and flags tasks that
 recurring in chat history but have no procedure covering them.
 
+## Why This Exists
+
+Before doing manual tool calls, the vaultbot needs to know whether a procedure already handles the task. This procedure closes that gap with a quick yes/no coverage check, and in `full_audit` mode audits the whole library for gaps. The tradeoff is that it is deliberately lighter than [[Small-Model-Route]] — just a yes/no with the procedure name rather than a full routing decision.
+
 ## Arguments
 
 - `task` (string): The task to check coverage for. Required for single-task mode.
@@ -133,3 +137,9 @@ except Exception:
     parsed = {"covered": False, "reason": "could not parse"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Small-Model-Route]] — the heavier routing decision this check is lighter than
+- [[Procedure-Library-Index]] — the catalog of procedures this check searches
+- [[Procedure-Eval]] — scores procedure health alongside coverage

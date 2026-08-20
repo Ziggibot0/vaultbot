@@ -28,6 +28,10 @@ tags:
 Run this when you need to compare two files and understand what changed.
 Works on any text files — vault notes, code, procedures.
 
+## Why This Exists
+
+When comparing two versions of a file, there was no way to see the meaningful changes without reading both in full. This procedure computes a line-level diff and summarizes the substantive changes. The key tradeoff is that the small model filters out whitespace and trivial changes, so the summary focuses on what actually matters.
+
 ## Steps
 
 ### Step 1: Read both files and compute a line-level diff
@@ -108,3 +112,9 @@ result = _json.dumps({"diff_stats": {"added": data.get("lines_added", 0),
                                       "removed": data.get("lines_removed", 0)},
                       "summary": parsed})
 ```
+
+## Related
+
+- [[Note-vs-Code-Diff]] — compares a note against code
+- [[Git-Working-Diff]] — shows uncommitted working-tree changes
+- [[Verify-Backend-Change]] — verifies a change took effect

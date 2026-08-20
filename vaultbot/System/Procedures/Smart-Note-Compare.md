@@ -34,6 +34,10 @@ Can also be used to diff two specific notes about the same concept,
 highlighting what each covers that the other doesn't. This absorbs the
 former Note-Content-Diff procedure.
 
+## Why This Exists
+
+Multiple notes about the same topic can be written from different angles, and consolidating them without understanding those differences risks losing coverage. This procedure closes that gap by classifying each note by perspective, or diffing two specific notes to highlight what each covers that the other doesn't. The tradeoff is that it absorbs the former Note-Content-Diff procedure, so one procedure now handles both perspective classification and content diffing.
+
 ## Arguments
 
 - `topic` (string): The topic to find and classify notes about. Required for topic mode.
@@ -154,3 +158,9 @@ if isinstance(parsed, list):
 else:
     result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Note-Merge-Candidates]] — identifies notes to merge after comparison
+- [[Find-Duplicates]] — finds near-duplicate notes to compare
+- [[Smart-Note-Read]] — reads a single note's key points

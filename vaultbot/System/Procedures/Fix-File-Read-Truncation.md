@@ -35,6 +35,15 @@ marker appears in file-read results. This procedure audits every layer
 in the chat pipeline that can cut file content and ensures each one
 either passes the full content through or has a very high threshold.
 
+## Why This Exists
+
+File-read tool results pass through several pipeline layers, each of which
+can truncate content before it reaches the model. This procedure audits
+every layer and ensures each passes full content through or has a very high
+threshold. The tradeoff: protecting full-file reads from truncation risks
+overwhelming the context window, so the hard token cap remains the ultimate
+backstop.
+
 ## Background: The Truncation Layers
 
 File-read tool results (`code_read`, `vault_read_note`) pass through
@@ -129,3 +138,9 @@ results and drop old messages to stay under 60K tokens.
 print("See config.py TUNABLES.read_result_cap for the default.")
 print("Override at runtime via VAULTBOT_READ_RESULT_CAP env var.")
 ```
+
+## Related
+
+- [[Smart-Code-Read]] — reads backend code with context awareness
+- [[Smart-Note-Read]] — reads vault notes with context awareness
+- [[Smart-Vault-Search]] — searches the vault with context awareness

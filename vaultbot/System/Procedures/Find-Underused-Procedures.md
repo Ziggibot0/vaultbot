@@ -28,6 +28,13 @@ tags:
 Run this to find procedures that exist but are never called. They might be
 unnecessary, poorly discovered (bad description), or just not needed yet.
 
+## Why This Exists
+
+Procedures that are never called may be unnecessary, poorly discovered, or
+broken. This procedure counts `execute_procedure` calls in chat history and
+flags zero-usage procedures. The tradeoff: it only sees the last 50 chat
+logs, so a rarely-used-but-valid procedure may look dead.
+
 ## Steps
 
 ### Step 1: Count procedure calls in chat history
@@ -137,3 +144,9 @@ result = _json.dumps({
     "usage_stats": data.get("usage_stats", []),
 })
 ```
+
+## Related
+
+- [[Find-Redundant-Procedures]] — sibling procedure-library audit probe
+- [[Procedure-Library-Health]] — broader library health assessment
+- [[Procedure-Coverage-Check]] — checks whether procedures cover the task space

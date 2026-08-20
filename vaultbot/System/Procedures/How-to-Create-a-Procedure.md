@@ -20,6 +20,14 @@ allowed_tools:
 
 This procedure guides you through creating a valid, executable procedure note. Follow these steps in order.
 
+## Why This Exists
+
+Creating a procedure note that actually parses and executes requires a
+specific structure (frontmatter, step headers, step types). This guide
+codifies that structure so new procedures are valid on the first try. The
+tradeoff: it is a human-facing guide, not an automated validator — it relies
+on the author following the steps.
+
 ## Steps
 
 ### Step 1: Decide — Tool vs Procedure
@@ -54,3 +62,9 @@ Structure the body with `### Step N: short-summary` headers. EVERY step MUST hav
 *   Ensure all `allowed_tools` listed in frontmatter actually exist.
 *   Save the file to `System/Procedures/[Procedure-Name].md`.
 *   (Optional) Run a mental simulation: "If I were the model, would I understand exactly what to do at each step?"
+
+## Related
+
+- [[Create-New-Procedure]] — automated procedure creation
+- [[Draft-New-Procedure]] — drafts a new procedure note
+- [[Check-Procedure-Type]] — validates a procedure's type/structure

@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Download or read a textbook/reference resource and ingest it into the vault as linked notes. Each section becomes a linked vault note with navigation. This is how VaultBot learns systematically.
 
+## Why This Exists
+
+Learning a new subject systematically from a textbook required a way to turn a large reference resource into navigable, linked vault notes. This procedure exists to ingest HTML, PDF, plain text, or Markdown sources and split them into per-section notes. The key tradeoff: it caps sections at max_sections (default 50) to avoid flooding the vault with an unbounded number of notes.
+
 ## Steps
 
 ### Step 1: Ingest the textbook into the vault as linked notes
@@ -35,3 +39,8 @@ Download or read a textbook/reference resource and ingest it into the vault as l
    })
    print(result)
    ```
+
+## Related
+
+- [[Textbook-Read-Page]] — reads a single page of an ingested textbook
+- [[Structure-Research-Note]] — structures research notes into the vault

@@ -30,6 +30,10 @@ manual changes, merged PRs). Produces a structured audit report identifying
 what changed, whether safety-critical patterns survived, and a risk
 assessment — all without using the big model.
 
+## Why This Exists
+
+External edits (Copilot, manual changes, merged PRs) can silently break safety-critical patterns like the sliding window, failsafe, or checkpointing. This procedure closes that gap by deriving ground truth from `git diff` and grepping changed files for those patterns. The key tradeoff is cost: 95% of the work is deterministic code, and only the final synthesis uses the small model — zero big-model cost.
+
 ## Steps
 
 ### Step 1: Get the git diff (deterministic)
@@ -243,3 +247,9 @@ validation: contains "Changed Files" and "Safety Pattern Check" and "Risk Assess
   the report. Now 95% of the work is deterministic code and only the final
   synthesis uses the small model.
 - The procedure can be chained after [[Route-Task]] as the audit branch.
+
+## Related
+
+- [[Procedure-Eval]] — scores procedure health from counters and the failure log
+- [[Run-CI-Gates]] — the local mirror of the CI pipeline
+- [[Verify-Backend-Change]] — runs tests, restarts, and checks health in one call

@@ -29,6 +29,13 @@ tags:
 Run this when you want to know which notes need work. It scores each note
 on 5 dimensions so you can prioritize improvements.
 
+## Why This Exists
+
+With many notes, you need a way to prioritize which to improve. This
+procedure scores a note on completeness, accuracy, connectivity, freshness,
+and clarity. The tradeoff: the scores are small-model judgment, so they're
+relative guidance, not objective measurement.
+
 ## Steps
 
 ### Step 1: Gather note metrics deterministically
@@ -122,3 +129,9 @@ except Exception:
     parsed = {"scores": {}, "overall": 0, "error": "could not parse scores"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Note-Consistency-Check]] — checks internal consistency of a note
+- [[Note-Accuracy-Check]] — verifies claims against the vault
+- [[Find-Thin-Notes]] — finds notes that need expansion

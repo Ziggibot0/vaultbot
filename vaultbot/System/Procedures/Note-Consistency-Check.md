@@ -32,6 +32,14 @@ Run this when a note feels off — frontmatter says one thing, body says
 another, tags don't match the topic. It catches internal contradictions
 within a single note.
 
+## Why This Exists
+
+A note can be internally inconsistent — frontmatter type, tags, and
+depends_on links may not match its content, or the body may contradict
+itself. This procedure checks those dimensions. The tradeoff: it only reads
+the first 2000 chars of the body, so inconsistencies deeper in a long note
+may be missed.
+
 ## Steps
 
 ### Step 1: Read the note and extract frontmatter + body
@@ -109,3 +117,9 @@ except Exception:
     parsed = {"consistent": True, "issues": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Note-Accuracy-Check]] — verifies claims against the rest of the vault
+- [[Note-Quality-Score]] — scores a note on 5 quality dimensions
+- [[Note-vs-Code-Diff]] — checks a note against the code it describes

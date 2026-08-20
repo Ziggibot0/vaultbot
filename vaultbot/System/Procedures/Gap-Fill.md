@@ -46,6 +46,14 @@ The small model does the classification — it sees the link text, the
 context sentence, and the list of existing note titles, then picks a
 category. No research, no synthesis, just routing.
 
+## Why This Exists
+
+Dangling wikilinks (links to notes that don't exist) need triage before the
+researcher can act on them. This procedure classifies each into one of four
+categories so the autonomous researcher knows exactly what to do. The
+tradeoff: it is pure classification over a bounded set of categories, so the
+small model handles it without big-model reasoning.
+
 ## Steps
 
 ### Step 1: Get dangling wikilinks from vault_gaps

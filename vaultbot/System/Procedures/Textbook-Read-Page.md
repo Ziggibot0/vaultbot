@@ -21,6 +21,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Read one page of an ingested textbook PDF and get its content as text. The page is rendered to an image and read by a vision-capable model so equations, figures, and tables come through exactly as printed — unlike a text-layer extract which drops vector-drawn math.
 
+## Why This Exists
+
+A text-layer extract of a textbook PDF drops vector-drawn math, equations, and figures. This procedure exists to render a page to an image and read it with a vision model so those elements come through exactly as printed. The key tradeoff: it needs a vision-capable llm_client for the precise image path, and falls back to the PDF text layer (with a caveat) when none is available.
+
 ## Steps
 
 ### Step 1: Read one page of the textbook as text
@@ -40,3 +44,7 @@ Read one page of an ingested textbook PDF and get its content as text. The page 
                        llm_client=_vision)
    print(result)
    ```
+
+## Related
+
+- [[Textbook-Ingest]] — ingests the textbook this procedure reads from

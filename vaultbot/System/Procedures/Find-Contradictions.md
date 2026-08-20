@@ -31,6 +31,10 @@ are actually accurate. After refactors, notes go stale. This procedure catches
 notes that explain things *wrong* — not missing notes, not historical records,
 just notes whose description of current behavior contradicts the code.
 
+## Why This Exists
+
+After a backend refactor, vault notes that describe how the code works go stale and start explaining things wrong, but the mismatch is invisible until someone compares note to code. This procedure exists to read the actual `.py` source and flag notes whose description contradicts it. The key tradeoff is that it only flags notes describing *current* behavior — historical records and history notes are explicitly ignored.
+
 ## What It Does
 
 1. Find notes in `System/` and `Knowledge/` that reference `.py` files or
@@ -148,3 +152,9 @@ result = _json.dumps({"contradictions": contradictions,
 ### Step 3: Return the contradiction report
 
 3. [llm: Format the contradictions from the prior step as a clear report. For each contradiction, show: the note path, what the note claims, what the code actually does, and a suggested fix (update the note to match the code, or update the code to match the note). If there are no contradictions, say the vault notes are in sync with the code.]
+
+## Related
+
+- [[Find-Dead-Code]] — sibling code-quality probe
+- [[Note-vs-Code-Diff]] — compares notes against code
+- [[Find-Vault-Contradictions]] — sibling contradiction detection

@@ -44,6 +44,10 @@ Use this procedure when you need to create a new procedure note for a recurring 
 6. **Syntax errors** — code steps that don't compile
 7. **LLM endpoint coupling** — direct socket/localhost instead of `get_llm_client()`
 
+## Why This Exists
+
+New procedures created by hand repeatedly hit the same seven friction points (format mismatch, tool API mismatch, missing injections, missing idempotency, unvalidated quality, syntax errors, endpoint coupling). This meta-procedure closes that gap by sandboxing and validating a draft before publishing. The tradeoff is that it only publishes when all checks pass, so a draft that fails any check is rejected rather than silently published.
+
 ## Before Running This
 
 1. Research how experts do the task

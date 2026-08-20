@@ -31,6 +31,10 @@ the notes carrying the most unfinished tasks. A thin filter over
 [[Pattern-Scan]] (`todo_count > 0`), then ranked. Good for "what's still
 on my plate?" without the big model hunting through notes.
 
+## Why This Exists
+
+Open tasks are scattered across notes as `- [ ]` checkboxes, and answering "what's left to do" requires collecting them all without the big model hunting through notes. This procedure exists as a thin filter over [[Pattern-Scan]] (`todo_count > 0`), ranked by most open tasks then oldest. The key tradeoff is that it surfaces the actual task text from the worst offenders, so the user sees the real work rather than just counts.
+
 ## Steps
 
 ### Step 1: Run Pattern-Scan and filter to notes with open tasks
@@ -78,3 +82,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "task"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this filters
+- [[Dream-TODO-Track]] — sibling task-tracking via TODO markers
+- [[Count-Todos]] — counts TODO markers across the vault

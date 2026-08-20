@@ -34,6 +34,10 @@ unexpectedly.
 This procedure is **fully deterministic**. The small model only formats
 the structured report into readable prose.
 
+## Why This Exists
+
+The embedding index can drift from the actual file state when files are added, modified, or deleted without triggering a reindex — especially if the file watcher missed events or the backend restarted unexpectedly. This procedure exists to compare the index metadata against the real vault file listing and report the drift. The key tradeoff is that it is fully deterministic — the small model only formats the report, so no LLM reasoning is needed.
+
 ## Steps
 
 ### Step 1: Get the actual vault file listing

@@ -30,6 +30,10 @@ Run this to check if a procedure's code steps will actually work. Catches
 common failure patterns: referencing tools not in allowed_tools, using
 args that aren't documented, importing modules that don't exist.
 
+## Why This Exists
+
+Procedures were being trusted without checking whether their code steps would actually run. This procedure exists to extract a procedure's code steps and check each for common runtime failure patterns. The key tradeoff: it uses the small model to judge the issues and return a safe/needs-fixes/broken verdict, rather than executing the code.
+
 ## Steps
 
 ### Step 1: Parse the procedure and extract code steps + frontmatter
@@ -119,3 +123,9 @@ except Exception:
     parsed = {"issues": [], "verdict": "error"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Test-Procedure-Until-Pass]] — the automated test→fix→retest loop
+- [[Verify-Procedure-Discoverability]] — verifies RAG surfaces the procedure
+- [[Check-Procedure-Drift]] — checks procedure drift

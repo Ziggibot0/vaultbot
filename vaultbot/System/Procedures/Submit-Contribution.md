@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Submit uncommitted changes as a GitHub pull request for community review. If the user has write access to the upstream repo, pushes directly and creates a PR. If not, forks the repo, pushes to the fork, and creates a cross-fork PR.
 
+## Why This Exists
+
+Submitting a PR that fails CI on a mechanical lint/format/test error wastes a review round-trip. This procedure closes that gap by enforcing the CI hard gates locally before pushing, and refusing to push if any fail. The tradeoff is that it handles both write-access and fork paths, and the `skip_ci=true` argument bypasses the gate only when the tree is already known to be CI-clean.
+
 ## Pre-flight CI gate (enforced)
 
 Before pushing, the `submit_contribution` tool runs the CI hard gates
@@ -45,3 +49,9 @@ be used when the tree is already known to be CI-clean.
    })
    print(result)
    ```
+
+## Related
+
+- [[Review-Contributions]] — the review side of the contribution flow
+- [[Run-CI-Gates]] — the CI gates this procedure enforces before pushing
+- [[Solve-GitHub-Issue]] — the full fix-to-merge loop that ends in a PR

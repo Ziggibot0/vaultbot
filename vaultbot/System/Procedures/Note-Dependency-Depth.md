@@ -29,6 +29,13 @@ Run this to understand which notes are load-bearing (many notes depend on
 them) and which depend on many others. Critical before deleting a note —
 you need to know if it's a hub.
 
+## Why This Exists
+
+Deleting a note without knowing its dependency depth can break the graph if
+it's a hub. This procedure computes in-degree and out-degree across the
+wikilink graph. The tradeoff: it only counts resolved wikilinks, so links to
+non-existent notes aren't reflected in the dependency counts.
+
 ## Steps
 
 ### Step 1: Compute the dependency graph
@@ -106,3 +113,9 @@ except Exception:
     parsed = {"critical_notes": []}
 result = _json.dumps({"dependency_map": data, "analysis": parsed})
 ```
+
+## Related
+
+- [[Vault-Graph-Analyzer]] — graph analysis of the vault topology
+- [[Find-Hub-Notes]] — finds hub notes specifically
+- [[Note-Link-Path]] — finds the shortest path between two notes

@@ -33,6 +33,10 @@ You are a small model. That is fine — this system is designed for you. You do 
 
 This procedure outputs your **operating contract**. Read it. Obey it. When in doubt, run it again.
 
+## Why This Exists
+
+Small models fail when they must pick from many tools, remember multi-step workflows, or judge safety. This procedure closes that gap by outputting a minimal operating contract that removes all three: a 4-item toolset, a "Route-Task → chain" workflow, and a "never call the 6 dangerous tools raw" safety rule. The tradeoff is that it is deterministic and zero-LLM-cost — the output IS the orientation, and the model reads it from the tool result.
+
 ## The Contract (what the steps below print)
 
 1. **You have 4 tools.** `vault_search` (find notes), `vault_read_note` (read one note by title), `execute_procedure` (run a procedure), `plan_task`/`update_task` (track multi-step work). You do not have 30 tools. If you think you need a tool you can't see, a procedure already wraps it.
@@ -105,3 +109,9 @@ Small models fail when they must (a) pick from many tools, (b) remember multi-st
 ## Falsifiability
 
 This procedure fails if a bootstrapped small model still raw-calls dangerous tools or bypasses Route-Task. Test: give a small model a self-edit task after bootstrap and check whether it routes through [[Safe-Write]] instead of calling `safe_write` directly.
+
+## Related
+
+- [[Route-Task]] — the front door every request goes through after bootstrap
+- [[Small-Model-Route]] — the single-procedure routing fallback
+- [[Safe-Write]] — the procedure-wrapped edit a bootstrapped model must route to

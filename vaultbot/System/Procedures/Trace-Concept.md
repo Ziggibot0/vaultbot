@@ -30,6 +30,10 @@ Run this when you need the full footprint of a concept: where it's defined,
 what links to it, what mentions it without linking, and what builds on it.
 Essential before renaming or deleting a concept note.
 
+## Why This Exists
+
+Before renaming or deleting a concept note, you need to know its full footprint — but no single search surfaces definers, linkers, and unlinked mentions together. This procedure exists to trace a concept through the vault and return a dependency graph. The key tradeoff: it distinguishes notes that link the concept from notes that merely mention it by name, so the trace doesn't conflate the two.
+
 ## Steps
 
 ### Step 1: Find the defining note and all mentions
@@ -107,3 +111,9 @@ except Exception:
 result = _json.dumps({"trace": trace_data, "chain": parsed.get("chain", []),
                       "summary": parsed.get("summary", "")})
 ```
+
+## Related
+
+- [[Impact-Trace]] — traces the impact of a change through the vault
+- [[Note-Link-Path]] — finds link paths between notes
+- [[Vault-Graph-Analyzer]] — analyzes vault graph connectedness

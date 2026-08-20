@@ -26,6 +26,10 @@ last_reviewed: 2026-08-15
 
 Run this procedure when a concept card (L1 abstraction) has been retrieved 3+ times and deserves a tighter semantic summary. The card starts as an extractive sketch (top TF-ranked sentences); this procedure rewrites it into 2-4 dense sentences capturing the core idea, definitions, and key formulas. This is the rehearsal-gated refinement — only earned cards get refined.
 
+## Why This Exists
+
+Concept cards start as extractive sketches that are verbose and unfocused, and refining them by hand is wasteful when the small model can summarize existing content. This procedure closes that gap by rewriting a sketch into a tight 2-4 sentence semantic summary. The tradeoff is that it is rehearsal-gated — only cards retrieved 3+ times are refined, and it must preserve every wikilink verbatim.
+
 ## Steps
 
 ### Step 1: Read the card and refine with the small model
@@ -41,3 +45,9 @@ if len(refined) < 50:
 else:
     result = json.dumps({"refined": refined, "length": len(refined)})
 ```
+
+## Related
+
+- [[Note-Quality-Score]] — scores the card's connectivity and quality
+- [[Condense-Note]] — the sibling condensation procedure
+- [[Summarize-Conversation]] — the sibling summarization procedure

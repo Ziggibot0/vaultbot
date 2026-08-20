@@ -40,6 +40,10 @@ Closes the feedback loop between [[Behavioral-Pattern-Mine]] and the procedure l
 
 The **calling code** (Dream-Pass step 2.8) writes the generated draft to `_procedure_draft.md` and calls [[Procedure-Creator]] to validate (13 static checks + dry run) and publish.
 
+## Why This Exists
+
+Mined tool-call patterns are raw sequences, not procedures — they need a name, YAML frontmatter, and `[llm:]` steps before they can be published. This procedure exists to deterministically generate a procedure from the pattern mine report, closing the loop between pattern detection and the procedure library. The key tradeoff is that it filters out all-generic tool sequences and low-priority candidates, so only genuinely novel workflows become procedures.
+
 ## Inputs
 
 No explicit arguments. Reads `vaultbot/Memory/Build-Log/behavioral-pattern-mine.json`.
@@ -277,3 +281,9 @@ else:
 ```
 
 [validate: contains "---" and contains "type: procedure" and contains "## Steps"]
+
+## Related
+
+- [[Behavioral-Pattern-Mine]] — produces the pattern report this consumes
+- [[Procedure-Creator]] — validates and publishes the generated draft
+- [[Dream-Pass]] — the orchestrator that calls this

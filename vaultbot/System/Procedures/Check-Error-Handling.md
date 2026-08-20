@@ -29,6 +29,10 @@ Run this to scan a Python file for error-handling anti-patterns.
 Catches bare `except:`, silent swallowing (`except: pass`),
 overly broad `except Exception:`, and missing exception types.
 
+## Why This Exists
+
+Bare excepts and silent swallowing hide failures, but they slip into code unnoticed. This procedure scans a file for error-handling anti-patterns and returns line-numbered violations. The key tradeoff is that detection is deterministic (regex), while severity assessment and fix suggestions are delegated to the small model.
+
 ## Steps
 
 ### Step 1: Read the file and detect error-handling violations deterministically
@@ -119,3 +123,9 @@ except Exception:
     parsed = {"assessment": "error", "violations": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — orchestrator that calls this check
+- [[Check-Resource-Leaks]] — sibling code-audit probe
+- [[Code-Structure-Check]] — sibling convention check

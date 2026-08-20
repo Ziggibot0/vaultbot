@@ -23,6 +23,10 @@ Run this procedure when creating a new standard operating procedure (SOP) or mac
 - A user requests the creation of a procedure from a task description
 - A recurring operation needs to be standardized to ensure consistent execution
 
+## Why This Exists
+
+New tasks and workflows needed to be formalized into repeatable procedures, but there was no consistent structure to generate them. This procedure generates a new markdown file with the required sections. The key tradeoff is that it enforces a fixed section structure (frontmatter, trigger conditions, inputs, steps, rationale, related notes) so every procedure is consistent.
+
 ## Falsifiable If
 - The generated markdown file is missing required frontmatter fields (type, status, created, summary, tags).
 - The generated procedure does not contain a "When to Use" section describing trigger situations.
@@ -75,3 +79,9 @@ required_sections = ["## Description", "## When to Use", "## Falsifiable If", "#
 for section in required_sections:
     assert section in content, f"Missing section: {section}"
 ```
+
+## Related
+
+- [[Build-Procedure]] — the full draft→review→test factory
+- [[Draft-New-Procedure]] — drafts a procedure without the full pipeline
+- [[How-to-Create-a-Procedure]] — human-facing guide to procedure creation

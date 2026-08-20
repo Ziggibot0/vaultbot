@@ -41,6 +41,10 @@ Read-only — runs retrieval queries, never modifies anything.
 - A procedure exists but the vaultbot doesn't use it
 - After changing the fused retriever or indexer, to verify retrieval
 
+## Why This Exists
+
+A note or procedure that "should be found" by RAG but isn't can fall out at any of four stages: not indexed, below the vector top-k cutoff, dropped from the fused merged pool, or missing the procedure-boost rerank. This procedure exists to walk the retrieval pipeline stage by stage and pinpoint exactly where the target note falls out. The key tradeoff is that it is read-only — it runs retrieval queries and never modifies anything, so it can be run safely against a live backend.
+
 ## Inputs
 
 - `query` (required): a natural-language query that SHOULD surface the
@@ -153,3 +157,9 @@ Read-only — runs retrieval queries, never modifies anything.
        lines.append(f"ROOT CAUSE: {rc}")
        result = "\n".join(lines)
    ```
+
+## Related
+
+- [[Evaluate-Retrieval]] — measures recall/precision across the same fused retrieval pipeline
+- [[Embedding-Drift-Report]] — checks whether the index itself is stale, a common upstream cause
+- [[Diagnose-Hallucinated-Sources]] — sibling diagnosis for when sources (not notes) are wrong

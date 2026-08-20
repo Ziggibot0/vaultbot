@@ -34,6 +34,15 @@ procedures. Uses deterministic string similarity (difflib + keyword
 overlap) to find candidate pairs — no LLM needed, so it works on any
 number of procedures without token limits.
 
+## Why This Exists
+
+The procedure library grows organically and accumulates overlapping
+procedures that do the same thing under different names. This procedure
+detects those duplicates deterministically using difflib + keyword
+overlap, so it scales to any number of procedures without token limits.
+The tradeoff: pure string similarity trades semantic precision for zero
+LLM cost, so it may flag near-misses as well as true duplicates.
+
 ## Steps
 
 ### Step 1: Read all procedure descriptions and compute pairwise similarity
@@ -164,3 +173,9 @@ if not pairs:
 
 result = _json.dumps({"summary": summary, "high_count": len(high), "medium_count": len(medium), "pairs": pairs})
 ```
+
+## Related
+
+- [[Find-Duplicates]] — catches exact title duplicates; this catches semantic overlap
+- [[Find-Underused-Procedures]] — sibling procedure-library audit probe
+- [[Procedure-Library-Health]] — broader library health assessment
