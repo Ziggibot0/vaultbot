@@ -196,29 +196,84 @@ else
         GH_OK=true
     fi
 
+    if [ "$GH_OK" = false ]; then
+        # gh CLI is missing. Offer to install it so VaultBot can update itself
+        # and share fixes. If the user declines, fall back to the zip download.
+        echo ">>> GitHub CLI not found"
+        echo "  VaultBot uses the GitHub CLI ('gh') to update itself and"
+        echo "  share fixes with the community. It's optional but recommended."
+        echo ""
+        printf "  Install GitHub CLI now? (y/n) "
+        read -r INSTALL_GH
+        if [ "$INSTALL_GH" = "y" ] || [ "$INSTALL_GH" = "yes" ]; then
+            echo ">>> Installing GitHub CLI..."
+            if command -v brew &>/dev/null; then
+                brew install gh >/dev/null 2>&1 && GH_OK=true
+            elif command -v apt-get &>/dev/null; then
+                sudo apt-get install -y gh >/dev/null 2>&1 && GH_OK=true
+            elif command -v dnf &>/dev/null; then
+                sudo dnf install -y gh >/dev/null 2>&1 && GH_OK=true
+            fi
+            if [ "$GH_OK" = true ]; then
+                echo "  [OK] GitHub CLI installed"
+            else
+                echo "  [!]  Could not install GitHub CLI automatically."
+                echo "       Install it from https://cli.github.com and re-run."
+            fi
+        fi
+    fi
+
     if [ "$GH_OK" = true ]; then
         echo ">>> Connecting to GitHub (one-time)..."
 
-        # gh auth status exits 0 when already authenticated. If not, run the
-        # interactive browser login. If the user declines, fall back to zip.
+        # gh auth status exits 0 when already authenticated. If not, walk the
+        # user through the browser login, then VERIFY it actually completed
+        # (gh auth login can exit 0 even if the user closed the browser early).
         AUTHD=false
         if gh auth status >/dev/null 2>&1; then
             AUTHD=true
         fi
 
         if [ "$AUTHD" = false ]; then
-            echo "  A browser window will open so you can sign in to GitHub."
-            echo "  (This lets VaultBot update itself and share fixes with the community.)"
-            echo "  (Skip it and VaultBot still installs, just without auto-updates.)"
-            if ! gh auth login --hostname github.com --git-protocol https --web; then
+            echo ""
+            echo "  VaultBot needs a GitHub account so it can update itself"
+            echo "  and share fixes with the community."
+            echo ""
+            echo "  A browser window will open. Sign in to GitHub, then"
+            echo "  copy the one-time code back into this window."
+            echo ""
+            echo "  (No GitHub account? Just close the browser — VaultBot"
+            echo "   will still install, just without auto-updates.)"
+            echo ""
+
+            RETRY=true
+            while [ "$AUTHD" = false ] && [ "$RETRY" = true ]; do
+                gh auth login --hostname github.com --git-protocol https --web || true
+                if gh auth status >/dev/null 2>&1; then
+                    AUTHD=true
+                else
+                    printf "  Sign-in didn't complete. Try again? (y/n) "
+                    read -r AGAIN
+                    if [ "$AGAIN" != "y" ] && [ "$AGAIN" != "yes" ]; then
+                        RETRY=false
+                    fi
+                fi
+            done
+
+            if [ "$AUTHD" = false ]; then
                 GH_OK=false
+                echo "  [!]  GitHub sign-in was skipped or didn't complete."
+                echo "       VaultBot will install without auto-updates."
+                echo "       You can connect GitHub later by running:  gh auth login"
+            else
+                echo "  [OK] Signed in to GitHub"
             fi
         fi
 
         if [ "$GH_OK" = true ]; then
             # Maintainer (has push access) clones directly; everyone else forks.
             HAS_PUSH=false
-            PERM=$(gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>/dev/null)
+            PERM=$(gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>/dev/null || true)
             if [ "$PERM" = "true" ]; then
                 HAS_PUSH=true
             fi
