@@ -59,7 +59,6 @@ def run(args: dict) -> dict:
     Returns a dict with the PR URL on success, or an error message.
     """
     import os
-    import re
     import sys
     import time
 
@@ -90,9 +89,29 @@ def run(args: dict) -> dict:
     description = args.get("description", "").strip()
     specific_files = args.get("files", [])
 
-    # Find the vault root (2 levels up from vaultbot_backend/ -> vaultbot/ ->
-    # vault root)
-    vault_root = os.path.dirname(os.path.dirname(backend_dir))
+    # Find the vault root — the nearest directory containing .git, found
+    # by walking up from vaultbot_backend/.  Previously this was hardcoded
+    # as 2 levels up (backend -> vaultbot/ -> vault root), which only works
+    # when the vault root IS the git repo.  When the git repo is one level
+    # further up (e.g. vaultbot-fork/ containing vaultbot/), the old code
+    # pointed at a directory with no .git and every git command failed.
+    from upstream_identity import (
+        UpstreamIdentityError,
+        _find_git_root,
+        _parse_github_url,
+        resolve_upstream,
+    )
+
+    vault_root = _find_git_root(backend_dir)
+    if vault_root is None:
+        return {
+            "error": (
+                "Could not find a git repository. The vault root must be "
+                "inside a git repo (one with a .git directory). "
+                "Run 'git init' or clone the repo so that git operations "
+                "like add/commit/push work."
+            )
+        }
 
     # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
     if not gh_available():
@@ -120,17 +139,13 @@ def run(args: dict) -> dict:
             ),
         }
 
-    # 2. Get remote URL and parse owner/repo
-    ok, remote_url, err = run_git(["remote", "get-url", "origin"], vault_root)
-    if not ok:
-        return {"error": f"Could not get git remote URL: {err}"}
+    # 2. Determine upstream repo — single source of truth
+    #    (env vars > git remote > loud error; no silent hardcoded fallback)
 
-    match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
-    if not match:
-        return {
-            "error": f"Could not parse GitHub owner/repo from remote URL: {remote_url}"
-        }
-    upstream_owner, upstream_repo = match.group(1), match.group(2)
+    try:
+        upstream_owner, upstream_repo = resolve_upstream()
+    except UpstreamIdentityError as e:
+        return {"error": str(e)}
 
     # 3. Get the authenticated user's GitHub username
     try:
@@ -290,43 +305,76 @@ def run(args: dict) -> dict:
         pr_head = branch_name
     else:
         # === FORK-BASED FLOW (user does NOT have write access) ===
-        # 9a. Fork the upstream repo
-        try:
-            gh_api(
-                "POST",
-                f"repos/{upstream_owner}/{upstream_repo}/forks",
-                timeout=30,
-            )
-        except GhError as e:
-            run_git(["checkout", "main"], vault_root)
-            run_git(["branch", "-D", branch_name], vault_root)
-            return {"error": f"Failed to fork repo: {e}"}
-
-        # 9b. Wait for fork to be ready (fork creation is async on GitHub)
-        time.sleep(5)
-
-        # 9c. Add fork as a remote (or update if exists)
+        # The user's fork is where we push.  In the common case the user
+        # already has 'origin' pointing at their fork (the standard
+        # fork-and-clone setup), so we can push to origin directly.  If
+        # origin points somewhere else, we need a 'fork' remote.
         fork_url = f"https://github.com/{gh_username}/{upstream_repo}.git"
-        ok, _, _ = run_git(["remote", "get-url", "fork"], vault_root)
-        if ok:
-            run_git(["remote", "set-url", "fork", fork_url], vault_root)
-        else:
-            run_git(["remote", "add", "fork", fork_url], vault_root)
 
-        # 9d. Push to fork
-        ok, _push_out, push_err = run_git(
-            ["push", "-u", "fork", branch_name], vault_root
+        # Check if origin is already the user's fork
+        ok, origin_url, _ = run_git(["remote", "get-url", "origin"], vault_root)
+        origin_is_fork = ok and _parse_github_url(origin_url) == (
+            gh_username,
+            upstream_repo,
         )
+
+        if origin_is_fork:
+            # 9a. Fork the upstream repo (no-op if fork already exists)
+            try:
+                gh_api(
+                    "POST",
+                    f"repos/{upstream_owner}/{upstream_repo}/forks",
+                    timeout=30,
+                )
+            except GhError as e:
+                run_git(["checkout", "main"], vault_root)
+                run_git(["branch", "-D", branch_name], vault_root)
+                return {"error": f"Failed to fork repo: {e}"}
+
+            # 9b. Push to origin (which is the fork)
+            ok, _push_out, push_err = run_git(
+                ["push", "-u", "origin", branch_name], vault_root
+            )
+            push_remote = "origin"
+        else:
+            # 9a. Fork the upstream repo
+            try:
+                gh_api(
+                    "POST",
+                    f"repos/{upstream_owner}/{upstream_repo}/forks",
+                    timeout=30,
+                )
+            except GhError as e:
+                run_git(["checkout", "main"], vault_root)
+                run_git(["branch", "-D", branch_name], vault_root)
+                return {"error": f"Failed to fork repo: {e}"}
+
+            # 9b. Wait for fork to be ready (fork creation is async on GitHub)
+            time.sleep(5)
+
+            # 9c. Add fork as a remote (or update if exists)
+            ok, _, _ = run_git(["remote", "get-url", "fork"], vault_root)
+            if ok:
+                run_git(["remote", "set-url", "fork", fork_url], vault_root)
+            else:
+                run_git(["remote", "add", "fork", fork_url], vault_root)
+
+            # 9d. Push to fork
+            ok, _push_out, push_err = run_git(
+                ["push", "-u", "fork", branch_name], vault_root
+            )
+            push_remote = "fork"
+
         if not ok:
             time.sleep(10)
             ok, _push_out, push_err = run_git(
-                ["push", "-u", "fork", branch_name], vault_root
+                ["push", "-u", push_remote, branch_name], vault_root
             )
         if not ok:
             run_git(["checkout", "main"], vault_root)
             run_git(["branch", "-D", branch_name], vault_root)
             return {
-                "error": f"Could not push to fork: {push_err}",
+                "error": f"Could not push to {push_remote}: {push_err}",
                 "hint": (
                     f"Make sure your fork exists at {fork_url} and your gh "
                     f"auth has push access to it."

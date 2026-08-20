@@ -57,27 +57,14 @@ def run(args: dict) -> dict:
             ),
         }
 
-    # 2. Determine upstream repo
-    upstream_owner = "Ziggibot0"
-    upstream_repo = "vaultbot"
+    # 2. Determine upstream repo — single source of truth
+    #    (env vars > git remote > loud error; no silent hardcoded fallback)
+    from upstream_identity import UpstreamIdentityError, resolve_upstream
+
     try:
-        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        vault_root = os.path.dirname(os.path.dirname(backend_dir))
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=vault_root,
-            timeout=10,
-        )
-        if r.returncode == 0:
-            match = re.search(
-                r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", r.stdout.strip()
-            )
-            if match:
-                upstream_owner, upstream_repo = match.group(1), match.group(2)
-    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-        pass
+        upstream_owner, upstream_repo = resolve_upstream()
+    except UpstreamIdentityError as e:
+        return {"error": str(e)}
 
     pr_number = args.get("pr_number")
     if not pr_number:
