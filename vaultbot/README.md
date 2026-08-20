@@ -311,6 +311,47 @@ updates, re-run the installer — it will set up a fork for you.
 
 ---
 
+## Community contributions
+
+VaultBot is a community project, and your VaultBot can give back — but only
+on your terms.
+
+**Default: pull-only.** Out of the box, your VaultBot only *pulls* updates.
+It never writes to GitHub — not even filing an issue — unless you opt in.
+This is your right, not a soft preference.
+
+**Opt in with one toggle.** Settings → **Allow contributions** turns on
+`VAULTBOT_ALLOW_CONTRIBUTIONS`. When it's on, your VaultBot can:
+
+- **File issues automatically** when it hits an obstacle it was already
+  solving (a bug, a broken procedure, a retrieval miss). This is cheap and
+  one-shot — it just tells the maintainer something's wrong and roughly
+  where to look.
+- **Submit pull requests** when *you* ask it to, or when a fix is a natural
+  byproduct of work it was already doing for you.
+
+**Your VaultBot never does the maintainer's work on your dime.** It won't
+scan the project's issue tracker and pick up tickets on its own. Solving is
+only justified when it's already in your VaultBot's path — filing an issue is
+the default "give back," solving is the exception.
+
+**How your contributions are used.** Every PR is reviewed and torture-tested
+by the maintainer's VaultBot (safety scan + import check + syntax check +
+functional test) before a human merges it. Nothing merges without passing CI
+and a human sign-off.
+
+**Which account does the work?** Your VaultBot uses whatever GitHub account
+you're signed into (`gh auth login`). The maintainer's VaultBot uses a
+separate bot account so the human maintainer can approve its PRs (GitHub
+forbids approving your own). No one force-pushes — every change goes through
+a PR and CI.
+
+See
+[`vaultbot/System/Community-Contribution-System.md`](vaultbot/System/Community-Contribution-System.md)
+for the full design.
+
+---
+
 ## Safety & Security
 
 VaultBot runs entirely on your machine. It does not phone home, send
