@@ -113,18 +113,15 @@ class SelfImprover:
             # out of the LLM context (no bloat from a tool that will never be
             # used) and prevents the tool from being callable at all. Each
             # gated tool also has a call-time check as defence-in-depth.
-            if mod_name in _CONTRIBUTIONS_GATED_TOOLS:
-                if (
-                    os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "")
-                    .strip()
-                    .lower()
-                    != "true"
-                ):
-                    self._log(
-                        "custom_tool_skipped_contributions_off",
-                        {"name": mod_name, "module": mod_name},
-                    )
-                    continue
+            if mod_name in _CONTRIBUTIONS_GATED_TOOLS and (
+                os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
+                != "true"
+            ):
+                self._log(
+                    "custom_tool_skipped_contributions_off",
+                    {"name": mod_name, "module": mod_name},
+                )
+                continue
             # Import using the full package-qualified path (custom_tools.<stem>)
             # so that `from custom_tools.ask_user import _pending_requests` in
             # other modules (e.g. routers/system.py /user_response endpoint)

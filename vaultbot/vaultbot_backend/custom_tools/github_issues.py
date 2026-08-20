@@ -48,9 +48,7 @@ SCHEMA = {
             },
             "issue_number": {
                 "type": "integer",
-                "description": (
-                    "Issue number. Required for read/comment/close/label."
-                ),
+                "description": ("Issue number. Required for read/comment/close/label."),
             },
             "title": {
                 "type": "string",
