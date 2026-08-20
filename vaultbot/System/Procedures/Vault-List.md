@@ -40,8 +40,10 @@ tag = ""       # optional: set to filter by tag
 result = vault_list(directory=directory, tag=tag) if hasattr(vault_list, '__call__') else vault_list.run({"directory": directory, "tag": tag})
 ```
 
+### Step 2: Summarize results
+
 2. [llm: Summarize the results. If the user asked for a specific directory or tag, report what was found. If the list is long, report the count and the first 20 files.]
 
-### Step 2: Validate
+### Step 3: Validate
 
-2. [validate: contains "count"]
+3. [validate: contains "count"]

@@ -116,8 +116,8 @@ Statistics:
 
 Return JSON: {{"health": "good|fair|poor", "summary": "2-3 sentence assessment", "concerns": ["issues if any"], "strengths": ["good signs"]}}
 Return ONLY the JSON."""
-    summary = llm_generate(prompt)
-    result = summary
+summary = llm_generate(prompt)
+result = summary
 ```
 
 ### Step 3: Return the statistics

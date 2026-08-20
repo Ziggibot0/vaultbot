@@ -178,7 +178,7 @@ The note has no web sources to verify against. Search the vault for notes on the
 **IF note_type is NOT "research":**
 Skip faithfulness check. Non-research notes (procedures, directives, chat logs) don't make factual claims that need source verification. Score = N/A.
 
-1. ```python
+2. ```python
 import json
 
 note_info = json.loads(args.get("step1_result", "{}"))
@@ -216,7 +216,7 @@ else:
 
 Run `vault_lint` on the note to check for broken wikilinks and structural issues. Count incoming wikilinks by searching the vault for references to this note's title.
 
-1. ```python
+3. ```python
 import json, re, os
 
 note_info = json.loads(args.get("step1_result", "{}"))
@@ -282,7 +282,7 @@ Run `vault_search` with the note's title as the query. Check if the note appears
 **IF note is thin (word_count < 200):**
 Score max 2 regardless of retrieval performance. Flag for expansion.
 
-1. ```python
+4. ```python
 import json
 
 note_info = json.loads(args.get("step1_result", "{}"))
@@ -332,7 +332,7 @@ If the action is `run_vault_search`, run `vault_search` with the note's title as
 
 Combine the three axis scores into a final assessment. Use the small model to generate a brief summary of the note's quality across all three axes, including specific improvement recommendations.
 
-1. ```python
+5. ```python
 import json
 
 # Collect scores from previous steps
@@ -360,7 +360,7 @@ result = json.dumps({
 }, indent=2)
 ```
 
-2. [llm] Given the triadic scores (faithfulness: {faithfulness}, connectivity: {connectivity}, utility: {utility}), write a 2-3 sentence assessment of this note's quality and 1-2 specific improvement recommendations. Focus on the lowest-scoring axis. Be concise and actionable.
+6. [llm] Given the triadic scores (faithfulness: {faithfulness}, connectivity: {connectivity}, utility: {utility}), write a 2-3 sentence assessment of this note's quality and 1-2 specific improvement recommendations. Focus on the lowest-scoring axis. Be concise and actionable.
 
 ## Conditional Dispatch Summary
 

@@ -62,8 +62,10 @@ result = json.dumps({
 })
 ```
 
+### Step 2: Report gaps
+
 2. [llm: Report the gaps to the user. Lead with the DANGLING gaps — the missing note titles referenced by the MOST other notes, since filling those closes the most gaps at once. Then the THIN/STUB gaps — existing notes worth expanding, prioritized by how many notes link to them. For each, say what it is and whether it's worth researching. Group by type.]
 
-### Step 2: Validate
+### Step 3: Validate
 
-2. [validate: contains "gap"]
+3. [validate: contains "gap"]

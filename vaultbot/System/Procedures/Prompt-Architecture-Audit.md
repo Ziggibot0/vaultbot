@@ -68,9 +68,11 @@ for i, line in enumerate(lines):
         break
 ```
 
+### Step 2: List every conversation.append call
+
 2. [llm: Search chat_handler.py for the line `conversation = [` or `conversation.append`. This is where the final prompt order is set. Read a generous range around it (at least 80 lines) to see every block that gets appended. List every `conversation.append` or `conversation.extend` call you find, in order, with what each one injects.]
 
-### Step 2: Map the injection order
+### Step 3: Map the injection order
 
 3. ```python
 import json
@@ -95,6 +97,8 @@ for i, line in enumerate(lines):
         print("---")
 ```
 
+### Step 4: Build the complete injection map
+
 4. [llm: Build the complete injection map. For each block that gets added to the prompt, record:
   - Block name (e.g., "stable prompt", "working memory", "procedure surface", "procedure hint", "vault context", "conversation history", "user message", "suggested action")
   - Where it's injected (system message 1? system message 2? appended after user? etc.)
@@ -103,7 +107,7 @@ for i, line in enumerate(lines):
 
 Output a JSON array of {block, location, message_index, type: "reference"|"actionable"|"history"|"user"}.]
 
-### Step 3: Identify misplacements
+### Step 5: Identify misplacements
 
 5. [llm: Review the injection map from Step 2. Apply these ordering principles:
   - **Reference material** (procedure surface catalog, identity, capability lists) should be EARLY — the model reads it once and refers back.
@@ -120,7 +124,7 @@ Identify any block that violates these principles. For each violation, describe:
 
 Output JSON: {"violations": [{"block": "...", "current": "...", "should_be": "...", "reason": "..."}], "none": false}]
 
-### Step 4: Propose the repositioning change
+### Step 6: Propose the repositioning change
 
 6. [llm: For each violation from Step 3, write the SPECIFIC code change needed:
   - What lines to remove from their current position
@@ -131,7 +135,7 @@ Output JSON: {"violations": [{"block": "...", "current": "...", "should_be": "..
 Be precise — give exact line numbers and the before/after code. This proposal
 will be passed to Safe-Write if the user wants to apply it.]
 
-### Step 5: Optional — apply and verify
+### Step 7: Optional — apply and verify
 
 7. [llm: If the proposed change should be applied:
   - Call `run_procedure("Safe-Write", {"file_path": "vaultbot/vaultbot_backend/chat_handler.py", "content": "<the full updated file>"})` to apply the edit with syntax check
