@@ -512,6 +512,39 @@ else
     mark_step_done "env_written"
 fi
 
+# ── 7b. Configure Obsidian (hide repo-hygiene docs) ─────────────────────────
+# The repo root carries GitHub-facing docs (AGENTS.md, README.md, SECURITY.md,
+# LICENSE, CONTRIBUTING.md) that must stay at the root for GitHub to see them,
+# but they should not clutter the user's Obsidian file explorer. Obsidian's
+# userIgnoreFilters (in .obsidian/app.json) hides them. We MERGE into any
+# existing filters so we never clobber a user's own ignore list.
+OBSIDIAN_DIR="$VAULT_PATH/.obsidian"
+APP_JSON="$OBSIDIAN_DIR/app.json"
+if step_done "obsidian_ignore_configured"; then
+    echo "  [!]  Obsidian ignore filters already configured -- skipping."
+else
+    mkdir -p "$OBSIDIAN_DIR"
+    python3 -c "
+import json, sys
+path = sys.argv[1]
+docs = ['AGENTS.md', 'README.md', 'SECURITY.md', 'LICENSE', 'CONTRIBUTING.md']
+try:
+    with open(path) as f:
+        app = json.load(f)
+except Exception:
+    app = {}
+filters = list(app.get('userIgnoreFilters') or [])
+for d in docs:
+    if d not in filters:
+        filters.append(d)
+app['userIgnoreFilters'] = filters
+with open(path, 'w') as f:
+    json.dump(app, f, indent=2)
+" "$APP_JSON"
+    echo "  [OK] Obsidian configured to hide repo docs from the file explorer"
+    mark_step_done "obsidian_ignore_configured"
+fi
+
 # ── 8. Done -- open Obsidian ─────────────────────────────────────────────────
 echo ""
 echo "  ============================="
