@@ -66,6 +66,42 @@ def gh_available() -> bool:
         return False
 
 
+def _bot_env() -> dict[str, str] | None:
+    """Return an env dict that makes ``gh`` act as the bot account, or None.
+
+    When ``VAULTBOT_GH_BOT_USER`` is set (e.g. "ziggibot-uni"), retrieve that
+    account's token from the keyring via ``gh auth token --user`` and return
+    an env with ``GH_TOKEN`` set to it. This makes the vaultbot author PRs as
+    the bot account so the human operator (the code owner) can approve them —
+    GitHub does not allow approving your own PR, so the bot and the human must
+    be different accounts.
+
+    Returns None when the env var is unset or the token can't be retrieved, so
+    callers fall back to the active account (unchanged behavior). The token is
+    a scoped ``gho_`` OAuth token already stored in the OS keychain by
+    ``gh auth login`` — this only surfaces it to the ``gh`` subprocess, exactly
+    as ``gh`` itself does internally.
+    """
+    bot_user = os.environ.get("VAULTBOT_GH_BOT_USER", "").strip()
+    if not bot_user:
+        return None
+    try:
+        r = _subprocess_run(
+            ["gh", "auth", "token", "--user", bot_user],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    token = r.stdout.strip()
+    if r.returncode != 0 or not token:
+        return None
+    env = dict(os.environ)
+    env["GH_TOKEN"] = token
+    return env
+
+
 def gh(
     args: list[str], cwd: str | None = None, timeout: int = 60
 ) -> subprocess.CompletedProcess:
@@ -81,6 +117,7 @@ def gh(
             text=True,
             timeout=timeout,
             cwd=cwd,
+            env=_bot_env(),
         )
     except FileNotFoundError as err:
         raise GhError(
@@ -124,6 +161,7 @@ def gh_api(
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=_bot_env(),
         )
     except FileNotFoundError as err:
         raise GhError(
@@ -168,6 +206,7 @@ def gh_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 30) -> str
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=_bot_env(),
         )
     except FileNotFoundError as err:
         raise GhError(
