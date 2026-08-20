@@ -453,6 +453,10 @@ async def prepare_turn(
                 return True
             return _relevant
         except Exception:  # noqa: BLE001 -- best-effort, never break chat
+            # Trip the breaker so a timing-out/erroring model costs zero
+            # latency on subsequent turns (30-min cooldown), matching the
+            # garbled-output path. Fail-safe still returns True.
+            _breaker_trip("relevance")
             return True
 
     _auto_research_note: str | None = None
