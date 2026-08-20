@@ -85,3 +85,17 @@ if result.returncode != 0:
 else:
     result = result.stdout
 ```
+
+## Why This Exists
+
+After a restart or crash, the context of what happened in a past session
+is lost. This procedure is the single read-only entry point for
+reconstructing any session — turns, tool calls, exceptions, and thinking —
+from its JSONL log. The key tradeoff is that it is strictly read-only, so
+it can never corrupt the append-only session files it inspects.
+
+## Related
+
+- [[Find-Recent-Errors]] — composes this to diagnose failures
+- [[Analyze-Failure-Log]] — aggregates failure patterns across procedures
+- [[Session-Effort-Analysis]] — analyzes token consumption across sessions
