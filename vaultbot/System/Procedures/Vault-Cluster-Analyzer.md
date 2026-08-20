@@ -12,6 +12,7 @@ summary: Vault-Cluster-Analyzer
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Vault-Cluster-Analyzer

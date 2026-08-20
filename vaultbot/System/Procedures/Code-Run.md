@@ -18,6 +18,7 @@ summary: ```text|python sandbox subprocess execution analysis | debugging strate
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Code-Run

@@ -9,6 +9,9 @@ allowed_tools:
   - run_procedure
   - vault_safe_write
 tags: [procedure, test, think-procedure, false-premise, verification]
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+model_cartridge: small
 ---
 
 # Test-Think-False-Premise: Verify Think Procedure False-Premise Defenses

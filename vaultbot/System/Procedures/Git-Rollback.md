@@ -12,6 +12,7 @@ summary: Git-rollback command restores files from git HEAD; requires self_improv
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Git-Rollback

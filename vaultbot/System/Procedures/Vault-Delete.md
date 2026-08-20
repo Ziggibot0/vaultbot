@@ -13,6 +13,7 @@ summary: 1. Safely delete note from Vault while backing up content before deleti
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Vault-Delete

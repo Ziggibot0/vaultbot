@@ -13,6 +13,7 @@ summary: Self-reflect tool proposal for self-improver session logging with code 
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Self-Reflect

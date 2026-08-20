@@ -11,6 +11,10 @@ status: raw
 baseline: true
 created: 2026-08-06
 summary: Diagnose GUI Setting Not Sticking (Optimistic-Update / Silent-Failure Mask)
+description: "Diagnose GUI Setting Not Sticking (Optimistic-Update / Silent-Failure Mask)"
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools: []
 ---
 
 # Diagnose GUI Setting Not Sticking (Optimistic-Update / Silent-Failure Mask)

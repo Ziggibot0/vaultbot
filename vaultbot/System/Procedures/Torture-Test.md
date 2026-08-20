@@ -16,6 +16,7 @@ SUMMARY
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Torture-Test

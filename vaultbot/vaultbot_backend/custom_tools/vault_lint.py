@@ -235,46 +235,39 @@ def run(args: dict) -> dict:
         pass  # note_schema unavailable — skip schema checks
 
     # --- Procedure-specific frontmatter checks ---
-    # Procedures need when_to_use, description, falsifiable_if, and
-    # allowed_tools for RAG retrieval and quality. If this note is a
-    # procedure (type: procedure in frontmatter), check for these fields.
+    # If this note is a procedure (type: procedure in frontmatter), run the
+    # authoritative procedure_validator so the full required-field set is
+    # enforced (type, description, when_to_use, allowed_tools,
+    # falsifiable_if, status, model_cartridge, created, summary, tags) —
+    # not just the three fields the old check looked at. This keeps
+    # vault_lint in lockstep with Procedure-Creator's pre-publication gate.
     if has_frontmatter:
         try:
-            import yaml
+            import os
+            import sys
 
-            fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-            if fm_match:
-                fm = yaml.safe_load(fm_match.group(1))
-                if isinstance(fm, dict) and fm.get("type") == "procedure":
-                    proc_required = ["when_to_use", "description", "allowed_tools"]
-                    for field in proc_required:
-                        if not fm.get(field):
-                            issues.append(
-                                {
-                                    "type": "missing_procedure_field",
-                                    "field": field,
-                                    "message": (
-                                        f"Procedure is missing '{field}' field "
-                                        f"— this is required for RAG retrieval "
-                                        f"and procedure quality."
-                                    ),
-                                }
-                            )
-                    # falsifiable_if is strongly recommended but not strictly required
-                    if not fm.get("falsifiable_if"):
-                        issues.append(
-                            {
-                                "type": "missing_procedure_field",
-                                "field": "falsifiable_if",
-                                "message": (
-                                    "Procedure is missing 'falsifiable_if' "
-                                    "field — strongly recommended for "
-                                    "testability."
-                                ),
-                            }
-                        )
-        except Exception as e:
-            print(f"vault_lint: procedure frontmatter check skipped: {e}")  # noqa: BLE001 — best-effort check, non-fatal
+            backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if backend_dir not in sys.path:
+                sys.path.insert(0, backend_dir)
+            from procedure_validator import validate_procedure_text
+
+            result = validate_procedure_text(content)
+            # Only surface frontmatter errors here — step/syntax/tool issues
+            # are the validator's job at publication time, not vault_lint's.
+            for err in result.get("errors", []):
+                if err.startswith("Frontmatter"):
+                    issues.append(
+                        {"type": "procedure_frontmatter_error", "message": err}
+                    )
+        except Exception as e:  # noqa: BLE001 — fail loud, don't silently skip
+            issues.append(
+                {
+                    "type": "procedure_check_failed",
+                    "message": (
+                        f"vault_lint could not validate procedure frontmatter: {e}"
+                    ),
+                }
+            )
 
     # Extract tags (avoid matching hex colors like #FF0000)
     tags = list(set(re.findall(r"(?<!\w)#([a-zA-Z][a-zA-Z0-9_-]*)", content)))

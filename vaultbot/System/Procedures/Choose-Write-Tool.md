@@ -22,6 +22,7 @@ tags:
   - procedure
   - write-safety
   - tool-selection
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Choose-Write-Tool

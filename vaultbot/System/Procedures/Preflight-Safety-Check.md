@@ -12,6 +12,7 @@ summary: "Summary: A security audit checklist for safe self-modifying code opera
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Preflight-Safety-Check

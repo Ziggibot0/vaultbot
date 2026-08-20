@@ -17,6 +17,7 @@ summary: "Discover-Procedures: A Python script that scans chat logs to find repe
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Discover-Procedures

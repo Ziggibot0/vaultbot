@@ -12,6 +12,7 @@ summary: The note describes a method to reload the Obsidian plugin without resta
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Plugin-Reload

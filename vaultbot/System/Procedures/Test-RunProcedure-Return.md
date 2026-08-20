@@ -9,6 +9,10 @@ summary: "Step 1: Inspect run_procedure return value"
 tags:
   - procedure
   - procedures
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools:
+  - run_procedure
 ---
 
 ## Step 1: Inspect run_procedure return value

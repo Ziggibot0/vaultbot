@@ -10,6 +10,11 @@ superseded_by: "chat_handler.py (2026-08-02 refactor)"
 summary: "HISTORICAL: Describes the old 3-phase PLAN→ACT→SYNTHESIZE state machine that was removed in the 2026-08-02 chat_handler.py refactor. Kept for project history."
 tags: [agentic-loop, state-machine, working-memory, phase, turn-protocol, record, history]
 when_to_use: "DEPRECATED — do not follow this protocol. The current loop is model-driven with no phases."
+description: "HISTORICAL: Describes the old 3-phase PLAN→ACT→SYNTHESIZE state machine that was removed in the 2026-08-02 chat_handler.py refactor. Kept for project history."
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools:
+  - plan_task
+  - update_task
 ---
 
 # Agentic Loop Turn Protocol

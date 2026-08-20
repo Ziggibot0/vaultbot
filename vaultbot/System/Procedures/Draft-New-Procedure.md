@@ -6,6 +6,11 @@ created: 2023-10-27
 summary: Converts a task description or workflow gap into a structured, machine-executable procedure markdown file with frontmatter, falsifiable conditions, and executable steps.
 tags: [procedure, meta, documentation]
 last_reviewed: 2026-08-15
+description: "This procedure converts a task description or identified workflow gap into a structured, machine-executable procedure markdown file. It generates the required frontmatter, trigger conditions, falsifiable failure conditions, required inputs, and step-by-step executable actions using allowed tools."
+when_to_use: "Run this procedure when drafting a new machine-executable procedure note for the vault. Triggered when: - A task description is provided and needs to be converted into a structured procedure markdown file. - A recurring failure or gap has been identified that warrants a documented, repeatable procedure. - A user explicitly requests creation of a new procedure from a task or workflow description."
+falsifiable_if: "The generated procedure markdown file fails to parse as valid YAML frontmatter."
+allowed_tools: []
+model_cartridge: big
 ---
 
 ## Description

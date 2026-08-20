@@ -15,6 +15,7 @@ summary: "List and review open pull requests on the VaultBot GitHub repo by fetc
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Review-Contributions
