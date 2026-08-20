@@ -151,10 +151,13 @@ pulls a local model for you if you pick local), writes your config, and
 opens Obsidian for you — all automatically. It takes 10–30 minutes the
 first time (mostly downloads). You only do this once.
 
-If you choose the cloud API path, you'll add your API key to `.env` after
-setup (the installer tells you exactly what to write). If you choose
-local, the installer pulls the model for you. Either way, the backend
-starts automatically when you open Obsidian — no terminal needed.
+If you pick **cloud** (recommended for most users — a free OpenRouter tier
+works with no credit card), the installer opens a browser to OpenRouter,
+walks you through creating a key, and writes it to `.env` for you — you
+never edit a hidden file by hand. If you skip the key, the installer tells
+you exactly what to add later. If you pick **local**, the installer pulls
+the model for you. Either way, the backend starts automatically when you
+open Obsidian — no terminal needed.
 
 If Python or Ollama aren't installed yet, the installer tells you and
 opens the download page for you. Install them, then run the command again.

@@ -56,6 +56,71 @@ function Set-StepDone {
     }
 }
 
+function Set-StateValue {
+    param([string]$key, [string]$value)
+    if (-not $script:stateFile) { return }
+    try {
+        $state = @{}
+        if (Test-Path $script:stateFile) {
+            $state = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+        }
+        $state.$key = $value
+        [System.IO.File]::WriteAllText($script:stateFile, ($state | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        Write-Warn2 "Could not write install state (non-fatal): $_"
+    }
+}
+
+function Get-StateValue {
+    param([string]$key)
+    if (-not $script:stateFile -or -not (Test-Path $script:stateFile)) { return $null }
+    try {
+        $state = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+        return $state.$key
+    } catch { return $null }
+}
+
+function Get-FreeCloudModel {
+    # Query OpenRouter's PUBLIC model list (no API key needed) and pick the
+    # best free model that can drive the "big" cartridge: it must be free
+    # (pricing 0/0) AND have a large context window (>=128K) so it can hold
+    # the agentic loop + RAG context. We prefer a curated, ordered list of
+    # known-good free models (so the pick is a model we've verified can
+    # tool-call and reason), falling back to the first free+capable model
+    # the API reports if none of the curated picks are still live. Returns
+    # "" if the query fails (offline) — the caller falls back to a default.
+    $curated = @(
+        "z-ai/glm-5.2:free",                          # 256K ctx, strong agentic
+        "nvidia/nemotron-3-ultra-550b-a55b:free",     # 1M ctx
+        "dots-studio/dots-3-note-preview:free"        # 512K ctx
+    )
+    try {
+        $resp = Invoke-RestMethod -Uri "https://openrouter.ai/api/v1/models" -TimeoutSec 15
+        $live = @{}
+        $firstFree = ""
+        foreach ($m in $resp.data) {
+            $id = $m.id
+            if (-not $id) { continue }
+            $p = $m.pricing
+            $prompt = "$($p.prompt)"
+            $completion = "$($p.completion)"
+            $isFree = ($prompt -eq "0" -or $prompt -eq "0.0") -and ($completion -eq "0" -or $completion -eq "0.0")
+            $ctx = 0
+            try { $ctx = [int]$m.context_length } catch { $ctx = 0 }
+            if ($isFree -and $ctx -ge 128000) {
+                $live[$id] = $true
+                if (-not $firstFree) { $firstFree = $id }
+            }
+        }
+        foreach ($c in $curated) {
+            if ($live.ContainsKey($c)) { return $c }
+        }
+        return $firstFree
+    } catch {
+        return ""
+    }
+}
+
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Cyan
 Write-Host "      VaultBot Installer" -ForegroundColor Cyan
@@ -330,6 +395,9 @@ if (Test-StepDone "models_pulled") {
 # we write LLM_BACKEND=openai into .env and they add their key later.
 $chatBackend = "ollama"  # default
 $chatModel   = ""
+$apiKey      = ""
+$apiBaseUrl  = ""
+$apiModel    = ""
 if (-not (Test-StepDone "chat_backend_chosen")) {
     Write-Host ""
     Write-Host "  VaultBot needs a chat model to talk to you." -ForegroundColor Cyan
@@ -337,17 +405,48 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
     Write-Host "    1. Local (free, private, uses Ollama — already installed)" -ForegroundColor White
     Write-Host "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM." -ForegroundColor DarkGray
     Write-Host "    2. Cloud API (zero local compute, recommended for laptops)" -ForegroundColor White
-    Write-Host "       You provide an API key later (OpenAI, OpenRouter, etc.)." -ForegroundColor DarkGray
+    Write-Host "       Free OpenRouter tier — no credit card needed." -ForegroundColor DarkGray
     Write-Host ""
     $choice = Read-Host "  Pick 1 or 2 (default: 1)"
     if ($choice -eq "2") {
         $chatBackend = "openai"
         Write-Host ""
-        Write-Host "  You'll need an API key from OpenAI, OpenRouter, or any" -ForegroundColor Yellow
-        Write-Host "  OpenAI-compatible provider. Add it to .env after setup:" -ForegroundColor Yellow
-        Write-Host "    LLM_API_KEY=sk-..." -ForegroundColor White
-        Write-Host "    LLM_MODEL=gpt-4o-mini" -ForegroundColor White
-        Write-Host "  (Or set LLM_BACKEND=ollama in .env to use local instead.)" -ForegroundColor DarkGray
+        Write-Host "  VaultBot will use a cloud model (recommended for laptops)." -ForegroundColor Cyan
+        Write-Host "  The easiest free option is OpenRouter — it has a free tier" -ForegroundColor White
+        Write-Host "  with no credit card required." -ForegroundColor White
+        Write-Host ""
+        Write-Host "  A browser window will open so you can create an account." -ForegroundColor Cyan
+        Write-Host "  Then click 'Create Key', copy it, and paste it back here." -ForegroundColor Cyan
+        Write-Host ""
+        Start-Process "https://openrouter.ai"
+        Start-Process "https://openrouter.ai/keys"
+        Write-Host "  (If the browser didn't open, go to https://openrouter.ai/keys)" -ForegroundColor DarkGray
+        Write-Host ""
+        $apiKey = Read-Host "  Paste your API key (or press Enter to skip and add it later)"
+        if ([string]::IsNullOrWhiteSpace($apiKey)) {
+            Write-Host ""
+            Write-Host "  No problem — you can add your key later. After setup, edit" -ForegroundColor Yellow
+            Write-Host "  the .env file and set:" -ForegroundColor Yellow
+            Write-Host "    LLM_API_KEY=sk-..." -ForegroundColor White
+            Write-Host "    LLM_BASE_URL=https://openrouter.ai/api/v1" -ForegroundColor White
+            Write-Host "    LLM_MODEL=z-ai/glm-5.2:free" -ForegroundColor White
+            Write-Host "  (Or set LLM_BACKEND=ollama in .env to use local instead.)" -ForegroundColor DarkGray
+        } else {
+            $apiKey = $apiKey.Trim()
+            $apiBaseUrl = "https://openrouter.ai/api/v1"
+            # Pick the best free model that can drive the big cartridge.
+            # Live-query OpenRouter's free list so a new user never lands on
+            # a deprecated or rate-limited model; fall back to a known-good
+            # default if the query fails (offline).
+            Write-Host ""
+            Write-Host "  Picking a free model for you..." -ForegroundColor Cyan
+            $apiModel = Get-FreeCloudModel
+            if ([string]::IsNullOrWhiteSpace($apiModel)) {
+                $apiModel = "z-ai/glm-5.2:free"
+                Write-Warn2 "Couldn't reach OpenRouter to pick a model — using a default."
+            }
+            Write-OK "API key saved — VaultBot will use $apiModel (free tier)."
+        }
     } else {
         $chatBackend = "ollama"
         Write-Host ""
@@ -359,9 +458,24 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
         $chatModel = Read-Host "  Model name"
         if ([string]::IsNullOrWhiteSpace($chatModel)) { $chatModel = "qwen3:latest" }
     }
+    # Persist the choice so a re-run after a failed step doesn't reset it.
+    Set-StateValue "chat_backend" $chatBackend
+    Set-StateValue "chat_model" $chatModel
+    Set-StateValue "api_key" $apiKey
+    Set-StateValue "api_base_url" $apiBaseUrl
+    Set-StateValue "api_model" $apiModel
     Set-StepDone "chat_backend_chosen"
-} elseif (Test-StepDone "chat_model_pulled") {
-    Write-Warn2 "Chat model choice already made -- skipping."
+} else {
+    # Resume: restore the previously-chosen backend + key from state.
+    $chatBackend = Get-StateValue "chat_backend"
+    if (-not $chatBackend) { $chatBackend = "ollama" }
+    $chatModel  = Get-StateValue "chat_model"
+    $apiKey     = Get-StateValue "api_key"
+    $apiBaseUrl = Get-StateValue "api_base_url"
+    $apiModel   = Get-StateValue "api_model"
+    if (Test-StepDone "chat_model_pulled") {
+        Write-Warn2 "Chat model choice already made -- skipping."
+    }
 }
 
 # ── 6c. Pull the chat model if local ──────────────────────────────────────
@@ -390,10 +504,15 @@ if (Test-StepDone "env_written") {
     if ($chatBackend -eq "ollama" -and $chatModel) {
         $content = $content -replace 'OLLAMA_LLM_MODEL=.*', "OLLAMA_LLM_MODEL=$chatModel"
     }
+    if ($chatBackend -eq "openai" -and $apiKey) {
+        $content = $content -replace 'LLM_API_KEY=.*', "LLM_API_KEY=$apiKey"
+        $content = $content -replace 'LLM_BASE_URL=.*', "LLM_BASE_URL=$apiBaseUrl"
+        $content = $content -replace 'LLM_MODEL=.*', "LLM_MODEL=$apiModel"
+    }
     # Write UTF-8 WITHOUT BOM (BOM breaks Python's dotenv parser)
     [System.IO.File]::WriteAllText($envFile, $content, [System.Text.UTF8Encoding]::new($false))
     Write-OK "Configured -- VaultBot will call you $ownerName"
-    if ($chatBackend -eq "openai") {
+    if ($chatBackend -eq "openai" -and -not $apiKey) {
         Write-Host "  Don't forget: add your LLM_API_KEY to .env to use your cloud model." -ForegroundColor Yellow
     }
     Set-StepDone "env_written"
