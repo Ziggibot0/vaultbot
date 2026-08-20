@@ -109,14 +109,21 @@ def main() -> int:
 
     failures: list[str] = []
 
-    # Pyright ratchet.
+    # Pyright ratchet. The baseline is keyed by Python version because
+    # pyright's type-inference count differs slightly between 3.11 and 3.12
+    # stdlib stubs (e.g. 454 vs 456 errors).
     py_errors, py_warnings = _run_pyright()
     py_base = baseline.get("pyright", {})
     if py_errors < 0:
         failures.append("pyright: could not determine count")
     else:
-        base_errors = py_base.get("errors", 0)
-        base_warnings = py_base.get("warnings", 0)
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        ver_base = py_base.get(py_ver)
+        if ver_base is None:
+            # Fall back to a flat {errors, warnings} shape for backward compat.
+            ver_base = py_base if "errors" in py_base else {}
+        base_errors = ver_base.get("errors", 0)
+        base_warnings = ver_base.get("warnings", 0)
         if py_errors > base_errors:
             failures.append(
                 f"pyright errors grew: {py_errors} > baseline {base_errors}"
@@ -127,7 +134,7 @@ def main() -> int:
             )
         print(
             f"debt-ratchet: pyright {py_errors} errors / {py_warnings} warnings "
-            f"(baseline {base_errors} / {base_warnings})"
+            f"(baseline {base_errors} / {base_warnings}, py{py_ver})"
         )
 
     # Pytest integration ratchet.
