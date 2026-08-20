@@ -4624,7 +4624,14 @@ class VaultBotSidebarView extends ItemView {
 			if (ws) {
 				try { ws.close(); } catch (e) {}
 			}
-			const wsUrl = this.backendUrl.replace('http', 'ws') + '/ws';
+			// Resume the SAME session on reconnect by sending the tracked
+			// session_id as a query param. Without this, the backend falls
+			// back to a single global last-active pointer, which gets
+			// overwritten by other tabs/background turns and causes the bot
+			// to adopt a DIFFERENT session's history ("what did I just say?"
+			// returns another conversation). See issue #77.
+			const wsUrl = this.backendUrl.replace('http', 'ws') + '/ws'
+				+ (currentSessionId ? '?sid=' + encodeURIComponent(currentSessionId) : '');
 			ws = new WebSocket(wsUrl);
 			ws.onopen = () => {
 				statusEl.setText('Connected to VaultBot backend');
