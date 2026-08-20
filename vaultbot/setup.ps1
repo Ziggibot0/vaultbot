@@ -594,6 +594,32 @@ if (Test-StepDone "obsidian_ignore_configured") {
     Set-StepDone "obsidian_ignore_configured"
 }
 
+# ── 7c. Configure Obsidian (dark mode) ──────────────────────────────────────
+# Obsidian's appearance.json controls the theme. "baseTheme": "obsidian" is
+# the built-in dark theme. We write it so a fresh install opens in dark mode
+# without the user having to toggle it manually. We MERGE into any existing
+# appearance.json so we never clobber a user's cssTheme or other settings.
+$appearanceJson = Join-Path $obsidianDir "appearance.json"
+if (Test-StepDone "obsidian_dark_mode") {
+    Write-Warn2 "Obsidian dark mode already configured -- skipping."
+} else {
+    if (-not (Test-Path $obsidianDir)) { New-Item -ItemType Directory -Path $obsidianDir | Out-Null }
+    $appearance = @{}
+    if (Test-Path $appearanceJson) {
+        try {
+            $obj = Get-Content $appearanceJson -Raw | ConvertFrom-Json
+            foreach ($prop in $obj.PSObject.Properties) {
+                $appearance[$prop.Name] = $prop.Value
+            }
+        } catch { $appearance = @{} }
+    }
+    $appearance["baseTheme"] = "obsidian"
+    # Write UTF-8 WITHOUT BOM (BOM breaks JSON parsers).
+    [System.IO.File]::WriteAllText($appearanceJson, ($appearance | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))
+    Write-OK "Obsidian configured to open in dark mode"
+    Set-StepDone "obsidian_dark_mode"
+}
+
 # ── 8. Done -- open Obsidian ────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Green
