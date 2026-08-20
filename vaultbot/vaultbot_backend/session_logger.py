@@ -6,6 +6,7 @@ before writing. The log is the single source of truth for debugging and
 calibration.
 """
 
+import contextlib
 import json
 import re
 import time
@@ -16,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from config import TUNABLES
-
 
 # ── Secret redaction ──────────────────────────────────────────────────────
 # Session logs persist full WebSocket payloads (user messages, tool inputs,
@@ -53,9 +53,7 @@ _UUID_RE = re.compile(
 # redact) but not so broad that it destroys diagnostic value.
 #
 # If a new provider is added, append its prefix here.
-_PROVIDER_KEY_RE = re.compile(
-    r"^(?:sk-|sk-or-|tvly-|xai-|sk-ant-)[A-Za-z0-9_\-]{8,}$"
-)
+_PROVIDER_KEY_RE = re.compile(r"^(?:sk-|sk-or-|tvly-|xai-|sk-ant-)[A-Za-z0-9_\-]{8,}$")
 
 # Field paths that are NEVER redacted regardless of their string value.
 # These are known-safe by construction: user messages, search queries,
@@ -66,24 +64,26 @@ _PROVIDER_KEY_RE = re.compile(
 # via _SECRET_KEY_RE still applies — ``data.api_key`` is always
 # redacted even if ``api_key`` weren't in this allowlist, which it
 # isn't.)
-_SAFE_FIELD_NAMES = frozenset({
-    "message",       # websocket user message (data.payload.message)
-    "content",       # assistant response (data.payload.content)
-    "query",         # search queries (data.query)
-    "topic",         # research topics (data.topic)
-    "tool",          # tool names (data.tool)
-    "method",        # tool method names (data.method)
-    "model",         # model names (data.model)
-    "title",         # session/note titles (data.title)
-    "detail",        # stage detail strings (data.detail)
-    "stage",         # stage names (data.stage)
-    "context",       # exception context (data.context)
-    "error",         # error message strings (data.error)
-    "user_message",  # chat_begin user message (data.user_message)
-    "source",        # provenance source labels (data.source)
-    "name",          # tool call names (data.name)
-    "msg",           # qa_worker messages (data.msg)
-})
+_SAFE_FIELD_NAMES = frozenset(
+    {
+        "message",  # websocket user message (data.payload.message)
+        "content",  # assistant response (data.payload.content)
+        "query",  # search queries (data.query)
+        "topic",  # research topics (data.topic)
+        "tool",  # tool names (data.tool)
+        "method",  # tool method names (data.method)
+        "model",  # model names (data.model)
+        "title",  # session/note titles (data.title)
+        "detail",  # stage detail strings (data.detail)
+        "stage",  # stage names (data.stage)
+        "context",  # exception context (data.context)
+        "error",  # error message strings (data.error)
+        "user_message",  # chat_begin user message (data.user_message)
+        "source",  # provenance source labels (data.source)
+        "name",  # tool call names (data.name)
+        "msg",  # qa_worker messages (data.msg)
+    }
+)
 
 
 def _redact(obj: Any, _key_path: str = "") -> Any:
@@ -149,15 +149,13 @@ class SessionLogger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         # Retention: cap session log accumulation so a non-technical user's
         # disk doesn't fill over months. Defaults live in config.TUNABLES.
-        try:
+        with contextlib.suppress(Exception):  # noqa: BLE001 — best-effort cleanup
             sweep_old_sessions(
                 self.log_dir,
                 max_files=TUNABLES.session_log_retention_count,
                 max_age_days=TUNABLES.session_log_retention_days,
                 max_file_mb=TUNABLES.session_log_max_file_mb,
             )
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass  # cleanup must never crash the backend
 
         self.session_id: str = session_id or str(uuid.uuid4())
         self.started_at: str = datetime.now(UTC).isoformat()

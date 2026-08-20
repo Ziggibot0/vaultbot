@@ -117,8 +117,13 @@ def _category(event_name: str) -> str:
 
 
 def _is_error_event(event_name: str, data: dict[str, Any]) -> bool:
-    """Check if an event represents an error (has 'error' field or is error-category)."""
-    if event_name in ("exception", "console_error", "notify_console_failure", "problem_notified"):
+    """Check if an event is an error (has 'error' field or error-category)."""
+    if event_name in (
+        "exception",
+        "console_error",
+        "notify_console_failure",
+        "problem_notified",
+    ):
         return True
     if data.get("error"):
         return True
@@ -133,9 +138,7 @@ def _format_timestamp(ts: float) -> str:
         return f"<invalid ts:{ts}>"
 
 
-def find_session_file(
-    sessions_dir: Path, query: str
-) -> Path | None:
+def find_session_file(sessions_dir: Path, query: str) -> Path | None:
     """Find a session JSONL file by UUID, 'latest', or title substring.
 
     Args:
@@ -234,25 +237,31 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
             token_totals["completion_tokens"] += data.get("completion_tokens", 0)
         elif ev == "session_token_total":
             # Final totals — override accumulated if present
-            token_totals["prompt_tokens"] = data.get("prompt_tokens", token_totals["prompt_tokens"])
+            token_totals["prompt_tokens"] = data.get(
+                "prompt_tokens", token_totals["prompt_tokens"]
+            )
             token_totals["completion_tokens"] = data.get(
                 "completion_tokens", token_totals["completion_tokens"]
             )
         # ── Conversation (canonical events, Fix #3) ──────────────
         elif ev == "chat_begin":
-            turns.append({
-                "role": "user",
-                "content": data.get("user_message", ""),
-                "timestamp": _format_timestamp(ts),
-            })
+            turns.append(
+                {
+                    "role": "user",
+                    "content": data.get("user_message", ""),
+                    "timestamp": _format_timestamp(ts),
+                }
+            )
         elif ev == "assistant_response":
             # Use 'content' (authoritative) or fall back to 'text'
             content = data.get("content") or data.get("text", "")
-            turns.append({
-                "role": "assistant",
-                "content": content,
-                "timestamp": _format_timestamp(ts),
-            })
+            turns.append(
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "timestamp": _format_timestamp(ts),
+                }
+            )
         # ── Tool calls (with call_id correlation, Fix #5) ─────────
         elif ev == "tool_call":
             call_id = data.get("call_id")
@@ -306,25 +315,37 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
                         break
         # ── Errors ────────────────────────────────────────────────
         elif ev == "exception":
-            msg = data.get("error") or data.get("message") or json.dumps(data, default=str)
-            exceptions.append({
-                "event": ev,
-                "context": data.get("context", ""),
-                "message": msg,
-                "timestamp": _format_timestamp(ts),
-            })
+            msg = (
+                data.get("error")
+                or data.get("message")
+                or json.dumps(data, default=str)
+            )
+            exceptions.append(
+                {
+                    "event": ev,
+                    "context": data.get("context", ""),
+                    "message": msg,
+                    "timestamp": _format_timestamp(ts),
+                }
+            )
         elif ev in ("console_error", "notify_console_failure", "problem_notified"):
-            msg = data.get("message") or data.get("user_message") or json.dumps(data, default=str)
+            msg = (
+                data.get("message")
+                or data.get("user_message")
+                or json.dumps(data, default=str)
+            )
             console_errors.append(f"[{_format_timestamp(ts)}] {msg}")
         elif "exception" in ev.lower() or "_failed" in ev:
             # Catch-all for *_failed events
             msg = data.get("error") or json.dumps(data, default=str)
-            exceptions.append({
-                "event": ev,
-                "context": "",
-                "message": msg,
-                "timestamp": _format_timestamp(ts),
-            })
+            exceptions.append(
+                {
+                    "event": ev,
+                    "context": "",
+                    "message": msg,
+                    "timestamp": _format_timestamp(ts),
+                }
+            )
 
     # If no canonical conversation events were found, fall back to
     # parsing websocket_message payloads (legacy sessions, Fix #3)
@@ -371,11 +392,13 @@ def _parse_ws_messages(lines: list[str]) -> list[dict[str, Any]]:
 
         if direction == "in":
             if current_assistant:
-                turns.append({
-                    "role": "assistant",
-                    "content": current_assistant,
-                    "timestamp": current_ts,
-                })
+                turns.append(
+                    {
+                        "role": "assistant",
+                        "content": current_assistant,
+                        "timestamp": current_ts,
+                    }
+                )
                 current_assistant = ""
             msg = payload.get("message") or payload.get("content") or ""
             if msg:
@@ -388,15 +411,25 @@ def _parse_ws_messages(lines: list[str]) -> list[dict[str, Any]]:
             elif ptype == "answer_done":
                 content = payload.get("content") or ""
                 if content:
-                    turns.append({"role": "assistant", "content": content, "timestamp": ts})
+                    turns.append(
+                        {"role": "assistant", "content": content, "timestamp": ts}
+                    )
                 elif current_assistant:
-                    turns.append({"role": "assistant", "content": current_assistant, "timestamp": ts})
+                    turns.append(
+                        {
+                            "role": "assistant",
+                            "content": current_assistant,
+                            "timestamp": ts,
+                        }
+                    )
                 current_assistant = ""
             elif ptype == "thinking":
                 pass  # thinking blocks are not conversation turns
 
     if current_assistant:
-        turns.append({"role": "assistant", "content": current_assistant, "timestamp": current_ts})
+        turns.append(
+            {"role": "assistant", "content": current_assistant, "timestamp": current_ts}
+        )
 
     return turns
 
@@ -422,8 +455,7 @@ def format_transcript(summary: dict[str, Any], filter_type: str = "all") -> str:
         f"Console errors: {len(summary['console_errors'])}"
     )
     out.append(
-        f"Tokens: prompt={tt['prompt_tokens']} "
-        f"completion={tt['completion_tokens']}"
+        f"Tokens: prompt={tt['prompt_tokens']} completion={tt['completion_tokens']}"
     )
 
     if filter_type in ("conversation", "all"):
@@ -507,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
     list_p = sub.add_parser("list", help="List recent sessions")
     list_p.add_argument(
         "-n",
- "--count",
+        "--count",
         type=int,
         default=10,
         help="Number of recent sessions to show (default: 10)",
@@ -521,7 +553,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    sessions_dir = Path(args.sessions_dir) if args.sessions_dir else _default_sessions_dir()
+    sessions_dir = (
+        Path(args.sessions_dir) if args.sessions_dir else _default_sessions_dir()
+    )
 
     if args.command == "list":
         if not sessions_dir.exists():
@@ -534,7 +568,9 @@ def main(argv: list[str] | None = None) -> int:
             # Read title from first session_title event
             t = "New Session"
             try:
-                for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+                for line in f.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines():
                     try:
                         evt = json.loads(line)
                     except json.JSONDecodeError:

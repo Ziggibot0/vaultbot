@@ -46,7 +46,7 @@ def test_redact_provider_key_values():
 
 
 def test_redact_no_longer_matches_bare_alnum_24_plus():
-    """Issue #86 Fix #4: bare 24+ char alnum strings are NOT redacted.
+    r"""Issue #86 Fix #4: bare 24+ char alnum strings are NOT redacted.
 
     The old regex ``^[A-Za-z0-9_\-]{24,}$`` caught legitimate
     diagnostic strings. The new regex only matches known provider key
@@ -126,7 +126,9 @@ def test_logger_tool_call_has_call_id(tmp_path: Path):
     s.close()
     lines = s._file_path.read_text(encoding="utf-8").splitlines()
     tool_call_lines = [
-        json.loads(l) for l in lines if json.loads(l).get("event") == "tool_call"
+        json.loads(line)
+        for line in lines
+        if json.loads(line).get("event") == "tool_call"
     ]
     assert len(tool_call_lines) == 2
     assert tool_call_lines[0]["data"]["call_id"] == 1
@@ -140,8 +142,16 @@ def test_logger_log_tool_result_correlation(tmp_path: Path):
     s.log_tool_result(call_id=1, tool="vault_search", result={"hits": 3})
     s.close()
     lines = s._file_path.read_text(encoding="utf-8").splitlines()
-    tc = [json.loads(l) for l in lines if json.loads(l).get("event") == "tool_call"][0]
-    tr = [json.loads(l) for l in lines if json.loads(l).get("event") == "tool_call_result"][0]
+    tc = next(
+        json.loads(line)
+        for line in lines
+        if json.loads(line).get("event") == "tool_call"
+    )
+    tr = next(
+        json.loads(line)
+        for line in lines
+        if json.loads(line).get("event") == "tool_call_result"
+    )
     assert tc["data"]["call_id"] == tr["data"]["call_id"] == 1
 
 
