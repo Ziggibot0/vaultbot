@@ -29,7 +29,7 @@ CONTRACT
 No tool names, no raw output, no "I called X and it returned Y". The summary
 is the gist a human would remember a day later.
 
-The summary is written by the SMALL model cartridge (qwen3.5:0.8b when
+The summary is written by the SMALL model cartridge (qwen3.5:4b when
 configured, else the big model) via a non-streaming chat() call. This keeps
 the cloud model focused on the actual reasoning work and delegates the
 bounded-output summarization to the cheap local model — same pattern as the

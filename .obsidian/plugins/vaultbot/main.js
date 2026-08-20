@@ -47,6 +47,7 @@ class VaultBotPlugin extends Plugin {
 		// every file event triggers Obsidian's metadata cache + graph refresh.
 		// Without this, Obsidian bogs down when VaultBot is actively working.
 		this._ensureIgnoredDirs();
+		this._ensureDarkMode();
 
 		this.addCommand({
 			id: 'open-vaultbot-sidebar',
@@ -202,23 +203,54 @@ class VaultBotPlugin extends Plugin {
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
 		const required = ['vaultbot/vaultbot_backend/', '.venv/', 'vaultbot/vaultbot_backend/vaultbot_index/'];
+		// Repo-level files that live at the vault root (AGENTS.md, README.md,
+		// SECURITY.md, LICENSE) are VaultBot's own plumbing, not the user's
+		// notes. Hide them from the file explorer so the root stays clean for
+		// the user's own stuff.
+		const rootFiles = ['AGENTS.md', 'README.md', 'SECURITY.md', 'LICENSE'];
 		try {
 			const current = this.app.vault.getConfig('userIgnoreFilters') || [];
 			let changed = false;
 			const updated = [...current];
-			for (const dir of required) {
-				if (!updated.includes(dir)) {
-					updated.push(dir);
+			for (const entry of [...required, ...rootFiles]) {
+				if (!updated.includes(entry)) {
+					updated.push(entry);
 					changed = true;
 				}
 			}
 			if (changed) {
 				this.app.vault.setConfig('userIgnoreFilters', updated);
-				console.log('VaultBot: added internal dirs to userIgnoreFilters', updated);
+				console.log('VaultBot: added internal dirs/files to userIgnoreFilters', updated);
 			}
 		} catch (e) {
 			// Non-fatal: if the Obsidian API doesn't support this, just skip.
 			console.warn('VaultBot: could not update userIgnoreFilters', e);
+		}
+	}
+
+	async _ensureDarkMode() {
+		// Default new installs to dark mode. Obsidian ships light by default,
+		// which is harsh on the eyes. We set baseTheme=dark ONCE — only when
+		// the user hasn't already chosen a theme (baseTheme absent). Once they
+		// pick a theme in Settings -> Appearance, Obsidian writes baseTheme and
+		// we leave it alone.
+		try {
+			const adapter = this.app.vault.adapter;
+			const appearancePath = '.obsidian/appearance.json';
+			let data = {};
+			if (await adapter.exists(appearancePath)) {
+				try {
+					data = JSON.parse(await adapter.read(appearancePath)) || {};
+				} catch (e) { data = {}; }
+			}
+			if (!data.baseTheme) {
+				data.baseTheme = 'dark';
+				await adapter.write(appearancePath, JSON.stringify(data, null, 2));
+				console.log('VaultBot: set default theme to dark');
+			}
+		} catch (e) {
+			// Non-fatal: the user can set the theme manually in Settings.
+			console.warn('VaultBot: could not set dark mode default', e);
 		}
 	}
 
