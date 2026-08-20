@@ -38,12 +38,13 @@ wins — flag the discrepancy instead of guessing.
 6. `gh pr create --base main --head <branch> --title ... --body ...`
    Fill the PR template's safety checklist (`.github/pull_request_template.md`).
 7. `gh pr checks <N>` — wait for both Python 3.11 and 3.12 to go green.
-8. `gh pr merge <N> --squash --delete-branch --admin`
+8. `gh pr merge <N> --squash --delete-branch`
 
-The `--admin` flag is required because branch protection + CODEOWNERS demand
-`@skelogg` review. Sean is the sole maintainer and authorizes the merge, so
-`--admin` is the correct mechanism — but it means the merge is a force-merge
-past review. Don't use it silently; it's a deliberate maintainer action.
+Branch protection on `main` requires a code-owner approval (`@Ziggibot0`)
+before any merge. Do NOT use `--admin` to force-merge past review — that
+bypasses the sign-off gate. The vaultbot's `review_contributions` tool
+enforces the same rule: it refuses to merge until the PR has an APPROVED
+review, and reports "awaiting approval" otherwise.
 
 ## Gotchas
 
