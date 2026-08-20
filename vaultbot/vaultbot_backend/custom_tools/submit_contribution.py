@@ -312,9 +312,7 @@ def run(args: dict) -> dict:
         fork_url = f"https://github.com/{gh_username}/{upstream_repo}.git"
 
         # Check if origin is already the user's fork
-        ok, origin_url, _ = run_git(
-            ["remote", "get-url", "origin"], vault_root
-        )
+        ok, origin_url, _ = run_git(["remote", "get-url", "origin"], vault_root)
         origin_is_fork = ok and _parse_github_url(origin_url) == (
             gh_username,
             upstream_repo,
