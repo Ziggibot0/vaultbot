@@ -25,9 +25,7 @@ def test_bot_env_set_returns_token_env(monkeypatch):
         returncode = 0
         stdout = "gho_faketoken123\n"
 
-    monkeypatch.setattr(
-        gh_client, "_subprocess_run", lambda *a, **k: _FakeResult()
-    )
+    monkeypatch.setattr(gh_client, "_subprocess_run", lambda *a, **k: _FakeResult())
 
     env = gh_client._bot_env()
     assert env is not None
@@ -41,8 +39,6 @@ def test_bot_env_token_failure_returns_none(monkeypatch):
         returncode = 1
         stdout = ""
 
-    monkeypatch.setattr(
-        gh_client, "_subprocess_run", lambda *a, **k: _FakeResult()
-    )
+    monkeypatch.setattr(gh_client, "_subprocess_run", lambda *a, **k: _FakeResult())
 
     assert gh_client._bot_env() is None
