@@ -68,6 +68,7 @@ _CONTRIBUTIONS_GATED_TOOLS: frozenset[str] = frozenset(
         "submit_contribution",  # submit PRs (fork-based or direct)
         "review_contributions",  # review open PRs (maintainer side)
         "torture_test",  # torture-test a PR before merge (maintainer side)
+        "pr_feedback",  # check PR CI/reviews (contributor feedback loop)
     }
 )
 
