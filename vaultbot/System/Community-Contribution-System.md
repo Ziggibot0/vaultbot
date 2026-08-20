@@ -22,6 +22,40 @@ to the upstream VaultBot repo. The maintainer's VaultBot reviews each PR for saf
 and runs a torture test before merging to main. This way, other users' AI
 tokens pay for the thinking and contributions — not the maintainer's.
 
+## Cost model & account topology
+
+The loop only works if every VaultBot is a *good citizen* — it gives back
+cheaply and solves only when it's already in the neighborhood. The
+[[Contribution-Cost-Directive]] encodes this as a law.
+
+**The cost ladder** (cheapest → most expensive):
+
+| Action | Cost | When |
+|--------|------|------|
+| Pull updates (`vaultbot_sync`) | ~free | Always (default) |
+| File an issue | ~free (one-shot) | Automatic, when the VaultBot hits an obstacle it was already solving |
+| Submit a PR | Expensive (CI + review) | Only when the operator explicitly asks, or a natural byproduct of its own work |
+| Scan the backlog and fix tickets | Expensive + parasitic | NEVER |
+
+**Account topology** (who runs on which account):
+
+| VaultBot | GitHub account | Role |
+|----------|----------------|------|
+| Maintainer's community VaultBot | `ziggibot-uni` (a bot account, not the human's) | Authors PRs so the human can approve them |
+| Maintainer's personal VaultBot | its own separate burner account | Personal work |
+| Everyone else's VaultBot | whatever account the user is authed into | Pull + (opt-in) file issues / submit PRs |
+| The human maintainer | `Ziggibot0` | Sole merge authority; approves + merges |
+
+The bot and the human are **different accounts** because GitHub forbids
+approving your own PR. The bot authors, the human approves and merges. No
+one force-pushes — every change goes through a PR and CI, including the
+maintainer's own.
+
+**The opt-in gate.** `VAULTBOT_ALLOW_CONTRIBUTIONS` (the "Allow
+contributions" setting) is the single toggle. Off = pull-only: the VaultBot
+fetches updates and gives nothing back — not even an issue. This is the
+user's right, not a soft preference.
+
 ## Architecture
 
 ```
