@@ -388,6 +388,14 @@ for fp, entry in distilled.items():
     if not content.startswith("---"):
         continue
 
+    # Skip baseline notes — trigger/inhibitor phrases are learned from THIS
+    # user's reactions, so they are personal. Writing them into a shared
+    # baseline file would make every install's copy diverge.
+    _fm_end = content.find("\n---", 3)
+    _fm_block = content[:_fm_end] if _fm_end != -1 else content[:200]
+    if "baseline: true" in _fm_block:
+        continue
+
     changes = []
     for field_name, new_phrases in [("trigger", new_triggers), ("inhibitor", new_inhibitors)]:
         if not new_phrases:

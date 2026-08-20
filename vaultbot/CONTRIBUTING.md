@@ -143,6 +143,28 @@ categories) to tag errors that don't have a distinctive exception signature.
 - `vaultbot/vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
 - `vaultbot/learningMaterial/` (user's PDFs)
 
+## Baseline vs. emergent content
+
+VaultBot ships two kinds of knowledge, and they must not mix:
+
+- **Baseline** (`baseline: true` in frontmatter) — curated, reviewed,
+  universal. The *one canonical way* to solve a common problem. Ships to
+  every user. Two installs must never have different versions.
+- **Emergent** (no `baseline: true`) — what *your* instance learned from
+  *your* usage: session logs, tool-call patterns, journal themes, user
+  reactions. Stays local. Divergence is expected and fine.
+
+The Dream-Pass is an **emergent** process. It must never write
+`baseline: true`, and it must never mutate a `baseline: true` file's
+frontmatter. Auto-generated procedures (`Dream-Pattern-To-Procedure`) and
+retrieval-tuning metadata (`trigger`/`inhibitor`, learned `when_to_use`)
+are personal by default. Promoting something to baseline is a deliberate,
+reviewed act — not a side effect of a dream pass.
+
+If you find a `baseline: true` file that was auto-generated or carries
+per-user metadata, that's a bug: strip the marker and route the content
+through the contribution review flow instead.
+
 ## Coding style
 
 - UTF-8 everywhere. The agent's `code_write` once corrupted every Unicode

@@ -90,6 +90,12 @@ for file_path in all_files:
     if "type: procedure" not in fm:
         continue
     
+    # Skip baseline procedures — their when_to_use is curated and shared,
+    # not learned per-instance. Rewriting it here would make every user's
+    # copy diverge from the canonical baseline.
+    if "baseline: true" in fm:
+        continue
+    
     # If targeting a specific procedure, skip others
     proc_name = file_path.split("/")[-1].replace(".md", "")
     if target and target.lower() not in proc_name.lower():
