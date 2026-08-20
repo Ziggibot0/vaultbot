@@ -204,14 +204,18 @@ The upstream repo is resolved at runtime by `upstream_identity.resolve_upstream(
 `review_contributions`, `torture_test`, and `github_issues`. Resolution order:
 
 1. **Env vars** — `UPSTREAM_OWNER` + `UPSTREAM_REPO` in `.env`. Set these
-   when your `origin` differs from the canonical upstream (e.g. a personal
+   when your remotes don't match the canonical upstream (e.g. a personal
    fork contributing back to the parent). Example:
    ```
-   UPSTREAM_OWNER=cadenKel
+   UPSTREAM_OWNER=Ziggibot0
    UPSTREAM_REPO=vaultbot
    ```
-2. **git remote** — `git remote get-url origin` from the nearest `.git`
-   directory (found by walking up from `vaultbot_backend/`).
+2. **git remote** — `git remote get-url upstream` (preferred) or
+   `git remote get-url origin` (fallback), from the nearest `.git`
+   directory (found by walking up from `vaultbot_backend/`). A fork
+   typically has two remotes: `origin` (the fork, where you push) and
+   `upstream` (the canonical project, where you file PRs). Preferring
+   `upstream` ensures contribution tools target the right repo.
 3. **No silent fallback.** If neither yields an answer the tool raises an
    actionable error instead of guessing a wrong default.
 
