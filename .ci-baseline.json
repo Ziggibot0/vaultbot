@@ -1,0 +1,11 @@
+{
+  "_comment": "Debt ratchet baseline (issue #21). CI fails if the current count EXCEEDS these values. Lower them as debt is paid down. pyright counts are from `pyright --level warning vaultbot_backend/`; pytest counts are from `pytest -m integration`.",
+  "pyright": {
+    "errors": 454,
+    "warnings": 11
+  },
+  "pytest_integration": {
+    "failures": 0,
+    "tests": 25
+  }
+}

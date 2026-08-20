@@ -141,6 +141,17 @@ jobs:
           uv run pytest -q -m "integration" --tb=short
         continue-on-error: true
 
+      - name: Debt ratchet (HARD GATE)
+        # The two soft gates above (pyright full, pytest integration) run
+        # with continue-on-error so they surface pre-existing debt without
+        # blocking CI. This step is the enforcement mechanism (issue #21):
+        # it re-runs each soft gate, counts the current violations, and
+        # fails if the count EXCEEDS the committed baseline in
+        # .ci-baseline.json. New debt is blocked; the baseline stays green
+        # and is lowered incrementally as debt is paid down.
+        working-directory: vaultbot
+        run: uv run python vaultbot_backend/scripts/check_debt_ratchet.py
+
       - name: Secret scan (gitleaks)
         # Hard gate: the backend now handles OAuth tokens (google_workspace).
         # gitleaks scans the whole repo for leaked secrets/credentials before
