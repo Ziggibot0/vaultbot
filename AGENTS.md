@@ -46,6 +46,13 @@ bypasses the sign-off gate. The vaultbot's `review_contributions` tool
 enforces the same rule: it refuses to merge until the PR has an APPROVED
 review, and reports "awaiting approval" otherwise.
 
+The vaultbot authors PRs as the bot account (`ziggibot-uni`), NOT as
+`@Ziggibot0`, so that Sean can approve them (GitHub forbids approving your
+own PR). Set `VAULTBOT_GH_BOT_USER=ziggibot-uni` in the backend `.env` to
+make `gh_client` retrieve the bot's token from the keyring and run `gh` as
+the bot. Without it, `gh` uses the active account and the approval flow
+deadlocks.
+
 ## Gotchas
 
 - `gh` is at `%LOCALAPPDATA%\Programs\gh\bin\gh.exe`, authenticated as
