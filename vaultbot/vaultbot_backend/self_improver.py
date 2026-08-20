@@ -57,6 +57,20 @@ TRASH_DIR = (
     BACKEND_DIR / "trash" / "backups"
 )  # all .bak files go here, not alongside source
 
+# Custom tools that are gated behind VAULTBOT_ALLOW_CONTRIBUTIONS=true.
+# When contributions are off, these tools are not loaded at all — their
+# schemas never reach the LLM (zero context bloat) and they can't be
+# called. Each tool also checks the env var at call time as
+# defence-in-depth. See [[Community-Contribution-System]].
+_CONTRIBUTIONS_GATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "github_issues",  # read/comment/close/label/create GitHub issues
+        "submit_contribution",  # submit PRs (fork-based or direct)
+        "review_contributions",  # review open PRs (maintainer side)
+        "torture_test",  # torture-test a PR before merge (maintainer side)
+    }
+)
+
 
 class SelfImprover:
     """File I/O, code execution, tool creation, and git rollback for the agent."""
@@ -94,6 +108,23 @@ class SelfImprover:
             if py.name.startswith("_") or py.name == "__init__.py":
                 continue
             mod_name = py.stem
+            # Contributions-gated tools: skip loading entirely when the user
+            # hasn't opted into community contributions. This keeps the schema
+            # out of the LLM context (no bloat from a tool that will never be
+            # used) and prevents the tool from being callable at all. Each
+            # gated tool also has a call-time check as defence-in-depth.
+            if mod_name in _CONTRIBUTIONS_GATED_TOOLS:
+                if (
+                    os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "")
+                    .strip()
+                    .lower()
+                    != "true"
+                ):
+                    self._log(
+                        "custom_tool_skipped_contributions_off",
+                        {"name": mod_name, "module": mod_name},
+                    )
+                    continue
             # Import using the full package-qualified path (custom_tools.<stem>)
             # so that `from custom_tools.ask_user import _pending_requests` in
             # other modules (e.g. routers/system.py /user_response endpoint)
