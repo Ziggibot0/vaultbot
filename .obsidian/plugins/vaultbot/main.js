@@ -651,6 +651,24 @@ class VaultBotPlugin extends Plugin {
 		};
 		runPreflight();
 
+		// ── Cloud API key: the "get a key" path ─────────────────────────
+		// The installer walks a non-technical user through the cloud path
+		// (open a browser, create a key, paste it back). This button is the
+		// plugin-side equivalent: a one-click "Get an API key" that opens
+		// OpenRouter's key page, so a user who already installed but never
+		// added a key isn't left to find a hidden .env file on their own.
+		const apiKeySection = modal.contentEl.createDiv();
+		apiKeySection.style.marginTop = '16px';
+		apiKeySection.createEl('p', {
+			text: 'Want a cloud model (recommended for laptops)? Get a free ' +
+				'OpenRouter API key — no credit card needed.'
+		}).style.opacity = '0.85';
+		const apiKeyBtn = apiKeySection.createEl('button', {
+			text: 'Get an API key', cls: 'mod-cta'});
+		apiKeyBtn.addEventListener('click', () => {
+			window.open('https://openrouter.ai/keys', '_blank');
+		});
+
 		// ── One-liner: the "just run it" path ───────────────────────────
 		const divider = modal.contentEl.createEl('hr');
 		divider.style.margin = '16px 0';

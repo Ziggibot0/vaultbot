@@ -45,6 +45,85 @@ with open(path, 'w') as f: json.dump(state, f)
 " "$STATE_FILE" "$step" 2>/dev/null || true
 }
 
+set_state_value() {
+    # Store an arbitrary string value in the state JSON (used to persist the
+    # chat backend + API key across a re-run after a failed step).
+    [ -z "$STATE_FILE" ] && return 0
+    local key="$1"
+    local value="$2"
+    python3 -c "
+import json, sys
+path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path) as f: state = json.load(f)
+except Exception:
+    state = {}
+state[key] = value
+with open(path, 'w') as f: json.dump(state, f)
+" "$STATE_FILE" "$key" "$value" 2>/dev/null || true
+}
+
+get_state_value() {
+    # Read a string value from the state JSON (empty if absent).
+    [ -z "$STATE_FILE" ] && return 0
+    [ ! -f "$STATE_FILE" ] && return 0
+    local key="$1"
+    python3 -c "
+import json, sys
+path, key = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as f: state = json.load(f)
+except Exception:
+    state = {}
+print(state.get(key, ''))
+" "$STATE_FILE" "$key" 2>/dev/null
+}
+
+get_free_cloud_model() {
+    # Query OpenRouter's PUBLIC model list (no API key needed) and pick the
+    # best free model that can drive the "big" cartridge: free (pricing 0/0)
+    # AND >=128K context so it holds the agentic loop + RAG context. Prefer a
+    # curated, ordered list of known-good free models; fall back to the first
+    # free+capable model the API reports. Prints "" on failure (offline).
+    python3 -c "
+import json, urllib.request
+CURATED = [
+    'z-ai/glm-5.2:free',                       # 256K ctx, strong agentic
+    'nvidia/nemotron-3-ultra-550b-a55b:free',  # 1M ctx
+    'dots-studio/dots-3-note-preview:free',    # 512K ctx
+]
+try:
+    with urllib.request.urlopen('https://openrouter.ai/api/v1/models', timeout=15) as r:
+        data = json.load(r)
+except Exception:
+    print('')
+    raise SystemExit(0)
+live = set()
+first_free = ''
+for m in data.get('data', []):
+    mid = m.get('id', '')
+    if not mid:
+        continue
+    p = m.get('pricing') or {}
+    prompt = str(p.get('prompt', ''))
+    completion = str(p.get('completion', ''))
+    is_free = prompt in ('0', '0.0') and completion in ('0', '0.0')
+    try:
+        ctx = int(m.get('context_length') or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    if is_free and ctx >= 128000:
+        live.add(mid)
+        if not first_free:
+            first_free = mid
+for c in CURATED:
+    if c in live:
+        print(c)
+        raise SystemExit(0)
+print(first_free)
+" 2>/dev/null
+}
+
 echo ""
 echo "  ============================="
 echo "      VaultBot Installer"
@@ -306,6 +385,9 @@ fi
 # or a cloud API key (zero local compute, recommended for laptops).
 CHAT_BACKEND="ollama"  # default
 CHAT_MODEL=""
+API_KEY=""
+API_BASE_URL=""
+API_MODEL=""
 if ! step_done "chat_backend_chosen"; then
     echo ""
     echo "  VaultBot needs a chat model to talk to you."
@@ -313,17 +395,48 @@ if ! step_done "chat_backend_chosen"; then
     echo "    1. Local (free, private, uses Ollama — already installed)"
     echo "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM."
     echo "    2. Cloud API (zero local compute, recommended for laptops)"
-    echo "       You provide an API key later (OpenAI, OpenRouter, etc.)."
+    echo "       Free OpenRouter tier — no credit card needed."
     echo ""
     read -p "  Pick 1 or 2 (default: 1): " CHOICE
     if [ "$CHOICE" = "2" ]; then
         CHAT_BACKEND="openai"
         echo ""
-        echo "  You'll need an API key from OpenAI, OpenRouter, or any"
-        echo "  OpenAI-compatible provider. Add it to .env after setup:"
-        echo "    LLM_API_KEY=sk-..."
-        echo "    LLM_MODEL=gpt-4o-mini"
-        echo "  (Or set LLM_BACKEND=ollama in .env to use local instead.)"
+        echo "  VaultBot will use a cloud model (recommended for laptops)."
+        echo "  The easiest free option is OpenRouter — it has a free tier"
+        echo "  with no credit card required."
+        echo ""
+        echo "  A browser window will open so you can create an account."
+        echo "  Then click 'Create Key', copy it, and paste it back here."
+        echo ""
+        open "https://openrouter.ai" 2>/dev/null || xdg-open "https://openrouter.ai" 2>/dev/null || true
+        open "https://openrouter.ai/keys" 2>/dev/null || xdg-open "https://openrouter.ai/keys" 2>/dev/null || true
+        echo "  (If the browser didn't open, go to https://openrouter.ai/keys)"
+        echo ""
+        read -p "  Paste your API key (or press Enter to skip and add it later): " API_KEY
+        if [ -z "$API_KEY" ]; then
+            echo ""
+            echo "  No problem — you can add your key later. After setup, edit"
+            echo "  the .env file and set:"
+            echo "    LLM_API_KEY=sk-..."
+            echo "    LLM_BASE_URL=https://openrouter.ai/api/v1"
+            echo "    LLM_MODEL=z-ai/glm-5.2:free"
+            echo "  (Or set LLM_BACKEND=ollama in .env to use local instead.)"
+        else
+            API_KEY="$(echo "$API_KEY" | tr -d '[:space:]')"
+            API_BASE_URL="https://openrouter.ai/api/v1"
+            # Pick the best free model that can drive the big cartridge.
+            # Live-query OpenRouter's free list so a new user never lands on
+            # a deprecated or rate-limited model; fall back to a known-good
+            # default if the query fails (offline).
+            echo ""
+            echo "  Picking a free model for you..."
+            API_MODEL="$(get_free_cloud_model)"
+            if [ -z "$API_MODEL" ]; then
+                API_MODEL="z-ai/glm-5.2:free"
+                echo "  [!]  Couldn't reach OpenRouter to pick a model — using a default."
+            fi
+            echo "  [OK] API key saved — VaultBot will use $API_MODEL (free tier)."
+        fi
     else
         CHAT_BACKEND="ollama"
         echo ""
@@ -335,7 +448,21 @@ if ! step_done "chat_backend_chosen"; then
         read -p "  Model name: " CHAT_MODEL
         CHAT_MODEL="${CHAT_MODEL:-qwen3:latest}"
     fi
+    # Persist the choice so a re-run after a failed step doesn't reset it.
+    set_state_value "chat_backend" "$CHAT_BACKEND"
+    set_state_value "chat_model" "$CHAT_MODEL"
+    set_state_value "api_key" "$API_KEY"
+    set_state_value "api_base_url" "$API_BASE_URL"
+    set_state_value "api_model" "$API_MODEL"
     mark_step_done "chat_backend_chosen"
+else
+    # Resume: restore the previously-chosen backend + key from state.
+    CHAT_BACKEND="$(get_state_value "chat_backend")"
+    [ -z "$CHAT_BACKEND" ] && CHAT_BACKEND="ollama"
+    CHAT_MODEL="$(get_state_value "chat_model")"
+    API_KEY="$(get_state_value "api_key")"
+    API_BASE_URL="$(get_state_value "api_base_url")"
+    API_MODEL="$(get_state_value "api_model")"
 fi
 
 # ── 6c. Pull the chat model if local ──────────────────────────────────────
@@ -364,9 +491,19 @@ elif [ -f "$ENV_EXAMPLE" ]; then
         sed -i.bak "s/^OLLAMA_LLM_MODEL=.*/OLLAMA_LLM_MODEL=$CHAT_MODEL/" "$ENV_FILE" 2>/dev/null || \
             sed "s/^OLLAMA_LLM_MODEL=.*/OLLAMA_LLM_MODEL=$CHAT_MODEL/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
     fi
+    if [ "$CHAT_BACKEND" = "openai" ] && [ -n "$API_KEY" ]; then
+        sed -i.bak "s/^LLM_API_KEY=.*/LLM_API_KEY=$API_KEY/" "$ENV_FILE" 2>/dev/null || \
+            sed "s/^LLM_API_KEY=.*/LLM_API_KEY=$API_KEY/" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+        # Use '|' as the sed delimiter: the base URL and model id both contain
+        # '/' (https://... and deepseek/...), which would break a s/// command.
+        sed -i.bak "s|^LLM_BASE_URL=.*|LLM_BASE_URL=$API_BASE_URL|" "$ENV_FILE" 2>/dev/null || \
+            sed "s|^LLM_BASE_URL=.*|LLM_BASE_URL=$API_BASE_URL|" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+        sed -i.bak "s|^LLM_MODEL=.*|LLM_MODEL=$API_MODEL|" "$ENV_FILE" 2>/dev/null || \
+            sed "s|^LLM_MODEL=.*|LLM_MODEL=$API_MODEL|" "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+    fi
     rm -f "${ENV_FILE}.bak" 2>/dev/null
     echo "  [OK] Configured -- VaultBot will call you $OWNER_NAME"
-    if [ "$CHAT_BACKEND" = "openai" ]; then
+    if [ "$CHAT_BACKEND" = "openai" ] && [ -z "$API_KEY" ]; then
         echo "  Don't forget: add your LLM_API_KEY to .env to use your cloud model."
     fi
     mark_step_done "env_written"
