@@ -45,36 +45,79 @@ _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
     r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-_PROVIDER_KEY_RE = re.compile(
-    r"(?:^(?:sk-|sk-or-|tvly-|xai-|sk-ant-)[A-Za-z0-9_\-]{8,}$"
-    r"|^[A-Za-z0-9_\-]{24,}$)"
+# Provider key shapes: only match strings with a KNOWN provider key
+# prefix. The previous bare ``^[A-Za-z0-9_\-]{24,}$`` alternative
+# over-redacted legitimate diagnostic strings (search queries, note
+# titles, error messages) that happened to be ≥24 chars of alnum.
+# See issue #86 — the redaction must be conservative (never under-
+# redact) but not so broad that it destroys diagnostic value.
+#
+# If a new provider is added, append its prefix here.
+_PROVIDER_KEY_RE = re.compile(r"^(?:sk-|sk-or-|tvly-|xai-|sk-ant-)[A-Za-z0-9_\-]{8,}$")
+
+# Field paths that are NEVER redacted regardless of their string value.
+# These are known-safe by construction: user messages, search queries,
+# note titles, tool names, model names. The path is matched against the
+# dotted key path (e.g. ``data.payload.message``, ``data.query``).
+# A key at any depth whose final segment matches one of these is
+# exempt from _PROVIDER_KEY_RE value redaction. (Key-suffix redaction
+# via _SECRET_KEY_RE still applies — ``data.api_key`` is always
+# redacted even if ``api_key`` weren't in this allowlist, which it
+# isn't.)
+_SAFE_FIELD_NAMES = frozenset(
+    {
+        "message",  # websocket user message (data.payload.message)
+        "content",  # assistant response (data.payload.content)
+        "query",  # search queries (data.query)
+        "topic",  # research topics (data.topic)
+        "tool",  # tool names (data.tool)
+        "method",  # tool method names (data.method)
+        "model",  # model names (data.model)
+        "title",  # session/note titles (data.title)
+        "detail",  # stage detail strings (data.detail)
+        "stage",  # stage names (data.stage)
+        "context",  # exception context (data.context)
+        "error",  # error message strings (data.error)
+        "user_message",  # chat_begin user message (data.user_message)
+        "source",  # provenance source labels (data.source)
+        "name",  # tool call names (data.name)
+        "msg",  # qa_worker messages (data.msg)
+    }
 )
 
 
-def _redact(obj: Any) -> Any:
+def _redact(obj: Any, _key_path: str = "") -> Any:
     """Recursively replace secret-shaped values with ``[REDACTED]``.
 
     Walks dicts and lists; replaces string values that look like provider
     keys, and any value of a dict key whose name ends with a secret suffix.
     Cheap: only inspects strings. Non-string values pass through.
+
+    ``_key_path`` is the dotted path of the current key (e.g.
+    ``data.payload.message``) used to check the safe-field allowlist.
+    Callers should not pass it — it's used internally during recursion.
     """
     if isinstance(obj, dict):
         out: dict[str, Any] = {}
         for k, v in obj.items():
+            child_path = f"{_key_path}.{k}" if _key_path else str(k)
             if isinstance(k, str) and _SECRET_KEY_RE.search(k):
                 # The KEY says it's a secret — redact regardless of value.
                 out[k] = "[REDACTED]"
             else:
-                out[k] = _redact(v)
+                out[k] = _redact(v, child_path)
         return out
     if isinstance(obj, list):
-        return [_redact(item) for item in obj]
+        return [_redact(item, _key_path) for item in obj]
     if isinstance(obj, str):
+        # Allowlist: if the leaf key name is known-safe, skip value
+        # redaction entirely. This prevents over-redaction of
+        # legitimate diagnostic strings (e.g. a 30-char search query
+        # stored under ``data.query``).
+        leaf = _key_path.rsplit(".", 1)[-1] if _key_path else ""
+        if leaf in _SAFE_FIELD_NAMES:
+            return obj
         if _PROVIDER_KEY_RE.search(obj):
-            # Exclude UUIDs — they're identifiers (session_id, file stems),
-            # not secrets. A bare 36-char hex+dash string is a UUID.
-            if _UUID_RE.match(obj):
-                return obj
             return "[REDACTED]"
         return obj
     return obj
@@ -106,8 +149,7 @@ class SessionLogger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         # Retention: cap session log accumulation so a non-technical user's
         # disk doesn't fill over months. Defaults live in config.TUNABLES.
-        with contextlib.suppress(Exception):
-            # cleanup must never crash the backend
+        with contextlib.suppress(Exception):  # noqa: BLE001 — best-effort cleanup
             sweep_old_sessions(
                 self.log_dir,
                 max_files=TUNABLES.session_log_retention_count,
@@ -127,6 +169,12 @@ class SessionLogger:
             "prompt_tokens": 0,
             "completion_tokens": 0,
         }
+        # Monotonic counter for tool-call correlation IDs. Every
+        # log_tool_call() gets a unique ``call_id`` so the reader can
+        # match a ``tool_call`` event to its ``tool_call_result`` event
+        # deterministically — no more reversed-walk heuristic.
+        # See issue #86, Fix #5.
+        self._call_id_counter: int = 0
 
         self._write(
             {
@@ -204,10 +252,18 @@ class SessionLogger:
         duration_ms: float | None = None,
         error: str | None = None,
     ) -> None:
-        """Log a tool/framework call with input, output, timing, and error."""
+        """Log a tool/framework call with input, output, timing, and error.
+
+        Emits a ``tool_call`` event with a unique ``call_id`` so the
+        result can be correlated deterministically. The ``call_id`` is
+        a monotonically incrementing integer scoped to this session.
+        """
+        self._call_id_counter += 1
+        call_id = self._call_id_counter
         self.log(
             "tool_call",
             {
+                "call_id": call_id,
                 "tool": tool,
                 "method": method,
                 "inputs": inputs,
@@ -216,6 +272,43 @@ class SessionLogger:
                 "error": error,
             },
         )
+
+    def log_tool_result(
+        self,
+        call_id: int,
+        tool: str,
+        result: Any | None = None,
+        duration_ms: float | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Log a tool result correlated to a prior ``tool_call`` by ``call_id``.
+
+        This is the companion to ``log_tool_call()``: the ``call_id``
+        matches the one returned by that method, so the reader can
+        pair them without the reversed-walk heuristic used by the old
+        ``Analyze-Session-Log`` procedure.
+        """
+        self.log(
+            "tool_call_result",
+            {
+                "call_id": call_id,
+                "tool": tool,
+                "result": result,
+                "duration_ms": duration_ms,
+                "error": error,
+            },
+        )
+
+    def next_call_id(self) -> int:
+        """Allocate and return the next tool-call correlation ID.
+
+        Call sites that emit ``tool_call_requested`` (websocket-facing
+        tool dispatch in ``chat_loop_tools.py``) can use this to get a
+        ``call_id`` *before* the tool runs, then emit it in both the
+        request and result events.
+        """
+        self._call_id_counter += 1
+        return self._call_id_counter
 
     def log_message(self, direction: str, payload: dict[str, Any]) -> None:
         """Log a WebSocket message sent or received."""
