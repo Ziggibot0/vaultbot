@@ -67,3 +67,9 @@ result = json.dumps(stub_notes)
 ### Step 3: Validate output
 
 3. [validate: is a JSON list]
+
+## Related
+
+- [[Vault-Walk]] — produces the JSON this probe filters
+- [[Pattern-Scan]] — the orchestrator that calls this probe
+- [[Check-Thin]] — sibling probe in the same decomposition

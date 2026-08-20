@@ -29,6 +29,16 @@ This is claim-vs-claim contradiction detection (not note-vs-code like
 [[Find-Contradictions]]). The vault does the detection work deterministically;
 the small model only classifies whether each candidate pair is real.
 
+## Why This Exists
+
+The vault can hold notes that take opposing positions on the same question
+without anyone noticing. This procedure detects claim-vs-claim contradictions
+deterministically (status conflicts, prose contradiction signals, rejection
+language) and uses one small-model call only to classify whether each
+candidate pair is real. The tradeoff: deterministic signal detection trades
+recall for precision, so it may miss subtle tensions that don't use explicit
+contradiction language.
+
 ## What It Does
 
 1. Scans `System/`, `Knowledge/`, and notes with `type: architecture`/`semantic`/
@@ -334,3 +344,9 @@ else:
         lines.append("")
     result = "\n".join(lines)
 ```
+
+## Related
+
+- [[Find-Contradictions]] — note-vs-code contradiction detection (sibling probe)
+- [[Find-Vault-Contradictions]] — vault-wide direct-contradiction scan
+- [[Cross-Check-Claims]] — verifies claims against external sources

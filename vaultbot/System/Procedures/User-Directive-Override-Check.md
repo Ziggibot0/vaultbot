@@ -36,6 +36,10 @@ USER DIRECTIVE > vault notes > procedures > model weights > nothing
 
 If the user says "DON'T do X" and a vault note says "X is required," the user wins. Always. No exceptions.
 
+## Why This Exists
+
+A vault design doc, architecture note, or procedure could contradict the user's explicit live directive, and VaultBot might obey the note over the user. This procedure exists to detect explicit directives (negations, prohibitions, mandates) and flag any vault note that contradicts them. The key tradeoff: when a conflict exists, the user directive wins and the note is flagged for review — never obeyed.
+
 ## Inputs
 
 - `intent`: the user's raw request/message (required)
@@ -164,3 +168,9 @@ This procedure is falsifiable if:
 - A user directive is overridden by a vault note despite this check running (testable: feed it "NO X" + a note that says "X is required" and verify the note is flagged)
 - A false positive flags a non-conflicting note (testable: feed it normal requests and verify no false constraints)
 - The check misses a directive (testable: feed it edge cases like "i don't want any gates" and verify detection)
+
+## Related
+
+- [[Route-Task]] — the router this check runs before
+- [[Authority-Check]] — resolves authority conflicts between user and vault
+- [[Preflight-Safety-Check]] — the preflight safety gate

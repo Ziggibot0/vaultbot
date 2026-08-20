@@ -32,6 +32,14 @@ These are candidates to expand, merge, or delete. Thin filter over
 [[Pattern-Scan]] (`is_thin OR is_stub`), excluding daily notes and
 procedures (which are legitimately structured differently).
 
+## Why This Exists
+
+Notes that exist but carry almost no content (thin or stub-marked) are dead
+weight in the graph. This procedure finds them as a thin filter over
+Pattern-Scan's `is_thin`/`is_stub` signals. The tradeoff: it excludes daily
+notes and procedures, which are legitimately structured differently and
+shouldn't be flagged as stubs.
+
 ## Steps
 
 ### Step 1: Run Pattern-Scan and filter to thin/stub notes
@@ -70,3 +78,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "stub" or contains "thin"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this procedure filters
+- [[Check-Stub]] — the standalone stub signal probe
+- [[Find-Thin-Notes]] — sibling probe that also suggests expansion content

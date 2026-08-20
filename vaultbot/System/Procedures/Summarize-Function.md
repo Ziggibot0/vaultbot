@@ -29,6 +29,10 @@ Run this when you need to understand a specific function before touching it.
 The small model reads the function body and produces a tight summary:
 inputs, outputs, side effects, what it does.
 
+## Why This Exists
+
+Understanding a function before editing it requires reading its body, which is wasteful when a tight summary would suffice. This procedure closes that gap by extracting the function body and having the small model summarize its inputs, outputs, and side effects. The tradeoff is that it summarizes rather than reads verbatim, so it is for comprehension and documentation, not for making the edit itself.
+
 ## Steps
 
 ### Step 1: Extract the function from the file
@@ -95,3 +99,9 @@ except Exception:
     parsed = {"error": "could not parse summary"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Smart-Code-Read]] — maps a whole file's structure before summarizing one function
+- [[Proc-Step-Planner]] — plans edits after understanding a function
+- [[Analyze-Function-Flow]] — traces a function's call flow

@@ -125,3 +125,9 @@ result = json.dumps(records)
 ### Step 3: Validate output
 
 3. [validate: is a JSON list]
+
+## Related
+
+- [[Pattern-Scan]] — the orchestrator that consumes Vault-Walk output
+- [[Vault-List]] — lists notes (the raw listing Vault-Walk builds on)
+- [[Vault-Statistics]] — computes vault statistics from per-note data

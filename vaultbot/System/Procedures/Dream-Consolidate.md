@@ -28,6 +28,10 @@ tags:
 
 Consolidates patterns from journal themes, graph gaps, and quality modules into permanent semantic notes. This is the core memory-writing step of the dream pass — the LLM synthesizes, everything else is deterministic.
 
+## Why This Exists
+
+Journal themes, graph gaps, and quality signals are scattered raw material that must be synthesized into permanent semantic notes, and doing so requires the LLM to reason while everything else stays deterministic. This procedure exists as the core memory-writing step of the dream pass. The key tradeoff is that it is the only sub-procedure that uses the `big` cartridge — all reasoning lives here, while dedup and file I/O stay deterministic.
+
 ## Step 1: Gather Inputs
 
 Collect themes from Dream-Scan's output file, graph gaps from Dream-Analyze, existing semantic notes for dedup, and an exemplar note for formatting guidance.
@@ -236,3 +240,9 @@ print(json.dumps(final_output, indent=2))
 - This is the only sub-procedure that uses the **big** model cartridge — all reasoning lives here.
 - The dedup check is intentionally simple (keyword overlap). If it misses duplicates, [[Dream-Evaluate]] will catch them in the next cycle and flag them for review.
 - If the LLM fabricates content not grounded in journal themes, the `falsifiable_if` condition is triggered and the note should be flagged for review.
+
+## Related
+
+- [[Dream-Scan]] — produces the journal themes this consumes
+- [[Dream-Analyze]] — produces the graph gaps this consumes
+- [[Dream-Evaluate]] — catches duplicates this dedup check misses

@@ -30,6 +30,10 @@ When a research note cites web sources, run this to verify each claim
 against the actual source text. Catches claims that the source doesn't
 actually support.
 
+## Why This Exists
+
+Research notes cite web sources that don't actually support their claims, and there was no way to verify them. This procedure fetches each cited source and checks every claim against the source text. The key tradeoff is that it fetches sources live via `web_read_source`, so verification depends on the source being reachable.
+
 ## Steps
 
 ### Step 1: Read the note and extract claims with source URLs
@@ -124,3 +128,9 @@ result = _json.dumps({
     "all_results": results,
 })
 ```
+
+## Related
+
+- [[Check-Entailment]] — checks a single claim against a source
+- [[Verify-Claims]] — parent claim-verification workflow
+- [[Cite-Provenance]] — attaches citations to claims

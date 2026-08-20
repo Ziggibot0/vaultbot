@@ -31,6 +31,14 @@ Run this to find notes that are too thin to be useful — stubs, placeholders,
 or notes with barely any content. The small model then suggests what each
 should be expanded with.
 
+## Why This Exists
+
+Thin notes (under 200 words, stubs, placeholders) exist but aren't useful.
+This procedure finds them via Pattern-Scan and has the small model suggest
+what each should be expanded with. The tradeoff: the expansion suggestions
+are small-model guesses, not research — they point at what's missing, not
+the content itself.
+
 ## Steps
 
 ### Step 1: Import Pattern-Scan and filter for thin notes
@@ -107,3 +115,9 @@ except Exception:
     parsed = []
 result = _json.dumps({"thin_notes": parsed, "total_thin": data.get("thin_count", 0)})
 ```
+
+## Related
+
+- [[Pattern-Scan]] — the engine this procedure filters
+- [[Check-Thin]] — the standalone thin-note signal probe
+- [[Find-Stubs]] — sibling probe for stub-marked notes

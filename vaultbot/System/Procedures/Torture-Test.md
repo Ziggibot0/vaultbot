@@ -23,6 +23,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Run torture tests on a pull request before merging. Downloads changed files from the PR branch and runs: Python syntax check, JS syntax check, .gitignore tampering check, malware/exfiltration pattern scan, path whitelist check. Returns a structured pass/fail report.
 
+## Why This Exists
+
+Merging a PR without safety checks risked introducing syntax errors, malware, or .gitignore tampering. This procedure exists to run a battery of torture tests on a PR's changed files before merge. The key tradeoff: it downloads and scans the PR branch's files rather than trusting the local working tree, so it catches what would actually be merged.
+
 ## Steps
 
 ### Step 1: Run torture tests on the pull request
@@ -33,3 +37,9 @@ Run torture tests on a pull request before merging. Downloads changed files from
    result = _torture({"pr_number": args.get("pr_number", 0)})
    print(result)
    ```
+
+## Related
+
+- [[Run-CI-Gates]] — runs the CI hard gates locally
+- [[Verify-Backend-Change]] — verifies and deploys a backend change
+- [[Iterate-PR]] — iterates on a pull request

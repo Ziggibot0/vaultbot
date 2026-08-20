@@ -29,6 +29,10 @@ tags:
 
 Connects orphaned notes (from graph analyzer output) into the vault graph by finding semantically related notes and adding wikilinks.
 
+## Why This Exists
+
+Orphaned notes sit disconnected from the graph, so they can't be reached by backlinks or retrieval even when their content is valuable. This procedure exists to find semantically related notes for each orphan and add wikilinks to connect them. The key tradeoff is a 50-note cap and a skip-list (chat logs, SECURITY/README/LICENSE) to avoid timeouts and false links.
+
 ## Step 1: Find and add links for orphaned notes
 
 1. ```python
@@ -124,3 +128,9 @@ result = json.dumps({
     "link_log": link_log[:20],
 })
 ```
+
+## Related
+
+- [[Dream-Analyze]] — produces the isolated nodes this connects
+- [[Dream-Dangle-Fix]] — sibling linking step for dangling wikilinks
+- [[Dream-Pass]] — the orchestrator that calls this

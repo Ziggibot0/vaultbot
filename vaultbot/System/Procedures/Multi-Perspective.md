@@ -55,6 +55,15 @@ The **hermeneutic circle** — where part and whole inform each other iterativel
 | Hermeneutic circle checks (fairness + emergent insight) were separate steps | Merged into one call |
 | 10 steps, ~30 LLM calls | 5 steps, ~5 LLM calls |
 
+## Why This Exists
+
+Some problems have no single right answer — multiple valid viewpoints exist
+and the goal is a synthesized understanding. This lens implements
+thesis-antithesis-synthesis (dialectical reasoning) to evaluate such problems.
+The tradeoff: it batches independent LLM calls to cut cost (v4.1 reduced ~5
+calls to ~3-4), but keeps the hermeneutic check separate because it genuinely
+depends on the synthesis output.
+
 ## Inputs
 
 - `problem`: The problem requiring multi-perspective evaluation

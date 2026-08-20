@@ -32,6 +32,10 @@ tags:
 Run after a refactor. Notes that reference `old_function_name` or
 `deleted_file.py` become stale. This finds them.
 
+## Why This Exists
+
+After a refactor renames or deletes files and functions, vault notes that reference the old names become stale and misleading. This procedure closes that gap by scanning notes for code references and checking each against the actual code. The tradeoff is that it distinguishes historical records from active references, so changelogs and build logs are not falsely flagged.
+
 ## Steps
 
 ### Step 1: Collect all code references from vault notes
@@ -120,3 +124,9 @@ Return ONLY the JSON."""
 ### Step 3: Report stale references
 
 3. [llm: Format the active stale references from the prior step as a report. For each, show the note path, the stale file/symbol references, and suggest whether to update the note or delete the stale reference. If none, say all code references are current.]
+
+## Related
+
+- [[Update-Vault-References]] — updates references after a rename
+- [[Check-Staleness]] — flags stale notes generally
+- [[Find-Stale-Notes]] — finds load-bearing notes older than 30 days

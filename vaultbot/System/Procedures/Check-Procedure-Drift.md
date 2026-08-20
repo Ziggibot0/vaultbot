@@ -34,6 +34,10 @@ wrong intent. Run this to catch description-step drift and optionally fix it.
 - `optimize`: Report mismatches AND write improved descriptions to the
   procedure notes' frontmatter. This absorbs the former Procedure-Description-Optimizer.
 
+## Why This Exists
+
+Procedure descriptions are what RAG uses for discovery, so a description that drifts from what the procedure actually does causes it to surface for the wrong intent. This procedure detects description-step drift and can optionally fix it. The key tradeoff is that `optimize` mode writes directly to frontmatter, so it is gated behind an explicit mode flag rather than running by default.
+
 ## Steps
 
 ### Step 1: Read all procedures' descriptions and steps
@@ -146,3 +150,9 @@ else:
     result = _json.dumps({"mismatches": mismatches, "mode": mode,
                           "optimized": optimized})
 ```
+
+## Related
+
+- [[Analyze-Failure-Log]] — sibling procedure-quality audit
+- [[Verify-Procedure-Discoverability]] — checks RAG discoverability
+- [[Procedure-Library-Health]] — library-wide health check

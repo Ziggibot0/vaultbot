@@ -33,6 +33,10 @@ each to see if the target procedure ranks #1.
 
 Read-only — runs retrieval queries, never modifies anything.
 
+## Why This Exists
+
+A procedure could exist but never be reached by the vaultbot because RAG retrieval doesn't surface it. This procedure exists to run the procedure's when_to_use phrasings as test queries through the FusedRetriever and report whether the target ranks #1. The key tradeoff: it's read-only — it runs retrieval queries and never modifies anything.
+
 ## When to Run This
 
 - A procedure exists but the vaultbot doesn't reach for it when it should
@@ -144,3 +148,9 @@ Read-only — runs retrieval queries, never modifies anything.
                lines.append(f"       top5: {', '.join(d['top5'][:3])}")
            result = "\n".join(lines)
    ```
+
+## Related
+
+- [[Verify-Procedure-Args]] — checks a procedure's code steps for runtime issues
+- [[Discover-Procedures]] — discovers procedures from vault content
+- [[Procedure-Library-Index]] — indexes the procedure library

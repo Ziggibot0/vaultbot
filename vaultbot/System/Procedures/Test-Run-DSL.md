@@ -21,6 +21,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 # Test-Run-DSL
 
+## Why This Exists
+
+The DSL `run` entry type needed a test proving it can call a sub-procedure and branch on the parsed output. This procedure uses Authority-Check as the sub-procedure and conditions on its `ruling` field. The tradeoff: it's a manual, experimental test that runs only on explicit invocation, not part of the normal dispatch path.
+
 ## Dispatch
 
 - run:
@@ -57,3 +61,9 @@ result = {
     "condition_met": dispatch_ns.get("_prev", {}).get("condition_met", None),
 }
 ```
+
+## Related
+
+- [[Test-Dispatch-DSL]] — the sibling DSL smoke test for classify/dispatch
+- [[Authority-Check]] — the sub-procedure this test exercises
+- [[Dispatch-DSL-Smoke-Test]] — the broader DSL smoke test

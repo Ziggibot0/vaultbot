@@ -26,6 +26,10 @@ tags:
 
 Scans for and removes pytest cache files, duplicate/backup files, corrupted filenames, and trash remnants. Always backs up before deleting (vault_delete does this automatically). Never deletes sacred journals, LOCKED notes, or identity files.
 
+## Why This Exists
+
+Junk files (pytest cache, backups, empty notes, trash remnants) accumulate in the vault and clutter the graph, but deleting them by hand risks removing something sacred. This procedure exists to identify and remove only junk, always backing up first. The key tradeoff is a hard safety rule — it never deletes sacred journals, LOCKED notes, or identity files — so cleanup can't destroy important content.
+
 ## Step 1: Find and remove junk files
 
 1. ```python
@@ -70,3 +74,9 @@ for f in junk_files:
 
 result = json.dumps({"junk_deleted": deleted})
 ```
+
+## Related
+
+- [[Dream-Curate-Research]] — flags thin/junk notes this removes
+- [[Dream-Pass]] — the orchestrator that calls this
+- [[Vault-Cleanup]] — broader vault cleanup sibling

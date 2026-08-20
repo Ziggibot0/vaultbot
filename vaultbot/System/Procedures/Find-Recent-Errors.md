@@ -44,6 +44,10 @@ Read-only — never modifies session files.
 - First diagnostic step before calling a repair procedure
 - Proactive health sweep
 
+## Why This Exists
+
+Failures often happen silently in a background task or a session the operator isn't looking at, so they never get reported. This procedure exists to sweep the N most recent session logs and return every failure signal across them. The key tradeoff is that it is read-only — it never modifies session files — and it complements [[Analyze-Session-Log]], which deep-dives a single session.
+
 ## Inputs
 
 - `count` (optional): how many recent sessions to scan. Default `10`.
@@ -141,3 +145,9 @@ Read-only — never modifies session files.
            out.append("")
        result = "\n".join(out)
    ```
+
+## Related
+
+- [[Analyze-Session-Log]] — deep-dives a single session this sweep identifies
+- [[Diagnose-System-Health]] — endpoint-level health check, complementary
+- [[Analyze-Failure-Log]] — analyzes a specific failure log

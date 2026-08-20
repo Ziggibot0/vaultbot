@@ -29,6 +29,15 @@ When procedures keep failing and you want to know why. Reads the failure
 log, identifies patterns, and points to specific procedures that need
 fixing.
 
+## Why This Exists
+
+Procedures fail silently and there is no single place to see which ones
+fail most or why. This procedure reads the JSON failure log and surfaces
+failure patterns so reliability work targets the worst offenders. The key
+tradeoff is that the small model's analysis is split into three focused
+calls (worst procedures, common causes, fix priority) to stay within its
+bounded context.
+
 ## Steps
 
 ### Step 1: Read the failure log
@@ -151,3 +160,9 @@ except Exception:
     parsed = {"worst_procedures": [], "common_causes": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Analyze-Session-Log]] — reads a single session's log; this aggregates across the failure log
+- [[Check-Procedure-Drift]] — sibling procedure-quality audit
+- [[Find-Recent-Errors]] — surfaces recent errors for diagnosis

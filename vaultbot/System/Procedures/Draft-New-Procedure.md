@@ -24,6 +24,10 @@ Run this procedure when drafting a new machine-executable procedure note for the
 - A recurring failure or gap has been identified that warrants a documented, repeatable procedure.
 - A user explicitly requests creation of a new procedure from a task or workflow description.
 
+## Why This Exists
+
+A task description or identified workflow gap is unstructured prose, but a procedure must be a machine-executable markdown file with valid YAML frontmatter, falsifiable conditions, and executable steps. This procedure exists to convert the former into the latter deterministically. The key tradeoff is that it requires the `big` cartridge — reasoning and synthesis are needed to structure the procedure from a raw description.
+
 ## Falsifiable If
 
 - The generated procedure markdown file fails to parse as valid YAML frontmatter.
@@ -67,3 +71,9 @@ with open(filename, 'w') as f:
     f.write(generated_markdown)
 print(f"Procedure saved to {filename}")
 ```
+
+## Related
+
+- [[Draft-Procedure-Note]] — sibling procedure-drafting workflow
+- [[Create-New-Procedure]] — the creation path this drafting feeds into
+- [[How-to-Create-a-Procedure]] — the canonical procedure-authoring guide

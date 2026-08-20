@@ -28,6 +28,10 @@ tags:
 
 Run when there are multiple topics to research. The small model triages and plans; the big model only synthesizes the actual research notes.
 
+## Why This Exists
+
+Researching many topics one at a time wastes big-model tokens on triage and planning that a small model can do. This procedure closes that gap by having the small model classify each topic by type and priority and fill a research plan template, leaving only the actual synthesis to the big model. The tradeoff is that triage and planning are small-cartridge, saving roughly 2000-4000 tokens of big-model reasoning per batch.
+
 ## Steps
 
 ### Step 1: Gather the topic list

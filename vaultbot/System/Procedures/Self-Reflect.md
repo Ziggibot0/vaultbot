@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Reflect on a topic and propose 1-3 new tool abilities you could create for yourself. Returns concrete proposals with code sketches you can then implement with tool_create.
 
+## Why This Exists
+
+When the vaultbot hits a wall and lacks an ability, it needs a way to propose new capabilities rather than stall. This procedure closes that gap by reflecting on a topic and returning 1-3 concrete tool proposals with code sketches. The tradeoff is that it only proposes — the actual implementation happens later via tool_create.
+
 ## Steps
 
 ### Step 1: Reflect and propose new tool abilities
@@ -35,3 +39,9 @@ Reflect on a topic and propose 1-3 new tool abilities you could create for yours
 ### Step 2: Identify which abilities to implement first
 
 2. [llm: Based on the reflection results, identify which proposed abilities are most valuable and should be implemented first.]
+
+## Related
+
+- [[Capability-Audit]] — audits existing capabilities before proposing new ones
+- [[Write-Python-Tool]] — implements the tool abilities this procedure proposes
+- [[Self-Check-Reasoning]] — the sibling self-audit procedure

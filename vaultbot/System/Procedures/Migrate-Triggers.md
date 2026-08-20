@@ -32,6 +32,15 @@ One-time migration from the old `when_to_use` frontmatter schema to the new `tri
 
 **Preserves `when_to_use`:** The legacy field is left in place for human readability and backward compatibility (the embedding surface falls back to it when `trigger` is absent). It is NOT deleted.
 
+## Why This Exists
+
+The retrieval gate and embedding surface prefer the new `trigger` list over
+the legacy `when_to_use` string, but existing procedures only have
+`when_to_use`. This migration seeds `trigger` from the existing clauses so
+the gate works immediately. The tradeoff: it is a pure text split (no LLM),
+so it is deterministic and idempotent — but it leaves `when_to_use` in place
+for backward compatibility rather than deleting it.
+
 ## Steps
 
 ### Step 1: Scan all procedure notes + migrate when_to_use to trigger
@@ -145,3 +154,9 @@ print(result)
 ```
 
 [validate: contains "MIGRATION COMPLETE"]
+
+## Related
+
+- [[Dream-Trigger-Inhibitor-Update]] — updates trigger/inhibitor fields on procedures
+- [[Procedure-Library-Index]] — indexes the procedure library
+- [[Verify-Procedure-Discoverability]] — verifies procedures are discoverable

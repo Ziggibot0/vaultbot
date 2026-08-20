@@ -37,6 +37,10 @@ Run this after a chat answer is delivered, to verify that each cited claim is ac
 
 Sentence-to-source mapping is **structural** (deterministic code splits sentences and extracts their wikilinks). Entailment checking is **semantic** (the small model decides supported/unsupported/contradicted). This mirrors the [[Provenance-Audit]] split: code finds the structure, the model judges the meaning.
 
+## Why This Exists
+
+Chat answers cite vault notes, but there was no check that each cited claim is actually supported by its source. This procedure exists to split an answer into sentences, map each to its cited note, and run per-claim entailment checking. The key tradeoff: it runs as an idle-time background layer (not on the chat critical path) to upgrade the trust badge from "grounded" to "verified."
+
 ## Inputs
 
 - `answer` (string, required): The chat answer text, with inline `[[wikilinks]]` citing vault notes.

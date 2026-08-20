@@ -29,6 +29,13 @@ tags:
 When the vault has lots of short, fragmented notes that might be pieces
 of the same topic. This finds them and suggests which to merge.
 
+## Why This Exists
+
+Rapid note-taking produces short, fragmented notes that are pieces of the
+same topic. This procedure finds short notes with high content overlap and
+suggests merges. The tradeoff: it only considers notes under 200 words, so
+longer fragmented notes aren't flagged.
+
 ## Steps
 
 ### Step 1: Find short notes with overlapping content
@@ -132,3 +139,9 @@ result = _json.dumps({
     "short_notes_found": data.get("total_short_notes", 0),
 })
 ```
+
+## Related
+
+- [[Find-Duplicates]] — catches exact title duplicates
+- [[Note-Similarity-Cluster]] — clusters semantically-similar notes
+- [[Split-Note]] — the inverse operation (splitting a note apart)

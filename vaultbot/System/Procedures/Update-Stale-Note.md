@@ -29,6 +29,10 @@ When you know a note is stale and want an updated version. The small model
 reads the note and the current code, then produces an updated description
 section. The big model reviews and writes it with `vault_safe_write`.
 
+## Why This Exists
+
+Notes describing system behavior drift out of sync with the code after changes, leaving stale documentation. This procedure exists to read a note and its referenced code, then produce an updated description section. The key tradeoff: it does NOT write to disk — it returns the updated text for the big model to review and write, so a bad update can't silently corrupt the note.
+
 ## Steps
 
 ### Step 1: Read the note and the referenced code
@@ -109,3 +113,9 @@ except Exception:
     parsed = {"updated": False, "updated_text": "", "changes": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Check-Staleness]] — detects stale notes
+- [[Find-Stale-Notes]] — finds stale notes across the vault
+- [[Update-Vault-References]] — bulk-updates outdated references vault-wide

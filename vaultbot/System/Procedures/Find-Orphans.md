@@ -31,6 +31,10 @@ and that link to nothing resolvable. This is a **thin filter** over the
 [[Pattern-Scan]] engine: it imports the engine, reads the per-note table,
 and keeps only `is_orphan == true`. Do NOT walk the vault inline.
 
+## Why This Exists
+
+Orphan notes (no incoming and no outgoing resolved wikilinks) are disconnected islands that can't be reached by backlinks or retrieval. This procedure exists as a thin filter over [[Pattern-Scan]] that keeps only `is_orphan == true` records. The key tradeoff is that it deliberately does not walk the vault inline — it reuses the engine's per-note table to avoid duplicating the scan.
+
 ## Steps
 
 ### Step 1: Run the Pattern-Scan engine and load its full table
@@ -74,3 +78,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "orphan"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this filters
+- [[Find-Broken-Links]] — sibling filter over the same engine
+- [[Dream-Link]] — connects the orphans this finds

@@ -26,6 +26,13 @@ last_reviewed: 2026-08-15
 
 Run this procedure when a plan has been executed and you need to judge whether it's complete. The judge reads the plan's goal and each subtask's result + verifier status, then determines whether the overall goal has been achieved.
 
+## Why This Exists
+
+After a plan executes, you need a strict verdict on whether it actually
+finished. This procedure has the small model judge completion against the
+plan's goal and subtask results. The tradeoff: judging completion is simple
+verification, so the small model suffices — no big-model reasoning needed.
+
 ## Steps
 
 ### Step 1: Ask the small model to judge the plan
@@ -47,3 +54,9 @@ except Exception:
     parsed = {"complete": False, "reasoning": "judge error", "missing": []}
 result = json.dumps(parsed)
 ```
+
+## Related
+
+- [[Decomposition]] — breaks a task into the plan this judges
+- [[Proc-Step-Planner]] — plans procedure steps
+- [[Check-Entailment]] — verifies whether an answer entails the claim

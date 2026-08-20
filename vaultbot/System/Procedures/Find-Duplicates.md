@@ -31,6 +31,10 @@ near-identical title). Duplicates split backlinks and confuse retrieval.
 Thin filter over [[Pattern-Scan]] (its `duplicates` map + the per-note
 table), enriched with size/link info so you can pick a canonical survivor.
 
+## Why This Exists
+
+Duplicate notes split backlinks and confuse retrieval, but finding them requires comparing every title against every other. This procedure exists as a thin filter over [[Pattern-Scan]]'s duplicates map, enriched with size/link info. The key tradeoff is that it picks a canonical survivor (most linked, then largest) so merging is decisive rather than ambiguous.
+
 ## Steps
 
 ### Step 1: Run Pattern-Scan and report duplicate-title groups
@@ -76,3 +80,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "duplicate"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this filters
+- [[Find-Orphans]] — sibling filter over the same engine
+- [[Note-Merge-Candidates]] — merges the duplicates this finds

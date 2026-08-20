@@ -29,6 +29,10 @@ After every code edit, run this to verify the file still imports cleanly.
 It catches breakages immediately — before you restart the backend and
 discover the hard way.
 
+## Why This Exists
+
+A self-modification edit can break imports without throwing a visible error until the backend restarts. This procedure closes that gap by attempting to import the edited file in a subprocess and reporting any import errors immediately. The tradeoff is that it checks import validity only — it does not restart the backend or run the full test suite.
+
 ## Steps
 
 ### Step 1: Attempt to import the edited file in a subprocess
@@ -95,3 +99,9 @@ except Exception:
     parsed = {"status": "error", "message": "could not parse result"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Safe-Write]] — the edit step this procedure verifies
+- [[Proc-Step-Planner]] — plans the edits before they are made
+- [[Run-Test-Suite]] — the fuller verification gate after import check

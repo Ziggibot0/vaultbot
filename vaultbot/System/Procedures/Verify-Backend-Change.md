@@ -39,6 +39,10 @@ auditable and the logic compounds.
 3. Polls the `/health` endpoint until the backend is up and responsive
 4. Reports the final status: deployed + healthy, or where it failed
 
+## Why This Exists
+
+Editing backend code left a gap between "edit" and "live" — tests, restart, and health check were separate manual steps. This procedure exists to orchestrate the full verify-and-deploy chain in one call. The key tradeoff: it stops before restarting if tests fail, so broken code is never deployed live.
+
 ## Steps
 
 ### Step 1: Run the test suite
@@ -126,3 +130,9 @@ print(result)
   - If healthy=True: report "DEPLOYED — backend is live and healthy." Include the health info (uptime, index vectors, graph nodes).
   - If healthy=False: report "DEPLOY FAILED — backend did not come back up after restart." Include the health info or error. This is critical — the backend may be down. Recommend checking backend_stderr.txt for the crash reason.
 Output a clear verdict so the operator knows whether the change is live.]
+
+## Related
+
+- [[Run-Test-Suite]] — the test suite this procedure calls
+- [[Backend-Restart]] — the restart procedure this procedure calls
+- [[Verify-Syntax]] — verifies Python syntax before restart

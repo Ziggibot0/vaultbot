@@ -24,6 +24,10 @@ tags:
 
 Scores the procedure library by calling [[Procedure-Eval]]. Each procedure gets classified as healthy, degraded, or broken based on success/failure counters.
 
+## Why This Exists
+
+A procedure library accumulates procedures that silently degrade or break, and without scoring they never get reviewed, demoted, or retired. This procedure exists to classify every procedure as healthy/degraded/broken from its success/failure counters. The key tradeoff is that it delegates the actual scoring to [[Procedure-Eval]] rather than reimplementing it, keeping this a thin wrapper.
+
 ## Steps
 
 ### Step 1: Run Procedure-Eval and summarize
@@ -43,3 +47,9 @@ result = json.dumps({
     "procedure_scores": summary,
 }, indent=2)
 ```
+
+## Related
+
+- [[Procedure-Eval]] — the scoring engine this delegates to
+- [[Dream-Pass]] — the orchestrator that calls this as its final step
+- [[Dream-When-To-Use-Update]] — runs after this to fix discoverability of poorly-scored procedures

@@ -38,6 +38,10 @@ This procedure finds unlinked chat logs, classifies them, and suggests
 which highway each belongs to. The small model handles classification
 because it's a bounded sorting task with a fixed set of categories.
 
+## Why This Exists
+
+Chat logs accumulate without being linked into the pattern highway system, so their patterns stay buried. This procedure finds unlinked chats and classifies each into a highway. The key tradeoff is that classification is delegated to the small model because it is a bounded sorting task with a fixed set of categories.
+
 ## Steps
 
 ### Step 1: Find chat logs that aren't linked to any highway
@@ -188,3 +192,9 @@ forcing everything into existing buckets.
 
 **Rationale:** Not every chat contains knowledge worth preserving. This
 branch prevents noise from polluting the highway system.
+
+## Related
+
+- [[Code-Pattern-Extract]] — dispatched for build-log chats
+- [[Cross-Check-Claims]] — dispatched for testing-history chats
+- [[Structure-Research-Note]] — dispatched for research chats

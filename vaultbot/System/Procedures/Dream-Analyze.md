@@ -26,6 +26,10 @@ tags:
 
 Runs the vault graph analyzer to produce a health snapshot. The output is used by Dream-Link (to find orphans to connect) and Dream-Validate (to compare before/after).
 
+## Why This Exists
+
+Graph health (islands, isolated nodes, connectivity ratio) must be measured before any linking or validation work can happen, and doing it by hand is error-prone. This procedure exists to run the vault graph analyzer and return a metrics snapshot for downstream dream sub-procedures to act on. The key tradeoff is that it is a pure measurement step — it produces data, not changes.
+
 ## Step 1: Run graph analyzer
 
 1. ```python
@@ -34,3 +38,9 @@ import json
 data = vault_graph_analyzer()
 result = json.dumps(data)
 ```
+
+## Related
+
+- [[Dream-Link]] — consumes the isolated nodes this produces
+- [[Dream-Validate]] — compares before/after against this snapshot
+- [[Dream-Pass]] — the orchestrator that calls this first

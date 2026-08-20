@@ -35,6 +35,14 @@ summary: Model-Tournament
 4. Ranks models by weighted score
 5. Recommends the best model for the task
 
+## Why This Exists
+
+Choosing which small model to use for a task is guesswork without a
+head-to-head comparison. This procedure runs each candidate model against
+the same test cases and ranks them by weighted score. The tradeoff: it runs
+each model 3 times per test case for consistency, so it is slow and
+compute-heavy.
+
 ## Steps
 
 ### Step 0: Discover candidate models and load test cases
@@ -322,3 +330,9 @@ Write a brief recommendation (2-3 sentences) explaining:
 3. Any caveats (e.g. "winner is fast but inconsistent", "runner-up is more reliable but slower")
 
 Keep it concise. This recommendation will be shown to the user.]
+
+## Related
+
+- [[Ollama-Model-Search]] — discovers/pulls candidate models to test
+- [[Ollama-Pull-Models]] — pulls models by tag before a tournament
+- [[Small-Model-Route]] — routes tasks to the appropriate small model

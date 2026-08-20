@@ -25,6 +25,10 @@ Run this procedure when you need to draft a new procedure markdown note from a t
 - A recurring workflow needs to be documented as a repeatable procedure
 - An existing ad-hoc process needs to be formalized into the standard procedure format
 
+## Why This Exists
+
+A task description is unstructured, but a procedure note must carry frontmatter, a description, falsifiable conditions, and executable steps to be machine-runnable. This procedure exists to formalize a task or workflow into that standard repeatable format. The key tradeoff is that it uses the `big` cartridge — reasoning and synthesis are required to generate structured markdown from an unstructured description.
+
 ## Falsifiable If
 - The generated markdown note is missing the `---` frontmatter block.
 - The generated note lacks a `## Description` section that states what the procedure does.
@@ -59,3 +63,9 @@ with open(filepath, "w") as f:
     f.write(content)
 print(f"Saved procedure to {filepath}")
 ```
+
+## Related
+
+- [[Draft-New-Procedure]] — sibling procedure-drafting workflow
+- [[Create-New-Procedure]] — the creation path this drafting feeds into
+- [[How-to-Create-a-Procedure]] — the canonical procedure-authoring guide

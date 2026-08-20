@@ -30,6 +30,10 @@ tags:
 Run this when a note depends on other notes that might not exist. It checks
 wikilinks and `depends_on` frontmatter, and reports which targets are missing.
 
+## Why This Exists
+
+A note can reference dependencies that were never written, and relying on it without checking leaves broken links and unmet dependencies. This procedure exists to read a note's wikilinks and `depends_on` frontmatter and report which targets are missing. The key tradeoff is conditional post-detection routing — each missing note is dispatched to the right creation procedure based on its type and priority, rather than monolithic gap-filling.
+
 ## Steps
 
 ### Step 1: Read the note and extract all references
@@ -192,3 +196,9 @@ enough to be retrieved but don't contain enough content to be useful.
 [[RAG-evaluation-metrics]] shows that thin notes reduce retrieval
 precision because they match queries but don't satisfy information
 needs.
+
+## Related
+
+- [[Find-Broken-Links]] — sibling gap detection via dangling wikilinks
+- [[Dream-Gap-Fill]] — creates the missing notes this detects
+- [[How-to-Create-a-Procedure]] — the creation path for missing procedures

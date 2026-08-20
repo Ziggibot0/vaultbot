@@ -29,6 +29,10 @@ When title and tag search aren't enough — a note might discuss a topic
 deeply without mentioning it in the title or tags. This finds those
 hidden-topic notes.
 
+## Why This Exists
+
+Title and tag search miss notes that discuss a topic deeply in their body without any metadata indication. This procedure exists to find those hidden-topic notes and assess how central the topic is to each. The key tradeoff: it uses the small model to judge centrality (main/supporting/passing) and flag retag/retitle candidates, rather than just returning raw matches.
+
 ## Steps
 
 ### Step 1: Find notes that mention the topic in body but not in title/tags
@@ -127,3 +131,9 @@ result = _json.dumps({
     "total_hidden": data.get("total_hidden", 0),
 })
 ```
+
+## Related
+
+- [[Vault-Inventory]] — exact-string search across notes
+- [[Note-Topic-Classifier]] — classifies notes by topic
+- [[Index-Notes-By-Topic]] — indexes notes by topic

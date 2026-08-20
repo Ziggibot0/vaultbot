@@ -31,6 +31,10 @@ doesn't exist yet. These are the vault's dangling references — each is
 either a gap to research/fill or a typo to fix. Thin filter over
 [[Pattern-Scan]] (`unresolved_out > 0`).
 
+## Why This Exists
+
+Dangling wikilinks point at notes that don't exist, and each is either a gap to fill or a typo to fix — but finding them all requires walking the whole vault. This procedure exists as a thin filter over [[Pattern-Scan]] that surfaces every note with unresolved outgoing links. The key tradeoff is that it also ranks the most-referenced missing targets, so the highest-leverage gaps are filled first.
+
 ## Steps
 
 ### Step 1: Run Pattern-Scan and filter to notes with broken outgoing links
@@ -72,3 +76,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "broken"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine this filters
+- [[Find-Orphans]] — sibling filter over the same engine
+- [[Dream-Dangle-Fix]] — repairs the broken links this finds

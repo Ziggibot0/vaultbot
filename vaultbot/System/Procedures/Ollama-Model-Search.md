@@ -33,6 +33,14 @@ selects the operation; `query`/`tag`/`category` refine it:
 If no `action` arg is given, default to `installed` (cheapest — shows
 what's already local before any network call).
 
+## Why This Exists
+
+Finding, evaluating, and pulling Ollama models requires dispatching to the
+`ollama_model_search` tool with the right action. This procedure wraps that
+dispatch so the model can search, list tags, check installed models, or pull
+new ones. The tradeoff: it defaults to the cheapest action (`installed`) to
+avoid network calls before checking what's already local.
+
 ## Steps
 
 ### Step 1: Dispatch the requested ollama_model_search action

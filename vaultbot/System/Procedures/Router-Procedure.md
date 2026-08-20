@@ -24,6 +24,10 @@ The Router operates in three phases:
 2. **Select Procedure** – map intent to a procedure name (e.g., `Smart-Vault-Search`, `Research-Batch`).
 3. **Execute & Persist** – run the chosen procedure, capture its output, and write a summary note.
 
+## Why This Exists
+
+The VaultBot loop needs a single place to decide which core procedure to invoke for a given request, so it can be extended without changing the loop itself. This procedure closes that gap by centralizing decision logic into three phases: analyze intent, select procedure, execute and persist. The tradeoff is that it centralizes decision logic so new intent-to-procedure mappings can be added without modifying this file.
+
 ## Step 1: Analyze Intent
 ### Step 1.1: Summarize User Query
 ```python
@@ -65,3 +69,9 @@ vault_safe_write(content=content, dry_run=False, file_path=output_note_path)
 ```
 
 > **Links to relevant procedures:** [[Smart-Vault-Search]], [[Research-Batch]], [[Vault-Lint]]
+
+## Related
+
+- [[Route-Task]] — the intent classifier this router's decision logic mirrors
+- [[Smart-Vault-Search]] — the search procedure this dispatches to
+- [[Research-Batch]] — the research procedure this dispatches to

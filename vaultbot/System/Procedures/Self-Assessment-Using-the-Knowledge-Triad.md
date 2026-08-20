@@ -57,6 +57,10 @@ The [[AI-system-audit-categories-how-to-audit-an-AI-agent-system-for-reliability
 
 [[Claim-Verification-for-Vault-Notes]] describes the verification layer this procedure implements: the post-generation check that synthesized claims are faithful to their sources.
 
+## Why This Exists
+
+A note can look good on one axis while failing on another — faithful but disconnected, or connected but useless for retrieval. This procedure closes that gap by evaluating a note on three axes (Faithfulness, Connectivity, Utility) by composing existing procedures. The tradeoff is that it is a thin orchestrator: it delegates each axis to a dedicated procedure and only adds the triadic scoring and conditional branches.
+
 ## When to Run This
 
 - After writing a new research note (self-assessment before finalizing)

@@ -19,6 +19,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Pre-flight safety check before self-modifying operations. Verifies git clean state (for rollback safety), critical backend files exist, identity files intact, disk space adequate, custom tools still import cleanly, and vault directory is accessible. Returns PASS / WARN / BLOCK with full details.
 
+## Why This Exists
+
+Self-modifying operations can corrupt the backend or the vault if the system is not in a healthy state. This procedure closes that gap by verifying git cleanliness, file integrity, disk space, and tool importability before any edit proceeds. The tradeoff is a three-tier verdict (PASS / WARN / BLOCK) so a degraded-but-recoverable state warns rather than hard-blocks.
+
 ## Steps
 
 ### Step 1: Run the preflight safety check
@@ -29,3 +33,9 @@ Pre-flight safety check before self-modifying operations. Verifies git clean sta
    result = _preflight({})
    print(result)
    ```
+
+## Related
+
+- [[Safe-Write]] — the self-modifying edit this check gates
+- [[Git-Rollback]] — the rollback safety this check verifies
+- [[Backend-Restart]] — typically needed after a self-modifying change

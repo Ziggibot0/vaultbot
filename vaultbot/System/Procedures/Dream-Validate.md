@@ -24,6 +24,10 @@ tags:
 
 Verifies that graph maintenance work actually improved the vault's connectivity. Compares before/after metrics.
 
+## Why This Exists
+
+Graph maintenance work (linking, gap-filling) is only worth doing if it actually improves connectivity, and without a before/after comparison there's no way to know. This procedure exists to re-run the graph analyzer and compare metrics against the pre-pass snapshot. The key tradeoff is a hard falsifiable gate — if islands increased or connectivity dropped, the pass is judged to have failed.
+
 ## Steps
 
 ### Step 1: Compare before/after graph metrics
@@ -67,3 +71,9 @@ result = json.dumps({
     "graph_improved": islands_after <= islands_before and connectivity_after >= connectivity_before,
 })
 ```
+
+## Related
+
+- [[Dream-Analyze]] — produces the "before" metrics this compares against
+- [[Dream-Pass]] — the orchestrator that calls this
+- [[Dream-Link]] — the linking work this validates

@@ -34,6 +34,10 @@ pipeline. The core insight: **position matters**. A suggestion at the
 start of a long prompt gets buried under context and history; the same
 suggestion as the last thing before the model acts is a starting point.
 
+## Why This Exists
+
+When the model ignores injected suggestions or context seems buried, the cause is often prompt ordering rather than content. This procedure closes that gap by tracing the conversation-assembly code and mapping the order every block appears in the final message list. The tradeoff is that it identifies misplacements and proposes repositioning, but applying the change is optional and delegated to [[Safe-Write]].
+
 ## What It Does
 
 1. Traces the code that assembles the conversation message list (the `conversation = [...]` block in the chat handler)
@@ -143,3 +147,9 @@ will be passed to Safe-Write if the user wants to apply it.]
   - Call `run_procedure("Verify-Backend-Change", {})` to restart and verify health
   - Report the result
 Otherwise, output the proposal for review.]
+
+## Related
+
+- [[Safe-Write]] — applies the repositioning change this audit proposes
+- [[Run-Test-Suite]] — verifies nothing broke after the change
+- [[Verify-Backend-Change]] — restarts and checks health after the change

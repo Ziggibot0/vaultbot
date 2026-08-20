@@ -29,6 +29,13 @@ Run this when a directory needs a topic index — a map of what topics are
 covered and which notes cover them. Useful for building directory-level
 index notes.
 
+## Why This Exists
+
+A directory of notes is hard to navigate without a topic map. This procedure
+builds a topic index by having the small model classify each note by topic.
+The tradeoff: classification is small-model judgment, so topic assignments
+may be imperfect.
+
 ## Steps
 
 ### Step 1: List notes and read previews
@@ -97,3 +104,9 @@ result = _json.dumps({"directory": data.get("directory"),
                       "topics": parsed.get("topics", []),
                       "total_topics": len(parsed.get("topics", []))})
 ```
+
+## Related
+
+- [[Note-Topic-Classifier]] — finds the single best note for a topic
+- [[Note-Similarity-Cluster]] — clusters notes by topic (semantic grouping)
+- [[Vault-Topic-Density]] — measures topic coverage density

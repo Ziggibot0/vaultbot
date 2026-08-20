@@ -23,6 +23,10 @@ General class: **any UI control whose change fires a backend mutation but does n
 confirm it landed.** Symptom: the control snaps back to the old value (or the saved
 state on disk never changes) right after the user picks something new.
 
+## Why This Exists
+
+A UI control whose change fires a backend mutation but never confirms it landed snaps back to the old value, and the failure is masked by fire-and-forget writes plus optimistic re-renders. This procedure exists to pin down which branch of the symptom tree applies — the mutation never landed, a stale re-render, or a consumer that wasn't rebuilt — before theorizing. The key tradeoff is forcing a read-only probe against the live backend to stop early hypothesis-spinning.
+
 ## Symptom → likely cause decision tree
 
 1. Saved/authoritative state on disk NEVER changed (check the persisted file / endpoint).
@@ -77,3 +81,5 @@ state on disk never changes) right after the user picks something new.
 ## Related
 - memory: `gui-setting-silent-failure-mask.md`
 - model registry: `provider-model-registry-2026-08-01.md`
+- [[Diagnose-System-Health]] — triage the backend before deep-diving a specific setting
+- [[Diagnose-Self-Update-Incomplete]] — sibling silent-failure diagnosis

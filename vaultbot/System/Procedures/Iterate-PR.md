@@ -49,6 +49,15 @@ so VaultBot can do it autonomously.
 - After `submit_contribution` to verify the PR goes green
 - When `pr_feedback` shows failing check-runs
 
+## Why This Exists
+
+A PR that fails CI needs a fix-and-verify loop, but doing it manually is
+slow and error-prone. This procedure codifies the human developer's
+workflow — read the failure, fix locally, verify with local CI gates, push,
+re-check — so VaultBot can do it autonomously. The tradeoff: it caps at 3
+iterations to prevent infinite loops, handing off to a human if the fix
+isn't found.
+
 ## What It Does
 
 For each iteration (max 3):
@@ -295,3 +304,9 @@ else:
         "hint": "If CI is still red, a human should review the remaining failures.",
     })
 ```
+
+## Related
+
+- [[Run-CI-Gates]] — the local CI gates this procedure runs to verify fixes
+- [[Submit-Contribution]] — the workflow that produces the PR this iterates on
+- [[Solve-GitHub-Issue]] — end-to-end issue resolution workflow

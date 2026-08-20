@@ -30,6 +30,10 @@ tags:
 
 Fixes dangling wikilinks surfaced by [[Dream-Analyze]] (or `vault_gaps`). For each dangling link, attempts fuzzy matching against existing vault note stems. If a match is found, repairs the wikilink in the referencing note. If no match exists, flags it for [[Dream-Gap-Fill]].
 
+## Why This Exists
+
+Dangling wikilinks point at notes that don't exist, and each is either a typo to repair or a genuine gap to fill — but telling them apart requires fuzzy-matching against the real vault stem index. This procedure exists to repair the fixable links and flag the rest for gap-fill. The key tradeoff is a fuzzy-match threshold (0.5) that balances repairing near-miss typos against wrongly matching a dangling link to an unrelated note.
+
 ## Inputs
 
 - `dangling_links`: list of `{topic, referenced_by, file_path}` from Dream-Analyze or vault_gaps (passed via `args` or `prior_results`)
@@ -214,3 +218,9 @@ result = json.dumps({
 ## Step 4: Validate
 
 4. [validate: at_least 0 repaired or at_least 0 gaps_flagged]
+
+## Related
+
+- [[Dream-Analyze]] — surfaces the dangling links this repairs
+- [[Dream-Gap-Fill]] — creates notes for the gaps this flags
+- [[Dream-Link]] — sibling linking step for orphaned notes

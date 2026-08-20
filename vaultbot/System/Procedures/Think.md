@@ -37,6 +37,10 @@ success_rate: 1.0
 
 This procedure makes a 4B local model reason like a frontier model by following deterministic code steps with focused LLM calls. The 4B model can handle richer prompts, batched verification, and combined tasks — so v4 merges over-split steps, kills triple-try, and gives the model enough context to make real semantic judgments.
 
+## Why This Exists
+
+A small local model can't reason like a frontier model on its own, and the vault often lacks a direct answer to complex problems. This procedure exists to scaffold structured reasoning — premise verification, lens dispatch, and synthesis — through deterministic code steps with focused LLM calls. The key tradeoff: it merges over-split steps and kills triple-try to keep the 4B model's call count low (~4-6) while preserving the reasoning structure.
+
 ## What Changed in v4
 
 | Problem in v3 (0.8B-era) | Fix in v4 (4B-era) |

@@ -36,6 +36,10 @@ model_cartridge: big
 - **Epistemology**: What evidence supports it? What evidence contradicts it?
 - **Hermeneutics**: What should we conclude given the weight of evidence?
 
+## Why This Exists
+
+Evaluating whether a claim is true requires weighing evidence for and against it, and doing so naively (triple-try on every call, over-split steps) was costing ~24 LLM calls per claim. This procedure exists as a structured justification analysis that weighs supporting and contradicting evidence. The key tradeoff is the v4 redesign for qwen3.5:4b — it killed triple-try and merged over-split steps down to ~4 LLM calls, and the audit found it already optimal.
+
 ## What Changed in v4
 
 | Problem in v3 | Fix in v4 |

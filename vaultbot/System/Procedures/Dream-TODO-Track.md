@@ -28,6 +28,10 @@ tags:
 
 Scans all vault notes for TODO markers (TODO, FIXME, HACK, XXX, NOTE), groups them by the note they appear in, and produces a prioritized report. Excludes TODOs inside code blocks (``` fences) to avoid false positives from example code.
 
+## Why This Exists
+
+Unfinished work is scattered across the vault as TODO/FIXME/HACK markers, and it's invisible until someone hunts for it. This procedure exists to scan all notes, group markers by note, and produce a prioritized action report. The key tradeoff is that it strips code blocks before matching, so example code in procedures doesn't produce false-positive TODOs.
+
 ## Step 1: Scan all notes for TODO markers
 
 1. ```python
@@ -131,3 +135,9 @@ result = json.dumps({
 ## Step 3: Validate
 
 3. [validate: contains "total_todos"]
+
+## Related
+
+- [[Find-Overdue-Tasks]] — sibling task-tracking via open checkboxes
+- [[Dream-Pass]] — the orchestrator that calls this
+- [[Count-Todos]] — counts TODO markers across the vault

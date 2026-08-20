@@ -38,6 +38,10 @@ running follow-up searches on subtopics extracted from the initial hits.
 This absorbs the former Deep-Vault-Search (iterative deepening) and
 Smart-Vault-Dig (content-aware digging) procedures.
 
+## Why This Exists
+
+`vault_search` returns results by keyword overlap, which can be noisy or miss truly relevant notes. This procedure closes that gap by reading the actual content and having the small model re-rank by true relevance. The tradeoff is that it absorbs two former procedures (Deep-Vault-Search and Smart-Vault-Dig), so one procedure now handles both re-ranking and iterative deepening.
+
 ## Steps
 
 ### Step 1: Get search results (pre-supplied or run vault_search)
@@ -121,3 +125,9 @@ result = _json.dumps({"high_relevance": high,
                       "medium_relevance": medium,
                       "total_hits": len(parsed)})
 ```
+
+## Related
+
+- [[Filter-Context-For-Query]] — filters retrieved context for a query
+- [[Evaluate-Retrieval]] — measures retrieval quality
+- [[Diagnose-Retrieval-Failure]] — finds why a note isn't being retrieved

@@ -25,6 +25,10 @@ The test passes if:
 2. The output contains `WIKILINKS_UNRESOLVED` with a count > 0
 3. Fabricated wikilinks are replaced with `[UNRESOLVED: ...]` markers
 
+## Why This Exists
+
+The Think procedure's false-premise defenses (PREMISE_WARNINGS, WIKILINKS_UNRESOLVED) needed verification, but execute_procedure output is truncated so intermediate results can't be checked from the return value. This test exists to run Think with a false-premise question and write the full output to a vault note for inspection. The tradeoff: it writes a test artifact to the vault rather than returning results inline, because that's the only way to see the full output.
+
 ## Inputs
 
 - `question`: The false-premise question to test with (optional, defaults to a WASM question)

@@ -30,6 +30,13 @@ Before changing a function or variable that other code might depend on,
 run this to see the blast radius. It scans the backend and procedures for
 every reference.
 
+## Why This Exists
+
+Changing a shared function or variable can break code you didn't know
+depended on it. This procedure traces every importer, caller, and procedure
+reference to produce a dependency map. The tradeoff: it uses regex matching,
+so it may miss dynamic references or include false positives.
+
 ## Steps
 
 ### Step 1: Scan all backend .py files for references to the target
@@ -113,3 +120,9 @@ except Exception:
     parsed = {"risk": "unknown"}
 result = _json.dumps({"impact": data, "risk_assessment": parsed})
 ```
+
+## Related
+
+- [[Git-Working-Diff]] — inspect uncommitted changes before committing
+- [[Verify-Backend-Change]] — verify a backend change after applying it
+- [[Code-Structure-Check]] — structural analysis of backend code

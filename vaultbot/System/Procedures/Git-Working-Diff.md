@@ -28,6 +28,13 @@ tags:
 Run before committing to verify what will go in. Or run to check what's
 been changed since the last commit.
 
+## Why This Exists
+
+Before committing, you need to know exactly what will go in. This procedure
+runs `git diff` deterministically and has the small model summarize the
+meaningful changes (not whitespace). The tradeoff: the diff preview is capped
+at 4000 chars, so very large diffs are only partially summarized.
+
 ## Steps
 
 ### Step 1: Run git diff deterministically
@@ -95,3 +102,9 @@ except Exception:
     parsed = {"summary": "could not parse git diff summary"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Git-Rollback]] — restore files from git HEAD if the diff reveals a bad edit
+- [[Submit-Contribution]] — the commit/push workflow this precedes
+- [[Impact-Trace]] — assess the blast radius of a change before committing

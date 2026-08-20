@@ -53,6 +53,14 @@ The LLM handles:
 | vault_knowledge | What does the vault know about topic X? | vault_search |
 | tool | What tools are available? How does tool X work? | code_read (step_gate_runtime.py) |
 
+## Why This Exists
+
+VaultBot needs a way to answer questions about its own code, procedures, and
+architecture without the LLM reasoning over raw files. This procedure makes
+deterministic code reading do the discovery work, reserving the LLM for
+classification and optional synthesis. The tradeoff: every finding must cite
+provenance (file path + line numbers), so unsourced claims are rejected.
+
 ## Inputs
 
 - `question`: The introspection question to answer

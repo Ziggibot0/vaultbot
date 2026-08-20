@@ -29,6 +29,13 @@ Run this when you need to check a **specific** note against the code it
 describes. Unlike [[Find-Contradictions]] which scans the whole vault,
 this takes one note path and produces a precise claim-by-claim diff.
 
+## Why This Exists
+
+A note describing backend behavior can drift from the code it documents.
+This procedure produces a claim-by-claim diff of what the note says vs what
+the code does. The tradeoff: it is more precise than Find-Contradictions but
+requires you to already know which note to check.
+
 ## Steps
 
 ### Step 1: Read the note and extract backend-behavior claims
@@ -117,3 +124,9 @@ result = _json.dumps({
     "mismatch_count": len(mismatches),
 })
 ```
+
+## Related
+
+- [[Find-Contradictions]] — vault-wide note-vs-code contradiction scan
+- [[Note-Accuracy-Check]] — verifies claims against the vault
+- [[Code-Diff-Notes]] — diffs notes against code

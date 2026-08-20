@@ -22,6 +22,10 @@ allowed_tools:
 > **⚠ RECORD — NOT CURRENT DOCUMENTATION**
 > This note describes past behavior that was **removed** in the 2026-08-02 chat_handler.py refactor. It is preserved for project history. Do not use it to understand how the system works today. The current loop is model-driven — see `chat_handler.py` docstring for current behavior.
 
+## Why This Exists
+
+This note exists to preserve the history of the removed 3-phase PLAN→ACT→SYNTHESIZE state machine so future work understands why it was removed. The phase state machine caused friction — the framework rejected correct model outputs and the model got stuck arguing with the phase. The key tradeoff it documents is the shift from framework-enforced phases to a model-driven loop with no gates.
+
 ## What This Was
 
 This procedure described a mandatory 3-phase state machine (PLAN → ACT → SYNTHESIZE) that the framework enforced. The framework would track the phase, block illegal outputs, reject wrong-phase tool calls, and auto-mark steps. The LLM was required to emit only the legal output for the current phase.

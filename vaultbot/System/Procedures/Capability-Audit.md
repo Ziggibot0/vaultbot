@@ -19,6 +19,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Inventory every available tool (built-in + meta + custom-authored) and assess whether you have a capability gap for a specific task. Returns a structured report with tool names, descriptions, and a coverage assessment.
 
+## Why This Exists
+
+Before attempting a task, there was no way to know whether the available tools actually cover it, leading to hitting walls mid-task. This procedure inventories every tool and assesses coverage for a specific task. The key tradeoff is that it delegates gap identification and fill proposals to the LLM rather than hardcoding a capability matrix.
+
 ## Steps
 
 ### Step 1: Inventory available tools and assess capability gaps
@@ -34,3 +38,9 @@ Inventory every available tool (built-in + meta + custom-authored) and assess wh
 ### Step 2: Identify gaps and propose how to fill them
 
 2. [llm: Based on the audit results, identify any capability gaps and propose how to fill them — either by creating a new tool or by using an existing procedure.]
+
+## Related
+
+- [[Check-Tool-Coverage]] — sibling capability assessment
+- [[Write-Python-Tool]] — creates a new tool to fill a gap
+- [[Build-Procedure]] — creates a procedure to fill a gap

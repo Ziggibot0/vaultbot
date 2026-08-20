@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/ before deleting. Has safety checks to prevent deleting sacred files.
 
+## Why This Exists
+
+Deleting a note risked permanent loss of content and accidental removal of sacred files. This procedure exists to back up content to trash before deleting and to run safety checks that block sacred-file deletion. The key tradeoff: it searches to confirm the note should be deleted first, and respects any safety block rather than forcing the delete.
+
 ## Steps
 
 ### Step 1: Search for the note to confirm it should be deleted
@@ -36,3 +40,9 @@ Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/
 ### Step 3: Confirm the deletion succeeded
 
 3. [llm: Confirm the deletion succeeded. If it was blocked by a safety check, respect the block and tell the user why.]
+
+## Related
+
+- [[Vault-Cleanup]] — the meta cleanup audit that identifies deletion candidates
+- [[Find-Duplicates]] — finds duplicate notes to merge or delete
+- [[Safe-Write]] — the safe-write primitive for vault mutations

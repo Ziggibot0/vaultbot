@@ -40,6 +40,10 @@ tags:
 
 Collects and aggregates token \u0026 tool usage data from all chat logs to surface where I spend the most resources.
 
+## Why This Exists
+
+Without visibility into where tokens and tool calls go, the vaultbot cannot know which repetitive sequences are worth consolidating. This procedure closes that gap by scanning all chat logs and aggregating token consumption, tool frequency, and time per session. The tradeoff is that it suggests new composite procedures only for chains that appear at least three times and consume over 100 tokens on average, balancing specificity with impact.
+
 ## Inputs
 
 No explicit arguments. The procedure scans the entire `vaultbot/Memory/Chat` directory.
@@ -197,4 +201,10 @@ The procedure aggregates session data, then calculates tool frequency and bigram
 
 
 **Reasoning:** The heavy-cost analysis is derived from token totals per session and tool frequency. By aggregating bigram chains we can identify *repeated* sequences that consume a lot of tokens. Suggesting a composite procedure for such a chain reduces the number of individual tool calls, thereby cutting overhead. This aligns with our goal to let me operate without external prompts about which procedures to use.
+
+## Related
+
+- [[Capability-Audit]] — audits capabilities alongside effort analysis
+- [[Procedure-Eval]] — scores procedure health from counters
+- [[Analyze-Session-Log]] — deep-dives a single session's turns and tokens
 

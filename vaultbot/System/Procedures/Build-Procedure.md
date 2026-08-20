@@ -441,3 +441,9 @@ Keep it concise.]
 The manual procedure-building workflow was slow and error-prone. I shipped [[Authority-Check]] with `read_note` — a function that doesn't exist in the procedure runtime — because there was no automated verification between drafting and writing. This procedure automates the entire pipeline: draft → review → write → verify → lint → test → fix → retest → final lint → report. Every procedure that leaves this factory has passed every gate.
 
 The review step (Step 3) is the critical innovation: the big model checks for discoverability, falsifiability, executability, and correctness before anything hits disk. This is the "strong as fuck" guarantee.
+
+## Related
+
+- [[Verify-Procedure-Args]] — static check this factory calls
+- [[Test-Procedure-Until-Pass]] — dynamic test loop this factory calls
+- [[Create-New-Procedure]] — simpler procedure-creation alternative

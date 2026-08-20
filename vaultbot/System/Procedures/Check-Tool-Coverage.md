@@ -29,6 +29,10 @@ Before starting a complex task, run this to check if the vaultbot has the
 tools it needs. If not, it identifies what's missing and suggests what to
 create.
 
+## Why This Exists
+
+The vaultbot hits walls mid-task when it lacks a needed tool, and there was no way to assess coverage before starting. This procedure enumerates available tools and assesses whether they cover a task. The key tradeoff is that coverage assessment is delegated to the small model rather than hardcoding a capability matrix.
+
 ## Steps
 
 ### Step 1: Enumerate available tools
@@ -98,3 +102,9 @@ except Exception:
     parsed = {"covered": False, "error": "could not parse assessment"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Capability-Audit]] — sibling capability assessment
+- [[Write-Python-Tool]] — creates a tool to fill a gap
+- [[Build-Procedure]] — creates a procedure to fill a gap

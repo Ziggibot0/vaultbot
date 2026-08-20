@@ -38,6 +38,10 @@ success_rate: 0.0
 
 This is the **master dispatcher** — a conditional intent router that classifies incoming user requests and dispatches to procedure chains. The routing decision is a classification task (cheap, small model), and the actual work happens in procedure chains that carry their own cartridges.
 
+## Why This Exists
+
+Without a dispatcher, the big model improvises workflows instead of delegating to deterministic procedure chains. This procedure closes that gap by classifying each incoming request and returning the procedure chain to run. The tradeoff is that the routing decision itself is a cheap small-model classification, while the actual work happens in procedure chains that carry their own cartridges.
+
 ## Architecture
 
 ```
@@ -159,3 +163,9 @@ This procedure is falsifiable if:
 - The classifier picks the wrong category for a task (testable: run it on known tasks and check)
 - A branch's procedure chain produces worse results than an unconstrained cloud model (testable: compare outputs)
 - The research backing doesn't actually support the branch design (testable: read the cited research)
+
+## Related
+
+- [[Decision-Tree-Router]] — the three-layer router that calls this for Layer 1 intent classification
+- [[Small-Model-Route]] — the default branch this dispatches to
+- [[Research-Batch]] — the research chain this dispatches to

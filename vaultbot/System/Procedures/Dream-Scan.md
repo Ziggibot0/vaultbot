@@ -26,6 +26,10 @@ tags:
 
 Scans the vault for date-only journal filenames, extracts theme previews, and saves them to a temp file for downstream consolidation.
 
+## Why This Exists
+
+Journal entries (date-only filenames) hold the raw material for consolidation, but they must be located and their themes extracted before any downstream step can run. This procedure exists to scan for those journals, extract theme previews, and flag empty ones. The key tradeoff is that it writes themes to a temp file (`_dream_pass_themes.json`) so downstream sub-procedures can consume them without re-scanning.
+
 ## Step 1: Scan journals and extract themes
 
 1. ```python
@@ -79,3 +83,9 @@ result = json.dumps({
     "themes_file": themes_path,
 })
 ```
+
+## Related
+
+- [[Dream-Consolidate]] — consumes the themes this extracts
+- [[Dream-Pass]] — the orchestrator that calls this first
+- [[Dream-Analyze]] — the next step in the chain

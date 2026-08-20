@@ -19,6 +19,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Reload the Obsidian plugin (disable + re-enable) without killing the backend. Sends a WebSocket message to the plugin to toggle itself off and on.
 
+## Why This Exists
+
+Editing the plugin's `main.js` requires a reload to take effect, but restarting the backend is disruptive and slow. This procedure closes that gap by toggling the plugin off and on via a WebSocket message, so the new code becomes active without a full restart. The tradeoff is that it only reloads the plugin layer — it does not restart the backend process itself.
+
 ## Steps
 
 ### Step 1: Reload the Obsidian plugin
@@ -32,3 +36,8 @@ Reload the Obsidian plugin (disable + re-enable) without killing the backend. Se
 ### Step 2: Confirm the new code is active
 
 2. [llm: The plugin is reloading. The new main.js code is now active.]
+
+## Related
+
+- [[Backend-Restart]] — the heavier alternative this procedure avoids
+- [[Preflight-Safety-Check]] — verify the system is healthy before reloading

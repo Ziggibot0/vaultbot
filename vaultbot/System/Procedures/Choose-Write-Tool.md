@@ -35,6 +35,10 @@ instead of content, and safe_write silently ast.parsed the empty string and
 wrote it). This procedure is a decision tree that ensures the correct tool is
 chosen based on file type and edit scope, preventing that class of failure.
 
+## Why This Exists
+
+Picking the wrong write tool destroyed IDENTITY.md in session 15e346b7 — safe_write on a .md file wrote 0 bytes. This procedure is a decision tree that routes each file type and edit scope to the correct tool. The key tradeoff is that it encodes the tool-selection rules as a static decision tree rather than relying on the model to remember them.
+
 ## Decision Tree
 
 ```
@@ -106,3 +110,9 @@ print(result)
 ### Step 6: Diagnose and switch tools, do not spiral
 
 [llm: If a write failed, read the error message carefully. It will tell you why it failed and which tool to use instead. Switch to the correct tool and retry ONCE. If it fails again, explain the problem to the user in a text response and end the turn. Do NOT call the thought tool repeatedly — that is a thinking loop. The thought-loop detector will stop the turn after 5 consecutive thought-only rounds.]
+
+## Related
+
+- [[Safe-Write]] — the Python-file write tool this routes to
+- [[JS-Safe-Write]] — the JS-file write tool this routes to
+- [[Write-Note]] — note-writing workflow that depends on correct tool choice

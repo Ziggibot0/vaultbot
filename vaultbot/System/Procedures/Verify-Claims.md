@@ -53,6 +53,10 @@ This procedure implements the pipeline by **composing** existing procedures rath
 
 > **Design decision:** The previous Verify-Claims procedure (trashed after 6 failures) tried to do all 5 stages in one procedure. This version delegates to [[Cross-Check-Claims]] for web verification and focuses on what's missing: vault-internal consistency checks. This follows the procedure-composition pattern — each procedure does one thing well, and orchestrators compose them.
 
+## Why This Exists
+
+Research notes could be accepted as final while containing hallucinated or unsupported claims. This procedure exists to verify a note's claims after vault_research writes it, before it's trusted. The key tradeoff: it's a thin orchestrator that delegates web-source verification to Cross-Check-Claims rather than reimplementing claim extraction, and adds vault-internal consistency checks on top.
+
 ## Steps
 
 ### Step 1: Determine what kind of verification is needed

@@ -21,6 +21,13 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Pulls a list of Ollama models by tag. First lists what's already available, then pulls each requested model.
 
+## Why This Exists
+
+New models need to be downloaded onto the local Ollama instance before they
+can be used. This procedure lists what's already pulled, then pulls each
+requested model by tag. The tradeoff: it uses a hardcoded model list, so
+adding a new model requires editing the procedure.
+
 ## Steps
 
 ### Step 1: List currently pulled models
@@ -68,3 +75,9 @@ Pulls a list of Ollama models by tag. First lists what's already available, then
 ### Step 4: Report results for each model
 
 4. [llm: Report results for each model — which succeeded, which failed, and any error messages.]
+
+## Related
+
+- [[Ollama-Model-Search]] — discovers/pulls models via the search tool
+- [[Model-Tournament]] — benchmarks pulled models against each other
+- [[Small-Model-Route]] — routes tasks to the appropriate small model

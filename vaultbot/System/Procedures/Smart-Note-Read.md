@@ -28,6 +28,10 @@ tags:
 When you need to understand a note quickly without reading the whole thing.
 Returns a structured summary: key points, claims, action items, open questions.
 
+## Why This Exists
+
+Reading a full note to extract its key points wastes context when a structured summary would suffice. This procedure closes that gap by having the small model return a summary, key facts, open questions, and action items. The tradeoff is that it summarizes rather than reads verbatim, so it is only appropriate when a condensed view is enough.
+
 ## Steps
 
 ### Step 1: Read the note
@@ -87,3 +91,9 @@ except Exception:
     parsed = {"summary": "could not parse note summary"}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Smart-Note-Compare]] — compares two notes' perspectives
+- [[Summarize-Conversation]] — the sibling summarization procedure
+- [[Condense-Note]] — the sibling condensation procedure

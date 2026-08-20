@@ -27,6 +27,10 @@ last_reviewed: 2026-08-15
 
 Run this procedure when a note has proven its value (retrieved 3+ times for lookup) but is verbose. It condenses the note to a terse, dense version that preserves all information while dropping pedagogical scaffolding, repetition, and verbose examples. This is the lazy de-fluff pass — notes are only condensed after they prove their value.
 
+## Why This Exists
+
+Notes that have proven their value can still be verbose, bloated with scaffolding and repetition that slow retrieval. This procedure condenses them to a terse, dense version. The key tradeoff is that it is a lazy pass — notes are only condensed after they prove their value (retrieved 3+ times), so effort is spent only on notes that matter.
+
 ## Steps
 
 ### Step 1: Read the note
@@ -75,3 +79,9 @@ else:
     Path(note_path).write_text(new_content, encoding="utf-8")
     result = json.dumps({"status": "condensed", "note_path": note_path, "original_chars": len(original), "condensed_chars": len(condensed)})
 ```
+
+## Related
+
+- [[Note-Quality-Score]] — scores a note's quality before condensing
+- [[Find-Thin-Notes]] — finds notes that are too thin (opposite problem)
+- [[Split-Note]] — splits an oversized note instead of condensing

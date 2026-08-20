@@ -29,6 +29,14 @@ Run this to audit procedure trustworthiness. Catches procedures that say
 "verified" but actually fail, and procedures that say "experimental" but
 have a great track record and should be promoted.
 
+## Why This Exists
+
+A procedure's `status` field can drift from its actual reliability as
+success/failure counts accumulate. This procedure flags status-rate
+mismatches — "verified" procedures that fail, "experimental" ones that
+should be promoted. The tradeoff: it requires at least 5 runs before
+judging, so new procedures aren't audited.
+
 ## Steps
 
 ### Step 1: Read all procedure frontmatter and the failure log
@@ -142,3 +150,9 @@ result = _json.dumps({
     "procedures_audited": data.get("total_procedures", 0),
 })
 ```
+
+## Related
+
+- [[Procedure-Eval]] — evaluates procedure quality/trustworthiness
+- [[Procedure-Library-Health]] — broader library health assessment
+- [[Find-Redundant-Procedures]] — sibling procedure-library audit probe

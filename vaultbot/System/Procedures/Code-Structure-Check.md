@@ -29,6 +29,10 @@ Run this to check if a backend file follows conventions. Catches bare
 excepts, hardcoded paths, missing type hints, and other common issues
 before they cause problems.
 
+## Why This Exists
+
+Convention violations — bare excepts, hardcoded paths, missing type hints — cause problems downstream but are easy to miss in review. This procedure scans a file for them deterministically. The key tradeoff is that detection is deterministic (regex), while severity assessment and fix suggestions are delegated to the small model.
+
 ## Steps
 
 ### Step 1: Read the file and check conventions deterministically
@@ -121,3 +125,9 @@ except Exception:
     parsed = {"assessment": "error", "violations": []}
 result = _json.dumps(parsed)
 ```
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — orchestrator that calls this check
+- [[Check-Error-Handling]] — sibling code-audit probe
+- [[Check-Complexity]] — sibling code-audit probe

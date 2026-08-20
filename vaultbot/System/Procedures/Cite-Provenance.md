@@ -32,6 +32,10 @@ tags:
 
 Forces every factual claim in an answer to cite a supporting vault note. The core search is deterministic (code step calls vault_search for each sentence) — the LLM only formats the output.
 
+## Why This Exists
+
+Answers were presented with claims that had no grounding in the vault, so there was no way to trace a claim back to its source. This procedure forces every claim to cite a supporting vault note. The key tradeoff is that the search is deterministic (code step), while the LLM only formats the output — keeping grounding cheap and reliable.
+
 ## Inputs
 
 - `draft_answer` (string, required): The draft answer containing claims to cite.
@@ -113,3 +117,9 @@ Output the final cited answer, followed by a "Sources" section listing all citat
 FINAL OUTPUT:]
 
 [validate: contains "[[" and contains "Sources"]
+
+## Related
+
+- [[Record-Provenance-Trace]] — records the provenance trace this produces
+- [[Verify-Claims]] — verifies claims against sources
+- [[Cross-Check-Claims]] — checks claims against cited web sources

@@ -45,6 +45,10 @@ right notes. Use cases:
 - When the operator reports that a relevant note was missing from an answer
 - When testing changes to FUSED retrieval parameters
 
+## Why This Exists
+
+FUSED retrieval quality can silently degrade after vault changes or parameter tweaks, and without measured recall/precision there's no way to detect a regression. This procedure exists to run test queries, compute recall@k and precision@k, and dispatch conditional fixes based on the result. The key tradeoff is that it is idempotent — safe to re-run with the same test set — and its design decisions are backed by RAG evaluation metrics research.
+
 ## Research Backing
 
 > **Design decisions in this procedure are backed by research:**

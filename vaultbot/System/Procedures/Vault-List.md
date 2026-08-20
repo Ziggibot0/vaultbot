@@ -24,6 +24,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Run this procedure when you need to know what notes exist in the vault — either all of them, filtered by directory, or filtered by tag. This complements semantic search (which finds by meaning) with structural listing (which finds by location).
 
+## Why This Exists
+
+Semantic search finds notes by meaning but can't answer "what notes exist" or "what's in this directory." This procedure exists to list all markdown notes, optionally filtered by directory or tag. The key tradeoff: it's structural listing by location, deliberately complementing rather than replacing semantic search.
+
 ## Steps
 
 ### Step 1: List vault notes
@@ -47,3 +51,9 @@ result = vault_list(directory=directory, tag=tag) if hasattr(vault_list, '__call
 ### Step 3: Validate
 
 3. [validate: contains "count"]
+
+## Related
+
+- [[Vault-Inventory]] — exact-string search across notes
+- [[Vault-Walk]] — walks every note and returns per-note data
+- [[Vault-Statistics]] — computes vault statistics

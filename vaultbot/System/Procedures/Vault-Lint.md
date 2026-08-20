@@ -24,6 +24,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Run this after writing or editing a note to verify quality. Also run when the user asks to check a note's quality, find broken links, or audit a note.
 
+## Why This Exists
+
+Notes written or edited without verification could ship with broken wikilinks, missing frontmatter, or weak arguments. This procedure exists to lint a note and return a detailed quality report. The key tradeoff: it delegates to the vault_lint tool and uses the LLM only to report results actionably, not to re-derive the checks.
+
 ## Steps
 
 ### Step 1: Lint the note
@@ -40,3 +44,9 @@ result = vault_lint(file_path=file_path) if hasattr(vault_lint, '__call__') else
 ### Step 3: Validate
 
 3. [validate: contains "wikilink" or contains "frontmatter" or contains "quality"]
+
+## Related
+
+- [[Write-Note]] — creates notes that should be linted after
+- [[Find-Broken-Links]] — finds broken wikilinks across the vault
+- [[Note-Quality-Score]] — scores note quality

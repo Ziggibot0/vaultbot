@@ -28,6 +28,10 @@ tags:
 Run this to find functions and classes in the backend that nothing calls.
 Useful before a refactor or when cleaning up.
 
+## Why This Exists
+
+Dead functions and classes accumulate in the backend and bloat the codebase, but finding them requires checking every definition against every reference. This procedure exists to scan all `.py` files for unreferenced symbols. The key tradeoff is a small-model second pass that filters false positives from dynamic dispatch (getattr, eval, plugin loading), so only genuinely dead code is reported.
+
 ## Steps
 
 ### Step 1: Collect all definitions and check for references
@@ -114,3 +118,9 @@ Return ONLY the JSON."""
 ### Step 3: Report dead code
 
 3. [llm: Format the confirmed dead code from the prior step as a report. For each, show the function/class name, file, and line number. Suggest whether to remove it or keep it (some may be intentional API surfaces). If none, say the backend has no dead code.]
+
+## Related
+
+- [[Find-Contradictions]] — sibling code-quality probe
+- [[Check-Dead-Code]] — sibling dead-code check
+- [[Code-Audit-Architecture]] — broader code audit

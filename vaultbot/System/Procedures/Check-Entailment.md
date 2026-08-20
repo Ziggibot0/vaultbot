@@ -26,6 +26,10 @@ tags:
 
 Run this procedure when you need to verify whether a claim is supported by its cited source. Given a source text and a claim, the small model determines whether the source supports, contradicts, or does not support the claim. This is the core step of the [[Verify-Claims]] workflow.
 
+## Why This Exists
+
+Claims get cited to sources that don't actually support them, and there was no single step to verify support before presenting an answer. This procedure classifies each claim as supported, unsupported, or contradicted against its source. The key tradeoff is that entailment checking is delegated to the small model because it is simple classification, not deep reasoning.
+
 ## Steps
 
 ### Step 1: Ask the small model for a verdict

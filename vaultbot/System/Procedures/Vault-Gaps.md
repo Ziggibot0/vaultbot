@@ -28,6 +28,10 @@ Run this when the user asks what the vault is missing, what gaps exist, or what 
 
 Gaps are derived deterministically from the [[Pattern-Scan]] engine table — no live service needed. Two kinds: (a) dangling wikilinks — concepts linked but no note exists (the "most wanted missing" targets, ranked by how many notes reference them), and (b) thin/stub notes that exist but carry little content.
 
+## Why This Exists
+
+The vault's knowledge gaps — dangling wikilinks and thin notes — weren't surfaced in a single ranked view. This procedure exists to detect both kinds of gaps and rank them so the user knows what to research next. The key tradeoff: it derives gaps deterministically from the Pattern-Scan table rather than a live service, so it's cheap and reproducible.
+
 ## Steps
 
 ### Step 1: Detect gaps from the Pattern-Scan table
@@ -69,3 +73,9 @@ result = json.dumps({
 ### Step 3: Validate
 
 3. [validate: contains "gap"]
+
+## Related
+
+- [[Pattern-Scan]] — the engine whose table this procedure reads
+- [[Vault-Cleanup]] — the meta cleanup audit that also derives from Pattern-Scan
+- [[Gap-Fill]] — fills the gaps this procedure detects

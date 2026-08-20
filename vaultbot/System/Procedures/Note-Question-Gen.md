@@ -29,6 +29,13 @@ Run this when a note feels thin or incomplete. It generates questions the
 note *should* answer, checks which ones it doesn't, and returns the gaps
 as prompts for research or expansion.
 
+## Why This Exists
+
+A thin note is missing content, but it's hard to know exactly what. This
+procedure generates questions the note should answer and returns the
+unanswered ones as gap-filling prompts. The tradeoff: the questions are
+small-model generated, so they may be trivial or already answered.
+
 ## Steps
 
 ### Step 1: Read the note and generate questions
@@ -109,3 +116,9 @@ result = _json.dumps({
     "gap_count": len(parsed.get("unanswered", [])) + len(parsed.get("partial", [])),
 })
 ```
+
+## Related
+
+- [[Find-Thin-Notes]] — finds thin notes that need expansion
+- [[Gap-Fill]] — triages dangling wikilinks into research gaps
+- [[Find-Note-Gaps]] — finds gaps in note coverage

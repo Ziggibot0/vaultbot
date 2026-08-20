@@ -32,6 +32,10 @@ model_cartridge: big
 
 Called by [[Think]] when the problem type is **design/architecture** — choosing between competing options where each has advantages and disadvantages.
 
+## Why This Exists
+
+Choosing between competing options with different trade-offs is prone to preference errors when done intuitively. This lens exists to map options against criteria, weight trade-offs, and identify Pareto-optimal choices. The key tradeoff: it merges scoring+reasoning and tradeoff+pareto+recommendation into single calls, and makes the Pareto check deterministic, to reach ~3 LLM calls without losing the structured reasoning.
+
 ## What Changed in v4
 
 | Problem in v3 | Fix in v4 |

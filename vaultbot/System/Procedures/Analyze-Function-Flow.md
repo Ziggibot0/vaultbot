@@ -28,6 +28,14 @@ tags:
 Before modifying a function, understand its call graph. This traces
 callers (who calls it) and callees (what it calls) two levels deep.
 
+## Why This Exists
+
+Modifying a function without knowing its place in the call graph risks
+breaking callers or missing downstream effects. This procedure traces
+callers and callees two levels deep so edits are made with full context.
+The key tradeoff is the two-level depth limit, which balances completeness
+against the cost of scanning the whole backend.
+
 ## Steps
 
 ### Step 1: Scan the backend for the call graph
@@ -120,3 +128,9 @@ except Exception:
     parsed = {"flow_summary": "could not parse"}
 result = _json.dumps({"call_graph": data, "analysis": parsed})
 ```
+
+## Related
+
+- [[Codebase-Map]] — static index of the backend this traces through
+- [[Analyze-Session-Log]] — reconstructs runtime behavior from logs
+- [[Code-Structure-Check]] — sibling code-audit probe

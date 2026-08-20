@@ -30,6 +30,10 @@ When you need to find all instances of a code pattern across the backend
 module. The small model translates your pattern description into a regex
 and searches.
 
+## Why This Exists
+
+Finding all instances of a code pattern across the backend required manual grepping with no structured results. This procedure translates a pattern description into a regex and returns matches with file, line, and context. The key tradeoff is that the small model translates the description to a regex, so the search is flexible but depends on a correct translation.
+
 ## Steps
 
 ### Step 1: Small model translates the pattern description to a regex
@@ -115,3 +119,9 @@ else:
         "pattern_searched": data.get("pattern", ""),
     })
 ```
+
+## Related
+
+- [[Codebase-Map]] — static index of the backend this searches
+- [[Analyze-Function-Flow]] — traces a function's call graph
+- [[Chat-Consolidation]] — dispatches to this for build-log chats

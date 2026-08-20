@@ -30,6 +30,10 @@ Run this to find one-way wikilinks — note A links to note B, but B doesn't
 link back. Some of these should be reciprocal. The small model recommends
 which ones to fix.
 
+## Why This Exists
+
+One-way wikilinks (A links to B but B doesn't link back) weaken the graph's bidirectionality, but not every one-way link should be reciprocated. This procedure exists to scan for one-way links and have the small model recommend which to fix. The key tradeoff is that the small model judges reciprocity rather than blindly adding backlinks, so only genuinely reciprocal relationships are suggested.
+
 ## Steps
 
 ### Step 1: Build the bidirectional link map
@@ -105,3 +109,9 @@ result = _json.dumps({"backlink_suggestions": to_fix,
                       "total_one_way": data.get("total", 0),
                       "suggest_adding": len(to_fix)})
 ```
+
+## Related
+
+- [[Find-Hub-Notes]] — sibling link-structure probe
+- [[Find-Orphans]] — sibling graph-organization probe
+- [[Note-Linker]] — adds the backlinks this recommends

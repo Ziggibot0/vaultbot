@@ -19,6 +19,10 @@ procedure that already encodes the "how". Procedures compound: the more
 deterministic scanning/filtering is captured here, the less the big model
 does over time.
 
+## Why This Exists
+
+The big model wastes tokens when it reasons over raw notes instead of calling a procedure that already encodes the "how". This index closes that gap by cataloging the procedure library so the model reaches for the right procedure rather than re-deriving it. The key tradeoff is the compounding design: one importable pattern-recognition engine (Pattern-Scan) is reused by many thin filter procedures, so each new check costs ~15 lines instead of a full rescan.
+
 ## The Compounding Pattern (read this first)
 
 ```

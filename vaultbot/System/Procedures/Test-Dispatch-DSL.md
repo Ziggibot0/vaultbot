@@ -20,6 +20,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 # Test-Dispatch-DSL
 
+## Why This Exists
+
+The YAML Dispatch DSL needed a smoke test to prove the full pipeline — classify → dispatch → call tool → branch on result — works end to end. This procedure exercises dotted-field access and `_prev` references in conditions. The tradeoff: it's a manual, raw-status test that runs only when explicitly invoked, not a gate on every dispatch.
+
 ## Dispatch
 
 - classify:
@@ -74,3 +78,9 @@ result = {
     "gaps_count": dispatch_ns.get("gaps_data", {}).get("count", 0),
 }
 ```
+
+## Related
+
+- [[Test-Run-DSL]] — the sibling DSL smoke test for the `run` entry type
+- [[Dispatch-DSL-Smoke-Test]] — the broader DSL smoke test
+- [[Test-RunProcedure-Return]] — inspects what run_procedure returns

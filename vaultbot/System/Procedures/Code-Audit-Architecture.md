@@ -17,6 +17,10 @@ tags:
 
 Build granular code-audit procedures following the **Pattern-Scan refactoring pattern**: decompose a monolith into independent, reusable layers. Each code-audit concern gets its own procedure with exactly three steps. Then build a thin orchestrator that calls them together.
 
+## Why This Exists
+
+Code audit was bundled into a single `Code-Structure-Check` covering four unrelated functions, making each concern hard to test and maintain independently. This directive decomposes code audit into granular one-concern procedures plus a thin orchestrator. The key tradeoff is that each procedure is limited to exactly three steps (read → check → report), trading flexibility for uniformity and independent testability.
+
 ## Why This Pattern
 
 The Pattern-Scan refactoring (2026-08-04) proved this works: a 213-line monolith became:
@@ -56,3 +60,9 @@ After building all four procedures, execute the orchestrator against a real back
 - The orchestrator is thin — it only calls sub-procedures, never duplicates logic
 - Every procedure must be independently testable
 - Follow the Pattern-Scan refactoring as the proven template
+
+## Related
+
+- [[Code-Audit-Senior-Review]] — the thin orchestrator this directive specifies
+- [[Check-Error-Handling]] — one of the granular procedures
+- [[Pattern-Scan]] — the refactoring pattern this directive follows

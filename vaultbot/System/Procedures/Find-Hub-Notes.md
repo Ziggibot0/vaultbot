@@ -29,6 +29,10 @@ When the vault has important notes that aren't well-connected to its
 organizational structure. This finds notes that many others reference but
 that aren't linked from any hub or index note.
 
+## Why This Exists
+
+Important notes can be heavily referenced yet still invisible to the vault's hub structure, so they're discovered but not well-connected. This procedure exists to identify notes with many incoming links that no hub or index note links to. The key tradeoff is a threshold split — hubs are notes with 8+ incoming links, and "important but unconnected" are notes with 5+ incoming links not linked from any hub.
+
 ## Steps
 
 ### Step 1: Build the link graph and identify hubs + important-but-unconnected notes
@@ -115,3 +119,9 @@ result = _json.dumps({"hub_link_suggestions": parsed,
                       "total_unconnected": data.get("total_unconnected", 0),
                       "total_hubs": data.get("total_hubs", 0)})
 ```
+
+## Related
+
+- [[Find-Orphans]] — sibling graph-organization probe
+- [[Find-One-Way-Links]] — sibling link-structure probe
+- [[Vault-Graph-Analyzer]] — the graph analysis this builds on

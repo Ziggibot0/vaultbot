@@ -59,6 +59,10 @@ look the same to the user ("the links go to nothing"):
 - The vaultbot "is drawing from bullshit" or "can't see that it's wrong"
 - After changing the source filtering / URL liveness pipeline
 
+## Why This Exists
+
+Research notes with dead, low-credibility, or absent source links all look the same to the user ("the links go to nothing") but stem from four distinct failure modes: dead URLs, GitHub issue/PR sources, empty Sources sections, and notes written directly by the LLM with no research engine at all. This procedure exists to classify which mode applies so the right fix (delete, re-research, or repair URLs) is chosen. The key tradeoff is distinguishing notes that predate the liveness/classification fixes from notes that indicate a still-broken pipeline.
+
 ## Inputs
 
 - `note_path` (required): the vault-relative path to the research note
@@ -186,3 +190,9 @@ Report: (1) which failure modes apply, (2) which specific URLs are dead or low-c
 ### Step 4: Validate
 
 [validate: output contains at least one of "Failure Mode A", "Failure Mode B", "Failure Mode C", "Failure Mode D" or "no issues found"]
+
+## Related
+
+- [[Diagnose-Retrieval-Failure]] — sibling diagnosis for notes that should surface but don't
+- [[Evaluate-Retrieval]] — measures retrieval quality that feeds source selection
+- [[Verify-Claims]] — verifies the claims a research note makes against its sources

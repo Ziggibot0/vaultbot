@@ -25,6 +25,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 Run when the user asks about status, health, hardware, which models are loaded, or what VaultBot is running on. This reports everything that can be determined OFFLINE: machine specs (OS/CPU/RAM/GPU), Ollama models loaded, and vault graph/index stats. (For the live autonomous-researcher cycle count use the `vaultbot_status` chat tool — that needs the running backend; this procedure is the offline snapshot.)
 
+## Why This Exists
+
+Users ask about status, health, and hardware, but the live status tool needs a running backend. This procedure exists to report everything determinable offline — machine specs, loaded models, and vault stats. The key tradeoff: it's an offline snapshot, so it deliberately excludes live autonomous-researcher cycle state, which requires the running backend.
+
 ## Steps
 
 ### Step 1: Gather machine spec + graph stats
@@ -60,3 +64,9 @@ result = json.dumps({
 ### Step 2: Report the status
 
 2. [llm: Report VaultBot's status from the prior step output in a clear, concise summary: machine (OS, RAM, GPU), whether Ollama is running and which models are loaded (call out the big/small/vision cartridges if identifiable), and vault size (notes, connectivity). Be natural — don't dump JSON. If the user likely wanted live research-cycle state, note they can ask "what have you been doing" which uses the live status tool.]
+
+## Related
+
+- [[System-Status]] — the system status report procedure
+- [[Vault-Health-Check]] — the vault health snapshot
+- [[Vault-Graph-Analyzer]] — the graph analysis this procedure consumes

@@ -39,6 +39,10 @@ When the GUI shows a procedure step stuck for minutes (e.g.
 loop with synchronous subprocess calls, which defeats the
 `asyncio.wait_for` timeout.
 
+## Why This Exists
+
+When the GUI shows a procedure step stuck for minutes, the cause is almost never the visible procedure — it's the parallel preflight (Think) blocking the event loop with synchronous subprocess calls, which defeats the `asyncio.wait_for` timeout. This procedure exists to compute per-step durations from the session log and confirm whether timeouts actually fired on time. The key tradeoff is that the root cause (event-loop blocking) was already fixed via `asyncio.to_thread()`, so the procedure now serves to diagnose *new* stalls from other causes.
+
 ## Root Cause Pattern
 
 The preflight runs Think and Route-Task in parallel via

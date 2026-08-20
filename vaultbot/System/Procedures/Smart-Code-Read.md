@@ -29,6 +29,10 @@ When a code file is too large to read all at once, run this to get a
 structured map: every function/class, its line range, imports, and a
 one-line summary. Then use `code_read` with the specific line range.
 
+## Why This Exists
+
+Reading a large code file in full wastes context, but navigating it blind risks missing the function you need. This procedure closes that gap by extracting a structured map of signatures, imports, and one-line summaries. The tradeoff is that it maps structure deterministically and only uses the small model to summarize each function, so the map is cheap to produce.
+
 ## Steps
 
 ### Step 1: Read the file and extract structure deterministically
@@ -108,3 +112,9 @@ result = _json.dumps({"file": data.get("file"), "total_lines": data.get("total_l
                       "imports": data.get("imports", []),
                       "structure": parsed})
 ```
+
+## Related
+
+- [[Summarize-Function]] — summarizes a single function in depth
+- [[Proc-Step-Planner]] — plans edits after mapping a file's structure
+- [[Code-Structure-Check]] — the sibling code-structure procedure

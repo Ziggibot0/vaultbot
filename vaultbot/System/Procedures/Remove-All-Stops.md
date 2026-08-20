@@ -21,6 +21,10 @@ model_cartridge: small
 
 # Remove-All-Stops
 
+## Why This Exists
+
+Turn caps, read-only loop detectors, and force-synthesize nudges cut VaultBot off before it completes a task, causing it to die mid-task. This procedure closes that gap by raising the cap defaults and disabling the loop-detector and force-synthesize nudges in `chat_handler.py`. The tradeoff is that removing these stops trades safety for completion — the model runs to completion but loses the guardrails that would otherwise halt runaway loops.
+
 ## Steps
 
 ### Step 1: Remove turn caps and loop-detector nudges from chat_handler.py

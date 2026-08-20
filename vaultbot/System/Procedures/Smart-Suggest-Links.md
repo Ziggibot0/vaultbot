@@ -29,6 +29,10 @@ After writing a note, run this to get link suggestions. It reads the note,
 finds concepts that have existing notes, and suggests which to wikilink.
 More context-aware than a simple keyword scan — it reads the note's actual meaning before suggesting links.
 
+## Why This Exists
+
+A newly written note is often disconnected from the vault graph, and a simple keyword scan suggests links that don't make sense in context. This procedure closes that gap by reading the note's actual meaning and suggesting only links that make sense. The tradeoff is that it is more precise than a keyword scan because it reads context, but it still only suggests — it does not apply the links.
+
 ## Steps
 
 ### Step 1: Read the note and list all note stems
@@ -101,3 +105,9 @@ except Exception:
 result = _json.dumps({"link_suggestions": parsed, "note": data.get("note"),
                       "suggestion_count": len(parsed)})
 ```
+
+## Related
+
+- [[Note-Linker]] — applies link suggestions after a write
+- [[Find-Unlinked-Mentions]] — finds places to add links with no new notes
+- [[Smart-Note-Read]] — reads a note's key points before linking

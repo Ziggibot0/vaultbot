@@ -26,6 +26,10 @@ tags:
 
 Run this when you need to pull discrete factual claims out of a source text so they can be individually verified later. This is the first step of the Verify-Claims workflow: extract claims, then check each one against its source via [[Check-Entailment]].
 
+## Why This Exists
+
+Factual claims buried in a source text can't be individually verified until they're pulled out as discrete, checkable units. This procedure exists as the first step of the Verify-Claims workflow, extracting each claim with its supporting span. The key tradeoff is that it uses the small model — claim extraction is structured extraction, not reasoning.
+
 ## Steps
 
 ### Step 1: Ask the small model to extract claims
