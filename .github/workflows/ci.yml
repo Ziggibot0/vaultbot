@@ -91,12 +91,13 @@ jobs:
         # execution. Reuses procedure_validator (no duplicated logic).
         run: python vaultbot/vaultbot_backend/scripts/check_procedure_frontmatter.py --all
 
-      - name: Procedure provenance/rationale report (soft gate)
-        # Report-only (issues #63 + #64): counts how many procedures lack
-        # provenance (sources/depends_on/## Related) and a ## Why This Exists
-        # rationale section. Not a hard gate — the ~200 existing procedures
-        # predate the convention, so this surfaces the gap for incremental
-        # pay-down rather than blocking a mass-edit flag-day.
+      - name: Procedure provenance/rationale check (HARD GATE)
+        # Every committed procedure must carry provenance (sources/depends_on/
+        # ## Related wikilinks) and a ## Why This Exists rationale section
+        # (issues #63 + #64). Was a report-only soft gate while the ~200
+        # pre-existing procedures were backfilled; the backfill is complete
+        # (0 missing), so this now blocks any new procedure that ships
+        # without provenance or rationale.
         run: python vaultbot/vaultbot_backend/scripts/check_procedure_provenance.py
 
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
