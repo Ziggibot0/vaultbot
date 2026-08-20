@@ -118,6 +118,28 @@ def test_merge_blocked_when_no_approval(monkeypatch):
     assert calls["merge"] == []
 
 
+def test_merge_blocked_when_only_non_owner_approved(monkeypatch):
+    """A non-owner approval (e.g. the bot account) must NOT satisfy the gate.
+
+    The bot account (ziggibot-uni) has write access and can approve PRs, but
+    only the code owner (@Ziggibot0) may authorize a merge. This is the
+    defense-in-depth that prevents the bot from approving a stranger's PR and
+    then merging it.
+    """
+    prs = [_make_pr()]
+    check_runs = [{"name": "CI", "status": "completed", "conclusion": "success"}]
+    reviews = [{"state": "APPROVED", "user": {"login": "ziggibot-uni"}}]
+    calls = _run_review(monkeypatch, prs, _make_files(), check_runs, reviews)
+
+    result = rc.run({"pr_number": 1, "merge": True})
+    r = result["results"][0]
+    assert r["ci_status"] == "success"
+    assert r["approval_state"] == "pending"
+    assert r["merged"] is False
+    assert "only non-owner approvals" in r["merge_error"]
+    assert calls["merge"] == []
+
+
 def test_merge_blocked_when_approval_unknown(monkeypatch):
     """Approval state that can't be confirmed blocks the merge (fail-loud)."""
     prs = [_make_pr()]
