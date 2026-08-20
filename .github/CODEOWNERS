@@ -3,5 +3,9 @@
 # Sean Kellogg (project founder & custodian) is the required reviewer for
 # every path. No PR merges without his explicit approval. This is the
 # formal mechanism behind "the maintainer keeps control of what ships."
+#
+# NOTE: the account is @Ziggibot0 (the repo admin). A previous @skelogg
+# handle did not exist on GitHub, which would have made every PR
+# unmergeable under a code-owner review requirement.
 
-* @skelogg
+* @Ziggibot0
