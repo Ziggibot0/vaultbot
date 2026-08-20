@@ -1,6 +1,7 @@
 ---
 type: research
 status: complete
+baseline: true
 created: 2026-07-28
 summary: "How animals maintain homeostasis — the stable internal environment that sustains life. Covers negative/positive feedback loops, set points, allostasis, thermoregulation (endotherms vs ectotherms, heat exchange mechanisms, neural control), osmoregulation (osmoregulators vs osmoconformers, freshwater vs saltwater fish, sharks, terrestrial animals), and excretion systems across animal phyla. Sourced from three textbooks plus online research."
 tags: [biology, homeostasis, thermoregulation, osmoregulation, animal-physiology, textbook-sourced]

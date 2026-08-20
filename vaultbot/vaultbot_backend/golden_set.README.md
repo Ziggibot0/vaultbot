@@ -100,7 +100,7 @@ This is not "vibes." Each entry follows a documented selection protocol:
 ### Source Pool
 All expected notes are drawn from the **baseline vault content** — the notes
 that ship with the repo under `vaultbot/System/`, `vaultbot/Knowledge/`,
-and `vaultbot/baseline/` (which includes the directive templates). These are
+`vaultbot/baseline/`, and the vault root (`*.md` directives). These are
 guaranteed present in every clone, so the golden set is reproducible in CI.
 
 ### Selection Criteria
@@ -203,8 +203,8 @@ For each entry, the annotator (GitHub Copilot, 2026-08-16) performed:
 | Category   | Count | Target |
 |------------|-------|--------|
 | direct     | 10    | 10–15  |
-| semantic   | 11    | 10–15  |
-| graph      | 6     | 10–15  |
+| semantic   | 10    | 10–15  |
+| graph      | 7     | 10–15  |
 | negative   | 4     | 8–10   |
 | multi      | 7     | 8–12   |
 | **Total**  | **38**| **50+**|
