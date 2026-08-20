@@ -237,8 +237,15 @@ if (Test-Path $vaultPath) {
         # user through the browser login, then VERIFY it actually completed
         # (gh auth login can exit 0 even if the user closed the browser early).
         $authed = $false
-        & gh auth status *> $null
-        if ($LASTEXITCODE -eq 0) { $authed = $true }
+        try {
+            & gh auth status *> $null
+            if ($LASTEXITCODE -eq 0) { $authed = $true }
+        } catch {
+            # gh auth status writes "not logged in" to stderr, which PS 5.1
+            # turns into a terminating NativeCommandError under
+            # $ErrorActionPreference = "Stop". Treat that as "not authed".
+            $authed = $false
+        }
 
         if (-not $authed) {
             Write-Host ""
@@ -259,9 +266,16 @@ if (Test-Path $vaultPath) {
                 } catch {
                     Write-Warn2 "GitHub sign-in failed: $_"
                 }
-                & gh auth status *> $null
-                if ($LASTEXITCODE -eq 0) {
-                    $authed = $true
+                try {
+                    & gh auth status *> $null
+                    if ($LASTEXITCODE -eq 0) {
+                        $authed = $true
+                    }
+                } catch {
+                    $authed = $false
+                }
+                if ($authed) {
+                    break
                 } else {
                     $again = Read-Host "  Sign-in didn't complete. Try again? (y/n)"
                     if ($again -notmatch "^(y|yes)$") { $retry = $false }
