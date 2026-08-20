@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Procedure provenance/rationale report (soft gate, issues #63 + #64).
+"""Procedure provenance/rationale check (HARD GATE, issues #63 + #64).
 
-Scans every committed .md file under vaultbot/System/Procedures/ and reports
-how many lack provenance (``sources:`` / ``depends_on:`` / ``## Related``
-wikilinks) and how many lack a ``## Why This Exists`` rationale section.
+Scans every committed .md file under vaultbot/System/Procedures/ and blocks
+any procedure that lacks provenance (``sources:`` / ``depends_on:`` /
+``## Related`` wikilinks) or a ``## Why This Exists`` rationale section.
 
-This is a *report*, not a hard gate: the ~200 existing procedures predate the
-provenance/rationale convention, so blocking on them would be a mass-edit
-flag-day. The report surfaces the gap so it can be paid down incrementally
-(and, once the tree is clean, flipped to a hard gate).
+This was originally a report-only soft gate while the ~200 pre-existing
+procedures were backfilled. The backfill is complete (0 missing provenance,
+0 missing rationale), so this is now a hard gate: any new procedure that
+ships without provenance or rationale fails CI.
 
-Exit 0 always (report-only). Stdlib only — no dependencies beyond 3.11+.
+Exit 0 = all clear. Exit 1 = blocked, with a list of offending files.
+
+Stdlib only — no dependencies beyond 3.11+.
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ def main() -> int:
             f"check-procedure-provenance: git ls-files failed: {result.stderr}",
             file=sys.stderr,
         )
-        return 0  # report-only — never block on tool failure
+        return 1  # can't verify = block (safe)
 
     candidates = [p.strip() for p in result.stdout.split("\n") if p.strip()]
     to_check = [p for p in candidates if p.endswith(".md")]
@@ -77,7 +79,9 @@ def main() -> int:
             continue
         try:
             text = abs_path.read_text(encoding="utf-8", errors="replace")
-        except Exception:  # noqa: BLE001 — report-only; skip unreadable files
+        except Exception:  # noqa: BLE001 — can't read = can't verify = block (safe)
+            no_provenance.append(rel_path)
+            no_rationale.append(rel_path)
             continue
         if not _is_procedure(text):
             continue
@@ -99,6 +103,15 @@ def main() -> int:
         print("\nProcedures with no '## Why This Exists' section:")
         for p in no_rationale:
             print(f"  - {p}")
+
+    if no_provenance or no_rationale:
+        print(
+            "\nPROCEDURE PROVENANCE CHECK FAILED: add a '## Why This Exists' "
+            "section and provenance (sources:/depends_on:/## Related wikilinks) "
+            "to each listed procedure.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
