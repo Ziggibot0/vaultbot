@@ -32,6 +32,7 @@ existing ``except`` blocks work unchanged.
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
 
@@ -58,7 +59,7 @@ def run(*args, **kwargs):
 
 
 def Popen(*args, **kwargs):
-    """Drop-in replacement for ``subprocess.Popen`` that hides console windows on Windows.
+    """Drop-in replacement for ``subprocess.Popen`` that hides console windows.
 
     Identical signature to ``subprocess.Popen`` — just injects
     ``creationflags=CREATE_NO_WINDOW`` (on Windows) if the caller did not
@@ -85,8 +86,8 @@ def Popen(*args, **kwargs):
 # (none currently do — the backend talks to providers from the parent
 # process, never from an LLM-spawned child) can re-add it explicitly.
 
-import os
-import re
+import os  # noqa: E402
+import re  # noqa: E402
 
 # Suffix patterns on env-var names that mark a secret. Compiled once.
 # Case-insensitive. A name matches if it ENDS with one of these (the
@@ -161,13 +162,11 @@ def _posix_preexec() -> None:
     _resource.setrlimit(_resource.RLIMIT_CPU, (_CPU_SECONDS, _CPU_SECONDS))
     # RLIMIT_NPROC: max processes this user may spawn. Catches fork bombs.
     # Some platforms (e.g. macOS) don't support RLIMIT_NPROC — ignore if so.
-    try:
-        _resource.setrlimit(_resource.RLIMIT_NPROC, (_NPROC, _NPROC))
-    except (ValueError, OSError):
+    with contextlib.suppress(ValueError, OSError):
         # Unsupported or the limit is lower than the parent's current count
         # (e.g. the backend itself already has many threads). Degrade
         # gracefully — the timeout and mem cap are still in effect.
-        pass
+        _resource.setrlimit(_resource.RLIMIT_NPROC, (_NPROC, _NPROC))
 
 
 # The value to pass as ``preexec_fn=`` to subprocess.run / Popen. On POSIX

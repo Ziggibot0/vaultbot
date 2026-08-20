@@ -35,10 +35,7 @@ IGNORED_DIRS = {
 
 
 def _is_ignored_path(path: Path) -> bool:
-    for part in path.parts:
-        if part in IGNORED_DIRS:
-            return True
-    return False
+    return any(part in IGNORED_DIRS for part in path.parts)
 
 
 class VaultChangeHandler(FileSystemEventHandler):

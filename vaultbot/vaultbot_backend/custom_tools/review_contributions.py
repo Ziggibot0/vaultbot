@@ -4,15 +4,27 @@ Agent-authored tool: review_contributions
 
 SCHEMA = {
     "name": "review_contributions",
-    "description": "List and review open pull requests on the VaultBot GitHub repo. For each PR, fetches the diff, runs a safety scan (checks for secrets, dangerous code patterns, path traversal, .gitignore tampering), and returns a structured report. Requires the gh CLI authenticated via 'gh auth login'.",
+    "description": (
+        "List and review open pull requests on the VaultBot GitHub repo. For "
+        "each PR, fetches the diff, runs a safety scan (checks for secrets, "
+        "dangerous code patterns, path traversal, .gitignore tampering), and "
+        "returns a structured report. Requires the gh CLI authenticated via "
+        "'gh auth login'."
+    ),
     "parameters": {
         "properties": {
             "merge": {
-                "description": "If true and the PR passes all safety checks, merge it after reviewing. Default: false (review only).",
+                "description": (
+                    "If true and the PR passes all safety checks, merge it "
+                    "after reviewing. Default: false (review only)."
+                ),
                 "type": "boolean",
             },
             "pr_number": {
-                "description": "Optional: review a specific PR by number. If omitted, reviews all open PRs.",
+                "description": (
+                    "Optional: review a specific PR by number. If omitted, "
+                    "reviews all open PRs."
+                ),
                 "type": "integer",
             },
         },
@@ -32,6 +44,7 @@ def run(args: dict) -> dict:
 
     If merge=True and all checks pass, merges the PR.
     """
+    import contextlib
     import os
     import re
     import sys
@@ -46,7 +59,10 @@ def run(args: dict) -> dict:
     if not gh_available():
         return {
             "error": "gh CLI not found or not authenticated.",
-            "hint": "Install the GitHub CLI from https://cli.github.com and run 'gh auth login'.",
+            "hint": (
+                "Install the GitHub CLI from https://cli.github.com and run "
+                "'gh auth login'."
+            ),
         }
 
     # 2. Determine upstream repo
@@ -171,7 +187,9 @@ def run(args: dict) -> dict:
                 {
                     "severity": "high",
                     "check": "path_whitelist",
-                    "message": f"File '{filename}' is outside allowed contribution paths",
+                    "message": (
+                        f"File '{filename}' is outside allowed contribution paths"
+                    ),
                 }
             )
 
@@ -182,7 +200,9 @@ def run(args: dict) -> dict:
                     {
                         "severity": "critical",
                         "check": "sensitive_file",
-                        "message": f"File '{filename}' matches sensitive pattern '{sf}'",
+                        "message": (
+                            f"File '{filename}' matches sensitive pattern '{sf}'"
+                        ),
                     }
                 )
 
@@ -199,11 +219,15 @@ def run(args: dict) -> dict:
                                 {
                                     "severity": "critical",
                                     "check": "gitignore_tampering",
-                                    "message": f".gitignore removes ignore rule for '{removed}' (matches '{sf}')",
+                                    "message": (
+                                        f".gitignore removes ignore rule for "
+                                        f"'{removed}' (matches '{sf}')"
+                                    ),
                                 }
                             )
 
-        # Check: danger patterns in patch (skip markdown — docs mentioning patterns are not dangerous)
+        # Check: danger patterns in patch (skip markdown — docs mentioning
+        # patterns are not dangerous)
         if patch and not filename.endswith(".md"):
             for pattern, desc in DANGER_PATTERNS:
                 matches = re.findall(pattern, patch)
@@ -216,7 +240,8 @@ def run(args: dict) -> dict:
                             if not code.strip().startswith(
                                 "#"
                             ) and not code.strip().startswith("//"):
-                                # Skip lines that are regex pattern definitions (defining detection patterns)
+                                # Skip lines that are regex pattern definitions
+                                # (defining detection patterns)
                                 if 'r"' in code and (
                                     "\\" in code or "\\s" in code or "\\." in code
                                 ):
@@ -241,7 +266,11 @@ def run(args: dict) -> dict:
                 {
                     "severity": "medium",
                     "check": "large_file",
-                    "message": f"File '{filename}' has {file_info.get('additions', 0)} additions — unusually large",
+                    "message": (
+                        f"File '{filename}' has "
+                        f"{file_info.get('additions', 0)} additions — "
+                        f"unusually large"
+                    ),
                 }
             )
 
@@ -471,14 +500,21 @@ def run(args: dict) -> dict:
             result["merge_error"] = f"CI not green (status: {ci_status}). {ci_detail}"
 
         # Post a comment with the review results
-        comment_body = f"## 🤖 VaultBot Safety Review\n\n**Verdict:** {verdict}\n**Reason:** {verdict_reason}\n**CI:** {ci_status} — {ci_detail}\n\n"
+        comment_body = (
+            f"## 🤖 VaultBot Safety Review\n\n**Verdict:** {verdict}\n"
+            f"**Reason:** {verdict_reason}\n**CI:** {ci_status} — "
+            f"{ci_detail}\n\n"
+        )
         if all_issues:
             comment_body += "### Issues Found\n\n"
             for issue in all_issues:
                 emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡"}.get(
                     issue["severity"], "⚪"
                 )
-                comment_body += f"- {emoji} [{issue['severity']}] {issue['check']}: {issue['message']}\n"
+                comment_body += (
+                    f"- {emoji} [{issue['severity']}] {issue['check']}: "
+                    f"{issue['message']}\n"
+                )
                 if issue.get("evidence"):
                     for ev in issue["evidence"]:
                         comment_body += f"  - `{ev}`\n"
@@ -495,15 +531,13 @@ def run(args: dict) -> dict:
 
         comment_body += "\n---\n*Automated review by VaultBot safety scanner*"
 
-        try:
+        with contextlib.suppress(GhError):
             gh_api(
                 "POST",
                 f"repos/{upstream_owner}/{upstream_repo}/issues/{pr_num}/comments",
                 body={"body": comment_body},
                 timeout=15,
             )
-        except GhError:
-            pass  # Comment is best-effort
 
     return {
         "status": "success",

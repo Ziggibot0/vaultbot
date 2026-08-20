@@ -33,6 +33,7 @@ initial plan is framework-driven.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -135,10 +136,8 @@ def framework_plan(
 
     if not text:
         if session_logger is not None:
-            try:
+            with contextlib.suppress(Exception):
                 session_logger.log("framework_plan_empty", {})
-            except Exception:  # noqa: BLE001
-                pass
         return None
 
     if len(text) > _MAX_PLAN_CHARS:
@@ -147,15 +146,13 @@ def framework_plan(
     plan = _extract_json(text)
     if plan is None:
         if session_logger is not None:
-            try:
+            with contextlib.suppress(Exception):
                 session_logger.log(
                     "framework_plan_parse_failed",
                     {
                         "response_preview": text[:200],
                     },
                 )
-            except Exception:  # noqa: BLE001
-                pass
         return None
 
     goal = (plan.get("goal") or user_message[:100]).strip()
@@ -171,7 +168,7 @@ def framework_plan(
         return None
 
     if session_logger is not None:
-        try:
+        with contextlib.suppress(Exception):
             session_logger.log(
                 "framework_plan_built",
                 {
@@ -179,6 +176,4 @@ def framework_plan(
                     "steps": len(steps),
                 },
             )
-        except Exception:  # noqa: BLE001
-            pass
     return goal, steps

@@ -13,6 +13,7 @@ summary: Download textbooks and upload them to VaultBot's system as structured n
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Textbook-Ingest
@@ -20,6 +21,8 @@ tags:
 Download or read a textbook/reference resource and ingest it into the vault as linked notes. Each section becomes a linked vault note with navigation. This is how VaultBot learns systematically.
 
 ## Steps
+
+### Step 1: Ingest the textbook into the vault as linked notes
 
 1. ```python
    # Call the textbook_ingest tool's run() function

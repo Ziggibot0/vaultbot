@@ -42,7 +42,9 @@ SCHEMA = {
             },
             "body": {
                 "type": "string",
-                "description": "Comment text (for 'comment') or closing note (for 'close').",
+                "description": (
+                    "Comment text (for 'comment') or closing note (for 'close')."
+                ),
             },
             "labels": {
                 "type": "array",
@@ -160,7 +162,7 @@ def run(args: dict) -> dict:
                         "number": i.get("number"),
                         "title": i.get("title"),
                         "state": i.get("state"),
-                        "labels": [l.get("name") for l in i.get("labels", [])],
+                        "labels": [lbl.get("name") for lbl in i.get("labels", [])],
                         "comments": i.get("comments", 0),
                         "created_at": i.get("created_at"),
                         "html_url": i.get("html_url"),
@@ -184,7 +186,7 @@ def run(args: dict) -> dict:
                 "title": issue.get("title"),
                 "state": issue.get("state"),
                 "author": (issue.get("user") or {}).get("login"),
-                "labels": [l.get("name") for l in issue.get("labels", [])],
+                "labels": [lbl.get("name") for lbl in issue.get("labels", [])],
                 "body": issue.get("body") or "",
                 "html_url": issue.get("html_url"),
                 "comments": [
@@ -249,7 +251,7 @@ def run(args: dict) -> dict:
             )
             return {
                 "status": "success",
-                "labels": [l.get("name") for l in data],
+                "labels": [lbl.get("name") for lbl in data],
                 "message": f"Labels added to issue #{issue_number}",
             }
 

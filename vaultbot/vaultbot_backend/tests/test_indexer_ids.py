@@ -281,7 +281,8 @@ def test_batch_add_files_skips_empty(tmp_vault):
 
 
 def test_index_missing_or_changed_zero_embedding_on_remove(tmp_vault):
-    """index_missing_or_changed with a deleted file should fire zero embedding calls for the removal."""
+    """index_missing_or_changed with a deleted file should fire zero embedding
+    calls for the removal."""
     vault, index_dir = tmp_vault
     indexer = _make_indexer(vault, index_dir)
 
@@ -368,7 +369,9 @@ def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
         {"file_path": str(vault / "c.md"), "last_modified": 3.0, "content_hash": "h3"},
     ]
     # Write the files so they exist on disk for the later re-embed.
-    for p, content in zip(["a.md", "b.md", "c.md"], ["aaa", "bbb", "ccc"]):
+    for p, content in zip(
+        ["a.md", "b.md", "c.md"], ["aaa", "bbb", "ccc"], strict=False
+    ):
         (vault / p).write_text(content, encoding="utf-8")
 
     faiss.write_index(legacy_index, str(index_dir / "index.faiss"))

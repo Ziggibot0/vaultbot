@@ -13,6 +13,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Annotated, Any
@@ -97,7 +98,10 @@ async def tournament_staging_add(
     if reg.get_provider(provider) is None:
         return {
             "status": "error",
-            "detail": f"Provider '{provider}' not found. Add it in AI Models & Providers first.",
+            "detail": (
+                f"Provider '{provider}' not found. "
+                "Add it in AI Models & Providers first."
+            ),
         }, 400
 
     staging = _staging()
@@ -366,7 +370,8 @@ async def tournament_ws(
     """Run a tournament with streaming progress over WebSocket.
 
     Client sends a JSON start message:
-      {"type": "start", "contestants": [{"model_id","model_name","provider_id"},...], "role": "big"|"small"}
+      {"type": "start", "contestants": [{"model_id","model_name","provider_id"},...],
+       "role": "big"|"small"}
 
     Server streams progress events:
       {"type": "start", "role": "...", "model_count": N, "benchmark_count": N, ...}
@@ -420,12 +425,5 @@ async def tournament_ws(
                 return
     except Exception as e:
         logger.error("Tournament WS error: %s", e)
-        try:
+        with contextlib.suppress(WebSocketDisconnect):
             await websocket.send_json({"type": "error", "message": str(e)})
-        except WebSocketDisconnect:
-            pass
-        logger.error("Tournament WS error: %s", e)
-        try:
-            await websocket.send_json({"type": "error", "message": str(e)})
-        except WebSocketDisconnect:
-            pass

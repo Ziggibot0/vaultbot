@@ -1,10 +1,10 @@
-"""Conversation-aware retrieval — search the conversation history like RAG.
+"""Conversation-aware retrieval -- search the conversation history like RAG.
 
 THE PROBLEM THIS SOLVES
 -----------------------
 The VaultBot's RAG pipeline searched ONLY vault notes (FAISS index + wikilink
 graph + backlinks). When the user says "what was that thing you just found?"
-the retriever returns vault notes about "things" — not the actual conversation
+the retriever returns vault notes about "things" -- not the actual conversation
 the user just had. The conversation history was available as raw messages in
 the LLM context, but the sliding window dropped them after 40 messages,
 and they were never searchable.
@@ -12,12 +12,12 @@ and they were never searchable.
 This module indexes conversation turns (user + assistant) into a lightweight
 in-memory FAISS index that can be queried alongside the vault. When the user
 asks a follow-up that references prior conversation, relevant prior turns
-are retrieved and injected into the context — so the bot can "remember what
+are retrieved and injected into the context -- so the bot can "remember what
 it just said."
 
 DESIGN
 ------
-- In-memory FAISS index (not persisted — conversation history is already
+- In-memory FAISS index (not persisted -- conversation history is already
   persisted in conversation_state.json; this index is rebuilt from that on
   startup and updated incrementally as turns complete).
 - Each turn (user message + assistant answer) is one document. The embedding
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 # How many conversation turns to keep in the index.  Conversations are
 # bounded by conversation_state.json's MAX_TURNS (40), so this matches.
-MAX_INDEXED_TURNS = 80  # generous — the index is tiny (80 × 768 floats)
+MAX_INDEXED_TURNS = 80  # generous -- the index is tiny (80 x 768 floats)
 # Max chars of a turn to embed.  nomic-embed-text works best under ~4000
 # chars; we cap at 2000 to keep it fast (one short embedding call per turn).
 MAX_TURN_CHARS = 2000
@@ -134,7 +134,7 @@ class ConversationIndex:
                         assistant_text = str(next_msg.get("content", "") or "")
                         break
                     if isinstance(next_msg, dict) and next_msg.get("role") == "user":
-                        break  # next user message without an answer — skip
+                        break  # next user message without an answer -- skip
                     j += 1
                 if user_text.strip() or assistant_text.strip():
                     turns_to_add.append((user_text, assistant_text, time.time()))
@@ -166,7 +166,10 @@ class ConversationIndex:
             return
 
         ts = timestamp if timestamp is not None else time.time()
-        combined = f"User: {user_message[:MAX_TURN_CHARS]}\nAssistant: {assistant_answer[:MAX_TURN_CHARS]}"
+        combined = (
+            f"User: {user_message[:MAX_TURN_CHARS]}\n"
+            f"Assistant: {assistant_answer[:MAX_TURN_CHARS]}"
+        )
 
         # Try to embed (outside lock for the Ollama call).
         embedding = None
@@ -291,7 +294,7 @@ class ConversationIndex:
                 distances, indices = faiss_index.search(q_vec, k_eff)
                 # Build a turn_id → turn lookup
                 turn_map = {t.turn_id: t for t in turns_snapshot}
-                for tid, dist in zip(indices[0], distances[0]):
+                for tid, dist in zip(indices[0], distances[0], strict=False):
                     if tid < 0:
                         continue
                     turn_id = faiss_ids[tid] if tid < len(faiss_ids) else -1
@@ -334,7 +337,7 @@ class ConversationIndex:
 
         # --- Entity-mention boosting (deterministic anti-amnesia) ---
         # When the user mentions a [[wikilink]] entity, boost prior turns
-        # that contain the exact entity string — even if vector similarity
+        # that contain the exact entity string -- even if vector similarity
         # is low. This fixes the "looks empty" vs "note is complete" case:
         # the prior turn where the file path was established would be
         # missed by vector search (semantically distant) but is caught by
@@ -450,7 +453,7 @@ def build_conversation_context(
     if not results:
         return ""
     lines = [
-        "# PRIOR CONVERSATION (recent turns relevant to your current question — "
+        "# PRIOR CONVERSATION (recent turns relevant to your current question -- "
         "this is what you and the user discussed before. Use this to stay on "
         "track and reference prior context.)",
     ]
@@ -480,7 +483,7 @@ class ConversationIndexRegistry:
 
     Replaces the single global ``conversation_index`` singleton so each
     tab gets its own searchable index of its own conversation turns.
-    Cross-tab recall is impossible — session A's turns are never in
+    Cross-tab recall is impossible -- session A's turns are never in
     session B's index.
 
     Usage:

@@ -19,6 +19,7 @@ Pure stdlib + existing project imports. No new dependencies.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -247,11 +248,14 @@ class AMemeEvolution:
                         self._log_error("llm_suggest_tags_failed", e)
                         suggested_tags = []
 
-            if not suggested_tags:
-                # Fallback heuristic: if the new note's title token appears in the
-                # neighbor content (plain text), add it as a tag.
-                if new_note_title and new_note_title.lower() in content.lower():
-                    suggested_tags = [new_note_title]
+            # Fallback heuristic: if the new note's title token appears in the
+            # neighbor content (plain text), add it as a tag.
+            if (
+                not suggested_tags
+                and new_note_title
+                and new_note_title.lower() in content.lower()
+            ):
+                suggested_tags = [new_note_title]
 
             # --- Apply tags ---
             tags_updated = 0
@@ -394,7 +398,8 @@ class AMemeEvolution:
         prompt = (
             f"Given a new note titled '{new_title}' and an existing neighbor note, "
             "suggest 1-3 new tags/keywords to add to the neighbor that capture how "
-            "the new note relates to it. Return ONLY a JSON array of strings, no prose.\n\n"
+            "the new note relates to it. Return ONLY a JSON array of strings, "
+            "no prose.\n\n"
             f"New note title: {new_title}\n"
             f"New note content (excerpt):\n{new_preview}\n\n"
             f"Neighbor note content (excerpt):\n{neighbor_preview}\n"
@@ -698,10 +703,8 @@ class AMemeEvolution:
                         f.write(content)
                     os.replace(tmp_path, str(p))
                 except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    try:
+                    with contextlib.suppress(Exception):
                         os.unlink(tmp_path)
-                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                        pass
                     raise
                 return True
             except PermissionError as e:

@@ -52,6 +52,8 @@ Read-only — never modifies session files.
 
 ## Steps
 
+### Step 1: Scan recent session logs for failure signals
+
 1. ```python
    import json
    from pathlib import Path

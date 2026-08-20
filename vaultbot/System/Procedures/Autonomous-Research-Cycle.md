@@ -12,6 +12,7 @@ tags:
   - procedure
   - autonomous-research
   - decision-logic
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Autonomous-Research-Cycle

@@ -14,6 +14,8 @@ summary: "YAML DSL smoke test: classify → dispatch → call tool → condition
 tags:
   - procedure
   - procedures
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Test-Dispatch-DSL

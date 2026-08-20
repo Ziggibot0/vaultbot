@@ -41,7 +41,7 @@ Run this when the user asks for a status check or when you need to verify the sy
 
 ### Step 2: Format report
 
-1. [llm: Format the gathered signals into a concise status report. Include: backend status, tools live, researcher state, gap count, last activity. Keep it under 5 lines.]
+2. [llm: Format the gathered signals into a concise status report. Include: backend status, tools live, researcher state, gap count, last activity. Keep it under 5 lines.]
 
 ## Related
 

@@ -15,6 +15,7 @@ summary: "List and review open pull requests on the VaultBot GitHub repo by fetc
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Review-Contributions
@@ -22,6 +23,8 @@ tags:
 List and review open pull requests on the VaultBot GitHub repo. For each PR, fetches the diff, runs a safety scan (checks for secrets, dangerous code patterns, path traversal, .gitignore tampering), and returns a structured report.
 
 ## Steps
+
+### Step 1: List and review open pull requests
 
 1. ```python
    # Call the review_contributions tool's run() function

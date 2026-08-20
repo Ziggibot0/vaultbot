@@ -63,6 +63,7 @@ and the type decides the real API surface at call time:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -403,10 +404,10 @@ class ProviderRegistry:
                     prov = Provider(**p)
                     # Heal any stray /v1 (or trailing slash) so call-time path
                     # joining is unambiguous (the user's /v1 Ollama case).
-                    try:
+                    with contextlib.suppress(ValueError):
+                        # keep as-is if normalization fails; add_provider
+                        # rejects bad URLs going forward
                         prov.base_url = normalize_base_url(prov.base_url, prov.type)
-                    except ValueError:
-                        pass  # keep as-is if normalization fails; add_provider rejects bad URLs going forward
                     self._providers[prov.id] = prov
                 for m in data.get("models", []):
                     entry = ModelEntry(**m)

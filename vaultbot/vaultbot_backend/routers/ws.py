@@ -10,6 +10,7 @@ endpoints — verified against the docs).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -70,10 +71,8 @@ async def websocket_endpoint(
     # ── Session resume: reuse the same session_id across reconnects ──
     # Priority: explicit frontend sid > last-active pointer > new UUID.
     _resume_sid = None
-    try:
+    with contextlib.suppress(Exception):
         _resume_sid = websocket.query_params.get("sid")
-    except Exception:  # noqa: BLE001
-        pass
     if not _resume_sid:
         _resume_sid = read_last_session()
     # Validate a frontend-provided sid actually has state on disk; if not,
@@ -405,10 +404,8 @@ async def websocket_endpoint(
                     # Close the active HTTP streaming response so the
                     # executor thread (blocked in response.iter_lines()) is
                     # unblocked immediately.
-                    try:
+                    with contextlib.suppress(Exception):
                         svc.ollama_client.cancel_active_stream()
-                    except Exception:  # noqa: BLE001 — best-effort
-                        pass
                     task.cancel()
                 await svc.manager.send_personal_message(
                     json.dumps({"type": "stopped", "content": "Interrupted"}), websocket
@@ -421,10 +418,8 @@ async def websocket_endpoint(
                 if task and not task.done():
                     task._stopped_by_user = True
                     websocket._cancelled = True
-                    try:
+                    with contextlib.suppress(Exception):
                         svc.ollama_client.cancel_active_stream()
-                    except Exception:  # noqa: BLE001
-                        pass
                     task.cancel()
                 websocket.conversation_history = []
                 # Capture the old session_id before rolling a new one so we
@@ -473,7 +468,11 @@ async def websocket_endpoint(
                     json.dumps(
                         {
                             "type": "session_reset",
-                            "content": "New session started. I've cleared our conversation history — what would you like to work on?",
+                            "content": (
+                                "New session started. I've cleared our "
+                                "conversation history — what would you like "
+                                "to work on?"
+                            ),
                         }
                     ),
                     websocket,
@@ -511,10 +510,14 @@ async def websocket_endpoint(
                                 "content": (
                                     "Commands you can type here:\n"
                                     "  /new      — start a fresh conversation\n"
-                                    "  /clear    — clear the chat window (keeps history)\n"
-                                    "  /stop     — stop what I'm doing (same as the Stop button)\n"
-                                    "  /ingest   — index any new textbooks from learningMaterial/\n"
-                                    "  /diagnose — run a health check and show any problems\n"
+                                    "  /clear    — clear the chat window "
+                                    "(keeps history)\n"
+                                    "  /stop     — stop what I'm doing "
+                                    "(same as the Stop button)\n"
+                                    "  /ingest   — index any new textbooks "
+                                    "from learningMaterial/\n"
+                                    "  /diagnose — run a health check and "
+                                    "show any problems\n"
                                     "  /restart  — restart the backend\n"
                                     "  /help     — show this list"
                                 ),
@@ -532,7 +535,10 @@ async def websocket_endpoint(
                         json.dumps(
                             {
                                 "type": "session_reset",
-                                "content": "Chat cleared. Your history is saved — I still remember our conversation.",
+                                "content": (
+                                    "Chat cleared. Your history is saved — "
+                                    "I still remember our conversation."
+                                ),
                             }
                         ),
                         websocket,
@@ -544,10 +550,8 @@ async def websocket_endpoint(
                     if task and not task.done():
                         task._stopped_by_user = True
                         websocket._cancelled = True
-                        try:
+                        with contextlib.suppress(Exception):
                             svc.ollama_client.cancel_active_stream()
-                        except Exception:  # noqa: BLE001
-                            pass
                         task.cancel()
                     await svc.manager.send_personal_message(
                         json.dumps({"type": "stopped", "content": "Interrupted"}),
@@ -567,7 +571,10 @@ async def websocket_endpoint(
                                 json.dumps(
                                     {
                                         "type": "system_info",
-                                        "content": "Everything looks healthy. No problems found.",
+                                        "content": (
+                                            "Everything looks healthy. "
+                                            "No problems found."
+                                        ),
                                     }
                                 ),
                                 websocket,
@@ -607,7 +614,9 @@ async def websocket_endpoint(
                         json.dumps(
                             {
                                 "type": "status",
-                                "content": "Scanning learningMaterial/ for new textbooks...",
+                                "content": (
+                                    "Scanning learningMaterial/ for new textbooks..."
+                                ),
                             }
                         ),
                         websocket,
@@ -620,7 +629,10 @@ async def websocket_endpoint(
                         vault_root = Path(os.getenv("VAULT_PATH", "."))
                         learning_dir = vault_root / "vaultbot/learningMaterial"
                         result = await loop.run_in_executor(
-                            None, lambda: index_learning_material(str(learning_dir))
+                            None,
+                            lambda learning_dir=learning_dir: index_learning_material(
+                                str(learning_dir)
+                            ),
                         )
                         msg = result.get(
                             "message",
@@ -641,7 +653,10 @@ async def websocket_endpoint(
                                     json.dumps(
                                         {
                                             "type": "system_info",
-                                            "content": f"  ✗ {d.get('file', '?')}: {d['error']}",
+                                            "content": (
+                                                f"  ✗ {d.get('file', '?')}: "
+                                                f"{d['error']}"
+                                            ),
                                         }
                                     ),
                                     websocket,
@@ -653,7 +668,10 @@ async def websocket_endpoint(
                                     json.dumps(
                                         {
                                             "type": "system_info",
-                                            "content": f"  ✓ {d.get('file', '?')}: {notes} notes",
+                                            "content": (
+                                                f"  ✓ {d.get('file', '?')}: "
+                                                f"{notes} notes"
+                                            ),
                                         }
                                     ),
                                     websocket,
@@ -697,7 +715,9 @@ async def websocket_endpoint(
                                 json.dumps(
                                     {
                                         "type": "restart",
-                                        "content": "Restart requested via /restart command.",
+                                        "content": (
+                                            "Restart requested via /restart command."
+                                        ),
                                     }
                                 )
                             )
@@ -804,10 +824,8 @@ async def websocket_endpoint(
             task = getattr(websocket, "_current_task", None)
             if task and not task.done():
                 websocket._cancelled = True
-                try:
+                with contextlib.suppress(Exception):
                     svc.ollama_client.cancel_active_stream()
-                except Exception:  # noqa: BLE001
-                    pass
                 task.cancel()
                 session_logger.log("chat_interrupted", {"reason": "new_message"})
 
@@ -839,7 +857,11 @@ async def websocket_endpoint(
 
             # Spawn the handler fire-and-forget so the receive loop stays
             # responsive to stop/new messages.
-            def _spawn_handler():
+            def _spawn_handler(
+                msg_type=msg_type,
+                user_message=user_message,
+                session_logger=session_logger,
+            ):
                 async def _run():
                     try:
                         if msg_type == "research":

@@ -20,6 +20,8 @@ research_sources:
 success_count: 24
 failure_count: 0
 success_rate: 1.0
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+model_cartridge: big
 ---
 
 # Decomposition Lens (v4)

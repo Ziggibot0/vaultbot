@@ -147,11 +147,10 @@ _FM_END = re.compile(r"\n---\s*(?:\n|$)")
 def _strip_quotes(value: str) -> str:
     """Strip surrounding quotes from a YAML value string."""
     value = value.strip()
-    if len(value) >= 2:
-        if (value[0] == '"' and value[-1] == '"') or (
-            value[0] == "'" and value[-1] == "'"
-        ):
-            return value[1:-1]
+    if len(value) >= 2 and (
+        (value[0] == '"' and value[-1] == '"') or (value[0] == "'" and value[-1] == "'")
+    ):
+        return value[1:-1]
     return value
 
 
@@ -486,7 +485,8 @@ def validate_schema(content: str) -> tuple[bool, list[str], list[str]]:
                 for item in val:
                     if not isinstance(item, str):
                         errors.append(
-                            f"{field} list item must be a string, got: {type(item).__name__}"
+                            f"{field} list item must be a string, got: "
+                            f"{type(item).__name__}"
                         )
 
     # Warnings for missing optional claim fields on claim-like types
@@ -499,12 +499,11 @@ def validate_schema(content: str) -> tuple[bool, list[str], list[str]]:
         "pattern",
         "pattern-highway",
     }
-    if note_type in claim_types:
-        if "falsifiable_if" not in fm:
-            warnings.append(
-                f"Claim-like note (type:{note_type}) has no falsifiable_if — "
-                f"consider adding one for testability"
-            )
+    if note_type in claim_types and "falsifiable_if" not in fm:
+        warnings.append(
+            f"Claim-like note (type:{note_type}) has no falsifiable_if — "
+            f"consider adding one for testability"
+        )
 
     ok = len(errors) == 0
     return ok, errors, warnings
@@ -644,7 +643,8 @@ def split_note_if_needed(
             if claim_field in fm:
                 parent_fm[claim_field] = fm[claim_field]
         part_content = inject_schema(
-            f"---\n{_format_frontmatter(parent_fm)}\n---\n\n# {title}\n\n{section_body}",
+            f"---\n{_format_frontmatter(parent_fm)}\n---\n\n# {title}\n\n"
+            f"{section_body}",
             part_path,
             force_type=fm.get("type", _DEFAULT_TYPE),
         )

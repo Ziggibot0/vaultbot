@@ -86,7 +86,8 @@ def test_concurrent_refresh_and_walk_no_runtime_error(tmp_path):
     refresh()."""
     for i in range(10):
         (tmp_path / f"Note-{i}.md").write_text(
-            f"# Note {i}\n\nLinks to [[Note-{(i + 1) % 10}]] and [[Note-{(i + 2) % 10}]].\n",
+            f"# Note {i}\n\nLinks to [[Note-{(i + 1) % 10}]] and "
+            f"[[Note-{(i + 2) % 10}]].\n",
             encoding="utf-8",
         )
 

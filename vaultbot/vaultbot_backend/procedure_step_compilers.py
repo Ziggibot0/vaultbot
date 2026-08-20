@@ -125,7 +125,8 @@ def _compile_call(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
     if args:
         args_json = json.dumps(args)
         code = (
-            f"# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n"
+            f"# Dispatch: call {tool} (retry={retry}, "
+            f"on_error={json.dumps(on_error)})\n"
             f"_args = json.loads({json.dumps(args_json)})\n"
             f"# Resolve template variables in string args (e.g. {{{{ intent }}}})\n"
             f"for _k, _v in _args.items():\n"
@@ -151,7 +152,8 @@ def _compile_call(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
         )
     else:
         code = (
-            f"# Dispatch: call {tool} (retry={retry}, on_error={json.dumps(on_error)})\n"
+            f"# Dispatch: call {tool} (retry={retry}, "
+            f"on_error={json.dumps(on_error)})\n"
             f"_max_retries = {retry}\n"
             f"_last_error = None\n"
             f"for _attempt in range(_max_retries):\n"
@@ -234,7 +236,8 @@ def _compile_run(entry: dict, step_num: int, allowed_tools: list[str]) -> Step:
         f"    else:\n"
         f"        # run_procedure returns ExecutionResult dict: "
         f"{{procedure, overall_passed, final_output, ...}}\n"
-        f'        _result = dict(_raw) if isinstance(_raw, dict) else {{"final_output": str(_raw)}}\n'
+        f"        _result = dict(_raw) if isinstance(_raw, dict) "
+        f'else {{"final_output": str(_raw)}}\n'
         f'        _fo = _result.get("final_output", "")\n'
         f"        # Try to parse final_output as JSON and merge fields\n"
         f"        _parsed = {{}}\n"
@@ -581,7 +584,7 @@ def _parse_dispatch_section(body: str, allowed_tools: list[str]) -> list[Step]:
             logger.warning("dispatch_entry_%d: expected single-key dict", i)
             continue
 
-        entry_type = list(entry.keys())[0]
+        entry_type = next(iter(entry.keys()))
         entry_data = entry[entry_type] or {}
 
         compiler = _DISPATCH_COMPILERS.get(entry_type)
@@ -601,7 +604,7 @@ def _parse_dispatch_section(body: str, allowed_tools: list[str]) -> list[Step]:
             # the next condition can reference {{ _prev.field }} without
             # knowing the entry's output_as name.
             snippets.append('_dispatch_ns["_prev"] = result')
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort, skip malformed dispatch entry
             logger.warning("dispatch_compile_error[%s]: %s", entry_type, e)
             continue
 

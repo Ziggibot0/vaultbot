@@ -12,6 +12,7 @@ summary: Vault-Cluster-Analyzer
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Vault-Cluster-Analyzer
@@ -20,10 +21,14 @@ Analyze the vault graph's cluster structure: identifies communities using label 
 
 ## Steps
 
+### Step 1: Analyze the vault graph's cluster structure
+
 1. ```python
    from custom_tools.vault_cluster_analyzer import run as _cluster
    result = _cluster({"vault_path": args.get("vault_path", "")})
    print(result)
    ```
+
+### Step 2: Review the cluster analysis
 
 2. [llm: Review the cluster analysis. Large clusters may need MOC (map of content) notes to organize them.]

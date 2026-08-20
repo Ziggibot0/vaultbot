@@ -12,6 +12,7 @@ summary: "Summary: A security audit checklist for safe self-modifying code opera
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Preflight-Safety-Check
@@ -19,6 +20,8 @@ tags:
 Pre-flight safety check before self-modifying operations. Verifies git clean state (for rollback safety), critical backend files exist, identity files intact, disk space adequate, custom tools still import cleanly, and vault directory is accessible. Returns PASS / WARN / BLOCK with full details.
 
 ## Steps
+
+### Step 1: Run the preflight safety check
 
 1. ```python
    # Call the preflight_safety_check tool's run() function

@@ -1,6 +1,7 @@
 ---
 type: research
 status: raw
+baseline: true
 created: 2026-07-29
 title: RAG evaluation metrics
 tags:

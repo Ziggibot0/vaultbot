@@ -30,6 +30,7 @@ Design (see /memories/session/plan.md):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -229,10 +230,8 @@ def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
 
 def save_qa_queue(queue: list[dict[str, Any]]) -> None:
     """Persist the QA queue to disk."""
-    try:
+    with contextlib.suppress(Exception):
         _QUEUE_FILE.write_text(json.dumps(queue, indent=2), encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def load_qa_queue() -> list[dict[str, Any]]:
@@ -450,7 +449,8 @@ def _generate_summary_and_tags(
     try:
         result = ollama_client.generate(
             prompt=prompt,
-            system="You are a metadata generator. Output only the summary and tags in the exact format requested.",
+            system="You are a metadata generator. Output only the summary "
+            "and tags in the exact format requested.",
             stream=False,
             think=False,
         )
@@ -581,7 +581,8 @@ async def run_qa_idle_window(
             remaining = queue[idx:]  # unprocessed stay in queue
             if logger:
                 logger(
-                    f"QA interrupted: stopping after {processed} notes, {len(remaining)} remaining"
+                    f"QA interrupted: stopping after {processed} notes, "
+                    f"{len(remaining)} remaining"
                 )
             break
 
@@ -611,7 +612,8 @@ async def run_qa_idle_window(
             processed += 1
             if logger and processed % 10 == 0:
                 logger(
-                    f"QA progress: {processed} checked, {fixed} fixed, {skipped} skipped"
+                    f"QA progress: {processed} checked, {fixed} fixed, "
+                    f"{skipped} skipped"
                 )
             continue
 

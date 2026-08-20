@@ -12,6 +12,8 @@ summary: "Tests condition entry with operator inside braces and extract from a l
 tags:
   - procedure
   - procedures
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Dispatch-DSL-Smoke-Test
@@ -48,6 +50,8 @@ No inputs required. All values are seeded by the dispatch pipeline itself.
 # Seed test data so extract has something to work with
 args = {"test_data": {"items": [{"name": "alpha", "value": 1}, {"name": "beta", "value": 2}]}}
 ```
+
+### Step 2: Validate the dispatch output contains the chain
 
 2. [validate: contains "chain"]
 

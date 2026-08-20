@@ -10,6 +10,7 @@ callers (and tests) can point them at a throwaway directory tree.
 """
 
 import ast
+import contextlib
 import os
 import shutil
 import subprocess
@@ -277,7 +278,8 @@ def verify_js_load(content: str, timeout_s: int = 8) -> tuple[bool, str | None]:
         "    apply: () => ({}),\n"
         "  });\n"
         "}});\n"
-        "require.cache['obsidian-stub'] = { exports: stub, id: 'obsidian-stub', filename: 'obsidian-stub', loaded: true, children: [], paths: [] };\n"
+        "require.cache['obsidian-stub'] = { exports: stub, id: 'obsidian-stub', "
+        "filename: 'obsidian-stub', loaded: true, children: [], paths: [] };\n"
         "const watchdog = setTimeout(() => {\n"
         "  console.error('LOAD_TIMEOUT'); process.exit(2);\n"
         "}, " + str(timeout_s * 1000) + ");\n"
@@ -308,10 +310,8 @@ def verify_js_load(content: str, timeout_s: int = 8) -> tuple[bool, str | None]:
         os.unlink(tmp_path)
         return True, None  # can't run the check; don't block
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path)
-        except OSError:
-            pass
     if result.returncode == 0 and "LOAD_OK" in (result.stdout or ""):
         return True, None
     if result.returncode == 2 or "LOAD_TIMEOUT" in (result.stderr or ""):
@@ -421,10 +421,8 @@ def verify_startup_smoke(
             proc.terminate()
             proc.wait(timeout=5)
         except Exception:  # noqa: BLE001 — best-effort, returns error to caller — see CONTRIBUTING.md no-silent-fallbacks
-            try:
+            with contextlib.suppress(Exception):
                 proc.kill()
-            except Exception:  # noqa: BLE001 — best-effort, returns error to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
 
 
 def run_pytest_in_subprocess(
@@ -510,7 +508,7 @@ def run_pytest_in_subprocess(
 
     try:
         proc = _subprocess_run(
-            [chosen, "-m", "pytest", "-q", "--tb=short"] + test_args,
+            [chosen, "-m", "pytest", "-q", "--tb=short", *test_args],
             capture_output=True,
             text=True,
             timeout=60,

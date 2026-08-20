@@ -107,7 +107,7 @@ def test_attack_import_rejected():
 
 def test_attack_lambda_rejected():
     """Lambda expressions are not in the allowed node set."""
-    with pytest.raises(_VerifierError, match="disallowed|built-in"):
+    with pytest.raises(_VerifierError, match=r"disallowed|built-in"):
         _safe_eval_verifier("(lambda: 1)()", {})
 
 

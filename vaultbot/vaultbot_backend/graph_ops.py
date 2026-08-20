@@ -21,6 +21,7 @@ The ops wrap the existing building blocks (vault_graph, vault_indexer,
 note_creator, research_engine, ollama_client) without modifying them.
 """
 
+import contextlib
 import os
 import re
 from pathlib import Path
@@ -96,7 +97,7 @@ class GraphOpRegistry:
     ) -> None:
         if self.session_logger is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             self.session_logger.log_tool_call(
                 tool="graph_ops",
                 method=method,
@@ -104,8 +105,6 @@ class GraphOpRegistry:
                 outputs=outputs,
                 error=error,
             )
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass
 
     @staticmethod
     def _slugify(title: str) -> str:
@@ -352,10 +351,8 @@ class GraphOpRegistry:
             new_content = content.rstrip() + f"\n\n- {link_token}\n"
             src_path.write_text(new_content, encoding="utf-8")
             # Refresh graph awareness so subsequent ops see the new edge.
-            try:
+            with contextlib.suppress(Exception):
                 self.vault_graph.refresh()
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
             out = {"linked": True, "source_path": str(src_path), "target_exists": True}
             self._log("link", args, out)
             return out
@@ -483,14 +480,10 @@ class GraphOpRegistry:
                 appended = True
 
             # Keep the index + graph aware of the new/changed note.
-            try:
+            with contextlib.suppress(Exception):
                 self.vault_indexer._add_file_to_index(note_path)
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 self.vault_graph.refresh()
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
 
             out = {
                 "note_path": str(note_path),
@@ -767,11 +760,13 @@ SCHEMAS: list[dict[str, Any]] = [
                     },
                     "folder": {
                         "type": "string",
-                        "description": "Vault subfolder (default 'vaultbot/Knowledge/Research').",
+                        "description": "Vault subfolder (default "
+                        "'vaultbot/Knowledge/Research').",
                     },
                     "summary": {
                         "type": "string",
-                        "description": "Optional one-line summary prepended to the body.",
+                        "description": "Optional one-line summary prepended "
+                        "to the body.",
                     },
                 },
                 "required": ["title", "body"],

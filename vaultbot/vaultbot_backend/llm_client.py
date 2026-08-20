@@ -56,11 +56,12 @@ Ollama-only setup so existing installs keep working with zero config change.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
 from collections.abc import Generator
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 
@@ -281,7 +282,7 @@ class OpenAICompatibleClient(LLMClient):
     # families. Used by context_window() when the API doesn't expose the
     # value (most OpenAI-compatible endpoints don't). Matched by substring
     # against the model id, most specific first. Values from official docs.
-    _KNOWN_CONTEXT_WINDOWS: list[tuple[str, int]] = [
+    _KNOWN_CONTEXT_WINDOWS: ClassVar[list[tuple[str, int]]] = [
         # OpenAI
         ("gpt-4.1", 1048576),
         ("gpt-4o-mini", 128000),
@@ -376,7 +377,8 @@ class OpenAICompatibleClient(LLMClient):
                 "content": [
                     {
                         "type": "text",
-                        "text": "What color is the square in this image? Reply with one word.",
+                        "text": "What color is the square in this image? "
+                        "Reply with one word.",
                     },
                     {
                         "type": "image_url",
@@ -642,10 +644,8 @@ def build_role_client(
     if provider is None:
         return None
     client = _client_for_model_entry(entry, provider, session_logger)
-    try:
+    with contextlib.suppress(Exception):
         client._registry_model_id = mid  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001 — tagging is best-effort
-        pass
     _ROLE_CLIENT_CACHE[role] = client
     return client
 

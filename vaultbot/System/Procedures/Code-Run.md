@@ -18,6 +18,7 @@ summary: ```text|python sandbox subprocess execution analysis | debugging strate
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Code-Run
@@ -26,11 +27,15 @@ Execute Python code in a sandboxed subprocess. Returns stdout, stderr, and exit 
 
 ## Steps
 
+### Step 1: Execute the Python code in a sandboxed subprocess
+
 1. ```python
    from self_improver import SelfImprover
    _si = SelfImprover(session_logger=None)
    result = _si.code_run(code=args.get("code", ""), timeout=args.get("timeout", 15))
    print(result)
    ```
+
+### Step 2: Analyze the output and decide next action
 
 2. [llm: Analyze the output. If the code failed, diagnose the error and decide whether to fix the code or report the issue.]

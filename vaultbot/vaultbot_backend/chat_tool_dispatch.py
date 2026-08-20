@@ -12,6 +12,7 @@ user_message)`` and returns a result dict. No dependency on the loop logic.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import time
@@ -29,6 +30,10 @@ from fastapi import WebSocket
 from services import Services
 from weaving import weave_textbook_notes
 from working_memory import TaskList
+
+# Fire-and-forget task registry: keeps strong references to background
+# tasks so they aren't garbage-collected mid-flight.
+_background_tasks: set[asyncio.Task] = set()
 
 
 async def execute_agent_tool(
@@ -83,7 +88,10 @@ async def execute_agent_tool(
             "no",
         ):
             return {
-                "error": "Web research is disabled. Set 'Allow web research' in VaultBot Settings to enable it."
+                "error": (
+                    "Web research is disabled. Set 'Allow web research' in "
+                    "VaultBot Settings to enable it."
+                )
             }
 
         topic = (args.get("topic") or "").strip()
@@ -252,14 +260,14 @@ async def execute_agent_tool(
                         _structured
                         and len(_structured)
                         >= svc.research_engine._STRUCTURED_MIN_CHARS
-                    ):
+                    ):  # noqa: BLE001 — best-effort, logged and continues
                         Path(note_path).write_text(_structured, encoding="utf-8")
                         session_logger.log(
                             "research_note_structured",
                             {"note_path": note_path, "chars": len(_structured)},
                         )
                 report["note_path"] = note_path
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — best-effort, logged and continues
                 session_logger.log_exception(e, context="agent_research_note")
         # Citation export: write a .bib file alongside the research note so
         # the sources are available as BibTeX for academic use (DOI extraction
@@ -582,12 +590,10 @@ async def execute_agent_tool(
                 _payload["elapsed_s"] = elapsed_s
             if error:
                 _payload["error"] = error[:500]
-            try:
+            with contextlib.suppress(Exception):  # noqa: BLE001 — best-effort, must not crash the procedure
                 await svc.manager.send_personal_message(
                     json.dumps(_payload), websocket, session_logger=svc.session_logger
                 )
-            except Exception:  # noqa: BLE001 — best-effort, must not crash the procedure
-                pass
 
         _proc_args = (
             args.get("args")
@@ -905,7 +911,9 @@ async def execute_agent_tool(
                             ),
                         )
 
-                asyncio.create_task(_run_weave_bg())
+                _task = asyncio.create_task(_run_weave_bg())
+                _background_tasks.add(_task)
+                _task.add_done_callback(_background_tasks.discard)
         return result
 
     return {"error": f"unknown tool: {tool_name}"}

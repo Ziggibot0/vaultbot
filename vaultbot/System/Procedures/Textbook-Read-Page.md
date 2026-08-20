@@ -14,6 +14,7 @@ summary: TEXTBOOK_READ_PAGE_TOOL_VISION_EXACT_TEXT_SIMULATION
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Textbook-Read-Page
@@ -21,6 +22,8 @@ tags:
 Read one page of an ingested textbook PDF and get its content as text. The page is rendered to an image and read by a vision-capable model so equations, figures, and tables come through exactly as printed — unlike a text-layer extract which drops vector-drawn math.
 
 ## Steps
+
+### Step 1: Read one page of the textbook as text
 
 1. ```python
    # Call the textbook_read_page tool's run() function. It needs an

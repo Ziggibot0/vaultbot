@@ -13,6 +13,7 @@ summary: JS-Safe-Write
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # JS-Safe-Write
@@ -21,7 +22,11 @@ Edit JavaScript files safely. Validates JS syntax with node --check before writi
 
 ## Steps
 
+### Step 1: Read the JS file to understand its current state
+
 1. [llm: Read the JS file you want to edit using code_read to understand its current state.]
+
+### Step 2: Write the JS file with syntax validation
 
 2. ```python
    from self_improver import SelfImprover
@@ -33,5 +38,7 @@ Edit JavaScript files safely. Validates JS syntax with node --check before writi
    )
    print(result)
    ```
+
+### Step 3: Apply the edit or fix the syntax error
 
 3. [llm: If dry_run passed, re-run with dry_run=False to apply. If rejected, fix the JS syntax error before retrying.]

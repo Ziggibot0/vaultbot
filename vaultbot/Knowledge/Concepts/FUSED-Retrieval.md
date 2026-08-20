@@ -1,6 +1,7 @@
 ---
 type: concept
 status: active
+baseline: true
 created: 2026-08-06
 tags:
   - retrieval

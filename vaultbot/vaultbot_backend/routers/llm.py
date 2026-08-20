@@ -10,6 +10,7 @@ AND the svc fields (so Depends consumers see the new client).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -235,10 +236,8 @@ async def list_models(
     for name in models:
         caps = {"vision": False, "instruct": True}
         if caps_fn:
-            try:
+            with contextlib.suppress(Exception):
                 caps = await loop.run_in_executor(None, caps_fn, name)
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass  # keep defaults
         enriched.append(
             {
                 "name": name,
@@ -285,10 +284,8 @@ async def list_local_models() -> dict[str, Any]:
     for name in names:
         caps = {"vision": False, "instruct": True}
         if caps_fn:
-            try:
+            with contextlib.suppress(Exception):
                 caps = await loop.run_in_executor(None, caps_fn, name)
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
         enriched.append(
             {
                 "name": name,
@@ -392,10 +389,8 @@ async def pull_model(
                 # Parse the percentage if present.
                 pct = None
                 if "%" in line:
-                    try:
+                    with contextlib.suppress(ValueError, IndexError):
                         pct = int(line.split("%")[0].split()[-1])
-                    except (ValueError, IndexError):
-                        pass
                 # Broadcast progress to all WS clients.
                 try:
                     import json as _json
@@ -769,10 +764,8 @@ async def provider_live_models(
         for n in names:
             caps = {"vision": False, "instruct": True}
             if caps_fn:
-                try:
+                with contextlib.suppress(Exception):
                     caps = await loop.run_in_executor(None, caps_fn, n)
-                except Exception:  # noqa: BLE001 — best-effort per-model caps
-                    pass
             enriched.append(
                 {
                     "name": n,

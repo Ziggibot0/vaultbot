@@ -30,6 +30,7 @@ See:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from collections.abc import Callable
@@ -653,7 +654,7 @@ async def execute_procedure(
 
     # Procedure-level logging
     if procedure_tracker:
-        try:
+        with contextlib.suppress(Exception):
             procedure_tracker.log_result(
                 procedure=procedure.name,
                 task="procedure_execution",
@@ -662,8 +663,6 @@ async def execute_procedure(
                 error_details=_build_proc_error_details(failed_step, step_results),
                 category="validation_error",
             )
-        except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            pass
 
     return ExecutionResult(
         procedure_name=procedure.name,

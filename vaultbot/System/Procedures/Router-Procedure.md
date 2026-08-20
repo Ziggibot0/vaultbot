@@ -10,6 +10,12 @@ description: |
 tags:
   - router
   - loop
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools:
+  - llm_generate
+  - vault_safe_write
+model_cartridge: big
 ---
 
 ## Overview

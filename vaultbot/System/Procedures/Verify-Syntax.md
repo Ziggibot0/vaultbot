@@ -14,9 +14,13 @@ tags:
   - procedure
   - procedures
 last_reviewed: 2026-08-15
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+model_cartridge: small
 ---
 
 ## Steps
+
+### Step 1: Verify chat_handler.py compiles without errors
 
 1. ```python
    import py_compile

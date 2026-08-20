@@ -12,6 +12,10 @@ status: raw
 baseline: true
 created: 2026-08-03
 summary: Safe Commit & Push Procedure Requires Strict .env isolation and Git ignore handling of VaultBot-specific paths to prevent personal data leakage. | CODE, SECURITY_CHECKOUT, VOLUME_CONTROL
+description: Commit and push VaultBot code changes to GitHub without leaking personal data, API keys, or user content.
+when_to_use: when the operator authorizes a release, or when VaultBot needs to commit and push code changes safely
+falsifiable_if: personal data, API keys, or user content is committed, or a sensitive path is not covered by .gitignore
+model_cartridge: big
 ---
 
 # Safe Commit & Push Procedure

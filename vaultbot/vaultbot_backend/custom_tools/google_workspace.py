@@ -4,6 +4,7 @@ Provides OAuth-authenticated access to Google Calendar, Tasks, and Docs.
 Tokens are stored in google_workspace_tokens.json and auto-refreshed.
 """
 
+import contextlib
 import json
 import webbrowser
 from datetime import UTC, datetime, timedelta, timezone
@@ -15,7 +16,13 @@ TOKEN_PATH = Path(__file__).parent / "google_workspace_tokens.json"
 
 SCHEMA = {
     "name": "google_workspace",
-    "description": "Interact with Google Workspace APIs (Calendar, Tasks, Docs). Requires one-time OAuth setup: call 'setup' with client_id and client_secret, then 'auth' to get a browser sign-in URL, then 'callback' with the auth code. After that, calendar/tasks/docs actions work with stored tokens (auto-refreshed).",
+    "description": (
+        "Interact with Google Workspace APIs (Calendar, Tasks, Docs). "
+        "Requires one-time OAuth setup: call 'setup' with client_id and "
+        "client_secret, then 'auth' to get a browser sign-in URL, then "
+        "'callback' with the auth code. After that, calendar/tasks/docs "
+        "actions work with stored tokens (auto-refreshed)."
+    ),
     "parameters": {
         "type": "object",
         "properties": {
@@ -41,15 +48,26 @@ SCHEMA = {
             },
             "date": {
                 "type": "string",
-                "description": "A specific date (YYYY-MM-DD) to list events for (calendar_list). Sets time_min to 00:00 and time_max to 23:59 in local timezone. Takes precedence over time_min/time_max.",
+                "description": (
+                    "A specific date (YYYY-MM-DD) to list events for "
+                    "(calendar_list). Sets time_min to 00:00 and time_max to "
+                    "23:59 in local timezone. Takes precedence over "
+                    "time_min/time_max."
+                ),
             },
             "time_min": {
                 "type": "string",
-                "description": "ISO 8601 datetime — only return events starting after this (calendar_list). Defaults to now.",
+                "description": (
+                    "ISO 8601 datetime — only return events starting after "
+                    "this (calendar_list). Defaults to now."
+                ),
             },
             "time_max": {
                 "type": "string",
-                "description": "ISO 8601 datetime — only return events starting before this (calendar_list). Optional upper bound.",
+                "description": (
+                    "ISO 8601 datetime — only return events starting before "
+                    "this (calendar_list). Optional upper bound."
+                ),
             },
             "start": {
                 "type": "string",
@@ -94,7 +112,9 @@ SCHEMA = {
             },
             "code": {
                 "type": "string",
-                "description": "Authorization code from Google redirect (for 'callback' action).",
+                "description": (
+                    "Authorization code from Google redirect (for 'callback' action)."
+                ),
             },
         },
         "required": ["action"],
@@ -270,15 +290,16 @@ def run(args):
         }
         auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
-        try:
+        with contextlib.suppress(Exception):
             webbrowser.open(auth_url)
-        except Exception:  # noqa: BLE001 — best-effort: browser-open failure doesn't block auth, URL is returned anyway
-            pass
 
         return {
             "status": "auth_started",
             "auth_url": auth_url,
-            "message": "Open this URL to sign in. After consent, Google will redirect to localhost:8000/callback.",
+            "message": (
+                "Open this URL to sign in. After consent, Google will "
+                "redirect to localhost:8000/callback."
+            ),
         }
 
     # --- Callback: exchange auth code for tokens ---

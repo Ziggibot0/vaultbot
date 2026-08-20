@@ -12,6 +12,7 @@ Verifies that Safe Mode blocks the right tools:
 
 import importlib
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -68,7 +69,7 @@ class TestModeDetection:
 
 class TestDangerousToolsBlocked:
     # All tools that MUST be blocked in Safe Mode
-    DANGEROUS = [
+    DANGEROUS: ClassVar[list] = [
         "code_write",  # legacy
         "safe_write",
         "js_safe_write",
@@ -103,7 +104,7 @@ class TestDangerousToolsBlocked:
 
 
 class TestSafeToolsAllowed:
-    SAFE = [
+    SAFE: ClassVar[list] = [
         "vault_search",
         "vault_read_note",
         "vault_gaps",
@@ -145,7 +146,7 @@ class TestSafeToolsAllowed:
 
 class TestFileEditGate:
     # Source-code extensions that MUST be blocked in Safe Mode
-    BLOCKED_EXTENSIONS = [
+    BLOCKED_EXTENSIONS: ClassVar[list] = [
         ".py",
         ".pyw",
         ".js",
@@ -168,7 +169,7 @@ class TestFileEditGate:
     ]
 
     # Non-code extensions that should be ALLOWED in Safe Mode
-    ALLOWED_EXTENSIONS = [".md", ".txt", ".csv", ".html", ".pdf", ""]
+    ALLOWED_EXTENSIONS: ClassVar[list] = [".md", ".txt", ".csv", ".html", ".pdf", ""]
 
     @pytest.mark.parametrize("ext", BLOCKED_EXTENSIONS)
     def test_source_code_blocked_in_safe_mode(self, safe_mode_on, ext):

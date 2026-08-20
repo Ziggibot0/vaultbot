@@ -62,7 +62,7 @@ async def create_task(svc: Services, payload: dict) -> Any:
     op_names = list(svc.graph_op_registry.ops.keys())
     op_descriptions = "\n".join(
         f"  - {name}: {s['function']['description'][:120]}"
-        for name, s in zip(op_names, GRAPH_OP_SCHEMAS)
+        for name, s in zip(op_names, GRAPH_OP_SCHEMAS, strict=False)
     )
     decompose_prompt = (
         "You are a task planner for VaultBot, a self-improving research agent "
@@ -70,7 +70,8 @@ async def create_task(svc: Services, payload: dict) -> Any:
         "atomic, verifiable subtasks using ONLY these graph operations:\n"
         f"{op_descriptions}\n\n"
         'Return a JSON object: {"subtasks": [{"op": "...", '
-        '"intent": "...", "args": {...}, "verifier": "result.get(\'count\',0) > 0"}]}.\n'
+        '"intent": "...", "args": {...}, '
+        '"verifier": "result.get(\'count\',0) > 0"}]}.\n'
         "Each verifier is a Python expression over `result`. Make every subtask "
         "idempotent and independently verifiable. Be specific.\n\n"
         f"User goal: {goal}\n\nReturn ONLY valid JSON, no prose."

@@ -1,6 +1,7 @@
 ---
 type: research
 status: complete
+baseline: true
 created: 2026-07-30
 summary: "Bacteria communicate through quorum sensing: a molecular communication system where bacteria secrete and detect autoinducer molecules to coordinate group behavior. Gram-negative bacteria use AHL (N-acyl homoserine lactone), Gram-positive bacteria use peptide signals (AIP). When autoinducer concentration reaches a threshold, gene expression changes trigger biofilm formation, virulence, and other collective behaviors."
 tags: [research, biology, bacteria, quorum-sensing, cell-communication, biofilm, research-roadmap, sourced]

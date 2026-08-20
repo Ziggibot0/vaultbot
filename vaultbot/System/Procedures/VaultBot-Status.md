@@ -16,6 +16,7 @@ summary: "Summary: A Python script analyzes VaultBot status by extracting machin
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # VaultBot-Status

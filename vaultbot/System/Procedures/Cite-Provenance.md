@@ -44,6 +44,8 @@ Returns the cited answer with inline wikilinks and a Sources section.
 
 ## Steps
 
+### Step 1: Split the draft into claims and search the vault for each
+
 1. ```python
 import json, re
 
@@ -95,6 +97,8 @@ for c in citations:
 
 result = json.dumps({"citations": citations, "draft_answer": draft})
 ```
+
+### Step 2: Format the answer with inline citations
 
 2. [llm: Format the final answer with inline citations. Use the original draft and the citation data below.
 

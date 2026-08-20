@@ -4,19 +4,33 @@ Agent-authored tool: vault_cluster_analyzer
 
 SCHEMA = {
     "name": "vault_cluster_analyzer",
-    "description": "Analyze the vault graph's cluster structure: identifies communities using label propagation, counts cross-cluster edges, finds sparse connection zones, and identifies which nodes should be connected but aren't. Use this to SEE the vault's shape \u2014 where clusters are dense, where connections are thin, and where bridges are needed.",
+    "description": (
+        "Analyze the vault graph's cluster structure: identifies communities "
+        "using label propagation, counts cross-cluster edges, finds sparse "
+        "connection zones, and identifies which nodes should be connected but "
+        "aren't. Use this to SEE the vault's shape — where clusters are dense, "
+        "where connections are thin, and where bridges are needed."
+    ),
     "parameters": {
         "properties": {
             "min_cluster_size": {
-                "description": "Minimum cluster size to include in analysis (default 3).",
+                "description": (
+                    "Minimum cluster size to include in analysis (default 3)."
+                ),
                 "type": "integer",
             },
             "sparsity_threshold": {
-                "description": "Edges per node ratio below which a cross-cluster zone is flagged as sparse (default 0.1).",
+                "description": (
+                    "Edges per node ratio below which a cross-cluster zone is "
+                    "flagged as sparse (default 0.1)."
+                ),
                 "type": "number",
             },
             "vault_path": {
-                "description": "Path to the vault root. Defaults to the parent of vaultbot_backend/.",
+                "description": (
+                    "Path to the vault root. Defaults to the parent of "
+                    "vaultbot_backend/."
+                ),
                 "type": "string",
             },
         },
@@ -24,11 +38,11 @@ SCHEMA = {
     },
 }
 
-import os
-import random
-import re
-from collections import Counter, defaultdict
-from pathlib import Path
+import os  # noqa: E402
+import random  # noqa: E402
+import re  # noqa: E402
+from collections import Counter, defaultdict  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 WIKILINK_RE = re.compile(r"\[\[([^\][\|\r\n]+)(?:\|[^\]\r\n]+)?\]\]")
 IGNORED_DIRS = {
@@ -82,7 +96,7 @@ def run(args: dict) -> dict:
             node_to_dir[stem] = parts[0] if len(parts) > 1 else "(root)"
             try:
                 content = p.read_text(encoding="utf-8", errors="replace")
-            except:
+            except Exception:  # noqa: BLE001 — best-effort: unreadable file is skipped
                 continue
             clean = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
             for m in WIKILINK_RE.finditer(clean):
@@ -95,7 +109,7 @@ def run(args: dict) -> dict:
     # Label propagation community detection
     random.seed(42)
     labels = {n: i for i, n in enumerate(nodes)}
-    for iteration in range(20):
+    for _iteration in range(20):
         changed = False
         node_list = list(nodes)
         random.shuffle(node_list)
@@ -217,7 +231,8 @@ def run(args: dict) -> dict:
             f"Cluster {zone['cluster_b']} ({zone['size_b']} nodes)"
         )
         lines.append(
-            f"  Edges: {zone['edge_count']} | Sparsity: {zone['sparsity_ratio']} | {zone['verdict']}"
+            f"  Edges: {zone['edge_count']} | Sparsity: "
+            f"{zone['sparsity_ratio']} | {zone['verdict']}"
         )
         for e in zone["edges"][:5]:
             lines.append(f"    {e['from'][:45]:45s} -- {e['to'][:45]}")

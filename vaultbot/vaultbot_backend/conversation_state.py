@@ -38,6 +38,7 @@ each turn so it is NOT persisted — only the user/assistant/tool turns.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -132,10 +133,8 @@ def load_history(
             # Persist a copy under the session-specific path.
             _save_file(legacy, p)
             # Remove the legacy file so the next session starts fresh.
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(_DEFAULT_PATH)
-            except OSError:
-                pass
             logger.info("conversation_state: migrated legacy history to %s", p)
             return legacy
         except (json.JSONDecodeError, ValueError, OSError) as exc:
@@ -203,10 +202,8 @@ def _save_file(history: list[dict[str, Any]], p: str) -> None:
                     fh.write(payload)
                 os.replace(tmp, p)
             except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(tmp)
-                except OSError:
-                    pass
                 raise
     except Exception as exc:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         logger.warning("conversation_state save failed: %s", exc)

@@ -47,6 +47,8 @@ Read-only — never modifies a session file.
 
 ## Steps
 
+### Step 1: Read and summarize the session log
+
 1. ```python
    import json
    from pathlib import Path

@@ -73,7 +73,8 @@ class VaultIndexer:
         self.timestamp_file = self.index_path / "timestamps.json"
 
         self.session_logger = session_logger
-        # Trigger/inhibitor phrase-embedding store (optional, bonus layer — see trigger_store.py).
+        # Trigger/inhibitor phrase-embedding store (optional, bonus layer —
+        # see trigger_store.py).
         self.trigger_store = trigger_store
         self.ollama_client = OllamaClient(
             embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
@@ -172,7 +173,8 @@ class VaultIndexer:
                 else:
                     # Legacy list format — migrate to id-keyed dict + IndexIDMap2.
                     _logger.info(
-                        "[migration] Detected legacy list-format; converting to IndexIDMap2..."
+                        "[migration] Detected legacy list-format; "
+                        "converting to IndexIDMap2..."
                     )
                     legacy_list = loaded if isinstance(loaded, list) else []
                     self._metadata = {}
@@ -189,7 +191,8 @@ class VaultIndexer:
                             vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
                         except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                             _logger.info(
-                                f"[migration] Skipping unreconstructable legacy vector {i} ({meta['file_path']})"
+                                f"[migration] Skipping unreconstructable "
+                                f"legacy vector {i} ({meta['file_path']})"
                             )
                             continue
                         self._add_embedding_to_index(
@@ -221,7 +224,8 @@ class VaultIndexer:
                 if self.index is not None:
                     self.dimension = self.index.d
                     _logger.info(
-                        f"Loaded existing index with {self.index.ntotal} vectors from {self.index_file}"
+                        f"Loaded existing index with {self.index.ntotal} "
+                        f"vectors from {self.index_file}"
                     )
             except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
                 _logger.warning(
@@ -268,12 +272,17 @@ class VaultIndexer:
 
     @staticmethod
     def _split_into_chunks(text: str, chunk_size: int, overlap: int) -> list[str]:
-        """Split text into overlapping chunks on paragraph boundaries (delegates to embedding_utils)."""
+        """Split text into overlapping chunks on paragraph boundaries.
+
+        Delegates to embedding_utils.
+        """
         return split_into_chunks(text, chunk_size, overlap)
 
     @staticmethod
     def _embedding_text_for_note(file_path: Path, content: str) -> str:
-        """Return the text that should be EMBEDDED for a note (delegates to embedding_utils).
+        """Return the text that should be EMBEDDED for a note.
+
+        Delegates to embedding_utils.
 
         See ``embedding_utils.embedding_text_for_note`` for the full
         rationale on procedure discovery surfaces vs. full-content embedding.
@@ -397,7 +406,7 @@ class VaultIndexer:
             return
 
         # Normalize in-place so L2 distance ≡ cosine distance (unit vectors:
-        # ||a−b||² = 2(1−cos(a,b)), so L2 ranking == cosine ranking).
+        # ||a-b||² = 2(1-cos(a,b)), so L2 ranking == cosine ranking).
         vec = embedding.reshape(1, -1).astype(np.float32)
         faiss.normalize_L2(vec)
 
@@ -480,7 +489,7 @@ class VaultIndexer:
 
         embed_texts = [
             self._embedding_text_for_note(fp, content)
-            for fp, content in zip(valid_paths, contents)
+            for fp, content in zip(valid_paths, contents, strict=False)
         ]
 
         def _embed_one(text: str):
@@ -504,7 +513,7 @@ class VaultIndexer:
         indexed = 0
         emb_by_path: dict[str, list[float]] = {}
         for fp, emb, last_mod, ch, cont in zip(
-            valid_paths, embeddings, timestamps, hashes, contents
+            valid_paths, embeddings, timestamps, hashes, contents, strict=False
         ):
             if emb is None:
                 continue
@@ -549,7 +558,8 @@ class VaultIndexer:
                 self._log_tool("remove_file", {"file_path": key}, error=str(e))
                 raise
         _logger.debug(
-            f"Removed {file_path} from index. Total vectors: {self.index.ntotal if self.index else 0}"
+            f"Removed {file_path} from index. "
+            f"Total vectors: {self.index.ntotal if self.index else 0}"
         )
         self._log_tool("remove_file", {"file_path": key})
 
@@ -609,7 +619,8 @@ class VaultIndexer:
         self.index = faiss.IndexIDMap2(faiss.IndexFlatL2(self.dimension))
         self.index.add_with_ids(stacked, ids_arr)  # type: ignore
         _logger.info(
-            f"Compacted index with {len(live_ids)} live vectors (pruned {len(dead_keys)} dead)"
+            f"Compacted index with {len(live_ids)} live vectors "
+            f"(pruned {len(dead_keys)} dead)"
         )
 
     def _update_file(self, file_path_str: str):
@@ -662,11 +673,15 @@ class VaultIndexer:
         total = self.index.ntotal if self.index is not None else 0
         md_files = self._collect_md_files()
         _logger.info(
-            f"Loaded index with {total} vectors. {len(md_files)} markdown files in vault."
+            f"Loaded index with {total} vectors. "
+            f"{len(md_files)} markdown files in vault."
         )
 
     def index_missing_or_changed(self):
-        """Re-index only new or changed markdown files. This is safe to run in the background."""
+        """Re-index only new or changed markdown files.
+
+        This is safe to run in the background.
+        """
         _logger.info("Starting background vault indexing...")
         md_files = self._collect_md_files()
         changed_or_missing = []
@@ -693,7 +708,8 @@ class VaultIndexer:
                 changed_or_missing.append(file_path)
                 continue
 
-            # If the file no longer exists at this exact path, skip it; the watcher will remove it.
+            # If the file no longer exists at this exact path, skip it;
+            # the watcher will remove it.
             if not file_path.exists():
                 continue
 
@@ -711,7 +727,8 @@ class VaultIndexer:
         removed_paths = [Path(p) for p in meta_by_path if p not in current_paths]
 
         _logger.info(
-            f"Background indexing: {len(changed_or_missing)} changed/missing, {len(removed_paths)} removed out of {len(md_files)} total files."
+            f"Background indexing: {len(changed_or_missing)} changed/missing, "
+            f"{len(removed_paths)} removed out of {len(md_files)} total files."
         )
 
         for file_path in removed_paths:
@@ -727,7 +744,8 @@ class VaultIndexer:
 
         self.persist()
         _logger.info(
-            f"Background indexing complete. Index now has {self.index.ntotal if self.index else 0} vectors."
+            f"Background indexing complete. Index now has "
+            f"{self.index.ntotal if self.index else 0} vectors."
         )
 
     def initialize(self):
@@ -796,7 +814,10 @@ class VaultIndexer:
             self._log_tool(
                 "search_by_vector",
                 {"k": k},
-                error=f"dimension mismatch: query {len(query_embedding)} vs index {self.index.d}",
+                error=(
+                    f"dimension mismatch: query {len(query_embedding)} "
+                    f"vs index {self.index.d}"
+                ),
             )
             return []
 
@@ -809,7 +830,7 @@ class VaultIndexer:
         distances, indices = self.index.search(query_vec, k_eff)  # type: ignore
 
         results: list[dict[str, Any]] = []
-        for faiss_id, distance in zip(indices[0], distances[0]):
+        for faiss_id, distance in zip(indices[0], distances[0], strict=False):
             if faiss_id < 0:
                 continue  # FAISS returns -1 for "no result"
             meta = self._metadata.get(int(faiss_id))

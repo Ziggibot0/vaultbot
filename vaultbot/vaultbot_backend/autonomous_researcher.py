@@ -20,6 +20,7 @@ Search backend: DuckDuckGo (free, no API key, no signup). Zero setup.
 """
 
 import asyncio
+import contextlib
 import os
 import re
 import threading
@@ -248,10 +249,7 @@ def _is_researchable_gap(gap: dict[str, Any]) -> bool:
 
         # Minimum alphanumeric content (catches "PT2399" but rejects "to").
         alnum = re.sub(r"[^a-zA-Z0-9]+", "", topic)
-        if len(alnum) < _MIN_TOPIC_ALNUM_CHARS:
-            return False
-
-        return True
+        return not len(alnum) < _MIN_TOPIC_ALNUM_CHARS
     except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
         return False
 
@@ -1004,11 +1002,8 @@ class AutonomousResearcher:
                 # Notify the user via the on_crash callback (wired in main.py
                 # to broadcast a type:"problem" WS event). Without this the
                 # vault silently stops growing and the user has no idea.
-                if self.on_crash is not None:
-                    try:
-                        self.on_crash(str(e))
-                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                        pass  # the callback must never crash the thread
+                with contextlib.suppress(Exception):
+                    self.on_crash(str(e))  # the callback must never crash the thread
             finally:
                 loop.close()
 

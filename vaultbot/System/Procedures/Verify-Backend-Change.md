@@ -53,11 +53,11 @@ output = json.dumps(result, default=str) if isinstance(result, (dict, list)) els
 print(output)
 ```
 
+### Step 2: Examine test results
+
 2. [llm: Examine the test results from Step 1.
   - If the verdict is "PASS" (all tests green, or only pre-existing failures): proceed to Step 3.
   - If the verdict is "FAIL" (new failures caused by the change): STOP. Report the failing tests. Do not restart the backend with broken code. The change must be fixed first.]
-
-### Step 2: (Skipped if tests failed)
 
 ### Step 3: Restart the backend
 

@@ -13,9 +13,13 @@ summary: Steps
 tags:
   - procedure
   - procedures
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 ## Steps
+
+### Step 1: Test that llm_generate works in a code step
 
 1. ```python
 result = llm_generate("Say 'hello world' and nothing else.")

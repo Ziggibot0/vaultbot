@@ -157,22 +157,33 @@ For each entry, the annotator (GitHub Copilot, 2026-08-16) performed:
 2. **Decide the category** — which retrieval channel are you testing?
 3. **Craft the query** following the category's intent (see above).
 4. **For graph entries**: read the linking note and confirm the wikilink to
-   your expected note exists in the note body.
+   your expected note exists in the note body. Record the linking note as
+   `seed_notes` (the note the query semantically matches, whose wikilinks
+   lead to `expected_notes`). The seed note MUST be committed to the repo —
+   a gitignored seed makes the graph walk unreachable in CI.
 5. **Add the entry** to `golden_set.json` under `queries`:
    ```json
    {
      "query": "your query text",
      "expected_notes": ["Note-Stem-1", "Note-Stem-2"],
+     "seed_notes": ["Linking-Note-Stem"],
      "note": "Category: direct|semantic|graph|negative|multi — why these notes",
-     "category": "direct"
+     "category": "graph"
    }
    ```
-6. **Run the gate locally** to confirm the new entry doesn't drag recall
+   (`seed_notes` is required for `graph` entries; omit it for other
+   categories.)
+6. **Validate the set** against the committed notes — this fails loudly on
+   any phantom expected note or gitignored graph seed:
+   ```
+   python validate_golden_set.py
+   ```
+7. **Run the gate locally** to confirm the new entry doesn't drag recall
    below the CI floor:
    ```
    python run_golden_gate.py --vault <vault_path> --min-recall 0.7 --k 5
    ```
-7. Commit `golden_set.json` and `golden_set.README.md` together.
+8. Commit `golden_set.json` and `golden_set.README.md` together.
 
 ### Growth Sources (in priority order)
 1. **Operator corrections** — when Sean says "you missed X," add a
@@ -193,10 +204,10 @@ For each entry, the annotator (GitHub Copilot, 2026-08-16) performed:
 |------------|-------|--------|
 | direct     | 10    | 10–15  |
 | semantic   | 10    | 10–15  |
-| graph      | 8     | 10–15  |
-| negative   | 5     | 8–10   |
+| graph      | 7     | 10–15  |
+| negative   | 4     | 8–10   |
 | multi      | 7     | 8–12   |
-| **Total**  | **40**| **50+**|
+| **Total**  | **38**| **50+**|
 
 The goal is **50+ entries** across all 5 categories, grown primarily from
 real operator corrections (source 1 above). A 50-entry set with documented
@@ -217,6 +228,12 @@ The golden set is scored by `golden_eval.py`:
 - **CI gate**: `.github/workflows/golden-gate.yml` runs `run_golden_gate.py`
   with `--min-recall 0.7 --k 5` on PRs touching retrieval-affecting code.
   Aggregate recall@5 < 0.7 fails the workflow.
+- **Pre-flight validation**: the workflow first runs
+  `validate_golden_set.py`, which checks every `expected_notes` stem and
+  every graph `seed_notes` stem resolves to a committed note (via
+  `git ls-files`). A phantom expected note or a gitignored graph seed fails
+  the workflow *before* the expensive index build, instead of silently
+  scoring 0 recall at gate time.
 
 The `category` field on each entry enables per-category metric breakdowns
 in future reporting — so a regression in graph retrieval shows up as a

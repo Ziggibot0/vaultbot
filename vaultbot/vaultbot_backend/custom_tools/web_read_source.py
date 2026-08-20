@@ -45,9 +45,9 @@ SCHEMA = {
 }
 
 try:
-    VAULT_DIR = (
-        Path(__file__).resolve().parent.parent.parent
-    )  # vaultbot/ (framework root, 3 levels up from vaultbot/vaultbot_backend/custom_tools/)
+    # vaultbot/ (framework root, 3 levels up from
+    # vaultbot/vaultbot_backend/custom_tools/)
+    VAULT_DIR = Path(__file__).resolve().parent.parent.parent
     BACKEND_DIR = Path(__file__).resolve().parent.parent  # backend dir (2 levels up)
 except NameError:
     VAULT_DIR = Path(".").resolve()
@@ -74,16 +74,16 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     if url:
         entry = find_source(url)
         if entry is None:
-            return {"error": "no archived source for URL: %s" % url}
+            return {"error": f"no archived source for URL: {url}"}
         filename = entry["file"]
 
     path = source_path(filename)
     if not path.exists():
-        return {"error": "archived file not found: %s" % filename}
+        return {"error": f"archived file not found: {filename}"}
 
     text = read_source_text(filename)
     if not text:
-        return {"error": "could not extract text from %s" % filename}
+        return {"error": f"could not extract text from {filename}"}
 
     return {
         "status": "ok",
@@ -91,5 +91,5 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
         "file": filename,
         "title": (entry or {}).get("title", ""),
         "content": text,
-        "provenance": "learningMaterial/web/%s" % filename,
+        "provenance": f"learningMaterial/web/{filename}",
     }

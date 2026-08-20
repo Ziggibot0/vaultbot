@@ -115,9 +115,7 @@ def is_writable(path: Path) -> bool:
     if is_date_only_stem(p.stem):
         return False
     # Rule 2: existing files with a LOCKED pragma are read-only.
-    if p.exists() and is_locked(p):
-        return False
-    return True
+    return not (p.exists() and is_locked(p))
 
 
 def assert_writable(path: Path) -> None:

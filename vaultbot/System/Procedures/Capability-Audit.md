@@ -12,6 +12,7 @@ summary: The note instructs users to create a `capability_audit` function that u
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Capability-Audit
@@ -20,6 +21,8 @@ Inventory every available tool (built-in + meta + custom-authored) and assess wh
 
 ## Steps
 
+### Step 1: Inventory available tools and assess capability gaps
+
 1. ```python
    # capability_audit is a SelfImprover method — instantiate it standalone.
    from self_improver import SelfImprover
@@ -27,5 +30,7 @@ Inventory every available tool (built-in + meta + custom-authored) and assess wh
    result = _si.capability_audit(task=args.get("task", ""))
    print(result)
    ```
+
+### Step 2: Identify gaps and propose how to fill them
 
 2. [llm: Based on the audit results, identify any capability gaps and propose how to fill them — either by creating a new tool or by using an existing procedure.]

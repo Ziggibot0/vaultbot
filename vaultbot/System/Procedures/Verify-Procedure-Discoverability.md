@@ -48,6 +48,8 @@ Read-only — runs retrieval queries, never modifies anything.
 
 ## Steps
 
+### Step 1: Verify the procedure surfaces in RAG retrieval
+
 1. ```python
    import json, re, pathlib, sys
    from pathlib import Path

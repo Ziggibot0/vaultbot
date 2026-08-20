@@ -74,22 +74,24 @@ def gh(
     """
     try:
         r = _subprocess_run(
-            ["gh"] + args,
+            ["gh", *args],
             capture_output=True,
             text=True,
             timeout=timeout,
             cwd=cwd,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         raise GhError(
-            "gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'."
-        )
-    except subprocess.TimeoutExpired:
-        raise GhError(f"gh command timed out: {' '.join(args)}")
+            "gh CLI not found. Install it from https://cli.github.com and "
+            "run 'gh auth login'."
+        ) from err
+    except subprocess.TimeoutExpired as err:
+        raise GhError(f"gh command timed out: {' '.join(args)}") from err
 
     if r.returncode != 0:
         raise GhError(
-            f"gh {' '.join(args)} failed (exit {r.returncode}): {r.stderr.strip()[:500]}",
+            f"gh {' '.join(args)} failed (exit {r.returncode}): "
+            f"{r.stderr.strip()[:500]}",
             stderr=r.stderr,
         )
     return r
@@ -115,22 +117,24 @@ def gh_api(
 
     try:
         r = _subprocess_run(
-            ["gh"] + cmd,
+            ["gh", *cmd],
             input=json.dumps(body) if body is not None else None,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         raise GhError(
-            "gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'."
-        )
-    except subprocess.TimeoutExpired:
-        raise GhError(f"gh api {method} {path} timed out")
+            "gh CLI not found. Install it from https://cli.github.com and "
+            "run 'gh auth login'."
+        ) from err
+    except subprocess.TimeoutExpired as err:
+        raise GhError(f"gh api {method} {path} timed out") from err
 
     if r.returncode != 0:
         raise GhError(
-            f"gh api {method} {path} failed (exit {r.returncode}): {r.stderr.strip()[:500]}",
+            f"gh api {method} {path} failed (exit {r.returncode}): "
+            f"{r.stderr.strip()[:500]}",
             stderr=r.stderr,
         )
 
@@ -158,21 +162,23 @@ def gh_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 30) -> str
     ]
     try:
         r = _subprocess_run(
-            ["gh"] + cmd,
+            ["gh", *cmd],
             capture_output=True,
             text=True,
             timeout=timeout,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         raise GhError(
-            "gh CLI not found. Install it from https://cli.github.com and run 'gh auth login'."
-        )
-    except subprocess.TimeoutExpired:
-        raise GhError(f"gh raw {owner}/{repo}/{path}@{ref} timed out")
+            "gh CLI not found. Install it from https://cli.github.com and "
+            "run 'gh auth login'."
+        ) from err
+    except subprocess.TimeoutExpired as err:
+        raise GhError(f"gh raw {owner}/{repo}/{path}@{ref} timed out") from err
 
     if r.returncode != 0:
         raise GhError(
-            f"gh raw {owner}/{repo}/{path}@{ref} failed (exit {r.returncode}): {r.stderr.strip()[:500]}",
+            f"gh raw {owner}/{repo}/{path}@{ref} failed (exit {r.returncode}): "
+            f"{r.stderr.strip()[:500]}",
             stderr=r.stderr,
         )
     return r.stdout

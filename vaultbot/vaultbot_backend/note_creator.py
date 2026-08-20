@@ -103,7 +103,7 @@ class NoteCreator:
             for meta in self.indexer.metadata
         }
         for entity in entities:
-            for stem, file_path in note_stems.items():
+            for stem, _file_path in note_stems.items():
                 if stem.lower() == entity.lower():
                     links.add(f"[[{stem}]]")
                     break
@@ -308,7 +308,10 @@ class NoteCreator:
             topic = self._generate_chat_title(user_message, assistant_response)
         entry = f"**User:** {user_message}\n\n**Assistant:** {assistant_response}"
         if thinking:
-            entry += f"\n\n<details>\n<summary>Thinking process</summary>\n\n{thinking}\n\n</details>"
+            entry += (
+                f"\n\n<details>\n<summary>Thinking process</summary>\n\n"
+                f"{thinking}\n\n</details>"
+            )
 
         note_path = self.maintenance.merge_chat_note(topic, entry)
 

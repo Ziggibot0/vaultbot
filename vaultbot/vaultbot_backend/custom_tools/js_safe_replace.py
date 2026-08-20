@@ -4,7 +4,11 @@ Agent-authored tool: js_safe_replace
 
 SCHEMA = {
     "name": "js_safe_replace",
-    "description": "Safely replace a string in a JavaScript file. Reads the file, replaces old_str with new_str, validates with node --check, and writes atomically.",
+    "description": (
+        "Safely replace a string in a JavaScript file. Reads the file, "
+        "replaces old_str with new_str, validates with node --check, and "
+        "writes atomically."
+    ),
     "parameters": {
         "properties": {
             "file_path": {
@@ -51,26 +55,29 @@ def run(args: dict) -> dict:
     new_content = content.replace(old_str, new_str)
 
     # Validate JS syntax with node --check
-    tmp = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".js", delete=False, encoding="utf-8"
-    )
-    tmp.write(new_content)
-    tmp.close()
+    ) as tmp:
+        tmp.write(new_content)
+        tmp_name = tmp.name
     try:
         result = subprocess.run(
-            ["node", "--check", tmp.name], capture_output=True, timeout=10
+            ["node", "--check", tmp_name], capture_output=True, timeout=10
         )
         if result.returncode != 0:
             return {
-                "error": f"node --check failed: {result.stderr.decode('utf-8', errors='replace')}"
+                "error": (
+                    f"node --check failed: "
+                    f"{result.stderr.decode('utf-8', errors='replace')}"
+                )
             }
     except FileNotFoundError:
         # node not available — skip validation
         pass
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: node check failure returns error to caller
         return {"error": f"node --check error: {e}"}
     finally:
-        os.unlink(tmp.name)
+        os.unlink(tmp_name)
 
     # Backup
     trash_dir = vault_root / "vaultbot" / "vaultbot_backend" / "trash"

@@ -7,6 +7,12 @@ summary: ---
 tags:
   - procedure
   - procedures
+description: "---"
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools:
+  - vault_read_note
+model_cartridge: big
 ---
 
 ```markdown

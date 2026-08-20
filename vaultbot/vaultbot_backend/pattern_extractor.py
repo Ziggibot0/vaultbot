@@ -133,7 +133,7 @@ class PatternExtractor:
     JSON that the consolidation pipeline (clustering + LLM synthesis) consumes.
     """
 
-    def __init__(self, vault_path: str = None, log_path: str = None):
+    def __init__(self, vault_path: str | None = None, log_path: str | None = None):
         self.vault_path = vault_path or os.getenv("VAULT_PATH", ".")
         self.chat_dir = os.path.join(self.vault_path, "vaultbot/Memory/Chat")
         self.log_path = log_path or os.path.join(
@@ -218,7 +218,7 @@ class PatternExtractor:
 
             # Wikilinks from the full section
             wikilinks = re.findall(r"\[\[([^\]]+)\]\]", section)
-            wikilinks = [l.split("|")[0].split("#")[0].strip() for l in wikilinks]
+            wikilinks = [link.split("|")[0].split("#")[0].strip() for link in wikilinks]
 
             # Tool mentions from full exchange text
             all_text = asst_msg + " " + thinking
@@ -254,7 +254,7 @@ class PatternExtractor:
             "exchanges": exchanges,
         }
 
-    def scan_chat_logs(self, since_timestamp: str = None) -> list[dict]:
+    def scan_chat_logs(self, since_timestamp: str | None = None) -> list[dict]:
         """Scan all chat logs and return structured sessions.
 
         Args:
@@ -325,7 +325,8 @@ class PatternExtractor:
         return recurring
 
     def extract_sentiment_patterns(self, sessions: list[dict]) -> dict:
-        """Extract the operator's response sentiment distribution and negative exchanges.
+        """Extract the operator's response sentiment distribution and
+        negative exchanges.
 
         The negative rate is a key calibration metric: if it's not trending
         down over time, the consolidation system isn't working.
@@ -410,7 +411,7 @@ class PatternExtractor:
             "exchanges": long_exchanges,
         }
 
-    def extract_all(self, since_timestamp: str = None) -> dict:
+    def extract_all(self, since_timestamp: str | None = None) -> dict:
         """Run all pattern extractors and return structured findings.
 
         This is the main entry point for the consolidation pipeline.
@@ -447,7 +448,7 @@ class PatternExtractor:
 
     # --- Logging ---
 
-    def log_consolidation(self, patterns: dict, note_path: str = None) -> dict:
+    def log_consolidation(self, patterns: dict, note_path: str | None = None) -> dict:
         """Log a consolidation run for tracking.
 
         Args:

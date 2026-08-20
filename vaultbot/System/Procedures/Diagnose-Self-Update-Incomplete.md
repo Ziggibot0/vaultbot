@@ -12,6 +12,10 @@ status: raw
 baseline: true
 created: 2026-08-18
 summary: Diagnose Self-Update Incomplete (Updater Only Syncs Subset of Repo)
+description: "Diagnose Self-Update Incomplete (Updater Only Syncs Subset of Repo)"
+when_to_use: "when the user asks to run this procedure"
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+allowed_tools: []
 ---
 
 # Diagnose Self-Update Incomplete (Updater Only Syncs Subset of Repo)

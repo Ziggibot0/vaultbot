@@ -13,6 +13,7 @@ summary: 1. Safely delete note from Vault while backing up content before deleti
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Vault-Delete
@@ -21,11 +22,17 @@ Safely delete a note from the vault. Backs up content to vaultbot_backend/trash/
 
 ## Steps
 
+### Step 1: Search for the note to confirm it should be deleted
+
 1. [llm: Search for the note to confirm it exists and should be deleted.]
+
+### Step 2: Delete the note with backup
 
 2. ```python
    result = vault_delete(note_path=args["note_path"])
    print(result)
    ```
+
+### Step 3: Confirm the deletion succeeded
 
 3. [llm: Confirm the deletion succeeded. If it was blocked by a safety check, respect the block and tell the user why.]

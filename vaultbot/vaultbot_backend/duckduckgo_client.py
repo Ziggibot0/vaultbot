@@ -14,7 +14,7 @@ Implements a clean search interface for the research engine:
 
 import re
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 from bs4 import BeautifulSoup
@@ -33,7 +33,7 @@ class DuckDuckGoClient:
     """
 
     SEARCH_URL = "https://html.duckduckgo.com/html/"
-    HEADERS = {
+    HEADERS: ClassVar[dict[str, str]] = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "

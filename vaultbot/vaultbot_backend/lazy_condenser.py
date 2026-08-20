@@ -8,7 +8,7 @@ pedagogical scaffolding ("let's review what we learned...", worked examples
 that repeat the same setup, transitional paragraphs) that isn't useful once
 the concept is understood.  Leaving all that in:
 
-  - bloats the chat context window (5 retrieved notes × 20K = 100K of
+  - bloats the chat context window (5 retrieved notes x 20K = 100K of
     context, most of it fluff),
   - dilutes retrieval (the embedding averages over the whole section, so
     the signal-to-noise ratio is lower than a tight version),
@@ -63,6 +63,7 @@ to avoid partial writes on crash.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -330,7 +331,8 @@ class LazyCondenser:
                 + condensed_body
                 + footer
                 + f"\n\n{CONDENSE_MARKER}\n"
-                + f"{ORIG_MARKER}: {len(text)} --> {len(condensed_body) + len(header) + len(footer)} -->\n"
+                + f"{ORIG_MARKER}: {len(text)} --> "
+                + f"{len(condensed_body) + len(header) + len(footer)} -->\n"
             )
             self._atomic_write(p, new_text)
             out["condensed"] = True
@@ -661,10 +663,8 @@ class LazyCondenser:
                 return True
             finally:
                 if os.path.exists(tmp):
-                    try:
+                    with contextlib.suppress(Exception):
                         os.unlink(tmp)
-                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                        pass
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             return False
 

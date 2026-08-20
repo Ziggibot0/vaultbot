@@ -193,7 +193,10 @@ def test_strip_frontmatter():
 
 def test_existing_fields_not_overwritten():
     """inject_schema never overwrites a field the caller provided."""
-    content = "---\ntype: architecture\nstatus: verified\ncreated: 2020-01-01\nsummary: mine\ntags: [custom]\n---\n# X\n\nbody"
+    content = (
+        "---\ntype: architecture\nstatus: verified\ncreated: 2020-01-01\n"
+        "summary: mine\ntags: [custom]\n---\n# X\n\nbody"
+    )
     result = inject_schema(content, "vaultbot/System/Architecture/X.md")
     fm = parse_frontmatter(result)
     assert fm.get("type") == "architecture"
@@ -229,7 +232,8 @@ def test_heal_note_adds_missing_fields():
         assert result["healed"] is True
         assert "added type" in result["changes"]
         # Verify on disk
-        content = open(p, encoding="utf-8").read()
+        with open(p, encoding="utf-8") as f:
+            content = f.read()
         fm = parse_frontmatter(content)
         assert fm.get("type") == "research"
         assert fm.get("status") == "raw"
@@ -268,7 +272,8 @@ def test_heal_vault_schema_scans_all():
         with_schema = os.path.join(tmp, "vaultbot", "Knowledge", "Research", "Good.md")
         with open(with_schema, "w", encoding="utf-8") as f:
             f.write(
-                "---\ntype: research\nstatus: raw\ncreated: 2026-08-03\nsummary: x\ntags: [research]\n---\n# Good\n\nbody"
+                "---\ntype: research\nstatus: raw\ncreated: 2026-08-03\n"
+                "summary: x\ntags: [research]\n---\n# Good\n\nbody"
             )
 
         without_schema = os.path.join(tmp, "vaultbot", "Memory", "Chat", "Chat-Test.md")
@@ -279,7 +284,8 @@ def test_heal_vault_schema_scans_all():
         assert result["scanned"] >= 2
         assert result["healed"] >= 1
         # Verify the chat note got type: chat
-        healed = open(without_schema, encoding="utf-8").read()
+        with open(without_schema, encoding="utf-8") as f:
+            healed = f.read()
         fm = parse_frontmatter(healed)
         assert fm.get("type") == "chat"
     finally:
@@ -304,7 +310,8 @@ def test_heal_vault_schema_skips_source_docs():
 
         heal_vault_schema(tmp)
         # The source doc must be untouched (not scanned, not healed)
-        content = open(source_doc, encoding="utf-8").read()
+        with open(source_doc, encoding="utf-8") as f:
+            content = f.read()
         assert content == "# Architecture\n\nThis is a source doc, not a vault note."
         assert "type: claim" not in content
     finally:

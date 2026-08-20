@@ -26,7 +26,7 @@ from vault_graph import WIKILINK_RE
 
 # Module-private helpers re-exported here so the collectors don't need to
 # import the curriculum module.  These mirror the originals in
-# knowledge_curriculum.py — kept in sync.
+# knowledge_curriculum.py -- kept in sync.
 _STOP_TOKENS: set[str] = {
     "the",
     "a",
@@ -122,7 +122,7 @@ def collect_dangling_links(
                 }
             )
         return out
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         _log_error(session_logger, "collect_dangling_links", e)
         return []
 
@@ -135,8 +135,8 @@ def collect_thin_notes(
 ) -> list[dict[str, Any]]:
     """Signal 2: existing notes with too-short bodies.
 
-    Skips anything under Memory/Chat/ or Knowledge/Research/ (the bot's own drafts) so the
-    curriculum doesn't chase its own work-in-progress.
+    Skips anything under Memory/Chat/ or Knowledge/Research/ (the bot's own
+    drafts) so the curriculum doesn't chase its own work-in-progress.
     """
     try:
         thin = vault_graph.thin_notes(min_content_length=min_content_length)
@@ -166,7 +166,7 @@ def collect_thin_notes(
                 }
             )
         return out
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         _log_error(session_logger, "collect_thin_notes", e)
         return []
 
@@ -195,7 +195,7 @@ def collect_missing_entities(
             d.get("normalized_name", "") for d in dangling if d.get("normalized_name")
         }
         # Re-scan every note's raw content for wikilinks to non-existent
-        # notes — same logic as dangling_links but we keep only entries
+        # notes -- same logic as dangling_links but we keep only entries
         # whose reference count from *recent* notes (by mtime) differs.
         ref_counts: dict[str, int] = {}
         ref_sources: dict[str, set[str]] = {}
@@ -204,7 +204,7 @@ def collect_missing_entities(
             for link in raw_links:
                 norm = vault_graph._normalize_name(link)
                 if norm in vault_graph.nodes:
-                    continue  # resolved — not missing
+                    continue  # resolved -- not missing
                 if norm not in dangling_names:
                     continue  # dangling_links already covers this
                 ref_counts[norm] = ref_counts.get(norm, 0) + 1
@@ -241,7 +241,7 @@ def collect_missing_entities(
                 }
             )
         return out
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         _log_error(session_logger, "collect_missing_entities", e)
         return []
 
@@ -258,7 +258,7 @@ def collect_thin_communities(
     For each note, check whether its neighbor set forms a clique of at
     least ``thin_community_min_size`` notes where none of the members is a
     hub (name contains "MOC" or "Index"). A clique here is approximated by
-    "every pair of neighbors is mutually linked" — a strict but cheap
+    "every pair of neighbors is mutually linked" -- a strict but cheap
     check. We emit one gap per detected clique, keyed by its smallest
     member so duplicates collapse naturally.
 
@@ -277,7 +277,7 @@ def collect_thin_communities(
     try:
         graph_mtime = getattr(vault_graph, "_last_refresh_mtime", 0.0)
         if cache is not None and cache_graph_mtime == graph_mtime and graph_mtime > 0.0:
-            # Graph topology unchanged since last compute — reuse.
+            # Graph topology unchanged since last compute -- reuse.
             return list(cache), graph_mtime
 
         min_size = thin_community_min_size
@@ -299,7 +299,7 @@ def collect_thin_communities(
                 continue
 
             # Build the candidate clique: name + non-hub neighbors.
-            members = [name] + non_hub_neighbors
+            members = [name, *non_hub_neighbors]
             # Keep only members that are mutually linked to *every* other
             # member (strict clique). This is O(k^2) per note but k is tiny.
             clique: list[str] = []
@@ -337,7 +337,7 @@ def collect_thin_communities(
             )
 
         return out, graph_mtime
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         _log_error(session_logger, "collect_thin_communities", e)
         return [], getattr(vault_graph, "_last_refresh_mtime", 0.0)
 
@@ -372,7 +372,7 @@ def collect_link_density_anomalies(
                     }
                 )
         return out
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception as e:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         _log_error(session_logger, "collect_link_density_anomalies", e)
         return []
 
@@ -418,7 +418,7 @@ def filter_candidates(
             continue
         # Quality gate: reject trivial / placeholder topics that would
         # produce dictionary-scraping junk notes. thin_community topics
-        # ("MOC for: ...") are synthetic and always pass — the gate is
+        # ("MOC for: ...") are synthetic and always pass -- the gate is
         # about the raw dangling-link / thin-note labels.
         if not is_researchable_topic(g):
             continue
@@ -468,7 +468,7 @@ def diversity_bonus(
     """Penalize gaps too similar to recently-completed topics.
 
     A gap whose tokens heavily overlap the last ``diversity_window``
-    completed topics gets ×0.3; moderate overlap → ×0.6; no overlap → ×1.0.
+    completed topics gets x0.3; moderate overlap → x0.6; no overlap → x1.0.
     """
     completed = (completed_topics or [])[-diversity_window:]
     if not completed:
@@ -506,12 +506,12 @@ def achievability_bonus(
 ) -> float:
     """Reward gaps that are cheap to close; crush repeatedly-failed ones.
 
-    - thin_note (already exists, just needs expanding): ×1.5
-    - dangling_link with 1 reference: ×1.0
-    - dangling_link with many references (high value, harder): ×1.2
-    - missing_entity: ×1.1 (already partially surfaced)
-    - thin_community / link_density: ×1.0
-    - any topic that failed ≥3 times: ×0.1
+    - thin_note (already exists, just needs expanding): x1.5
+    - dangling_link with 1 reference: x1.0
+    - dangling_link with many references (high value, harder): x1.2
+    - missing_entity: x1.1 (already partially surfaced)
+    - thin_community / link_density: x1.0
+    - any topic that failed ≥3 times: x0.1
     """
     kind = gap.get("kind", "")
     ref_count = int(gap.get("reference_count", 0) or 0)
@@ -552,7 +552,7 @@ def context_bonus(
 
     Filling a gap that wedges into a rich neighborhood (referencing notes
     have many neighbors) yields more graph rewiring per research effort.
-    Returns ×1.3 when the average referencing-note degree is high, ×1.0
+    Returns x1.3 when the average referencing-note degree is high, x1.0
     otherwise.
     """
     ref_by = gap.get("referenced_by") or []
@@ -588,7 +588,7 @@ def explain(gap: dict[str, Any], breakdown: dict[str, float]) -> str:
         parts.append(f"ctx={breakdown['context_bonus']:.2f}")
         parts.append(f"priority={breakdown['priority']:.2f}")
         return " | ".join(parts)
-    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         return "curriculum-selected gap"
 
 
@@ -606,5 +606,5 @@ def _log_error(session_logger, context: str, exc: BaseException) -> None:
                     "traceback": traceback.format_exc(),
                 },
             )
-    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+    except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
         pass

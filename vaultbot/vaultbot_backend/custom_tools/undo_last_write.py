@@ -22,7 +22,10 @@ SCHEMA = {
         "properties": {
             "dry_run": {
                 "type": "boolean",
-                "description": "If true, show what would be restored without actually restoring it.",
+                "description": (
+                    "If true, show what would be restored without actually "
+                    "restoring it."
+                ),
             },
         },
     },
@@ -86,10 +89,7 @@ def run(args: dict) -> dict:
     #       → vaultbot_Knowledge_Research_My-Note.md.bak
     backup_name = newest.name
     # Strip the .bak suffix.
-    if backup_name.endswith(".bak"):
-        original_rel = backup_name[:-4]  # remove .bak
-    else:
-        original_rel = backup_name
+    original_rel = backup_name[:-4] if backup_name.endswith(".bak") else backup_name
 
     # Try to reconstruct the original path.
     # The backup name uses underscores in place of path separators.
@@ -103,7 +103,9 @@ def run(args: dict) -> dict:
         # vault_safe_write backups include a header comment with the original path.
         for line in content.split("\n")[:5]:
             if line.startswith("<!-- original_path: "):
-                candidate = line[len("<!-- original_path: ") :].rstrip(" -->").strip()
+                candidate = (
+                    line[len("<!-- original_path: ") :].removesuffix(" -->").strip()
+                )
                 candidate_path = vault_root / candidate
                 # The original might not exist anymore (it was deleted/overwritten),
                 # so we just use the path from the backup header.
@@ -168,7 +170,7 @@ def run(args: dict) -> dict:
             "backup_path": str(newest),
             "message": f"Restored {original_path.name} from trash backup.",
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — best-effort: restore failure returns error to caller
         return {
             "status": "error",
             "message": f"Failed to restore: {e}",

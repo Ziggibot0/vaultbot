@@ -216,18 +216,18 @@ This step feeds all the deterministic results to the small model to write
 the final audit report. This is the only step that uses any model — and
 it's the small model, not the big model.
 
-5. llm: You are a code auditor. Based on the following deterministic analysis
+5. [llm: You are a code auditor. Based on the following deterministic analysis
 of changes to the VaultBot backend, write a structured audit report.
 
 The report must include:
-1. **Changed Files**: List each changed file and what changed.
-2. **Safety Pattern Check**: For each safety-critical pattern (sliding window,
-   failsafe, checkpointing, MAX_ROUNDS, tool dispatch, per-step RAG),
-   report whether it was found in the changed files.
-3. **Risk Assessment**: Rate the risk as LOW, MEDIUM, or HIGH, with reasoning.
-4. **Recommendations**: Any actions needed (re-test, restart, investigate).
+- **Changed Files**: List each changed file and what changed.
+- **Safety Pattern Check**: For each safety-critical pattern (sliding window,
+  failsafe, checkpointing, MAX_ROUNDS, tool dispatch, per-step RAG),
+  report whether it was found in the changed files.
+- **Risk Assessment**: Rate the risk as LOW, MEDIUM, or HIGH, with reasoning.
+- **Recommendations**: Any actions needed (re-test, restart, investigate).
 
-Format as markdown with clear sections.
+Format as markdown with clear sections.]
 
 validation: contains "Changed Files" and "Safety Pattern Check" and "Risk Assessment"
 

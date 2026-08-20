@@ -14,6 +14,7 @@ summary: "Analyze this note and produce:
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Ollama-Pull-Models
@@ -21,6 +22,8 @@ tags:
 Pulls a list of Ollama models by tag. First lists what's already available, then pulls each requested model.
 
 ## Steps
+
+### Step 1: List currently pulled models
 
 1. ```python
    import subprocess
@@ -33,7 +36,11 @@ Pulls a list of Ollama models by tag. First lists what's already available, then
        print("STDERR:", result.stderr)
    ```
 
+### Step 2: Report what's already pulled
+
 2. [llm: Report what's already pulled to the user, then proceed to pull the missing models.]
+
+### Step 3: Pull the missing models
 
 3. ```python
    import subprocess
@@ -57,5 +64,7 @@ Pulls a list of Ollama models by tag. First lists what's already available, then
        print(f"Exit code: {result.returncode}")
        time.sleep(1)
    ```
+
+### Step 4: Report results for each model
 
 4. [llm: Report results for each model — which succeeded, which failed, and any error messages.]

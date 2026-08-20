@@ -61,7 +61,7 @@ def _write_toc(tmp_path: Path, key: str, slugs_headings):
         "",
     ]
     for slug, heading in slugs_headings:
-        lines.append("[[%s|%s]]" % (slug, heading))
+        lines.append(f"[[{slug}|{heading}]]")
     toc_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return toc_path
 

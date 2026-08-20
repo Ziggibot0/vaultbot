@@ -49,6 +49,8 @@ None.
 
 ## Steps
 
+### Step 1: Call the health endpoints and consolidate the report
+
 1. ```python
    import json
    import urllib.request

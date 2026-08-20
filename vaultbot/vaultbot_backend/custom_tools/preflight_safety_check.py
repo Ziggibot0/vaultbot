@@ -4,20 +4,31 @@ Agent-authored tool: preflight_safety_check
 
 SCHEMA = {
     "name": "preflight_safety_check",
-    "description": "Pre-flight safety check before self-modifying operations. Verifies git clean state (for rollback safety), critical backend files exist, identity files intact, disk space adequate, custom tools still import cleanly, and vault directory is accessible. Returns PASS / WARN / BLOCK with full details. Run this before any code_write or tool_create operation to verify the system is healthy enough to safely edit.",
+    "description": (
+        "Pre-flight safety check before self-modifying operations. Verifies "
+        "git clean state (for rollback safety), critical backend files exist, "
+        "identity files intact, disk space adequate, custom tools still import "
+        "cleanly, and vault directory is accessible. Returns PASS / WARN / "
+        "BLOCK with full details. Run this before any code_write or "
+        "tool_create operation to verify the system is healthy enough to "
+        "safely edit."
+    ),
     "parameters": {
-        "description": "No arguments needed. The tool auto-detects paths from its own file location.",
+        "description": (
+            "No arguments needed. The tool auto-detects paths from its own "
+            "file location."
+        ),
         "properties": {},
         "type": "object",
     },
 }
 
-import importlib.util
-import shutil
-import time
-from pathlib import Path
+import importlib.util  # noqa: E402
+import shutil  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from subprocess_utils import run as _subprocess_run
+from subprocess_utils import run as _subprocess_run  # noqa: E402
 
 # Determine backend directory from this file's location
 # (custom_tools/preflight_safety_check.py -> parent.parent = vaultbot_backend/)
@@ -58,7 +69,7 @@ def run(args: dict) -> dict:
 
         def git(*cmd):
             r = _subprocess_run(
-                ["git"] + list(cmd),
+                ["git", *list(cmd)],
                 capture_output=True,
                 text=True,
                 cwd=str(backend_dir),
@@ -67,8 +78,8 @@ def run(args: dict) -> dict:
             return r.stdout.strip(), r.stderr.strip(), r.returncode
 
         status_out, _, _ = git("status", "--porcelain")
-        uncommitted = [l for l in status_out.splitlines() if l.strip()]
-        head_out, _, head_rc = git("rev-parse", "HEAD")
+        uncommitted = [ln for ln in status_out.splitlines() if ln.strip()]
+        _head_out, _, head_rc = git("rev-parse", "HEAD")
         has_head = head_rc == 0
 
         git_check = {
@@ -86,7 +97,8 @@ def run(args: dict) -> dict:
             results["status"] = "BLOCK"
         elif uncommitted:
             results["warnings"].append(
-                f"Working tree not clean ({len(uncommitted)} uncommitted files) — rollback will lose these changes"
+                f"Working tree not clean ({len(uncommitted)} uncommitted files) "
+                f"— rollback will lose these changes"
             )
             if results["status"] == "PASS":
                 results["status"] = "WARN"
@@ -190,7 +202,8 @@ def run(args: dict) -> dict:
 
     # --- 6. Vault notes directory ---
     # Check for the current vault folder structure (post-reorganization)
-    # The vault uses function-based top-level folders: Knowledge/, Memory/, System/, User/
+    # The vault uses function-based top-level folders: Knowledge/, Memory/,
+    # System/, User/
     vault_dir = (
         backend_dir.parent.parent
     )  # vault root (2 levels up from vaultbot/vaultbot_backend/)
@@ -216,7 +229,8 @@ def run(args: dict) -> dict:
     }
     if len(found_folders) < 2:
         results["blocks"].append(
-            "Vault notes directory not found (expected folders like Knowledge/, Memory/, System/, User/)"
+            "Vault notes directory not found (expected folders like "
+            "Knowledge/, Memory/, System/, User/)"
         )
         results["status"] = "BLOCK"
 

@@ -15,6 +15,7 @@ summary: Vault-Lint
 tags:
   - procedure
   - procedures
+falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 ---
 
 # Vault-Lint
@@ -32,8 +33,10 @@ file_path = ""  # set to the note path relative to vault root
 result = vault_lint(file_path=file_path) if hasattr(vault_lint, '__call__') else vault_lint.run({"file_path": file_path})
 ```
 
+### Step 2: Report results
+
 2. [llm: Report the lint results to the user. If there are broken wikilinks, list them. If frontmatter is missing, note it. If the argument quality checks fail, explain what's missing (too short, no wikilinks, no reasoning language). Be specific and actionable — tell the user exactly what to fix.]
 
-### Step 2: Validate
+### Step 3: Validate
 
-2. [validate: contains "wikilink" or contains "frontmatter" or contains "quality"]
+3. [validate: contains "wikilink" or contains "frontmatter" or contains "quality"]

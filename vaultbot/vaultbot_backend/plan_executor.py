@@ -42,6 +42,7 @@ pathlib, datetime, typing. No new dependencies.
 from __future__ import annotations
 
 import ast
+import contextlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -447,7 +448,7 @@ def _ast_eval(node: ast.AST, result: Any, names: dict | None = None) -> Any:
     if isinstance(node, ast.Dict):
         return {
             _ast_eval(k, result, local_names): _ast_eval(v, result, local_names)
-            for k, v in zip(node.keys, node.values)
+            for k, v in zip(node.keys, node.values, strict=False)
         }
 
     # ── Operators ──────────────────────────────────────────────────────
@@ -471,7 +472,7 @@ def _ast_eval(node: ast.AST, result: Any, names: dict | None = None) -> Any:
         return op_fn(operand)
     if isinstance(node, ast.Compare):
         left = _ast_eval(node.left, result, local_names)
-        for op, comparator in zip(node.ops, node.comparators):
+        for op, comparator in zip(node.ops, node.comparators, strict=False):
             right = _ast_eval(comparator, result, local_names)
             op_fn = _CMP_OPS.get(type(op))
             if op_fn is None:
@@ -624,11 +625,9 @@ class PlanExecutor:
         entry.update(extra)
         plan.log.append(entry)
         if self.session_logger is not None:
-            try:
+            with contextlib.suppress(Exception):
                 # Be tolerant of differing logger signatures.
                 self.session_logger.log(f"[{level}] {msg}")  # type: ignore[attr-defined]
-            except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                pass
 
     # -- verification ------------------------------------------------------
 

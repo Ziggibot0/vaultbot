@@ -85,6 +85,8 @@ def load_golden_set(path: str | Path | None = None) -> list[dict[str, Any]]:
                     "query": q,
                     "expected_notes": list(exp),
                     "note": e.get("note", ""),
+                    "category": e.get("category", ""),
+                    "seed_notes": list(e.get("seed_notes") or []),
                 }
             )
     return out
@@ -261,3 +263,55 @@ def check_regression(
         "reasons": reasons,
         "aggregate": agg,
     }
+
+
+def validate_golden_set(
+    golden_set: list[dict[str, Any]] | None = None,
+    golden_path: str | Path | None = None,
+    available_stems: set[str] | None = None,
+) -> dict[str, Any]:
+    """Validate golden-set integrity before scoring.
+
+    Checks that every ``expected_notes`` stem and every graph entry's
+    ``seed_notes`` stem resolves to an available (committed) note. A phantom
+    expected note, or a graph seed that isn't committed, would otherwise
+    score 0 recall silently in CI — this turns that into a loud, actionable
+    failure at annotation/gate time instead of a silent 0 at scoring time.
+
+    Args:
+        golden_set: Pre-loaded entries. If None, loaded from ``golden_path``.
+        golden_path: Where to load the set from if ``golden_set`` is None.
+        available_stems: Set of note identifiers (full paths or bare stems)
+            that are actually present — e.g. from ``git ls-files '*.md'``.
+            Each is normalized with the same ``_norm`` used for scoring, so
+            full paths and stems are interchangeable. If None, the
+            availability check is skipped and the result is marked
+            ``checked=False``.
+
+    Returns:
+        ``{"valid": bool, "checked": bool, "problems": [str]}``.
+    """
+    entries = golden_set if golden_set is not None else load_golden_set(golden_path)
+    problems: list[str] = []
+    checked = available_stems is not None
+    avail = {_norm(s) for s in available_stems} if checked else set()
+
+    if not entries:
+        problems.append("golden set is empty — nothing to validate")
+
+    for i, e in enumerate(entries):
+        q = e.get("query") or f"<entry {i}>"
+        for stem in e.get("expected_notes", []):
+            if checked and _norm(stem) not in avail:
+                problems.append(
+                    f"[{q}] expected note '{stem}' is not an available note "
+                    f"(phantom or gitignored — will score 0 recall)"
+                )
+        for stem in e.get("seed_notes", []):
+            if checked and _norm(stem) not in avail:
+                problems.append(
+                    f"[{q}] seed note '{stem}' is not an available note "
+                    f"(graph walk unreachable in CI)"
+                )
+
+    return {"valid": not problems, "checked": checked, "problems": problems}

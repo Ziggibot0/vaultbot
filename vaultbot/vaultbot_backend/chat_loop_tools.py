@@ -1,6 +1,6 @@
 """Per-tool-call execution for one agentic-loop round.
 
-Extracted from ``chat_agentic_loop.py`` — ``execute_round_tools`` runs the
+Extracted from ``chat_agentic_loop.py`` -- ``execute_round_tools`` runs the
 ``for tc in round_tool_calls`` loop: it dispatches each tool, tracks
 seen-content, dedups vault_search results, escalates go-find-out, caps and
 appends tool results, and records the findings ledger. It mutates ``st`` and
@@ -49,7 +49,7 @@ async def execute_round_tools(
 ) -> tuple[list, list]:
     """Execute each tool call and feed results back as tool-role messages.
 
-    Returns the (possibly updated) (all_tools, custom_schemas) — rebuilt when
+    Returns the (possibly updated) (all_tools, custom_schemas) -- rebuilt when
     the agent creates a new tool via ``tool_create``.
     """
     # Execute each tool call and feed results back as tool-role messages.
@@ -103,7 +103,7 @@ async def execute_round_tools(
             _cr_fp = tool_args.get("file_path", "")
             _cr_seen = st._seen_content.get(_cr_fp)
             if _cr_seen and _cr_fp:
-                # Already saw this file →’ give the whole file.
+                # Already saw this file →' give the whole file.
                 tool_args["start_line"] = 1
                 tool_args["end_line"] = 0  # 0 = whole file
                 session_logger.log(
@@ -184,7 +184,7 @@ async def execute_round_tools(
         # When the model calls vault_search / vault_read_note mid-loop,
         # those notes become valid citation targets. Update the
         # allowed-citations set so the grounding gate accepts them. This
-        # makes the closed set dynamic — the model can cite notes it
+        # makes the closed set dynamic -- the model can cite notes it
         # retrieved on its own, not just the preflight ones.
         try:
             from citation_gate import add_citation_target
@@ -210,7 +210,7 @@ async def execute_round_tools(
                         _fp,
                         tool_result.get("content", ""),
                     )
-        except Exception:  # noqa: BLE001 — best-effort, never break the tool
+        except Exception:  # noqa: BLE001 -- best-effort, never break the tool
             pass
 
         # --- Annotate vault_search results against seen content ------
@@ -245,7 +245,7 @@ async def execute_round_tools(
                 tool_result["results"] = _annotated
                 _new_count = len(_annotated) - len(_already_seen)
                 if _new_count == 0:
-                    # ALL results were already seen — increment the
+                    # ALL results were already seen -- increment the
                     # go-find-out escalation counter.
                     st._consecutive_all_seen += 1
                     _go_find_out_threshold = int(
@@ -263,7 +263,7 @@ async def execute_round_tools(
                         # Use the last vault_search query as the
                         # research topic, NOT the raw user message.
                         # The user message is conversational ("dude
-                        # stop relying on model weights...") — search
+                        # stop relying on model weights...") -- search
                         # engines return nothing for that and the
                         # relevance gate filters out what little
                         # comes back, producing zero-source research.
@@ -285,7 +285,10 @@ async def execute_round_tools(
                             json.dumps(
                                 {
                                     "type": "status",
-                                    "content": "Vault doesn't have enough — researching on the web...",
+                                    "content": (
+                                        "Vault doesn't have enough -- "
+                                        "researching on the web..."
+                                    ),
                                 }
                             ),
                             websocket,
@@ -335,7 +338,7 @@ async def execute_round_tools(
                                 f"the user's question NOW. Do NOT call "
                                 f"vault_search again. Do NOT look for "
                                 f"procedures. You have the information "
-                                f"— write your answer."
+                                f"-- write your answer."
                             )
                             # Also keep the tool result for the model
                             # to see in the tool response.
@@ -345,7 +348,7 @@ async def execute_round_tools(
                                     "Web research completed "
                                     "automatically. See the system "
                                     "message for results. Use them "
-                                    "to answer now — do NOT search "
+                                    "to answer now -- do NOT search "
                                     "again."
                                 ),
                                 "research": _research_result,
@@ -356,10 +359,10 @@ async def execute_round_tools(
                                 f"All search results are files you "
                                 f"already have, and auto-research "
                                 f"failed ({e}). Answer from what you "
-                                f"already have — do NOT search again."
+                                f"already have -- do NOT search again."
                             )
                     else:
-                        # Below threshold or already fired — tell the
+                        # Below threshold or already fired -- tell the
                         # model to stop searching and answer.
                         tool_result["message"] = (
                             f"All {len(_already_seen)} search results "
@@ -371,7 +374,7 @@ async def execute_round_tools(
                             f"Do NOT call vault_search again."
                         )
                 else:
-                    # Some new results — reset the counter.
+                    # Some new results -- reset the counter.
                     st._consecutive_all_seen = 0
         session_logger.log(
             "tool_exec_exit",
@@ -445,7 +448,7 @@ async def execute_round_tools(
         # ALL tool results are bounded. code_read / vault_read_note
         # get a very generous cap (read_result_cap, default 120K chars
         # ≈ 30K tokens) so the model sees the WHOLE file in virtually
-        # all cases — only truly enormous files (500K+ chars) that
+        # all cases -- only truly enormous files (500K+ chars) that
         # would actually hurt the model are truncated. Other tool
         # results get the standard cap (10K chars). The hard token
         # cap (_enforce_token_cap) is the final guarantee, and it
@@ -460,7 +463,7 @@ async def execute_round_tools(
         # All models get the SAME treatment: raw tool results,
         # bounded only by truncate_tool_result for context-window
         # safety. No per-model heuristics (no thinking-model
-        # digest, no name sniffing) — every model sees the same
+        # digest, no name sniffing) -- every model sees the same
         # content. code_read / vault_read_note are never digested
         # or structurally summarized; the raw content lands in the
         # conversation as-is.

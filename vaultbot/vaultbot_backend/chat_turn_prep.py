@@ -1,6 +1,6 @@
 """Turn preparation: calibration, RAG, context building, preflight routing.
 
-Extracted from ``chat_handler.py`` — ``prepare_turn`` runs BEFORE the
+Extracted from ``chat_handler.py`` -- ``prepare_turn`` runs BEFORE the
 agentic loop starts. It does vault graph refresh, fused retrieval (query
 rewrite + expand + parallel retrieve + rerank), conversation-aware
 retrieval, context budgeting, procedure surface build, Route-Task
@@ -93,7 +93,7 @@ async def prepare_turn(
                 user_message, _prev_answer, failure_type=_ftype
             )
             session_logger.log("correction_detected", {"failure_type": _ftype})
-    except Exception as e:  # noqa: BLE001 — best-effort
+    except Exception as e:  # noqa: BLE001 -- best-effort
         session_logger.log("correction_detection_failed", {"error": str(e)})
 
     await svc.manager.send_personal_message(
@@ -131,14 +131,14 @@ async def prepare_turn(
     _check_cancelled(websocket)
 
     # RAG: retrieve vault context relevant to the user's message.
-    # Phase 3: conversation-aware query rewriting — rewrite the user's
+    # Phase 3: conversation-aware query rewriting -- rewrite the user's
     #   query using conversation context so follow-ups like "what was
     #   that thing?" resolve to the actual topic. Fail-safe: returns
     #   the original message on any failure.
-    # Phase 2: small-model query expansion (fail-safe — always includes
+    # Phase 2: small-model query expansion (fail-safe -- always includes
     #   the raw user message, so retrieval is never worse than today).
     # Phase 1: small-model reranking (over-fetch k=15, rerank down to 5
-    #   via the Smart-Vault-Search procedure; fail-safe — falls back to
+    #   via the Smart-Vault-Search procedure; fail-safe -- falls back to
     #   FUSED order on any error).
     t0 = loop.time()
     _rewritten_query = user_message  # default: no rewrite
@@ -156,13 +156,11 @@ async def prepare_turn(
             _expanded = expand_query(svc.small_client, _rewritten_query, session_logger)
             # Always include the original user message so retrieval is
             # never worse than baseline.
-            queries = list(
-                dict.fromkeys([_rewritten_query] + _expanded + [user_message])
-            )
+            queries = list(dict.fromkeys([_rewritten_query, *_expanded, user_message]))
         # Run all query retrievals concurrently. Each retrieve() is a
         # blocking call scheduled on the default executor; gathering them
         # turns N sequential round-trips into one parallel wave, cutting
-        # retrieval latency ~N× (3 queries → ~3×). A single heartbeat
+        # retrieval latency ~Nx (3 queries → ~3x). A single heartbeat
         # label covers the whole wave so the UI stays responsive.
         all_results: list[dict] = []
         if len(queries) <= 1:
@@ -200,12 +198,9 @@ async def prepare_turn(
                     all_results.extend(_r)
             finally:
                 await send_progress(svc, websocket, _qlabel + "_done", {})
-        if len(queries) > 1:
-            results = dedup_results(all_results)
-        else:
-            results = all_results
+        results = dedup_results(all_results) if len(queries) > 1 else all_results
         # Phase 1: deterministic reranking (embedding cosine similarity).
-        # No longer gated on svc.small_client — the reranker uses FAISS
+        # No longer gated on svc.small_client -- the reranker uses FAISS
         # vector reconstruction, not an LLM call.
         if len(results) > 5:
             await send_progress(
@@ -261,7 +256,7 @@ async def prepare_turn(
     #
     # Route-Task classifies intent and returns a procedure chain. It's
     # cheap (1 small-model LLM call). Think (the BS detector / premise
-    # gate) is NOT run here — it's an opt-in tool the big model can call
+    # gate) is NOT run here -- it's an opt-in tool the big model can call
     # via execute_procedure("Think") if it decides a question needs
     # structured premise checking.
     #
@@ -377,20 +372,20 @@ async def prepare_turn(
     # than letting the model answer from its weights, fire vault_research
     # ONCE synchronously, write a note, re-index, then re-retrieve so the
     # model sees the freshly-researched note as a citation target. This is
-    # the "vault does its own work" pattern — the big LLM never sees an
+    # the "vault does its own work" pattern -- the big LLM never sees an
     # empty context; it synthesizes from the new note with provenance.
     # Gated behind TUNABLES.auto_research_on_empty. Skipped for trivial
     # messages and resumed turns (those don't need fresh research).
     #
     # Topical-relevance check (2026-08-17): even when results pass the
-    # score threshold, they may be topically irrelevant — e.g., the vault
+    # score threshold, they may be topically irrelevant -- e.g., the vault
     # returns gecko-adhesives and slime-molds notes for "what are cat
     # whiskers made of?" because their FUSED similarity scores are above
     # min_retrieval_score. In that case, the model correctly says "I don't
     # know" but auto-research never fires because the gate only checks
     # scores, not topical overlap. We now also fire auto-research when ALL
     # results pass the score threshold but have zero content-word overlap
-    # with the query — a dead giveaway that the vault has nothing relevant.
+    # with the query -- a dead giveaway that the vault has nothing relevant.
     _STOPWORDS = frozenset(
         {
             "the",
@@ -524,14 +519,14 @@ async def prepare_turn(
 
         Returns True if at least one result shares at least one content
         word with the query. Returns False if results are empty or if
-        zero content words overlap — a strong signal that the vault has
+        zero content words overlap -- a strong signal that the vault has
         nothing relevant (e.g., gecko-adhesives notes for "cat whiskers").
         """
         if not results:
             return False
         _q_words = _content_words(query)
         if not _q_words:
-            return True  # can't tell — don't block auto-research on empty queries
+            return True  # can't tell -- don't block auto-research on empty queries
         for r in results:
             if not isinstance(r, dict):
                 continue
@@ -608,7 +603,10 @@ async def prepare_turn(
                     json.dumps(
                         {
                             "type": "status",
-                            "content": "Nothing in the vault covers this — researching it now...",
+                            "content": (
+                                "Nothing in the vault covers this -- "
+                                "researching it now..."
+                            ),
                         }
                     ),
                     websocket,
@@ -668,7 +666,7 @@ async def prepare_turn(
                         "auto_research_no_note",
                         {"query": _rewritten_query[:80]},
                     )
-            except Exception as e:  # noqa: BLE001 — best-effort, never break chat
+            except Exception as e:  # noqa: BLE001 -- best-effort, never break chat
                 session_logger.log("auto_research_failed", {"error": str(e)})
     elif not _category_allows_research and not _resumed_tool_history:
         # Log when auto-research was skipped due to the category gate
@@ -684,7 +682,7 @@ async def prepare_turn(
 
     # Conversation-aware retrieval: search the conversation index for
     # prior turns relevant to this query. This is what lets the bot
-    # "remember what it just said" — when the user asks a follow-up,
+    # "remember what it just said" -- when the user asks a follow-up,
     # the relevant prior turns are retrieved and injected into context
     # alongside the vault notes. Best-effort: never breaks the chat loop.
     _conv_results: list[dict] = []
@@ -804,9 +802,9 @@ async def prepare_turn(
             context="context_budget",
         )
 
-    # Phase 4: deterministic context filtering — drop irrelevant L1 card
+    # Phase 4: deterministic context filtering -- drop irrelevant L1 card
     # sections so the big model sees only what's relevant to this query.
-    # No longer gated on svc.small_client — the filter uses keyword
+    # No longer gated on svc.small_client -- the filter uses keyword
     # overlap, not an LLM call. Fail-safe: on any error, the full
     # context passes through unchanged.
     if len(context) > 3000:
@@ -905,7 +903,7 @@ async def prepare_turn(
     # The procedure hint (suggested action) is intentionally NOT injected
     # into the system prompt here. It is appended as the FINAL system
     # message, AFTER the user message, so it is the last thing the model
-    # reads before acting — giving it an immediate starting point.
+    # reads before acting -- giving it an immediate starting point.
     _suggested_action = ""
     try:
         _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
@@ -922,7 +920,7 @@ async def prepare_turn(
             # The small-model hint used to make a round-trip to Ollama to
             # pick which procedure matches the query. But FUSED retrieval
             # already ranked these same procedures by embedding+graph
-            # similarity to the query — the best-matching one is simply
+            # similarity to the query -- the best-matching one is simply
             # the highest-scored surfaced procedure. Reusing that score
             # is zero-LLM, zero-new-embedding, and never worse than the
             # small model's pick (it was choosing from the same surface).
@@ -932,7 +930,7 @@ async def prepare_turn(
                 _hint = _deterministic_procedure_hint(results, _proc_idx, user_message)
                 if _hint:
                     _suggested_action = (
-                        f"# SUGGESTED ACTION (pre-classification — "
+                        f"# SUGGESTED ACTION (pre-classification -- "
                         f"verify before executing): consider "
                         f'execute_procedure("{_hint}") if it matches '
                         f"the task above."
@@ -968,7 +966,7 @@ async def prepare_turn(
     if _resumed_tool_history:
         _lines = [
             "# RESUMED TURN (you were interrupted mid-task and are "
-            "continuing — do NOT re-run these tools, build on them):"
+            "continuing -- do NOT re-run these tools, build on them):"
         ]
         for _h in _resumed_tool_history[-15:]:
             if isinstance(_h, dict):
@@ -979,7 +977,7 @@ async def prepare_turn(
         system_prompt = system_prompt + "\n\n" + "\n".join(_lines)
 
     # Inject conversation recall: prior turns relevant to this query.
-    # This is what lets the bot "remember what it just said" — the
+    # This is what lets the bot "remember what it just said" -- the
     # conversation index retrieved turns that match the user's question,
     # and we inject them here so the model sees its own recent history
     # alongside the vault context. Skipped when there are no results.
@@ -1010,12 +1008,12 @@ async def prepare_turn(
     # PROMPT-CACHING STRUCTURE (2026-08-15):
     # The conversation starts with up to THREE separate system messages at
     # the beginning (stable prompt, vault context, wm block). This split is
-    # INTERNAL bookkeeping only — it lets the in-loop composer update the wm
+    # INTERNAL bookkeeping only -- it lets the in-loop composer update the wm
     # block in place (conversation[2]) without rebuilding the stable prefix.
     # Ollama's /v1/chat/completions REJECTS multiple leading system messages
     # with a 500, so OllamaClient.chat() collapses them into ONE system
     # message right before sending (see merge_leading_system_messages).
-    # Token-prefix caching is unaffected by the merge — the token sequence is
+    # Token-prefix caching is unaffected by the merge -- the token sequence is
     # identical either way, so the stable prompt prefix still caches:
     #
     #   conversation[0] = STABLE system prompt (identity + briefing +
@@ -1056,7 +1054,7 @@ async def prepare_turn(
             "Allowed citation targets (cite ONLY from these):\n"
             + ", ".join(f"[[{s}]]" for s in _allowed_stems)
             + "\n\nIf you cannot support a claim from these notes, say "
-            '"I don\'t know — nothing in the vault covers this" and offer '
+            '"I don\'t know -- nothing in the vault covers this" and offer '
             "to call vault_research. Do NOT write from your own knowledge. "
             "A factual sentence with no [[wikilink]] from the allowed set is "
             "an UNCITED claim and is FORBIDDEN."
@@ -1067,13 +1065,13 @@ async def prepare_turn(
             {"count": len(allowed_citations), "stems": _allowed_stems[:10]},
         )
     else:
-        # No notes retrieved — the model should refuse + offer research.
+        # No notes retrieved -- the model should refuse + offer research.
         # The auto-research preflight gate (above) usually prevents this,
         # but keep the directive so the model knows not to hallucinate.
         _allowed_block = (
             "\n\n--- CLOSED-SET CITATION RULE ---\n"
             "NO vault notes were retrieved for this query. You have NOTHING "
-            "to cite. Say \"I don't know — nothing in the vault covers this. "
+            "to cite. Say \"I don't know -- nothing in the vault covers this. "
             'Want me to research it?" and offer to call vault_research. '
             "Do NOT answer from your own knowledge."
         )
@@ -1093,7 +1091,7 @@ async def prepare_turn(
         },
         {
             "role": "system",
-            "content": "",  # wm block placeholder — filled by in-loop composer
+            "content": "",  # wm block placeholder -- filled by in-loop composer
         },
     ]
     conversation.extend(getattr(websocket, "conversation_history", []))
@@ -1119,7 +1117,7 @@ async def prepare_turn(
                 _pending_chain.append(_pn)
             else:
                 _pf_lines.append(
-                    f"✓ {_pn} — ALREADY EXECUTED (passed: "
+                    f"✓ {_pn} -- ALREADY EXECUTED (passed: "
                     f"{_pr.get('overall_passed', '?')})"
                 )
                 _fo = _pr.get("final_output", "")
@@ -1160,7 +1158,7 @@ async def prepare_turn(
         )
     elif _suggested_action:
         # Fallback: no preflight chain, use the old deterministic hint.
-        # 'user' role, not 'system' — see preflight_chain_injected comment.
+        # 'user' role, not 'system' -- see preflight_chain_injected comment.
         conversation.append({"role": "user", "content": _suggested_action})
         session_logger.log(
             "suggested_action_injected",
@@ -1250,11 +1248,11 @@ async def prepare_turn(
                 f"{_last_assistant[:4000]}\n"
                 f"--- END YOUR LAST TURN ---\n\n"
                 f"Proceed with what you proposed. Do NOT ask the user "
-                f"what they mean or re-search for context — they "
+                f"what they mean or re-search for context -- they "
                 f"agreed to the above. Call plan_task to structure the "
                 f"work, then execute it."
             )
-            # 'user' role, not 'system' — see preflight_chain_injected
+            # 'user' role, not 'system' -- see preflight_chain_injected
             # comment (Ollama rejects post-user system messages).
             conversation.append({"role": "user", "content": _confirm_ctx})
             session_logger.log(
@@ -1377,15 +1375,15 @@ async def prepare_turn(
                             "tool_rounds": 0,
                         },
                     )
-                    return None  # trivial turn handled — caller skips the loop
-                # Fall through — small model gave nothing useful.
+                    return None  # trivial turn handled -- caller skips the loop
+                # Fall through -- small model gave nothing useful.
                 session_logger.log(
                     "trivial_turn_fallback_empty",
                     {
                         "user_message": user_message[:80],
                     },
                 )
-        except Exception as e:  # noqa: BLE001 — best-effort: fall through to big model
+        except Exception as e:  # noqa: BLE001 -- best-effort: fall through to big model
             session_logger.log(
                 "trivial_turn_fallback_error",
                 {

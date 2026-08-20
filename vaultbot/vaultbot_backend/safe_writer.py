@@ -19,6 +19,7 @@ control where files land.
 """
 
 import ast
+import contextlib
 import os
 import re
 import shutil
@@ -147,7 +148,8 @@ def safe_write(
             "node --check before writing.",
         }
 
-    # --- 0b. Markdown guard: reject .md files (use md_safe_replace or vault_safe_write instead) ---
+    # --- 0b. Markdown guard: reject .md files (use md_safe_replace or
+    # vault_safe_write instead) ---
     # Without this, ast.parse() on markdown content either succeeds on
     # empty strings (writing 0 bytes — see session 15e346b7) or fails with
     # a confusing SyntaxError on em-dashes and other non-ASCII characters.
@@ -169,7 +171,8 @@ def safe_write(
             ),
         }
 
-    # --- 0c. Empty content guard: reject empty content (silent 0-byte write prevention) ---
+    # --- 0c. Empty content guard: reject empty content (silent 0-byte
+    # write prevention) ---
     # If the caller passes old_str/new_str (md_safe_replace params) instead
     # of content, args.get('content', '') returns '' — ast.parse('') succeeds,
     # and the file is overwritten with 0 bytes. This guard prevents that.
@@ -328,10 +331,8 @@ def safe_write(
                     checks["auto_rollback"] = f"FAILED: {rb_err}"
             # Clean up the backup after rollback (success or failure).
             if had_backup:
-                try:
+                with contextlib.suppress(Exception):
                     bak.unlink()
-                except Exception:  # noqa: BLE001 — non-critical cleanup
-                    pass
             log_fn(
                 "safe_write_rejected",
                 {"file_path": str(full), "error": err, "checks": checks},
@@ -378,10 +379,8 @@ def safe_write(
                     checks["auto_rollback"] = f"FAILED: {rb_err}"
             # Clean up the backup after rollback.
             if had_backup:
-                try:
+                with contextlib.suppress(Exception):
                     bak.unlink()
-                except Exception:  # noqa: BLE001 — non-critical cleanup
-                    pass
             log_fn(
                 "safe_write_pytest_rejected",
                 {"file_path": str(full), "error": p_out[:500], "checks": checks},
@@ -410,10 +409,8 @@ def safe_write(
     )
     # Clean up backup on success.
     if had_backup:
-        try:
+        with contextlib.suppress(Exception):
             bak.unlink()
-        except Exception:  # noqa: BLE001 — non-critical cleanup
-            pass
     return {
         "status": "written",
         "file_path": str(full),
@@ -532,9 +529,9 @@ def js_safe_write(
         # Extract the useful part of the error (skip node internals)
         err_lines = result.stderr.strip().split("\n")
         syntax_err = "\n".join(
-            l
-            for l in err_lines
-            if not l.startswith("    at ") and not l.startswith("Node.js")
+            line
+            for line in err_lines
+            if not line.startswith("    at ") and not line.startswith("Node.js")
         )
         checks["syntax"] = f"FAIL: {syntax_err}"
         os.unlink(tmp_path)
@@ -624,10 +621,8 @@ def js_safe_write(
                 checks["auto_rollback"] = f"FAILED: {rb_err}"
         # Clean up the backup after rollback.
         if had_backup:
-            try:
+            with contextlib.suppress(Exception):
                 bak.unlink()
-            except Exception:  # noqa: BLE001 — non-critical cleanup
-                pass
         log_fn(
             "js_safe_write_verify_failed",
             {"file_path": str(full), "error": str(e), "checks": checks},
@@ -641,10 +636,8 @@ def js_safe_write(
 
     # Clean up backup on success
     if had_backup:
-        try:
+        with contextlib.suppress(Exception):
             bak.unlink()
-        except Exception:  # noqa: BLE001 — non-critical cleanup
-            pass  # non-critical
 
     log_fn(
         "js_safe_write",

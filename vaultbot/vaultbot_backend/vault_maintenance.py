@@ -23,7 +23,8 @@ class VaultMaintenance:
     1. Generated notes live under vaultbot/Memory/Chat/ and
        vaultbot/Knowledge/Research/ (keeps the user's vault root clean).
     2. Chat notes on the same topic are merged into one running log.
-    3. Orphan generated notes (no wikilinks in, no wikilinks out, empty body) are removed.
+    3. Orphan generated notes (no wikilinks in, no wikilinks out, empty
+       body) are removed.
     4. Near-duplicate generated notes are merged.
     """
 
@@ -313,7 +314,6 @@ class VaultMaintenance:
         for folder in (self.chat_dir, self.research_dir):
             for path in list(folder.glob("*.md")):
                 content = path.read_text(encoding="utf-8")
-                links = WIKILINK_RE.findall(content)
                 body = self._body_text(content)
                 name = path.stem
                 norm = name.lower()
@@ -321,7 +321,6 @@ class VaultMaintenance:
                 has_backlinks = (
                     norm in graph.backlinks and len(graph.backlinks[norm]) > 0
                 )
-                len(links) > 0
                 is_empty = len(body) < 80
 
                 if is_empty and not has_backlinks:

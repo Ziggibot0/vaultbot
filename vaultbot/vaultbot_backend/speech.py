@@ -107,7 +107,10 @@ def _transcribe_openai(
             return {"error": f"auth rejected (check the API key) — {r.status_code}"}
         if r.status_code == 404:
             return {
-                "error": f"no /v1/audio/transcriptions at {base} (status 404). Does this endpoint support speech?"
+                "error": (
+                    f"no /v1/audio/transcriptions at {base} (status 404). "
+                    "Does this endpoint support speech?"
+                )
             }
         r.raise_for_status()
         text = r.json().get("text", "").strip()
@@ -204,7 +207,10 @@ async def _synthesize_openai(prov, entry, text: str) -> dict[str, Any]:
             return {"error": f"auth rejected (check the API key) — {r.status_code}"}
         if r.status_code == 404:
             return {
-                "error": f"no /v1/audio/speech at {base} (status 404). Does this endpoint support TTS?"
+                "error": (
+                    f"no /v1/audio/speech at {base} (status 404). "
+                    "Does this endpoint support TTS?"
+                )
             }
         r.raise_for_status()
         ct = r.headers.get("content-type", "audio/mpeg")
@@ -224,7 +230,7 @@ async def list_tts_voices(svc) -> dict[str, Any]:
     any voice). For openai-compatible, return the known OpenAI voice set.
     For browser, return an empty list (the frontend enumerates browser voices).
     """
-    entry, prov = _resolve(svc, "tts")
+    _entry, prov = _resolve(svc, "tts")
     if prov is None:
         return {"voices": [], "error": "No TTS provider configured."}
     if prov.type == "edge-tts":

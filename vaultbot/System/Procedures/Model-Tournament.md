@@ -37,6 +37,8 @@ summary: Model-Tournament
 
 ## Steps
 
+### Step 0: Discover candidate models and load test cases
+
 0. ```python
 import json, time, subprocess, re
 
@@ -89,6 +91,8 @@ result = json.dumps({
 print(result)
 ```
 
+### Step 1: Pull any models not yet installed
+
 1. ```python
 import json, time, subprocess
 
@@ -118,6 +122,8 @@ result = json.dumps({
 })
 print(result)
 ```
+
+### Step 2: Run each model against each test case
 
 2. ```python
 import json, time, subprocess
@@ -234,6 +240,8 @@ result = json.dumps({"results": results, "test_cases": test_cases})
 print(result)
 ```
 
+### Step 3: Score and rank the models
+
 3. ```python
 import json
 
@@ -296,6 +304,8 @@ else:
 
 print(result)
 ```
+
+### Step 4: Recommend the best model for the task
 
 4. [llm: You are a model evaluator. Below are the tournament results for benchmarking local models.
 

@@ -30,9 +30,11 @@ claim carry its own frontmatter (supports, contradicts, confidence).
 
 ## Steps
 
+### Step 1: Scan the vault for split candidates
+
 1. ```python
-   import json, os, re, sys
-   from pathlib import Path
+import json, os, re, sys
+from pathlib import Path
 
 # Import the schema module
 backend = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
@@ -92,11 +94,13 @@ for md_file in vault.rglob("*.md"):
 print(json.dumps({"candidates": candidates, "count": len(candidates)}, indent=2))
 ```
 
-2. ```python
-   import json, os, re, sys
-   from pathlib import Path
+### Step 2: Write each part as its own note
 
-   backend = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+2. ```python
+import json, os, re, sys
+from pathlib import Path
+
+backend = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
 if backend not in sys.path:
     sys.path.insert(0, backend)
 from note_schema import split_note_if_needed, inject_schema, parse_frontmatter

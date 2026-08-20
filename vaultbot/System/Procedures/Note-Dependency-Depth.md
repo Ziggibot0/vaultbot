@@ -90,8 +90,8 @@ Most dependent notes (depend on many others):
 
 Return JSON: {{"critical_notes": ["notes that would cause the most damage if deleted"], "orphan_risks": ["dependent notes that would be harmed if a hub is deleted"], "structural_observations": "one sentence about the vault structure"}}
 Return ONLY the JSON."""
-    analysis = llm_generate(prompt)
-    result = analysis
+analysis = llm_generate(prompt)
+result = analysis
 ```
 
 ### Step 3: Return the dependency analysis

@@ -16,6 +16,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - vault_graph_analyzer
+  - run_procedure
 summary: Pattern-Scan — thin orchestrator that runs Vault-Walk, computes vault-wide signals, and writes the full per-note table to pattern-scan-latest.json.
 tags:
   - procedure

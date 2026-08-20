@@ -440,7 +440,29 @@ def _parse_steps(body: str) -> list[Step]:
                         seen_steps = True
                         i += 1
                         continue
-                # else: fall through -- treat as a new step
+                else:
+                    # Text step (v1) with the same number as the header —
+                    # merge its annotations into the header step instead of
+                    # creating a duplicate. Handles the common pattern:
+                    #   ### Step 3: Validate output
+                    #   3. [validate: is a JSON list]
+                    # Without this, the compiler emits two step-3 entries
+                    # (a text step from the header + a text step from the
+                    # numbered line) and the validator flags a duplicate.
+                    clean, validation, condition, branch_target = _extract_annotations(
+                        rest
+                    )
+                    if validation:
+                        current_step.validation = validation
+                    if condition:
+                        current_step.condition = condition
+                    if branch_target is not None:
+                        current_step.branch_target = branch_target
+                    if clean and not current_step.instruction:
+                        current_step.instruction = clean
+                    seen_steps = True
+                    i += 1
+                    continue
 
             # Save previous step (if not merged above)
             if current_step is not None:
@@ -528,7 +550,7 @@ def compile_from_text(note_name: str, text: str) -> Procedure | None:
         note_name: The note stem (title without ``.md``).
         text: The full markdown text including frontmatter.
     """
-    fm, fm_str, body = _parse_frontmatter(text)
+    fm, _fm_str, body = _parse_frontmatter(text)
     if not fm:
         return None
     is_proc = fm.get("type", "").lower() == "procedure"
@@ -588,7 +610,7 @@ def compile_procedure(file_path: str) -> Procedure | None:
         file_path: Path to the ``.md`` file.
     """
     p = Path(file_path)
-    if not p.exists() or not p.suffix == ".md":
+    if not p.exists() or p.suffix != ".md":
         return None
     try:
         text = p.read_text(encoding="utf-8")

@@ -4,11 +4,23 @@ Agent-authored tool: vault_lint
 
 SCHEMA = {
     "name": "vault_lint",
-    "description": "Check a note for broken wikilinks, missing frontmatter, argument quality, and other quality issues. Returns a report of all wikilinks, which ones are broken (target note doesn't exist), whether the note has YAML frontmatter, what tags it has, and whether it passes argument-quality checks (minimum length, has wikilinks, contains reasoning language). Ignores wikilinks inside code spans/blocks. Checks against all vault files (not just .md). Use this after writing notes to verify quality.",
+    "description": (
+        "Check a note for broken wikilinks, missing frontmatter, argument "
+        "quality, and other quality issues. Returns a report of all wikilinks, "
+        "which ones are broken (target note doesn't exist), whether the note "
+        "has YAML frontmatter, what tags it has, and whether it passes "
+        "argument-quality checks (minimum length, has wikilinks, contains "
+        "reasoning language). Ignores wikilinks inside code spans/blocks. "
+        "Checks against all vault files (not just .md). Use this after "
+        "writing notes to verify quality."
+    ),
     "parameters": {
         "properties": {
             "file_path": {
-                "description": "Path to the note to lint, relative to vault root (e.g. 'vaultbot/System/Identity/Autonomy-Directive.md')",
+                "description": (
+                    "Path to the note to lint, relative to vault root (e.g. "
+                    "'vaultbot/System/Identity/Autonomy-Directive.md')"
+                ),
                 "type": "string",
             }
         },
@@ -17,13 +29,13 @@ SCHEMA = {
     },
 }
 
-import os
-import re
-from pathlib import Path
+import os  # noqa: E402
+import re  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-VAULT_ROOT = Path(
-    __file__
-).parent.parent.parent.parent.resolve()  # 4 levels up for vault root (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
+# 4 levels up for vault root
+# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
+VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",
@@ -50,7 +62,8 @@ def _build_file_index():
 
 
 def _strip_code(content: str) -> str:
-    """Remove code blocks and inline code spans so wikilinks inside them aren't matched."""
+    """Remove code blocks and inline code spans so wikilinks inside them
+    aren't matched."""
     # Strip fenced code blocks (```...```)
     content = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
     # Strip inline code spans (`...`)
@@ -75,7 +88,11 @@ def _check_argument_quality(content: str) -> list:
         issues.append(
             {
                 "type": "too_short",
-                "message": f"Note body is only {len(body)} chars — likely a bare fact, not a self-contained argument. Aim for claim + reasoning + connections in prose.",
+                "message": (
+                    f"Note body is only {len(body)} chars — likely a bare "
+                    f"fact, not a self-contained argument. Aim for claim + "
+                    f"reasoning + connections in prose."
+                ),
             }
         )
 
@@ -86,7 +103,10 @@ def _check_argument_quality(content: str) -> list:
         issues.append(
             {
                 "type": "no_wikilinks",
-                "message": "Note has no wikilinks — it should connect to related notes. Use [[Note-Title]] to cite related concepts.",
+                "message": (
+                    "Note has no wikilinks — it should connect to related "
+                    "notes. Use [[Note-Title]] to cite related concepts."
+                ),
             }
         )
 
@@ -125,7 +145,11 @@ def _check_argument_quality(content: str) -> list:
         issues.append(
             {
                 "type": "no_reasoning_language",
-                "message": "Note contains no reasoning language (because, therefore, which means, contradicts, however, etc.) — it should explain WHY, not just state facts.",
+                "message": (
+                    "Note contains no reasoning language (because, therefore, "
+                    "which means, contradicts, however, etc.) — it should "
+                    "explain WHY, not just state facts."
+                ),
             }
         )
 
@@ -159,7 +183,7 @@ def run(args: dict) -> dict:
 
     # Find all wikilinks: [[Target]] or [[Target|alias]]
     wikilinks = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", clean_content)
-    wikilinks = [l.strip() for l in wikilinks if l.strip()]
+    wikilinks = [ln.strip() for ln in wikilinks if ln.strip()]
 
     broken_links = []
     for link in wikilinks:
@@ -202,7 +226,7 @@ def run(args: dict) -> dict:
             sys.path.insert(0, backend_dir)
         from note_schema import validate_schema
 
-        schema_ok, schema_errors, schema_warnings = validate_schema(content)
+        _schema_ok, schema_errors, schema_warnings = validate_schema(content)
         for err in schema_errors:
             issues.append({"type": "schema_error", "message": err})
         for warn in schema_warnings:
@@ -211,38 +235,39 @@ def run(args: dict) -> dict:
         pass  # note_schema unavailable — skip schema checks
 
     # --- Procedure-specific frontmatter checks ---
-    # Procedures need when_to_use, description, falsifiable_if, and
-    # allowed_tools for RAG retrieval and quality. If this note is a
-    # procedure (type: procedure in frontmatter), check for these fields.
+    # If this note is a procedure (type: procedure in frontmatter), run the
+    # authoritative procedure_validator so the full required-field set is
+    # enforced (type, description, when_to_use, allowed_tools,
+    # falsifiable_if, status, model_cartridge, created, summary, tags) —
+    # not just the three fields the old check looked at. This keeps
+    # vault_lint in lockstep with Procedure-Creator's pre-publication gate.
     if has_frontmatter:
         try:
-            import yaml
+            import os
+            import sys
 
-            fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-            if fm_match:
-                fm = yaml.safe_load(fm_match.group(1))
-                if isinstance(fm, dict) and fm.get("type") == "procedure":
-                    proc_required = ["when_to_use", "description", "allowed_tools"]
-                    for field in proc_required:
-                        if not fm.get(field):
-                            issues.append(
-                                {
-                                    "type": "missing_procedure_field",
-                                    "field": field,
-                                    "message": f"Procedure is missing '{field}' field — this is required for RAG retrieval and procedure quality.",
-                                }
-                            )
-                    # falsifiable_if is strongly recommended but not strictly required
-                    if not fm.get("falsifiable_if"):
-                        issues.append(
-                            {
-                                "type": "missing_procedure_field",
-                                "field": "falsifiable_if",
-                                "message": "Procedure is missing 'falsifiable_if' field — strongly recommended for testability.",
-                            }
-                        )
-        except Exception as e:
-            print(f"vault_lint: procedure frontmatter check skipped: {e}")  # noqa: BLE001 — best-effort check, non-fatal
+            backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if backend_dir not in sys.path:
+                sys.path.insert(0, backend_dir)
+            from procedure_validator import validate_procedure_text
+
+            result = validate_procedure_text(content)
+            # Only surface frontmatter errors here — step/syntax/tool issues
+            # are the validator's job at publication time, not vault_lint's.
+            for err in result.get("errors", []):
+                if err.startswith("Frontmatter"):
+                    issues.append(
+                        {"type": "procedure_frontmatter_error", "message": err}
+                    )
+        except Exception as e:  # noqa: BLE001 — fail loud, don't silently skip
+            issues.append(
+                {
+                    "type": "procedure_check_failed",
+                    "message": (
+                        f"vault_lint could not validate procedure frontmatter: {e}"
+                    ),
+                }
+            )
 
     # Extract tags (avoid matching hex colors like #FF0000)
     tags = list(set(re.findall(r"(?<!\w)#([a-zA-Z][a-zA-Z0-9_-]*)", content)))

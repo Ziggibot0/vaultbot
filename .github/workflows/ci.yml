@@ -54,37 +54,19 @@ jobs:
         working-directory: vaultbot
         run: uv sync --frozen --extra dev
 
-      - name: "Ruff check â€” hard gate (F-rules: real bugs only)"
-        # Gate on F-rules only (undefined names, unused imports, etc.) â€”
-        # these are real bugs, not style.  The remaining ~250 B/UP/SIM/RUF
-        # violations are pre-existing style debt that needs an incremental
-        # cleanup pass; they're reported as warnings in the next step.
-        working-directory: vaultbot
-        run: uv run ruff check --select F vaultbot_backend/
-
-      - name: "Ruff check â€” soft gate (B, UP, SIM, RUF: style + correctness)"
-        # Report bug-class + style violations.  Non-blocking so the team
-        # sees the debt but CI doesn't fail on pre-existing issues.
-        # Once the debt is paid down, flip this to a hard gate.
-        working-directory: vaultbot
-        run: uv run ruff check --select B,UP,SIM,RUF vaultbot_backend/
-        continue-on-error: true
-
-      - name: Ruff check â€” full rule set (non-blocking baseline)
-        # Report ALL violations including style.  Non-blocking.
+      - name: "Ruff check â€” full rule set (HARD GATE)"
+        # The full rule set (E, F, W, I, B, UP, SIM, RUF, BLE001, FAST) is
+        # now a hard gate. The ~1500 violations of pre-existing style debt
+        # were paid down in #51 and #54, so the tree is fully ruff-clean and
+        # this gate now blocks any new violation from shipping.
         working-directory: vaultbot
         run: uv run ruff check vaultbot_backend/
-        continue-on-error: true
 
-      - name: Ruff format check
-        # Non-blocking: the codebase has pre-existing formatting drift
-        # (dozens of files) unrelated to any PR. Report it so the team sees
-        # the debt, but don't fail the build on it — same treatment as the
-        # pyright and full-rule-set steps. Flip to a hard gate once the
-        # drift is paid down.
+      - name: Ruff format check (HARD GATE)
+        # The codebase is fully formatted (220 files). Any formatting drift
+        # now fails the build.
         working-directory: vaultbot
         run: uv run ruff format --check vaultbot_backend/
-        continue-on-error: true
 
       - name: Baseline-marker check (HARD GATE)
         # Every committed .md under vaultbot/System/ must carry
@@ -97,6 +79,17 @@ jobs:
         # rail that keeps personal/bespoke content out of community PRs
         # and out of `git pull` updates (see issue #28).
         run: python vaultbot/vaultbot_backend/scripts/check_baseline_markers.py --all
+
+      - name: Procedure-frontmatter check (HARD GATE)
+        # Every committed procedure note (type: procedure in frontmatter)
+        # must carry the full required frontmatter set — type, description,
+        # when_to_use, allowed_tools, falsifiable_if, status,
+        # model_cartridge, created, summary, tags. This is the same gate
+        # Procedure-Creator applies at publication time, enforced here so a
+        # hand-edited or tool-bypassed procedure can't ship with incomplete
+        # frontmatter and silently break RAG retrieval / subprocess
+        # execution. Reuses procedure_validator (no duplicated logic).
+        run: python vaultbot/vaultbot_backend/scripts/check_procedure_frontmatter.py --all
 
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type

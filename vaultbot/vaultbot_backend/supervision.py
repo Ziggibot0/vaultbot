@@ -1,5 +1,6 @@
 """
-VaultBot supervision layer: liveness/health/heartbeat monitoring + Windows service install script.
+VaultBot supervision layer: liveness/health/heartbeat monitoring +
+Windows service install script.
 
 nssm (Non-Sucking Service Manager) is the Windows equivalent of systemd. It wraps a
 regular console process into a proper Windows service with boot-start, crash-restart,
@@ -28,6 +29,7 @@ constructor to avoid circular imports.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 import time
@@ -102,10 +104,8 @@ class HealthMonitor:
                 "timestamp": now,
             }
             if extra:
-                try:
+                with contextlib.suppress(Exception):
                     snapshot.update(extra)
-                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    pass
             return snapshot
         except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             # Never let health() crash a caller (e.g. an HTTP handler).
@@ -168,7 +168,8 @@ class HealthMonitor:
                                         on_stale()
                                     except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                                         self._log(
-                                            f"watchdog: on_stale callback raised: {exc!r}"
+                                            f"watchdog: on_stale callback "
+                                            f"raised: {exc!r}"
                                         )
                         except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                             self._log(f"watchdog: check raised: {exc!r}")

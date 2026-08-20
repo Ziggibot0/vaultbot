@@ -93,7 +93,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "llm_generate" in allowed_tools:
         snippets.append(
             'if "llm_generate" in allowed:\n'
-            "    from llm_client import get_llm_client, get_small_client, get_vision_client\n"
+            "    from llm_client import get_llm_client, get_small_client, "
+            "get_vision_client\n"
             '    _cartridge = os.environ.get("PROCEDURE_MODEL_CARTRIDGE", "big")\n'
             '    if _cartridge == "small":\n'
             "        _client = get_small_client() or get_llm_client()\n"
@@ -106,9 +107,12 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "    # 60s thinking on a one-line judgment. Big-cartridge procedures\n"
             "    # keep reasoning (synthesis needs it).\n"
             '    _think = False if _cartridge == "small" else None\n'
-            '    def llm_generate(prompt, system="You are a procedure executor. Follow the instruction. Output only the result."):\n'
-            '        messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]\n'
-            "        result = _client.chat(messages=messages, stream=False, think=_think)\n"
+            '    def llm_generate(prompt, system="You are a procedure executor. '
+            'Follow the instruction. Output only the result."):\n'
+            '        messages = [{"role": "system", "content": system}, '
+            '{"role": "user", "content": prompt}]\n'
+            "        result = _client.chat(messages=messages, stream=False, "
+            "think=_think)\n"
             '        return result.get("response", "")\n'
             '    namespace["llm_generate"] = llm_generate\n'
         )
@@ -121,7 +125,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        _vs = {"index": None, "metadata": {}, "loaded": False}\n'
             '        if not _vs["loaded"]:\n'
             '            _vs["loaded"] = True\n'
-            '            idx_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend" / "vaultbot_index"\n'
+            '            idx_dir = Path(vault_path) / "vaultbot" / '
+            '"vaultbot_backend" / "vaultbot_index"\n'
             '            idx_file = idx_dir / "index.faiss"\n'
             '            meta_file = idx_dir / "metadata.pkl"\n'
             "            if idx_file.exists() and meta_file.exists():\n"
@@ -132,7 +137,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "                    if isinstance(raw, tuple) and len(raw) >= 3:\n"
             '                        _vs["metadata"] = raw[0]\n'
             "                    elif isinstance(raw, list):\n"
-            '                        _vs["metadata"] = {i: m for i, m in enumerate(raw)}\n'
+            '                        _vs["metadata"] = {i: m for i, m in '
+            "enumerate(raw)}\n"
             "                except Exception:\n"
             "                    pass\n"
             '        if _vs["index"] is not None and _vs["metadata"]:\n'
@@ -143,7 +149,9 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "                    timeout=10\n"
             "                )\n"
             "                resp.raise_for_status()\n"
-            '                emb = np.array(resp.json()["embedding"], dtype=np.float32).reshape(1, -1)\n                faiss.normalize_L2(emb)\n'
+            '                emb = np.array(resp.json()["embedding"], '
+            "dtype=np.float32).reshape(1, -1)\n"
+            "                faiss.normalize_L2(emb)\n"
             '                distances, indices = _vs["index"].search(emb, k * 2)\n'
             "                results = []\n"
             "                for dist, idx in zip(distances[0], indices[0]):\n"
@@ -151,7 +159,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "                        continue\n"
             '                    meta = _vs["metadata"][idx]\n'
             '                    fp = meta.get("file_path", "")\n'
-            '                    results.append({"file_path": fp, "name": Path(fp).stem, "score": 1.0 / (1.0 + float(dist))})\n'
+            '                    results.append({"file_path": fp, "name": '
+            'Path(fp).stem, "score": 1.0 / (1.0 + float(dist))})\n'
             "                return results[:k]\n"
             "            except Exception:\n"
             "                pass\n"
@@ -164,11 +173,14 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '                if not f.endswith(".md"):\n'
             "                    continue\n"
             "                try:\n"
-            '                    text = Path(root, f).read_text(encoding="utf-8", errors="replace")\n'
+            '                    text = Path(root, f).read_text(encoding="utf-8", '
+            'errors="replace")\n'
             "                    text_lower = text.lower()\n"
-            "                    matches = sum(1 for t in query_terms if t in text_lower)\n"
+            "                    matches = sum(1 for t in query_terms if t "
+            "in text_lower)\n"
             "                    if matches > 0:\n"
-            '                        results.append({"file_path": str(Path(root, f)), "name": f[:-3], "score": matches / max(len(query_terms), 1)})\n'
+            '                        results.append({"file_path": str(Path(root, f)), '
+            '"name": f[:-3], "score": matches / max(len(query_terms), 1)})\n'
             "                except Exception:\n"
             "                    continue\n"
             '        results.sort(key=lambda r: r["score"], reverse=True)\n'
@@ -225,8 +237,10 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "            if link_stem not in _stem_map:\n"
             "                broken.append(link)\n"
             "        if broken:\n"
-            '            issues.append(f"{len(broken)} broken wikilinks: {broken[:5]}")\n'
-            '        return {"has_frontmatter": has_fm, "broken_wikilinks": broken, "issues": issues}\n'
+            '            issues.append(f"{len(broken)} broken wikilinks: '
+            '{broken[:5]}")\n'
+            '        return {"has_frontmatter": has_fm, "broken_wikilinks": '
+            'broken, "issues": issues}\n'
             '    namespace["vault_lint"] = vault_lint\n'
         )
 
@@ -286,12 +300,15 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             'if "run_procedure" in allowed:\n'
             "    from subprocess_utils import run as _sp_run\n"
             "    import json as _json\n"
-            '    _backend_dir = Path(os.environ.get("PYTHONPATH", ".").split(os.pathsep)[0])\n'
-            '    _venv_py = _backend_dir.parent.parent / ".venv" / "Scripts" / "python.exe"\n'
+            '    _backend_dir = Path(os.environ.get("PYTHONPATH", ".").split('
+            "os.pathsep)[0])\n"
+            '    _venv_py = _backend_dir.parent.parent / ".venv" / "Scripts" '
+            '/ "python.exe"\n'
             "    if not _venv_py.exists():\n"
             "        _venv_py = Path(sys.executable)\n"
             '    _proc_self = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
-            '    _call_stack = _json.loads(os.environ.get("PROCEDURE_CALL_STACK", "[]"))\n'
+            '    _call_stack = _json.loads(os.environ.get("PROCEDURE_CALL_STACK", '
+            '"[]"))\n'
             "    if _proc_self and _proc_self not in _call_stack:\n"
             "        _call_stack = _call_stack + [_proc_self]\n"
             "    def run_procedure(procedure_name, args=None):\n"
@@ -332,7 +349,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             'if "vault_graph_analyzer" in allowed:\n'
             "    from custom_tools.vault_graph_analyzer import analyze_graph\n"
             "    def vault_graph_analyzer(exclude_patterns=None, max_hops=6):\n"
-            '        result = analyze_graph(vault_path, exclude_patterns or ["LICENSE.md"], max_hops)\n'
+            "        result = analyze_graph(vault_path, exclude_patterns or "
+            '["LICENSE.md"], max_hops)\n'
             '        return {"status": "success", "analysis": result}\n'
             '    namespace["vault_graph_analyzer"] = vault_graph_analyzer\n'
         )
@@ -349,9 +367,11 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
     if "vault_safe_write" in allowed_tools:
         snippets.append(
             'if "vault_safe_write" in allowed:\n'
-            "    from custom_tools.vault_safe_write import run as _vault_safe_write_run\n"
+            "    from custom_tools.vault_safe_write import run as "
+            "_vault_safe_write_run\n"
             "    def vault_safe_write(file_path, content):\n"
-            '        return _vault_safe_write_run({"file_path": file_path, "content": content})\n'
+            '        return _vault_safe_write_run({"file_path": file_path, '
+            '"content": content})\n'
             '    namespace["vault_safe_write"] = vault_safe_write\n'
         )
 
@@ -384,8 +404,10 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '            gpu_info = "unknown"\n'
             "            try:\n"
             "                import subprocess as _sp\n"
-            '                nvidia = _sp.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],\n'
-            "                                 capture_output=True, text=True, timeout=5)\n"
+            '                nvidia = _sp.run(["nvidia-smi", "--query-gpu=name", '
+            '"--format=csv,noheader"],\n'
+            "                                 capture_output=True, text=True, "
+            "timeout=5)\n"
             "                if nvidia.returncode == 0 and nvidia.stdout.strip():\n"
             "                    gpu_info = nvidia.stdout.strip()\n"
             "            except Exception:\n"
@@ -409,7 +431,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "    def ollama_model_search(args=None):\n"
             '        action = (args or {}).get("action", "installed")\n'
             "        try:\n"
-            '            r = _sp.run(["ollama", "list"], capture_output=True, text=True, timeout=10)\n'
+            '            r = _sp.run(["ollama", "list"], capture_output=True, '
+            "text=True, timeout=10)\n"
             "            if r.returncode == 0:\n"
             '                lines = r.stdout.strip().split("\\n")[1:]  # skip header\n'
             "                models = []\n"
@@ -417,7 +440,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "                    parts = line.split()\n"
             "                    if parts:\n"
             "                        models.append(parts[0])\n"
-            '                return {"action": action, "models": models, "count": len(models)}\n'
+            '                return {"action": action, "models": models, '
+            '"count": len(models)}\n'
             '            return {"error": r.stderr.strip()}\n'
             "        except Exception as _e:\n"
             '            return {"error": str(_e)}\n'
@@ -431,7 +455,8 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "        try:\n"
             '            status = {"background_researcher": "unknown"}\n'
             "            # Check for researcher lock file\n"
-            '            lock = Path(vault_path) / "vaultbot" / "Memory" / ".researcher_lock"\n'
+            '            lock = Path(vault_path) / "vaultbot" / "Memory" / '
+            '".researcher_lock"\n'
             "            if lock.exists():\n"
             '                status["background_researcher"] = "running"\n'
             "            else:\n"
