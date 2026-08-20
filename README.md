@@ -52,7 +52,7 @@ the proof itself is not demonstrated yet:
 The mission is the direction. The work is getting there.
 
 For the full strategic vision, see
-[`vaultbot/Knowledge/Architecture/VaultBot-Strategic-Vision.md`](vaultbot/Knowledge/Architecture/VaultBot-Strategic-Vision.md).
+[`vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md`](vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md).
 
 ---
 
@@ -345,7 +345,7 @@ only the chat prompt is sent to that provider — your notes are not uploaded.
 - **Localhost-only:** The backend binds to `127.0.0.1` and CORS is restricted
   to Obsidian and localhost origins.
 
-See [SECURITY.md](vaultbot/SECURITY.md) for vulnerability reporting.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ---
 
@@ -399,7 +399,7 @@ The `baseline/` folder contains starter directive templates you can copy
 into `vaultbot/System/Identity/` to set rules:
 
 - `Autonomy-Directive.md` — act on its own, report after the fact
-- `Vault-Knowledge-Only-Directive.md` — never reference training data
+- `No-Wikipedia-Directive.md` — never reference Wikipedia
 - `IDK-Fallback-Directive.md` — say "I don't know" when stuck
 - `Communication-Preferences.md` — how you like to be talked to (template)
 
@@ -413,7 +413,7 @@ Wikipedia") and it will store that as a directive note itself.
 
 ## Project structure
 
-The backend (~95 modules) is organized into these key areas:
+The backend (~230 modules) is organized into these key areas:
 
 | Module | Role |
 |--------|------|
@@ -468,12 +468,12 @@ custodian. Sole merge authority for this repository; final say on project
 direction and what ships.
 
 - Role: maintainer / moderator (no copyright assignment required from
-  contributors — see [CONTRIBUTING.md](vaultbot/CONTRIBUTING.md))
+  contributors — see [CONTRIBUTING.md](CONTRIBUTING.md))
 
 **Reporting security issues:** Found a vulnerability? Please open a
 private security advisory on GitHub instead of a public issue. See
-[SECURITY.md](vaultbot/SECURITY.md) for details.
+[SECURITY.md](SECURITY.md) for details.
 
-**Contributing:** See [CONTRIBUTING.md](vaultbot/CONTRIBUTING.md). The short
+**Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md). The short
 version: test with `code_run` before `tool_create`, use `safe_write` for
 backend edits, and never commit your `.env` or vault contents.
