@@ -133,7 +133,7 @@ def existing_note_titles(svc: Services) -> dict:
             if not fp:
                 continue
             # Skip the textbooks/ folder — those are what we're weaving.
-            if "vaultbot/Knowledge/Textbooks" + os.sep not in fp + os.sep:
+            if "Knowledge/Textbooks" + os.sep not in fp + os.sep:
                 pass  # not a textbook note — keep it
             else:
                 continue
@@ -152,8 +152,8 @@ def is_ignored_index_path(p: Path) -> bool:
     ignored = (
         ".venv/",
         "vaultbot_venv/",
-        "vaultbot/vaultbot_backend/vaultbot_index/",
-        "vaultbot/vaultbot_backend/partials/",
+        "vaultbot_backend/vaultbot_index/",
+        "vaultbot_backend/partials/",
         ".git/",
     )
     return any(seg in parts for seg in ignored)
@@ -252,9 +252,9 @@ def cross_link_textbooks(
     """
     out: dict[str, Any] = {"cross_links_added": 0, "notes_linked": 0}
     try:
-        textbooks_dir = (
-            Path(os.getenv("VAULT_PATH", ".")) / "vaultbot/Knowledge/Textbooks"
-        )
+        from paths import FRAMEWORK_ROOT
+
+        textbooks_dir = FRAMEWORK_ROOT / "Knowledge/Textbooks"
         if not textbooks_dir.exists():
             return out
         # Build the set of all textbook note paths (candidates for cross-linking).
@@ -288,7 +288,7 @@ def cross_link_textbooks(
                     if fp_norm == new_norm:
                         continue
                     # Must be a textbook note.
-                    if "vaultbot/Knowledge/Textbooks" + os.sep not in fp_norm + os.sep:
+                    if "Knowledge/Textbooks" + os.sep not in fp_norm + os.sep:
                         continue
                     # Exclude same-book notes if we have source_keys.
                     if source_keys and fp_norm in source_keys:
@@ -625,9 +625,9 @@ async def weave_textbook_notes(
                     None, svc.vault_indexer.batch_add_files, card_paths, True
                 )
                 svc.vault_graph.refresh()
-                textbooks_dir = (
-                    Path(os.getenv("VAULT_PATH", ".")) / "vaultbot/Knowledge/Textbooks"
-                )
+                from paths import FRAMEWORK_ROOT
+
+                textbooks_dir = FRAMEWORK_ROOT / "Knowledge/Textbooks"
                 # Gather ALL L1 cards in the vault (incremental mode needs
                 # the full set to preserve existing cluster assignments;
                 # only the new subset gets assigned).  Merge the new

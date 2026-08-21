@@ -165,7 +165,7 @@ class RAGEvaluator:
 
         Handles every form the pipeline produces:
           - bare stem:            "No-Wikipedia-Directive"
-          - relative path:        "vaultbot/System/Identity/No-Wikipedia-Directive.md"
+          - relative path:        "System/Identity/No-Wikipedia-Directive.md"
           - absolute path:        "C:/Vault/System/Identity/No-Wikipedia-Directive.md"
           - forward/back slashes on Windows
         All normalize to "no-wikipedia-directive".

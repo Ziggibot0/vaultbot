@@ -19,7 +19,7 @@ DESIGN
 ------
 - Token is a 64-char hex string (256 bits of entropy), generated via
   secrets.token_hex(32).
-- Stored in vaultbot/vaultbot_backend/.vaultbot_auth_token (gitignored).
+- Stored in vaultbot_backend/.vaultbot_auth_token (gitignored).
 - The plugin reads the token file on startup and attaches it as the
   X-VaultBot-Token header on every fetch() and WebSocket connection.
 - The backend middleware checks the header on every HTTP request and

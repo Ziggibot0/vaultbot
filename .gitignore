@@ -125,6 +125,12 @@ vaultbot/vaultbot/
 # baseline/), NOT under vaultbot/.
 vaultbot/
 
+# The user's vault (inverted layout). The installer creates a Vault/
+# subfolder inside the framework folder; the user opens THIS in Obsidian.
+# It holds the user's notes (User/, Memory/, Knowledge/Research/) and must
+# never be committed to the framework repo.
+Vault/
+
 # Root-level scratch / debug artifacts
 test_pull_output.txt
 proc_audit_temp.md

@@ -89,7 +89,7 @@ def _run_preflight_ci_gates(vault_root: str) -> dict:
 
     from subprocess_utils import run as _subprocess_run
 
-    backend_dir = os.path.join(vault_root, "vaultbot", "vaultbot_backend")
+    backend_dir = os.path.join(vault_root, "vaultbot_backend")
     if not os.path.isdir(backend_dir):
         backend_dir = vault_root
 
@@ -332,7 +332,7 @@ def run(args: dict) -> dict:
                     }
 
     # 5b. Baseline-marker filter — exclude non-baseline System/ .md files.
-    # Only .md files under vaultbot/System/ are checked; .py files
+    # Only .md files under System/ are checked; .py files
     # and root-level files pass through. Files without "baseline: true" in
     # their YAML frontmatter are personal/bespoke and must not ship.
     from procedure_compiler import _parse_frontmatter as _parse_fm
@@ -350,7 +350,7 @@ def run(args: dict) -> dict:
             p.strip() for p in _untracked.split("\n") if p.strip()
         ]
 
-    _SYSTEM_PREFIX = "vaultbot/System/"
+    _SYSTEM_PREFIX = "System/"
     _excluded: list[str] = []
     _filtered_files: list[str] = []
     for _fp in _changed:
@@ -394,7 +394,7 @@ def run(args: dict) -> dict:
             ),
             "hint": (
                 "Add 'baseline: true' to the YAML frontmatter of any "
-                "vaultbot/System/ .md file you want to share. "
+                "System/ .md file you want to share. "
                 "Backend .py files are always baseline and don't need a marker. "
                 "See CONTRIBUTING.md → Baseline markers for the full policy."
             ),

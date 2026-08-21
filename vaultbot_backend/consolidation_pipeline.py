@@ -455,7 +455,7 @@ class ConsolidationPipeline:
             ]
             full_note = inject_schema(
                 full_note,
-                f"vaultbot/Memory/Build-Log/Semantic-{safe_name}.md",
+                f"Memory/Build-Log/Semantic-{safe_name}.md",
                 force_type="semantic",
             )
         except ImportError:

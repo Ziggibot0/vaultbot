@@ -19,8 +19,8 @@ class NoteCreator:
     """
     Creates vault notes and immediately maintains the vault so it stays clean.
 
-    - Research notes go to vaultbot/Knowledge/Research/
-    - Chat notes are merged by topic in vaultbot/Memory/Chat/
+    - Research notes go to Knowledge/Research/
+    - Chat notes are merged by topic in Memory/Chat/
     - After every write, orphan and near-duplicate generated notes are cleaned.
 
     Resilience: embedding/vector-search failures (e.g. Ollama returning 500)

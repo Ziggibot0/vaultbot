@@ -266,17 +266,17 @@ def test_heal_vault_schema_scans_all():
     tmp = tempfile.mkdtemp()
     try:
         # Create notes: one with schema, one without, one in a skipped dir
-        os.makedirs(os.path.join(tmp, "vaultbot", "Knowledge", "Research"))
-        os.makedirs(os.path.join(tmp, "vaultbot", "Memory", "Chat"))
+        os.makedirs(os.path.join(tmp, "Knowledge", "Research"))
+        os.makedirs(os.path.join(tmp, "Memory", "Chat"))
 
-        with_schema = os.path.join(tmp, "vaultbot", "Knowledge", "Research", "Good.md")
+        with_schema = os.path.join(tmp, "Knowledge", "Research", "Good.md")
         with open(with_schema, "w", encoding="utf-8") as f:
             f.write(
                 "---\ntype: research\nstatus: raw\ncreated: 2026-08-03\n"
                 "summary: x\ntags: [research]\n---\n# Good\n\nbody"
             )
 
-        without_schema = os.path.join(tmp, "vaultbot", "Memory", "Chat", "Chat-Test.md")
+        without_schema = os.path.join(tmp, "Memory", "Chat", "Chat-Test.md")
         with open(without_schema, "w", encoding="utf-8") as f:
             f.write("# Chat Test\n\nNo frontmatter.")
 

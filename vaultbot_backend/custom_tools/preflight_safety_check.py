@@ -42,7 +42,7 @@ except NameError:
         timeout=10,
     )
     git_root = Path(r.stdout.strip()) if r.returncode == 0 else Path.cwd()
-    BACKEND_DIR = git_root / "vaultbot" / "vaultbot_backend"
+    BACKEND_DIR = git_root / "vaultbot_backend"
 
 
 def run(args: dict) -> dict:
@@ -204,23 +204,26 @@ def run(args: dict) -> dict:
     # Check for the current vault folder structure (post-reorganization)
     # The vault uses function-based top-level folders: Knowledge/, Memory/,
     # System/, User/
-    vault_dir = (
-        backend_dir.parent.parent
-    )  # vault root (2 levels up from vaultbot/vaultbot_backend/)
+    from paths import FRAMEWORK_ROOT, VAULT_ROOT
+
+    vault_dir = VAULT_ROOT
     expected_folders = [
-        "vaultbot/Knowledge",
-        "vaultbot/Memory",
-        "vaultbot/System",
+        "Knowledge",
+        "Memory",
+        "System",
         "User",
     ]
     found_folders = [f for f in expected_folders if (vault_dir / f).exists()]
+    # Framework content (System/, Knowledge/) lives under FRAMEWORK_ROOT too.
+    for f in ("System", "Knowledge"):
+        if (FRAMEWORK_ROOT / f).exists() and f not in found_folders:
+            found_folders.append(f)
     note_count = sum(
         1
         for f in vault_dir.rglob("*.md")
         if "vaultbot_backend" not in str(f)
         and ".venv" not in str(f)
         and "vaultbot_venv" not in str(f)
-        and "vaultbot/vaultbot_backend" not in str(f)
     )
     results["checks"]["vault"] = {
         "exists": len(found_folders) >= 2,

@@ -33,9 +33,8 @@ SCHEMA = {
 import os  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-# 4 levels up for vault root
-# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+from paths import VAULT_ROOT  # noqa: E402
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",

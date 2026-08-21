@@ -19,10 +19,11 @@ import tempfile
 import time
 from pathlib import Path
 
+from paths import FRAMEWORK_ROOT
 from subprocess_utils import run as _subprocess_run
 
 BACKEND_DIR = Path(__file__).parent.resolve()
-BACKEND_ROOT = BACKEND_DIR.parent.parent
+BACKEND_ROOT = FRAMEWORK_ROOT
 
 
 def copy_backend_for_check(

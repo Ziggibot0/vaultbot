@@ -231,10 +231,12 @@ class TestEditLinesSafeModeIntegration:
         py_file = tmp_path / "test_code.py"
         py_file.write_text("def foo():\n    return 1\n", encoding="utf-8")
 
-        # Monkeypatch edit_lines' VAULT_ROOT to our tmp_path
+        # Monkeypatch paths' roots so resolve_content_path lands in tmp_path.
         import edit_lines
+        import paths
 
-        monkeypatch.setattr(edit_lines, "VAULT_ROOT", tmp_path)
+        monkeypatch.setattr(paths, "VAULT_ROOT", tmp_path)
+        monkeypatch.setattr(paths, "FRAMEWORK_ROOT", tmp_path)
 
         result = edit_lines.run(
             {
@@ -268,8 +270,10 @@ class TestEditLinesSafeModeIntegration:
         md_file.write_text(md_content, encoding="utf-8")
 
         import edit_lines
+        import paths
 
-        monkeypatch.setattr(edit_lines, "VAULT_ROOT", tmp_path)
+        monkeypatch.setattr(paths, "VAULT_ROOT", tmp_path)
+        monkeypatch.setattr(paths, "FRAMEWORK_ROOT", tmp_path)
         # Also patch TRASH_DIR so backup doesn't write to real trash
         monkeypatch.setattr(edit_lines, "TRASH_DIR", tmp_path / "trash")
 
@@ -294,8 +298,10 @@ class TestEditLinesSafeModeIntegration:
         py_file.write_text("def foo():\n    return 1\n", encoding="utf-8")
 
         import edit_lines
+        import paths
 
-        monkeypatch.setattr(edit_lines, "VAULT_ROOT", tmp_path)
+        monkeypatch.setattr(paths, "VAULT_ROOT", tmp_path)
+        monkeypatch.setattr(paths, "FRAMEWORK_ROOT", tmp_path)
         monkeypatch.setattr(edit_lines, "TRASH_DIR", tmp_path / "trash")
 
         # In developer mode, the safe_mode gate import will still import

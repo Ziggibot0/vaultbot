@@ -131,8 +131,9 @@ async def ingest_learning_material_endpoint(
 
     payload = payload or {}
     loop = asyncio.get_event_loop()
-    vault_root = Path(os.getenv("VAULT_PATH", "."))
-    learning_dir = vault_root / "vaultbot/learningMaterial"
+    from paths import FRAMEWORK_ROOT
+
+    learning_dir = FRAMEWORK_ROOT / "learningMaterial"
     result = await loop.run_in_executor(
         None, lambda: index_learning_material(str(learning_dir))
     )

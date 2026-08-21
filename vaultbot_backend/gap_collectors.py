@@ -146,8 +146,8 @@ def collect_thin_notes(
             if skip_vaultbot_paths and any(
                 d in file_path.replace("\\", "/")
                 for d in (
-                    "vaultbot/Memory/Chat/",
-                    "vaultbot/Knowledge/Research/",
+                    "Memory/Chat/",
+                    "Knowledge/Research/",
                 )
             ):
                 continue

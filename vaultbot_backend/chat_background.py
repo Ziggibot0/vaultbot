@@ -108,10 +108,10 @@ async def run_background_tasks(
                 if d
                 not in (
                     ".obsidian",
-                    "vaultbot/vaultbot_backend",
+                    "vaultbot_backend",
                     "node_modules",
                     ".git",
-                    "vaultbot/learningMaterial",
+                    "learningMaterial",
                     "custom_tools",
                     "__pycache__",
                 )

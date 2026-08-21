@@ -59,8 +59,16 @@ class VaultIndexer:
         index_path: str | None = None,
         session_logger=None,
         trigger_store: Any = None,
+        framework_root: str | None = None,
     ):
         self.vault_path = Path(vault_path).resolve()
+        # Optional framework root (the git repo holding System/, Knowledge/,
+        # baseline/).  When set, framework content is indexed alongside the
+        # user's vault so procedures + baseline knowledge stay retrievable.
+        # None (tests, legacy) = scan vault_path only.
+        self.framework_root = (
+            Path(framework_root).resolve() if framework_root else None
+        )
         if index_path is None:
             # Store index in the backend folder, not in the vault
             self.index_path = Path(__file__).parent / "vaultbot_index"
@@ -663,8 +671,21 @@ class VaultIndexer:
             self.observer = None
 
     def _collect_md_files(self) -> list[Path]:
-        """Scan the vault for markdown files, skipping ignored directories."""
-        return [p for p in self.vault_path.rglob("*.md") if not _is_ignored_path(p)]
+        """Scan the vault (and framework root, if set) for markdown files.
+
+        Skips ignored directories.  When ``framework_root`` is set, framework
+        content (System/Procedures, Knowledge/Concepts, baseline/) is indexed
+        alongside the user's vault so it stays retrievable.
+        """
+        roots = [self.vault_path]
+        if self.framework_root is not None and self.framework_root != self.vault_path:
+            roots.append(self.framework_root)
+        out: list[Path] = []
+        for root in roots:
+            out.extend(
+                p for p in root.rglob("*.md") if not _is_ignored_path(p)
+            )
+        return out
 
     def load(self):
         """Load a persisted index quickly without making Ollama calls."""

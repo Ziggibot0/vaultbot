@@ -1,4 +1,4 @@
-# ===========================================================================
+﻿# ===========================================================================
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
@@ -25,7 +25,7 @@ function Write-Err   { param($msg) Write-Host "  [X]  $msg" -ForegroundColor Red
 # "re-run the same command - it picks up where it left off" literally true
 # instead of aspirational.
 #
-# The state file lives at $vaultPath/.vaultbot-install-state.json, so it's
+# The state file lives at $frameworkPath/.vaultbot-install-state.json, so it's
 # only available AFTER step 3 (download). Steps 1-2 (prerequisites + name)
 # are interactive and always run - they're safe to repeat.
 $script:stateFile = $null
@@ -187,12 +187,15 @@ if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
 # -- 2b. Ask what to name the vault ------------------------------------------
-# The vault is the folder VaultBot lives in. VaultBot's own files go in a
-# `vaultbot/` subfolder inside it, so your notes stay clean at the top.
+# VaultBot installs as a self-contained folder. Inside it, the framework
+# (vaultbot_backend/, System/, Knowledge/, baseline/) lives at the top, and
+# YOUR vault is a `Vault/` subfolder you open in Obsidian. This keeps the
+# framework out of your Obsidian file explorer entirely — you only ever see
+# your own notes.
 Write-Host ""
-Write-Host "  What would you like to name your vault?" -ForegroundColor Cyan
-Write-Host "  (This is the folder VaultBot lives in. Your notes go here too.)" -ForegroundColor DarkGray
-$vaultName = Read-Host "  Vault name"
+Write-Host "  What would you like to name your VaultBot folder?" -ForegroundColor Cyan
+Write-Host "  (Your notes live in a 'Vault' subfolder inside it.)" -ForegroundColor DarkGray
+$vaultName = Read-Host "  Folder name"
 if ([string]::IsNullOrWhiteSpace($vaultName)) { $vaultName = "VaultBot" }
 Write-Host ""
 
@@ -204,8 +207,14 @@ Write-Host ""
 #      pushes fixes to your fork and opens a PR upstream, with zero manual git.
 # If `gh` is missing or the user declines auth, we fall back to the zip
 # download so a non-sharing user still gets a working vault.
-$vaultPath = Join-Path $PWD $vaultName
-$repoPath  = Join-Path $vaultPath "vaultbot"
+#
+# LAYOUT (inverted): the framework IS the top-level folder; the user's vault
+# is a `Vault/` subfolder inside it. So:
+#   $frameworkPath = the folder we clone the repo into (the framework root)
+#   $vaultPath     = $frameworkPath/Vault  (the folder you open in Obsidian)
+$frameworkPath = Join-Path $PWD $vaultName
+$repoPath      = $frameworkPath
+$vaultPath     = Join-Path $frameworkPath "Vault"
 # The requirements.txt is the canary for a correct install. A stale/partial
 # install from an older layout (e.g. the pre-flatten double-nested structure)
 # has a `vaultbot/` folder but the file one level deeper than expected. If
@@ -218,10 +227,9 @@ if ((Test-Path $repoPath) -and (Test-Path $reqCanary)) {
         Write-Warn2 "Found a stale/partial install -- re-cloning cleanly."
         Remove-Item $repoPath -Recurse -Force
     }
-    # Create the vault folder first, then nest the repo one level deep
-    # inside it as `vaultbot/`. This keeps VaultBot's files out of the
-    # user's way while the whole vault stays VaultBot's CRUD domain.
-    New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
+    # The framework folder is created by the clone/fork/zip step below (each
+    # path creates $repoPath itself). The user's vault (Vault/) is created
+    # after the clone.
     $ghOk = $false
     try {
         $gv = & gh --version 2>&1
@@ -329,8 +337,8 @@ if ((Test-Path $repoPath) -and (Test-Path $reqCanary)) {
             } else {
                 Write-Step "Forking VaultBot to your GitHub account..."
                 & gh repo fork Ziggibot0/vaultbot --clone
-                # gh clones to ./vaultbot (lowercase). Move it into the vault
-                # folder as `vaultbot/` (one level deep).
+                # gh clones to ./vaultbot (lowercase). Move it into the
+                # framework folder (the folder we named above).
                 if ((Test-Path "vaultbot") -and -not (Test-Path $repoPath)) {
                     Move-Item "vaultbot" $repoPath
                 }
@@ -365,30 +373,32 @@ if ((Test-Path $repoPath) -and (Test-Path $reqCanary)) {
         Write-OK "Downloaded to $repoPath"
     }
 
-    # -- Hoist .obsidian/ up one level so the plugin loads in the vault -----
+    # -- Create the vault + hoist .obsidian/ into it ------------------------
     # The repo ships .obsidian/plugins/vaultbot/ at its root. Obsidian looks
-    # for plugins at <vault>/.obsidian/plugins/, so we move the repo's
-    # .obsidian/ up to the vault root. This is what makes the plugin actually
-    # load when the user opens their vault.
+    # for plugins at <vault>/.obsidian/plugins/, so we create the Vault/
+    # subfolder and move the repo's .obsidian/ into it. This is what makes
+    # the plugin actually load when the user opens their vault — and it keeps
+    # the framework (vaultbot_backend/, System/, etc.) OUT of the vault.
+    New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
     $repoObsidian = Join-Path $repoPath ".obsidian"
     $vaultObsidian = Join-Path $vaultPath ".obsidian"
     if ((Test-Path $repoObsidian) -and -not (Test-Path $vaultObsidian)) {
         Move-Item $repoObsidian $vaultObsidian
-        Write-OK "Obsidian plugin installed at the vault root"
+        Write-OK "Obsidian plugin installed in the Vault/ subfolder"
     }
 }
 
 # Now that $vaultPath exists, set the install-state file path so steps
 # 4-7 can resume if the user re-runs after a partial install.
-$script:stateFile = Join-Path $vaultPath ".vaultbot-install-state.json"
+$script:stateFile = Join-Path $frameworkPath ".vaultbot-install-state.json"
 if (Test-Path $script:stateFile) {
     Write-Warn2 "Found previous install state - resuming where you left off."
 }
 
 # -- 4. Create the Python virtual environment --------------------------------
-# `.venv` is hidden in the Obsidian file explorer (dots are filtered),
-# keeping the vault clean for end users.
-$venvPath = Join-Path $vaultPath ".venv"
+# `.venv` lives at the FRAMEWORK root (next to vaultbot_backend/), NOT inside
+# the vault — so it never shows up in the user's Obsidian file explorer.
+$venvPath = Join-Path $frameworkPath ".venv"
 if (Test-StepDone "venv_created") {
     Write-Warn2 "Virtual environment already created -- skipping."
 } elseif (Test-Path (Join-Path $venvPath "Scripts\python.exe")) {
@@ -396,7 +406,7 @@ if (Test-StepDone "venv_created") {
     Set-StepDone "venv_created"
 } else {
     Write-Step "Creating Python environment (a few seconds)..."
-    Push-Location $vaultPath
+    Push-Location $frameworkPath
     try { & python -m venv .venv } finally { Pop-Location }
     Write-OK "Virtual environment created"
     Set-StepDone "venv_created"
@@ -404,7 +414,7 @@ if (Test-StepDone "venv_created") {
 
 # -- 5. Install dependencies -------------------------------------------------
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
-$reqPath    = Join-Path $vaultPath "vaultbot\vaultbot_backend\requirements.txt"
+$reqPath    = Join-Path $frameworkPath "vaultbot_backend\requirements.txt"
 
 if (Test-StepDone "deps_installed") {
     Write-Warn2 "Dependencies already installed -- skipping."
@@ -465,7 +475,7 @@ if (Test-StepDone "searxng_setup") {
                 & docker start vaultbot_searxng 2>$null | Out-Null
             } else {
                 # Run the container with the bundled settings file mounted.
-                $settingsPath = Join-Path $vaultPath "vaultbot\vaultbot_backend\searxng_settings.yml"
+                $settingsPath = Join-Path $frameworkPath "vaultbot_backend\searxng_settings.yml"
                 # Convert to Windows-style absolute path for Docker bind mount
                 $settingsPath = (Get-Item $settingsPath -ErrorAction SilentlyContinue).FullName
                 if ($settingsPath) {
@@ -645,8 +655,8 @@ if ($chatBackend -eq "ollama" -and $chatModel -and -not (Test-StepDone "chat_mod
 }
 
 # -- 7. Write .env with the user's name + LLM config -------------------------
-$envExample = Join-Path $vaultPath "vaultbot\.env.example"
-$envFile    = Join-Path $vaultPath ".env"
+$envExample = Join-Path $frameworkPath ".env.example"
+$envFile    = Join-Path $frameworkPath ".env"
 if (Test-StepDone "env_written") {
     Write-Warn2 "Config already written -- skipping."
 } elseif (Test-Path $envExample) {

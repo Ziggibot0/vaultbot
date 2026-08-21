@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # tracks the real location regardless of how the backend is launched.
 _ENV_PATH = (
     Path(__file__).resolve().parent.parent.parent / ".env"
-)  # 3 levels up for vault root (vaultbot/vaultbot_backend/routers/ -> vaultbot/)
+)  # framework root .env (vaultbot_backend/routers/ -> framework root)
 
 
 def _persist_env_value(key: str, value: str) -> None:

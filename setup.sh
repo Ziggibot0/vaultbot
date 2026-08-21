@@ -179,12 +179,14 @@ OWNER_NAME="${OWNER_NAME:-friend}"
 echo ""
 
 # ── 2b. Ask what to name the vault ──────────────────────────────────────────
-# The vault is the folder VaultBot lives in. VaultBot's own files go in a
-# `vaultbot/` subfolder inside it, so your notes stay clean at the top.
+# VaultBot installs as a self-contained folder. Inside it, the framework
+# (vaultbot_backend/, System/, Knowledge/, baseline/) lives at the top, and
+# YOUR vault is a `Vault/` subfolder you open in Obsidian. This keeps the
+# framework out of your Obsidian file explorer entirely.
 echo ""
-echo "  What would you like to name your vault?"
-echo "  (This is the folder VaultBot lives in. Your notes go here too.)"
-read -p "  Vault name: " VAULT_NAME
+echo "  What would you like to name your VaultBot folder?"
+echo "  (Your notes live in a 'Vault' subfolder inside it.)"
+read -p "  Folder name: " VAULT_NAME
 VAULT_NAME="${VAULT_NAME:-VaultBot}"
 echo ""
 
@@ -196,8 +198,12 @@ echo ""
 #      pushes fixes to your fork and opens a PR upstream, with zero manual git.
 # If `gh` is missing or the user declines auth, we fall back to the zip
 # download so a non-sharing user still gets a working vault.
-VAULT_PATH="$(pwd)/$VAULT_NAME"
-REPO_PATH="$VAULT_PATH/vaultbot"
+#
+# LAYOUT (inverted): the framework IS the top-level folder; the user's vault
+# is a `Vault/` subfolder inside it.
+FRAMEWORK_PATH="$(pwd)/$VAULT_NAME"
+REPO_PATH="$FRAMEWORK_PATH"
+VAULT_PATH="$FRAMEWORK_PATH/Vault"
 # The requirements.txt is the canary for a correct install. A stale/partial
 # install from an older layout (e.g. the pre-flatten double-nested structure)
 # has a `vaultbot/` folder but the file one level deeper than expected. If
@@ -210,10 +216,8 @@ else
         echo "  [!]  Found a stale/partial install -- re-cloning cleanly."
         rm -rf "$REPO_PATH"
     fi
-    # Create the vault folder first, then nest the repo one level deep
-    # inside it as `vaultbot/`. This keeps VaultBot's files out of the
-    # user's way while the whole vault stays VaultBot's CRUD domain.
-    mkdir -p "$VAULT_PATH"
+    # The framework folder is created by the clone/fork/zip step below. The
+    # user's vault (Vault/) is created after the clone.
     GH_OK=false
     if command -v gh &>/dev/null; then
         GH_OK=true
@@ -307,8 +311,8 @@ else
             else
                 echo ">>> Forking VaultBot to your GitHub account..."
                 gh repo fork Ziggibot0/vaultbot --clone
-                # gh clones to ./vaultbot (lowercase). Move it into the vault
-                # folder as `vaultbot/` (one level deep).
+                # gh clones to ./vaultbot (lowercase). Move it into the
+                # framework folder (the folder we named above).
                 if [ -d "vaultbot" ] && [ ! -d "$REPO_PATH" ]; then
                     mv "vaultbot" "$REPO_PATH"
                 fi
@@ -343,30 +347,31 @@ else
         echo "  [OK] Downloaded to $REPO_PATH"
     fi
 
-    # ── Hoist .obsidian/ up one level so the plugin loads in the vault ─────
+    # ── Create the vault + hoist .obsidian/ into it ────────────────────────
     # The repo ships .obsidian/plugins/vaultbot/ at its root. Obsidian looks
-    # for plugins at <vault>/.obsidian/plugins/, so we move the repo's
-    # .obsidian/ up to the vault root. This is what makes the plugin actually
-    # load when the user opens their vault.
+    # for plugins at <vault>/.obsidian/plugins/, so we create the Vault/
+    # subfolder and move the repo's .obsidian/ into it. This keeps the
+    # framework (vaultbot_backend/, System/, etc.) OUT of the vault.
+    mkdir -p "$VAULT_PATH"
     REPO_OBSIDIAN="$REPO_PATH/.obsidian"
     VAULT_OBSIDIAN="$VAULT_PATH/.obsidian"
     if [ -d "$REPO_OBSIDIAN" ] && [ ! -d "$VAULT_OBSIDIAN" ]; then
         mv "$REPO_OBSIDIAN" "$VAULT_OBSIDIAN"
-        echo "  [OK] Obsidian plugin installed at the vault root"
+        echo "  [OK] Obsidian plugin installed in the Vault/ subfolder"
     fi
 fi
 
 # Now that $VAULT_PATH exists, set the install-state file path so steps
 # 4-7 can resume if the user re-runs after a partial install.
-STATE_FILE="$VAULT_PATH/.vaultbot-install-state.json"
+STATE_FILE="$FRAMEWORK_PATH/.vaultbot-install-state.json"
 if [ -f "$STATE_FILE" ]; then
     echo "  [!]  Found previous install state -- resuming where you left off."
 fi
 
 # ── 4. Create the Python virtual environment ────────────────────────────────
-# `.venv` is hidden in the Obsidian file explorer (dots are filtered),
-# keeping the vault clean for end users.
-VENV_PYTHON="$VAULT_PATH/.venv/bin/python"
+# `.venv` lives at the FRAMEWORK root (next to vaultbot_backend/), NOT inside
+# the vault — so it never shows up in the user's Obsidian file explorer.
+VENV_PYTHON="$FRAMEWORK_PATH/.venv/bin/python"
 if step_done "venv_created"; then
     echo "  [!]  Virtual environment already created -- skipping."
 elif [ -f "$VENV_PYTHON" ]; then
@@ -374,7 +379,7 @@ elif [ -f "$VENV_PYTHON" ]; then
     mark_step_done "venv_created"
 else
     echo ">>> Creating Python environment (a few seconds)..."
-    cd "$VAULT_PATH"
+    cd "$FRAMEWORK_PATH"
     python3 -m venv .venv
     cd - >/dev/null
     echo "  [OK] Virtual environment created"
@@ -382,7 +387,7 @@ else
 fi
 
 # ── 5. Install dependencies ─────────────────────────────────────────────────
-REQ_PATH="$VAULT_PATH/vaultbot/vaultbot_backend/requirements.txt"
+REQ_PATH="$FRAMEWORK_PATH/vaultbot_backend/requirements.txt"
 if step_done "deps_installed"; then
     echo "  [!]  Dependencies already installed -- skipping."
 else
@@ -418,7 +423,7 @@ else
             echo "  [!]  SearXNG container already exists -- starting it."
             docker start vaultbot_searxng >/dev/null 2>&1
         else
-            SETTINGS_PATH="$VAULT_PATH/vaultbot/vaultbot_backend/searxng_settings.yml"
+            SETTINGS_PATH="$FRAMEWORK_PATH/vaultbot_backend/searxng_settings.yml"
             if [ -f "$SETTINGS_PATH" ]; then
                 docker run -d --name vaultbot_searxng -p 8080:8080 \
                     -v "$SETTINGS_PATH:/etc/searxng/settings.yml:ro" \
@@ -580,8 +585,8 @@ if [ "$CHAT_BACKEND" = "ollama" ] && [ -n "$CHAT_MODEL" ] && ! step_done "chat_m
 fi
 
 # ── 7. Write .env with the user's name + LLM config ────────────────────────
-ENV_EXAMPLE="$VAULT_PATH/vaultbot/.env.example"
-ENV_FILE="$VAULT_PATH/.env"
+ENV_EXAMPLE="$FRAMEWORK_PATH/.env.example"
+ENV_FILE="$FRAMEWORK_PATH/.env"
 if step_done "env_written"; then
     echo "  [!]  Config already written -- skipping."
 elif [ -f "$ENV_EXAMPLE" ]; then

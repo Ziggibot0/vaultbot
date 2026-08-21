@@ -49,16 +49,18 @@ import tempfile
 import time
 from pathlib import Path
 
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+# resolve_content_path maps a logical path to the correct physical root.
+import paths
+from paths import resolve_content_path, is_within_content_roots
+
 # custom_tools/edit_lines.py -> parent = custom_tools
 # -> parent.parent = vaultbot_backend
-# -> parent.parent.parent = vaultbot/ (framework root)
-# -> parent.parent.parent.parent = vault root
 try:
     BACKEND_DIR = Path(__file__).resolve().parent.parent
 except NameError:
     BACKEND_DIR = Path.cwd()
-VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
-TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
+TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_backend/trash/
 
 SCHEMA = {
     "name": "edit_lines",
@@ -84,8 +86,8 @@ SCHEMA = {
                 "type": "string",
                 "description": (
                     "Path to the file, relative to vault root "
-                    "(e.g. 'vaultbot/vaultbot_backend/chat_handler.py' "
-                    "or 'vaultbot/System/Procedures/My-Procedure.md')."
+                    "(e.g. 'vaultbot_backend/chat_handler.py' "
+                    "or 'System/Procedures/My-Procedure.md')."
                 ),
             },
             "start_line": {
@@ -273,7 +275,7 @@ def _write_md_safe(
         "status": "written",
         "file_path": str(full_path),
         "bytes_written": len(new_content),
-        "backup_path": str(backup_path.relative_to(VAULT_ROOT)),
+        "backup_path": str(backup_path.relative_to(paths.FRAMEWORK_ROOT)),
     }
 
 
@@ -315,7 +317,7 @@ def _write_generic(
         "status": "written",
         "file_path": str(full_path),
         "bytes_written": len(new_content),
-        "backup_path": str(backup_path.relative_to(VAULT_ROOT)),
+        "backup_path": str(backup_path.relative_to(paths.FRAMEWORK_ROOT)),
     }
 
 
@@ -360,7 +362,7 @@ def run(args: dict) -> dict:
         }
 
     # 3. Path traversal check
-    if _is_path_traversal(file_path_str, VAULT_ROOT):
+    if not is_within_content_roots(resolve_content_path(file_path_str)):
         return {
             "status": "error",
             "error": (
@@ -368,7 +370,7 @@ def run(args: dict) -> dict:
             ),
         }
 
-    full_path = (VAULT_ROOT / file_path_str).resolve()
+    full_path = resolve_content_path(file_path_str)
 
     # 4. File must exist
     if not full_path.exists():

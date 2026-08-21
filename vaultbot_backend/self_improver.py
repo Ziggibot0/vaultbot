@@ -45,14 +45,13 @@ from typing import Any, ClassVar
 import code_verify
 import safe_writer
 from config import TUNABLES
+from paths import FRAMEWORK_ROOT
 from subprocess_utils import preexec_fn, scrubbed_env
 from subprocess_utils import run as _subprocess_run
 
 BACKEND_DIR = Path(__file__).parent.resolve()
 CUSTOM_TOOLS_DIR = BACKEND_DIR / "custom_tools"
-BACKEND_ROOT = (
-    BACKEND_DIR.parent.parent
-)  # vault root (2 levels up from vaultbot/vaultbot_backend/)
+BACKEND_ROOT = FRAMEWORK_ROOT  # the framework root (git repo)
 TRASH_DIR = (
     BACKEND_DIR / "trash" / "backups"
 )  # all .bak files go here, not alongside source
@@ -678,7 +677,7 @@ class SelfImprover:
                         "checkout",
                         "HEAD",
                         "--",
-                        "vaultbot/vaultbot_backend",
+                        "vaultbot_backend",
                     ],
                     capture_output=True,
                     text=True,
