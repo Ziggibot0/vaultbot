@@ -33,7 +33,7 @@ from services import Services
 from working_memory import TaskList
 
 
-def is_malformed_tool_name(tool_name: str) -> bool:
+def is_malformed_tool_name(tool_name: str | None) -> bool:
     """True if ``tool_name`` is not a valid tool identifier (issue #130).
 
     Under context bloat the model can emit a "tool name" that is actually
@@ -104,17 +104,6 @@ async def execute_round_tools(
                 )
             }
             # Feed the short error back and skip dispatch entirely.
-            await svc.manager.send_personal_message(
-                json.dumps(
-                    {
-                        "type": "tool_result",
-                        "tool": "<malformed>",
-                        "summary": "malformed tool call rejected",
-                    }
-                ),
-                websocket,
-                session_logger=session_logger,
-            )
             conversation.append(
                 {
                     "role": "tool",

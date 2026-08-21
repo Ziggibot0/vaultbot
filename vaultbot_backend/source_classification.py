@@ -137,7 +137,7 @@ def is_github_issue_or_pr(url: str) -> bool:
     return bool(_GITHUB_LOW_CREDIBILITY_PATH.search(url.lower()))
 
 
-def _hostname(url: str) -> str:
+def _hostname(url: str | None) -> str:
     """Extract the bare hostname (no scheme, no port, no path) from a URL.
 
     Used by the source-authority allowlist/denylist (issue #133) so a
