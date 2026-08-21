@@ -56,8 +56,8 @@ def main() -> int:
     )
     ap.add_argument(
         "--repo-root",
-        default=str(_BACKEND.parent.parent),
-        help="repo root for `git ls-files` (default: two levels up from backend)",
+        default=str(_BACKEND.parent),
+        help="repo root for `git ls-files` (default: one level up from backend)",
     )
     args = ap.parse_args()
 
