@@ -1,4 +1,4 @@
-﻿# ═══════════════════════════════════════════════════════════════════════════
+# ===========================================================================
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
@@ -7,7 +7,7 @@
 # Downloads the repo, creates a Python venv, installs everything,
 # pulls AI models, asks your name, and opens Obsidian. No terminal
 # knowledge required.
-# ═══════════════════════════════════════════════════════════════════════════
+# ===========================================================================
 
 $ErrorActionPreference = "Stop"
 $repoZip   = "https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
@@ -18,17 +18,17 @@ function Write-OK    { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Gre
 function Write-Warn2 { param($msg) Write-Host "  [!]  $msg" -ForegroundColor Yellow }
 function Write-Err   { param($msg) Write-Host "  [X]  $msg" -ForegroundColor Red }
 
-# ── Install-state resume helpers ──────────────────────────────────────────
+# -- Install-state resume helpers ------------------------------------------
 # The installer writes a .vaultbot-install-state.json inside the vault folder
 # tracking which steps have completed. On re-run (e.g. the user killed the
 # terminal mid-download, or a step failed and they're trying again), each
 # step checks the state before running and skips if already done. This makes
-# "re-run the same command — it picks up where it left off" literally true
+# "re-run the same command - it picks up where it left off" literally true
 # instead of aspirational.
 #
 # The state file lives at $vaultPath/.vaultbot-install-state.json, so it's
 # only available AFTER step 3 (download). Steps 1-2 (prerequisites + name)
-# are interactive and always run — they're safe to repeat.
+# are interactive and always run - they're safe to repeat.
 $script:stateFile = $null
 
 function Test-StepDone {
@@ -99,7 +99,7 @@ function Get-FreeCloudModel {
     # known-good free models (so the pick is a model we've verified can
     # tool-call and reason), falling back to the first free+capable model
     # the API reports if none of the curated picks are still live. Returns
-    # "" if the query fails (offline) — the caller falls back to a default.
+    # "" if the query fails (offline) - the caller falls back to a default.
     $curated = @(
         "z-ai/glm-5.2:free",                          # 256K ctx, strong agentic
         "nvidia/nemotron-3-ultra-550b-a55b:free",     # 1M ctx
@@ -138,22 +138,44 @@ Write-Host "      VaultBot Installer" -ForegroundColor Cyan
 Write-Host "  =============================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── 1. Prerequisite checks ─────────────────────────────────────────────────
+# -- 1. Prerequisite checks -------------------------------------------------
 Write-Step "Checking prerequisites..."
 $missing = @()
 
 # Python 3.11+
+# Try several launchers in order: `python` (on PATH), `py` (the Windows
+# launcher, present even when `python` is not on PATH), then `python3`.
+# We surface the REAL error instead of swallowing it, so a user whose
+# Python is installed-but-not-on-PATH (or blocked by an Application
+# Control / WDAC policy) sees why instead of a false "install Python".
 $pyOk = $false
-try {
-    $pv = & python --version 2>&1
-    if ($pv -match "Python 3\.(\d+)") {
-        $minor = [int]$matches[1]
-        if ($minor -ge 11) { $pyOk = $true; Write-OK "Python: $pv" }
-        else { Write-Err "Python 3.11+ required, found $pv" }
+$pyErr = ""
+foreach ($launcher in @("python", "py", "python3")) {
+    try {
+        $pv = & $launcher --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $pv -match "Python 3\.(\d+)") {
+            $minor = [int]$matches[1]
+            if ($minor -ge 11) {
+                $pyOk = $true
+                Write-OK "Python: $pv (via '$launcher')"
+                break
+            } else {
+                Write-Err "Python 3.11+ required, found $pv (via '$launcher')"
+                $pyErr = "found $pv (too old)"
+            }
+        } else {
+            $pyErr = "$pv"
+        }
+    } catch {
+        $pyErr = $_.Exception.Message
     }
-} catch {}
+}
 if (-not $pyOk) {
     $missing += "Python 3.11+  ->  https://python.org/downloads`n         (check 'Add Python to PATH' during install!)"
+    if ($pyErr) {
+        Write-Warn2 "Python check failed: $pyErr"
+        Write-Warn2 "If Python is already installed, re-run its installer and tick 'Add Python to PATH'."
+    }
 }
 
 # Ollama
@@ -180,14 +202,14 @@ if ($missing.Count -gt 0) {
     return  # exits the iex scope without killing the terminal window
 }
 
-# ── 2. Ask the user's name ──────────────────────────────────────────────────
+# -- 2. Ask the user's name --------------------------------------------------
 Write-Host ""
 Write-Host "  What's your name? VaultBot will call you by this." -ForegroundColor Cyan
 $ownerName = Read-Host "  Your name"
 if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
-# ── 3. Get the repo (git fork, so updates merge cleanly) ───────────────────
+# -- 3. Get the repo (git fork, so updates merge cleanly) -------------------
 # VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
 # This is what makes two things possible:
 #   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
@@ -197,7 +219,7 @@ Write-Host ""
 # download so a non-sharing user still gets a working vault.
 #
 # The repo clones into a FRAMEWORK folder ($frameworkName). Inside it, the
-# `vault/` subfolder is the user's Obsidian vault — we rename it to the
+# `vault/` subfolder is the user's Obsidian vault - we rename it to the
 # user's chosen name below. The backend (vaultbot_backend/) and .venv/ live
 # at the framework root, OUTSIDE the vault, so the user never sees them.
 $frameworkPath = Join-Path $PWD $frameworkName
@@ -260,7 +282,7 @@ if (Test-Path $frameworkPath) {
             Write-Host "  A browser window will open. Sign in to GitHub, then" -ForegroundColor Yellow
             Write-Host "  copy the one-time code back into this window." -ForegroundColor Yellow
             Write-Host ""
-            Write-Host "  (No GitHub account? Just close the browser — VaultBot" -ForegroundColor DarkGray
+            Write-Host "  (No GitHub account? Just close the browser - VaultBot" -ForegroundColor DarkGray
             Write-Host "   will still install, just without auto-updates.)" -ForegroundColor DarkGray
             Write-Host ""
 
@@ -349,7 +371,7 @@ if (Test-Path $frameworkPath) {
     }
 }
 
-# ── 3b. Name the vault ─────────────────────────────────────────────────────
+# -- 3b. Name the vault -----------------------------------------------------
 # The repo ships a `vault/` subfolder (the user's Obsidian vault). Rename it
 # to the user's chosen name so they can have a different VaultBot per project.
 Write-Host ""
@@ -364,17 +386,17 @@ if ((Test-Path $shippedVault) -and -not (Test-Path $vaultPath)) {
     Write-OK "Vault named '$chosenVault'"
 } elseif (-not (Test-Path $vaultPath)) {
     New-Item -ItemType Directory -Path $vaultPath | Out-Null
-    Write-Warn2 "No shipped vault/ found — created an empty '$chosenVault' folder."
+    Write-Warn2 "No shipped vault/ found - created an empty '$chosenVault' folder."
 }
 
 # Now that $vaultPath exists, set the install-state file path so steps
 # 4-7 can resume if the user re-runs after a partial install.
 $script:stateFile = Join-Path $frameworkPath ".vaultbot-install-state.json"
 if (Test-Path $script:stateFile) {
-    Write-Warn2 "Found previous install state — resuming where you left off."
+    Write-Warn2 "Found previous install state - resuming where you left off."
 }
 
-# ── 4. Create the Python virtual environment ────────────────────────────────
+# -- 4. Create the Python virtual environment --------------------------------
 # `.venv` lives at the FRAMEWORK root (outside the vault), so the user never
 # sees it in Obsidian.
 $venvPath = Join-Path $frameworkPath ".venv"
@@ -391,7 +413,7 @@ if (Test-StepDone "venv_created") {
     Set-StepDone "venv_created"
 }
 
-# ── 5. Install dependencies ─────────────────────────────────────────────────
+# -- 5. Install dependencies -------------------------------------------------
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
 $reqPath    = Join-Path $frameworkPath "vaultbot_backend\requirements.txt"
 
@@ -404,14 +426,14 @@ if (Test-StepDone "deps_installed") {
     & $venvPython -m pip install -r $reqPath
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Dependency installation failed. See errors above."
-        Write-Host "  Re-run the same command — it picks up from here." -ForegroundColor Yellow
+        Write-Host "  Re-run the same command - it picks up from here." -ForegroundColor Yellow
         return
     }
     Write-OK "Dependencies installed"
     Set-StepDone "deps_installed"
 }
 
-# ── 5b. Set up SearXNG search container (optional, needs Docker) ───────────
+# -- 5b. Set up SearXNG search container (optional, needs Docker) -----------
 # SearXNG is a self-hosted meta-search engine that gives VaultBot's research
 # feature access to Google, Brave, DuckDuckGo, etc. via one private container.
 # Without it, research falls back to keyless backends (DDG Lite, Marginalia,
@@ -429,7 +451,7 @@ if (Test-StepDone "searxng_setup") {
 
     if ($dockerOk) {
         # `docker --version` only proves the CLI is installed. Probe the
-        # daemon with `docker info` — on Windows the daemon lives in Docker
+        # daemon with `docker info` - on Windows the daemon lives in Docker
         # Desktop, and if the app isn't running every `docker ps`/`run` call
         # fails with a pipe-not-found error.
         try {
@@ -501,7 +523,7 @@ if (Test-StepDone "searxng_setup") {
     }
 }
 
-# ── 6. Pull embedding + small models via Ollama ───────────────────────────
+# -- 6. Pull embedding + small models via Ollama ---------------------------
 # The lightweight embedding model (nomic-embed-text, ~270 MB) and the small
 # classification model (qwen3.5:4b, ~4 GB) are auto-pulled. The chat/synthesis
 # LLM is handled in step 6b based on the user's choice (local vs cloud API).
@@ -512,7 +534,7 @@ if (Test-StepDone "models_pulled") {
     & ollama pull nomic-embed-text
     Write-OK "Embedding model ready"
     # The small model (qwen3.5:4b) drives the small cartridge: cheap
-    # classification, tagging, and routing. It MUST be >= ~3-4B — a sub-1B
+    # classification, tagging, and routing. It MUST be >= ~3-4B - a sub-1B
     # model (like the old qwen3.5:0.8b) can't reliably classify or route,
     # which makes VaultBot feel broken. Pull it here so the one-liner is
     # truly all a user needs (no manual `ollama pull` afterward).
@@ -526,7 +548,7 @@ if (Test-StepDone "models_pulled") {
     Set-StepDone "models_pulled"
 }
 
-# ── 6b. Ask: local chat model or cloud API? ────────────────────────────────
+# -- 6b. Ask: local chat model or cloud API? --------------------------------
 # The embedding model (above) is mandatory and always local. The CHAT
 # model is the user's choice: a local Ollama model (free, private, heavy)
 # or a cloud API key (zero local compute, recommended for laptops).
@@ -543,17 +565,17 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
     Write-Host ""
     Write-Host "  VaultBot needs a chat model to talk to you." -ForegroundColor Cyan
     Write-Host "  Two options:" -ForegroundColor White
-    Write-Host "    1. Local (free, private, uses Ollama — already installed)" -ForegroundColor White
+    Write-Host "    1. Local (free, private, uses Ollama - already installed)" -ForegroundColor White
     Write-Host "       Downloads a model (1-5 GB). Best if you have 8+ GB RAM." -ForegroundColor DarkGray
     Write-Host "    2. Cloud API (zero local compute, recommended for laptops)" -ForegroundColor White
-    Write-Host "       Free OpenRouter tier — no credit card needed." -ForegroundColor DarkGray
+    Write-Host "       Free OpenRouter tier - no credit card needed." -ForegroundColor DarkGray
     Write-Host ""
     $choice = Read-Host "  Pick 1 or 2 (default: 1)"
     if ($choice -eq "2") {
         $chatBackend = "openai"
         Write-Host ""
         Write-Host "  VaultBot will use a cloud model (recommended for laptops)." -ForegroundColor Cyan
-        Write-Host "  The easiest free option is OpenRouter — it has a free tier" -ForegroundColor White
+        Write-Host "  The easiest free option is OpenRouter - it has a free tier" -ForegroundColor White
         Write-Host "  with no credit card required." -ForegroundColor White
         Write-Host ""
         Write-Host "  A browser window will open so you can create an account." -ForegroundColor Cyan
@@ -566,7 +588,7 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
         $apiKey = Read-Host "  Paste your API key (or press Enter to skip and add it later)"
         if ([string]::IsNullOrWhiteSpace($apiKey)) {
             Write-Host ""
-            Write-Host "  No problem — you can add your key later. After setup, edit" -ForegroundColor Yellow
+            Write-Host "  No problem - you can add your key later. After setup, edit" -ForegroundColor Yellow
             Write-Host "  the .env file and set:" -ForegroundColor Yellow
             Write-Host "    LLM_API_KEY=sk-..." -ForegroundColor White
             Write-Host "    LLM_BASE_URL=https://openrouter.ai/api/v1" -ForegroundColor White
@@ -584,9 +606,9 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
             $apiModel = Get-FreeCloudModel
             if ([string]::IsNullOrWhiteSpace($apiModel)) {
                 $apiModel = "z-ai/glm-5.2:free"
-                Write-Warn2 "Couldn't reach OpenRouter to pick a model — using a default."
+                Write-Warn2 "Couldn't reach OpenRouter to pick a model - using a default."
             }
-            Write-OK "API key saved — VaultBot will use $apiModel (free tier)."
+            Write-OK "API key saved - VaultBot will use $apiModel (free tier)."
         }
     } else {
         $chatBackend = "ollama"
@@ -619,21 +641,21 @@ if (-not (Test-StepDone "chat_backend_chosen")) {
     }
 }
 
-# ── 6c. Pull the chat model if local ──────────────────────────────────────
+# -- 6c. Pull the chat model if local --------------------------------------
 if ($chatBackend -eq "ollama" -and $chatModel -and -not (Test-StepDone "chat_model_pulled")) {
     Write-Step "Downloading chat model: $chatModel (this can take a while)..."
     Write-Host "  Grab a coffee. Large models take 5-30 min depending on your connection." -ForegroundColor DarkGray
     & ollama pull $chatModel
     if ($LASTEXITCODE -ne 0) {
         Write-Warn2 "Chat model pull failed. You can run 'ollama pull $chatModel' manually later."
-        Write-Host "  VaultBot will still start — you'll just need to pull a model before chatting." -ForegroundColor Yellow
+        Write-Host "  VaultBot will still start - you'll just need to pull a model before chatting." -ForegroundColor Yellow
     } else {
         Write-OK "Chat model ready: $chatModel"
     }
     Set-StepDone "chat_model_pulled"
 }
 
-# ── 7. Write .env with the user's name + LLM config ─────────────────────────
+# -- 7. Write .env with the user's name + LLM config -------------------------
 $envExample = Join-Path $frameworkPath ".env.example"
 $envFile    = Join-Path $frameworkPath ".env"
 if (Test-StepDone "env_written") {
@@ -663,7 +685,7 @@ if (Test-StepDone "env_written") {
     Set-StepDone "env_written"
 }
 
-# ── 7b. Configure Obsidian (hide repo-hygiene docs) ─────────────────────────
+# -- 7b. Configure Obsidian (hide repo-hygiene docs) -------------------------
 # The repo root carries GitHub-facing docs (AGENTS.md, README.md, SECURITY.md,
 # LICENSE, CONTRIBUTING.md) that must stay at the root for GitHub to see them,
 # but they should not clutter the user's Obsidian file explorer. Obsidian's
@@ -702,7 +724,7 @@ if (Test-StepDone "obsidian_ignore_configured") {
     Set-StepDone "obsidian_ignore_configured"
 }
 
-# ── 7c. Configure Obsidian (dark mode) ──────────────────────────────────────
+# -- 7c. Configure Obsidian (dark mode) --------------------------------------
 # Obsidian's appearance.json controls the theme. "baseTheme": "obsidian" is
 # the built-in dark theme. We write it so a fresh install opens in dark mode
 # without the user having to toggle it manually. We MERGE into any existing
@@ -728,7 +750,7 @@ if (Test-StepDone "obsidian_dark_mode") {
     Set-StepDone "obsidian_dark_mode"
 }
 
-# ── 8. Done -- open Obsidian ────────────────────────────────────────────────
+# -- 8. Done -- open Obsidian ------------------------------------------------
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Green
 Write-Host "      Setup Complete!" -ForegroundColor Green
