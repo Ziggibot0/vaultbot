@@ -115,4 +115,4 @@ print(result)
 
 - [[Safe-Write]] — the Python-file write tool this routes to
 - [[JS-Safe-Write]] — the JS-file write tool this routes to
-- [[Write-Note]] — note-writing workflow that depends on correct tool choice
+- [[vaultbot/System/Procedures/Write-Note]] — note-writing workflow that depends on correct tool choice

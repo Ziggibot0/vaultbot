@@ -603,8 +603,8 @@ class VaultBotPlugin extends Plugin {
 		modal.titleEl.setText('Welcome to VaultBot');
 		const isWin = process.platform === 'win32';
 		const cmd = isWin
-			? 'irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex'
-			: 'curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash';
+			? 'irm https://github.com/Ziggibot0/vaultbot/raw/main/setup.ps1 | iex'
+			: 'curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/setup.sh | bash';
 
 		// ── Checklist: what's missing? ──────────────────────────────────
 		// /preflight checks Python + Ollama presence, port, and sync folder
@@ -1127,7 +1127,7 @@ class VaultBotPlugin extends Plugin {
 			// overwrite. This preserves any local edits the vaultbot made to
 			// tracked files — the old tarball path silently clobbered them.
 			// Legacy zip installs (no .git) fall through to the tarball path.
-			const gitDir = path.join(vaultRoot, '.git');
+			const gitDir = path.join(vaultRoot, 'vaultbot', '.git');
 			if (fs.existsSync(gitDir)) {
 				notify(`Updating via git (${refSpec})…`);
 				const runGit = (args) => execFileSync('git', args, { cwd: vaultRoot, stdio: 'pipe' });
@@ -1231,29 +1231,29 @@ class VaultBotPlugin extends Plugin {
 				'-xzf', tarballPath,
 				'-C', stagingDir,
 				'--exclude=*/.obsidian/plugins/vaultbot/data.json',
-				'--exclude=*/vaultbot/vaultbot_backend/*.log',
-				'--exclude=*/vaultbot/vaultbot_backend/*_log.json',
-				'--exclude=*/vaultbot/vaultbot_backend/calibration_log.json',
-				'--exclude=*/vaultbot/vaultbot_backend/claim_verification_log.json',
-				'--exclude=*/vaultbot/vaultbot_backend/consolidation_log.json',
-				'--exclude=*/vaultbot/vaultbot_backend/embedding_drift.json',
-				'--exclude=*/vaultbot/vaultbot_backend/procedure_failure_log.json',
-				'--exclude=*/vaultbot/vaultbot_backend/rag_eval_log.json',
-				'--exclude=*/vaultbot/vaultbot_backend/touch_counts.json',
-				'--exclude=*/vaultbot/vaultbot_backend/vaultbot.pid',
-				'--exclude=*/vaultbot/vaultbot_backend/sessions',
-				'--exclude=*/vaultbot/vaultbot_backend/sessions/*',
-				'--exclude=*/vaultbot/vaultbot_backend/checkpoints',
-				'--exclude=*/vaultbot/vaultbot_backend/checkpoints/*',
-				'--exclude=*/vaultbot/vaultbot_backend/vaultbot_index',
-				'--exclude=*/vaultbot/vaultbot_backend/vaultbot_index/*',
-				'--exclude=*/vaultbot/vaultbot_backend/trash',
-				'--exclude=*/vaultbot/vaultbot_backend/trash/*',
-				'--exclude=*/vaultbot/vaultbot_backend/__pycache__',
-				'--exclude=*/vaultbot/vaultbot_backend/__pycache__/*',
-				'--exclude=*/vaultbot/vaultbot_backend/*/__pycache__',
-				'--exclude=*/vaultbot/vaultbot_backend/*/__pycache__/*',
-				'--exclude=*/vaultbot/vaultbot_backend/**/*.pyc'
+				'--exclude=*/vaultbot_backend/*.log',
+				'--exclude=*/vaultbot_backend/*_log.json',
+				'--exclude=*/vaultbot_backend/calibration_log.json',
+				'--exclude=*/vaultbot_backend/claim_verification_log.json',
+				'--exclude=*/vaultbot_backend/consolidation_log.json',
+				'--exclude=*/vaultbot_backend/embedding_drift.json',
+				'--exclude=*/vaultbot_backend/procedure_failure_log.json',
+				'--exclude=*/vaultbot_backend/rag_eval_log.json',
+				'--exclude=*/vaultbot_backend/touch_counts.json',
+				'--exclude=*/vaultbot_backend/vaultbot.pid',
+				'--exclude=*/vaultbot_backend/sessions',
+				'--exclude=*/vaultbot_backend/sessions/*',
+				'--exclude=*/vaultbot_backend/checkpoints',
+				'--exclude=*/vaultbot_backend/checkpoints/*',
+				'--exclude=*/vaultbot_backend/vaultbot_index',
+				'--exclude=*/vaultbot_backend/vaultbot_index/*',
+				'--exclude=*/vaultbot_backend/trash',
+				'--exclude=*/vaultbot_backend/trash/*',
+				'--exclude=*/vaultbot_backend/__pycache__',
+				'--exclude=*/vaultbot_backend/__pycache__/*',
+				'--exclude=*/vaultbot_backend/*/__pycache__',
+				'--exclude=*/vaultbot_backend/*/__pycache__/*',
+				'--exclude=*/vaultbot_backend/**/*.pyc'
 			];
 			execFileSync('tar.exe', extractArgs, { stdio: 'ignore' });
 
@@ -1270,8 +1270,8 @@ class VaultBotPlugin extends Plugin {
 			// tracked files rather than nuking the whole directory, so any
 			// untracked local state files (sessions/, logs, models, etc.) that
 			// the exclusions left untouched in the LIVE vault are preserved.
-			const srcBackend = path.join(archiveRoot, 'vaultbot', 'vaultbot_backend');
-			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot/vaultbot_backend/ folder.');
+			const srcBackend = path.join(archiveRoot, 'vaultbot_backend');
+			if (!fs.existsSync(srcBackend)) throw new Error('Archive has no vaultbot_backend/ folder.');
 			await copyCodeTree(srcBackend, backendDir);
 
 			notify(`Applying plugin files…`);

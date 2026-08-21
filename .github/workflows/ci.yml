@@ -51,7 +51,6 @@ jobs:
         # re-resolution, fully reproducible.  --extra dev pulls in the
         # [project.optional-dependencies].dev group (ruff, pyright,
         # pytest, httpx2, uv).
-        working-directory: vaultbot
         run: uv sync --frozen --extra dev
 
       - name: "Ruff check â€” full rule set (HARD GATE)"
@@ -59,13 +58,12 @@ jobs:
         # now a hard gate. The ~1500 violations of pre-existing style debt
         # were paid down in #51 and #54, so the tree is fully ruff-clean and
         # this gate now blocks any new violation from shipping.
-        working-directory: vaultbot
         run: uv run ruff check vaultbot_backend/
 
       - name: Ruff format check (HARD GATE)
         # The codebase is fully formatted (220 files). Any formatting drift
         # now fails the build.
-        working-directory: vaultbot
+
         run: uv run ruff format --check vaultbot_backend/
 
       - name: Baseline-marker check (HARD GATE)
@@ -78,7 +76,7 @@ jobs:
         # marker. This gate enforces the baseline membrane — the safety
         # rail that keeps personal/bespoke content out of community PRs
         # and out of `git pull` updates (see issue #28).
-        run: python vaultbot/vaultbot_backend/scripts/check_baseline_markers.py --all
+        run: python vaultbot_backend/scripts/check_baseline_markers.py --all
 
       - name: Procedure-frontmatter check (HARD GATE)
         # Every committed procedure note (type: procedure in frontmatter)
@@ -89,7 +87,7 @@ jobs:
         # hand-edited or tool-bypassed procedure can't ship with incomplete
         # frontmatter and silently break RAG retrieval / subprocess
         # execution. Reuses procedure_validator (no duplicated logic).
-        run: python vaultbot/vaultbot_backend/scripts/check_procedure_frontmatter.py --all
+        run: python vaultbot_backend/scripts/check_procedure_frontmatter.py --all
 
       - name: Procedure provenance/rationale check (HARD GATE)
         # Every committed procedure must carry provenance (sources/depends_on/
@@ -98,13 +96,12 @@ jobs:
         # pre-existing procedures were backfilled; the backfill is complete
         # (0 missing), so this now blocks any new procedure that ships
         # without provenance or rationale.
-        run: python vaultbot/vaultbot_backend/scripts/check_procedure_provenance.py
+        run: python vaultbot_backend/scripts/check_procedure_provenance.py
 
       - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
         # errors as warnings so the team sees the debt but CI stays green.
         # Config is in pyproject.toml [tool.pyright].
-        working-directory: vaultbot
         run: uv run pyright --level warning vaultbot_backend/
         continue-on-error: true
 
@@ -115,7 +112,6 @@ jobs:
         #
         # vault_indexer.py, chat_handler.py, and fused_retrieval.py are all
         # clean (0 errors) and are the hard gate today (issue #20).
-        working-directory: vaultbot
         run: uv run pyright --level error vaultbot_backend/vault_indexer.py vaultbot_backend/chat_handler.py vaultbot_backend/fused_retrieval.py
 
       - name: Pytest — unit tests (HARD GATE)
@@ -123,7 +119,7 @@ jobs:
         # No I/O, no network, no Ollama, no FAISS.  These MUST pass —
         # no continue-on-error.  This is the gate that catches regressions
         # before they ship.
-        working-directory: vaultbot/vaultbot_backend
+        working-directory: vaultbot_backend
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
@@ -141,7 +137,7 @@ jobs:
         # FAISS or vault fixtures that may not be fully buildable in a
         # bare CI runner.  Soft gate: failures are reported but don't fail
         # the build.  Once fixtures are CI-ready, flip to a hard gate.
-        working-directory: vaultbot/vaultbot_backend
+        working-directory: vaultbot_backend
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
@@ -158,7 +154,6 @@ jobs:
         # fails if the count EXCEEDS the committed baseline in
         # .ci-baseline.json. New debt is blocked; the baseline stays green
         # and is lowered incrementally as debt is paid down.
-        working-directory: vaultbot
         run: uv run python vaultbot_backend/scripts/check_debt_ratchet.py
 
       - name: Secret scan (gitleaks)
@@ -173,6 +168,5 @@ jobs:
       - name: Dependency vulnerability audit (pip-audit)
         # Hard gate: fail if any pinned dependency has a known CVE. Runs
         # against the locked environment so it reflects exactly what ships.
-        working-directory: vaultbot
         run: |
           uv run pip-audit

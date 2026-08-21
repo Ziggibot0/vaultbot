@@ -3,12 +3,11 @@
 # VaultBot one-click installer for macOS / Linux
 #
 # Run from any folder:
-#   curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
+#   curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/setup.sh | bash
 # ═══════════════════════════════════════════════════════════════════════════
 set -e
 
 REPO_ZIP="https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
-VAULT_NAME="VaultBot"
 
 # ── Install-state resume helpers ──────────────────────────────────────────
 # Same resume principle as setup.ps1: write a .vaultbot-install-state.json
@@ -179,6 +178,16 @@ read -p "  Your name: " OWNER_NAME
 OWNER_NAME="${OWNER_NAME:-friend}"
 echo ""
 
+# ── 2b. Ask what to name the vault ──────────────────────────────────────────
+# The vault is the folder VaultBot lives in. VaultBot's own files go in a
+# `vaultbot/` subfolder inside it, so your notes stay clean at the top.
+echo ""
+echo "  What would you like to name your vault?"
+echo "  (This is the folder VaultBot lives in. Your notes go here too.)"
+read -p "  Vault name: " VAULT_NAME
+VAULT_NAME="${VAULT_NAME:-VaultBot}"
+echo ""
+
 # ── 3. Get the repo (git fork, so updates merge cleanly) ───────────────────
 # VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
 # This is what makes two things possible:
@@ -188,9 +197,14 @@ echo ""
 # If `gh` is missing or the user declines auth, we fall back to the zip
 # download so a non-sharing user still gets a working vault.
 VAULT_PATH="$(pwd)/$VAULT_NAME"
-if [ -d "$VAULT_PATH" ]; then
-    echo "  [!]  Folder '$VAULT_NAME' already exists -- using it."
+REPO_PATH="$VAULT_PATH/vaultbot"
+if [ -d "$REPO_PATH" ]; then
+    echo "  [!]  VaultBot is already installed in '$VAULT_NAME' -- using it."
 else
+    # Create the vault folder first, then nest the repo one level deep
+    # inside it as `vaultbot/`. This keeps VaultBot's files out of the
+    # user's way while the whole vault stays VaultBot's CRUD domain.
+    mkdir -p "$VAULT_PATH"
     GH_OK=false
     if command -v gh &>/dev/null; then
         GH_OK=true
@@ -280,18 +294,18 @@ else
 
             if [ "$HAS_PUSH" = true ]; then
                 echo ">>> Cloning VaultBot..."
-                gh repo clone Ziggibot0/vaultbot "$VAULT_NAME"
+                gh repo clone Ziggibot0/vaultbot "$REPO_PATH"
             else
                 echo ">>> Forking VaultBot to your GitHub account..."
                 gh repo fork Ziggibot0/vaultbot --clone
-                # gh clones to ./vaultbot (lowercase); rename to $VAULT_NAME if
-                # the filesystem is case-sensitive (macOS/Linux).
-                if [ -d "vaultbot" ] && [ ! -d "$VAULT_NAME" ]; then
-                    mv "vaultbot" "$VAULT_NAME"
+                # gh clones to ./vaultbot (lowercase). Move it into the vault
+                # folder as `vaultbot/` (one level deep).
+                if [ -d "vaultbot" ] && [ ! -d "$REPO_PATH" ]; then
+                    mv "vaultbot" "$REPO_PATH"
                 fi
             fi
 
-            if [ ! -d "$VAULT_PATH" ]; then
+            if [ ! -d "$REPO_PATH" ]; then
                 echo "  [!]  GitHub clone/fork failed -- falling back to zip download."
                 GH_OK=false
             else
@@ -314,10 +328,22 @@ else
             tar -xzf "$TMP_ZIP" -C "$TMP_EXTRACT"
         fi
         INNER=$(ls -d "$TMP_EXTRACT"/*/ | head -1)
-        mv "$INNER" "$VAULT_PATH"
+        mv "$INNER" "$REPO_PATH"
         rm -f "$TMP_ZIP"
         rm -rf "$TMP_EXTRACT"
-        echo "  [OK] Downloaded to $VAULT_PATH"
+        echo "  [OK] Downloaded to $REPO_PATH"
+    fi
+
+    # ── Hoist .obsidian/ up one level so the plugin loads in the vault ─────
+    # The repo ships .obsidian/plugins/vaultbot/ at its root. Obsidian looks
+    # for plugins at <vault>/.obsidian/plugins/, so we move the repo's
+    # .obsidian/ up to the vault root. This is what makes the plugin actually
+    # load when the user opens their vault.
+    REPO_OBSIDIAN="$REPO_PATH/.obsidian"
+    VAULT_OBSIDIAN="$VAULT_PATH/.obsidian"
+    if [ -d "$REPO_OBSIDIAN" ] && [ ! -d "$VAULT_OBSIDIAN" ]; then
+        mv "$REPO_OBSIDIAN" "$VAULT_OBSIDIAN"
+        echo "  [OK] Obsidian plugin installed at the vault root"
     fi
 fi
 

@@ -2,7 +2,7 @@
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
-#   irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+#   irm https://github.com/Ziggibot0/vaultbot/raw/main/setup.ps1 | iex
 #
 # Downloads the repo, creates a Python venv, installs everything,
 # pulls AI models, asks your name, and opens Obsidian. No terminal
@@ -11,7 +11,6 @@
 
 $ErrorActionPreference = "Stop"
 $repoZip   = "https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
-$vaultName = "VaultBot"
 
 function Write-Step  { param($msg) Write-Host "`n>>> $msg" -ForegroundColor Cyan }
 function Write-OK    { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
@@ -187,6 +186,16 @@ $ownerName = Read-Host "  Your name"
 if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
+# ── 2b. Ask what to name the vault ──────────────────────────────────────────
+# The vault is the folder VaultBot lives in. VaultBot's own files go in a
+# `vaultbot/` subfolder inside it, so your notes stay clean at the top.
+Write-Host ""
+Write-Host "  What would you like to name your vault?" -ForegroundColor Cyan
+Write-Host "  (This is the folder VaultBot lives in. Your notes go here too.)" -ForegroundColor DarkGray
+$vaultName = Read-Host "  Vault name"
+if ([string]::IsNullOrWhiteSpace($vaultName)) { $vaultName = "VaultBot" }
+Write-Host ""
+
 # ── 3. Get the repo (git fork, so updates merge cleanly) ───────────────────
 # VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
 # This is what makes two things possible:
@@ -196,9 +205,14 @@ Write-Host ""
 # If `gh` is missing or the user declines auth, we fall back to the zip
 # download so a non-sharing user still gets a working vault.
 $vaultPath = Join-Path $PWD $vaultName
-if (Test-Path $vaultPath) {
-    Write-Warn2 "Folder '$vaultName' already exists here -- using it."
+$repoPath  = Join-Path $vaultPath "vaultbot"
+if (Test-Path $repoPath) {
+    Write-Warn2 "VaultBot is already installed in '$vaultName' -- using it."
 } else {
+    # Create the vault folder first, then nest the repo one level deep
+    # inside it as `vaultbot/`. This keeps VaultBot's files out of the
+    # user's way while the whole vault stays VaultBot's CRUD domain.
+    New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
     $ghOk = $false
     try {
         $gv = & gh --version 2>&1
@@ -302,19 +316,18 @@ if (Test-Path $vaultPath) {
 
             if ($hasPush) {
                 Write-Step "Cloning VaultBot..."
-                & gh repo clone Ziggibot0/vaultbot $vaultName
+                & gh repo clone Ziggibot0/vaultbot $repoPath
             } else {
                 Write-Step "Forking VaultBot to your GitHub account..."
                 & gh repo fork Ziggibot0/vaultbot --clone
-                # gh clones to ./vaultbot (lowercase); rename to $vaultName if
-                # the filesystem is case-sensitive (macOS/Linux). On Windows
-                # they're the same folder, so the rename is a no-op.
-                if ((Test-Path "vaultbot") -and -not (Test-Path $vaultName)) {
-                    Rename-Item "vaultbot" $vaultName
+                # gh clones to ./vaultbot (lowercase). Move it into the vault
+                # folder as `vaultbot/` (one level deep).
+                if ((Test-Path "vaultbot") -and -not (Test-Path $repoPath)) {
+                    Move-Item "vaultbot" $repoPath
                 }
             }
 
-            if (-not (Test-Path $vaultPath)) {
+            if (-not (Test-Path $repoPath)) {
                 Write-Warn2 "GitHub clone/fork failed -- falling back to zip download."
                 $ghOk = $false
             } else {
@@ -337,10 +350,22 @@ if (Test-Path $vaultPath) {
         $extractDir = Join-Path $env:TEMP "vaultbot-extract-$(Get-Random)"
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
         $inner = Get-ChildItem $extractDir -Directory | Select-Object -First 1
-        Move-Item $inner.FullName $vaultPath
+        Move-Item $inner.FullName $repoPath
         Remove-Item $zipPath -Force
         Remove-Item $extractDir -Recurse -Force
-        Write-OK "Downloaded to $vaultPath"
+        Write-OK "Downloaded to $repoPath"
+    }
+
+    # ── Hoist .obsidian/ up one level so the plugin loads in the vault ─────
+    # The repo ships .obsidian/plugins/vaultbot/ at its root. Obsidian looks
+    # for plugins at <vault>/.obsidian/plugins/, so we move the repo's
+    # .obsidian/ up to the vault root. This is what makes the plugin actually
+    # load when the user opens their vault.
+    $repoObsidian = Join-Path $repoPath ".obsidian"
+    $vaultObsidian = Join-Path $vaultPath ".obsidian"
+    if ((Test-Path $repoObsidian) -and -not (Test-Path $vaultObsidian)) {
+        Move-Item $repoObsidian $vaultObsidian
+        Write-OK "Obsidian plugin installed at the vault root"
     }
 }
 

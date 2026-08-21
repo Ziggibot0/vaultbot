@@ -25,11 +25,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The script lives at vaultbot/vaultbot_backend/scripts/, so the repo root
-# (where .ci-baseline.json lives) is three levels up.
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# The script lives at vaultbot_backend/scripts/, so the repo root
+# (where .ci-baseline.json lives) is two levels up.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _BASELINE_PATH = _REPO_ROOT / ".ci-baseline.json"
-_BACKEND_DIR = _REPO_ROOT / "vaultbot" / "vaultbot_backend"
+_BACKEND_DIR = _REPO_ROOT / "vaultbot_backend"
 
 _PYRIGHT_SUMMARY_RE = re.compile(r"(\d+) errors?, (\d+) warnings?, (\d+) informations?")
 _PYTEST_SUMMARY_RE = re.compile(r"(\d+) (?:failed|passed)")
