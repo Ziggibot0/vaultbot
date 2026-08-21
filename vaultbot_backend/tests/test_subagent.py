@@ -122,6 +122,33 @@ def test_build_research_wrapper_rejects_unknown_depth():
     assert "'malicious'" not in wrapper
 
 
+def test_build_research_wrapper_threads_source_allowlist():
+    """issue #133 — the source allowlist/denylist must be threaded into the
+    subagent wrapper so authoritative-only research actually filters by
+    domain. A regression here would silently drop the constraint and let a
+    personal blog back into the synthesized note."""
+    wrapper = _build_research_wrapper(
+        "oauth", "deep", ["developers.google.com"], ["medium.com"]
+    )
+    compile(wrapper, "<wrapper>", "exec")
+    assert "source_allowlist" in wrapper
+    assert "source_denylist" in wrapper
+    assert "developers.google.com" in wrapper
+    assert "medium.com" in wrapper
+    # The engine.research call must pass both through.
+    assert "source_allowlist=source_allowlist" in wrapper
+    assert "source_denylist=source_denylist" in wrapper
+
+
+def test_build_research_wrapper_no_allowlist_is_safe():
+    """With no allowlist/denylist, the wrapper still builds and passes empty
+    lists (no restriction) — the default behavior is unchanged."""
+    wrapper = _build_research_wrapper("oauth", "deep")
+    compile(wrapper, "<wrapper>", "exec")
+    assert "source_allowlist" in wrapper
+    assert "source_denylist" in wrapper
+
+
 # ── 2. Timeout → clean error (never raises) ────────────────────────────
 
 

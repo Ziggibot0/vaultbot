@@ -52,6 +52,30 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "lookup."
                         ),
                     },
+                    "source_allowlist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional list of domains to restrict research "
+                            "to (e.g. ['developers.google.com']). When set, "
+                            "ONLY sources from these domains are used — "
+                            "everything else is discarded before synthesis. "
+                            "Use this when the user requires authoritative-"
+                            "only sources ('ONLY Google official docs')."
+                        ),
+                    },
+                    "source_denylist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional list of domains to block (e.g. "
+                            "['medium.com', 'github.com']). Sources from "
+                            "these domains are discarded. Use this to block "
+                            "known-low-quality sources (personal blogs, "
+                            "random GitHub issues) when authoritative "
+                            "sources are required."
+                        ),
+                    },
                 },
                 "required": ["topic"],
             },
@@ -178,6 +202,45 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "what you've been doing or what you can do."
             ),
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_session_log",
+            "description": (
+                "Read VaultBot's own session logs (the JSONL transcripts of "
+                "past chat sessions). Use this INSTEAD of vault_search when "
+                "the user asks about recent sessions, 'what were we doing "
+                "last session', or any recency question — vault_search is "
+                "semantic (not recency-sorted) and will surface stale chat "
+                "notes. This tool returns sessions sorted newest-first by "
+                "timestamp, so 'last session' is unambiguous. Actions: "
+                "'list' (recent sessions newest-first) and 'read' (replay a "
+                "session's turns by uuid, 'latest', or title substring)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "read"],
+                        "description": "'list' recent sessions, or 'read' one.",
+                    },
+                    "session": {
+                        "type": "string",
+                        "description": (
+                            "For 'read': a session uuid, 'latest', or a "
+                            "title substring. Default: 'latest'."
+                        ),
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "For 'list': number of sessions (default 10).",
+                    },
+                },
+                "required": ["action"],
+            },
         },
     },
     {
@@ -584,6 +647,7 @@ CONTEXTUAL_TOOLS: dict[str, list[str]] = {
     ],
     "status": [
         "vaultbot_status",  # system status check
+        "read_session_log",  # read own session logs (recency questions)
         "ollama_model_search",  # search/pull Ollama models (custom tool)
         "machine_spec",  # report machine specs (custom tool)
     ],

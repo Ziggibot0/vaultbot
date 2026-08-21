@@ -49,7 +49,12 @@ def subagent_enabled() -> bool:
     )
 
 
-def build_subagent_code(topic: str, depth: str = "deep") -> str:
+def build_subagent_code(
+    topic: str,
+    depth: str = "deep",
+    source_allowlist: list[str] | None = None,
+    source_denylist: list[str] | None = None,
+) -> str:
     """Build the Python source code for the research subagent.
 
     The code runs in a subprocess with VAULT_PATH set. It:
@@ -62,6 +67,11 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
 
     All diagnostic output goes to stderr. stdout is reserved for the JSON
     brief ONLY.
+
+    ``source_allowlist`` / ``source_denylist`` (issue #133) restrict which
+    domains may be used as sources — passed through to the engine so
+    authoritative-only research ("ONLY Google official docs") actually
+    filters results by domain.
     """
     # Defensive allowlist: an unrecognized depth defaults to "deep" so a
     # bad payload can't inject arbitrary code via the depth parameter.
@@ -70,6 +80,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         depth = "deep"
 
     topic_repr = repr(topic)
+    allowlist_repr = repr(list(source_allowlist or []))
+    denylist_repr = repr(list(source_denylist or []))
 
     code = (
         "import json, os, sys, traceback\n"
@@ -85,6 +97,8 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         f"    vault_path = os.environ.get('VAULT_PATH', '.')\n"
         f"    topic = {topic_repr}\n"
         f"    depth = {depth!r}\n"
+        f"    source_allowlist = {allowlist_repr}\n"
+        f"    source_denylist = {denylist_repr}\n"
         "\n"
         "    # --- Rebuild the search backend ---\n"
         "    searxng_manager = None\n"
@@ -135,7 +149,9 @@ def build_subagent_code(topic: str, depth: str = "deep") -> str:
         "        _log(f'[subagent] title loading failed: {_te}')\n"
         "\n"
         "    report = engine.research(topic, llm_client=_oc,\n"
-        "                              vault_note_titles=_vault_titles)\n"
+        "                              vault_note_titles=_vault_titles,\n"
+        "                              source_allowlist=source_allowlist,\n"
+        "                              source_denylist=source_denylist)\n"
         "    if not report.get('source_count'):\n"
         "        _log('[subagent] no sources found — aborting')\n"
         "        sys.stdout = _real_stdout\n"
@@ -386,12 +402,15 @@ def run_subagent(
     Currently only ``task_type="research"`` is supported.  Unknown types
     return a clean error dict (never raise).
 
-    ``payload`` for research: ``{"topic": str, "depth": str}``.
+    ``payload`` for research: ``{"topic": str, "depth": str,
+    "source_allowlist": list[str] | None, "source_denylist": list[str] | None}``.
     """
     if task_type == "research":
         topic = payload.get("topic", "")
         depth = payload.get("depth", "deep")
-        wrapper = build_subagent_code(topic, depth)
+        source_allowlist = payload.get("source_allowlist")
+        source_denylist = payload.get("source_denylist")
+        wrapper = build_subagent_code(topic, depth, source_allowlist, source_denylist)
         return _run_subprocess(
             wrapper,
             session_logger=session_logger,
@@ -407,7 +426,11 @@ def run_subagent(
 
 
 def run_research_subagent(
-    topic: str, depth: str = "deep", session_logger: Any = None
+    topic: str,
+    depth: str = "deep",
+    session_logger: Any = None,
+    source_allowlist: list[str] | None = None,
+    source_denylist: list[str] | None = None,
 ) -> dict:
     """Run a research subagent for the given topic.
 
@@ -418,8 +441,11 @@ def run_research_subagent(
     - synthesis_brief: first 500 chars of synthesis
     - key_facts: up to 8 fact summaries
     - llm_synthesized: whether the LLM produced structured synthesis
+
+    ``source_allowlist`` / ``source_denylist`` (issue #133) restrict which
+    domains may be used as sources.
     """
-    code = build_subagent_code(topic, depth)
+    code = build_subagent_code(topic, depth, source_allowlist, source_denylist)
     return _run_subprocess(
         code, session_logger=session_logger, timeout=300, log_tag="subagent"
     )

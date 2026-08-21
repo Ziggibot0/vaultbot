@@ -33,6 +33,24 @@ from services import Services
 from working_memory import TaskList
 
 
+def is_malformed_tool_name(tool_name: str | None) -> bool:
+    """True if ``tool_name`` is not a valid tool identifier (issue #130).
+
+    Under context bloat the model can emit a "tool name" that is actually
+    prior tool-result text (a ~2000-char code_read JSON smashed together
+    with prose). A valid tool name is short, has no whitespace, and
+    contains no JSON braces or colons. This is a pure function so it can
+    be unit-tested directly (see tests/test_chat_loop_tools.py).
+    """
+    if not tool_name:
+        return True
+    if len(tool_name) > 64:
+        return True
+    if any(ch.isspace() for ch in tool_name):
+        return True
+    return "{" in tool_name or "}" in tool_name or ":" in tool_name
+
+
 async def execute_round_tools(
     svc: Services,
     websocket,
@@ -58,6 +76,50 @@ async def execute_round_tools(
         fn = tc.get("function", {})
         tool_name = fn.get("name", "")
         tool_args_raw = fn.get("arguments", "{}")
+
+        # --- Malformed tool-name guard (issue #130) --------------------
+        # Under context bloat the model can emit a "tool name" that is
+        # actually prior tool-result text (a ~2000-char code_read JSON
+        # smashed together with prose). Dispatching that returns a bare
+        # "unknown tool: <garbled>" and echoes the whole blob back into
+        # context, poisoning the next round. Detect it here: a valid tool
+        # name is short, has no whitespace, and contains no JSON braces.
+        # On a malformed name, feed back a SHORT, actionable error (never
+        # the garbled string) so the model can recover instead of looping.
+        if is_malformed_tool_name(tool_name):
+            session_logger.log(
+                "malformed_tool_name",
+                {
+                    "round": st.round_idx,
+                    "name_len": len(tool_name),
+                    "name_preview": tool_name[:80],
+                },
+            )
+            tool_result = {
+                "error": (
+                    "malformed tool call: the tool name was not a valid "
+                    "tool identifier (it may have been corrupted by context "
+                    "bloat). Re-emit a clean tool call with a short, "
+                    "single-word tool name from the available tools list."
+                )
+            }
+            # Feed the short error back and skip dispatch entirely.
+            conversation.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", "malformed"),
+                    "tool_name": "<malformed>",
+                    "content": json.dumps(tool_result, default=str),
+                }
+            )
+            st._turn_tool_history.append(
+                {
+                    "round": st.round_idx,
+                    "tool": "<malformed>",
+                    "result_summary": "malformed tool call rejected",
+                }
+            )
+            continue
         try:
             tool_args = (
                 json.loads(tool_args_raw)
@@ -463,7 +525,12 @@ async def execute_round_tools(
         _READ_CAP = int(
             os.getenv("VAULTBOT_READ_RESULT_CAP", str(TUNABLES.read_result_cap))
         )
-        if tool_name in ("code_read", "vault_read_note"):
+        # Read tools get the generous cap so the model sees the WHOLE
+        # content. github_issues is a read tool too (issue bodies +
+        # comment threads must be fully readable to be reasoned about —
+        # see issue #128); it was previously capped at the standard 10K
+        # chars, cutting issue bodies off mid-sentence.
+        if tool_name in ("code_read", "vault_read_note", "github_issues"):
             capped_result = truncate_tool_result(tool_result, max_chars=_READ_CAP)
         else:
             capped_result = truncate_tool_result(tool_result)

@@ -21,6 +21,37 @@ from chat_loop_state import TurnState
 from config import TUNABLES
 from services import Services
 
+# Tools whose output is a live, authoritative fact source (not vault
+# retrieval, not planning/self-edit bookkeeping). When a turn used one of
+# these, the answer is grounded in the tool's output — not model weights —
+# so the grounding gate must not false-alarm (issue #132).
+LIVE_FACT_TOOLS: frozenset[str] = frozenset(
+    {
+        "google_workspace",
+        "calendar_list",
+        "calendar_events",
+        "code_read",
+        "code_run",
+        "github_issues",
+        "web_read_source",
+        "vault_research",
+        "machine_spec",
+        "ollama_model_search",
+    }
+)
+
+
+def is_tool_sourced(turn_tool_history: list | None) -> bool:
+    """True if the turn used a live fact-source tool (issue #132).
+
+    Pure function so it can be unit-tested directly. ``turn_tool_history``
+    is the list of ``{"tool": name, ...}`` dicts recorded per round.
+    """
+    if not turn_tool_history:
+        return False
+    tools = {e.get("tool", "") for e in turn_tool_history if isinstance(e, dict)}
+    return bool(tools & LIVE_FACT_TOOLS)
+
 
 async def finalize_turn(
     svc: Services,
@@ -79,6 +110,15 @@ async def finalize_turn(
     _is_idk = False
     _is_temporal = bool(getattr(st, "_is_temporal_question", False))
     _graph_lookup = None
+    # Tool-sourced answer detection (issue #132): when the turn's facts
+    # came from LIVE tool calls (calendar, code_read, github_issues, etc.)
+    # rather than vault retrieval, the answer is grounded in the tool's
+    # output — not model weights. The grounding gate only knows about vault
+    # notes, so it would false-alarm (0% grounded) on a correct calendar
+    # answer. Detect that and suppress the scary "may draw on model
+    # weights" warning, replacing it with a neutral "sourced from live
+    # tools" note.
+    _is_tool_sourced = is_tool_sourced(getattr(st, "_turn_tool_history", None))
     try:
 
         def _graph_lookup(_wl):
@@ -114,9 +154,15 @@ async def finalize_turn(
                     "retry_count": getattr(st, "_grounding_retry_count", 0),
                     "is_idk": _is_idk,
                     "is_temporal": _is_temporal,
+                    "is_tool_sourced": _is_tool_sourced,
                 },
             )
-            if _score["failed"] and not _is_idk and not _is_temporal:
+            if (
+                _score["failed"]
+                and not _is_idk
+                and not _is_temporal
+                and not _is_tool_sourced
+            ):
                 # Hard gate: flag for retry if under the cap.
                 _retries = getattr(st, "_grounding_retry_count", 0)
                 if _retries < TUNABLES.max_grounding_retries:
@@ -142,22 +188,26 @@ async def finalize_turn(
                         f"this topic."
                     )
                     final_answer += _grounding_caution
-            elif _score["failed"] and (_is_idk or _is_temporal):
+            elif _score["failed"] and (_is_idk or _is_temporal or _is_tool_sourced):
                 # IDK answer failed grounding (expected — it has no factual
-                # claims to cite), or a temporal/recency question (grounded
-                # in conversation history, not the vault closed set). Log
-                # and skip — don't retry, don't caution.
+                # claims to cite), a temporal/recency question (grounded
+                # in conversation history, not the vault closed set), or a
+                # tool-sourced answer (grounded in a live tool call, not
+                # vault notes — issue #132). Log and skip — don't retry,
+                # don't caution.
                 session_logger.log(
                     "grounding_skipped_idk",
                     {
                         "retry_count": getattr(st, "_grounding_retry_count", 0),
                         "is_temporal": _is_temporal,
+                        "is_tool_sourced": _is_tool_sourced,
                     },
                 )
             elif (
                 _score["grounding_score"] < 0.5
                 and _score["total_wikilinks"] > 0
                 and not _is_temporal
+                and not _is_tool_sourced
             ):
                 # Some citations but many missing from the set/vault — soft warn.
                 _grounding_caution = (
@@ -180,7 +230,7 @@ async def finalize_turn(
     # "I don't know" gets no block — the citations in an IDK answer are
     # just the irrelevant notes the model was told it could cite, not
     # real provenance for a factual claim).
-    if not _is_idk and not _is_temporal:
+    if not _is_idk and not _is_temporal and not _is_tool_sourced:
         try:
             from citation_gate import build_sources_block, build_trust_badge
 
@@ -196,7 +246,8 @@ async def finalize_turn(
             session_logger.log("provenance_surface_failed", {"error": str(_e)})
     else:
         session_logger.log(
-            "provenance_surface_skipped_idk", {"is_temporal": _is_temporal}
+            "provenance_surface_skipped_idk",
+            {"is_temporal": _is_temporal, "is_tool_sourced": _is_tool_sourced},
         )
 
     # --- Token cost tracking: log and emit cumulative per-turn totals ---

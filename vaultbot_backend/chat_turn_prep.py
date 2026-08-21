@@ -147,8 +147,28 @@ async def prepare_turn(
         # conversation so retrieval finds the right notes.
         _history = getattr(websocket, "conversation_history", [])
         await send_progress(svc, websocket, "rewriting query", {})
+
+        # Fail-loud hook (issue #129): when the small model is unreachable,
+        # surface a console warning so the operator knows retrieval is
+        # degrading — instead of silently falling back every turn.
+        def _on_rewrite_failure(_e):
+            asyncio.run_coroutine_threadsafe(
+                notify_console_failure(
+                    svc,
+                    websocket,
+                    f"small model unreachable — query rewriting degraded: {_e}",
+                    context="query_rewrite",
+                ),
+                loop,
+            )
+
         _rewritten_query = await loop.run_in_executor(
-            None, rewrite_query_with_history, user_message, _history, session_logger
+            None,
+            rewrite_query_with_history,
+            user_message,
+            _history,
+            session_logger,
+            _on_rewrite_failure,
         )
         queries = [_rewritten_query]
         if svc.small_client:

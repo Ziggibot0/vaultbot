@@ -45,7 +45,13 @@ from research_synthesizer import (
     synthesize_structured_note as _synthesize_structured_note_fn,
 )
 from source_classification import (
+    is_allowlisted as _is_allowlisted,
+)
+from source_classification import (
     is_blocked_source as _is_blocked_source,
+)
+from source_classification import (
+    is_denylisted as _is_denylisted,
 )
 from source_classification import (
     is_github_issue_or_pr as _is_github_issue_or_pr,
@@ -457,7 +463,12 @@ class ResearchEngine:
             self.progress_callback(stage, detail or {})
 
     def _search_round(
-        self, query: str, round_idx: int, topic: str = ""
+        self,
+        query: str,
+        round_idx: int,
+        topic: str = "",
+        source_allowlist: list[str] | None = None,
+        source_denylist: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Run one search query and return fetched, cleaned sources.
 
@@ -541,6 +552,24 @@ class ResearchEngine:
             # operator's directive)
             if _is_blocked_source(url):
                 self._log("research_source_blocked", {"round": round_idx, "url": url})
+                continue
+            # Source-authority allowlist/denylist (issue #133): when the
+            # caller requires authoritative-only sources ("ONLY Google
+            # official docs"), filter search results by domain BEFORE any
+            # scraping or synthesis. A non-allowlisted source is discarded
+            # entirely — not just down-ranked — so it can never leak into
+            # the synthesized note.
+            if not _is_allowlisted(url, source_allowlist):
+                self._log(
+                    "research_source_not_allowlisted",
+                    {"round": round_idx, "url": url},
+                )
+                continue
+            if _is_denylisted(url, source_denylist):
+                self._log(
+                    "research_source_denylisted",
+                    {"round": round_idx, "url": url},
+                )
                 continue
             text = hit.get("raw_content", "") or ""
             snippet = hit.get("content", "")
@@ -810,6 +839,8 @@ class ResearchEngine:
         topic: str,
         llm_client: Any = None,
         vault_note_titles: list[str] | None = None,
+        source_allowlist: list[str] | None = None,
+        source_denylist: list[str] | None = None,
     ) -> dict[str, Any]:
         """Run a full multi-round research dig. Returns a structured report.
 
@@ -817,6 +848,12 @@ class ResearchEngine:
         instead of the extractive sentence-scoring. The deterministic
         search/fetch/clean pipeline is unchanged. Falls back to extractive
         synthesis if the LLM is unavailable or produces too-short output.
+
+        ``source_allowlist`` / ``source_denylist`` (issue #133) restrict
+        which domains may be used as sources. When an allowlist is set, only
+        matching domains are fetched and synthesized; everything else is
+        discarded before scraping. A denylist blocks specific low-quality
+        domains (Medium, personal blogs) even when no allowlist is set.
         """
         t0 = time.time()
         topic = topic.strip()
@@ -870,7 +907,13 @@ class ResearchEngine:
                     "total_sources_so_far": len(all_sources),
                 },
             )
-            sources = self._search_round(query, round_idx, topic=search_topic)
+            sources = self._search_round(
+                query,
+                round_idx,
+                topic=search_topic,
+                source_allowlist=source_allowlist,
+                source_denylist=source_denylist,
+            )
             # Dedup against already-collected sources (normalized URLs
             # catch http vs https duplicates of the same page).
             # FIX: update seen_urls DURING the loop, not after, so that

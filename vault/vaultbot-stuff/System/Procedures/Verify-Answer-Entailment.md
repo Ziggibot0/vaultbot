@@ -81,7 +81,7 @@ else:
 ### Step 2: Resolve each cited note to its file and read its text
 
 2. ```python
-import json
+import json, time
 
 data = json.loads(output)
 pairs = data.get("pairs", [])
@@ -90,20 +90,29 @@ for p in pairs:
     note = p.get("note", "")
     source_text = ""
     if note:
-        try:
-            # Resolve the wikilink stem to a file path via vault_search,
-            # then read the full note text via code_read.
-            hits = vault_search(note, k=1)
-            if hits and len(hits) > 0:
-                fp = hits[0].get("file_path", "")
-                if fp:
-                    content = code_read(fp)
-                    if isinstance(content, dict):
-                        source_text = content.get("content", "") or content.get("text", "")
-                    else:
-                        source_text = str(content)
-        except Exception:
-            source_text = ""
+        # Resolve the wikilink stem to a file path via vault_search,
+        # then read the full note text via code_read. A note created in
+        # THIS session may not be indexed yet (the index refresh is
+        # async), so retry once with a short delay before giving up —
+        # an empty source_text silently passes "unsupported" verdicts
+        # and makes the whole verification theater (issue #131).
+        for attempt in range(2):
+            try:
+                hits = vault_search(note, k=1)
+                if hits and len(hits) > 0:
+                    fp = hits[0].get("file_path", "")
+                    if fp:
+                        content = code_read(fp)
+                        if isinstance(content, dict):
+                            source_text = content.get("content", "") or content.get("text", "")
+                        else:
+                            source_text = str(content)
+                if source_text:
+                    break
+                if attempt == 0:
+                    time.sleep(1.0)  # let the async indexer pick up a new note
+            except Exception:
+                source_text = ""
     enriched.append({
         "claim": p.get("claim", ""),
         "note": note,
@@ -121,12 +130,14 @@ import json
 data = json.loads(output)
 pairs = data.get("pairs", [])
 verdicts = []
+empty_source_count = 0
 
 for p in pairs:
     claim = p.get("claim", "")
     note = p.get("note", "")
     source_text = p.get("source_text", "")
     if not source_text:
+        empty_source_count += 1
         verdicts.append({
             "claim": claim,
             "note": note,
@@ -165,7 +176,26 @@ for p in pairs:
             "reasoning": "entailment check failed: " + str(e)[:100],
         })
 
-result = json.dumps(verdicts)
+# Fail loud when verification could not actually run (issue #131): if there
+# are claims but EVERY source_text was empty, the procedure verified nothing
+# and must NOT report overall_passed=true. Raising here makes the step fail,
+# which propagates to overall_passed=false instead of a silent false pass.
+if pairs and empty_source_count == len(pairs):
+    raise RuntimeError(
+        "entailment verification could not run: no source text was readable "
+        "for any cited note (the notes may be newly created and not yet "
+        "indexed). Refusing to report a false pass."
+    )
+
+summary = {
+    "total": len(verdicts),
+    "supported": sum(1 for v in verdicts if v["verdict"] == "supported"),
+    "unsupported": sum(1 for v in verdicts if v["verdict"] == "unsupported"),
+    "contradicted": sum(1 for v in verdicts if v["verdict"] == "contradicted"),
+    "empty_source": empty_source_count,
+    "verdicts": verdicts,
+}
+result = json.dumps(summary)
 ```
 
 ## Related

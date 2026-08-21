@@ -96,6 +96,11 @@ async def execute_agent_tool(
 
         topic = (args.get("topic") or "").strip()
         depth = args.get("depth", "deep")
+        # Source-authority constraints (issue #133): the caller may require
+        # authoritative-only sources ("ONLY Google official docs") via an
+        # allowlist, or block known-low-quality domains via a denylist.
+        source_allowlist = args.get("source_allowlist")
+        source_denylist = args.get("source_denylist")
         if not topic:
             return {"error": "missing topic"}
 
@@ -135,6 +140,8 @@ async def execute_agent_tool(
                     topic,
                     depth,
                     session_logger,
+                    source_allowlist,
+                    source_denylist,
                 )
             except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                 session_logger.log_exception(e, context="subagent_research")
@@ -196,6 +203,10 @@ async def execute_agent_tool(
                 f"research{topic[:40]}",
                 svc.research_engine.research,
                 topic,
+                None,  # llm_client (in-process path uses the engine's own)
+                None,  # vault_note_titles
+                source_allowlist,
+                source_denylist,
             )
         finally:
             svc.research_engine.max_rounds = int(
@@ -457,6 +468,90 @@ async def execute_agent_tool(
 
     if tool_name == "vaultbot_status":
         return svc.autonomous_researcher.status()
+
+    if tool_name == "read_session_log":
+        # Read VaultBot's own session logs (issue #134). Wraps
+        # session_log_reader.py so the agent can answer "what were we
+        # doing last session" from the actual JSONL transcripts, sorted
+        # newest-first — NOT from semantic vault_search (which surfaces
+        # stale chat notes regardless of recency).
+        from session_log_reader import (
+            find_session_file,
+            format_transcript,
+            parse_session_log,
+        )
+
+        action = (args.get("action") or "list").strip().lower()
+        sessions_dir = Path(__file__).resolve().parent / "sessions"
+
+        def _list_sessions():
+            if not sessions_dir.exists():
+                return {"error": f"sessions directory not found: {sessions_dir}"}
+            count = int(args.get("count", 10))
+            files = sorted(
+                sessions_dir.glob("*.jsonl"),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+            out = []
+            for f in files[:count]:
+                title = "New Session"
+                started_at = ""
+                try:
+                    for line in f.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines():
+                        try:
+                            evt = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if evt.get("event") == "session_title":
+                            title = evt.get("title", title)
+                            break
+                        if evt.get("event") == "session_start":
+                            title = evt.get("title", title)
+                            started_at = evt.get("started_at", "")
+                except OSError:
+                    pass
+                out.append(
+                    {
+                        "session_id": f.stem,
+                        "title": title,
+                        "started_at": started_at,
+                        "mtime": f.stat().st_mtime,
+                    }
+                )
+            return {"sessions": out, "count": len(out)}
+
+        def _read_session():
+            query = (args.get("session") or "latest").strip()
+            target = find_session_file(sessions_dir, query)
+            if target is None:
+                return {"error": f"no session found for: {query!r}"}
+            summary = parse_session_log(target)
+            return {
+                "session_id": summary["session_id"],
+                "title": summary["title"],
+                "started_at": summary["started_at"],
+                "turns": summary["turns"],
+                "tool_calls": [
+                    {
+                        "tool": tc.get("tool"),
+                        "args": tc.get("args"),
+                        "result": (tc.get("result") or "")[:500],
+                        "error": tc.get("error"),
+                    }
+                    for tc in summary["tool_calls"]
+                ],
+                "exceptions": summary["exceptions"],
+                "transcript": format_transcript(summary, filter_type="conversation"),
+            }
+
+        if action == "list":
+            return await loop.run_in_executor(None, _list_sessions)
+        if action == "read":
+            return await loop.run_in_executor(None, _read_session)
+        return {"error": "action must be 'list' or 'read'"}
 
     # --- Meta-tools (self-improvement) --- #
     if tool_name == "code_read":
@@ -916,4 +1011,9 @@ async def execute_agent_tool(
                 _task.add_done_callback(_background_tasks.discard)
         return result
 
-    return {"error": f"unknown tool: {tool_name}"}
+    # Unknown tool (issue #130): return a SHORT error, never echo a long
+    # garbled tool name back into context. A corrupted name (prior tool
+    # result text) would otherwise be injected verbatim into the next
+    # round, poisoning the conversation. Truncate defensively.
+    _short_name = (tool_name or "")[:40]
+    return {"error": f"unknown tool: {_short_name}"}
