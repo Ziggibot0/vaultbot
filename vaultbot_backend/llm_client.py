@@ -113,6 +113,7 @@ class LLMClient:
         stream: bool = False,
         think: bool | None = None,
         max_predict: int | None = None,
+        timeout: float | None = None,
     ) -> Any:
         """Synthesize a chat response.
 
@@ -121,6 +122,9 @@ class LLMClient:
         OpenAI-compatible clients map it to no-op (they have no reasoning
         toggle) and use ``max_predict`` as ``max_tokens``. ``max_predict``
         caps output tokens so a runaway small model can't ramble.
+        ``timeout`` overrides the client's default per-call timeout (used by
+        bounded procedure steps so one stalled claim can't hang the whole
+        procedure — see issue #137).
         """
         raise NotImplementedError
 
@@ -419,6 +423,7 @@ class OpenAICompatibleClient(LLMClient):
         stream: bool = False,
         think: bool | None = None,
         max_predict: int | None = None,
+        timeout: float | None = None,
     ) -> Any:
         payload: dict[str, Any] = {
             "model": self.llm_model,
@@ -444,7 +449,7 @@ class OpenAICompatibleClient(LLMClient):
                 headers=self._headers(),
                 json=payload,
                 stream=stream,
-                timeout=self.timeout,
+                timeout=timeout if timeout is not None else self.timeout,
             )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks

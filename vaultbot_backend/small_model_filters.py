@@ -461,6 +461,7 @@ def rewrite_query_with_history(
     user_message: str,
     conversation_history: list[dict],
     session_logger: Any = None,
+    on_failure: Any = None,
 ) -> str:
     """Rewrite a user query using conversation context for better retrieval.
 
@@ -473,6 +474,10 @@ def rewrite_query_with_history(
     Fail-safe: on any failure, returns the original user_message unchanged.
     The original message is ALWAYS included in the expanded queries list,
     so retrieval is never worse than baseline.
+
+    ``on_failure`` (optional callable) is invoked with the exception when
+    the small model is unreachable, so the caller can surface a fail-loud
+    console warning (issue #129) instead of degrading silently.
 
     Returns a string suitable for FUSED retrieval (the rewritten query).
     """
@@ -567,6 +572,14 @@ def rewrite_query_with_history(
     except Exception as e:  # noqa: BLE001
         if session_logger:
             session_logger.log("query_rewrite_failed", {"error": str(e)})
+        # Fail-loud (issue #129): the small model is down — surface it so
+        # the operator knows retrieval is degrading, instead of silently
+        # falling back every turn.
+        if on_failure is not None:
+            try:
+                on_failure(e)
+            except Exception:  # noqa: BLE001 — the callback must never break the fallback
+                pass
         return user_message
 
 

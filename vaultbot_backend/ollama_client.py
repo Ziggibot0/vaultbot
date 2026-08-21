@@ -737,7 +737,7 @@ class OllamaClient(_BASE):
             return False
 
     def _chat_native_no_think(
-        self, payload: dict[str, Any], t0: float
+        self, payload: dict[str, Any], t0: float, timeout: float | None = None
     ) -> dict[str, Any]:
         """Fast path for bounded small-model calls (think=False, no tools).
 
@@ -758,7 +758,11 @@ class OllamaClient(_BASE):
         Returns the same dict shape as chat() non-stream: {response,
         thinking, tool_calls, finish_reason}.
         """
-        _timeout = float(os.environ.get("VAULTBOT_SMALL_TIMEOUT_SECONDS", "20"))
+        _timeout = (
+            timeout
+            if timeout is not None
+            else float(os.environ.get("VAULTBOT_SMALL_TIMEOUT_SECONDS", "20"))
+        )
         # /api/chat takes think + options at the top level (not under
         # options like /v1). payload already has think=False set by chat().
         # Strip /v1-only keys that /api/chat doesn't understand.
@@ -814,6 +818,7 @@ class OllamaClient(_BASE):
         stream: bool = False,
         think: bool | None = None,
         max_predict: int | None = None,
+        timeout: float | None = None,
     ) -> dict | Generator:
         """
         Multi-turn chat completion via Ollama's OpenAI-compatible /v1/chat/completions
@@ -912,7 +917,7 @@ class OllamaClient(_BASE):
         # non-stream response, so the raw endpoint is fine here. The main
         # chat loop (which needs tools + finish_reason) still uses /v1.
         if think is False and not stream and not tools:
-            return self._chat_native_no_think(payload, t0)
+            return self._chat_native_no_think(payload, t0, timeout)
         try:
             if stream:
                 _read_timeout = float(
@@ -931,8 +936,12 @@ class OllamaClient(_BASE):
                 # well under a second; cap the timeout so a stuck 0.8b model
                 # can't block the whole turn for 60s. Default 20s covers a
                 # cold load; lower via VAULTBOT_SMALL_TIMEOUT_SECONDS.
+                # An explicit per-call `timeout` (e.g. from a procedure
+                # step's llm_generate) overrides the heuristic — see #137.
                 _chat_timeout = 20.0 if think is False else 60.0
-                if think is False:
+                if timeout is not None:
+                    _chat_timeout = timeout
+                elif think is False:
                     _chat_timeout = float(
                         os.environ.get(
                             "VAULTBOT_SMALL_TIMEOUT_SECONDS", str(_chat_timeout)

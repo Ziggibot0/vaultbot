@@ -112,7 +112,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        messages = [{"role": "system", "content": system}, '
             '{"role": "user", "content": prompt}]\n'
             "        result = _client.chat(messages=messages, stream=False, "
-            "think=_think)\n"
+            "think=_think, max_predict=256, timeout=30)\n"
             '        return result.get("response", "")\n'
             '    namespace["llm_generate"] = llm_generate\n'
         )

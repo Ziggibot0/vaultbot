@@ -137,6 +137,69 @@ def is_github_issue_or_pr(url: str) -> bool:
     return bool(_GITHUB_LOW_CREDIBILITY_PATH.search(url.lower()))
 
 
+def _hostname(url: str) -> str:
+    """Extract the bare hostname (no scheme, no port, no path) from a URL.
+
+    Used by the source-authority allowlist/denylist (issue #133) so a
+    domain like ``developers.google.com`` matches regardless of scheme,
+    ``www.`` prefix, or path. Returns "" on a malformed URL.
+    """
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(url).hostname or "").lower()
+        # Strip a leading "www." so "www.google.com" == "google.com".
+        if host.startswith("www."):
+            host = host[4:]
+        return host
+    except Exception:  # noqa: BLE001 — best-effort, returns "" on malformed URL
+        return ""
+
+
+def is_allowlisted(url: str, allowlist: list[str] | None) -> bool:
+    """True if ``url``'s hostname matches any allowlisted domain.
+
+    An empty/None allowlist means "no restriction" (everything passes).
+    Matching is suffix-based: ``developers.google.com`` matches
+    ``google.com`` and ``developers.google.com``, but NOT ``notgoogle.com``.
+    """
+    if not allowlist:
+        return True
+    host = _hostname(url)
+    if not host:
+        return False
+    for domain in allowlist:
+        d = (domain or "").strip().lower().lstrip(".")
+        if not d:
+            continue
+        if host == d or host.endswith("." + d):
+            return True
+    return False
+
+
+def is_denylisted(url: str, denylist: list[str] | None) -> bool:
+    """True if ``url``'s hostname matches any denylisted domain.
+
+    Used to block known-low-quality sources (Medium, personal blogs) when
+    authoritative sources are required. Same suffix-matching as
+    ``is_allowlisted``.
+    """
+    if not denylist:
+        return False
+    host = _hostname(url)
+    if not host:
+        return False
+    for domain in denylist:
+        d = (domain or "").strip().lower().lstrip(".")
+        if not d:
+            continue
+        if host == d or host.endswith("." + d):
+            return True
+    return False
+
+
 def normalize_url(url: str) -> str:
     """Normalize URL for dedup: strip protocol, www., trailing slash, fragments.
 
