@@ -57,10 +57,10 @@ def resolve_path(
 def backup_path(target: Path, backend_root: Path, trash_dir: Path) -> Path:
     """Return the backup path for a target file, routed to trash/backups/.
 
-    Uses the target's relative path from the vault root to create a unique
+    Uses the target's relative path from the framework root to create a unique
     backup name, so two files with the same name in different directories
-    don't collide.  Example: vaultbot/vaultbot_backend/main.py
-    -> trash/backups/vaultbot/vaultbot_backend/main.py.bak
+    don't collide.  Example: vaultbot_backend/main.py
+    -> trash/backups/vaultbot_backend/main.py.bak
     """
     try:
         rel = target.resolve().relative_to(backend_root.resolve())

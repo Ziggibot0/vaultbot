@@ -37,7 +37,7 @@ SCHEMA = {
                 "type": "string",
                 "description": (
                     "Path to the .md note, relative to vault root. "
-                    "E.g. 'vaultbot/System/Procedures/Check-Error-Handling.md'."
+                    "E.g. 'System/Procedures/Check-Error-Handling.md'."
                 ),
             },
             "old_str": {
@@ -68,15 +68,20 @@ import tempfile  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-# custom_tools/md_safe_replace.py -> parent.parent = vaultbot/vaultbot_backend/
-# -> parent.parent.parent = vaultbot/
-# -> parent.parent.parent.parent = Vault2/ (vault root)
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+# resolve_content_path maps a logical path to the correct physical root.
+from paths import (  # noqa: E402
+    VAULT_ROOT,
+    is_within_content_roots,
+    resolve_content_path,
+)
+
+# custom_tools/md_safe_replace.py -> parent.parent = vaultbot_backend/
 try:
-    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot/vaultbot_backend/
+    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
-VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
-TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
+TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_backend/trash/
 
 
 def _is_sacred_journal(file_path: Path) -> bool:
@@ -156,13 +161,13 @@ def run(args: dict) -> dict:
         return result
 
     # 4. Path traversal check
-    if _is_path_traversal(file_path_str, VAULT_ROOT):
+    if not is_within_content_roots(resolve_content_path(file_path_str)):
         result["blocked_reason"] = (
             f"Path traversal detected: {file_path_str} resolves outside vault root"
         )
         return result
 
-    full_path = (VAULT_ROOT / file_path_str).resolve()
+    full_path = resolve_content_path(file_path_str)
     result["checks"]["resolved_path"] = str(full_path)
 
     # 5. File must exist

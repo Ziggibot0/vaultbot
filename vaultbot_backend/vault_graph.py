@@ -42,9 +42,17 @@ class VaultGraph:
     """
 
     def __init__(
-        self, vault_path: str, session_logger=None, max_note_size: int = 12_000
+        self,
+        vault_path: str,
+        session_logger=None,
+        max_note_size: int = 12_000,
+        framework_root: str | None = None,
     ):
         self.vault_path = Path(vault_path).resolve()
+        # Optional framework root (the git repo holding System/, Knowledge/,
+        # baseline/).  When set, framework content is scanned alongside the
+        # user's vault so procedures + baseline knowledge stay in the graph.
+        self.framework_root = Path(framework_root).resolve() if framework_root else None
         self.session_logger = session_logger
         self.max_note_size = max_note_size
         self.nodes: dict[str, dict[str, Any]] = {}  # normalized name -> metadata
@@ -123,14 +131,19 @@ class VaultGraph:
     def _resolve_note_path(self, name: str) -> Path | None:
         """Find an actual markdown file matching a wikilink target."""
         norm = self._normalize_name(name)
+        roots = [self.vault_path]
+        if self.framework_root is not None and self.framework_root != self.vault_path:
+            roots.append(self.framework_root)
         # Exact match first
-        for p in self.vault_path.rglob("*.md"):
-            if self._normalize_name(p.stem) == norm:
-                return p
+        for root in roots:
+            for p in root.rglob("*.md"):
+                if self._normalize_name(p.stem) == norm:
+                    return p
         # Then partial
-        for p in self.vault_path.rglob("*.md"):
-            if norm in self._normalize_name(p.stem):
-                return p
+        for root in roots:
+            for p in root.rglob("*.md"):
+                if norm in self._normalize_name(p.stem):
+                    return p
         return None
 
     def _read_note(self, path: Path) -> str:
@@ -160,15 +173,19 @@ class VaultGraph:
         """
         import os as _os
 
+        roots = [self.vault_path]
+        if self.framework_root is not None and self.framework_root != self.vault_path:
+            roots.append(self.framework_root)
         out: list[Path] = []
-        for root, dirs, files in _os.walk(self.vault_path):
-            # Prune ignored dirs in-place so os.walk doesn't descend into them.
-            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]
-            for f in files:
-                if f.endswith(".md"):
-                    p = Path(root) / f
-                    if not _is_ignored_path(p):
-                        out.append(p)
+        for root in roots:
+            for _root, dirs, files in _os.walk(root):
+                # Prune ignored dirs in-place so os.walk doesn't descend into them.
+                dirs[:] = [d for d in dirs if d not in _IGNORED_DIRS]
+                for f in files:
+                    if f.endswith(".md"):
+                        p = Path(_root) / f
+                        if not _is_ignored_path(p):
+                            out.append(p)
         return out
 
     def _add_or_update_node(self, path: Path) -> str:

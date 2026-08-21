@@ -698,14 +698,12 @@ _HEAL_SKIP_ROOT_FILES = {
 }
 
 # Only heal files under these top-level directories (vault knowledge zones).
-# NOTE: narrowed from ("vaultbot/", "User/") — the broad "vaultbot/" prefix
-# matched the repo's SOURCE docs (vaultbot/README.md, vaultbot/ARCHITECTURE.md,
-# vaultbot/docs/*.md, vaultbot/baseline/*.md) and auto-injected `type: claim`
-# frontmatter into them on every boot. Only actual knowledge zones are healed.
+# User content now lives directly under the vault root (no vaultbot/ prefix);
+# framework content (System/, Knowledge/Concepts/, baseline/) lives under the
+# framework root and is NOT healed (it's curated baseline with frontmatter).
 _HEAL_ALLOWED_PREFIXES = (
-    "vaultbot/Knowledge/",
-    "vaultbot/Memory/",
-    "vaultbot/System/",
+    "Knowledge/",
+    "Memory/",
     "User/",
 )
 

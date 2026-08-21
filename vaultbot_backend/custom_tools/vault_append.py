@@ -10,11 +10,11 @@ SCHEMA = {
         "content and adds new content at the end. Respects LOCKED notes "
         "(standalone line or frontmatter marker) and sacred journal files "
         "(date-only filenames). IMPORTANT: VaultBot-generated content lives "
-        "under vaultbot/ (e.g. 'vaultbot/Knowledge/Research/My-Note.md'). "
+        "under the vault root (e.g. 'Knowledge/Research/My-Note.md'). "
         "Only user-personal notes go in User/ (e.g. 'User/Research-Roadmap.md'). "
         "VaultBot's own directives and identity notes live under "
-        "vaultbot/System/Identity/ (e.g. "
-        "'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER create "
+        "System/Identity/ (e.g. "
+        "'System/Identity/Autonomy-Directive.md'). NEVER create "
         "Knowledge/, Memory/, System/, or directive notes at the vault root."
     ),
     "parameters": {
@@ -26,11 +26,11 @@ SCHEMA = {
             "file_path": {
                 "description": (
                     "Path to the note, relative to vault root. VaultBot notes "
-                    "are under vaultbot/ (e.g. "
-                    "'vaultbot/Memory/Chat/Chat-Topic.md'). User-personal notes "
+                    "are under the vault root (e.g. "
+                    "'Memory/Chat/Chat-Topic.md'). User-personal notes "
                     "go in User/ (e.g. 'User/Research-Roadmap.md'). VaultBot "
-                    "notes (including its own directives) are under vaultbot/ "
-                    "(e.g. 'vaultbot/System/Identity/Autonomy-Directive.md')."
+                    "notes (including its own directives) are under "
+                    "System/Identity/ (e.g. 'System/Identity/Autonomy-Directive.md')."
                 ),
                 "type": "string",
             },
@@ -43,9 +43,9 @@ SCHEMA = {
 import re  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-# 4 levels up for vault root
-# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+# resolve_content_path maps a logical path to the correct physical root.
+from paths import is_within_content_roots, resolve_content_path  # noqa: E402
 
 
 def _is_locked(content: str) -> bool:
@@ -71,10 +71,10 @@ def _is_locked(content: str) -> bool:
 def _is_root_directive(file_path: str) -> bool:
     """Block VaultBot from writing its own directives to the vault root.
 
-    Directives belong under vaultbot/ (e.g. vaultbot/System/Identity/ or
-    vaultbot/baseline/), never at the vault root. A root-level directive is
-    a *-Directive.md (or *-Communication-Preferences.md) with no directory
-    component (e.g. 'Autonomy-Directive.md').
+    Directives belong under System/Identity/ (framework root), never at the
+    vault root. A root-level directive is a *-Directive.md (or
+    *-Communication-Preferences.md) with no directory component (e.g.
+    'Autonomy-Directive.md').
     """
     normalized = file_path.replace("\\", "/").lstrip("./")
     if "/" in normalized:
@@ -95,21 +95,18 @@ def run(args: dict) -> dict:
         return {"error": "file_path and content are required"}
 
     # Block root-level directives — VaultBot's directives live under
-    # vaultbot/, never at the vault root.
+    # System/Identity/, never at the vault root.
     if _is_root_directive(file_path):
         return {
             "error": (
                 f"Root-level directive blocked: {file_path}. "
-                "VaultBot directives belong under vaultbot/ (e.g. "
-                "vaultbot/System/Identity/)."
+                "VaultBot directives belong under System/Identity/."
             )
         }
 
-    full = (VAULT_ROOT / file_path).resolve()
+    full = resolve_content_path(file_path)
 
-    try:
-        full.relative_to(VAULT_ROOT.resolve())
-    except ValueError:
+    if not is_within_content_roots(full):
         return {"error": "path must be inside vault root"}
 
     if full.exists():

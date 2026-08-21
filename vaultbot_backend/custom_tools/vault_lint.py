@@ -19,7 +19,7 @@ SCHEMA = {
             "file_path": {
                 "description": (
                     "Path to the note to lint, relative to vault root (e.g. "
-                    "'vaultbot/System/Identity/Autonomy-Directive.md')"
+                    "'System/Identity/Autonomy-Directive.md')"
                 ),
                 "type": "string",
             }
@@ -33,9 +33,13 @@ import os  # noqa: E402
 import re  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-# 4 levels up for vault root
-# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+from paths import (  # noqa: E402
+    VAULT_ROOT,
+    is_within_content_roots,
+    resolve_content_path,
+)
+
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",
@@ -162,11 +166,9 @@ def run(args: dict) -> dict:
     if not file_path:
         return {"error": "file_path is required"}
 
-    full = (VAULT_ROOT / file_path).resolve()
+    full = resolve_content_path(file_path)
 
-    try:
-        full.relative_to(VAULT_ROOT.resolve())
-    except ValueError:
+    if not is_within_content_roots(full):
         return {"error": "path must be inside vault root"}
 
     if not full.exists():

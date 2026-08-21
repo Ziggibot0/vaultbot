@@ -375,7 +375,7 @@ class AutonomousResearcher:
         """
         safe_topic = re.sub(r"[^\w\s-]", "", topic).strip()
         safe_topic = re.sub(r"[-\s]+", "-", safe_topic)[:80] or "note"
-        research_dir = self.vault_path / "vaultbot/Knowledge/Research"
+        research_dir = self.vault_path / "Knowledge/Research"
         candidate = research_dir / f"{safe_topic}.md"
         if candidate.exists():
             return candidate
@@ -513,7 +513,7 @@ class AutonomousResearcher:
 
             pipeline = ConsolidationPipeline(
                 vault_path=str(self.vault_path),
-                backend_path=str(self.vault_path / "vaultbot/vaultbot_backend"),
+                backend_path=str(Path(__file__).parent),
             )
 
             # Chat-priority check: if chat became active while _cycle_impl

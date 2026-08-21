@@ -211,11 +211,9 @@ def _run_diagnose_checks(svc: Services) -> list[Diagnosis]:
     # 3) Vault not inside a sync folder?
     vault_path = ""
     with contextlib.suppress(Exception):
-        # The vault root is 4 levels up from routers/
-        # (vaultbot/vaultbot_backend/routers/ -> vault root)
-        vault_path = str(
-            Path(__file__).resolve().parent.parent.parent
-        )  # vault root (3 levels up from vaultbot/vaultbot_backend/routers/)
+        from paths import VAULT_ROOT
+
+        vault_path = str(VAULT_ROOT)
     sync_diag = _check_synced_folder(vault_path)
     if sync_diag is not None:
         problems.append(sync_diag)
@@ -296,11 +294,10 @@ async def preflight(request: Request) -> dict[str, Any]:
     """
     problems: list[Diagnosis] = []
 
-    # Vault root = 4 levels up from routers/
-    # (vaultbot/vaultbot_backend/routers/ -> vault root)
-    vault_path = str(
-        Path(__file__).resolve().parent.parent.parent
-    )  # vault root (3 levels up from vaultbot/vaultbot_backend/routers/)
+    # Vault root (for sync-folder check) — resolved via paths.py.
+    from paths import VAULT_ROOT
+
+    vault_path = str(VAULT_ROOT)
     sync_diag = _check_synced_folder(vault_path)
     if sync_diag is not None:
         problems.append(sync_diag)

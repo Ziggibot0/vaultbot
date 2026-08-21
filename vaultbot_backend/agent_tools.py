@@ -301,7 +301,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "Read a file from VaultBot's own source code or the vault. "
                 "Use this to inspect how a tool works, read the backend's "
                 "code, or examine a note. Paths are relative to the vault root "
-                "(e.g. 'vaultbot/vaultbot_backend/main.py')."
+                "(e.g. 'vaultbot_backend/main.py')."
             ),
             "parameters": {
                 "type": "object",
@@ -419,7 +419,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "file_path": {
                         "type": "string",
                         "description": "Path relative to vault root "
-                        "(e.g. 'vaultbot/vaultbot_backend/fused_retrieval.py').",
+                        "(e.g. 'vaultbot_backend/fused_retrieval.py').",
                     },
                     "content": {"type": "string"},
                     "dry_run": {
@@ -489,7 +489,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "(e.g. a code step reads `file_path = args.get('file_path', '')`). "
                 "ALWAYS check the procedure's 'Inputs' section and pass every "
                 "required argument. Example: execute_procedure('Check-Error-Handling', "
-                "args={'file_path': 'vaultbot/vaultbot_backend/chat_handler.py'}). "
+                "args={'file_path': 'vaultbot_backend/chat_handler.py'}). "
                 "If a required arg is missing, the procedure returns an error like "
                 "'file_path argument required' and does nothing."
             ),
@@ -510,7 +510,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "file_path (a Python file to audit), procedure_name "
                             "(a procedure to fix), note_path (a note to read). "
                             'Example: {"file_path": '
-                            '"vaultbot/vaultbot_backend/main.py"}'
+                            '"vaultbot_backend/main.py"}'
                         ),
                         "additionalProperties": True,
                     },
@@ -534,7 +534,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 #   self_improvement, status). Zero LLM cost — deterministic keyword match.
 #
 # Tier 3 — PROCEDURE candidates: removed from the tool list entirely.
-#   These become procedure notes (vaultbot/System/Procedures/), discovered via RAG
+#   These become procedure notes (System/Procedures/), discovered via RAG
 #   and executed via execute_procedure. They stay as custom tools in
 #   custom_tools/ but are not advertised in the tool schema list.
 

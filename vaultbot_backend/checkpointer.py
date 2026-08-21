@@ -78,7 +78,7 @@ class Checkpointer:
 
     def __init__(
         self,
-        checkpoint_dir: str = "vaultbot/vaultbot_backend/checkpoints",
+        checkpoint_dir: str = "checkpoints",
         session_logger: Any = None,
     ) -> None:
         self.checkpoint_dir = Path(checkpoint_dir)

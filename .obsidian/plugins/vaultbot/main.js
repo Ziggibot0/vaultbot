@@ -202,7 +202,7 @@ class VaultBotPlugin extends Plugin {
 		// cooking" — the backend writes session logs, conversation state, and
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
-		const required = ['vaultbot/vaultbot_backend/', '.venv/', 'vaultbot/vaultbot_backend/vaultbot_index/'];
+		const required = ['vaultbot_backend/', '.venv/', 'vaultbot_backend/vaultbot_index/'];
 		// Repo-level files that live at the vault root (AGENTS.md, README.md,
 		// SECURITY.md, LICENSE) are VaultBot's own plumbing, not the user's
 		// notes. Hide them from the file explorer so the root stays clean for
@@ -304,7 +304,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$|^/, '');
 			}
-			const pidFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'vaultbot.pid');
+			const pidFile = path.join(this._backendDir(vaultRoot), 'vaultbot.pid');
 			const fs = require('fs');
 			while (Date.now() - start < timeoutMs) {
 				// Only probe with fetch if the PID file exists — the backend
@@ -502,12 +502,28 @@ class VaultBotPlugin extends Plugin {
 
 	_venvPythonExe(vaultRoot) {
 		const bin = this._venvBinDir();
+		// The framework (vaultbot_backend/, .venv/) lives ONE level ABOVE the
+		// vault (the vault is the Vault/ subfolder). So the venv is at
+		// <framework>/.venv, not <vault>/.venv.
+		const frameworkRoot = path.dirname(vaultRoot);
 		const candidates = process.platform === 'win32'
-			? [path.join(vaultRoot, '.venv', bin, 'pythonw.exe'),
-			   path.join(vaultRoot, '.venv', bin, 'python.exe')]
-			: [path.join(vaultRoot, '.venv', bin, 'python')];
+			? [path.join(frameworkRoot, '.venv', bin, 'pythonw.exe'),
+			   path.join(frameworkRoot, '.venv', bin, 'python.exe')]
+			: [path.join(frameworkRoot, '.venv', bin, 'python')];
 		const fs = require('fs');
 		return candidates.find(p => fs.existsSync(p)) || candidates[0];
+	}
+
+	// The framework root is the parent of the vault root: the vault is a
+	// Vault/ subfolder inside the framework folder (which holds
+	// vaultbot_backend/, System/, Knowledge/, .venv/, .env).
+	_frameworkRoot(vaultRoot) {
+		return path.dirname(vaultRoot);
+	}
+
+	// The backend directory (vaultbot_backend/) lives at the framework root.
+	_backendDir(vaultRoot) {
+		return path.join(this._frameworkRoot(vaultRoot), 'vaultbot_backend');
 	}
 
 	// Check whether the vault root is inside a known cloud-sync folder.
@@ -858,7 +874,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
-			const mcpPy = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'mcp_server.py');
+			const mcpPy = path.join(this._backendDir(vaultRoot), 'mcp_server.py');
 			const fs = require('fs');
 			const mcpPythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(mcpPythonExe) || !fs.existsSync(mcpPy)) {
@@ -908,7 +924,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 			}
-			const tokenPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', '.vaultbot_auth_token');
+			const tokenPath = path.join(this._backendDir(vaultRoot), '.vaultbot_auth_token');
 			return fs.readFileSync(tokenPath, 'utf-8').trim();
 		} catch (e) {
 			return '';
@@ -932,7 +948,7 @@ class VaultBotPlugin extends Plugin {
 		} else {
 			vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 		}
-		const pidFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'vaultbot.pid');
+		const pidFile = path.join(this._backendDir(vaultRoot), 'vaultbot.pid');
 
 		// 1) Ask the backend to self-terminate. Best-effort, short timeout.
 		try {
@@ -1053,7 +1069,7 @@ class VaultBotPlugin extends Plugin {
 	// live vault, WITHOUT touching any user state.
 	//
 	// What gets updated (code only):
-	//   - vaultbot/vaultbot_backend/**/*.py  (the backend engine)
+	//   - vaultbot_backend/**/*.py  (the backend engine)
 	//   - .obsidian/plugins/vaultbot/main.js   (this plugin file)
 	//   - .obsidian/plugins/vaultbot/manifest.json
 	//   - .obsidian/plugins/vaultbot/styles.css
@@ -1102,7 +1118,7 @@ class VaultBotPlugin extends Plugin {
 		// first; if GitHub 404s, retry as a tag so users can pin a release.
 
 		const pluginDir = path.join(vaultRoot, '.obsidian', 'plugins', 'vaultbot');
-		const backendDir = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend');
+		const backendDir = this._backendDir(vaultRoot);
 		const dataJsonPath = path.join(pluginDir, 'data.json');
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vaultbot-update-'));
 		const stagingDir = path.join(tmpDir, 'staging');
@@ -1127,7 +1143,7 @@ class VaultBotPlugin extends Plugin {
 			// overwrite. This preserves any local edits the vaultbot made to
 			// tracked files — the old tarball path silently clobbered them.
 			// Legacy zip installs (no .git) fall through to the tarball path.
-			const gitDir = path.join(vaultRoot, 'vaultbot', '.git');
+			const gitDir = path.join(this._frameworkRoot(vaultRoot), '.git');
 			if (fs.existsSync(gitDir)) {
 				notify(`Updating via git (${refSpec})…`);
 				const runGit = (args) => execFileSync('git', args, { cwd: vaultRoot, stdio: 'pipe' });
@@ -1175,7 +1191,7 @@ class VaultBotPlugin extends Plugin {
 				// Re-run pip install in case the update added new dependencies.
 				try {
 					const venvPython = this._venvPythonExe(vaultRoot);
-					const reqPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'requirements.txt');
+					const reqPath = path.join(this._backendDir(vaultRoot), 'requirements.txt');
 					if (fs.existsSync(venvPython) && fs.existsSync(reqPath)) {
 						notify('Checking for new dependencies...');
 						execFileSync(venvPython, ['-m', 'pip', 'install', '-r', reqPath, '--quiet'], {
@@ -1308,7 +1324,7 @@ class VaultBotPlugin extends Plugin {
 			// Re-run pip install in case the update added new dependencies.
 			try {
 				const venvPython = this._venvPythonExe(vaultRoot);
-				const reqPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'requirements.txt');
+				const reqPath = path.join(this._backendDir(vaultRoot), 'requirements.txt');
 				if (fs.existsSync(venvPython) && fs.existsSync(reqPath)) {
 					notify('Checking for new dependencies...');
 					const { execFileSync } = require('child_process');
@@ -1474,7 +1490,7 @@ class VaultBotPlugin extends Plugin {
 	// Read the last N lines of backend.log for diagnostics.
 	_readBackendLog(vaultRoot, maxLines = 50) {
 		const fs = require('fs');
-		const logFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'backend.log');
+		const logFile = path.join(this._backendDir(vaultRoot), 'backend.log');
 		try {
 			if (!fs.existsSync(logFile)) return '';
 			const content = fs.readFileSync(logFile, 'utf8');
@@ -1634,7 +1650,7 @@ class VaultBotPlugin extends Plugin {
 	async _installDeps(vaultRoot) {
 		const { execFile } = require('child_process');
 		const venvPython = this._venvPythonExe(vaultRoot);
-		const reqPath = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'requirements.txt');
+		const reqPath = path.join(this._backendDir(vaultRoot), 'requirements.txt');
 		const notify = (msg) => { try { new Notice(msg); } catch (e) {} };
 		notify('Installing missing packages... this can take a few minutes.');
 		try {
@@ -1676,7 +1692,7 @@ class VaultBotPlugin extends Plugin {
 			} else {
 				vaultRoot = this.app.vault.configDir.replace(/[\\/].obsidian[\\/]?$|^/, '');
 			}
-			const pidFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'vaultbot.pid');
+			const pidFile = path.join(this._backendDir(vaultRoot), 'vaultbot.pid');
 			const fs = require('fs');
 			let running = false;
 			if (fs.existsSync(pidFile)) {
@@ -1690,8 +1706,8 @@ class VaultBotPlugin extends Plugin {
 
 			new Notice('Starting VaultBot backend...');
 
-			const mainPy = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'main.py');
-			const logFile = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', 'backend.log');
+			const mainPy = path.join(this._backendDir(vaultRoot), 'main.py');
+			const logFile = path.join(this._backendDir(vaultRoot), 'backend.log');
 
 			const pythonExe = this._venvPythonExe(vaultRoot);
 			if (!fs.existsSync(pythonExe) || !fs.existsSync(mainPy)) {
@@ -1716,7 +1732,7 @@ class VaultBotPlugin extends Plugin {
 			openedHandles = [fd];
 		} catch (e) {
 			const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-			const altLog = path.join(vaultRoot, 'vaultbot', 'vaultbot_backend', `backend-${stamp}.log`);
+			const altLog = path.join(this._backendDir(vaultRoot), `backend-${stamp}.log`);
 			try {
 				const fd = fs.openSync(altLog, 'a');
 				out = fd;

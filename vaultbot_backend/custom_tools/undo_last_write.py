@@ -47,6 +47,8 @@ def run(args: dict) -> dict:
     import shutil
     from pathlib import Path
 
+    from paths import VAULT_ROOT
+
     dry_run = args.get("dry_run", False)
 
     # Determine paths.
@@ -54,7 +56,7 @@ def run(args: dict) -> dict:
         backend_dir = Path(__file__).resolve().parent.parent
     except NameError:
         backend_dir = Path.cwd()
-    vault_root = backend_dir.parent.parent
+    vault_root = VAULT_ROOT
     trash_dir = backend_dir / "trash"
 
     if not trash_dir.exists() or not trash_dir.is_dir():
@@ -85,7 +87,7 @@ def run(args: dict) -> dict:
 
     # Determine the original path from the backup filename.
     # Backups are stored with the relative path flattened (slashes → underscores).
-    # Example: vaultbot/Knowledge/Research/My-Note.md
+    # Example: Knowledge/Research/My-Note.md
     #       → vaultbot_Knowledge_Research_My-Note.md.bak
     backup_name = newest.name
     # Strip the .bak suffix.

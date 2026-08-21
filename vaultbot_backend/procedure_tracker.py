@@ -156,9 +156,18 @@ class ProcedureTracker:
     No LLM judgment -- just counters and date comparisons.
     """
 
-    def __init__(self, log_path: str, vault_path: str = "."):
+    def __init__(
+        self,
+        log_path: str,
+        vault_path: str = ".",
+        framework_root: str | None = None,
+    ):
         self.log_path = Path(log_path)
         self.vault_path = Path(vault_path)
+        # Optional framework root (the git repo holding System/Procedures/).
+        # When set, framework procedures are scanned alongside the user's
+        # vault so they stay discoverable/executable.
+        self.framework_root = Path(framework_root).resolve() if framework_root else None
         self._ensure_log()
 
     # --- Vault scanning ---
@@ -179,26 +188,30 @@ class ProcedureTracker:
         vault = Path(vault_path)
         if not vault.is_dir():
             return
-        for root, dirs, files in os.walk(vault):
-            # Prune ignored subtrees in-place so os.walk doesn't descend.
-            dirs[:] = [d for d in dirs if d not in _TRACKER_IGNORED_DIRS]
-            for fname in files:
-                if not fname.endswith(".md"):
-                    continue
-                md = Path(root) / fname
-                try:
-                    text = md.read_text(encoding="utf-8", errors="replace")
-                except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    continue
-                if not text.startswith("---"):
-                    continue
-                end = text.find("---", 3)
-                if end == -1:
-                    continue
-                fm = text[3:end]
-                if "type: procedure" not in fm:
-                    continue
-                yield md, fm, text
+        roots = [vault]
+        if self.framework_root is not None and self.framework_root != vault:
+            roots.append(self.framework_root)
+        for root in roots:
+            for _root, dirs, files in os.walk(root):
+                # Prune ignored subtrees in-place so os.walk doesn't descend.
+                dirs[:] = [d for d in dirs if d not in _TRACKER_IGNORED_DIRS]
+                for fname in files:
+                    if not fname.endswith(".md"):
+                        continue
+                    md = Path(_root) / fname
+                    try:
+                        text = md.read_text(encoding="utf-8", errors="replace")
+                    except Exception:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                        continue
+                    if not text.startswith("---"):
+                        continue
+                    end = text.find("---", 3)
+                    if end == -1:
+                        continue
+                    fm = text[3:end]
+                    if "type: procedure" not in fm:
+                        continue
+                    yield md, fm, text
 
     # --- Procedure stem index (for fast lookup by name) -----------------
     #

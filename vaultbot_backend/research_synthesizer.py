@@ -403,7 +403,7 @@ def synthesize_note_markdown(report: dict[str, Any], summary: str | None = None)
 
         return inject_schema(
             body,
-            f"vaultbot/Knowledge/Research/{_topic}.md",
+            f"Knowledge/Research/{_topic}.md",
             force_type="research",
         )
     except ImportError:
@@ -567,7 +567,7 @@ def synthesize_structured_note(
 
         note_md = inject_schema(
             note_md,
-            f"vaultbot/Knowledge/Research/{topic}.md",
+            f"Knowledge/Research/{topic}.md",
             force_type="research",
         )
     except ImportError:

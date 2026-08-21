@@ -31,9 +31,13 @@ import re  # noqa: E402
 from datetime import date, datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-# 4 levels up for vault root
-# (vaultbot/vaultbot_backend/custom_tools/ -> the vault root)
-VAULT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+from paths import (  # noqa: E402
+    VAULT_ROOT,
+    is_within_content_roots,
+    resolve_content_path,
+)
+
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",
@@ -138,11 +142,9 @@ def run(args: dict) -> dict:
     if not file_path:
         return {"error": "file_path is required"}
 
-    full = (VAULT_ROOT / file_path).resolve()
+    full = resolve_content_path(file_path)
 
-    try:
-        full.relative_to(VAULT_ROOT.resolve())
-    except ValueError:
+    if not is_within_content_roots(full):
         return {"error": "path must be inside vault root"}
 
     if not full.exists():
@@ -183,7 +185,7 @@ def run(args: dict) -> dict:
     incoming_links = _find_incoming_links(stem)
 
     # Check if file is already in trash — skip re-backup
-    is_in_trash = "vaultbot/vaultbot_backend" in file_path and "trash" in file_path
+    is_in_trash = "vaultbot_backend" in file_path and "trash" in file_path
 
     if is_in_trash:
         # Already a backup — delete permanently without re-backing-up

@@ -160,7 +160,9 @@ def build_abstract_context(
     degrades to the legacy builder (or a stub string if that also fails).
     """
     if textbooks_dir is None:
-        textbooks_dir = Path(graph.vault_path) / "vaultbot/Knowledge/Textbooks"
+        from paths import FRAMEWORK_ROOT
+
+        textbooks_dir = FRAMEWORK_ROOT / "Knowledge/Textbooks"
     tdir = Path(textbooks_dir)
 
     # ---- Collect seed names + their L0 paths from the search results ----

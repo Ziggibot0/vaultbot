@@ -6,7 +6,7 @@ codebase map note (produced by the Codebase-Map procedure) and returns the
 full map or a single module's section in one call — no LLM, no embeddings,
 no per-file code_read round-trips.
 
-The map note lives at ``vaultbot/Knowledge/Architecture/Codebase-Map.md``
+The map note lives at ``Knowledge/Architecture/Codebase-Map.md``
 and is regenerated on demand by the Codebase-Map procedure. This tool is the
 READ side: it loads the map so the agent can "understand any part of its own
 code in an instant" before editing it.
@@ -47,15 +47,11 @@ SCHEMA = {
 
 def run(args: dict) -> dict:
     """Read the codebase map note and return it (full or per-module)."""
-    from pathlib import Path
+    # Resolve the map note path.  The codebase map is framework content
+    # (Knowledge/Architecture/), so it lives under FRAMEWORK_ROOT.
+    from paths import FRAMEWORK_ROOT
 
-    # Resolve the map note path relative to the vault root.
-    # custom_tools/codebase_map.py -> vaultbot_backend -> vaultbot -> vault root.
-    backend_dir = Path(__file__).resolve().parent.parent
-    vault_root = backend_dir.parent.parent
-    map_path = (
-        vault_root / "vaultbot" / "Knowledge" / "Architecture" / "Codebase-Map.md"
-    )
+    map_path = FRAMEWORK_ROOT / "Knowledge" / "Architecture" / "Codebase-Map.md"
 
     if not map_path.exists():
         return {

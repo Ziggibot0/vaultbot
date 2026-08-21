@@ -83,6 +83,13 @@ def _run_code_step(
         "from pathlib import Path\n"
         "\n"
         'vault_path = os.environ.get("VAULT_PATH", ".")\n'
+        "try:\n"
+        "    from paths import FRAMEWORK_ROOT\n"
+        "    framework_root = str(FRAMEWORK_ROOT)\n"
+        "except Exception:\n"
+        "    framework_root = os.path.dirname(\n"
+        "        os.path.dirname(os.path.abspath(__file__))\n"
+        "    )\n"
         'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "{}"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
         'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
@@ -100,6 +107,7 @@ def _run_code_step(
         '    "json": json,\n'
         '    "os": os,\n'
         '    "vault_path": vault_path,\n'
+        '    "framework_root": framework_root,\n'
         '    "_IGNORED_DIRS": _IGNORED_DIRS,\n'
         "}\n"
         "\n"

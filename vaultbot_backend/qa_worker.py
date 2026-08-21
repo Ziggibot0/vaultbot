@@ -155,13 +155,12 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
         "learningMaterial",
     }
     # NOTE: narrowed from ("vaultbot/", "User/") — the broad "vaultbot/" prefix
-    # matched the repo's SOURCE docs (vaultbot/README.md, vaultbot/docs/*.md,
-    # vaultbot/baseline/*.md) and QA'd them as vault notes. Only actual
-    # knowledge zones are QA'd.
+    # matched the repo's SOURCE docs and QA'd them as vault notes. Only actual
+    # knowledge zones are QA'd. User content now lives directly under the
+    # vault root (no vaultbot/ prefix).
     ALLOWED = (
-        "vaultbot/Knowledge/",
-        "vaultbot/Memory/",
-        "vaultbot/System/",
+        "Knowledge/",
+        "Memory/",
         "User/",
     )
     notes: list[str] = []
@@ -182,7 +181,7 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
 # frontmatter pipeline. Chat logs are conversation traces, not knowledge
 # notes — they get consolidated by the semantic consolidation pipeline
 # (hippocampal replay), not QA'd for frontmatter quality.
-_QA_EXCLUDE_DIRS = ("vaultbot/Memory/Chat",)
+_QA_EXCLUDE_DIRS = ("Memory/Chat",)
 
 # Cap the QA queue so it actually drains. Without a cap, a large vault fills
 # the queue with every note (thousands), the QA worker processes 50 per idle
@@ -195,7 +194,7 @@ _QA_QUEUE_CAP = 200
 def build_qa_queue(vault_root: str | Path) -> list[dict[str, Any]]:
     """Build the QA queue: vault notes, ordered by usage (most first).
 
-    Each entry: ``{"path": "vaultbot/.../Note.md", "touch_count": N}``
+    Each entry: ``{"path": "Knowledge/.../Note.md", "touch_count": N}``
     Notes with higher touch counts come first.  Notes never retrieved
     (touch_count=0) come last.
 

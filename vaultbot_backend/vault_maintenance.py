@@ -20,8 +20,8 @@ class VaultMaintenance:
     Continuous self-cleaning for a vaultbot-managed vault.
 
     Rules:
-    1. Generated notes live under vaultbot/Memory/Chat/ and
-       vaultbot/Knowledge/Research/ (keeps the user's vault root clean).
+    1. Generated notes live under Memory/Chat/ and
+       Knowledge/Research/ (keeps the user's vault root clean).
     2. Chat notes on the same topic are merged into one running log.
     3. Orphan generated notes (no wikilinks in, no wikilinks out, empty
        body) are removed.
@@ -34,20 +34,17 @@ class VaultMaintenance:
         self.vault_path = Path(vault_path).resolve()
         self.session_logger = session_logger
         self.similarity_threshold = similarity_threshold
-        # All vaultbot-generated content lives under vaultbot/ so the
-        # user's vault root stays clean (their notes, not framework cruft).
-        # These paths match the readers in pattern_extractor.py and
-        # consolidation_pipeline.py, which already target vaultbot/.
-        self.chat_dir = self.vault_path / "vaultbot/Memory/Chat"
-        self.research_dir = self.vault_path / "vaultbot/Knowledge/Research"
-        self.log_file = (
-            self.vault_path / "vaultbot/vaultbot_backend" / "maintenance.log"
-        )
+        # All vaultbot-generated content lives under the vault root (the
+        # user's notes, not framework cruft). These paths match the readers
+        # in pattern_extractor.py and consolidation_pipeline.py.
+        self.chat_dir = self.vault_path / "Memory/Chat"
+        self.research_dir = self.vault_path / "Knowledge/Research"
+        self.log_file = Path(__file__).parent / "maintenance.log"
         self._ensure_dirs()
 
     def _ensure_dirs(self):
         # parents=True is required: on a fresh install the parent folders
-        # (vaultbot/Memory/, vaultbot/Knowledge/) do not exist yet, and
+        # (Memory/, Knowledge/) do not exist yet, and
         # mkdir without parents=True raises FileNotFoundError when the
         # leaf directory's parent is missing.
         self.chat_dir.mkdir(parents=True, exist_ok=True)
@@ -100,8 +97,8 @@ class VaultMaintenance:
     # Track the most recently created/updated chat note so consecutive
     # chat notes can be linked in chronological order (Previous/Next).
     # The tracker file lives in the chat directory's parent
-    # (vaultbot/Memory/), matching conversation_state.clear_trail_tracker.
-    _TRAIL_TRACKER = "vaultbot/Memory/_last_chat_note.txt"
+    # (Memory/), matching conversation_state.clear_trail_tracker.
+    _TRAIL_TRACKER = "Memory/_last_chat_note.txt"
 
     def _trail_tracker_path(self) -> Path:
         return self.chat_dir.parent / "_last_chat_note.txt"

@@ -67,43 +67,20 @@ FreeSearch = ForumEnhancedFreeSearch  # noqa: F811  — intentional override of 
 from calibration import CalibrationTracker  # noqa: E402
 from claim_verifier import ClaimVerifier  # noqa: E402
 from context_budgeter import ContextBudgeter  # noqa: E402
+
+# Central path resolution: FRAMEWORK_ROOT (the git repo, holds
+# vaultbot_backend/ + System/ + Knowledge/ + baseline/) and VAULT_ROOT (the
+# user's Obsidian vault — FRAMEWORK_ROOT/Vault/ when installed, the repo
+# root in the flattened dev layout).  See paths.py.
+from paths import FRAMEWORK_ROOT, VAULT_ROOT  # noqa: E402
 from pattern_extractor import PatternExtractor  # noqa: E402
 from procedure_tracker import ProcedureTracker  # noqa: E402
 from rag_eval import RAGEvaluator  # noqa: E402
 
-# Load environment variables from the vault root (the directory with
-# .obsidian/). override=True ensures .env values win over any stale env
-# passed by the Obsidian plugin spawn (which used to carry an empty
-# TAVILY_API_KEY).
-#
-# In the installed layout, main.py is at <vault>/vaultbot/vaultbot_backend/
-# and the vault root is two levels up. In the dev layout (flattened repo),
-# main.py is at <repo-root>/vaultbot_backend/ and the vault root is one
-# level up. Walking up to find .obsidian/ handles both correctly.
-
-
-def _resolve_vault_root() -> str:
-    """Walk up from this file to find the vault root (has .obsidian/).
-
-    Falls back to one level up (the framework root) if .obsidian/ is not
-    found — this covers CI, where VAULT_PATH is set explicitly and .obsidian/
-    may not exist.
-    """
-    here = os.path.dirname(__file__)
-    current = here
-    for _ in range(5):  # limit walk depth
-        if os.path.isdir(os.path.join(current, ".obsidian")):
-            return os.path.normpath(current)
-        parent = os.path.dirname(current)
-        if parent == current:  # filesystem root
-            break
-        current = parent
-    # Fallback: one level up from vaultbot_backend/ (framework root).
-    return os.path.normpath(os.path.join(here, ".."))
-
-
-_VAULT_ROOT = _resolve_vault_root()
-dotenv_path = os.path.join(_VAULT_ROOT, ".env")
+# Load .env from the FRAMEWORK root (where the installer writes it), not the
+# vault root.  override=True ensures .env values win over any stale env
+# passed by the Obsidian plugin spawn.
+dotenv_path = os.path.join(FRAMEWORK_ROOT, ".env")
 load_dotenv(dotenv_path, override=True)
 
 # Resolve VAULT_PATH relative to the vault root.  When .env says
@@ -113,7 +90,7 @@ load_dotenv(dotenv_path, override=True)
 # regardless of the process working directory.
 _vp = os.environ.get("VAULT_PATH", ".")
 if not os.path.isabs(_vp):
-    os.environ["VAULT_PATH"] = os.path.normpath(os.path.join(_VAULT_ROOT, _vp))
+    os.environ["VAULT_PATH"] = os.path.normpath(os.path.join(VAULT_ROOT, _vp))
 
 # NOTE: The hand-rolled _verify_imports() AST checker that used to live here
 # has been replaced by `ruff check` (F821 — undefined-name) configured in
@@ -654,10 +631,14 @@ search_client = FreeSearch(
     searxng_manager=searxng_manager,
 )
 vault_indexer = VaultIndexer(
-    vault_path=os.getenv("VAULT_PATH", "."), session_logger=default_session_logger
+    vault_path=os.getenv("VAULT_PATH", "."),
+    session_logger=default_session_logger,
+    framework_root=str(FRAMEWORK_ROOT),
 )
 vault_graph = VaultGraph(
-    vault_path=os.getenv("VAULT_PATH", "."), session_logger=default_session_logger
+    vault_path=os.getenv("VAULT_PATH", "."),
+    session_logger=default_session_logger,
+    framework_root=str(FRAMEWORK_ROOT),
 )
 note_creator = NoteCreator(
     vault_path=os.getenv("VAULT_PATH", "."),
@@ -709,6 +690,7 @@ checkpointer = Checkpointer(
 procedure_tracker = ProcedureTracker(
     log_path=str(Path(__file__).with_name("procedure_failure_log.json")),
     vault_path=os.getenv("VAULT_PATH", "."),
+    framework_root=str(FRAMEWORK_ROOT),
 )
 
 # Autonomous researcher: scans the vault for knowledge gaps and fills them

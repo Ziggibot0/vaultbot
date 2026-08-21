@@ -13,19 +13,16 @@ from custom_tools import codebase_map as cm
 
 
 def _point_at_tmp(tmp_path, monkeypatch):
-    """Patch cm.__file__ so run() resolves its map under tmp_path.
+    """Patch paths.FRAMEWORK_ROOT so run() resolves its map under tmp_path.
 
-    run() derives backend_dir = Path(__file__).parent.parent and
-    vault_root = backend_dir.parent.parent. Pointing __file__ at
-    tmp_path/vaultbot/vaultbot_backend/custom_tools/codebase_map.py makes
-    vault_root == tmp_path, so the map resolves to
-    tmp_path/vaultbot/Knowledge/Architecture/Codebase-Map.md.
+    run() reads the map from paths.FRAMEWORK_ROOT/Knowledge/Architecture/
+    Codebase-Map.md. Pointing FRAMEWORK_ROOT at tmp_path makes the map
+    resolve to tmp_path/Knowledge/Architecture/Codebase-Map.md.
     """
-    fake_file = (
-        tmp_path / "vaultbot" / "vaultbot_backend" / "custom_tools" / "codebase_map.py"
-    )
-    monkeypatch.setattr(cm, "__file__", str(fake_file))
-    return tmp_path / "vaultbot" / "Knowledge" / "Architecture" / "Codebase-Map.md"
+    import paths
+
+    monkeypatch.setattr(paths, "FRAMEWORK_ROOT", tmp_path)
+    return tmp_path / "Knowledge" / "Architecture" / "Codebase-Map.md"
 
 
 def _write_map(map_path, content):

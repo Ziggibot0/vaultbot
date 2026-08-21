@@ -12,11 +12,11 @@ SCHEMA = {
         "traversal attempts. Writes atomically (temp file + rename). Use this "
         "INSTEAD of code_run with open() for any markdown note write — it's "
         "the safety layer for knowledge, just as safe_write is for code. "
-        "IMPORTANT: VaultBot-generated content MUST go under vaultbot/ (e.g. "
-        "'vaultbot/Knowledge/Research/My-Note.md'). Only user-personal notes "
+        "IMPORTANT: VaultBot-generated content MUST go under the vault root "
+        "(e.g. 'Knowledge/Research/My-Note.md'). Only user-personal notes "
         "go in User/ (e.g. 'User/VaultBot Issues.md'). VaultBot's own "
-        "directives and identity notes live under vaultbot/System/Identity/ "
-        "(e.g. 'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER create "
+        "directives and identity notes live under System/Identity/ "
+        "(e.g. 'System/Identity/Autonomy-Directive.md'). NEVER create "
         "Knowledge/, Memory/, System/, or *-Directive.md at the vault root — "
         "those are gitignored hygiene zones."
     ),
@@ -36,16 +36,16 @@ SCHEMA = {
             "file_path": {
                 "description": (
                     "Path to the note, relative to vault root. VaultBot notes "
-                    "go under vaultbot/ (e.g. "
-                    "'vaultbot/Knowledge/Research/My-Note.md', "
-                    "'vaultbot/Memory/Chat/Chat-Topic.md', "
-                    "'vaultbot/System/Procedures/My-Procedure.md'). "
+                    "go under the vault root (e.g. "
+                    "'Knowledge/Research/My-Note.md', "
+                    "'Memory/Chat/Chat-Topic.md', "
+                    "'System/Procedures/My-Procedure.md'). "
                     "User-personal notes go in User/ (e.g. 'User/VaultBot "
                     "Issues.md'). VaultBot's own directives go under "
-                    "vaultbot/System/Identity/ (e.g. "
-                    "'vaultbot/System/Identity/Autonomy-Directive.md'). NEVER "
+                    "System/Identity/ (e.g. "
+                    "'System/Identity/Autonomy-Directive.md'). NEVER "
                     "write to root-level Knowledge/, Memory/, System/, or "
-                    "*-Directive.md — always use the vaultbot/ prefix."
+                    "*-Directive.md — always use the vault root."
                 ),
                 "type": "string",
             },
@@ -67,16 +67,21 @@ import tempfile  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
 
+# Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
+# resolve_content_path maps a logical path to the correct physical root.
+from paths import (  # noqa: E402
+    VAULT_ROOT,
+    is_within_content_roots,
+    resolve_content_path,
+)
+
 # Determine paths from this file's location
-# custom_tools/vault_safe_write.py -> parent.parent = vaultbot/vaultbot_backend/
-# -> parent.parent.parent = vaultbot/ -> parent.parent.parent.parent = Vault2/
-# (vault root)
+# custom_tools/vault_safe_write.py -> parent.parent = vaultbot_backend/
 try:
-    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot/vaultbot_backend/
+    BACKEND_DIR = Path(__file__).resolve().parent.parent  # vaultbot_backend/
 except NameError:
     BACKEND_DIR = Path.cwd()
-VAULT_ROOT = BACKEND_DIR.parent.parent  # the vault root
-TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot/vaultbot_backend/trash/
+TRASH_DIR = BACKEND_DIR / "trash"  # vaultbot_backend/trash/
 
 
 def _is_sacred_journal(file_path: Path) -> bool:
@@ -118,7 +123,7 @@ def _is_path_traversal(file_path: str, vault_root: Path) -> bool:
 def _is_root_directive(file_path: str) -> bool:
     """Block VaultBot from writing its own directives to the vault root.
 
-    Directives belong under vaultbot/System/Identity/, never at the root.
+    Directives belong under System/Identity/, never at the root.
     A root-level directive is a *-Directive.md (or *-Communication-Preferences.md)
     with no directory component (e.g. 'Autonomy-Directive.md').
     """
@@ -170,22 +175,22 @@ def run(args: dict) -> dict:
         return result
 
     # 3. Path traversal check
-    if _is_path_traversal(file_path_str, VAULT_ROOT):
+    if not is_within_content_roots(resolve_content_path(file_path_str)):
         result["blocked_reason"] = (
             f"Path traversal detected: {file_path_str} resolves outside vault root"
         )
         return result
 
     # 3b. Block root-level directives — VaultBot's directives live under
-    # vaultbot/System/Identity/, never at the vault root.
+    # System/Identity/, never at the vault root.
     if _is_root_directive(file_path_str):
         result["blocked_reason"] = (
             f"Root-level directive blocked: {file_path_str}. "
-            "VaultBot directives belong under vaultbot/System/Identity/."
+            "VaultBot directives belong under System/Identity/."
         )
         return result
 
-    full_path = (VAULT_ROOT / file_path_str).resolve()
+    full_path = resolve_content_path(file_path_str)
     result["checks"]["resolved_path"] = str(full_path)
 
     # 4. Content must not be empty

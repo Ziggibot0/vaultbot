@@ -125,9 +125,9 @@ jobs:
           VAULTBOT_SKIP_WATCHER: "1"
           VAULT_PATH: ${{ github.workspace }}
         run: |
-          mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
-          mkdir -p "$VAULT_PATH/vaultbot/Knowledge"
-          mkdir -p "$VAULT_PATH/vaultbot/System"
+          mkdir -p "$VAULT_PATH/Memory/Chat"
+          mkdir -p "$VAULT_PATH/Knowledge"
+          mkdir -p "$VAULT_PATH/System"
           uv run pytest -q -m "unit" --tb=short \
             --cov=vaultbot_backend --cov-report=term-missing \
             --cov-fail-under=10
