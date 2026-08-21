@@ -4,8 +4,7 @@
 
 > A retrieval-augmented research assistant that lives inside your Obsidian vault.
 > It searches your notes, researches the web when the vault is thin, and writes
-> sourced knowledge — your vault and embeddings stay on your machine; the chat
-> model can run locally (with capable hardware) or via a free-tier cloud API.
+> sourced knowledge — all while running entirely on your own computer.
 
 VaultBot is not a chatbot. It's a **personal research assistant** that
 treats your Obsidian vault as its knowledge base. The LLM is swappable plumbing; the
@@ -52,7 +51,7 @@ the proof itself is not demonstrated yet:
 The mission is the direction. The work is getting there.
 
 For the full strategic vision, see
-[`vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md`](vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md).
+[`Knowledge/Architecture/VaultBot-Strategic-Vision.md`](Knowledge/Architecture/VaultBot-Strategic-Vision.md).
 
 ---
 
@@ -113,11 +112,8 @@ For the full strategic vision, see
 
 ## Quick start (one command)
 
-VaultBot can run **entirely on your own computer**, but most people should
-use a free-tier cloud API key (e.g. [OpenRouter](https://openrouter.ai))
-for the chat model — running a capable local LLM needs real hardware (see
-[Local vs. cloud](#local-vs-cloud-what-do-i-need) below). Either way, your
-vault, embeddings, and search index always stay on your machine.
+VaultBot runs **entirely on your own computer** — nothing leaves your
+machine unless you choose to add a cloud LLM later.
 
 You need two things installed first — both are free, one-click downloads:
 
@@ -150,14 +146,18 @@ curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | ba
 
 The installer asks for your name, downloads the VaultBot files, creates a
 Python environment, installs all dependencies, pulls the lightweight embedding
-model (~270 MB) and the small classification model (~4 GB, both always local),
-and asks whether you want a local or cloud chat model. If you pick **cloud** (recommended for most users — a free OpenRouter
-key works), you'll add your API key to `.env` after setup (the installer tells
-you exactly what to write). If you pick **local**, the installer pulls a
-local chat model for you — but note that a capable LLM for the agentic loop
-needs real hardware (see [Local vs. cloud](#local-vs-cloud-what-do-i-need)).
-Either way, the backend starts automatically when you open Obsidian — no
-terminal needed.
+model (~270 MB) and the small classification model (~4 GB), asks whether you
+want a local or cloud chat model (and pulls a local model for you if you pick
+local), writes your config, and opens Obsidian for you — all automatically. It takes 10–30 minutes the
+first time (mostly downloads). You only do this once.
+
+If you pick **cloud** (recommended for most users — a free OpenRouter tier
+works with no credit card), the installer opens a browser to OpenRouter,
+walks you through creating a key, and writes it to `.env` for you — you
+never edit a hidden file by hand. If you skip the key, the installer tells
+you exactly what to add later. If you pick **local**, the installer pulls
+the model for you. Either way, the backend starts automatically when you
+open Obsidian — no terminal needed.
 
 If Python or Ollama aren't installed yet, the installer tells you and
 opens the download page for you. Install them, then run the command again.
@@ -182,8 +182,11 @@ again after that one paste.**
 > **Don't put your vault in OneDrive or Dropbox** — syncing services can
 > corrupt the database files VaultBot creates.
 
-> **Optional:** [Docker](https://www.docker.com) — only if you want to run
-> the self-hosted SearXNG search backend. Skip it for a first install.
+> **Recommended:** [Docker](https://www.docker.com) — the setup script
+> automatically starts a SearXNG search container if Docker is present,
+> giving the research feature full web coverage (Google, Brave, etc.).
+> Without Docker, research still works via keyless backends (DuckDuckGo
+> Lite, Marginalia, arXiv) but is more rate-limited.
 
 ---
 
@@ -219,7 +222,7 @@ close and reopen Obsidian) for changes to take effect.
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
 | `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; the installer can pull it for you, or manually `ollama pull` it) | `qwen3:latest` |
 | `OLLAMA_EMBED_MODEL` | The embedding model (auto-pulled by the installer, ~270 MB) | `nomic-embed-text` |
-| `LLM_BACKEND` | `ollama` (local, free, **default — needs capable hardware for the agentic loop**) or `openai` (cloud, any OpenAI-compatible API — **recommended for most users**, free OpenRouter tier works) | `ollama` |
+| `LLM_BACKEND` | `ollama` (local, free, **default — zero-config**) or `openai` (cloud, any OpenAI-compatible API — recommended for laptops) | `ollama` |
 | `LLM_API_KEY` | Cloud API key (leave blank for local-only; if `LLM_BACKEND=openai` but this is empty, the backend fails with a clear error — set the key to use the cloud backend) | (empty) |
 | `LLM_BASE_URL` | Cloud API base URL (OpenAI, OpenRouter, LM Studio, vLLM, etc.) | `https://api.openai.com` |
 | `LLM_MODEL` | Cloud model name (only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
@@ -233,19 +236,7 @@ close and reopen Obsidian) for changes to take effect.
 | `VAULTBOT_PRELOAD_ON_STARTUP` | Preload models when the backend starts to reduce first-chat latency (`1`/`0`) | `1` |
 | `VAULTBOT_PRELOAD_ON_CONNECT` | Preload when a chat WebSocket opens (`1`/`0`) | `1` |
 
-### Local vs. cloud: what do I need?
-
-**Most users — use a free-tier cloud API key (recommended).** VaultBot's
-chat loop needs a model that can actually reason, follow plans, and call
-tools. On a typical laptop, a local model small enough to fit in RAM is
-too weak for the agentic loop. Sign up at
-[OpenRouter](https://openrouter.ai) (free tier available), grab an API
-key, and set `LLM_BACKEND=openai`, `LLM_BASE_URL=https://openrouter.ai/api/v1`,
-`LLM_API_KEY=your-key`, and `LLM_MODEL=` to a free-tier model. Your vault,
-embeddings, and search index stay local on Ollama — only the chat prompt
-hits the API.
-
-> **Want to use a cloud model (like GPT-4o) instead?** Set
+> **Want to use a cloud model (like GPT-4o) instead of local?** Set
 > `LLM_BACKEND=openai`, `LLM_API_KEY=your-key`, and `LLM_MODEL=gpt-4o-mini`
 > (or any OpenAI/OpenRouter model) in `.env`. Embeddings stay local on
 > Ollama either way. You can also switch between cloud and local back and
@@ -253,13 +244,10 @@ hits the API.
 > changes persist for you. If you set `LLM_BACKEND=openai` but forget the
 > API key, the backend fails with a clear error — set the key to actually use the cloud backend.
 >
-> **Want to run a local LLM instead?** You can, but you need the hardware
-> for it: **at least a ~30B model** to keep up with the agentic loop (we
-> suggest `qwen3.8:latest`), which means a capable GPU or a lot of RAM.
-> `ollama pull qwen3.8:latest` (or any model you like). The installer can
-> pull a model for you during setup, or you can pull one manually later.
-> Embeddings always use Ollama regardless. Don't expect a laptop to run
-> the full chat loop locally — that's what the cloud option is for.
+> **Want to run a local LLM instead?** That's the default — just `ollama pull
+> qwen3:latest` (or any model you like). The installer can pull it for you
+> during setup, or you can pull it manually later. Embeddings always use
+> Ollama regardless.
 
 ---
 
@@ -311,18 +299,64 @@ VaultBot can update itself from inside Obsidian — no terminal needed.
    an update — only the code files change. Your `data.json`, `.env`, and
    all `.md` files are preserved.
 
-If you prefer the manual route: `git pull` (if you cloned), or re-download
-the ZIP and copy over the `vaultbot_backend/` and `.obsidian/plugins/vaultbot/`
-folders. Then restart the backend.
+**How updates work (fork installs).** If you installed via the one-click
+installer, your vault is a git fork of `Ziggibot0/vaultbot`. Updates
+merge via `git pull upstream main`, so any local edits your VaultBot made
+to its own code are *merged*, not overwritten. If you prefer the manual
+route: `git pull upstream main` (or `git pull origin main` for maintainers).
+
+**Legacy zip installs.** If you installed before the fork-based installer
+(no `.git` folder), the updater falls back to downloading a tarball and
+copying code files over the live vault. To get the cleaner merge-based
+updates, re-run the installer — it will set up a fork for you.
+
+---
+
+## Community contributions
+
+VaultBot is a community project, and your VaultBot can give back — but only
+on your terms.
+
+**Default: pull-only.** Out of the box, your VaultBot only *pulls* updates.
+It never writes to GitHub — not even filing an issue — unless you opt in.
+This is your right, not a soft preference.
+
+**Opt in with one toggle.** Settings → **Allow contributions** turns on
+`VAULTBOT_ALLOW_CONTRIBUTIONS`. When it's on, your VaultBot can:
+
+- **File issues automatically** when it hits an obstacle it was already
+  solving (a bug, a broken procedure, a retrieval miss). This is cheap and
+  one-shot — it just tells the maintainer something's wrong and roughly
+  where to look.
+- **Submit pull requests** when *you* ask it to, or when a fix is a natural
+  byproduct of work it was already doing for you.
+
+**Your VaultBot never does the maintainer's work on your dime.** It won't
+scan the project's issue tracker and pick up tickets on its own. Solving is
+only justified when it's already in your VaultBot's path — filing an issue is
+the default "give back," solving is the exception.
+
+**How your contributions are used.** Every PR is reviewed and torture-tested
+by the maintainer's VaultBot (safety scan + import check + syntax check +
+functional test) before a human merges it. Nothing merges without passing CI
+and a human sign-off.
+
+**Which account does the work?** Your VaultBot uses whatever GitHub account
+you're signed into (`gh auth login`). The maintainer's VaultBot uses a
+separate bot account so the human maintainer can approve its PRs (GitHub
+forbids approving your own). No one force-pushes — every change goes through
+a PR and CI.
+
+See
+[`vaultbot/System/Community-Contribution-System.md`](vaultbot/System/Community-Contribution-System.md)
+for the full design.
 
 ---
 
 ## Safety & Security
 
-VaultBot itself runs entirely on your machine — it does not phone home, send
-telemetry, or share your data. Your vault, embeddings, and search index never
-leave your computer. If you configure a cloud LLM (recommended for most users),
-only the chat prompt is sent to that provider — your notes are not uploaded.
+VaultBot runs entirely on your machine. It does not phone home, send
+telemetry, or share your data unless you explicitly configure a cloud LLM.
 
 **Defense in depth:**
 
@@ -400,7 +434,7 @@ The `baseline/` folder contains starter directive templates you can copy
 into `vaultbot/System/Identity/` to set rules:
 
 - `Autonomy-Directive.md` — act on its own, report after the fact
-- `No-Wikipedia-Directive.md` — never reference Wikipedia
+- `Vault-Knowledge-Only-Directive.md` — never reference training data
 - `IDK-Fallback-Directive.md` — say "I don't know" when stuck
 - `Communication-Preferences.md` — how you like to be talked to (template)
 
@@ -414,7 +448,7 @@ Wikipedia") and it will store that as a directive note itself.
 
 ## Project structure
 
-The backend (~230 modules) is organized into these key areas:
+The backend (~95 modules) is organized into these key areas:
 
 | Module | Role |
 |--------|------|
