@@ -28,7 +28,7 @@ The core principle: **deterministic code reading does the work, not the LLM.** T
 1. Question classification (semantic task — understanding what kind of question is being asked, because classification requires understanding meaning)
 2. Optional final synthesis (weaving findings into a coherent answer, because natural language generation is what LLMs do best)
 
-Everything else — locating files, reading source code, tracing imports, finding procedure calls, extracting relevant sections — is done by deterministic Python code with `code_read`, `vault_list`, and `vault_search`. Therefore, even a 0.8B model can use this procedure effectively, because the model never needs to reason about code — it just interprets what the deterministic steps already found.
+Everything else — locating files, reading source code, tracing imports, finding procedure calls, extracting relevant sections — is done by deterministic Python code with `code_read`, `vault_list`, and `vault_search`. Because the model never needs to reason about code — it just interprets what the deterministic steps already found — a small model is sufficient here. We recommend a 3B or 4B model (a 2B is pushing it); qwen3.5:0.8b was tried and wasn't strong enough for reliable classification.
 
 ## Design Principle: Code for Discovery, LLM for Interpretation
 

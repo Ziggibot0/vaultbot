@@ -535,10 +535,12 @@ if (Test-StepDone "models_pulled") {
     & ollama pull nomic-embed-text
     Write-OK "Embedding model ready"
     # The small model (qwen3.5:4b) drives the small cartridge: cheap
-    # classification, tagging, and routing. It MUST be >= ~3-4B - a sub-1B
-    # model (like the old qwen3.5:0.8b) can't reliably classify or route,
-    # which makes VaultBot feel broken. Pull it here so the one-liner is
-    # truly all a user needs (no manual `ollama pull` afterward).
+    # classification, tagging, and routing. We recommend a 3B or 4B model
+    # (a 2B is pushing it). qwen3.5:0.8b was tried and wasn't strong
+    # enough - it timed out on one-line classification/routing and
+    # couldn't follow multi-part instructions, which made VaultBot feel
+    # broken. Pull the 4B here so the one-liner is truly all a user needs
+    # (no manual `ollama pull` afterward).
     Write-Step "Downloading small model (qwen3.5:4b, ~4 GB) for classification/routing..."
     & ollama pull qwen3.5:4b
     if ($LASTEXITCODE -ne 0) {
