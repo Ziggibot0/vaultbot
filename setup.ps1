@@ -373,12 +373,14 @@ if ((Test-Path $repoPath) -and (Test-Path $reqCanary)) {
         Write-OK "Downloaded to $repoPath"
     }
 
-    # -- Create the vault + hoist .obsidian/ into it ------------------------
-    # The repo ships .obsidian/plugins/vaultbot/ at its root. Obsidian looks
-    # for plugins at <vault>/.obsidian/plugins/, so we create the Vault/
-    # subfolder and move the repo's .obsidian/ into it. This is what makes
-    # the plugin actually load when the user opens their vault — and it keeps
-    # the framework (vaultbot_backend/, System/, etc.) OUT of the vault.
+    # -- Create the vault (the repo already ships Vault/.obsidian/) ---------
+    # The repo ships the Obsidian plugin at Vault/.obsidian/plugins/vaultbot/
+    # (the inverted layout: the vault is a Vault/ subfolder of the repo).
+    # Obsidian looks for plugins at <vault>/.obsidian/plugins/, so the plugin
+    # is already in the right place after clone — no hoisting needed. We only
+    # ensure the Vault/ folder exists (it does, from the clone) and, for
+    # legacy installs that predate the inverted layout, hoist a stray
+    # repo-root .obsidian/ into Vault/ if one is present.
     New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
     $repoObsidian = Join-Path $repoPath ".obsidian"
     $vaultObsidian = Join-Path $vaultPath ".obsidian"

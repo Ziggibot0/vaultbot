@@ -1048,7 +1048,9 @@ class VaultBotPlugin extends Plugin {
 			}
 		} catch (e) {}
 		// Use the GitHub API (works for branches + tags) to get the manifest.
-		const apiUrl = `https://raw.githubusercontent.com/Ziggibot0/vaultbot/${encodeURIComponent(refSpec)}/.obsidian/plugins/vaultbot/manifest.json`;
+		// The plugin ships at Vault/.obsidian/plugins/vaultbot/ in the repo
+		// (the inverted layout: the vault is a Vault/ subfolder of the repo).
+		const apiUrl = `https://raw.githubusercontent.com/Ziggibot0/vaultbot/${encodeURIComponent(refSpec)}/Vault/.obsidian/plugins/vaultbot/manifest.json`;
 		try {
 			const resp = await fetch(apiUrl, { cache: 'no-store' });
 			if (!resp.ok) return { error: `GitHub returned ${resp.status}`, current: currentVersion };
@@ -1070,9 +1072,9 @@ class VaultBotPlugin extends Plugin {
 	//
 	// What gets updated (code only):
 	//   - vaultbot_backend/**/*.py  (the backend engine)
-	//   - .obsidian/plugins/vaultbot/main.js   (this plugin file)
-	//   - .obsidian/plugins/vaultbot/manifest.json
-	//   - .obsidian/plugins/vaultbot/styles.css
+	//   - Vault/.obsidian/plugins/vaultbot/main.js   (this plugin file)
+	//   - Vault/.obsidian/plugins/vaultbot/manifest.json
+	//   - Vault/.obsidian/plugins/vaultbot/styles.css
 	//
 	// What is PRESERVED (never overwritten):
 	//   - .obsidian/plugins/vaultbot/data.json (your keys, model, etc.)
@@ -1246,7 +1248,7 @@ class VaultBotPlugin extends Plugin {
 			const extractArgs = [
 				'-xzf', tarballPath,
 				'-C', stagingDir,
-				'--exclude=*/.obsidian/plugins/vaultbot/data.json',
+				'--exclude=*/Vault/.obsidian/plugins/vaultbot/data.json',
 				'--exclude=*/vaultbot_backend/*.log',
 				'--exclude=*/vaultbot_backend/*_log.json',
 				'--exclude=*/vaultbot_backend/calibration_log.json',
@@ -1300,7 +1302,9 @@ class VaultBotPlugin extends Plugin {
 					backups[name] = fs.readFileSync(p);
 				}
 			}
-			const srcPlugin = path.join(archiveRoot, '.obsidian', 'plugins', 'vaultbot');
+			// The plugin ships at Vault/.obsidian/plugins/vaultbot/ in the repo
+			// (inverted layout: the vault is a Vault/ subfolder of the repo).
+			const srcPlugin = path.join(archiveRoot, 'Vault', '.obsidian', 'plugins', 'vaultbot');
 			if (!fs.existsSync(srcPlugin)) throw new Error('Archive has no plugin folder.');
 			// Copy only code files from the archive's plugin dir. Never copy
 			// data.json even if it somehow survived (it shouldn't).

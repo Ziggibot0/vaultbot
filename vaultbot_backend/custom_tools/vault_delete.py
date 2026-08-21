@@ -47,7 +47,7 @@ EXCLUDE_DIRS = {
     "checkpoints",
     ".venv",
 }
-BACKEND_DIR = Path(__file__).parent.parent.resolve()  # vaultbot/vaultbot_backend/
+BACKEND_DIR = Path(__file__).parent.parent.resolve()  # vaultbot_backend/
 TRASH_DIR = BACKEND_DIR / "trash"
 IDENTITY_FILES = {"IDENTITY"}
 

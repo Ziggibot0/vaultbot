@@ -113,13 +113,13 @@ def safe_write(
          disk, the pre-edit backup (.bak) is restored immediately.
 
     Args:
-      file_path: path relative to vault root.
+      file_path: path relative to the framework root.
       content: the new file content.
       dry_run: if True, run all checks but do NOT write to disk.
         Returns the verification result so the agent can preview
         whether an edit would be safe before committing it.
       backend_dir: the backend directory (for core-file detection).
-      backend_root: the vault root (for path resolution).
+      backend_root: the framework root (for path resolution).
       trash_dir: where .bak files go.
       core_files: set of core file names that trigger import verification.
       log_fn: callable (event, data) for logging.
@@ -448,11 +448,11 @@ def js_safe_write(
          from .bak immediately.
 
     Args:
-      file_path: path relative to vault root (e.g.
-        '.obsidian/plugins/vaultbot/main.js').
+      file_path: path relative to the framework root (e.g.
+        'Vault/.obsidian/plugins/vaultbot/main.js').
       content: the new JS file content.
       dry_run: if True, run the syntax check only; do NOT write.
-      backend_root: the vault root (for path resolution).
+      backend_root: the framework root (for path resolution).
       trash_dir: where .bak files go.
       log_fn: callable (event, data) for logging.
       verify_js_load_fn: callable (content) -> (bool, str|None) for
