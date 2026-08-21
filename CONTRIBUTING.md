@@ -47,11 +47,11 @@ The fastest way to get a dev environment running is the one-liner installer:
 
 ```powershell
 # Windows
-irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+irm https://github.com/Ziggibot0/vaultbot/raw/main/setup.ps1 | iex
 ```
 ```bash
 # macOS / Linux
-curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
+curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/setup.sh | bash
 ```
 
 This creates a `VaultBot/` folder with a fully set-up venv, deps, models,
