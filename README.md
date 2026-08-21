@@ -133,7 +133,7 @@ Then open a terminal and paste **one line**:
 ### Windows (PowerShell)
 
 ```powershell
-irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+irm https://github.com/Ziggibot0/vaultbot/raw/main/setup.ps1 | iex
 ```
 
 > **Don't know how to open PowerShell?** Press the Windows key, type
@@ -143,15 +143,17 @@ irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
+curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/setup.sh | bash
 ```
 
 ### What the installer does
 
-The installer asks for your name, downloads the VaultBot files, creates a
-Python environment, installs all dependencies, pulls the lightweight embedding
-model (~270 MB) and the small classification model (~4 GB, both always local),
-and asks whether you want a local or cloud chat model. If you pick **cloud** (recommended for most users — a free OpenRouter
+The installer asks for your name, asks what you'd like to name your vault,
+creates that folder, downloads the VaultBot files into a `vaultbot/`
+subfolder inside it, creates a Python environment, installs all dependencies,
+pulls the lightweight embedding model (~270 MB) and the small classification
+model (~4 GB, both always local), and asks whether you want a local or cloud
+chat model. If you pick **cloud** (recommended for most users — a free OpenRouter
 key works), you'll add your API key to `.env` after setup (the installer tells
 you exactly what to write). If you pick **local**, the installer pulls a
 local chat model for you — but note that a capable LLM for the agentic loop
@@ -159,14 +161,18 @@ needs real hardware (see [Local vs. cloud](#local-vs-cloud-what-do-i-need)).
 Either way, the backend starts automatically when you open Obsidian — no
 terminal needed.
 
+VaultBot's own files stay tucked inside the `vaultbot/` subfolder so they
+don't clutter your vault — your notes live at the top level, VaultBot's
+internals stay out of the way.
+
 If Python or Ollama aren't installed yet, the installer tells you and
 opens the download page for you. Install them, then run the command again.
 
 ### After the installer finishes
 
 Obsidian opens automatically. If it doesn't, open it manually and choose
-**Open folder as vault** → select the `VaultBot` folder the installer
-created.
+**Open folder as vault** → select the folder you named (the installer tells
+you the path).
 
 In Obsidian:
 

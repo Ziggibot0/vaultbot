@@ -80,7 +80,7 @@ def main() -> int:
     # files only (used by the pre-commit hook).
     if "--all" in sys.argv:
         result = subprocess.run(
-            ["git", "ls-files", "vaultbot/System/"],
+            ["git", "ls-files", "System/"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -116,8 +116,8 @@ def main() -> int:
 
         candidates = [p.strip() for p in result.stdout.split("\n") if p.strip()]
 
-    # Filter to .md files under vaultbot/System/.
-    SYSTEM_PREFIX = "vaultbot/System/"
+    # Filter to .md files under System/.
+    SYSTEM_PREFIX = "System/"
     to_check = [
         p for p in candidates if p.startswith(SYSTEM_PREFIX) and p.endswith(".md")
     ]
