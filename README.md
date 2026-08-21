@@ -129,7 +129,7 @@ Then open a terminal and paste **one line**:
 ### Windows (PowerShell)
 
 ```powershell
-irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+irm https://github.com/Ziggibot0/vaultbot/raw/main/setup.ps1 | iex
 ```
 
 > **Don't know how to open PowerShell?** Press the Windows key, type
@@ -139,7 +139,7 @@ irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
+curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/setup.sh | bash
 ```
 
 ### What the installer does
