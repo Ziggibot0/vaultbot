@@ -449,7 +449,7 @@ def js_safe_write(
 
     Args:
       file_path: path relative to the framework root (e.g.
-        'Vault/.obsidian/plugins/vaultbot/main.js').
+        '.obsidian/plugins/vaultbot/main.js').
       content: the new JS file content.
       dry_run: if True, run the syntax check only; do NOT write.
       backend_root: the framework root (for path resolution).

@@ -125,22 +125,26 @@ vaultbot/vaultbot/
 # baseline/), NOT under vaultbot/.
 vaultbot/
 
-# The user's vault (inverted layout). The repo ships a Vault/ subfolder
-# holding the Obsidian plugin (.obsidian/plugins/vaultbot/) — that's the
-# shippable product. Everything ELSE in Vault/ is the user's personal
-# content (User/, Memory/, Knowledge/Research/, Lyrics/, notes) and must
-# never be committed to the framework repo.
-Vault/*
-!Vault/.obsidian/
-Vault/.obsidian/*
-!Vault/.obsidian/community-plugins.json
-!Vault/.obsidian/plugins/
-Vault/.obsidian/plugins/*
-!Vault/.obsidian/plugins/vaultbot/
-Vault/.obsidian/plugins/vaultbot/*
-!Vault/.obsidian/plugins/vaultbot/main.js
-!Vault/.obsidian/plugins/vaultbot/manifest.json
-!Vault/.obsidian/plugins/vaultbot/styles.css
+# The Obsidian plugin ships at .obsidian/plugins/vaultbot/ at the repo
+# root (the repo root IS the vault root in the dev/CI layout). When
+# installed, the installer clones the repo as a `vaultbot/` subfolder inside
+# the user's named vault folder, then hoists .obsidian/ to the vault root.
+# Only the plugin code files + community-plugins.json are tracked; the rest
+# of .obsidian/ is user-local config.
+.obsidian/*
+!.obsidian/community-plugins.json
+!.obsidian/plugins/
+.obsidian/plugins/*
+!.obsidian/plugins/vaultbot/
+.obsidian/plugins/vaultbot/*
+!.obsidian/plugins/vaultbot/main.js
+!.obsidian/plugins/vaultbot/manifest.json
+!.obsidian/plugins/vaultbot/styles.css
+
+# Legacy Vault/ folder from the inverted layout (PR #143/#144). The tracked
+# plugin files have been moved to .obsidian/ at the repo root. Any remaining
+# Vault/ content is personal/user-local and must stay ignored.
+Vault/
 
 # Root-level scratch / debug artifacts
 test_pull_output.txt

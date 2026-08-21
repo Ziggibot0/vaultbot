@@ -1,19 +1,19 @@
 """Central path resolution for the VaultBot framework.
 
-VaultBot has TWO roots, and they are no longer the same directory:
+VaultBot has TWO roots:
 
-* ``FRAMEWORK_ROOT`` — the directory that contains ``vaultbot_backend/``
-  (the git repo).  Holds framework content: ``System/``, ``Knowledge/``
-  (Textbooks/Concepts/Architecture), ``baseline/``, ``learningMaterial/``,
-  ``.env``, ``.venv/``.  This is the program, not the user's mind.
+* ``VAULT_ROOT`` — the user's Obsidian vault.  This is the folder the user
+  names during install and opens in Obsidian.  Holds ALL user-visible
+  content: ``System/Procedures/``, ``Knowledge/``, ``baseline/``, ``Memory/``,
+  ``User/``, ``.obsidian/``.  Procedures live HERE so they're visible in the
+  Obsidian file explorer (transparency layer).
 
-* ``VAULT_ROOT`` — the user's Obsidian vault.  In the installed layout this
-  is ``FRAMEWORK_ROOT/Vault/`` (the user opens *this* folder in Obsidian).
-  In the flattened dev layout it is the repo root (where ``.obsidian/``
-  lives).  Holds user content: ``User/``, ``Memory/``, ``Knowledge/Research/``.
-
-The two roots are separated so the user's Obsidian file explorer shows only
-their notes — never the framework internals.
+* ``FRAMEWORK_ROOT`` — the directory that contains ``vaultbot_backend/``.
+  In the **installed** layout this is ``VAULT_ROOT/vaultbot/`` (a subfolder
+  inside the vault, hidden from the Obsidian file explorer via ignore
+  filters).  Holds framework plumbing: ``vaultbot_backend/``, ``.venv/``,
+  ``.env``, ``setup.ps1``, ``learningMaterial/``.  In the **flattened dev**
+  layout (this repo), ``FRAMEWORK_ROOT`` == ``VAULT_ROOT`` == the repo root.
 """
 
 from pathlib import Path
@@ -26,18 +26,32 @@ FRAMEWORK_ROOT = Path(__file__).resolve().parent.parent
 def _resolve_vault_root() -> Path:
     """Locate the user's vault root.
 
-    Installed layout: ``FRAMEWORK_ROOT/Vault/`` (has ``.obsidian/``).
-    Dev (flattened) layout: the repo root (has ``.obsidian/``).
-    Falls back to ``FRAMEWORK_ROOT/Vault/`` if it exists, else the framework
-    root itself (covers CI, where ``VAULT_PATH`` is set explicitly and
-    ``.obsidian/`` may not exist).
+    Installed layout: the vault is the PARENT of the framework root
+    (``FRAMEWORK_ROOT`` == ``<vault>/vaultbot/``, so the vault is one level
+    up).  The vault has ``.obsidian/`` and ``System/``.
+
+    Dev (flattened) layout: the repo root has both ``vaultbot_backend/`` and
+    ``.obsidian/`` / ``System/``, so ``FRAMEWORK_ROOT`` IS the vault root.
+
+    CI: ``VAULT_PATH`` is set explicitly to the repo workspace; ``.obsidian/``
+    may not exist.  Falls back to ``FRAMEWORK_ROOT``.
     """
-    # Installed layout: the vault is a Vault/ subfolder of the framework.
-    candidate = FRAMEWORK_ROOT / "Vault"
-    if (candidate / ".obsidian").is_dir():
+    # Installed layout: framework lives in <vault>/vaultbot/, so the vault
+    # is the parent of the framework root.  Only accept it if the framework
+    # root itself is named "vaultbot" (the installed subfolder name) AND the
+    # parent looks like a vault (has .obsidian/ or System/).
+    candidate = FRAMEWORK_ROOT.parent
+    if FRAMEWORK_ROOT.name == "vaultbot" and (
+        (candidate / ".obsidian").is_dir() or (candidate / "System").is_dir()
+    ):
         return candidate
 
-    # Dev / legacy: walk up from the framework root to find .obsidian/.
+    # Dev / legacy flattened: the framework root IS the vault root (it has
+    # .obsidian/ or System/ directly).
+    if (FRAMEWORK_ROOT / ".obsidian").is_dir() or (FRAMEWORK_ROOT / "System").is_dir():
+        return FRAMEWORK_ROOT
+
+    # Walk up to find a .obsidian/ (covers edge cases).
     current = FRAMEWORK_ROOT
     for _ in range(5):
         if (current / ".obsidian").is_dir():
@@ -47,8 +61,9 @@ def _resolve_vault_root() -> Path:
             break
         current = parent
 
-    # Fallback: the Vault/ subfolder if it exists, else the framework root.
-    return candidate if candidate.is_dir() else FRAMEWORK_ROOT
+    # Fallback: the framework root itself (covers CI, where VAULT_PATH is
+    # set explicitly and .obsidian/ may not exist).
+    return FRAMEWORK_ROOT
 
 
 VAULT_ROOT = _resolve_vault_root()
@@ -57,12 +72,13 @@ VAULT_ROOT = _resolve_vault_root()
 def content_roots() -> list[Path]:
     """Roots to scan for vault content (user vault + framework content).
 
-    The user's notes live under ``VAULT_ROOT``; framework content
-    (``System/Procedures/``, ``Knowledge/Concepts/``, ``baseline/``) lives
-    under ``FRAMEWORK_ROOT``.  Retrieval (indexer, graph, procedure tracker)
-    must see BOTH so procedures and baseline knowledge stay retrievable even
-    though they sit outside the user's vault.  In the flattened dev layout
-    the two roots are the same directory, so this returns a single entry.
+    The user's notes AND framework content (procedures, knowledge, baseline)
+    all live under ``VAULT_ROOT`` in the new layout — ``System/Procedures/``
+    is visible in Obsidian.  ``FRAMEWORK_ROOT`` (``<vault>/vaultbot/``) holds
+    only plumbing (``vaultbot_backend/``, ``.venv/``), which is not content.
+    In the flattened dev layout the two roots are the same directory, so
+    this returns a single entry.  In the installed layout the framework root
+    is still included as a fallback in case any content drifts there.
     """
     roots = [VAULT_ROOT]
     if FRAMEWORK_ROOT != VAULT_ROOT:
@@ -70,36 +86,25 @@ def content_roots() -> list[Path]:
     return roots
 
 
-# Logical paths that resolve against the FRAMEWORK root (not the vault).
-# These are framework-owned content: procedures, directives, baseline
-# knowledge, textbooks, architecture maps.  Everything else (User/, Memory/,
-# Knowledge/Research/) is user content and resolves against VAULT_ROOT.
-_FRAMEWORK_PREFIXES = (
-    "System/",
-    "baseline/",
-    "Knowledge/Concepts/",
-    "Knowledge/Textbooks/",
-    "Knowledge/Architecture/",
-    "Knowledge/Procedures/",
-    "Knowledge/Tools/",
-    "Knowledge/Simulations/",
-    "Knowledge/Biology/",
-)
+# In the new layout, ALL content (System/, Knowledge/, baseline/) lives in
+# the vault root and is visible in Obsidian.  The framework root
+# (<vault>/vaultbot/) holds only plumbing (vaultbot_backend/, .venv/).
+# resolve_content_path routes everything to VAULT_ROOT.  The framework
+# prefixes list is kept empty for backward compatibility — if any content
+# somehow lives under the framework root in a legacy install, the
+# content_roots() fallback scan still finds it.
+_FRAMEWORK_PREFIXES: tuple[str, ...] = ()
 
 
 def resolve_content_path(file_path: str | Path) -> Path:
     """Resolve a logical vault-relative path to its physical location.
 
-    Framework-owned content (``System/``, ``baseline/``, framework
-    ``Knowledge/`` subfolders) resolves against ``FRAMEWORK_ROOT``; user
-    content (``User/``, ``Memory/``, ``Knowledge/Research/``) resolves
-    against ``VAULT_ROOT``.  In the flattened dev layout the two roots are
-    identical, so this is a no-op there.
+    All content (``System/``, ``Knowledge/``, ``baseline/``, ``User/``,
+    ``Memory/``) resolves against ``VAULT_ROOT`` — the user's Obsidian vault.
+    In the flattened dev layout ``VAULT_ROOT`` == ``FRAMEWORK_ROOT``, so
+    this is a no-op there.
     """
     p = Path(file_path)
-    norm = str(p).replace("\\", "/").lstrip("./")
-    if norm.startswith(_FRAMEWORK_PREFIXES):
-        return (FRAMEWORK_ROOT / p).resolve()
     return (VAULT_ROOT / p).resolve()
 
 

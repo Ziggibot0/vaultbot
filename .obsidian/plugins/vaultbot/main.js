@@ -202,12 +202,12 @@ class VaultBotPlugin extends Plugin {
 		// cooking" — the backend writes session logs, conversation state, and
 		// FAISS index files many times per second, and each event triggers
 		// Obsidian's metadata cache update.
-		const required = ['vaultbot_backend/', '.venv/', 'vaultbot_backend/vaultbot_index/'];
+		const required = ['vaultbot/', '.venv/', 'vaultbot_backend/', 'vaultbot_backend/vaultbot_index/'];
 		// Repo-level files that live at the vault root (AGENTS.md, README.md,
 		// SECURITY.md, LICENSE) are VaultBot's own plumbing, not the user's
 		// notes. Hide them from the file explorer so the root stays clean for
 		// the user's own stuff.
-		const rootFiles = ['AGENTS.md', 'README.md', 'SECURITY.md', 'LICENSE'];
+		const rootFiles = ['AGENTS.md', 'README.md', 'SECURITY.md', 'LICENSE', 'CONTRIBUTING.md', 'pyproject.toml', 'Dockerfile'];
 		try {
 			const current = this.app.vault.getConfig('userIgnoreFilters') || [];
 			let changed = false;
@@ -502,10 +502,10 @@ class VaultBotPlugin extends Plugin {
 
 	_venvPythonExe(vaultRoot) {
 		const bin = this._venvBinDir();
-		// The framework (vaultbot_backend/, .venv/) lives ONE level ABOVE the
-		// vault (the vault is the Vault/ subfolder). So the venv is at
-		// <framework>/.venv, not <vault>/.venv.
-		const frameworkRoot = path.dirname(vaultRoot);
+		// The framework (vaultbot_backend/, .venv/) lives in a `vaultbot/`
+		// subfolder INSIDE the vault. So the venv is at
+		// <vault>/vaultbot/.venv, not <vault>/.venv.
+		const frameworkRoot = this._frameworkRoot(vaultRoot);
 		const candidates = process.platform === 'win32'
 			? [path.join(frameworkRoot, '.venv', bin, 'pythonw.exe'),
 			   path.join(frameworkRoot, '.venv', bin, 'python.exe')]
@@ -514,11 +514,22 @@ class VaultBotPlugin extends Plugin {
 		return candidates.find(p => fs.existsSync(p)) || candidates[0];
 	}
 
-	// The framework root is the parent of the vault root: the vault is a
-	// Vault/ subfolder inside the framework folder (which holds
-	// vaultbot_backend/, System/, Knowledge/, .venv/, .env).
+	// The framework root is a `vaultbot/` subfolder inside the vault root.
+	// It holds vaultbot_backend/, .venv/, .env, setup.ps1 — the plumbing.
+	// The vault root itself holds System/, Knowledge/, baseline/, .obsidian/ —
+	// the user-visible content.
+	// Legacy fallback: if <vault>/vaultbot/ doesn't exist, assume the
+	// flattened dev layout where the framework root IS the vault root.
 	_frameworkRoot(vaultRoot) {
-		return path.dirname(vaultRoot);
+		const sub = path.join(vaultRoot, 'vaultbot');
+		try {
+			const fs = require('fs');
+			if (fs.existsSync(path.join(sub, 'vaultbot_backend'))) {
+				return sub;
+			}
+		} catch (e) {}
+		// Flattened dev layout: framework root == vault root.
+		return vaultRoot;
 	}
 
 	// The backend directory (vaultbot_backend/) lives at the framework root.
@@ -887,7 +898,7 @@ class VaultBotPlugin extends Plugin {
 				VAULTBOT_BACKEND_URL: this.settings.backendUrl
 			});
 			this.mcpProcess = spawn(mcpPythonExe, [mcpPy], {
-				cwd: vaultRoot,
+				cwd: this._frameworkRoot(vaultRoot),
 				detached: true,
 				windowsHide: true,
 				stdio: ['ignore', 'ignore', 'ignore'],
@@ -1148,7 +1159,8 @@ class VaultBotPlugin extends Plugin {
 			const gitDir = path.join(this._frameworkRoot(vaultRoot), '.git');
 			if (fs.existsSync(gitDir)) {
 				notify(`Updating via git (${refSpec})…`);
-				const runGit = (args) => execFileSync('git', args, { cwd: vaultRoot, stdio: 'pipe' });
+				const gitCwd = this._frameworkRoot(vaultRoot);
+				const runGit = (args) => execFileSync('git', args, { cwd: gitCwd, stdio: 'pipe' });
 				// A fork has an `upstream` remote; a direct clone (maintainer)
 				// only has `origin`. Prefer upstream, fall back to origin.
 				let remote = 'upstream';
@@ -1197,7 +1209,7 @@ class VaultBotPlugin extends Plugin {
 					if (fs.existsSync(venvPython) && fs.existsSync(reqPath)) {
 						notify('Checking for new dependencies...');
 						execFileSync(venvPython, ['-m', 'pip', 'install', '-r', reqPath, '--quiet'], {
-							cwd: vaultRoot, stdio: 'ignore', timeout: 120000,
+							cwd: this._frameworkRoot(vaultRoot), stdio: 'ignore', timeout: 120000,
 						});
 						notify('Dependencies updated.');
 					}
@@ -1248,6 +1260,7 @@ class VaultBotPlugin extends Plugin {
 			const extractArgs = [
 				'-xzf', tarballPath,
 				'-C', stagingDir,
+				'--exclude=*/.obsidian/plugins/vaultbot/data.json',
 				'--exclude=*/Vault/.obsidian/plugins/vaultbot/data.json',
 				'--exclude=*/vaultbot_backend/*.log',
 				'--exclude=*/vaultbot_backend/*_log.json',
@@ -1302,9 +1315,14 @@ class VaultBotPlugin extends Plugin {
 					backups[name] = fs.readFileSync(p);
 				}
 			}
-			// The plugin ships at Vault/.obsidian/plugins/vaultbot/ in the repo
-			// (inverted layout: the vault is a Vault/ subfolder of the repo).
-			const srcPlugin = path.join(archiveRoot, 'Vault', '.obsidian', 'plugins', 'vaultbot');
+			// The plugin ships at .obsidian/plugins/vaultbot/ in the repo
+			// (the vault root IS the repo root in the flattened dev layout).
+			// Legacy: it used to be at Vault/.obsidian/plugins/vaultbot/.
+			// Try the new path first, fall back to the old one.
+			let srcPlugin = path.join(archiveRoot, '.obsidian', 'plugins', 'vaultbot');
+			if (!fs.existsSync(srcPlugin)) {
+				srcPlugin = path.join(archiveRoot, 'Vault', '.obsidian', 'plugins', 'vaultbot');
+			}
 			if (!fs.existsSync(srcPlugin)) throw new Error('Archive has no plugin folder.');
 			// Copy only code files from the archive's plugin dir. Never copy
 			// data.json even if it somehow survived (it shouldn't).
@@ -1333,7 +1351,7 @@ class VaultBotPlugin extends Plugin {
 					notify('Checking for new dependencies...');
 					const { execFileSync } = require('child_process');
 					execFileSync(venvPython, ['-m', 'pip', 'install', '-r', reqPath, '--quiet'], {
-						cwd: vaultRoot, stdio: 'ignore', timeout: 120000,
+						cwd: this._frameworkRoot(vaultRoot), stdio: 'ignore', timeout: 120000,
 					});
 					notify('Dependencies updated.');
 				}
@@ -1636,7 +1654,7 @@ class VaultBotPlugin extends Plugin {
 		notify('Repairing FAISS + numpy... this takes a minute.');
 		try {
 			execFile(venvPython, ['-m', 'pip', 'install', '--force-reinstall', 'faiss-cpu>=1.11.0', 'numpy>=2.0.0'], {
-				cwd: vaultRoot, stdio: 'inherit',
+				cwd: this._frameworkRoot(vaultRoot), stdio: 'inherit',
 			}, (err) => {
 				if (err) {
 					notify('Repair failed: ' + err.message + '. Try re-running the installer.');
@@ -1659,7 +1677,7 @@ class VaultBotPlugin extends Plugin {
 		notify('Installing missing packages... this can take a few minutes.');
 		try {
 			execFile(venvPython, ['-m', 'pip', 'install', '-r', reqPath], {
-				cwd: vaultRoot, stdio: 'inherit',
+				cwd: this._frameworkRoot(vaultRoot), stdio: 'inherit',
 			}, (err) => {
 				if (err) {
 					notify('Install failed: ' + err.message + '. Try re-running the installer.');
@@ -1749,7 +1767,7 @@ class VaultBotPlugin extends Plugin {
 		}
 
 		const backendProcess = spawn(pythonExe, [mainPy], {
-			cwd: vaultRoot,
+			cwd: this._frameworkRoot(vaultRoot),
 			detached: true,
 			windowsHide: true,
 			stdio: ['ignore', out, err],
