@@ -52,7 +52,7 @@ the proof itself is not demonstrated yet:
 The mission is the direction. The work is getting there.
 
 For the full strategic vision, see
-[`vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md`](vaultbot/Knowledge/Architecture/Small-Model-Driving-Architecture.md).
+[`Knowledge/Architecture/Small-Model-Driving-Architecture.md`](Knowledge/Architecture/Small-Model-Driving-Architecture.md).
 
 ---
 

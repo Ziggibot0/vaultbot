@@ -198,7 +198,7 @@ with them. The `.gitignore` keeps personal data out of git, and a
    as a safety net.
 
 Backend `.py` files are always baseline — no marker needed. The membrane
-only applies to `vaultbot/System/` `.md` files, which is where the
+only applies to `System/` `.md` files, which is where the
 ambiguity between "general-purpose" and "personal" lives.
 
 ## Directory Map
