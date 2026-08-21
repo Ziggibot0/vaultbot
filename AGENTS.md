@@ -1,7 +1,7 @@
 # AGENTS.md — VaultBot agent workflow
 
 Operational rules for AI agents working in this repo. Human-facing detail
-lives in `CONTRIBUTING.md`; this file is the concise checklist an
+lives in `vaultbot/CONTRIBUTING.md`; this file is the concise checklist an
 agent must follow. If this file and CONTRIBUTING.md disagree, CONTRIBUTING.md
 wins — flag the discrepancy instead of guessing.
 
@@ -9,8 +9,8 @@ wins — flag the discrepancy instead of guessing.
 
 - Repo root is `C:\Users\skell\Desktop\Vault2` (NOT `vaultbot/` — that's a
   subfolder). Confirm with `git rev-parse --show-toplevel`.
-- Backend source: `vaultbot_backend/`
-- Procedures: `System/Procedures/`
+- Backend source: `vaultbot/vaultbot_backend/`
+- Procedures: `vaultbot/System/Procedures/`
 - CI workflow: `.github/workflows/ci.yml`
 
 ## Hard rules (non-negotiable)
