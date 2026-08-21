@@ -32,11 +32,11 @@ their notes, their chat history, their API keys. The `.gitignore` already
 excludes these, but double-check before pushing:
 
 - `.env` — contains API keys and the owner's name
-- `vaultbot/Memory/` and `vaultbot/Knowledge/` — the user's notes, chats, research
-- `vaultbot/vaultbot_backend/sessions/` — chat logs
-- `vaultbot/vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
+- `Memory/` and `Knowledge/` — the user's notes, chats, research
+- `vaultbot_backend/sessions/` — chat logs
+- `vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
   SELF_MODEL.md) — these are personal, regenerate per user
-- `vaultbot/learningMaterial/` — the user's PDFs
+- `learningMaterial/` — the user's PDFs
 
 The `baseline/` folder holds templates; the `vaultbot_backend/identity/`
 folder holds *one user's* live identity. Don't confuse them.
@@ -47,31 +47,32 @@ The fastest way to get a dev environment running is the one-liner installer:
 
 ```powershell
 # Windows
-irm https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.ps1 | iex
+irm https://github.com/Ziggibot0/vaultbot/raw/main/setup.ps1 | iex
 ```
 ```bash
 # macOS / Linux
-curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/vaultbot/setup.sh | bash
+curl -fsSL https://github.com/Ziggibot0/vaultbot/raw/main/setup.sh | bash
 ```
 
-This creates a `VaultBot/` folder with a fully set-up venv, deps, models,
-and `.env`. For development, you'll typically want to clone your fork
-instead and run the installer inside it (or set up the venv manually):
+This creates a `<vault-name>/` folder with a fully set-up venv, deps,
+models, and `.env`, with the framework nested inside it as `vaultbot/`.
+For development, you'll typically want to clone your fork instead and set
+up the venv manually (the repo root IS the framework):
 
 ```bash
 git clone <your-fork>.git
 cd vaultbot
-python -m venv vaultbot_venv
+python -m venv .venv
 # No activation needed — invoke the venv's python directly:
-vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot/vaultbot_backend/requirements.txt   # Windows
-# or: vaultbot_venv/bin/python -m pip install -r vaultbot/vaultbot_backend/requirements.txt       # macOS/Linux
+.venv/Scripts/python.exe -m pip install -r vaultbot_backend/requirements.txt   # Windows
+# or: .venv/bin/python -m pip install -r vaultbot_backend/requirements.txt       # macOS/Linux
 ollama pull qwen3.6:latest nomic-embed-text
-cp vaultbot/.env.example .env   # fill in your values
+cp .env.example .env   # fill in your values
 ```
 
 The backend is started automatically by the Obsidian plugin. For manual
-testing: `vaultbot_venv/Scripts/python.exe vaultbot/vaultbot_backend/main.py`
-(Windows) or `vaultbot_venv/bin/python vaultbot/vaultbot_backend/main.py` (macOS/Linux).
+testing: `.venv/Scripts/python.exe vaultbot_backend/main.py`
+(Windows) or `.venv/bin/python vaultbot_backend/main.py` (macOS/Linux).
 ```
 
 ## Safe self-editing
@@ -127,21 +128,21 @@ categories) to tag errors that don't have a distinctive exception signature.
 
 ## What to commit
 
-- Backend source code (`vaultbot/vaultbot_backend/*.py`)
+- Backend source code (`vaultbot_backend/*.py`)
 - The Obsidian plugin (`.obsidian/plugins/vaultbot/`)
-- `vaultbot/baseline/` directive templates
+- `baseline/` directive templates
 - `README.md`, `CONTRIBUTING.md`, `LICENSE`
-- `vaultbot/.env.example`, `.gitignore`, `pyproject.toml`
-- `vaultbot/setup.ps1`, `vaultbot/setup.sh` (one-click installers)
+- `.env.example`, `.gitignore`, `pyproject.toml`
+- `setup.ps1`, `setup.sh` (one-click installers)
 
 ## What NOT to commit
 
 - `.env` (secrets)
 - `vaultbot_venv/` (regenerated per install)
-- `vaultbot/Memory/`, `vaultbot/Knowledge/` (the user's notes and research)
-- `vaultbot/vaultbot_backend/sessions/`, `vaultbot/vaultbot_backend/identity/` (personal data)
-- `vaultbot/vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
-- `vaultbot/learningMaterial/` (user's PDFs)
+- `Memory/`, `Knowledge/` (the user's notes and research)
+- `vaultbot_backend/sessions/`, `vaultbot_backend/identity/` (personal data)
+- `vaultbot_backend/vaultbot_index/` (regenerated FAISS index)
+- `learningMaterial/` (user's PDFs)
 
 ## Baseline vs. emergent content
 

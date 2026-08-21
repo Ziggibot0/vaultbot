@@ -1,6 +1,6 @@
 ---
 description: When troubleshooting the VaultBot project, follow these instructions to ensure consistent and effective problem-solving.
-applyTo: 'vaultbot/vaultbot_backend/**'
+applyTo: 'vaultbot_backend/**'
 ---
 Procedure Directive Instructions for VaultBot Troubleshooting
 

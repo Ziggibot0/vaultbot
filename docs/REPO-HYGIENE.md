@@ -24,16 +24,16 @@ These rules keep the codebase clean as it evolves. The repo was restructured on 
 
 ## Where things belong
 
-- **Source code**: `vaultbot/vaultbot_backend/` (not root)
-- **Tests**: `vaultbot/vaultbot_backend/tests/`
-- **Installers**: `vaultbot/setup.ps1` / `vaultbot/setup.sh` (not root)
+- **Source code**: `vaultbot_backend/` (not root)
+- **Tests**: `vaultbot_backend/tests/`
+- **Installers**: `setup.ps1` / `setup.sh` (not root)
 - **CI**: `.github/workflows/`
 - **Vault knowledge**: Obsidian manages these — the vault root outside `vaultbot/`
 - **Runtime state**: created by the backend at runtime, never committed
 
 ## Pre-commit checklist
 
-- `ruff check vaultbot/vaultbot_backend/` — zero errors
-- `ruff format --check vaultbot/vaultbot_backend/` — clean
+- `ruff check vaultbot_backend/` — zero errors
+- `ruff format --check vaultbot_backend/` — clean
 - No files matching the "Never commit" list above
 - Backend imports cleanly: `python -c "import main"` from `vaultbot_backend/`

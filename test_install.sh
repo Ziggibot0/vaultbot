@@ -9,6 +9,7 @@ set -e
 REPO_ZIP="https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
 VAULT_NAME="VaultBot"
 VAULT_PATH="/home/vaultbotuser/$VAULT_NAME"
+REPO_PATH="$VAULT_PATH/vaultbot"
 PASS=0
 FAIL=0
 
@@ -24,19 +25,28 @@ curl -fsSL -o "$TMP_ZIP" "$REPO_ZIP"
 mkdir -p "$TMP_EXTRACT"
 unzip -q "$TMP_ZIP" -d "$TMP_EXTRACT"
 INNER=$(ls -d "$TMP_EXTRACT"/*/ | head -1)
-mv "$INNER" "$VAULT_PATH"
+
+# The repo root IS the framework. Nest it one level deep as vaultbot/.
+mkdir -p "$VAULT_PATH"
+mv "$INNER" "$REPO_PATH"
 rm -f "$TMP_ZIP"
 rm -rf "$TMP_EXTRACT"
 
-if [ -d "$VAULT_PATH" ]; then
-    ok "Repo downloaded to $VAULT_PATH"
+# Hoist .obsidian/ up one level so the plugin loads in the vault.
+if [ -d "$REPO_PATH/.obsidian" ] && [ ! -d "$VAULT_PATH/.obsidian" ]; then
+    mv "$REPO_PATH/.obsidian" "$VAULT_PATH/.obsidian"
+fi
+
+if [ -d "$REPO_PATH" ]; then
+    ok "Repo downloaded to $REPO_PATH"
 else
     fail "Repo download failed"
     exit 1
 fi
 
 section "2. Verify file structure"
-# Check that key files exist where the setup script expects them
+# Check that key files exist where the setup script expects them.
+# The framework lives at <vault>/vaultbot/; the plugin at <vault>/.obsidian/.
 check_file() {
     if [ -f "$VAULT_PATH/$1" ]; then ok "$1 exists"
     else fail "$1 missing"; fi
@@ -55,24 +65,24 @@ check_file ".obsidian/plugins/vaultbot/main.js"
 check_file ".obsidian/plugins/vaultbot/manifest.json"
 
 # Check .gitignore exists and has key entries
-if [ -f "$VAULT_PATH/.gitignore" ]; then
-    if grep -q "^\.env$" "$VAULT_PATH/.gitignore"; then ok ".gitignore has .env"
+if [ -f "$REPO_PATH/.gitignore" ]; then
+    if grep -q "^\.env$" "$REPO_PATH/.gitignore"; then ok ".gitignore has .env"
     else fail ".gitignore missing .env entry"; fi
 else
     fail ".gitignore missing"
 fi
 
 section "3. Create venv and install deps (non-interactive)"
-VENV_PYTHON="$VAULT_PATH/vaultbot_venv/bin/python"
+VENV_PYTHON="$VAULT_PATH/.venv/bin/python"
 
 cd "$VAULT_PATH"
-python3 -m venv vaultbot_venv
+python3 -m venv .venv
 if [ -f "$VENV_PYTHON" ]; then ok "venv created"
 else fail "venv creation failed"; fi
 
 echo "  Installing dependencies (this takes a few minutes)..."
 "$VENV_PYTHON" -m pip install --upgrade pip --quiet 2>&1 | tail -1
-"$VENV_PYTHON" -m pip install -r "$VAULT_PATH/vaultbot/vaultbot_backend/requirements.txt" 2>&1 | tail -3
+"$VENV_PYTHON" -m pip install -r "$REPO_PATH/vaultbot_backend/requirements.txt" 2>&1 | tail -3
 
 # Verify key deps importable
 for mod in fastapi uvicorn requests bs4 faiss watchdog numpy dotenv; do
@@ -81,7 +91,7 @@ for mod in fastapi uvicorn requests bs4 faiss watchdog numpy dotenv; do
 done
 
 section "4. Write .env (non-interactive)"
-ENV_EXAMPLE="$VAULT_PATH/vaultbot/.env.example"
+ENV_EXAMPLE="$REPO_PATH/.env.example"
 ENV_FILE="$VAULT_PATH/.env"
 
 if [ -f "$ENV_EXAMPLE" ]; then
@@ -101,14 +111,14 @@ else
 fi
 
 section "5. Backend import test"
-# Create directories the backend expects to exist
+# Create directories the backend expects to exist (relative to vault root).
 mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
 mkdir -p "$VAULT_PATH/vaultbot/Memory/Build-Log"
 mkdir -p "$VAULT_PATH/vaultbot/Knowledge/Research"
 cd "$VAULT_PATH"
 VAULT_PATH="$VAULT_PATH" "$VENV_PYTHON" -c "
 import sys, os
-sys.path.insert(0, '$VAULT_PATH/vaultbot/vaultbot_backend')
+sys.path.insert(0, '$REPO_PATH/vaultbot_backend')
 try:
     import main
     print('  [PASS] main.py imports successfully')
@@ -152,12 +162,12 @@ else
 fi
 
 section "7. Custom tools check"
-TOOLS_DIR="$VAULT_PATH/vaultbot/vaultbot_backend/custom_tools"
+TOOLS_DIR="$REPO_PATH/vaultbot_backend/custom_tools"
 if [ -d "$TOOLS_DIR" ]; then
     TOOL_COUNT=$(ls "$TOOLS_DIR"/*.py 2>/dev/null | wc -l)
     if [ "$TOOL_COUNT" -ge 3 ]; then ok "custom_tools/ has $TOOL_COUNT tools"
     else fail "custom_tools/ has only $TOOL_COUNT tools (expected 3+)"; fi
-    
+
     # Check key tools exist
     for tool in submit_contribution review_contributions torture_test; do
         if [ -f "$TOOLS_DIR/${tool}.py" ]; then ok "$tool.py exists"

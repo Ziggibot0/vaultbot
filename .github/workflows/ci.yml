@@ -67,7 +67,7 @@ jobs:
         run: uv run ruff format --check vaultbot_backend/
 
       - name: Baseline-marker check (HARD GATE)
-        # Every committed .md under vaultbot/System/ must carry
+        # Every committed .md under System/ must carry
         # "baseline: true" frontmatter. This is the same check the
         # pre-commit hook runs, but in --all mode it scans the whole
         # committed tree (CI has no staging area). Hard gate: the 11

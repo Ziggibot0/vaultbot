@@ -8,6 +8,7 @@
 set -e
 
 VAULT_PATH="/home/vaultbotuser/VaultBot"
+REPO_PATH="$VAULT_PATH/vaultbot"
 PASS=0
 FAIL=0
 
@@ -15,7 +16,7 @@ ok()   { echo "  [PASS] $1"; PASS=$((PASS+1)); }
 fail() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 section() { echo ""; echo "=== $1 ==="; }
 
-if [ ! -d "$VAULT_PATH" ]; then
+if [ ! -d "$REPO_PATH" ]; then
     echo "  [SKIP] No VaultBot install found — run test_install.sh first"
     exit 0
 fi
@@ -25,17 +26,17 @@ section "1. Create fake user content (must survive update)"
 mkdir -p "$VAULT_PATH/User"
 echo "# My personal note" > "$VAULT_PATH/User/my-note.md"
 
-mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
-echo "fake chat log" > "$VAULT_PATH/vaultbot/Memory/Chat/test-chat.md"
+mkdir -p "$REPO_PATH/Memory/Chat"
+echo "fake chat log" > "$REPO_PATH/Memory/Chat/test-chat.md"
 
-mkdir -p "$VAULT_PATH/vaultbot/vaultbot_backend/sessions"
-echo '{"session":"fake"}' > "$VAULT_PATH/vaultbot/vaultbot_backend/sessions/test.jsonl"
+mkdir -p "$REPO_PATH/vaultbot_backend/sessions"
+echo '{"session":"fake"}' > "$REPO_PATH/vaultbot_backend/sessions/test.jsonl"
 
-mkdir -p "$VAULT_PATH/vaultbot/vaultbot_backend/identity"
-echo "# My identity" > "$VAULT_PATH/vaultbot/vaultbot_backend/identity/IDENTITY.md"
+mkdir -p "$REPO_PATH/vaultbot_backend/identity"
+echo "# My identity" > "$REPO_PATH/vaultbot_backend/identity/IDENTITY.md"
 
 # Create a fake custom tool (should survive update — copyCodeTree doesn't delete)
-echo "# My custom tool" > "$VAULT_PATH/vaultbot/vaultbot_backend/custom_tools/my_custom_tool.py"
+echo "# My custom tool" > "$REPO_PATH/vaultbot_backend/custom_tools/my_custom_tool.py"
 
 # Create fake .env (should survive update)
 echo "GITHUB_TOKEN=ghp_fake_token_for_testing" >> "$VAULT_PATH/.env"
@@ -59,19 +60,20 @@ section "3. Extract to staging (with exclusions)"
 STAGING="/tmp/vaultbot-staging-test"
 mkdir -p "$STAGING"
 
-# Extract with the same exclusions the plugin uses
+# Extract with the same exclusions the plugin uses. The repo root IS the
+# framework, so backend paths are vaultbot_backend/ (no vaultbot/ prefix).
 tar -xzf "$TARBALL" -C "$STAGING" \
     --exclude="*/.obsidian/plugins/vaultbot/data.json" \
-    --exclude="*/vaultbot/vaultbot_backend/*.log" \
-    --exclude="*/vaultbot/vaultbot_backend/*_log.json" \
-    --exclude="*/vaultbot/vaultbot_backend/sessions" \
-    --exclude="*/vaultbot/vaultbot_backend/sessions/*" \
-    --exclude="*/vaultbot/vaultbot_backend/vaultbot_index" \
-    --exclude="*/vaultbot/vaultbot_backend/vaultbot_index/*" \
-    --exclude="*/vaultbot/vaultbot_backend/trash" \
-    --exclude="*/vaultbot/vaultbot_backend/trash/*" \
-    --exclude="*/vaultbot/vaultbot_backend/__pycache__" \
-    --exclude="*/vaultbot/vaultbot_backend/**/*.pyc" \
+    --exclude="*/vaultbot_backend/*.log" \
+    --exclude="*/vaultbot_backend/*_log.json" \
+    --exclude="*/vaultbot_backend/sessions" \
+    --exclude="*/vaultbot_backend/sessions/*" \
+    --exclude="*/vaultbot_backend/vaultbot_index" \
+    --exclude="*/vaultbot_backend/vaultbot_index/*" \
+    --exclude="*/vaultbot_backend/trash" \
+    --exclude="*/vaultbot_backend/trash/*" \
+    --exclude="*/vaultbot_backend/__pycache__" \
+    --exclude="*/vaultbot_backend/**/*.pyc" \
     2>/dev/null || true
 
 # Find the archive root
@@ -83,13 +85,13 @@ fi
 ok "Extracted to staging: $ARCHIVE_ROOT"
 
 section "4. Simulate copyCodeTree (backend only)"
-# The plugin's copyCodeTree copies from archiveRoot/vaultbot/vaultbot_backend/
+# The plugin's copyCodeTree copies from archiveRoot/vaultbot_backend/
 # to the live backend dir. It does NOT delete files that exist in dest but not src.
-SRC_BACKEND="$ARCHIVE_ROOT/vaultbot/vaultbot_backend"
-DST_BACKEND="$VAULT_PATH/vaultbot/vaultbot_backend"
+SRC_BACKEND="$ARCHIVE_ROOT/vaultbot_backend"
+DST_BACKEND="$REPO_PATH/vaultbot_backend"
 
 if [ ! -d "$SRC_BACKEND" ]; then
-    fail "Archive has no vaultbot/vaultbot_backend/"
+    fail "Archive has no vaultbot_backend/"
     exit 1
 fi
 
@@ -136,10 +138,10 @@ check_survived() {
 }
 
 check_survived "$VAULT_PATH/User/my-note.md"
-check_survived "$VAULT_PATH/vaultbot/Memory/Chat/test-chat.md"
-check_survived "$VAULT_PATH/vaultbot/vaultbot_backend/sessions/test.jsonl"
-check_survived "$VAULT_PATH/vaultbot/vaultbot_backend/identity/IDENTITY.md"
-check_survived "$VAULT_PATH/vaultbot/vaultbot_backend/custom_tools/my_custom_tool.py"
+check_survived "$REPO_PATH/Memory/Chat/test-chat.md"
+check_survived "$REPO_PATH/vaultbot_backend/sessions/test.jsonl"
+check_survived "$REPO_PATH/vaultbot_backend/identity/IDENTITY.md"
+check_survived "$REPO_PATH/vaultbot_backend/custom_tools/my_custom_tool.py"
 check_survived "$VAULT_PATH/.env"
 
 # Verify .env still has the token
@@ -168,11 +170,11 @@ else
 fi
 
 section "8. Post-update import test"
-VENV_PYTHON="$VAULT_PATH/vaultbot_venv/bin/python"
+VENV_PYTHON="$VAULT_PATH/.venv/bin/python"
 # Ensure directories the backend expects exist
-mkdir -p "$VAULT_PATH/vaultbot/Memory/Chat"
-mkdir -p "$VAULT_PATH/vaultbot/Memory/Build-Log"
-mkdir -p "$VAULT_PATH/vaultbot/Knowledge/Research"
+mkdir -p "$REPO_PATH/Memory/Chat"
+mkdir -p "$REPO_PATH/Memory/Build-Log"
+mkdir -p "$REPO_PATH/Knowledge/Research"
 cd "$VAULT_PATH"
 VAULT_PATH="$VAULT_PATH" "$VENV_PYTHON" -c "
 import sys, os
