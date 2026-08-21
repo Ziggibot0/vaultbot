@@ -16,7 +16,6 @@ No network, no Ollama, no Services — pure functions only.
 from __future__ import annotations
 
 import pytest
-
 from chat_loop_tools import is_malformed_tool_name
 
 pytestmark = pytest.mark.unit

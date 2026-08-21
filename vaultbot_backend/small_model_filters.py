@@ -25,6 +25,7 @@ See [[Cloud-Model-Obsolescence-Architecture]] and
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -576,10 +577,8 @@ def rewrite_query_with_history(
         # the operator knows retrieval is degrading, instead of silently
         # falling back every turn.
         if on_failure is not None:
-            try:
+            with contextlib.suppress(Exception):  # noqa: BLE001 — the callback must never break the fallback
                 on_failure(e)
-            except Exception:  # noqa: BLE001 — the callback must never break the fallback
-                pass
         return user_message
 
 

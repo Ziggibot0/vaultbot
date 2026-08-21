@@ -11,7 +11,6 @@ Pure functions, no network, no Ollama.
 from __future__ import annotations
 
 import pytest
-
 from source_classification import (
     _hostname,
     is_allowlisted,
@@ -24,7 +23,9 @@ pytestmark = pytest.mark.unit
 class TestHostname:
     def test_strips_scheme_and_path(self):
         assert (
-            _hostname("https://developers.google.com/identity/protocols/oauth2/native-app")
+            _hostname(
+                "https://developers.google.com/identity/protocols/oauth2/native-app"
+            )
             == "developers.google.com"
         )
 

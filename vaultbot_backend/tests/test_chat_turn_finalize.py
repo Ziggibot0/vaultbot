@@ -12,7 +12,6 @@ Pure function tests — no Services, no Ollama, no websocket.
 from __future__ import annotations
 
 import pytest
-
 from chat_turn_finalize import LIVE_FACT_TOOLS, is_tool_sourced
 
 pytestmark = pytest.mark.unit

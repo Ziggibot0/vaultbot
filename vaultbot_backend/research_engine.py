@@ -45,10 +45,10 @@ from research_synthesizer import (
     synthesize_structured_note as _synthesize_structured_note_fn,
 )
 from source_classification import (
-    is_blocked_source as _is_blocked_source,
+    is_allowlisted as _is_allowlisted,
 )
 from source_classification import (
-    is_allowlisted as _is_allowlisted,
+    is_blocked_source as _is_blocked_source,
 )
 from source_classification import (
     is_denylisted as _is_denylisted,

@@ -410,9 +410,7 @@ def run_subagent(
         depth = payload.get("depth", "deep")
         source_allowlist = payload.get("source_allowlist")
         source_denylist = payload.get("source_denylist")
-        wrapper = build_subagent_code(
-            topic, depth, source_allowlist, source_denylist
-        )
+        wrapper = build_subagent_code(topic, depth, source_allowlist, source_denylist)
         return _run_subprocess(
             wrapper,
             session_logger=session_logger,

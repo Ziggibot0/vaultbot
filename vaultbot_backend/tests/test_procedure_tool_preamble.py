@@ -13,7 +13,6 @@ silently drops those bounds.
 from __future__ import annotations
 
 import pytest
-
 from procedure_tool_preamble import _build_tool_preamble
 
 pytestmark = pytest.mark.unit

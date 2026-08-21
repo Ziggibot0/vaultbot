@@ -21,7 +21,6 @@ from chat_loop_state import TurnState
 from config import TUNABLES
 from services import Services
 
-
 # Tools whose output is a live, authoritative fact source (not vault
 # retrieval, not planning/self-edit bookkeeping). When a turn used one of
 # these, the answer is grounded in the tool's output — not model weights —
@@ -158,7 +157,12 @@ async def finalize_turn(
                     "is_tool_sourced": _is_tool_sourced,
                 },
             )
-            if _score["failed"] and not _is_idk and not _is_temporal and not _is_tool_sourced:
+            if (
+                _score["failed"]
+                and not _is_idk
+                and not _is_temporal
+                and not _is_tool_sourced
+            ):
                 # Hard gate: flag for retry if under the cap.
                 _retries = getattr(st, "_grounding_retry_count", 0)
                 if _retries < TUNABLES.max_grounding_retries:

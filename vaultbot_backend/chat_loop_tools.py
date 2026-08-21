@@ -48,9 +48,7 @@ def is_malformed_tool_name(tool_name: str) -> bool:
         return True
     if any(ch.isspace() for ch in tool_name):
         return True
-    if "{" in tool_name or "}" in tool_name or ":" in tool_name:
-        return True
-    return False
+    return "{" in tool_name or "}" in tool_name or ":" in tool_name
 
 
 async def execute_round_tools(
