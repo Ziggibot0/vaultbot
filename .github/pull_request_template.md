@@ -13,7 +13,7 @@
 ## Safety checklist
 
 - [ ] No personal data, vault contents, or secrets in this PR
-- [ ] Changes are within `vaultbot/` or `.obsidian/plugins/vaultbot/`
+- [ ] Changes are within `vaultbot_backend/`, `vault/`, or `.obsidian/plugins/vaultbot/`
 - [ ] No changes to `.gitignore` that un-ignore sensitive paths
 - [ ] No dangerous code patterns (`eval`, `exec`, `os.system`, `pickle.loads`, etc.)
 - [ ] Python files pass syntax check (`py_compile`)
