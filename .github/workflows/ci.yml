@@ -155,6 +155,17 @@ jobs:
         # and is lowered incrementally as debt is paid down.
         run: uv run python vaultbot_backend/scripts/check_debt_ratchet.py
 
+      - name: Thinness ratchet (HARD GATE)
+        # Measures inline backend .py logic (non-blank, non-comment lines in
+        # vaultbot_backend/ excluding custom_tools/, tests/, scripts/) and
+        # fails if it EXCEEDS the committed baseline in .ci-baseline.json.
+        # This is the enforcement mechanism for the "thin backend" goal
+        # (issue #150): logic should migrate out of inline .py modules into
+        # procedures / custom_tools / a thin interpreter, and this ratchet
+        # makes that migration monotonic — the count can only go down as we
+        # thin. Lower the baseline in the same PR that thins the code.
+        run: python vaultbot_backend/scripts/check_thinness.py
+
       - name: Secret scan (gitleaks)
         # Hard gate: the backend now handles OAuth tokens (google_workspace).
         # gitleaks scans the whole repo for leaked secrets/credentials before
