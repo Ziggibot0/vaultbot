@@ -17,5 +17,8 @@
   "pytest_integration": {
     "failures": 0,
     "tests": 25
+  },
+  "thinness": {
+    "sloc": 45821
   }
 }
