@@ -198,9 +198,18 @@ echo ""
 # download so a non-sharing user still gets a working vault.
 VAULT_PATH="$(pwd)/$VAULT_NAME"
 REPO_PATH="$VAULT_PATH/vaultbot"
-if [ -d "$REPO_PATH" ]; then
+# The requirements.txt is the canary for a correct install. A stale/partial
+# install from an older layout (e.g. the pre-flatten double-nested structure)
+# has a `vaultbot/` folder but the file one level deeper than expected. If
+# the canary is missing, remove the stale folder and re-clone cleanly.
+REQ_CANARY="$REPO_PATH/vaultbot_backend/requirements.txt"
+if [ -d "$REPO_PATH" ] && [ -f "$REQ_CANARY" ]; then
     echo "  [!]  VaultBot is already installed in '$VAULT_NAME' -- using it."
 else
+    if [ -d "$REPO_PATH" ]; then
+        echo "  [!]  Found a stale/partial install -- re-cloning cleanly."
+        rm -rf "$REPO_PATH"
+    fi
     # Create the vault folder first, then nest the repo one level deep
     # inside it as `vaultbot/`. This keeps VaultBot's files out of the
     # user's way while the whole vault stays VaultBot's CRUD domain.
