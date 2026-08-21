@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The script lives at vaultbot/vaultbot_backend/scripts/, so the backend
+# The script lives at vaultbot_backend/scripts/, so the backend
 # package is two levels up. Add it to sys.path so we can import the
 # authoritative validator (no duplicated provenance logic).
 _BACKEND_DIR = Path(__file__).resolve().parent.parent

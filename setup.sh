@@ -347,11 +347,14 @@ else
         echo "  [OK] Downloaded to $REPO_PATH"
     fi
 
-    # ── Create the vault + hoist .obsidian/ into it ────────────────────────
-    # The repo ships .obsidian/plugins/vaultbot/ at its root. Obsidian looks
-    # for plugins at <vault>/.obsidian/plugins/, so we create the Vault/
-    # subfolder and move the repo's .obsidian/ into it. This keeps the
-    # framework (vaultbot_backend/, System/, etc.) OUT of the vault.
+    # ── Create the vault (the repo already ships Vault/.obsidian/) ─────────
+    # The repo ships the Obsidian plugin at Vault/.obsidian/plugins/vaultbot/
+    # (the inverted layout: the vault is a Vault/ subfolder of the repo).
+    # Obsidian looks for plugins at <vault>/.obsidian/plugins/, so the plugin
+    # is already in the right place after clone — no hoisting needed. We only
+    # ensure the Vault/ folder exists (it does, from the clone) and, for
+    # legacy installs that predate the inverted layout, hoist a stray
+    # repo-root .obsidian/ into Vault/ if one is present.
     mkdir -p "$VAULT_PATH"
     REPO_OBSIDIAN="$REPO_PATH/.obsidian"
     VAULT_OBSIDIAN="$VAULT_PATH/.obsidian"

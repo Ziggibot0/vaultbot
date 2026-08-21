@@ -85,7 +85,7 @@ SCHEMA = {
             "file_path": {
                 "type": "string",
                 "description": (
-                    "Path to the file, relative to vault root "
+                    "Path to the file, relative to the framework root "
                     "(e.g. 'vaultbot_backend/chat_handler.py' "
                     "or 'System/Procedures/My-Procedure.md')."
                 ),
