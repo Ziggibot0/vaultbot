@@ -59,7 +59,7 @@ def run(args: dict) -> dict:
 
     # 2. Determine upstream repo — single source of truth
     #    (env vars > git remote > loud error; no silent hardcoded fallback)
-    from upstream_identity import UpstreamIdentityError, resolve_upstream
+    from custom_tools.upstream_identity import UpstreamIdentityError, resolve_upstream
 
     try:
         upstream_owner, upstream_repo = resolve_upstream()

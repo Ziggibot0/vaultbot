@@ -237,7 +237,7 @@ def run(args: dict) -> dict:
     # when the vault root IS the git repo.  When the git repo is one level
     # further up (e.g. vaultbot-fork/ containing vaultbot/), the old code
     # pointed at a directory with no .git and every git command failed.
-    from upstream_identity import (
+    from custom_tools.upstream_identity import (
         UpstreamIdentityError,
         _find_git_root,
         _parse_github_url,
