@@ -453,7 +453,7 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "file_path": {
                         "type": "string",
                         "description": "Path relative to the framework root "
-                        "(e.g. Vault/.obsidian/plugins/vaultbot/main.js).",
+                        "(e.g. .obsidian/plugins/vaultbot/main.js).",
                     },
                     "content": {"type": "string"},
                     "dry_run": {

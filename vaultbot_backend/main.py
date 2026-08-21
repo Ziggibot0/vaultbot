@@ -68,10 +68,11 @@ from calibration import CalibrationTracker  # noqa: E402
 from claim_verifier import ClaimVerifier  # noqa: E402
 from context_budgeter import ContextBudgeter  # noqa: E402
 
-# Central path resolution: FRAMEWORK_ROOT (the git repo, holds
-# vaultbot_backend/ + System/ + Knowledge/ + baseline/) and VAULT_ROOT (the
-# user's Obsidian vault — FRAMEWORK_ROOT/Vault/ when installed, the repo
-# root in the flattened dev layout).  See paths.py.
+# Central path resolution: FRAMEWORK_ROOT (holds vaultbot_backend/ + .venv/ +
+# .env — in the installed layout this is <vault>/vaultbot/) and VAULT_ROOT
+# (the user's Obsidian vault — the folder they named during install, holds
+# System/Procedures/, Knowledge/, baseline/, .obsidian/).  In the flattened
+# dev layout both are the repo root.  See paths.py.
 from paths import FRAMEWORK_ROOT, VAULT_ROOT  # noqa: E402
 from pattern_extractor import PatternExtractor  # noqa: E402
 from procedure_tracker import ProcedureTracker  # noqa: E402

@@ -165,6 +165,25 @@ if (-not $ollamaOk) {
     $missing += "Ollama  ->  https://ollama.com"
 }
 
+# Obsidian — the app the user opens their vault in. Without it the install
+# completes but the user can't see their notes or the VaultBot plugin.
+$obsidianOk = $false
+try {
+    # Check common install locations (the installer doesn't add Obsidian to
+    # PATH on Windows). LocalAppData is the default installer path.
+    $obsPaths = @(
+        "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe",
+        "$env:ProgramFiles\Obsidian\Obsidian.exe",
+        "${env:ProgramFiles(x86)}\Obsidian\Obsidian.exe"
+    )
+    foreach ($p in $obsPaths) {
+        if (Test-Path $p) { $obsidianOk = $true; Write-OK "Obsidian found"; break }
+    }
+} catch {}
+if (-not $obsidianOk) {
+    $missing += "Obsidian  ->  https://obsidian.md/downloads"
+}
+
 if ($missing.Count -gt 0) {
     Write-Host ""
     Write-Host "  Almost there! Install these first, then run the command again:" -ForegroundColor Red
@@ -175,6 +194,7 @@ if ($missing.Count -gt 0) {
     foreach ($m in $missing) {
         if ($m -match "python\.org") { Start-Process "https://python.org/downloads" }
         if ($m -match "ollama\.com") { Start-Process "https://ollama.com" }
+        if ($m -match "obsidian\.md") { Start-Process "https://obsidian.md/downloads" }
     }
     return  # exits the iex scope without killing the terminal window
 }
@@ -187,15 +207,14 @@ if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
 # -- 2b. Ask what to name the vault ------------------------------------------
-# VaultBot installs as a self-contained folder. Inside it, the framework
-# (vaultbot_backend/, System/, Knowledge/, baseline/) lives at the top, and
-# YOUR vault is a `Vault/` subfolder you open in Obsidian. This keeps the
-# framework out of your Obsidian file explorer entirely — you only ever see
-# your own notes.
+# The user names their VAULT — the folder they'll open in Obsidian. Inside
+# it, a `vaultbot/` subfolder holds the framework plumbing (backend code,
+# venv, .env). Everything else (System/Procedures/, Knowledge/, baseline/)
+# is visible in Obsidian so the user can see what the bot knows.
 Write-Host ""
-Write-Host "  What would you like to name your VaultBot folder?" -ForegroundColor Cyan
-Write-Host "  (Your notes live in a 'Vault' subfolder inside it.)" -ForegroundColor DarkGray
-$vaultName = Read-Host "  Folder name"
+Write-Host "  What would you like to name your vault?" -ForegroundColor Cyan
+Write-Host "  (This is the folder you'll open in Obsidian.)" -ForegroundColor DarkGray
+$vaultName = Read-Host "  Vault name"
 if ([string]::IsNullOrWhiteSpace($vaultName)) { $vaultName = "VaultBot" }
 Write-Host ""
 
@@ -208,13 +227,16 @@ Write-Host ""
 # If `gh` is missing or the user declines auth, we fall back to the zip
 # download so a non-sharing user still gets a working vault.
 #
-# LAYOUT (inverted): the framework IS the top-level folder; the user's vault
-# is a `Vault/` subfolder inside it. So:
-#   $frameworkPath = the folder we clone the repo into (the framework root)
-#   $vaultPath     = $frameworkPath/Vault  (the folder you open in Obsidian)
-$frameworkPath = Join-Path $PWD $vaultName
+# LAYOUT: the user's vault IS the top-level folder (the one they named).
+# Inside it, a `vaultbot/` subfolder holds the framework (vaultbot_backend/,
+# .venv/, .env, setup.ps1). The repo is cloned into `vaultbot/`, then
+# .obsidian/ and the content folders (System/, Knowledge/, baseline/) are
+# hoisted to the vault root so they're visible in Obsidian.
+#   $vaultPath     = the folder the user opens in Obsidian (what they named)
+#   $frameworkPath = $vaultPath/vaultbot  (the framework root: backend code)
+$vaultPath     = Join-Path $PWD $vaultName
+$frameworkPath = Join-Path $vaultPath "vaultbot"
 $repoPath      = $frameworkPath
-$vaultPath     = Join-Path $frameworkPath "Vault"
 # The requirements.txt is the canary for a correct install. A stale/partial
 # install from an older layout (e.g. the pre-flatten double-nested structure)
 # has a `vaultbot/` folder but the file one level deeper than expected. If
@@ -338,8 +360,10 @@ if ((Test-Path $repoPath) -and (Test-Path $reqCanary)) {
                 Write-Step "Forking VaultBot to your GitHub account..."
                 & gh repo fork Ziggibot0/vaultbot --clone
                 # gh clones to ./vaultbot (lowercase). Move it into the
-                # framework folder (the folder we named above).
+                # framework folder inside the vault.
                 if ((Test-Path "vaultbot") -and -not (Test-Path $repoPath)) {
+                    # Ensure the vault folder exists, then move the clone in.
+                    New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
                     Move-Item "vaultbot" $repoPath
                 }
             }
@@ -367,26 +391,50 @@ if ((Test-Path $repoPath) -and (Test-Path $reqCanary)) {
         $extractDir = Join-Path $env:TEMP "vaultbot-extract-$(Get-Random)"
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
         $inner = Get-ChildItem $extractDir -Directory | Select-Object -First 1
+        # Ensure the vault folder exists, then move the extracted repo in.
+        New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
         Move-Item $inner.FullName $repoPath
         Remove-Item $zipPath -Force
         Remove-Item $extractDir -Recurse -Force
         Write-OK "Downloaded to $repoPath"
     }
 
-    # -- Create the vault (the repo already ships Vault/.obsidian/) ---------
-    # The repo ships the Obsidian plugin at Vault/.obsidian/plugins/vaultbot/
-    # (the inverted layout: the vault is a Vault/ subfolder of the repo).
-    # Obsidian looks for plugins at <vault>/.obsidian/plugins/, so the plugin
-    # is already in the right place after clone — no hoisting needed. We only
-    # ensure the Vault/ folder exists (it does, from the clone) and, for
-    # legacy installs that predate the inverted layout, hoist a stray
-    # repo-root .obsidian/ into Vault/ if one is present.
+    # -- Hoist .obsidian/ and content folders to the vault root --------------
+    # The repo ships .obsidian/ at the repo root (the dev layout where the
+    # repo root IS the vault). In the installed layout, the repo lives in
+    # <vault>/vaultbot/, so we need to hoist .obsidian/ and the content
+    # folders (System/, Knowledge/, baseline/) to the vault root so they're
+    # visible in Obsidian. The framework plumbing (vaultbot_backend/, .venv/,
+    # .env) stays in vaultbot/ — hidden via Obsidian's userIgnoreFilters.
     New-Item -ItemType Directory -Path $vaultPath -Force | Out-Null
+
+    # Hoist .obsidian/ (the plugin) to the vault root.
     $repoObsidian = Join-Path $repoPath ".obsidian"
     $vaultObsidian = Join-Path $vaultPath ".obsidian"
     if ((Test-Path $repoObsidian) -and -not (Test-Path $vaultObsidian)) {
         Move-Item $repoObsidian $vaultObsidian
-        Write-OK "Obsidian plugin installed in the Vault/ subfolder"
+        Write-OK "Obsidian plugin installed at the vault root"
+    }
+
+    # Hoist content folders (System/, Knowledge/, baseline/) to the vault
+    # root so procedures and knowledge are visible in Obsidian. These stay
+    # in the git repo (vaultbot/) for updates, so we COPY them — the git
+    # tracked versions remain for `git pull` updates, and the vault-root
+    # copies are what Obsidian sees. On update, the plugin's git pull
+    # updates vaultbot/System/ etc., and the user re-runs setup to re-hoist.
+    # Actually, simpler: SYMLINK would be ideal but Windows requires admin
+    # for symlinks. Instead, we leave content in vaultbot/ and let the
+    # backend's dual-root scanning (content_roots() in paths.py) find it
+    # there. Obsidian doesn't need to see the files for the backend to work
+    # — but Sean wants them visible. So we copy them.
+    $contentFolders = @("System", "Knowledge", "baseline")
+    foreach ($folder in $contentFolders) {
+        $src = Join-Path $repoPath $folder
+        $dst = Join-Path $vaultPath $folder
+        if ((Test-Path $src) -and -not (Test-Path $dst)) {
+            Copy-Item $src $dst -Recurse
+            Write-OK "Hoisted $folder/ to the vault root (visible in Obsidian)"
+        }
     }
 }
 
@@ -695,7 +743,8 @@ if (Test-StepDone "env_written") {
 # existing filters so we never clobber a user's own ignore list.
 $obsidianDir = Join-Path $vaultPath ".obsidian"
 $appJson = Join-Path $obsidianDir "app.json"
-$repoDocs = @("AGENTS.md", "README.md", "SECURITY.md", "LICENSE", "CONTRIBUTING.md")
+# Hide the vaultbot/ framework subfolder + repo-hygiene docs from Obsidian.
+$repoDocs = @("vaultbot/", "AGENTS.md", "README.md", "SECURITY.md", "LICENSE", "CONTRIBUTING.md", "pyproject.toml", "Dockerfile")
 if (Test-StepDone "obsidian_ignore_configured") {
     Write-Warn2 "Obsidian ignore filters already configured -- skipping."
 } else {

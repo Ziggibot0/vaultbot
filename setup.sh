@@ -157,6 +157,19 @@ if [ "$OLLAMA_OK" = false ]; then
     missing+=("Ollama  ->  https://ollama.com")
 fi
 
+# Obsidian — the app the user opens their vault in.
+OBSIDIAN_OK=false
+# Check common install locations on macOS + Linux.
+for p in /Applications/Obsidian.app /usr/bin/obsidian /usr/local/bin/obsidian /opt/homebrew/bin/obsidian /snap/bin/obsidian; do
+    if [ -e "$p" ]; then OBSIDIAN_OK=true; echo "  [OK] Obsidian found"; break; fi
+done
+if [ "$OBSIDIAN_OK" = false ] && command -v obsidian &>/dev/null; then
+    OBSIDIAN_OK=true; echo "  [OK] Obsidian found"
+fi
+if [ "$OBSIDIAN_OK" = false ]; then
+    missing+=("Obsidian  ->  https://obsidian.md/downloads")
+fi
+
 if [ ${#missing[@]} -gt 0 ]; then
     echo ""
     echo "  Almost there! Install these first, then run the command again:"
@@ -167,6 +180,7 @@ if [ ${#missing[@]} -gt 0 ]; then
     for m in "${missing[@]}"; do
         if echo "$m" | grep -q "python.org"; then open "https://python.org/downloads" 2>/dev/null || xdg-open "https://python.org/downloads" 2>/dev/null || true; fi
         if echo "$m" | grep -q "ollama.com";  then open "https://ollama.com" 2>/dev/null || xdg-open "https://ollama.com" 2>/dev/null || true; fi
+        if echo "$m" | grep -q "obsidian.md"; then open "https://obsidian.md/downloads" 2>/dev/null || xdg-open "https://obsidian.md/downloads" 2>/dev/null || true; fi
     done
     exit 1
 fi
@@ -179,14 +193,14 @@ OWNER_NAME="${OWNER_NAME:-friend}"
 echo ""
 
 # ── 2b. Ask what to name the vault ──────────────────────────────────────────
-# VaultBot installs as a self-contained folder. Inside it, the framework
-# (vaultbot_backend/, System/, Knowledge/, baseline/) lives at the top, and
-# YOUR vault is a `Vault/` subfolder you open in Obsidian. This keeps the
-# framework out of your Obsidian file explorer entirely.
+# The user names their VAULT — the folder they'll open in Obsidian. Inside
+# it, a `vaultbot/` subfolder holds the framework plumbing (backend code,
+# venv, .env). Everything else (System/Procedures/, Knowledge/, baseline/)
+# is visible in Obsidian so the user can see what the bot knows.
 echo ""
-echo "  What would you like to name your VaultBot folder?"
-echo "  (Your notes live in a 'Vault' subfolder inside it.)"
-read -p "  Folder name: " VAULT_NAME
+echo "  What would you like to name your vault?"
+echo "  (This is the folder you'll open in Obsidian.)"
+read -p "  Vault name: " VAULT_NAME
 VAULT_NAME="${VAULT_NAME:-VaultBot}"
 echo ""
 
@@ -199,11 +213,13 @@ echo ""
 # If `gh` is missing or the user declines auth, we fall back to the zip
 # download so a non-sharing user still gets a working vault.
 #
-# LAYOUT (inverted): the framework IS the top-level folder; the user's vault
-# is a `Vault/` subfolder inside it.
-FRAMEWORK_PATH="$(pwd)/$VAULT_NAME"
+# LAYOUT: the user's vault IS the top-level folder (the one they named).
+# Inside it, a `vaultbot/` subfolder holds the framework (vaultbot_backend/,
+# .venv/, .env, setup.sh). The repo is cloned into `vaultbot/`, then
+# .obsidian/ and content folders are hoisted to the vault root.
+VAULT_PATH="$(pwd)/$VAULT_NAME"
+FRAMEWORK_PATH="$VAULT_PATH/vaultbot"
 REPO_PATH="$FRAMEWORK_PATH"
-VAULT_PATH="$FRAMEWORK_PATH/Vault"
 # The requirements.txt is the canary for a correct install. A stale/partial
 # install from an older layout (e.g. the pre-flatten double-nested structure)
 # has a `vaultbot/` folder but the file one level deeper than expected. If
@@ -307,13 +323,15 @@ else
 
             if [ "$HAS_PUSH" = true ]; then
                 echo ">>> Cloning VaultBot..."
+                mkdir -p "$VAULT_PATH"
                 gh repo clone Ziggibot0/vaultbot "$REPO_PATH"
             else
                 echo ">>> Forking VaultBot to your GitHub account..."
                 gh repo fork Ziggibot0/vaultbot --clone
                 # gh clones to ./vaultbot (lowercase). Move it into the
-                # framework folder (the folder we named above).
+                # framework folder inside the vault.
                 if [ -d "vaultbot" ] && [ ! -d "$REPO_PATH" ]; then
+                    mkdir -p "$VAULT_PATH"
                     mv "vaultbot" "$REPO_PATH"
                 fi
             fi
@@ -341,27 +359,36 @@ else
             tar -xzf "$TMP_ZIP" -C "$TMP_EXTRACT"
         fi
         INNER=$(ls -d "$TMP_EXTRACT"/*/ | head -1)
+        mkdir -p "$VAULT_PATH"
         mv "$INNER" "$REPO_PATH"
         rm -f "$TMP_ZIP"
         rm -rf "$TMP_EXTRACT"
         echo "  [OK] Downloaded to $REPO_PATH"
     fi
 
-    # ── Create the vault (the repo already ships Vault/.obsidian/) ─────────
-    # The repo ships the Obsidian plugin at Vault/.obsidian/plugins/vaultbot/
-    # (the inverted layout: the vault is a Vault/ subfolder of the repo).
-    # Obsidian looks for plugins at <vault>/.obsidian/plugins/, so the plugin
-    # is already in the right place after clone — no hoisting needed. We only
-    # ensure the Vault/ folder exists (it does, from the clone) and, for
-    # legacy installs that predate the inverted layout, hoist a stray
-    # repo-root .obsidian/ into Vault/ if one is present.
+    # ── Hoist .obsidian/ and content folders to the vault root ─────────────
+    # The repo ships .obsidian/ at the repo root (dev layout). In the
+    # installed layout the repo lives in <vault>/vaultbot/, so we hoist
+    # .obsidian/ and content folders (System/, Knowledge/, baseline/) to
+    # the vault root so they're visible in Obsidian. Framework plumbing
+    # (vaultbot_backend/, .venv/, .env) stays in vaultbot/ — hidden via
+    # Obsidian's userIgnoreFilters.
     mkdir -p "$VAULT_PATH"
     REPO_OBSIDIAN="$REPO_PATH/.obsidian"
     VAULT_OBSIDIAN="$VAULT_PATH/.obsidian"
     if [ -d "$REPO_OBSIDIAN" ] && [ ! -d "$VAULT_OBSIDIAN" ]; then
         mv "$REPO_OBSIDIAN" "$VAULT_OBSIDIAN"
-        echo "  [OK] Obsidian plugin installed in the Vault/ subfolder"
+        echo "  [OK] Obsidian plugin installed at the vault root"
     fi
+    # Hoist content folders so procedures + knowledge are visible in Obsidian.
+    for folder in System Knowledge baseline; do
+        src="$REPO_PATH/$folder"
+        dst="$VAULT_PATH/$folder"
+        if [ -d "$src" ] && [ ! -d "$dst" ]; then
+            cp -r "$src" "$dst"
+            echo "  [OK] Hoisted $folder/ to the vault root (visible in Obsidian)"
+        fi
+    done
 fi
 
 # Now that $VAULT_PATH exists, set the install-state file path so steps
@@ -638,7 +665,7 @@ else
     python3 -c "
 import json, sys
 path = sys.argv[1]
-docs = ['AGENTS.md', 'README.md', 'SECURITY.md', 'LICENSE', 'CONTRIBUTING.md']
+docs = ['vaultbot/', 'AGENTS.md', 'README.md', 'SECURITY.md', 'LICENSE', 'CONTRIBUTING.md', 'pyproject.toml', 'Dockerfile']
 try:
     with open(path) as f:
         app = json.load(f)
