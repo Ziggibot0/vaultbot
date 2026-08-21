@@ -67,15 +67,15 @@ FreeSearch = ForumEnhancedFreeSearch  # noqa: F811  — intentional override of 
 from calibration import CalibrationTracker  # noqa: E402
 from claim_verifier import ClaimVerifier  # noqa: E402
 from context_budgeter import ContextBudgeter  # noqa: E402
-from pattern_extractor import PatternExtractor  # noqa: E402
-from procedure_tracker import ProcedureTracker  # noqa: E402
-from rag_eval import RAGEvaluator  # noqa: E402
 
 # Central path resolution: FRAMEWORK_ROOT (the git repo, holds
 # vaultbot_backend/ + System/ + Knowledge/ + baseline/) and VAULT_ROOT (the
 # user's Obsidian vault — FRAMEWORK_ROOT/Vault/ when installed, the repo
 # root in the flattened dev layout).  See paths.py.
 from paths import FRAMEWORK_ROOT, VAULT_ROOT  # noqa: E402
+from pattern_extractor import PatternExtractor  # noqa: E402
+from procedure_tracker import ProcedureTracker  # noqa: E402
+from rag_eval import RAGEvaluator  # noqa: E402
 
 # Load .env from the FRAMEWORK root (where the installer writes it), not the
 # vault root.  override=True ensures .env values win over any stale env

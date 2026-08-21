@@ -125,7 +125,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        _vs = {"index": None, "metadata": {}, "loaded": False}\n'
             '        if not _vs["loaded"]:\n'
             '            _vs["loaded"] = True\n'
-            '            idx_dir = Path(framework_root) / "vaultbot_backend" / "vaultbot_index"\n'
+            '            idx_dir = Path(framework_root) / "vaultbot_backend" / "vaultbot_index"\n'  # noqa: E501
             '            idx_file = idx_dir / "index.faiss"\n'
             '            meta_file = idx_dir / "metadata.pkl"\n'
             "            if idx_file.exists() and meta_file.exists():\n"

@@ -34,7 +34,12 @@ import re  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 # Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
-from paths import VAULT_ROOT, resolve_content_path, is_within_content_roots  # noqa: E402
+from paths import (  # noqa: E402
+    VAULT_ROOT,
+    is_within_content_roots,
+    resolve_content_path,
+)
+
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",

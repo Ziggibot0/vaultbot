@@ -69,7 +69,11 @@ from pathlib import Path  # noqa: E402
 
 # Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
 # resolve_content_path maps a logical path to the correct physical root.
-from paths import VAULT_ROOT, resolve_content_path, is_within_content_roots  # noqa: E402
+from paths import (  # noqa: E402
+    VAULT_ROOT,
+    is_within_content_roots,
+    resolve_content_path,
+)
 
 # Determine paths from this file's location
 # custom_tools/vault_safe_write.py -> parent.parent = vaultbot_backend/

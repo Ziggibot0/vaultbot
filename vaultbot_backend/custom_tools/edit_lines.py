@@ -52,7 +52,7 @@ from pathlib import Path
 # Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
 # resolve_content_path maps a logical path to the correct physical root.
 import paths
-from paths import resolve_content_path, is_within_content_roots
+from paths import is_within_content_roots, resolve_content_path
 
 # custom_tools/edit_lines.py -> parent = custom_tools
 # -> parent.parent = vaultbot_backend

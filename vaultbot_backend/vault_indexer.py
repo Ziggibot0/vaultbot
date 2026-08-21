@@ -66,9 +66,7 @@ class VaultIndexer:
         # baseline/).  When set, framework content is indexed alongside the
         # user's vault so procedures + baseline knowledge stay retrievable.
         # None (tests, legacy) = scan vault_path only.
-        self.framework_root = (
-            Path(framework_root).resolve() if framework_root else None
-        )
+        self.framework_root = Path(framework_root).resolve() if framework_root else None
         if index_path is None:
             # Store index in the backend folder, not in the vault
             self.index_path = Path(__file__).parent / "vaultbot_index"
@@ -682,9 +680,7 @@ class VaultIndexer:
             roots.append(self.framework_root)
         out: list[Path] = []
         for root in roots:
-            out.extend(
-                p for p in root.rglob("*.md") if not _is_ignored_path(p)
-            )
+            out.extend(p for p in root.rglob("*.md") if not _is_ignored_path(p))
         return out
 
     def load(self):

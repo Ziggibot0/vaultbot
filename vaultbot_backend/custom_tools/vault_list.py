@@ -35,6 +35,7 @@ from pathlib import Path  # noqa: E402
 
 # Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
 from paths import VAULT_ROOT  # noqa: E402
+
 EXCLUDE_DIRS = {
     ".git",
     "node_modules",

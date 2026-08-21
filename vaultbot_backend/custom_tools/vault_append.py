@@ -45,7 +45,7 @@ from pathlib import Path  # noqa: E402
 
 # Central path resolution: VAULT_ROOT (user vault) + FRAMEWORK_ROOT (git repo).
 # resolve_content_path maps a logical path to the correct physical root.
-from paths import resolve_content_path, is_within_content_roots  # noqa: E402
+from paths import is_within_content_roots, resolve_content_path  # noqa: E402
 
 
 def _is_locked(content: str) -> bool:

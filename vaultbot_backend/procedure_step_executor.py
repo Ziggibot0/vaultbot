@@ -87,7 +87,9 @@ def _run_code_step(
         "    from paths import FRAMEWORK_ROOT\n"
         "    framework_root = str(FRAMEWORK_ROOT)\n"
         "except Exception:\n"
-        '    framework_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n'
+        "    framework_root = os.path.dirname(\n"
+        "        os.path.dirname(os.path.abspath(__file__))\n"
+        "    )\n"
         'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "{}"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
         'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'

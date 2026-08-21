@@ -52,9 +52,7 @@ class VaultGraph:
         # Optional framework root (the git repo holding System/, Knowledge/,
         # baseline/).  When set, framework content is scanned alongside the
         # user's vault so procedures + baseline knowledge stay in the graph.
-        self.framework_root = (
-            Path(framework_root).resolve() if framework_root else None
-        )
+        self.framework_root = Path(framework_root).resolve() if framework_root else None
         self.session_logger = session_logger
         self.max_note_size = max_note_size
         self.nodes: dict[str, dict[str, Any]] = {}  # normalized name -> metadata

@@ -156,15 +156,18 @@ class ProcedureTracker:
     No LLM judgment -- just counters and date comparisons.
     """
 
-    def __init__(self, log_path: str, vault_path: str = ".", framework_root: str | None = None):
+    def __init__(
+        self,
+        log_path: str,
+        vault_path: str = ".",
+        framework_root: str | None = None,
+    ):
         self.log_path = Path(log_path)
         self.vault_path = Path(vault_path)
         # Optional framework root (the git repo holding System/Procedures/).
         # When set, framework procedures are scanned alongside the user's
         # vault so they stay discoverable/executable.
-        self.framework_root = (
-            Path(framework_root).resolve() if framework_root else None
-        )
+        self.framework_root = Path(framework_root).resolve() if framework_root else None
         self._ensure_log()
 
     # --- Vault scanning ---
