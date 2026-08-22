@@ -262,6 +262,56 @@ if (-not $ollamaOk) {
     }
 }
 
+# Obsidian — the app the user actually talks to VaultBot through. Unlike
+# Python/Git/Ollama, the installer previously ASSUMED Obsidian was already
+# installed, so a fresh machine would reach the end, fail to open the
+# `obsidian://` deep link (no protocol handler registered), and leave the
+# user with a "complete" install they couldn't use. Detect it the same way
+# as the other prerequisites and auto-install it when missing.
+$obsidianOk = $false
+try {
+    # Obsidian is rarely on PATH. Detect it via its registered URI protocol
+    # handler (HKCU\Software\Classes\obsidian) or its known install paths.
+    $obsidianExe = $null
+    $proto = Get-ItemProperty -Path "HKCU:\Software\Classes\obsidian\shell\open\command" -ErrorAction SilentlyContinue
+    if ($proto) {
+        $cmd = $proto.'(default)'
+        if ($cmd -match '"(?<exe>[^"]+\.exe)"') { $obsidianExe = $matches['exe'] }
+    }
+    if (-not $obsidianExe) {
+        foreach ($candidate in @(
+            (Join-Path $env:LOCALAPPDATA "Obsidian\Obsidian.exe"),
+            (Join-Path $env:LOCALAPPDATA "Programs\Obsidian\Obsidian.exe"),
+            (Join-Path $env:ProgramFiles "Obsidian\Obsidian.exe")
+        )) {
+            if (Test-Path $candidate) { $obsidianExe = $candidate; break }
+        }
+    }
+    if ($obsidianExe) { $obsidianOk = $true; Write-OK "Obsidian: $obsidianExe" }
+} catch {}
+if (-not $obsidianOk) {
+    if (Install-ViaWinget "Obsidian.Obsidian" "Obsidian") {
+        $obsidianOk = $true
+        Write-OK "Obsidian installed"
+        # Re-detect the exe so the final open step can launch it directly
+        # if the deep link fails (winget may not register the URI handler
+        # until the app is run once).
+        foreach ($candidate in @(
+            (Join-Path $env:LOCALAPPDATA "Obsidian\Obsidian.exe"),
+            (Join-Path $env:LOCALAPPDATA "Programs\Obsidian\Obsidian.exe"),
+            (Join-Path $env:ProgramFiles "Obsidian\Obsidian.exe")
+        )) {
+            if (Test-Path $candidate) { $obsidianExe = $candidate; break }
+        }
+    } else {
+        Write-Warn2 "Could not auto-install Obsidian."
+        Write-Host "  Download Obsidian from https://obsidian.md, then" -ForegroundColor Yellow
+        Write-Host "  re-run this installer." -ForegroundColor Yellow
+        Start-Process "https://obsidian.md"
+        return
+    }
+}
+
 # -- 2. Ask the user's name --------------------------------------------------
 Write-Host ""
 Write-Host "  What's your name? VaultBot will call you by this." -ForegroundColor Cyan
@@ -799,10 +849,38 @@ Write-Host ""
 Write-Host "  VaultBot knows your name is $ownerName." -ForegroundColor Magenta
 Write-Host ""
 
-# Try to open Obsidian deep-linked to the vault
+# Try to open Obsidian deep-linked to the vault.
+#
+# The `obsidian://open` action's `path` parameter must point at a FILE
+# inside the vault, NOT the vault folder itself — Obsidian searches for the
+# most specific vault that CONTAINS that file path, and a bare folder
+# doesn't match. So we deep-link to a real file inside the vault and let
+# Obsidian resolve the vault from it. We prefer any .md note, then fall back
+# to the .obsidian/app.json we just wrote (guaranteed to exist after step
+# 7b), then to the vault folder as a last resort.
+#
+# If Obsidian still isn't installed (e.g. winget failed and the user
+# declined), fall back to launching the app directly, so the user is never
+# left with a "complete" install they can't open.
+$openTarget = $null
+$firstNote = Get-ChildItem -Path $vaultPath -Filter *.md -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($firstNote) {
+    $openTarget = $firstNote.FullName
+} elseif (Test-Path $appJson) {
+    $openTarget = $appJson
+} else {
+    $openTarget = $vaultPath
+}
 try {
-    $uri = "obsidian://open?path=$([uri]::EscapeDataString($vaultPath))"
+    $uri = "obsidian://open?path=$([uri]::EscapeDataString($openTarget))"
     Start-Process $uri
 } catch {
-    Write-Warn2 "Couldn't auto-open Obsidian. Open it manually and pick the folder above."
+    Write-Warn2 "Couldn't auto-open Obsidian via deep link."
+    if ($obsidianExe) {
+        Write-Host "  Launching Obsidian directly..." -ForegroundColor DarkGray
+        Start-Process $obsidianExe
+    } else {
+        Write-Host "  Open Obsidian manually and choose 'Open folder as vault' ->" -ForegroundColor Yellow
+        Write-Host "  select the folder above." -ForegroundColor Yellow
+    }
 }
