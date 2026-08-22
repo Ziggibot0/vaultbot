@@ -34,9 +34,6 @@ from chat_preflight import (
     check_cancelled as _check_cancelled,
 )
 from chat_preflight import (
-    classify_trivial as _classify_trivial,
-)
-from chat_preflight import (
     deterministic_procedure_hint as _deterministic_procedure_hint,
 )
 from chat_preflight import (
@@ -45,7 +42,6 @@ from chat_preflight import (
 from citation_gate import build_allowed_citations
 from config import TUNABLES
 from conversation_index import build_conversation_context
-from conversation_state import save_history
 from procedure_surface import build_procedure_surface
 from services import Services
 from small_model_filters import (
@@ -280,15 +276,11 @@ async def prepare_turn(
     # via execute_procedure("Think") if it decides a question needs
     # structured premise checking.
     #
-    # Skipped for: trivial messages (uses _classify_trivial patterns),
-    # resumed turns (model is mid-task).
+    # Skipped for: resumed turns (model is mid-task).
     _preflight_chain: list[str] = []
     _preflight_results: list[dict[str, Any]] = []
     _preflight_category = ""
-    _is_trivial = _classify_trivial(
-        user_message, getattr(websocket, "conversation_history", []), wm
-    )
-    if not _is_trivial and not _resumed_tool_history:
+    if not _resumed_tool_history:
 
         async def _run_route() -> dict[str, Any]:
             """Run Route-Task. Returns {"error": ...} on failure."""
@@ -493,9 +485,6 @@ async def prepare_turn(
     if (
         TUNABLES.auto_research_on_empty
         and not _resumed_tool_history
-        and not _classify_trivial(
-            user_message, getattr(websocket, "conversation_history", []), wm
-        )
         and _category_allows_research
     ):
         _usable = [
@@ -892,9 +881,9 @@ async def prepare_turn(
     # The Route-Task block was moved to BEFORE the auto-research gate so
     # its classification result can prevent unnecessary web scraping on
     # conversational messages. See issue #25. The variables
-    # _preflight_chain, _preflight_results, _preflight_category, and
-    # _is_trivial are set in the earlier block and used here for the
-    # auto-research gate condition and later for preflight chain injection.
+    # _preflight_chain, _preflight_results, and _preflight_category are set
+    # in the earlier block and used here for the auto-research gate condition
+    # and later for preflight chain injection.
 
     # If we're resuming an interrupted turn, tell the model what it already
     # did so it continues instead of re-running tools.
@@ -1232,102 +1221,12 @@ async def prepare_turn(
         session_logger=session_logger,
     )
 
-    # --- Trivial-turn shortcut (Phase 7: skip big model) ---------------
-    # Simple greetings, thanks, and meta-questions are routed to the
-    # small model directly, saving cloud tokens. Conservative: falls
-    # through to the big-model agentic loop on any failure.
-    if _classify_trivial(
-        user_message, getattr(websocket, "conversation_history", []), wm
-    ):
-        try:
-            from llm_client import get_small_client
-
-            _trivial_client = get_small_client(session_logger)
-            if _trivial_client is not None:
-                _trivial_identity = svc.identity.boot_context()
-                _trivial_prompt = (
-                    f"{_trivial_identity}\n\n"
-                    f'The user said: "{user_message}"\n'
-                    f"Answer briefly and naturally. Be warm and concise. "
-                    f"Do not call any tools."
-                )
-                _trivial_resp = _trivial_client.chat(
-                    [{"role": "user", "content": _trivial_prompt}],
-                    temperature=0.5,
-                    stream=False,
-                    think=False,
-                    max_predict=512,
-                )
-                _trivial_text = ""
-                if isinstance(_trivial_resp, dict):
-                    _msg = _trivial_resp.get("message", {})
-                    if isinstance(_msg, dict):
-                        _trivial_text = _msg.get("content", "") or ""
-                    if not _trivial_text:
-                        _trivial_text = _trivial_resp.get(
-                            "response", ""
-                        ) or _trivial_resp.get("content", "")
-                _trivial_text = (_trivial_text or "").strip()
-                # Only accept the shortcut if the small model produced a
-                # real response. Otherwise fall through to the big model.
-                if len(_trivial_text) >= 10:
-                    session_logger.log(
-                        "trivial_turn_shortcut",
-                        {
-                            "user_message": user_message[:80],
-                            "response_chars": len(_trivial_text),
-                        },
-                    )
-                    await svc.manager.send_personal_message(
-                        json.dumps({"type": "answer_chunk", "content": _trivial_text}),
-                        websocket,
-                        session_logger=session_logger,
-                    )
-                    await svc.manager.send_personal_message(
-                        json.dumps({"type": "answer_done", "content": _trivial_text}),
-                        websocket,
-                        session_logger=session_logger,
-                    )
-                    # Explicitly log the assistant response so /sessions/{id}
-                    # replay can find it even if the websocket_message log
-                    # path was skipped or the session crashed mid-stream.
-                    session_logger.log("assistant_response", {"text": _trivial_text})
-                    # Save to conversation history.
-                    _new_turns = [
-                        {"role": "user", "content": user_message},
-                        {"role": "assistant", "content": _trivial_text},
-                    ]
-                    websocket.conversation_history = (
-                        getattr(websocket, "conversation_history", []) + _new_turns
-                    )
-                    save_history(
-                        websocket.conversation_history,
-                        session_id=getattr(websocket, "session_id", None),
-                    )
-                    session_logger.log(
-                        "chat_end",
-                        {
-                            "answer_length": len(_trivial_text),
-                            "thinking_length": 0,
-                            "tool_rounds": 0,
-                        },
-                    )
-                    return None  # trivial turn handled -- caller skips the loop
-                # Fall through -- small model gave nothing useful.
-                session_logger.log(
-                    "trivial_turn_fallback_empty",
-                    {
-                        "user_message": user_message[:80],
-                    },
-                )
-        except Exception as e:  # noqa: BLE001 -- best-effort: fall through to big model
-            session_logger.log(
-                "trivial_turn_fallback_error",
-                {
-                    "error": str(e),
-                    "user_message": user_message[:80],
-                },
-            )
+    # --- Trivial-turn shortcut removed (issue #166) ---------------------
+    # The lexical trivial-turn classifier (exact/prefix string matching)
+    # was removed: it misrouted real questions that merely started with a
+    # greeting word (e.g. "yo can you access my google calendar?") to the
+    # small model with no tool schemas. Every turn now goes through the
+    # agentic loop, where the model sees the full tool list and decides.
 
     return (
         conversation,

@@ -670,103 +670,6 @@ PROCEDURE_CANDIDATES: set[str] = {
     "torture_test",  # torture test a PR (custom tool)
 }
 
-# Keyword mapping for contextual tool selection
-_CONTEXTUAL_KEYWORDS: dict[str, list[str]] = {
-    "research": [
-        "research",
-        "investigate",
-        "look up",
-        "find out",
-        "what is",
-        "how does",
-        "source",
-        "web",
-        "study",
-        "learn about",
-        "topic",
-    ],
-    "code_edit": [
-        "code",
-        "fix",
-        "edit",
-        "write",
-        "modify",
-        "bug",
-        "implement",
-        "function",
-        "python",
-        "javascript",
-        ".py",
-        ".js",
-        "backend",
-        "frontend",
-        "plugin",
-        "restart",
-        "reload",
-        "refactor",
-        "debug",
-        "safe_write",
-        "js_safe_write",
-        "md_safe_replace",
-        "git_rollback",
-    ],
-    "vault_maintenance": [
-        "vault",
-        "graph",
-        "gaps",
-        "note",
-        "link",
-        "wikilink",
-        "cluster",
-        "lint",
-        "delete",
-        "orphan",
-        "island",
-        "maintenance",
-        "cleanup",
-        "consolidate",
-        "merge",
-    ],
-    "self_improvement": [
-        "tool",
-        "build",
-        "create",
-        "improve",
-        "self-improve",
-        "reflect",
-        "capability",
-        "audit",
-        "new ability",
-    ],
-    "status": [
-        "status",
-        "running",
-        "operational",
-        "what are you doing",
-        "system",
-        "goal",
-        "machine",
-        "spec",
-    ],
-}
-
-
-def select_contextual_tools(user_message: str, plan_text: str = "") -> set[str]:
-    """Deterministic keyword-based selection of contextual tools.
-
-    No LLM cost. Matches the user message + current plan against
-    keyword categories to determine which contextual tools are relevant.
-    """
-    text = (user_message + " " + plan_text).lower()
-    selected: set[str] = set()
-
-    for category, keywords in _CONTEXTUAL_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            selected.update(CONTEXTUAL_TOOLS.get(category, []))
-
-    return selected
-
-
 def get_core_tools(
     custom_schemas: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
@@ -820,41 +723,33 @@ def build_tool_list(
     plan_text: str = "",
     custom_schemas: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build the tool list for the LLM call using three-tier selection.
+    """Build the tool list for the LLM call.
 
-    Tier 1 (core): always included.
-    Tier 2 (contextual): included when user_message + plan_text match keywords.
-    Tier 3 (procedure candidates): never included — discovered via RAG.
-
-
-    Custom tools that aren't procedure candidates are included if they
-    match a selected contextual category.
+    Core tools and ALL contextual tools are always included — the model
+    decides which to use from the schemas it receives. No keyword gating:
+    a capability must never be unreachable because a literal string didn't
+    match. Procedure candidates are excluded (discovered via RAG).
     """
     # Tier 1: core tools (always)
     tools = get_core_tools(custom_schemas)
 
-    # Tier 2: contextual tools (keyword-matched)
-    contextual_names = select_contextual_tools(user_message, plan_text)
-    # Filter out any that are procedure candidates
-    contextual_names = contextual_names - PROCEDURE_CANDIDATES
-    contextual_names = contextual_names - CORE_TOOL_NAMES  # don't double-add core
-    tools.extend(_get_contextual_tool_schemas(contextual_names, custom_schemas))
-
-    # Build the full set of all classified tool names (core + all contextual
-    # tiers + procedure candidates). Any custom tool NOT in this set is truly
-    # unclassified — include it so newly-created tools are visible.
-    _all_contextual = set()
+    # Tier 2: all contextual tools (always — no keyword gating)
+    _all_contextual: set[str] = set()
     for cat_tools in CONTEXTUAL_TOOLS.values():
         _all_contextual.update(cat_tools)
-    _classified = CORE_TOOL_NAMES | _all_contextual | PROCEDURE_CANDIDATES
+    contextual_names = _all_contextual - PROCEDURE_CANDIDATES - CORE_TOOL_NAMES
+    tools.extend(_get_contextual_tool_schemas(contextual_names, custom_schemas))
 
+    # Any custom tool not in a tier is included so newly-created tools are
+    # visible.
+    _classified = CORE_TOOL_NAMES | _all_contextual | PROCEDURE_CANDIDATES
     if custom_schemas:
         for s in custom_schemas:
             name = s.get("function", {}).get("name", "")
             if name in _classified:
                 continue  # already handled by a tier (core/contextual/procedure)
-            # Custom tool not in any tier — include it (progressive disclosure
-            # can handle this later). This ensures new custom tools are visible.
+            # Custom tool not in any tier — include it so newly-created tools
+            # are visible.
             tools.append(s)
 
     # Dedupe by function name

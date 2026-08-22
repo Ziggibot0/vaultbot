@@ -18,11 +18,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from config import TUNABLES
 from fastapi import WebSocket
 from procedure_surface import status_allows_execution
 from services import Services
-from working_memory import TaskList  # noqa: F401 — re-exported for backward compat
 
 # ---------------------------------------------------------------------------
 # Cancel check — called at every phase boundary so the stop button works
@@ -40,69 +38,6 @@ def check_cancelled(websocket: WebSocket) -> None:
     """
     if getattr(websocket, "_cancelled", False):
         raise asyncio.CancelledError("user stopped")
-
-
-# ---------------------------------------------------------------------------
-# Trivial-turn shortcut (Phase 7: skip big model for simple messages)
-# ---------------------------------------------------------------------------
-# Simple greetings, thanks, and meta-questions ("hi", "thanks!", "what can
-# you do?") don't need the full agentic loop with the cloud model. This
-# classifier routes them to the small model directly, saving cloud tokens
-# and giving an instant response. Conservative: if in doubt, fall through
-# to the big model. False negatives cost a few tokens; false positives cost
-# answer quality.
-
-# Patterns that indicate a trivial turn. Must be SHORT and match the whole
-# message (case-insensitive, stripped). Keywords are matched as whole words.
-# The exact-set and prefix-tuple live in config.TUNABLES (single source of
-# truth); local aliases keep the call sites readable.
-_TRIVIAL_EXACT = TUNABLES.trivial_exact
-_TRIVIAL_PREFIXES = TUNABLES.trivial_prefixes
-_TRIVIAL_MAX_LEN = TUNABLES.trivial_max_len
-
-
-def classify_trivial(
-    user_message: str,
-    conversation_history: list[dict[str, Any]],
-    wm: TaskList | None,
-) -> bool:
-    """Deterministically classify whether a turn is trivial enough to skip
-    the big cloud model and route directly to the small model.
-
-    Returns True only if ALL of:
-    - The message is short (< _TRIVIAL_MAX_LEN chars).
-    - The message matches a greeting, confirmation, thanks, or meta-question
-      pattern (exact match or prefix match).
-    - There is no active plan in working memory.
-    - There are no recent tool calls in conversation history (last 4 msgs).
-
-    Conservative: anything uncertain falls through to the big model.
-    """
-    msg = user_message.strip().lower()
-    if not msg or len(msg) > _TRIVIAL_MAX_LEN:
-        return False
-
-    # Exact match check.
-    if msg in _TRIVIAL_EXACT or any(msg.startswith(p) for p in _TRIVIAL_PREFIXES):
-        pass  # trivial
-    else:
-        return False
-
-    # No active plan — a trivial message during an active task might be
-    # a continuation that needs the big model's context.
-    if wm is not None and wm.has_plan():
-        return False
-
-    # No recent tool calls — if the last few messages include tool activity,
-    # the user might be reacting to tool results and needs full context.
-    if conversation_history:
-        for _m in conversation_history[-4:]:
-            if isinstance(_m, dict) and (
-                _m.get("tool_calls") or _m.get("role") == "tool"
-            ):
-                return False
-
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -129,19 +64,11 @@ def deterministic_procedure_hint(
     """
     if not results:
         return ""
-    # Skip greetings/trivial messages — no procedure is the right hint.
+    # Skip very short messages — no procedure is the right hint for a bare
+    # greeting or fragment. (No lexical keyword list: FUSED retrieval and the
+    # model decide relevance, not literal string matching.)
     _msg_low = user_message.strip().lower()
-    _trivial = _msg_low in {
-        "hi",
-        "hello",
-        "hey",
-        "yo",
-        "sup",
-        "ok",
-        "thanks",
-        "thank you",
-    }
-    if _trivial or len(_msg_low) < 5:
+    if len(_msg_low) < 5:
         return ""
 
     _best_stem = ""
