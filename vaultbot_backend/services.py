@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from knowledge_curriculum import KnowledgeCurriculum
     from lazy_condenser import LazyCondenser
     from llm_client import LLMClient
+    from main import ConnectionManager
     from note_creator import NoteCreator
     from ollama_client import OllamaClient
     from pattern_extractor import PatternExtractor
@@ -103,6 +104,11 @@ class Services:
     pattern_extractor: PatternExtractor
     # Session logging + websocket manager
     session_logger: SessionLogger
+    # ConnectionManager is defined in main.py; typed via TYPE_CHECKING to
+    # avoid a runtime import cycle (main.py imports Services). Non-optional:
+    # main.py always wires it (manager=manager) and tests stub it with a
+    # MagicMock.
+    manager: ConnectionManager
     # Chat-loop checkpoint/resume (multi-day sturdiness). Optional so older
     # wiring and tests that build Services without it still work.
     chat_checkpointer: object | None = None
@@ -114,9 +120,6 @@ class Services:
     # Roles (big/small/vision) draw from this one pot. Optional with a default
     # so tests that build Services without it still construct.
     registry: object | None = None
-    # ConnectionManager is defined in main.py (kept there for now); typed
-    # loosely to avoid importing main here (would create a cycle).
-    manager: object = None
     # Conversation-aware retrieval: searchable index of recent conversation
     # turns so the bot can "remember what it just said." Optional with a
     # default so tests that build Services without it still construct.
