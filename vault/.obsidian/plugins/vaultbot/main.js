@@ -1865,6 +1865,16 @@ class VaultBotSettingTab extends PluginSettingTab {
 		newProvRow.createEl('span', {text: 'Provider', attr: {style: 'min-width:64px;font-size:0.85em;'}});
 		const provPresetSel = newProvRow.createEl('select');
 		provPresetSel.style.minWidth = '150px';
+		// Provider type — only editable for a custom endpoint (presets auto-set
+		// it). Lets the user point at either an OpenAI-compatible /v1 API or a
+		// native Ollama daemon without guessing from the id string.
+		const provTypeSel = newProvRow.createEl('select');
+		provTypeSel.style.minWidth = '140px';
+		provTypeSel.createEl('option', {text: 'OpenAI-compatible', attr: {value: 'openai'}});
+		provTypeSel.createEl('option', {text: 'Ollama', attr: {value: 'ollama'}});
+		// Name for a custom endpoint — becomes its id + label so multiple
+		// custom endpoints don't collide on a single fixed "custom" id.
+		const provNameInput = newProvRow.createEl('input', {type: 'text', attr: {placeholder: 'name (custom only)', style: 'min-width:110px;'}});
 
 		const provUrlInput = newProvRow.createEl('input', {type: 'text', attr: {placeholder: 'base URL (auto-filled)', style: 'flex:1;min-width:170px;'}});
 		const provKeyInput = newProvRow.createEl('input', {type: 'password', attr: {placeholder: 'API key (blank for local Ollama)', style: 'flex:1;min-width:170px;'}});
@@ -1942,17 +1952,35 @@ class VaultBotSettingTab extends PluginSettingTab {
 			if (prov && prov.known) {
 				const curPreset = provPresetSel.value;
 				provPresetSel.empty();
+				// "Custom endpoint…" is always the first option — lets the user
+				// type any base URL + pick its type, instead of being limited to
+				// the fixed presets.
+				provPresetSel.createEl('option', {text: 'Custom endpoint…', attr: {value: 'custom', 'data-url': '', 'data-type': '', 'data-label': 'Custom endpoint'}});
 				Object.entries(prov.known).forEach(([id, info]) => {
-					provPresetSel.createEl('option', {text: info.label || id, attr: {value: id, 'data-url': info.base_url || ''}});
+					provPresetSel.createEl('option', {text: info.label || id, attr: {value: id, 'data-url': info.base_url || '', 'data-type': info.type || 'openai', 'data-label': info.label || id}});
 				});
 				if (curPreset) provPresetSel.value = curPreset;
-				// Fill the URL field from the selected preset.
-				const fillUrl = () => {
+				// Sync URL + type + name from the selected preset (or clear
+				// them for a custom endpoint).
+				const syncPreset = () => {
 					const opt = provPresetSel.options[provPresetSel.selectedIndex];
-					if (opt && opt.getAttribute('data-url')) provUrlInput.value = opt.getAttribute('data-url');
+					if (!opt) return;
+					const isCustom = opt.value === 'custom';
+					provUrlInput.value = opt.getAttribute('data-url') || '';
+					provUrlInput.placeholder = isCustom ? 'type your base URL' : 'base URL (auto-filled)';
+					const t = opt.getAttribute('data-type');
+					if (t) provTypeSel.value = t;
+					provTypeSel.disabled = !isCustom;
+					if (isCustom) {
+						provNameInput.value = '';
+						provNameInput.placeholder = 'name (custom only)';
+					} else {
+						provNameInput.value = opt.getAttribute('data-label') || '';
+						provNameInput.placeholder = 'name (auto)';
+					}
 				};
-				fillUrl();
-				provPresetSel.onchange = fillUrl;
+				syncPreset();
+				provPresetSel.onchange = syncPreset;
 			}
 			// Existing providers list.
 			provListEl.empty();
@@ -2011,16 +2039,30 @@ class VaultBotSettingTab extends PluginSettingTab {
 		addProvBtn.addEventListener('click', async () => {
 			provStatusEl.setText('Testing endpoint...');
 			const opt = provPresetSel.options[provPresetSel.selectedIndex];
-			const id = opt ? opt.value : 'custom';
+			const isCustom = opt && opt.value === 'custom';
 			const url = provUrlInput.value.trim();
+			let id, type, label;
+			if (isCustom) {
+				const name = provNameInput.value.trim() || url;
+				if (!url) { provStatusEl.setText('Enter a base URL for your custom endpoint.'); return; }
+				// Slug the name into a unique id so the user can add MULTIPLE
+				// custom endpoints (a fixed "custom" id would overwrite itself).
+				id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'custom';
+				type = provTypeSel.value;
+				label = name;
+			} else {
+				id = opt ? opt.value : 'custom';
+				type = opt ? (opt.getAttribute('data-type') || 'openai') : 'openai';
+				label = opt ? (opt.getAttribute('data-label') || opt.text) : id;
+			}
 			const res = await this.plugin.addProviderCfg({
-				id, type: (id.includes('ollama') ? 'ollama' : 'openai'),
+				id, type,
 				baseUrl: url, apiKey: provKeyInput.value.trim(),
-				label: opt ? opt.text : id});
+				label});
 			if (res && res.status === 'ok') {
 				provKeyInput.value = '';
 				const n = res.probe ? res.probe.count : 0;
-				new Notice(`Provider connected: ${opt ? opt.text : id} (${n} model${n === 1 ? '' : 's'} found)`);
+				new Notice(`Provider connected: ${label || id} (${n} model${n === 1 ? '' : 's'} found)`);
 				provStatusEl.setText(`✓ connected — ${n} model(s) available.`);
 				refreshPotUI();
 			} else {
