@@ -263,8 +263,7 @@ def test_rejects_external_import_without_doc_source(patched_improver, tmp_path):
     improver, backend_dir = patched_improver
 
     content = (
-        "import requests\n\ndef run(args):\n"
-        "    return requests.get(args['url'])\n"
+        "import requests\n\ndef run(args):\n    return requests.get(args['url'])\n"
     )
     result = improver.safe_write("vaultbot_backend/my_new_tool.py", content)
 
@@ -284,8 +283,7 @@ def test_accepts_external_import_with_doc_source(patched_improver, tmp_path):
     improver, backend_dir = patched_improver
 
     content = (
-        "import requests\n\ndef run(args):\n"
-        "    return requests.get(args['url'])\n"
+        "import requests\n\ndef run(args):\n    return requests.get(args['url'])\n"
     )
     result = improver.safe_write(
         "vaultbot_backend/my_new_tool.py",

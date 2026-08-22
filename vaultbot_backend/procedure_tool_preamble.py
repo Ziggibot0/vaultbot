@@ -482,11 +482,11 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '        On failure, returns {"error": ...} for graceful degradation.\n'
             '        """\n'
             "        try:\n"
-            "            _payload = {\"topic\": topic, \"depth\": depth}\n"
+            '            _payload = {"topic": topic, "depth": depth}\n'
             "            if source_allowlist:\n"
-            "                _payload[\"source_allowlist\"] = source_allowlist\n"
+            '                _payload["source_allowlist"] = source_allowlist\n'
             "            if source_denylist:\n"
-            "                _payload[\"source_denylist\"] = source_denylist\n"
+            '                _payload["source_denylist"] = source_denylist\n'
             "            resp = _requests.post(\n"
             '                "http://localhost:8000/research_tool",\n'
             "                json=_payload,\n"
