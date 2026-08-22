@@ -129,46 +129,84 @@ echo "      VaultBot Installer"
 echo "  ============================="
 echo ""
 
-# ── 1. Prerequisite checks ─────────────────────────────────────────────────
+# ── 1. Prerequisite checks (auto-install what's missing) ───────────────────
+# VaultBot should be one paste for a non-technical user. So instead of just
+# DETECTING Python/Git/Ollama and telling the user to install them, we
+# AUTO-INSTALL them via the system package manager when they're missing.
 echo ">>> Checking prerequisites..."
-missing=()
+
+# Install a package via the detected package manager; returns 0 on success.
+install_pkg() {
+    local label="$1"
+    shift
+    echo ">>> Installing $label (one-time)..."
+    if command -v brew &>/dev/null; then
+        brew install "$@" >/dev/null 2>&1
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get install -y "$@" >/dev/null 2>&1
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y "$@" >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
 
 # Python 3.11+
 PY_OK=false
 if command -v python3 &>/dev/null; then
-    PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null)
     PY_MINOR=$(python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null)
     if [ "$PY_MINOR" -ge 11 ] 2>/dev/null; then
         PY_OK=true
-        echo "  [OK] Python: $PY_VERSION"
+        echo "  [OK] Python: $(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null)"
     fi
 fi
 if [ "$PY_OK" = false ]; then
-    missing+=("Python 3.11+  ->  https://python.org/downloads")
+    if install_pkg "Python 3" python3; then
+        PY_OK=true
+        echo "  [OK] Python installed"
+    else
+        echo "  [!]  Could not auto-install Python."
+        echo "       Install Python 3.11+ from https://python.org/downloads, then re-run."
+        open "https://python.org/downloads" 2>/dev/null || xdg-open "https://python.org/downloads" 2>/dev/null || true
+        exit 1
+    fi
 fi
 
-# Ollama
+# Git — needed to download and update VaultBot. Auto-install if missing.
+GIT_OK=false
+if command -v git &>/dev/null; then
+    GIT_OK=true
+    echo "  [OK] Git: $(git --version 2>/dev/null)"
+fi
+if [ "$GIT_OK" = false ]; then
+    if install_pkg "Git" git; then
+        GIT_OK=true
+        echo "  [OK] Git installed"
+    else
+        echo "  [!]  Could not auto-install Git."
+        echo "       Install Git from https://git-scm.com/downloads, then re-run."
+        open "https://git-scm.com/downloads" 2>/dev/null || xdg-open "https://git-scm.com/downloads" 2>/dev/null || true
+        exit 1
+    fi
+fi
+
+# Ollama — a background service, harder to fully bundle. Auto-install the
+# app if possible; otherwise open the download page.
 OLLAMA_OK=false
 if command -v ollama &>/dev/null; then
     OLLAMA_OK=true
     echo "  [OK] Ollama: $(ollama --version 2>/dev/null || echo 'installed')"
 fi
 if [ "$OLLAMA_OK" = false ]; then
-    missing+=("Ollama  ->  https://ollama.com")
-fi
-
-if [ ${#missing[@]} -gt 0 ]; then
-    echo ""
-    echo "  Almost there! Install these first, then run the command again:"
-    echo ""
-    for m in "${missing[@]}"; do echo "    - $m"; done
-    echo ""
-    # Try to open download pages
-    for m in "${missing[@]}"; do
-        if echo "$m" | grep -q "python.org"; then open "https://python.org/downloads" 2>/dev/null || xdg-open "https://python.org/downloads" 2>/dev/null || true; fi
-        if echo "$m" | grep -q "ollama.com";  then open "https://ollama.com" 2>/dev/null || xdg-open "https://ollama.com" 2>/dev/null || true; fi
-    done
-    exit 1
+    if install_pkg "Ollama" ollama; then
+        OLLAMA_OK=true
+        echo "  [OK] Ollama installed"
+    else
+        echo "  [!]  Could not auto-install Ollama."
+        echo "       Download Ollama from https://ollama.com and run it once, then re-run."
+        open "https://ollama.com" 2>/dev/null || xdg-open "https://ollama.com" 2>/dev/null || true
+        exit 1
+    fi
 fi
 
 # ── 2. Ask the user's name ──────────────────────────────────────────────────
