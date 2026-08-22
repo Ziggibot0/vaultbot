@@ -388,12 +388,12 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "Execute Python code in a sandboxed subprocess to test it "
                 "before writing or adopting it. Returns stdout, stderr, and "
                 "exit code. Use this to verify new tools work before creating "
-                "them. IMPORTANT: code_run is for TESTING only — do NOT use it "
-                "to write or modify files. Use safe_write (Python), "
-                "js_safe_write (JavaScript), vault_safe_write (markdown), or "
-                "vault_append (markdown append) for any file modification. "
-                "code_run has no backup/rollback — files you create or modify "
-                "in code_run are permanent and untracked."
+                "them. IMPORTANT: code_run is READ-ONLY — it rejects code "
+                "that opens files for writing or calls mutating file methods "
+                "(.write/.writelines/.truncate/mkdir/remove/rename/…). "
+                "Use safe_write (Python), js_safe_write (JavaScript), "
+                "vault_safe_write (markdown), or vault_append (markdown "
+                "append) for any file modification."
             ),
             "parameters": {
                 "type": "object",

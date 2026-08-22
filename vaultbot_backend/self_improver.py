@@ -71,6 +71,75 @@ _CONTRIBUTIONS_GATED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Methods/attributes that write files. code_run must reject code that uses
+# any of these so the only way to modify backend source is the gated
+# safe_write (issue #207, Gap 2). open() is allowed in READ mode only —
+# the walker checks the mode argument for write modes.
+_FILE_WRITE_METHODS: frozenset[str] = frozenset(
+    {
+        "write",
+        "writelines",
+        "truncate",
+        "flush",
+        "mkdir",
+        "makedirs",
+        "rmdir",
+        "remove",
+        "unlink",
+        "rename",
+        "replace",
+        "copy",
+        "copyfile",
+        "move",
+        "chmod",
+        "chown",
+    }
+)
+_OPEN_WRITE_MODES = frozenset("wax+")
+
+
+def _contains_file_write(code: str) -> str | None:
+    """Static AST check: return a reason string if ``code`` performs a file
+    write, else ``None``. Catches:
+
+    - ``open(...)`` in a write/append/create mode (default is read).
+    - ``.write()`` / ``.writelines()`` / ``.truncate()`` on any object.
+    - ``os`` / ``pathlib`` / ``shutil`` mutating calls (mkdir, remove,
+      rename, copy, chmod …) by name.
+    - ``__import__("os").remove(...)``-style dynamic imports are NOT caught
+      (AST can't resolve them) — that is an accepted residual; the doc-gate
+      on safe_write is the primary control.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return f"syntax error: {e}"
+    for node in ast.walk(tree):
+        # open(path, "w"/"a"/"x"/"+") — check mode arg if present.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "open"
+            and len(node.args) >= 2
+        ):
+            mode_arg = node.args[1]
+            if (
+                isinstance(mode_arg, ast.Constant)
+                and isinstance(mode_arg.value, str)
+                and any(c in _OPEN_WRITE_MODES for c in mode_arg.value)
+            ):
+                return f"open() with write mode '{mode_arg.value}'"
+        # obj.write(...), obj.writelines(...), obj.truncate(...), etc.
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _FILE_WRITE_METHODS
+        ):
+            return f".{node.func.attr}() — file modification"
+        # os.remove / pathlib.Path.unlink as attribute calls covered above;
+        # bare Name calls (rare) are not file ops.
+    return None
+
 
 class SelfImprover:
     """File I/O, code execution, tool creation, and git rollback for the agent."""
@@ -500,6 +569,21 @@ class SelfImprover:
         writes to temp files with a HARD BYTE CAP; the backend reads back only
         the tail. Backend memory stays flat no matter how much the child prints.
         """
+        # File-write guard (issue #207 Gap 2): code_run is for TESTING only.
+        # Reject code that opens files for writing or calls mutating file
+        # methods (.write/.writelines/.truncate/mkdir/remove/…) BEFORE
+        # spawning the subprocess. The only path to modify backend source
+        # is the gated safe_write, which syntax-checks + import-tests edits.
+        reason = _contains_file_write(code)
+        if reason is not None:
+            return {
+                "error": (
+                    f"code_run blocked: {reason}. code_run is read-only — "
+                    "use safe_write (.py), js_safe_write (.js), or "
+                    "vault_safe_write (.md) to modify files."
+                ),
+                "exit_code": -1,
+            }
         venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
