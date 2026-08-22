@@ -12,6 +12,10 @@
     "3.13": {
       "errors": 467,
       "warnings": 11
+    },
+    "3.14": {
+      "errors": 452,
+      "warnings": 7
     }
   },
   "pytest_integration": {
