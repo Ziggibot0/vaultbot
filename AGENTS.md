@@ -21,7 +21,11 @@ wins — flag the discrepancy instead of guessing.
 2. **No silent fallbacks.** Every `except Exception` must raise, surface via
    `notify_problem`, narrow to a specific exception, or carry
    `# noqa: BLE001 — <reason>`. `tests/test_no_silent_swallow.py` AST-scans
-   for violations and CI fails on them.
+   for violations and CI fails on them. Strictly enforced on the **hot path**
+   (`vault_indexer.py`, `chat_handler.py`, `fused_retrieval.py`); ~35
+   background modules have a blanket `BLE001` ignore in `pyproject.toml` by
+   design (best-effort async cleanup). See CONTRIBUTING.md for the full
+   enforcement/exception map.
 3. **One concern per branch.** Don't mix unrelated changes in one PR. If the
    working tree has unrelated edits, stash or move them aside first.
 4. **CI is the gate.** `ruff check --select F` and `pytest -m unit` are hard
