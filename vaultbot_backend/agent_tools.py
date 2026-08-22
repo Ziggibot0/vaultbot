@@ -670,6 +670,7 @@ PROCEDURE_CANDIDATES: set[str] = {
     "torture_test",  # torture test a PR (custom tool)
 }
 
+
 def get_core_tools(
     custom_schemas: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
