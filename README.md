@@ -78,7 +78,8 @@ For the full strategic vision, see
 9. [How it thinks](#how-it-thinks)
 10. [Directives (how to shape its behavior)](#directives-how-to-shape-its-behavior)
 11. [Project structure](#project-structure)
-12. [License & contact](#license--contact)
+12. [Governance](#governance)
+13. [License & contact](#license--contact)
 
 ## What it does
 
@@ -500,6 +501,7 @@ The backend (~95 modules) is organized into these key areas:
 │   ├── setup.ps1 / setup.sh       # One-click installers
 ├── README.md                      # GitHub-facing README
 ├── CONTRIBUTING.md                # GitHub-facing contributing guide
+├── GOVERNANCE.md                  # Decision-making model & succession plan
 ├── SECURITY.md                    # Security policy
 ├── providers.example.json         # Example provider/model registry (copy to providers.json)
 ├── .ci-baseline.json              # Debt + thinness ratchet baselines (CI enforces monotonic improvement)
@@ -512,6 +514,15 @@ Your personal content stays at the vault root:
 - `vaultbot/Knowledge/` — research notes (gitignored)
 - `vaultbot/learningMaterial/` — PDFs / textbooks (gitignored)
 - `.env` — API keys (gitignored)
+
+## Governance
+
+VaultBot is currently a single-maintainer project with a public paper
+trail. The decision-making model, merge authority, and — most importantly —
+the succession plan are documented in [GOVERNANCE.md](GOVERNANCE.md). The
+short version: the project states its governance gaps honestly (single
+maintainer, no second maintainer yet) and tracks them publicly rather than
+hiding them.
 
 ## License & contact
 
@@ -537,3 +548,7 @@ two ratchets (debt + thinness) that prevent quality regressions — see
 
 **Code of conduct:** All participants are expected to follow our
 [Code of Conduct](CODE_OF_CONDUCT.md).
+
+**Governance:** How the project is governed — decision-making model,
+merge authority, and the succession plan — is documented in
+[GOVERNANCE.md](GOVERNANCE.md).
