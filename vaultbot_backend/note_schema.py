@@ -438,7 +438,12 @@ def inject_schema(
         {t.lower() if isinstance(t, str) else str(t) for t in _tags_val}
     )
 
-    if not missing and fm_str and not _has_placeholder_summary and not _has_duplicate_tags:
+    if (
+        not missing
+        and fm_str
+        and not _has_placeholder_summary
+        and not _has_duplicate_tags
+    ):
         # All required fields present and clean — no injection needed.
         return content
 
