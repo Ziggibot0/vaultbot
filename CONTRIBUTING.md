@@ -254,6 +254,45 @@ through the contribution review flow instead.
 
 
 
+## Releases
+
+VaultBot follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+and keeps a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+[`CHANGELOG.md`](CHANGELOG.md). Releases are cut by the project custodian.
+
+### When to cut a release
+
+- **Patch** (`0.1.x`) — a bug fix or internal refactor with no
+  user-visible behavior change. Cut whenever a meaningful fix lands.
+- **Minor** (`0.x.0`) — a new capability (a new tool, procedure family, or
+  integration) that is backward-compatible.
+- **Major** (`x.0.0`) — a breaking change to the vault schema, the
+  procedure format, or the installer contract. Pre-1.0, breaking changes
+  bump the *minor* version (see the note in `CHANGELOG.md`).
+
+### Release checklist
+
+1. Update the `[Unreleased]` section of `CHANGELOG.md` into a dated
+   version section, and bump `version` in `pyproject.toml`.
+2. Tag the release: `git tag -a v0.1.1 -m "v0.1.1"` and push the tag.
+3. Publish a GitHub Release from the tag, with notes linking to the
+   issues closed since the last release.
+
+## Branch protection
+
+`main` is protected: it requires a code-owner approval before merge, and
+**force-push and branch deletion are disabled** on all branches. This is
+deliberate — it preserves the review gate and prevents history rewriting.
+
+Two practical consequences for contributors:
+
+- **Do not rebase-and-force-push a PR branch.** If your branch has
+  diverged from `main`, merge `main` into it (or open a fresh branch)
+  instead of force-pushing.
+- **Orphaned branches cannot be deleted by the bot.** If a PR is closed
+  without merging, its branch stays on the remote until a maintainer
+  deletes it from the GitHub UI.
+
 ## What happens after you submit
 
 Every PR goes through a two-layer review:
