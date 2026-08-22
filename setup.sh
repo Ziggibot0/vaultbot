@@ -192,9 +192,28 @@ echo ""
 # `vault/` subfolder is the user's Obsidian vault — we rename it to the
 # user's chosen name below. The backend (vaultbot_backend/) and .venv/ live
 # at the framework root, OUTSIDE the vault, so the user never sees them.
+# Detect if we're already inside a VaultBot repo. This happens when the
+# user cloned the repo and ran the installer from inside it. Use the
+# existing repo instead of cloning a nested copy.
 FRAMEWORK_PATH="$(pwd)/$FRAMEWORK_NAME"
-if [ -d "$FRAMEWORK_PATH" ]; then
-    echo "  [!]  Folder '$FRAMEWORK_NAME' already exists -- using it."
+IN_EXISTING_REPO=false
+
+if [ -d "$(pwd)/vaultbot_backend" ] && [ -f "$(pwd)/setup.sh" ]; then
+    # Case 1: $PWD itself is a VaultBot repo (installer run from inside it).
+    FRAMEWORK_PATH="$(pwd)"
+    IN_EXISTING_REPO=true
+    echo "  [!]  Already inside a VaultBot repo -- using this folder."
+elif [ -d "$FRAMEWORK_PATH" ]; then
+    # Case 2: $FRAMEWORK_PATH exists. Verify it's a VaultBot repo before
+    # using it; abort if it's an unrelated folder to avoid clobbering.
+    if [ -d "$FRAMEWORK_PATH/vaultbot_backend" ] && [ -f "$FRAMEWORK_PATH/setup.sh" ]; then
+        IN_EXISTING_REPO=true
+        echo "  [!]  Found existing VaultBot repo -- using it."
+    else
+        echo "  [X]  Folder '$FRAMEWORK_NAME' already exists but isn't a VaultBot repo."
+        echo "       Pick a different location or remove the existing folder."
+        exit 1
+    fi
 else
     GH_OK=false
     if command -v gh &>/dev/null; then
@@ -337,8 +356,38 @@ read -r CHOSEN_VAULT
 [ -z "$CHOSEN_VAULT" ] && CHOSEN_VAULT="vault"
 VAULT_PATH="$FRAMEWORK_PATH/$CHOSEN_VAULT"
 SHIPPED_VAULT="$FRAMEWORK_PATH/vault"
-if [ -d "$SHIPPED_VAULT" ] && [ ! -d "$VAULT_PATH" ]; then
-    mv "$SHIPPED_VAULT" "$CHOSEN_VAULT"
+if [ "$CHOSEN_VAULT" = "vault" ]; then
+    # User chose the default name - no rename needed, use the shipped vault.
+    VAULT_PATH="$SHIPPED_VAULT"
+elif [ -d "$SHIPPED_VAULT" ] && [ ! -d "$VAULT_PATH" ]; then
+    # Rename the shipped vault to the user's chosen name. In a git repo,
+    # use `git mv` so git tracks the rename and doesn't restore vault/ on
+    # the next checkout (which would create a duplicate empty vault/
+    # alongside the renamed folder). Also update .gitignore rules that
+    # reference vault/ to use the new name, then commit so it persists.
+    if [ -d "$FRAMEWORK_PATH/.git" ]; then
+        cd "$FRAMEWORK_PATH"
+        if git mv vault "$CHOSEN_VAULT" 2>/dev/null; then
+            # Update .gitignore: replace the vault/ path prefix with the
+            # new vault name in all rules (ignore + un-ignore).
+            GITIGNORE_PATH="$FRAMEWORK_PATH/.gitignore"
+            if [ -f "$GITIGNORE_PATH" ]; then
+                # sed -i isn't portable on macOS (needs backup ext). Use
+                # a temp file + mv instead.
+                sed "s#^\(!\?\)vault/#\1$CHOSEN_VAULT/#" "$GITIGNORE_PATH" > "${GITIGNORE_PATH}.tmp" && \
+                    mv "${GITIGNORE_PATH}.tmp" "$GITIGNORE_PATH"
+            fi
+            git add .gitignore
+            git -c user.name="VaultBot Installer" -c user.email="installer@vaultbot.local" \
+                commit -m "chore: rename vault/ to $CHOSEN_VAULT/ (installer)" >/dev/null 2>&1 || true
+        else
+            # git mv failed - fall back to a filesystem rename.
+            mv "$SHIPPED_VAULT" "$CHOSEN_VAULT"
+        fi
+        cd - >/dev/null
+    else
+        mv "$SHIPPED_VAULT" "$CHOSEN_VAULT"
+    fi
     echo "  [OK] Vault named '$CHOSEN_VAULT'"
 elif [ ! -d "$VAULT_PATH" ]; then
     mkdir -p "$VAULT_PATH"
