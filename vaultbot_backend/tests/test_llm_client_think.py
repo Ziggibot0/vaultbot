@@ -16,7 +16,6 @@ a future refactor that drops that mapping.
 from __future__ import annotations
 
 import pytest
-
 from llm_client import OpenAICompatibleClient
 
 pytestmark = pytest.mark.unit
