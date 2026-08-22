@@ -15,23 +15,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-22
+
+This release restructures the repository layout, thins the backend, and
+hardens the self-improvement and contribution paths. It is a **minor**
+bump because the vault/installer layout changed (a breaking change to the
+installer contract, per the pre-1.0 versioning note above).
+
 ### Added
 
-- `doc_domains.py` — extensible doc-domain map for the Prove-Code-Change
-  gate (stdlib auto-detection + PyPI metadata fallback).
-- `code_run_guard.py` — read-only guard for `code_run`, closing the
-  file-write bypass path so `safe_write` is the only way to modify backend
-  source.
+- **Thin backend** — the backend is now a thin interpreter; capabilities
+  live in procedures, not inline `.py` modules. Enforced by a *thinness
+  ratchet* in CI.
+- **Debt ratchet** — CI fails if pyright/pytest debt grows past a
+  committed baseline, making debt reduction monotonic.
+- **Prove-Code-Change gate** — `safe_write` rejects edits that import
+  non-VaultBot modules without a `doc_source` (official-docs URL). Backed
+  by `doc_domains.py` (extensible domain map) and `code_run_guard.py`
+  (read-only `code_run`).
+- **Contribution system hardening** — code-owner approval required before
+  merge, PRs authored as a dedicated bot account, opt-in cost-safe
+  contribution model, and a CI pre-flight gate before submitting PRs.
+- **Procedures** — provenance + rationale requirements, `Run-CI-Gates`,
+  `Iterate-PR`, and `Triage-GitHub-Issues`.
+- **Google OAuth hardening** — state/PKCE and reflected-value escaping in
+  the OAuth callback.
+- **Documentation** — `CHANGELOG.md`, `docs/adr/` (architecture decision
+  records), `ROADMAP.md`, and README badges.
 
 ### Changed
 
-- `Check-API-Against-Docs` now imports `resolve_doc_domain` instead of a
-  hardcoded map.
+- **Repository layout** — `vault/` + `vaultbot-stuff/` + thin backend
+  restructure; the vault is now a sibling of the backend, not an ancestor.
+- **Retrieval** — simplified to 3 channels with a trigger/inhibitor
+  gradient; golden set made reproducible in CI.
+- **Installer** — dark-mode default, 4B small model, GitHub-auth walkthrough,
+  BOM stripping, and self-heal on stale clones.
+- **Dependencies** — replaced `httpx2` with `httpx`; declared the missing
+  `edge-tts` TTS provider.
 
 ### Security
 
 - `code_run` is read-only by default; file-write primitives raise
   `PermissionError` unless `allow_write=true`.
+- TTS/STT provider failures now surface a loud diagnosis instead of
+  degrading silently.
 
 ## [0.1.0] - 2026-08-19
 
