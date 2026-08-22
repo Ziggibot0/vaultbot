@@ -274,3 +274,157 @@ class TestSubsystemCategories:
         exc = RuntimeError("detailed internal error trace")
         d = classify_error(exc, {"category": "compaction_broken"})
         assert "detailed internal error trace" in d.raw_for_log
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Speech unavailable (issue #182)
+# ─────────────────────────────────────────────────────────────────────────
+class TestSpeechUnavailable:
+    """A missing edge-tts dep or a dead speech relay must surface a
+    FIXABLE remedy card, not silent no-audio (issue #182)."""
+
+    def test_edge_tts_import_error_classifies(self):
+        """ModuleNotFoundError for edge_tts → speech_unavailable."""
+        exc = ModuleNotFoundError("No module named 'edge_tts'")
+        d = classify_error(
+            exc,
+            context={
+                "role": "tts",
+                "provider": "edge-tts",
+                "category": "speech_unavailable",
+            },
+        )
+        assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
+        assert d.severity is Severity.FIXABLE
+        assert "edge-tts" in d.remedy_hint or "pip install" in d.remedy_hint
+        assert d.action == "open_settings"
+        # No stack-trace leak.
+        assert "Traceback" not in d.user_message
+        assert "No module named" not in d.user_message
+
+    def test_context_tag_classifies_speech(self):
+        """The speech_unavailable context tag works even for a generic
+        exception (e.g. a relay timeout that isn't an ImportError)."""
+        exc = RuntimeError("websocket relay timed out")
+        d = classify_error(
+            exc,
+            context={
+                "role": "tts",
+                "provider": "edge-tts",
+                "category": "speech_unavailable",
+            },
+        )
+        assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
+        assert "TTS" in d.user_message
+        assert d.severity is Severity.FIXABLE
+
+    def test_stt_role_message(self):
+        exc = ConnectionError("endpoint unreachable")
+        d = classify_error(
+            exc,
+            context={
+                "role": "stt",
+                "provider": "openai",
+                "category": "speech_unavailable",
+            },
+        )
+        assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
+        assert "STT" in d.user_message
+
+    def test_openai_provider_remedy_mentions_settings(self):
+        exc = ConnectionError("auth rejected")
+        d = classify_error(
+            exc,
+            context={
+                "role": "tts",
+                "provider": "openai",
+                "category": "speech_unavailable",
+            },
+        )
+        assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
+        assert "Settings" in d.remedy_hint or "settings" in d.remedy_hint.lower()
+
+    def test_raw_for_log_captured(self):
+        exc = ModuleNotFoundError("No module named 'edge_tts'")
+        d = classify_error(
+            exc,
+            context={
+                "role": "tts",
+                "provider": "edge-tts",
+                "category": "speech_unavailable",
+            },
+        )
+        assert "edge_tts" in d.raw_for_log
+
+
+class TestSpeechLoudDiagnosis:
+    """speech._speech_error returns a dict with a diagnosis payload — the
+    loud path that replaces the old silent logger.warning + bare error."""
+
+    def test_speech_error_returns_diagnosis_dict(self):
+        import speech
+
+        exc = ModuleNotFoundError("No module named 'edge_tts'")
+        result = speech._speech_error(
+            exc,
+            role="tts",
+            provider="edge-tts",
+            fallback_msg=f"{type(exc).__name__}: {exc}",
+        )
+        assert "error" in result  # backward-compat string kept
+        assert "diagnosis" in result
+        diag = result["diagnosis"]
+        assert diag["category"] == "speech_unavailable"
+        assert diag["severity"] == "fixable"
+        assert "edge-tts" in diag["remedy_hint"] or "pip install" in diag["remedy_hint"]
+
+    def test_speech_error_diagnosis_omits_raw_by_default(self):
+        import speech
+
+        exc = RuntimeError("internal relay detail with stack info")
+        result = speech._speech_error(
+            exc,
+            role="tts",
+            provider="openai",
+            fallback_msg=f"{type(exc).__name__}: {exc}",
+        )
+        assert "raw_for_log" not in result["diagnosis"]
+
+
+class TestSpeechSynthesizeLoudFailure:
+    """End-to-end: synthesize() with a missing edge-tts surfaces a
+    diagnosis instead of a bare error string."""
+
+    def test_synthesize_missing_edge_tts_surfaces_diagnosis(self, monkeypatch):
+        """When edge_tts can't be imported, synthesize() must return a
+        dict carrying a speech_unavailable diagnosis (issue #182)."""
+        # Force the edge_tts import inside _synthesize_edge_tts to fail.
+        import builtins
+
+        import speech
+
+        real_import = builtins.__import__
+
+        def _fail_import(name, *args, **kwargs):
+            if name == "edge_tts":
+                raise ModuleNotFoundError("No module named 'edge_tts'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", _fail_import)
+
+        # A fake model entry whose provider resolves to edge-tts.
+        class _Entry:
+            model = "en-US-GuyNeural"
+
+        result = asyncio_run(speech._synthesize_edge_tts(_Entry(), "hello"))
+        assert "diagnosis" in result
+        assert result["diagnosis"]["category"] == "speech_unavailable"
+        assert result["diagnosis"]["severity"] == "fixable"
+
+
+# asyncio helper kept at the bottom to avoid a top-level import that
+# some test runners flag when async isn't used.
+def asyncio_run(coro):
+    import asyncio
+
+    return asyncio.run(coro)

@@ -178,6 +178,16 @@ def _is_agent_silent(exc: BaseException, ctx: dict[str, Any]) -> bool:
     return isinstance(exc, AgentSilentError)
 
 
+def _is_speech_unavailable(exc: BaseException, ctx: dict[str, Any]) -> bool:
+    """TTS/STT provider dep missing or relay dead (issue #182)."""
+    if (ctx.get("category") or "").strip().lower() == "speech_unavailable":
+        return True
+    text = _exc_text(exc)
+    return ("edge_tts" in text or "edge-tts" in text) and (
+        "importerror" in text or "modulenotfounderror" in text
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Factories — build the user-facing message + remedy per category
 # ─────────────────────────────────────────────────────────────────────────
@@ -403,6 +413,39 @@ def _f_agent_silent(exc, ctx) -> Diagnosis:
     )
 
 
+def _f_speech_unavailable(exc, ctx) -> Diagnosis:
+    """TTS/STT can't run — missing dep or dead relay (issue #182)."""
+    provider = ctx.get("provider", "")
+    role = ctx.get("role", "speech")
+    text = _exc_text(exc)
+    is_edge = "edge_tts" in text or "edge-tts" in text or provider == "edge-tts"
+    if is_edge:
+        msg = (
+            f"{role.upper()} isn't available — the free Edge TTS voice "
+            "needs the 'edge-tts' package, which isn't installed."
+        )
+        remedy = (
+            "Run: pip install edge-tts  (then restart VaultBot). "
+            "Or pick a different voice in Settings → Speech Models."
+        )
+    else:
+        msg = (
+            f"{role.upper()} isn't available — the configured speech "
+            "provider couldn't be reached."
+        )
+        remedy = (
+            "Check the provider's URL and API key in Settings → Speech "
+            "Models, then restart VaultBot."
+        )
+    return make_diagnosis(
+        ProblemCategory.SPEECH_UNAVAILABLE,
+        user_message=msg,
+        remedy_hint=remedy,
+        action="open_settings",
+        raw_for_log=repr(exc),
+    )
+
+
 def _f_generic(exc, ctx) -> Diagnosis:
     stage = ctx.get("stage", "")
     stage_part = f" while {stage}" if stage else ""
@@ -442,6 +485,9 @@ _REGISTRY: list[tuple[Predicate, Factory]] = [
     # the generic fallback so the user sees the agent_silent card, not a
     # generic "something went wrong".
     (_is_agent_silent, _f_agent_silent),
+    # Speech provider unavailable — before generic so user sees the install
+    # hint instead of "something went wrong" (issue #182).
+    (_is_speech_unavailable, _f_speech_unavailable),
     # Model problems before ollama-down: a 404 model-not-found is a
     # ConnectionError-shaped HTTPError sometimes, and the model message
     # is more actionable than "Ollama is down" (which would be wrong).

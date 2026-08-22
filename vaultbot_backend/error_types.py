@@ -92,6 +92,8 @@ class ProblemCategory(str, Enum):  # noqa: UP042 - str+Enum for JSON serializati
     # done until the user has text"), not a normal stop. Fail-loud: the
     # user sees a problem card, never silence.
     AGENT_SILENT = "agent_silent"
+    # TTS/STT provider dep missing or endpoint unreachable (issue #182).
+    SPEECH_UNAVAILABLE = "speech_unavailable"
     # Catch-all: nothing more specific matched. Last resort.
     GENERIC = "generic"
 
@@ -132,6 +134,7 @@ _DEFAULT_SEVERITY: dict[ProblemCategory, Severity] = {
     ProblemCategory.VERIFICATION_BROKEN: Severity.INFO,
     ProblemCategory.MAINTENANCE_BROKEN: Severity.INFO,
     ProblemCategory.AGENT_SILENT: Severity.BROKEN,
+    ProblemCategory.SPEECH_UNAVAILABLE: Severity.FIXABLE,
     ProblemCategory.GENERIC: Severity.BROKEN,
 }
 
