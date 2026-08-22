@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug or request a feature
+about: Report a bug
 title: ""
 labels: ""
 assignees: ""
@@ -8,7 +8,7 @@ assignees: ""
 
 ## What happened?
 
-<!-- Describe the issue or feature request -->
+<!-- Describe the bug -->
 
 ## VaultBot version
 
