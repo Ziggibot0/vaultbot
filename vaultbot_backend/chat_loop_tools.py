@@ -550,14 +550,21 @@ async def execute_round_tools(
             }
         )
         # Record for the chat-loop checkpoint.
-        st._turn_tool_history.append(
-            {
-                "round": st.round_idx,
-                "tool": tool_name,
-                "result_summary": (tool_result_summary(tool_name, tool_result) or "")[
-                    :200
-                ],
-            }
-        )
+        _hist_entry = {
+            "round": st.round_idx,
+            "tool": tool_name,
+            "result_summary": (tool_result_summary(tool_name, tool_result) or "")[:200],
+        }
+        # Code-grounding provenance: record whether a safe_write carried a
+        # doc_source (the official-docs URL proving the edit was checked
+        # against real sources, not model weights). The finalize step scores
+        # this to flag unproven code edits — the code analogue of the chat
+        # closed-set citation gate.
+        if tool_name == "safe_write" and isinstance(tool_result, dict):
+            _hist_entry["doc_source"] = bool(
+                tool_result.get("checks", {}).get("doc_source") == "ok"
+            )
+            _hist_entry["status"] = tool_result.get("status", "")
+        st._turn_tool_history.append(_hist_entry)
 
     return all_tools, custom_schemas
