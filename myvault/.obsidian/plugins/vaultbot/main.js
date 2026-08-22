@@ -400,14 +400,14 @@ class VaultBotPlugin extends Plugin {
 			if (apiKey !== undefined) body.api_key = apiKey;
 			if (label !== undefined) body.label = label;
 			const r = await fetch(this.settings.backendUrl + '/llm/providers', {
-				method: 'POST', headers: {'Content-Type': 'application/json'},
+				method: 'POST', headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify(body)});
 			return await r.json();
 		} catch (e) { return null; }
 	}
 	async removeProviderCfg(providerId) {
 		try {
-			const r = await fetch(this.settings.backendUrl + '/llm/providers/' + encodeURIComponent(providerId), {method: 'DELETE'});
+			const r = await fetch(this.settings.backendUrl + '/llm/providers/' + encodeURIComponent(providerId), {method: 'DELETE', headers: this._authHeaders()});
 			return await r.json();
 		} catch (e) { return null; }
 	}
@@ -425,14 +425,14 @@ class VaultBotPlugin extends Plugin {
 			if (id) body.id = id;
 			if (label !== undefined) body.label = label;
 			const r = await fetch(this.settings.backendUrl + '/llm/models', {
-				method: 'POST', headers: {'Content-Type': 'application/json'},
+				method: 'POST', headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify(body)});
 			return await r.json();
 		} catch (e) { return null; }
 	}
 	async removeModelCfg(modelId) {
 		try {
-			const r = await fetch(this.settings.backendUrl + '/llm/models/' + encodeURIComponent(modelId), {method: 'DELETE'});
+			const r = await fetch(this.settings.backendUrl + '/llm/models/' + encodeURIComponent(modelId), {method: 'DELETE', headers: this._authHeaders()});
 			return await r.json();
 		} catch (e) { return null; }
 	}
@@ -440,7 +440,7 @@ class VaultBotPlugin extends Plugin {
 		// One interchange call: map any model in the pot into any role.
 		try {
 			const r = await fetch(this.settings.backendUrl + '/llm/role', {
-				method: 'POST', headers: {'Content-Type': 'application/json'},
+				method: 'POST', headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify({role, model_id: modelId})});
 			return await r.json();
 		} catch (e) { return null; }
@@ -917,6 +917,18 @@ class VaultBotPlugin extends Plugin {
 		} catch (e) {
 			return '';
 		}
+	}
+
+	// Build request headers that include the shared-secret auth token (when
+	// available). Mutating endpoints (POST/PUT/DELETE on /llm/*, /shutdown,
+	// /custom_tools/call) now require the token even from localhost, so every
+	// mutating fetch must attach it. Returns a plain object; callers merge
+	// their own Content-Type etc. on top.
+	_authHeaders(extra) {
+		const headers = Object.assign({}, extra || {});
+		const token = this._getAuthToken();
+		if (token) headers['X-VaultBot-Token'] = token;
+		return headers;
 	}
 
 	// Kill the backend process when Obsidian closes so nothing is left
@@ -1983,7 +1995,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 			if (!providerId || !modelId) { provStatusEl.setText('Pick a provider and a model first.'); return; }
 			provStatusEl.setText(`Testing ${modelId}...`);
 			const r = await fetch(this.plugin.settings.backendUrl + '/llm/test_model', {
-				method: 'POST', headers: {'Content-Type': 'application/json'},
+				method: 'POST', headers: this.plugin._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify({provider_id: providerId, model: modelId, vision: visionChk.checked})});
 			const data = await r.json().catch(() => ({}));
 			if (data.ok) {
@@ -2660,7 +2672,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 				await fetch(this.plugin.settings.backendUrl + '/llm/role', {
 
-					method: 'POST', headers: {'Content-Type':'application/json'},
+					method: 'POST', headers: this.plugin._authHeaders({'Content-Type':'application/json'}),
 
 					body: JSON.stringify({role, model_id: modelId})
 
@@ -2676,7 +2688,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 				await fetch(this.plugin.settings.backendUrl + '/llm/models', {
 
-					method: 'POST', headers: {'Content-Type':'application/json'},
+					method: 'POST', headers: this.plugin._authHeaders({'Content-Type':'application/json'}),
 
 					body: JSON.stringify({id, model, provider, instruct: true, label, kind: kind || 'llm'})
 

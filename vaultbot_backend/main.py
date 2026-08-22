@@ -513,7 +513,11 @@ app.add_middleware(_RateLimitMiddleware)
 # Health/preflight endpoints are exempt (the plugin needs them before it
 # can read the token file). When VAULTBOT_SKIP_LOCK=1 (test mode), auth is
 # bypassed entirely so the test client can call endpoints without a token.
-from auth import get_or_create_token, is_auth_exempt, is_auth_required  # noqa: E402
+from auth import (  # noqa: E402
+    get_or_create_token,
+    is_auth_exempt,
+    is_auth_required_for_method,
+)
 
 
 class _AuthMiddleware(BaseHTTPMiddleware):
@@ -521,7 +525,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path.rstrip("/") or "/"
         if is_auth_exempt(path):
             return await call_next(request)
-        if not is_auth_required(path):
+        if not is_auth_required_for_method(path, request.method):
             # Non-sensitive endpoints are trusted from localhost.
             return await call_next(request)
         # Sensitive endpoint — validate the token.

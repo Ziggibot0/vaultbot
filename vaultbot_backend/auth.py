@@ -65,6 +65,22 @@ _AUTH_REQUIRED_PATHS: frozenset[str] = frozenset(
     }
 )
 
+# HTTP methods that mutate state. Any mutating request to a path under one of
+# the prefixes below requires auth, even from localhost. This closes the
+# "dozens of mutating endpoints are open" hole (issue #230) for the LLM config
+# surface specifically (issue #253): a local process or DNS-rebinding/browser
+# attack could otherwise POST /llm/providers to reconfigure the LLM provider
+# or exfiltrate a bearer token via the SSRF probe.
+_MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+
+# Path prefixes whose mutating methods require auth. GET stays open (the
+# plugin reads the provider/model lists without a token).
+_AUTH_REQUIRED_PREFIXES: frozenset[str] = frozenset(
+    {
+        "/llm/",
+    }
+)
+
 
 def _generate_token() -> str:
     """Generate a new 64-char hex token (256 bits)."""
@@ -124,6 +140,27 @@ def is_auth_required(path: str) -> bool:
     if not p.startswith("/"):
         p = "/" + p
     return p in _AUTH_REQUIRED_PATHS
+
+
+def is_auth_required_for_method(path: str, method: str) -> bool:
+    """Return True if this (path, method) requires authentication.
+
+    Extends ``is_auth_required`` with a prefix rule: any MUTATING method
+    (POST/PUT/DELETE/PATCH) on a path under an auth-required prefix (e.g.
+    ``/llm/``) requires the token, even from localhost. GET stays open so the
+    plugin can read provider/model lists without a token.
+    """
+    if is_auth_required(path):
+        return True
+    if method.upper() not in _MUTATING_METHODS:
+        return False
+    p = path.rstrip("/")
+    if not p.startswith("/"):
+        p = "/" + p
+    return any(
+        p == prefix.rstrip("/") or p.startswith(prefix)
+        for prefix in _AUTH_REQUIRED_PREFIXES
+    )
 
 
 def validate_token(token: str | None) -> bool:

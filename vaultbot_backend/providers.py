@@ -64,13 +64,16 @@ and the type decides the real API surface at call time:
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import json
 import os
+import socket
 import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from paths import FRAMEWORK_ROOT
@@ -207,6 +210,100 @@ def normalize_base_url(url: str, type_: str) -> str:
     if not u:
         raise ValueError(f"base_url {url!r} reduced to nothing after normalization")
     return u
+
+
+# Hostnames that resolve to link-local/metadata addresses. These are the
+# classic SSRF targets: a local caller can point the backend at a cloud
+# metadata endpoint or an internal service and have the backend (which may
+# hold secrets) fetch it on their behalf.
+#
+# NOTE: loopback (localhost / 127.0.0.1 / ::1) is deliberately NOT blocked —
+# the local Ollama daemon (localhost:11434) and LM Studio (localhost:1234)
+# are legitimate first-class providers that go through the same
+# ``POST /llm/providers`` path. The SSRF risk is the *metadata* and
+# *internal-network* ranges, not the user's own loopback.
+_BLOCKED_HOSTNAMES: frozenset[str] = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata",
+    }
+)
+
+# IPv4/IPv6 ranges that are never a legitimate LLM endpoint. Denying these
+# closes the SSRF + credential-exfil vector described in issue #253: a caller
+# could otherwise submit base_url=http://169.254.169.254 (cloud metadata) or
+# an internal 10.x/192.168.x service and have the backend probe it with an
+# attacker-supplied bearer token. Loopback is intentionally absent so local
+# Ollama / LM Studio keep working.
+_BLOCKED_NETWORKS: tuple[ipaddress._BaseNetwork, ...] = (
+    ipaddress.ip_network("0.0.0.0/8"),  # "this" network
+    ipaddress.ip_network("10.0.0.0/8"),  # private
+    ipaddress.ip_network("100.64.0.0/10"),  # CGNAT
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local / cloud metadata
+    ipaddress.ip_network("172.16.0.0/12"),  # private
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
+    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1
+    ipaddress.ip_network("192.168.0.0/16"),  # private
+    ipaddress.ip_network("198.18.0.0/15"),  # benchmarking
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
+    ipaddress.ip_network("224.0.0.0/4"),  # multicast
+    ipaddress.ip_network("240.0.0.0/4"),  # reserved
+    ipaddress.ip_network("::/128"),  # unspecified
+    ipaddress.ip_network("::ffff:0:0/96"),  # IPv4-mapped
+    ipaddress.ip_network("64:ff9b::/96"),  # IPv4/IPv6 translation
+    ipaddress.ip_network("100::/64"),  # discard-only
+    ipaddress.ip_network("2001:db8::/32"),  # documentation
+    ipaddress.ip_network("fc00::/7"),  # unique-local (private)
+    ipaddress.ip_network("fe80::/10"),  # link-local
+    ipaddress.ip_network("ff00::/8"),  # multicast
+)
+
+
+def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    """Return True if the address falls in a private/metadata range."""
+    return any(ip in net for net in _BLOCKED_NETWORKS)
+
+
+def assert_public_base_url(url: str) -> None:
+    """Reject base_urls that resolve to private/metadata addresses.
+
+    Raises ValueError if the URL's host is a blocked hostname or resolves to
+    a blocked IP range. This is the SSRF guard for ``POST /llm/providers``:
+    before the backend probes a provider (sending any bearer token), the
+    target must not be a cloud-metadata or internal-network endpoint.
+
+    Loopback (localhost / 127.0.0.1 / ::1) is allowed — the local Ollama and
+    LM Studio presets are legitimate loopback providers. The guard blocks the
+    metadata endpoint (169.254.169.254) and private/internal ranges (10.x,
+    172.16-31.x, 192.168.x) that a caller could use to exfiltrate the
+    provider's bearer token or reach internal services.
+    """
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError(f"base_url {url!r} has no host")
+    if host in _BLOCKED_HOSTNAMES:
+        raise ValueError(f"base_url host {host!r} is not a public endpoint")
+    # Resolve the hostname and reject if ANY resolved address is blocked.
+    # This defeats DNS-rebinding tricks where a hostname resolves to a public
+    # IP at validation time but a private IP at probe time — we check every
+    # address the resolver returns.
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError(f"base_url host {host!r} does not resolve: {e}") from e
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue  # not an IP literal (shouldn't happen from getaddrinfo)
+        if _is_blocked_ip(ip):
+            raise ValueError(
+                f"base_url host {host!r} resolves to {addr}, which is a "
+                "private/metadata address and is not allowed"
+            )
 
 
 def test_provider(prov: Provider, timeout: float = 8.0) -> dict[str, Any]:
