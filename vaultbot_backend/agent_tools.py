@@ -485,6 +485,18 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "(e.g. 'vaultbot_backend/fused_retrieval.py').",
                     },
                     "content": {"type": "string"},
+                    "doc_source": {
+                        "type": "string",
+                        "description": (
+                            "Official documentation URL (or semicolon-"
+                            "separated URLs) the edit was checked against. "
+                            "REQUIRED when the content imports any non-"
+                            "VaultBot module (stdlib or third-party). Run "
+                            "Prove-Code-Change to fetch the docs and "
+                            "produce this. Without it, safe_write rejects "
+                            "the edit."
+                        ),
+                    },
                     "dry_run": {
                         "type": "boolean",
                         "default": False,
@@ -866,6 +878,13 @@ def build_system_prompt_briefing(
         f'- Use procedures first. execute_procedure("X") before manual tool '
         f"calls. If a procedure breaks, fix it — don't fall back to doing it "
         f"by hand. Stop, fix the procedure, then resume.\n"
+        f"- PROVE CODE AGAINST DOCS: before ANY safe_write that imports a "
+        f"stdlib or third-party module, run Prove-Code-Change. safe_write "
+        f"REJECTS edits that import non-VaultBot modules without a "
+        f"doc_source (the official-docs URL the edit was checked against). "
+        f"Writing code from model weights is FORBIDDEN — the same rule as "
+        f"uncited chat claims. Do NOT bypass the gate with code_write or "
+        f"code_run for file modification.\n"
         f"- Mark stale docs: if a note contradicts current reality, tag it "
         f"`status: stale` and note what changed.\n"
         f"- You are a SYNTHESIS ROUTER. Your world knowledge is DISABLED in "
