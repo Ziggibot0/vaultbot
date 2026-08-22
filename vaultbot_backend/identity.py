@@ -44,6 +44,7 @@ _CHARS_PER_TOKEN = TUNABLES.chars_per_token
 # Filenames inside identity_dir.
 _IDENTITY_FILENAME = "IDENTITY.md"
 _RESTART_CONTEXT_FILENAME = "RESTART_CONTEXT.md"
+_INSTANCE_ID_FILENAME = "INSTANCE_ID"
 
 # ---------------------------------------------------------------------------
 # Seed content
@@ -98,10 +99,12 @@ class Identity:
         self._restart_context_path = os.path.join(
             identity_dir, _RESTART_CONTEXT_FILENAME
         )
+        self._instance_id_path = os.path.join(identity_dir, _INSTANCE_ID_FILENAME)
 
         try:
             os.makedirs(identity_dir, exist_ok=True)
             self._seed_if_missing()
+            self._ensure_instance_id()
         except Exception as exc:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
             logger.exception("Identity init failed: %s", exc)
             self._safe_log("identity_init_error", {"error": str(exc)})
@@ -123,6 +126,35 @@ class Identity:
         if not os.path.exists(self._identity_path):
             self._atomic_write(self._identity_path, _SEED_IDENTITY)
             self._safe_log("identity_seed", {"file": self._identity_path})
+
+    def _ensure_instance_id(self) -> None:
+        """Generate and persist a stable per-vault instance ID (UUID).
+
+        The instance ID is the *identity* of this VaultBot instance — it is
+        stable across restarts, model swaps, and GitHub accounts. It is NOT
+        the GitHub account: one account can drive many instances (laptop +
+        desktop, multiple vaults), and one instance can be driven by whichever
+        account is authed at push time. The account is a *credential* (a
+        transport for pushing); the instance ID is the *thing*.
+
+        Stored in ``identity/INSTANCE_ID`` (already gitignored, so it never
+        leaks into a PR). Generated once on first boot, then read-only.
+        """
+        if os.path.exists(self._instance_id_path):
+            return
+        import uuid
+
+        instance_id = str(uuid.uuid4())
+        self._atomic_write(self._instance_id_path, instance_id + "\n")
+        self._safe_log("instance_id_generated", {"instance_id": instance_id})
+
+    def get_instance_id(self) -> str:
+        """Return this instance's stable ID, or "" if it can't be read."""
+        try:
+            return self._read(self._instance_id_path).strip()
+        except Exception as exc:  # noqa: BLE001 — best-effort, returns empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            logger.warning("Failed to read instance ID: %s", exc)
+            return ""
 
     # ------------------------------------------------------------------
     # Boot injection

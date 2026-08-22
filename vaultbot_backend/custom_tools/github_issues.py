@@ -278,10 +278,19 @@ def run(args: dict) -> dict:
         if action == "create":
             if not title:
                 return {"error": "title is required for 'create'"}
+            from custom_tools.gh_client import get_instance_id
+
+            instance_id = get_instance_id()
+            issue_body = body or ""
+            if instance_id:
+                attribution = f"\n\n---\n*Filed by VaultBot instance `{instance_id}`.*"
+                issue_body = (
+                    (issue_body + attribution) if issue_body else attribution.strip()
+                )
             data = gh_api(
                 "POST",
                 f"{repo_path}/issues",
-                body={"title": title, "body": body},
+                body={"title": title, "body": issue_body},
                 timeout=30,
             )
             return {
