@@ -12,6 +12,7 @@ vaultbot_backend/google_workspace_config.json
 vaultbot_backend/google_workspace_token.json
 vaultbot_backend/custom_tools/google_workspace_config.json
 vaultbot_backend/custom_tools/google_workspace_tokens.json
+.vaultbot-install-state.json
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Python virtual environment

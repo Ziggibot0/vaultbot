@@ -601,6 +601,11 @@ if ollama_client is None:
     from llm_client import LLMClient as _LC
 
     ollama_client = _LC()  # type: ignore[abstract]
+    # _LC() bypasses __init__ (abstract), so the type-annotated class
+    # attributes (llm_model, base_url) are never set. Set them explicitly
+    # so _preload_models and other callers don't AttributeError.
+    ollama_client.llm_model = ""
+    ollama_client.base_url = ""
 # VaultBot's own search engine: a keyless, rate-limit-resistant
 # multi-engine aggregator (DuckDuckGo Lite + Marginalia + arXiv) PLUS an
 # opt-in SearXNG (self-hosted Docker) backend for mainstream-web coverage.
