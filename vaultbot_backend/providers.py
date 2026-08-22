@@ -108,11 +108,6 @@ KNOWN_PROVIDERS: dict[str, dict[str, str]] = {
         "base_url": "http://localhost:11434",
         "label": "Ollama (this machine)",
     },
-    "ollama-cloud": {
-        "type": "ollama",
-        "base_url": "https://ollama.com",
-        "label": "Ollama Cloud",
-    },
     "openai": {
         "type": "openai",
         "base_url": "https://api.openai.com",
