@@ -271,7 +271,7 @@ def _api_request(method, url, token, data=None):
         return {"error": str(e)}
 
 
-def run(args):
+def run(args: dict) -> dict:
     """Main entry point for the google_workspace tool."""
     action = args.get("action", "")
 
