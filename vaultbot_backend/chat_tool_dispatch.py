@@ -575,7 +575,9 @@ async def execute_agent_tool(
         return await loop.run_in_executor(
             None,
             lambda: svc.self_improver.code_run(
-                args.get("code", ""), int(args.get("timeout", 15))
+                args.get("code", ""),
+                int(args.get("timeout", 15)),
+                bool(args.get("allow_write", False)),
             ),
         )
 
