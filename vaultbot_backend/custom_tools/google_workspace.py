@@ -31,6 +31,7 @@ def _b64url(data: bytes) -> str:
     """Base64url-encode bytes (no padding), per RFC 7636."""
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
+
 SCHEMA = {
     "name": "google_workspace",
     "description": (
