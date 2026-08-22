@@ -121,6 +121,19 @@ class FusedRetriever:
     # pop).  See trigger_store.py.
     TRIGGER_BOOST = 0.2  # additive score bump, scaled by trigger cosine
     TRIGGER_GATE_MARGIN = 0.0  # drop when inhibitor > trigger (no slack)
+    # Trust reranking (issue #49).  Notes whose frontmatter ``status`` is
+    # ``verified`` get a small ADDITIVE trust bump so that, all else being
+    # equal, a note whose claims have survived verification floats above
+    # an unverified note of comparable relevance.  Notes with a negative
+    # status (``flagged``/``rejected``/``deprecated``/``superseded``) get a
+    # multiplicative penalty so they sink below usable results.  This
+    # applies to NON-procedure notes — procedures already get their own
+    # status-aware boost (PROCEDURE_BASE_BOOST + VERIFIED_BOOST).  The
+    # signal comes from the ``status`` field parsed out of the candidate's
+    # cached content (no new pipeline plumbing — content is already in the
+    # merged-pool dict).  See note_schema.VALID_STATUSES.
+    TRUST_BOOST = 0.05  # additive bump for verified non-procedure notes
+    TRUST_PENALTY = 0.5  # multiplicative penalty for negative statuses
 
     def __init__(
         self,
@@ -645,7 +658,25 @@ class FusedRetriever:
                     cand["score"] = cand["score"] * boost + boost_add
                     if _pstatus == "flagged":
                         cand["score"] = cand["score"] * self.FLAGGED_PENALTY
-                    continue  # skip the generic multiplicative apply below
+                    continue  # skip trust rerank — already status-boosted
+            # Trust reranking for non-procedure notes (issue #49).
+            # Parse ``status`` from the candidate's cached content and apply
+            # a trust boost (verified) or penalty (negative statuses).  This
+            # is best-effort — unparseable or missing frontmatter is a no-op.
+            _tstatus: str | None = None
+            _content = cand.get("content", "")
+            if _content.startswith("---"):
+                try:
+                    from note_schema import parse_frontmatter
+
+                    _tstatus = parse_frontmatter(_content).get("status")  # noqa: BLE001
+                except Exception:  # best-effort, never blocks retrieval
+                    _tstatus = None
+            if _tstatus == "verified":
+                cand["score"] = cand["score"] * boost + self.TRUST_BOOST
+                continue
+            if _tstatus in ("flagged", "rejected", "deprecated", "superseded"):
+                boost *= self.TRUST_PENALTY
             cand["score"] = cand["score"] * boost
 
     def _procedure_status_lookup(self, name: str) -> str | None:

@@ -170,3 +170,128 @@ class _NoEdgeGraph:
 
     def neighbors(self, name, direction="both"):
         return []
+
+
+# ---------------------------------------------------------------------------
+# Trust reranking (issue #49) — status-based boost/penalty for non-procedure
+# notes.  Verified notes float up; flagged/rejected/deprecated notes sink.
+# ---------------------------------------------------------------------------
+
+
+def _fm(status: str) -> str:
+    """Build minimal frontmatter + body content with the given status."""
+    return (
+        "---\n"
+        "type: note\n"
+        f"status: {status}\n"
+        "created: 2026-01-01\n"
+        'summary: "test note"\n'
+        "tags: [test]\n"
+        "---\n"
+        "Body text.\n"
+    )
+
+
+class _TrustGraph:
+    """Graph stub with no edges — isolates the vector channel so only the
+    trust rerank signal affects scores."""
+
+    nodes: ClassVar[dict] = {}
+    backlinks: ClassVar[dict] = {}
+
+    def neighbors(self, name, direction="both"):
+        return []
+
+
+def test_trust_boost_verified_note_floats_up(tmp_path):
+    # Arrange: two notes with equal vector similarity.  The verified note
+    # should rank above the raw (unverified) note after trust reranking.
+    verified_path = str(tmp_path / "verified.md")
+    raw_path = str(tmp_path / "raw.md")
+    vector_hits = [
+        {"file_path": verified_path, "score": 0.4, "content": _fm("verified")},
+        {"file_path": raw_path, "score": 0.4, "content": _fm("raw")},
+    ]
+    fused = FusedRetriever(
+        vault_graph=_TrustGraph(),
+        vault_indexer=_StubIndexer(vector_hits),
+    )
+
+    # Act
+    out = fused.retrieve("q", k=5)
+
+    # Assert: both notes are returned, verified ranks first.
+    results = out["results"]
+    assert results[0]["file_path"] == verified_path
+    assert results[1]["file_path"] == raw_path
+    # The verified note's score is higher by TRUST_BOOST (0.05).
+    assert results[0]["score"] > results[1]["score"]
+
+
+def test_trust_penalty_flagged_note_sinks(tmp_path):
+    # Arrange: two notes with equal vector similarity.  The flagged note
+    # should rank below the draft note after trust reranking.
+    flagged_path = str(tmp_path / "flagged.md")
+    draft_path = str(tmp_path / "draft.md")
+    vector_hits = [
+        {"file_path": flagged_path, "score": 0.4, "content": _fm("flagged")},
+        {"file_path": draft_path, "score": 0.4, "content": _fm("draft")},
+    ]
+    fused = FusedRetriever(
+        vault_graph=_TrustGraph(),
+        vault_indexer=_StubIndexer(vector_hits),
+    )
+
+    # Act
+    out = fused.retrieve("q", k=5)
+
+    # Assert: draft ranks first, flagged sinks.
+    results = out["results"]
+    assert results[0]["file_path"] == draft_path
+    assert results[1]["file_path"] == flagged_path
+    assert results[0]["score"] > results[1]["score"]
+
+
+def test_trust_no_status_is_noop(tmp_path):
+    # Arrange: a note with no frontmatter at all should NOT get a trust
+    # boost or penalty — it passes through _rerank unchanged.
+    nofm_path = str(tmp_path / "nofm.md")
+    draft_path = str(tmp_path / "draft.md")
+    vector_hits = [
+        {"file_path": nofm_path, "score": 0.4, "content": "No frontmatter here."},
+        {"file_path": draft_path, "score": 0.4, "content": _fm("draft")},
+    ]
+    fused = FusedRetriever(
+        vault_graph=_TrustGraph(),
+        vault_indexer=_StubIndexer(vector_hits),
+    )
+
+    # Act
+    out = fused.retrieve("q", k=5)
+
+    # Assert: both have the same score (no trust signal applied to either).
+    results = out["results"]
+    scores = {r["file_path"]: r["score"] for r in results}
+    assert scores[nofm_path] == scores[draft_path]
+
+
+def test_trust_penalty_superseded(tmp_path):
+    # Arrange: superseded status should also trigger the penalty.
+    superseded_path = str(tmp_path / "old.md")
+    active_path = str(tmp_path / "active.md")
+    vector_hits = [
+        {"file_path": superseded_path, "score": 0.4, "content": _fm("superseded")},
+        {"file_path": active_path, "score": 0.4, "content": _fm("active")},
+    ]
+    fused = FusedRetriever(
+        vault_graph=_TrustGraph(),
+        vault_indexer=_StubIndexer(vector_hits),
+    )
+
+    # Act
+    out = fused.retrieve("q", k=5)
+
+    # Assert: active ranks above superseded.
+    results = out["results"]
+    assert results[0]["file_path"] == active_path
+    assert results[0]["score"] > results[1]["score"]
