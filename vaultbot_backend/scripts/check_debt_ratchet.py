@@ -54,9 +54,16 @@ def _run_pyright() -> tuple[int, int, str | None]:
     even with zero code changes, so a stale baseline would either false-fail
     ("debt grew") or silently hide real debt. See the version-drift check in
     ``main()``.
+
+    Tools are invoked via ``sys.executable -m <tool>`` rather than a nested
+    ``uv run``. This script is itself launched with ``uv run python ...`` (in
+    CI) or directly from the venv (locally), so ``sys.executable`` is already
+    the venv interpreter and the tools are on its path. A nested ``uv run``
+    hits a "uv trampoline failed to canonicalize script path" error on
+    Windows, which made the ratchet unrunnable locally.
     """
     result = subprocess.run(
-        ["uv", "run", "pyright", "--level", "warning", "vaultbot_backend/"],
+        [sys.executable, "-m", "pyright", "--level", "warning", "vaultbot_backend/"],
         cwd=_BACKEND_DIR.parent,
         capture_output=True,
         text=True,
@@ -85,7 +92,7 @@ def _pyright_version() -> str | None:
     fatal.
     """
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "pyright", "--version"],
+        [sys.executable, "-m", "pyright", "--version"],
         cwd=_BACKEND_DIR.parent,
         capture_output=True,
         text=True,
@@ -104,7 +111,7 @@ def _run_pytest_integration() -> tuple[int, int]:
     env["VAULTBOT_SKIP_WATCHER"] = "1"
     env["VAULT_PATH"] = str(_REPO_ROOT)
     result = subprocess.run(
-        ["uv", "run", "pytest", "-m", "integration", "--tb=no"],
+        [sys.executable, "-m", "pytest", "-m", "integration", "--tb=no"],
         cwd=_BACKEND_DIR,
         capture_output=True,
         text=True,
