@@ -5,11 +5,12 @@ VaultBot has TWO roots in the new layout:
 * ``FRAMEWORK_ROOT`` — the directory that contains ``vaultbot_backend/``.
   This is the repo root (or the install folder).  Holds the thin engine
   (``vaultbot_backend/``), ``.env``, ``.venv/``, ``setup.ps1``, and the
-  ``vault/`` subfolder.
+  ``myvault/`` subfolder.
 
 * ``VAULT_ROOT`` — the user's Obsidian vault.  By default this is
-  ``FRAMEWORK_ROOT/vault``; the installer renames it to the user's chosen
-  name and writes an absolute ``VAULT_PATH`` into ``.env``.  Holds the
+  ``FRAMEWORK_ROOT/myvault``.  The vault folder name is FIXED to
+  ``myvault`` so upstream updates (new procedures, Knowledge notes, plugin
+  code) always merge into the right place for every user.  Holds the
   user's notes plus the transparent ``vaultbot-stuff/`` folder (procedures,
   knowledge, baseline, memory).
 
@@ -28,9 +29,9 @@ from pathlib import Path
 # framework root (repo root / install folder).
 FRAMEWORK_ROOT = Path(__file__).resolve().parent.parent
 
-# The default vault subfolder name.  The installer renames this to the
-# user's chosen name and writes an absolute VAULT_PATH into .env.
-DEFAULT_VAULT_DIR = "vault"
+# The default vault subfolder name.  The vault folder name is FIXED to
+# "myvault" so that upstream updates always merge into the right place.
+DEFAULT_VAULT_DIR = "myvault"
 
 # Content that lives inside the vault under vaultbot-stuff/ (the transparent
 # brain).  resolve_content_path maps these logical prefixes to
@@ -49,7 +50,7 @@ def _resolve_vault_root() -> Path:
 
     Precedence:
     1. ``VAULT_PATH`` env (absolute, or relative to FRAMEWORK_ROOT).
-    2. ``FRAMEWORK_ROOT/vault`` if it exists.
+    2. ``FRAMEWORK_ROOT/myvault`` if it exists.
     3. ``FRAMEWORK_ROOT`` (dev/CI fallback where the vault is flattened).
     """
     vp = os.environ.get("VAULT_PATH", "")

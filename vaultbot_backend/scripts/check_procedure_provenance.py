@@ -53,7 +53,7 @@ def _is_procedure(text: str) -> bool:
 
 def main() -> int:
     result = subprocess.run(
-        ["git", "ls-files", "vault/vaultbot-stuff/System/Procedures/"],
+        ["git", "ls-files", "myvault/vaultbot-stuff/System/Procedures/"],
         capture_output=True,
         text=True,
         timeout=10,

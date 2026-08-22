@@ -175,8 +175,8 @@ opens the download page for you. Install them, then run the command again.
 ### After the installer finishes
 
 Obsidian opens automatically. If it doesn't, open it manually and choose
-**Open folder as vault** → select the `VaultBot` folder the installer
-created.
+**Open folder as vault** → select the `myvault` folder inside the
+`VaultBot` folder the installer created.
 
 In Obsidian:
 
@@ -207,7 +207,7 @@ After the one-time setup, your daily routine is just:
 1. **Make sure Ollama is running.** It usually starts automatically on boot
    (check for the Ollama icon in your system tray / menu bar). If not,
    open the Ollama app once to start the service.
-2. **Open Obsidian.** Open your `VaultBot` vault.
+2. **Open Obsidian.** Open your `myvault` vault.
 3. **Click the VaultBot icon** in the left sidebar and start chatting.
 
 That's it. The plugin handles starting/stopping the backend for you — it
