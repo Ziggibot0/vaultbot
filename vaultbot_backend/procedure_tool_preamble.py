@@ -471,17 +471,25 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
         snippets.append(
             'if "vault_research" in allowed:\n'
             "    import requests as _requests\n"
-            '    def vault_research(topic, depth="deep"):\n'
+            '    def vault_research(topic, depth="deep", source_allowlist=None, '
+            "source_denylist=None):\n"
             '        """Research a topic via the backend research engine.\n'
             "        Calls the /research_tool HTTP endpoint so the procedure\n"
             "        subprocess does not need to import the full engine.\n"
             "        Returns a dict with synthesis, sources, and note_path.\n"
+            "        source_allowlist restricts sources to specific domains\n"
+            "        (e.g. ['docs.python.org']) for authoritative-only digs.\n"
             '        On failure, returns {"error": ...} for graceful degradation.\n'
             '        """\n'
             "        try:\n"
+            '            _payload = {"topic": topic, "depth": depth}\n'
+            "            if source_allowlist:\n"
+            '                _payload["source_allowlist"] = source_allowlist\n'
+            "            if source_denylist:\n"
+            '                _payload["source_denylist"] = source_denylist\n'
             "            resp = _requests.post(\n"
             '                "http://localhost:8000/research_tool",\n'
-            '                json={"topic": topic, "depth": depth},\n'
+            "                json=_payload,\n"
             "                timeout=120\n"
             "            )\n"
             "            resp.raise_for_status()\n"
