@@ -115,6 +115,36 @@ without one of the above. The ruff config selects `BLE001` (blind-except)
 and the test `tests/test_no_silent_swallow.py` AST-scans for silent-swallow
 patterns. Both will catch new violations.
 
+### Where BLE001 is enforced vs. ignored
+
+The fail-loud rule is **strictly enforced on the hot path** — the three
+modules where narrowing actually surfaces real bugs:
+
+| Module | Role |
+|--------|------|
+| `vault_indexer.py` | Vault indexing / reindexing — the core ingest pipeline |
+| `chat_handler.py` | The chat loop — user-facing request handling |
+| `fused_retrieval.py` | Multi-channel retrieval — the answer pipeline |
+
+A new broad-except in any of these files fails the `ruff check --select F`
+CI gate. No per-file-ignores, no blanket exemptions.
+
+**Background and cleanup modules** (research cycles, post-ingest weaving,
+sandbox execution, embedding drift, etc.) are **best-effort by design**.
+These modules run asynchronously and must never crash the chat loop over
+a transient failure. `BLE001` is blanket-ignored for ~35 such modules via
+`[tool.ruff.lint.per-file-ignores]` in `pyproject.toml`. This is deliberate:
+annotating each of ~300 individual sites would bloat the diff without
+changing behavior, and a background-module crash is less harmful than a
+dead chat loop.
+
+When working in a **hot-path file**, every `except Exception` must use one
+of the four approaches above — there is no escape hatch. When working in a
+**background module**, the blanket ignore means you won't see a ruff
+error, but you should still follow the four-approach rule: surface errors
+where practical, and only fall back to bare `except Exception` when
+genuine graceful degradation is the intended behavior.
+
 The project has a typed error layer for surfacing:
 - `diagnostics.py` — `classify_error(exc, context)` translates any
   exception into a `Diagnosis`
