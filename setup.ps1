@@ -208,16 +208,17 @@ $ownerName = Read-Host "  Your name"
 if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
-# -- 3. Get the repo (git fork, so updates merge cleanly) -------------------
-# VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
-# This is what makes two things possible:
-#   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
-#   2. Community contributions = the vaultbot's submit_contribution tool
-#      pushes fixes to your fork and opens a PR upstream, with zero manual git.
-# If `gh` is missing or the user declines auth, installation aborts with a
-# clear error. We never fall back to a zip snapshot: a zip has no git
-# history, so it can't update itself or share fixes, and we won't let a
-# user believe they got a working install when they didn't.
+# -- 3. Get the repo (anonymous clone, so updates merge cleanly) -----------
+# VaultBot installs as a plain `git clone` of the public upstream repo — NO
+# GitHub account is required to install or update. Pulling updates is
+# anonymous (`git pull upstream main`); only *pushing* (contributing) needs
+# a GitHub account, and that is opt-in later, not a gate on install.
+#
+# We add an `upstream` remote pointing at Ziggibot0/vaultbot so the
+# in-Obsidian updater's `git pull upstream main` works out of the box.
+# When the user later opts into "Allow contributions", the
+# submit_contribution tool forks the repo and adds a `fork` remote on its
+# own — no install-time sign-in needed.
 #
 # The repo clones into a FRAMEWORK folder ($frameworkName). Inside it, the
 # `myvault/` subfolder is the user's Obsidian vault. The vault folder name
@@ -254,144 +255,87 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
         return
     }
 } else {
+    # Anonymous clone — no GitHub account required to install or update.
+    # git is the only prerequisite here (gh is NOT required; it's only for
+    # the optional "share fixes" contribution flow, handled later).
+    $gitOk = $false
+    try {
+        $gv = & git --version 2>&1
+        if ($LASTEXITCODE -eq 0) { $gitOk = $true }
+    } catch {}
+
+    if (-not $gitOk) {
+        # git is missing. Offer to install it (free, one-click). If the user
+        # declines, we can't clone, so installation aborts with a clear path.
+        Write-Step "Git not found"
+        Write-Host "  VaultBot needs Git to download and update itself." -ForegroundColor Cyan
+        Write-Host "  It's a free, one-click download." -ForegroundColor Cyan
+        Write-Host ""
+        $installGit = Read-Host "  Install Git now? (y/n)"
+        if ($installGit -match "^(y|yes)$") {
+            Write-Step "Installing Git..."
+            try {
+                & winget install --id Git.Git --silent --accept-package-agreements --accept-source-agreements
+                if ($LASTEXITCODE -eq 0) {
+                    # winget installs to a path that may not be on the current
+                    # session's PATH. Refresh PATH from the registry.
+                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                    $gv = & git --version 2>&1
+                    if ($LASTEXITCODE -eq 0) { $gitOk = $true; Write-OK "Git installed" }
+                }
+            } catch {
+                Write-Warn2 "Could not install Git automatically."
+            }
+        }
+    }
+
+    if (-not $gitOk) {
+        Write-Err "Git is required to install VaultBot."
+        Write-Host "  Install Git from https://git-scm.com/downloads, then" -ForegroundColor Yellow
+        Write-Host "  re-run this installer." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Step "Downloading VaultBot..."
+    & git clone https://github.com/Ziggibot0/vaultbot.git $frameworkName
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $frameworkPath)) {
+        Write-Err "Could not download VaultBot."
+        Write-Host "  Check your network connection, then re-run this installer." -ForegroundColor Yellow
+        return
+    }
+
+    # Add an `upstream` remote so the in-Obsidian updater can `git pull
+    # upstream main`. (A plain clone already sets `origin` to upstream, but
+    # the updater prefers `upstream` and the contribution flow expects it.)
+    Push-Location $frameworkPath
+    try {
+        & git remote add upstream https://github.com/Ziggibot0/vaultbot.git 2>$null
+    } finally { Pop-Location }
+
+    Write-OK "VaultBot downloaded (updates will merge cleanly)"
+
+    # Optional: detect GitHub CLI for the contribution flow. This is NOT
+    # required to use or update VaultBot — the user only needs to sign in
+    # the first time they opt into "Allow contributions" and their vaultbot
+    # has something to give back. We just note availability, never gate on it.
     $ghOk = $false
     try {
         $gv = & gh --version 2>&1
         if ($LASTEXITCODE -eq 0) { $ghOk = $true }
     } catch {}
 
-    if (-not $ghOk) {
-        # gh CLI is missing. Offer to install it so VaultBot can update itself
-        # and share fixes. If the user declines, installation aborts (no zip).
-        Write-Step "GitHub CLI not found"
-        Write-Host "  VaultBot uses the GitHub CLI ('gh') to update itself and" -ForegroundColor Cyan
-        Write-Host "  share fixes with the community. It's optional but recommended." -ForegroundColor Cyan
-        Write-Host ""
-        $installGh = Read-Host "  Install GitHub CLI now? (y/n)"
-        if ($installGh -match "^(y|yes)$") {
-            Write-Step "Installing GitHub CLI..."
-            try {
-                & winget install --id GitHub.cli --silent --accept-package-agreements --accept-source-agreements
-                if ($LASTEXITCODE -eq 0) {
-                    # winget installs to a path that may not be on the current
-                    # session's PATH. Refresh PATH from the registry.
-                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-                    $gv = & gh --version 2>&1
-                    if ($LASTEXITCODE -eq 0) { $ghOk = $true; Write-OK "GitHub CLI installed" }
-                }
-            } catch {
-                Write-Warn2 "Could not install GitHub CLI automatically."
-            }
-        }
-    }
-
     if ($ghOk) {
-        Write-Step "Connecting to GitHub (one-time)..."
-
-        # gh auth status exits 0 when already authenticated. If not, walk the
-        # user through the browser login, then VERIFY it actually completed
-        # (gh auth login can exit 0 even if the user closed the browser early).
-        $authed = $false
         try {
             & gh auth status *> $null
-            if ($LASTEXITCODE -eq 0) { $authed = $true }
-        } catch {
-            # gh auth status writes "not logged in" to stderr, which PS 5.1
-            # turns into a terminating NativeCommandError under
-            # $ErrorActionPreference = "Stop". Treat that as "not authed".
-            $authed = $false
-        }
-
-        if (-not $authed) {
-            Write-Host ""
-            Write-Host "  VaultBot needs a GitHub account so it can update itself" -ForegroundColor Cyan
-            Write-Host "  and share fixes with the community." -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "  A browser window will open. Sign in to GitHub, then" -ForegroundColor Yellow
-            Write-Host "  copy the one-time code back into this window." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "  (No GitHub account? VaultBot requires one to install - it" -ForegroundColor DarkGray
-            Write-Host "   installs as a fork so it can update itself and share fixes.)" -ForegroundColor DarkGray
-            Write-Host ""
-
-            $retry = $true
-            while (-not $authed -and $retry) {
-                try {
-                    & gh auth login --hostname github.com --git-protocol https --web
-                } catch {
-                    Write-Warn2 "GitHub sign-in failed: $_"
-                }
-                try {
-                    & gh auth status *> $null
-                    if ($LASTEXITCODE -eq 0) {
-                        $authed = $true
-                    }
-                } catch {
-                    $authed = $false
-                }
-                if ($authed) {
-                    break
-                } else {
-                    $again = Read-Host "  Sign-in didn't complete. Try again? (y/n)"
-                    if ($again -notmatch "^(y|yes)$") { $retry = $false }
-                }
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "GitHub CLI detected — you can share fixes with the community (optional)."
             }
-
-            if (-not $authed) {
-                $ghOk = $false
-                Write-Warn2 "GitHub sign-in was skipped or didn't complete."
-                Write-Host "  VaultBot needs a GitHub account to install (it installs as a" -ForegroundColor Yellow
-                Write-Host "  fork so it can update itself and share fixes)." -ForegroundColor Yellow
-                Write-Host "  Sign in with:  gh auth login   then re-run this installer." -ForegroundColor Yellow
-            } else {
-                Write-OK "Signed in to GitHub"
-            }
-        }
-
-        if ($ghOk) {
-            # Maintainer (has push access) clones directly; everyone else forks.
-            $hasPush = $false
-            try {
-                $perm = (& gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>$null)
-                if ($perm -eq "true") { $hasPush = $true }
-            } catch {}
-
-            if ($hasPush) {
-                Write-Step "Cloning VaultBot..."
-                & gh repo clone Ziggibot0/vaultbot $frameworkName
-            } else {
-                Write-Step "Forking VaultBot to your GitHub account..."
-                & gh repo fork Ziggibot0/vaultbot --clone
-                # gh clones to ./vaultbot (lowercase); rename to $frameworkName
-                # if the filesystem is case-sensitive (macOS/Linux). On Windows
-                # they're the same folder, so the rename is a no-op.
-                if ((Test-Path "vaultbot") -and -not (Test-Path $frameworkName)) {
-                    Rename-Item "vaultbot" $frameworkName
-                }
-            }
-
-            if (-not (Test-Path $frameworkPath)) {
-                Write-Err "GitHub clone/fork failed."
-                Write-Host "  VaultBot could not be installed. Check your GitHub account" -ForegroundColor Yellow
-                Write-Host "  and network connection, then re-run this installer." -ForegroundColor Yellow
-                return
-            } else {
-                Write-OK "VaultBot installed as a git fork (updates will merge cleanly)"
-            }
-        }
-    }
-
-    if (-not $ghOk) {
-        Write-Err "VaultBot requires a GitHub account to install."
-        Write-Host "  VaultBot installs as a git fork so it can update itself and" -ForegroundColor Yellow
-        Write-Host "  share fixes. A zip snapshot can't do either, so we don't" -ForegroundColor Yellow
-        Write-Host "  install one." -ForegroundColor Yellow
+        } catch {}
+    } else {
         Write-Host ""
-        Write-Host "  To continue:" -ForegroundColor Cyan
-        Write-Host "    1. Install the GitHub CLI:  winget install GitHub.cli" -ForegroundColor White
-        Write-Host "    2. Sign in:                 gh auth login" -ForegroundColor White
-        Write-Host "    3. Re-run this installer." -ForegroundColor White
-        return
+        Write-Host "  Tip: to share fixes with the community later, install the" -ForegroundColor DarkGray
+        Write-Host "  GitHub CLI and sign in. You don't need it to use VaultBot." -ForegroundColor DarkGray
+        Write-Host ""
     }
 }
 

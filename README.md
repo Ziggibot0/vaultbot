@@ -125,7 +125,7 @@ For the full strategic vision, see
 VaultBot runs **entirely on your own computer** — nothing leaves your
 machine unless you choose to add a cloud LLM later.
 
-You need two things installed first — both are free, one-click downloads:
+You need three things installed first — all free, one-click downloads:
 
 1. **[Python 3.11+](https://www.python.org/downloads)** — during install,
    **check the box that says "Add Python to PATH"** (it's on the first
@@ -133,6 +133,14 @@ You need two things installed first — both are free, one-click downloads:
 2. **[Ollama](https://ollama.com)** — just download and run it. It installs
    a small background service. You'll know it's working when you see the
    Ollama icon in your system tray / menu bar.
+3. **[Git](https://git-scm.com/downloads)** — just download and run it. The
+   installer uses it to download VaultBot and keep it updated. (If it's
+   missing, the installer offers to install it for you.)
+
+> **No GitHub account needed.** You do *not* need to sign in to GitHub to
+> install or use VaultBot. A GitHub account is only needed if you later
+> choose to *share* fixes with the community — and even then, only when you
+> opt in.
 
 Then open a terminal and paste **one line**:
 
@@ -309,16 +317,16 @@ VaultBot can update itself from inside Obsidian — no terminal needed.
    an update — only the code files change. Your `data.json`, `.env`, and
    all `.md` files are preserved.
 
-**How updates work (fork installs).** If you installed via the one-click
-installer, your vault is a git fork of `Ziggibot0/vaultbot`. Updates
+**How updates work.** If you installed via the one-click installer, your
+vault is a git clone of `Ziggibot0/vaultbot` (no account needed). Updates
 merge via `git pull upstream main`, so any local edits your VaultBot made
 to its own code are *merged*, not overwritten. If you prefer the manual
 route: `git pull upstream main` (or `git pull origin main` for maintainers).
 
-**Legacy zip installs.** If you installed before the fork-based installer
+**Legacy zip installs.** If you installed before the clone-based installer
 (no `.git` folder), the updater falls back to downloading a tarball and
 copying code files over the live vault. To get the cleaner merge-based
-updates, re-run the installer — it will set up a fork for you.
+updates, re-run the installer — it will set up a clone for you.
 
 ---
 
