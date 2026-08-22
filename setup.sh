@@ -178,16 +178,17 @@ read -p "  Your name: " OWNER_NAME
 OWNER_NAME="${OWNER_NAME:-friend}"
 echo ""
 
-# ── 3. Get the repo (git fork, so updates merge cleanly) ───────────────────
-# VaultBot installs as a git fork of the upstream repo, NOT a zip snapshot.
-# This is what makes two things possible:
-#   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
-#   2. Community contributions = the vaultbot's submit_contribution tool
-#      pushes fixes to your fork and opens a PR upstream, with zero manual git.
-# If `gh` is missing or the user declines auth, installation aborts with a
-# clear error. We never fall back to a zip snapshot: a zip has no git
-# history, so it can't update itself or share fixes, and we won't let a
-# user believe they got a working install when they didn't.
+# ── 3. Get the repo (anonymous clone, so updates merge cleanly) ─────────────
+# VaultBot installs as a plain `git clone` of the public upstream repo — NO
+# GitHub account is required to install or update. Pulling updates is
+# anonymous (`git pull upstream main`); only *pushing* (contributing) needs
+# a GitHub account, and that is opt-in later, not a gate on install.
+#
+# We add an `upstream` remote pointing at Ziggibot0/vaultbot so the
+# in-Obsidian updater's `git pull upstream main` works out of the box.
+# When the user later opts into "Allow contributions", the
+# submit_contribution tool forks the repo and adds a `fork` remote on its
+# own — no install-time sign-in needed.
 #
 # The repo clones into a FRAMEWORK folder ($FRAMEWORK_NAME). Inside it, the
 # `myvault/` subfolder is the user's Obsidian vault. The vault folder name
@@ -217,129 +218,74 @@ elif [ -d "$FRAMEWORK_PATH" ]; then
         exit 1
     fi
 else
-    GH_OK=false
-    if command -v gh &>/dev/null; then
-        GH_OK=true
+    # Anonymous clone — no GitHub account required to install or update.
+    # git is the only prerequisite here (gh is NOT required; it's only for
+    # the optional "share fixes" contribution flow, handled later).
+    GIT_OK=false
+    if command -v git &>/dev/null; then
+        GIT_OK=true
     fi
 
-    if [ "$GH_OK" = false ]; then
-        # gh CLI is missing. Offer to install it so VaultBot can update itself
-        # and share fixes. If the user declines, installation aborts (no zip).
-        echo ">>> GitHub CLI not found"
-        echo "  VaultBot uses the GitHub CLI ('gh') to update itself and"
-        echo "  share fixes with the community. It's optional but recommended."
+    if [ "$GIT_OK" = false ]; then
+        echo ">>> Git not found"
+        echo "  VaultBot needs Git to download and update itself."
+        echo "  It's a free, one-click download."
         echo ""
-        printf "  Install GitHub CLI now? (y/n) "
-        read -r INSTALL_GH
-        if [ "$INSTALL_GH" = "y" ] || [ "$INSTALL_GH" = "yes" ]; then
-            echo ">>> Installing GitHub CLI..."
+        printf "  Install Git now? (y/n) "
+        read -r INSTALL_GIT
+        if [ "$INSTALL_GIT" = "y" ] || [ "$INSTALL_GIT" = "yes" ]; then
+            echo ">>> Installing Git..."
             if command -v brew &>/dev/null; then
-                brew install gh >/dev/null 2>&1 && GH_OK=true
+                brew install git >/dev/null 2>&1 && GIT_OK=true
             elif command -v apt-get &>/dev/null; then
-                sudo apt-get install -y gh >/dev/null 2>&1 && GH_OK=true
+                sudo apt-get install -y git >/dev/null 2>&1 && GIT_OK=true
             elif command -v dnf &>/dev/null; then
-                sudo dnf install -y gh >/dev/null 2>&1 && GH_OK=true
+                sudo dnf install -y git >/dev/null 2>&1 && GIT_OK=true
             fi
-            if [ "$GH_OK" = true ]; then
-                echo "  [OK] GitHub CLI installed"
+            if [ "$GIT_OK" = true ]; then
+                echo "  [OK] Git installed"
             else
-                echo "  [!]  Could not install GitHub CLI automatically."
-                echo "       Install it from https://cli.github.com and re-run."
+                echo "  [!]  Could not install Git automatically."
+                echo "       Install it from https://git-scm.com/downloads and re-run."
             fi
         fi
     fi
 
-    if [ "$GH_OK" = true ]; then
-        echo ">>> Connecting to GitHub (one-time)..."
-
-        # gh auth status exits 0 when already authenticated. If not, walk the
-        # user through the browser login, then VERIFY it actually completed
-        # (gh auth login can exit 0 even if the user closed the browser early).
-        AUTHD=false
-        if gh auth status >/dev/null 2>&1; then
-            AUTHD=true
-        fi
-
-        if [ "$AUTHD" = false ]; then
-            echo ""
-            echo "  VaultBot needs a GitHub account so it can update itself"
-            echo "  and share fixes with the community."
-            echo ""
-            echo "  A browser window will open. Sign in to GitHub, then"
-            echo "  copy the one-time code back into this window."
-            echo ""
-            echo "  (No GitHub account? VaultBot requires one to install - it"
-            echo "   installs as a fork so it can update itself and share fixes.)"
-            echo ""
-
-            RETRY=true
-            while [ "$AUTHD" = false ] && [ "$RETRY" = true ]; do
-                gh auth login --hostname github.com --git-protocol https --web || true
-                if gh auth status >/dev/null 2>&1; then
-                    AUTHD=true
-                else
-                    printf "  Sign-in didn't complete. Try again? (y/n) "
-                    read -r AGAIN
-                    if [ "$AGAIN" != "y" ] && [ "$AGAIN" != "yes" ]; then
-                        RETRY=false
-                    fi
-                fi
-            done
-
-            if [ "$AUTHD" = false ]; then
-                GH_OK=false
-                echo "  [!]  GitHub sign-in was skipped or didn't complete."
-                echo "       VaultBot needs a GitHub account to install (it installs"
-                echo "       as a fork so it can update itself and share fixes)."
-                echo "       Sign in with:  gh auth login   then re-run this installer."
-            else
-                echo "  [OK] Signed in to GitHub"
-            fi
-        fi
-
-        if [ "$GH_OK" = true ]; then
-            # Maintainer (has push access) clones directly; everyone else forks.
-            HAS_PUSH=false
-            PERM=$(gh api repos/Ziggibot0/vaultbot --jq .permissions.push 2>/dev/null || true)
-            if [ "$PERM" = "true" ]; then
-                HAS_PUSH=true
-            fi
-
-            if [ "$HAS_PUSH" = true ]; then
-                echo ">>> Cloning VaultBot..."
-                gh repo clone Ziggibot0/vaultbot "$FRAMEWORK_NAME"
-            else
-                echo ">>> Forking VaultBot to your GitHub account..."
-                gh repo fork Ziggibot0/vaultbot --clone
-                # gh clones to ./vaultbot (lowercase); rename to $FRAMEWORK_NAME
-                # if the filesystem is case-sensitive (macOS/Linux).
-                if [ -d "vaultbot" ] && [ ! -d "$FRAMEWORK_NAME" ]; then
-                    mv "vaultbot" "$FRAMEWORK_NAME"
-                fi
-            fi
-
-            if [ ! -d "$FRAMEWORK_PATH" ]; then
-                echo "  [X]  GitHub clone/fork failed."
-                echo "       VaultBot could not be installed. Check your GitHub account"
-                echo "       and network connection, then re-run this installer."
-                exit 1
-            else
-                echo "  [OK] VaultBot installed as a git fork (updates will merge cleanly)"
-            fi
-        fi
-    fi
-
-    if [ "$GH_OK" = false ]; then
-        echo "  [X]  VaultBot requires a GitHub account to install."
-        echo "       VaultBot installs as a git fork so it can update itself and"
-        echo "       share fixes. A zip snapshot can't do either, so we don't"
-        echo "       install one."
-        echo ""
-        echo "       To continue:"
-        echo "         1. Install the GitHub CLI (https://cli.github.com)"
-        echo "         2. Sign in:  gh auth login"
-        echo "         3. Re-run this installer."
+    if [ "$GIT_OK" = false ]; then
+        echo "  [X]  Git is required to install VaultBot."
+        echo "       Install Git from https://git-scm.com/downloads, then"
+        echo "       re-run this installer."
         exit 1
+    fi
+
+    echo ">>> Downloading VaultBot..."
+    git clone https://github.com/Ziggibot0/vaultbot.git "$FRAMEWORK_NAME"
+    if [ ! -d "$FRAMEWORK_PATH" ]; then
+        echo "  [X]  Could not download VaultBot."
+        echo "       Check your network connection, then re-run this installer."
+        exit 1
+    fi
+
+    # Add an `upstream` remote so the in-Obsidian updater can `git pull
+    # upstream main`. (A plain clone already sets `origin` to upstream, but
+    # the updater prefers `upstream` and the contribution flow expects it.)
+    ( cd "$FRAMEWORK_PATH" && git remote add upstream https://github.com/Ziggibot0/vaultbot.git ) 2>/dev/null || true
+
+    echo "  [OK] VaultBot downloaded (updates will merge cleanly)"
+
+    # Optional: detect GitHub CLI for the contribution flow. This is NOT
+    # required to use or update VaultBot — the user only needs to sign in
+    # the first time they opt into "Allow contributions" and their vaultbot
+    # has something to give back. We just note availability, never gate on it.
+    if command -v gh &>/dev/null; then
+        if gh auth status >/dev/null 2>&1; then
+            echo "  [OK] GitHub CLI detected — you can share fixes with the community (optional)."
+        fi
+    else
+        echo ""
+        echo "  Tip: to share fixes with the community later, install the"
+        echo "  GitHub CLI and sign in. You don't need it to use VaultBot."
+        echo ""
     fi
 fi
 
