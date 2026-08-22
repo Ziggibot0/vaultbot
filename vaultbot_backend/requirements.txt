@@ -59,7 +59,7 @@ click==8.4.2
 colorama==0.4.6 ; sys_platform == "win32"
 h11==0.16.0
 httptools==0.8.0
-idna==3.18
+idna==3.19
 packaging==26.3
 pydantic==2.13.4
 pydantic-core==2.46.4
