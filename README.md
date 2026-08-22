@@ -207,7 +207,7 @@ After the one-time setup, your daily routine is just:
 1. **Make sure Ollama is running.** It usually starts automatically on boot
    (check for the Ollama icon in your system tray / menu bar). If not,
    open the Ollama app once to start the service.
-2. **Open Obsidian.** Open your `MyVault` vault.
+2. **Open Obsidian.** Open your `VaultBot` vault.
 3. **Click the VaultBot icon** in the left sidebar and start chatting.
 
 That's it. The plugin handles starting/stopping the backend for you — it
@@ -444,7 +444,7 @@ The `baseline/` folder contains starter directive templates you can copy
 into `vaultbot/System/Identity/` to set rules:
 
 - `Autonomy-Directive.md` — act on its own, report after the fact
-- `Vault-Knowledge-Only-Directive.md` — never reference training data
+- `No-Wikipedia-Directive.md` — never reference training data, prefer primary sources
 - `IDK-Fallback-Directive.md` — say "I don't know" when stuck
 - `Communication-Preferences.md` — how you like to be talked to (template)
 
@@ -529,4 +529,3 @@ two ratchets (debt + thinness) that prevent quality regressions — see
 
 **Code of conduct:** All participants are expected to follow our
 [Code of Conduct](CODE_OF_CONDUCT.md).
-for details.
