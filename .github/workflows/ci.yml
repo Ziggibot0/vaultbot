@@ -185,7 +185,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Dependency vulnerability audit (pip-audit)
-        # Hard gate: fail if any pinned dependency has a known CVE. Runs
-        # against the locked environment so it reflects exactly what ships.
+        # Hard gate: fail if any pinned dependency has a known CVE.
+        # Audits the concrete requirements.txt (the uv.lock-derived pip
+        # fallback) rather than introspecting the uv-managed environment,
+        # which pip-audit may silently skip. -r ensures every pinned
+        # version is checked regardless of how the env was installed
+        # (issue #179). --strict treats warnings as failures so a
+        # dep that can't be looked up doesn't silently pass.
         run: |
-          uv run pip-audit
+          uv run pip-audit -r vaultbot_backend/requirements.txt --strict
