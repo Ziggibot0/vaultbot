@@ -193,9 +193,8 @@ def _is_speech_unavailable(exc: BaseException, ctx: dict[str, Any]) -> bool:
     if (ctx.get("category") or "").strip().lower() == "speech_unavailable":
         return True
     text = _exc_text(exc)
-    return (
-        ("edge_tts" in text or "edge-tts" in text)
-        and ("importerror" in text or "modulenotfounderror" in text)
+    return ("edge_tts" in text or "edge-tts" in text) and (
+        "importerror" in text or "modulenotfounderror" in text
     )
 
 

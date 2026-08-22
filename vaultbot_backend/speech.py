@@ -113,8 +113,7 @@ def transcribe(svc, audio_bytes: bytes, filename: str = "audio.webm") -> dict[st
             "diagnosis": make_diagnosis(
                 ProblemCategory.SPEECH_UNAVAILABLE,
                 user_message=(
-                    "STT isn't available — no speech-to-text model is "
-                    "configured."
+                    "STT isn't available — no speech-to-text model is configured."
                 ),
                 remedy_hint="Pick a speech model in Settings → Speech Models.",
                 action="open_settings",
@@ -178,8 +177,7 @@ async def synthesize(svc, text: str) -> dict[str, Any]:
             "diagnosis": make_diagnosis(
                 ProblemCategory.SPEECH_UNAVAILABLE,
                 user_message=(
-                    "TTS isn't available — no text-to-speech model is "
-                    "configured."
+                    "TTS isn't available — no text-to-speech model is configured."
                 ),
                 remedy_hint="Pick a speech model in Settings → Speech Models.",
                 action="open_settings",
@@ -304,8 +302,12 @@ async def list_tts_voices(svc) -> dict[str, Any]:
             }
         except Exception as e:  # noqa: BLE001 — surfaced as a diagnosis below
             diag = classify_error(
-                e, context={"role": "tts", "provider": "edge-tts",
-                            "category": "speech_unavailable"}
+                e,
+                context={
+                    "role": "tts",
+                    "provider": "edge-tts",
+                    "category": "speech_unavailable",
+                },
             )
             return {"voices": [], "error": str(e), "diagnosis": diag.to_dict()}
     if prov.type == "browser":

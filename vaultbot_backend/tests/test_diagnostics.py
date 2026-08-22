@@ -287,8 +287,12 @@ class TestSpeechUnavailable:
         """ModuleNotFoundError for edge_tts → speech_unavailable."""
         exc = ModuleNotFoundError("No module named 'edge_tts'")
         d = classify_error(
-            exc, context={"role": "tts", "provider": "edge-tts",
-                          "category": "speech_unavailable"}
+            exc,
+            context={
+                "role": "tts",
+                "provider": "edge-tts",
+                "category": "speech_unavailable",
+            },
         )
         assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
         assert d.severity is Severity.FIXABLE
@@ -303,8 +307,12 @@ class TestSpeechUnavailable:
         exception (e.g. a relay timeout that isn't an ImportError)."""
         exc = RuntimeError("websocket relay timed out")
         d = classify_error(
-            exc, context={"role": "tts", "provider": "edge-tts",
-                          "category": "speech_unavailable"}
+            exc,
+            context={
+                "role": "tts",
+                "provider": "edge-tts",
+                "category": "speech_unavailable",
+            },
         )
         assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
         assert "TTS" in d.user_message
@@ -313,8 +321,12 @@ class TestSpeechUnavailable:
     def test_stt_role_message(self):
         exc = ConnectionError("endpoint unreachable")
         d = classify_error(
-            exc, context={"role": "stt", "provider": "openai",
-                          "category": "speech_unavailable"}
+            exc,
+            context={
+                "role": "stt",
+                "provider": "openai",
+                "category": "speech_unavailable",
+            },
         )
         assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
         assert "STT" in d.user_message
@@ -322,8 +334,12 @@ class TestSpeechUnavailable:
     def test_openai_provider_remedy_mentions_settings(self):
         exc = ConnectionError("auth rejected")
         d = classify_error(
-            exc, context={"role": "tts", "provider": "openai",
-                          "category": "speech_unavailable"}
+            exc,
+            context={
+                "role": "tts",
+                "provider": "openai",
+                "category": "speech_unavailable",
+            },
         )
         assert d.category is ProblemCategory.SPEECH_UNAVAILABLE
         assert "Settings" in d.remedy_hint or "settings" in d.remedy_hint.lower()
@@ -331,8 +347,12 @@ class TestSpeechUnavailable:
     def test_raw_for_log_captured(self):
         exc = ModuleNotFoundError("No module named 'edge_tts'")
         d = classify_error(
-            exc, context={"role": "tts", "provider": "edge-tts",
-                          "category": "speech_unavailable"}
+            exc,
+            context={
+                "role": "tts",
+                "provider": "edge-tts",
+                "category": "speech_unavailable",
+            },
         )
         assert "edge_tts" in d.raw_for_log
 
@@ -346,7 +366,9 @@ class TestSpeechLoudDiagnosis:
 
         exc = ModuleNotFoundError("No module named 'edge_tts'")
         result = speech._speech_error(
-            exc, role="tts", provider="edge-tts",
+            exc,
+            role="tts",
+            provider="edge-tts",
             fallback_msg=f"{type(exc).__name__}: {exc}",
         )
         assert "error" in result  # backward-compat string kept
@@ -361,7 +383,9 @@ class TestSpeechLoudDiagnosis:
 
         exc = RuntimeError("internal relay detail with stack info")
         result = speech._speech_error(
-            exc, role="tts", provider="openai",
+            exc,
+            role="tts",
+            provider="openai",
             fallback_msg=f"{type(exc).__name__}: {exc}",
         )
         assert "raw_for_log" not in result["diagnosis"]
