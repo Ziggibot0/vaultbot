@@ -431,9 +431,16 @@ class OpenAICompatibleClient(LLMClient):
             "stream": stream,
             "temperature": temperature,
         }
-        # ``think`` has no OpenAI-compatible equivalent — ignored here.
-        # ``max_predict`` maps to ``max_tokens`` so bounded small-model tasks
-        # can cap output on cloud providers too.
+        # ``think=False`` disables reasoning for bounded small-model tasks.
+        # OpenAI-compatible endpoints have no standard reasoning toggle, but
+        # Lemonade (and other reasoning-model backends) honor
+        # ``enable_thinking: false`` — without it a reasoning model spends
+        # its whole budget on chain-of-thought before answering, turning a
+        # one-line entailment judgment into a 13s+ stall per claim (issue
+        # #137). ``max_predict`` maps to ``max_tokens`` so bounded
+        # small-model tasks can cap output on cloud providers too.
+        if think is False:
+            payload["enable_thinking"] = False
         if max_predict is not None:
             payload["max_tokens"] = max_predict
         # Ollama and OpenAI share the tool schema shape
