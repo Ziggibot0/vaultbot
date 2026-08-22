@@ -374,10 +374,10 @@ class TestSpeechSynthesizeLoudFailure:
     def test_synthesize_missing_edge_tts_surfaces_diagnosis(self, monkeypatch):
         """When edge_tts can't be imported, synthesize() must return a
         dict carrying a speech_unavailable diagnosis (issue #182)."""
-        import speech
-
         # Force the edge_tts import inside _synthesize_edge_tts to fail.
         import builtins
+
+        import speech
 
         real_import = builtins.__import__
 
