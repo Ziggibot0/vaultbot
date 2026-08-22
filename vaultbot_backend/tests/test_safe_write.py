@@ -245,3 +245,70 @@ def test_non_core_file_skips_import_check(patched_improver, tmp_path):
     written = backend_dir / "my_new_tool.py"
     assert written.exists()
     assert written.read_text(encoding="utf-8") == content
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — doc-source gate: external imports require a doc_source
+# ---------------------------------------------------------------------------
+def test_rejects_external_import_without_doc_source(patched_improver, tmp_path):
+    """An edit that imports a non-VaultBot module (stdlib or third-party)
+    without a doc_source is rejected before any disk touch.
+
+    Arrange: SelfImprover with BACKEND_DIR -> tmp_path.
+    Act:     safe_write("...my_new_tool.py", "import requests\\n...") with
+             no doc_source.
+    Assert:  status == "rejected", error names the external import, and no
+             file was written.
+    """
+    improver, backend_dir = patched_improver
+
+    content = (
+        "import requests\n\ndef run(args):\n    return requests.get(args['url'])\n"
+    )
+    result = improver.safe_write("vaultbot_backend/my_new_tool.py", content)
+
+    assert result["status"] == "rejected"
+    assert "requests" in result["error"]
+    assert result["checks"]["doc_source"].startswith("FAIL")
+    assert not (backend_dir / "my_new_tool.py").exists()
+
+
+def test_accepts_external_import_with_doc_source(patched_improver, tmp_path):
+    """The same edit WITH a doc_source passes the gate and is written.
+
+    Arrange: SelfImprover with BACKEND_DIR -> tmp_path.
+    Act:     safe_write(..., doc_source="https://docs.python-requests.org/")
+    Assert:  status == "written", checks["doc_source"] == "ok".
+    """
+    improver, backend_dir = patched_improver
+
+    content = (
+        "import requests\n\ndef run(args):\n    return requests.get(args['url'])\n"
+    )
+    result = improver.safe_write(
+        "vaultbot_backend/my_new_tool.py",
+        content,
+        doc_source="https://docs.python-requests.org/en/latest/",
+    )
+
+    assert result["status"] == "written"
+    assert result["checks"]["doc_source"] == "ok"
+    assert (backend_dir / "my_new_tool.py").exists()
+
+
+def test_internal_import_needs_no_doc_source(patched_improver, tmp_path):
+    """An edit that only imports VaultBot-internal modules (or uses
+    relative imports) does NOT require a doc_source.
+
+    Arrange: SelfImprover with BACKEND_DIR -> tmp_path; a sibling module.
+    Act:     safe_write with a relative import and no doc_source.
+    Assert:  status == "written" (no doc_source gate triggered).
+    """
+    improver, _backend_dir = patched_improver
+
+    # A relative import is internal — no doc_source required.
+    content = "from . import helpers\n\ndef run(args):\n    return helpers.go(args)\n"
+    result = improver.safe_write("vaultbot_backend/my_new_tool.py", content)
+
+    assert result["status"] == "written"
+    assert "doc_source" not in result["checks"]

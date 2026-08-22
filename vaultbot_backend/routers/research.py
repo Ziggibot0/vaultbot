@@ -28,6 +28,8 @@ async def research_tool_endpoint(
     """
     topic = (payload.get("topic") or "").strip()
     depth = payload.get("depth", "deep")
+    source_allowlist = payload.get("source_allowlist")
+    source_denylist = payload.get("source_denylist")
     if not topic:
         return {"error": "missing topic"}, 400
     loop = asyncio.get_event_loop()
@@ -40,7 +42,11 @@ async def research_tool_endpoint(
         report = await loop.run_in_executor(
             None,
             lambda: svc.research_engine.research(
-                topic, llm_client=svc.ollama_client, vault_note_titles=_titles
+                topic,
+                llm_client=svc.ollama_client,
+                vault_note_titles=_titles,
+                source_allowlist=source_allowlist,
+                source_denylist=source_denylist,
             ),
         )
     finally:

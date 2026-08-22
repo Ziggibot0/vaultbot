@@ -620,6 +620,7 @@ async def execute_agent_tool(
                 args.get("file_path", ""),
                 _sw_content,
                 bool(args.get("dry_run", False)),
+                args.get("doc_source"),
             ),
         )
 

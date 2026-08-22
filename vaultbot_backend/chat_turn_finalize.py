@@ -53,6 +53,47 @@ def is_tool_sourced(turn_tool_history: list | None) -> bool:
     return bool(tools & LIVE_FACT_TOOLS)
 
 
+def score_code_grounding(turn_tool_history: list | None) -> dict:
+    """Score how doc-proven this turn's code edits were.
+
+    The code analogue of the chat closed-set citation gate. A ``safe_write``
+    that imports external modules must carry a ``doc_source`` (official-docs
+    URL) or it is rejected by the gate — so a turn that wrote code WITHOUT
+    any doc-proven edit is a red flag (the model may have bypassed the gate
+    via code_write / code_run, which is forbidden).
+
+    Returns a dict with:
+      - safe_writes: number of safe_write calls this turn
+      - doc_proven: number of those that carried a doc_source
+      - unproven: safe_writes - doc_proven
+      - bypassed: True if the turn wrote files via code_write/code_run
+        (the forbidden path) without any doc-proven safe_write.
+    """
+    if not turn_tool_history:
+        return {"safe_writes": 0, "doc_proven": 0, "unproven": 0, "bypassed": False}
+    safe_writes = 0
+    doc_proven = 0
+    bypassed = False
+    for e in turn_tool_history:
+        if not isinstance(e, dict):
+            continue
+        tool = e.get("tool", "")
+        if tool == "safe_write":
+            safe_writes += 1
+            if e.get("doc_source"):
+                doc_proven += 1
+        elif tool in ("code_write", "code_run"):
+            # code_write / code_run are the forbidden file-modification
+            # path (no doc gate). Flag as a potential bypass.
+            bypassed = True
+    return {
+        "safe_writes": safe_writes,
+        "doc_proven": doc_proven,
+        "unproven": safe_writes - doc_proven,
+        "bypassed": bypassed,
+    }
+
+
 async def finalize_turn(
     svc: Services,
     websocket,
@@ -220,6 +261,30 @@ async def finalize_turn(
                 final_answer += _grounding_caution
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("grounding_check_failed", {"error": str(_e)})
+
+    # --- Code-grounding score (the code analogue of the citation gate) ---
+    # Log how doc-proven this turn's code edits were. A turn that wrote
+    # code via code_write/code_run (the forbidden, un-gated path) without
+    # any doc-proven safe_write is flagged — the model may have bypassed
+    # the Prove-Code-Change gate. This is observational (it logs + warns),
+    # not a hard gate: the hard gate lives in safe_write itself.
+    try:
+        _code_score = score_code_grounding(getattr(st, "_turn_tool_history", None))
+        if _code_score["safe_writes"] or _code_score["bypassed"]:
+            session_logger.log("code_grounding_check", _code_score)
+            if _code_score["bypassed"] and _code_score["doc_proven"] == 0:
+                session_logger.log(
+                    "code_grounding_bypass_warning",
+                    {
+                        "message": (
+                            "This turn modified files via code_write/code_run "
+                            "without a doc-proven safe_write. The Prove-Code-"
+                            "Change gate was bypassed."
+                        )
+                    },
+                )
+    except Exception as _e:  # noqa: BLE001 — best-effort
+        session_logger.log("code_grounding_check_failed", {"error": str(_e)})
 
     # --- Positive provenance surface: trust badge + Sources block --------
     # After grounding enforcement, append a POSITIVE affordance so a scholar
