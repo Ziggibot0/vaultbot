@@ -487,7 +487,7 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "            _headers = {}\n"
             "            try:\n"
             "                from auth import read_token as _read_token\n"
-            '                _tok = _read_token()\n'
+            "                _tok = _read_token()\n"
             "                if _tok:\n"
             '                    _headers["X-VaultBot-Token"] = _tok\n'
             "            except Exception:\n"
