@@ -166,6 +166,15 @@ jobs:
         # thin. Lower the baseline in the same PR that thins the code.
         run: python vaultbot_backend/scripts/check_thinness.py
 
+      - name: PowerShell BOM check (HARD GATE)
+        # Windows PowerShell 5.1 mis-parses a .ps1 file that contains
+        # non-ASCII characters (box-drawing, em-dashes) unless it starts
+        # with a UTF-8 BOM. Enforces the conditional invariant: non-ASCII
+        # .ps1 MUST have a BOM, pure-ASCII .ps1 MUST NOT. Catches the
+        # regression where an edit tool strips the BOM from a Unicode
+        # installer script.
+        run: python vaultbot_backend/scripts/check_ps1_bom.py
+
       - name: Secret scan (gitleaks)
         # Hard gate: the backend now handles OAuth tokens (google_workspace).
         # gitleaks scans the whole repo for leaked secrets/credentials before
