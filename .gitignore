@@ -188,10 +188,14 @@ User/
 # When the vault root IS the repo root, VaultBot writes generated notes to
 # root-level vaultbot-stuff/ and vaultbot/ instead of vault/vaultbot-stuff/.
 # These are the user's personal mind (chat logs, research notes) plus
-# generated artifacts (Codebase-Map.md) — never commit them. The shippable
-# framework under vault/vaultbot-stuff/System/ is unaffected.
-vaultbot-stuff/
-vaultbot/
+# generated artifacts (Codebase-Map.md) — never commit them.
+#
+# Anchored to root (leading /) so they do NOT match the shippable
+# vault/vaultbot-stuff/ tree. The shippable System/ framework is gated by
+# the `baseline: true` frontmatter marker (enforced by the
+# check_baseline_markers.py pre-commit hook), NOT by these ignores.
+/vaultbot-stuff/
+/vaultbot/
 
 # Baseline-marked Knowledge/ notes (baseline: true in frontmatter) are
 # shippable and must NOT be gitignored. Git can't read frontmatter, so
