@@ -4,8 +4,11 @@ Provides OAuth-authenticated access to Google Calendar, Tasks, and Docs.
 Tokens are stored in google_workspace_tokens.json and auto-refreshed.
 """
 
+import base64
 import contextlib
+import hashlib
 import json
+import secrets
 import webbrowser
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -13,6 +16,21 @@ from urllib.parse import urlencode
 
 CONFIG_PATH = Path(__file__).parent.parent / "google_workspace_config.json"
 TOKEN_PATH = Path(__file__).parent / "google_workspace_tokens.json"
+
+# In-flight OAuth state. Maps the `state` value sent to Google to the PKCE
+# `code_verifier` that must accompany the token exchange. This defeats
+# login-CSRF / token-injection attacks on the localhost redirect: a callback
+# whose `state` was never issued by us is rejected outright.
+#
+# Stored in-memory (single-user localhost backend). If the backend restarts
+# mid-flow, the pending state is lost and the user simply re-runs 'auth'.
+_PENDING_STATES: dict[str, str] = {}
+
+
+def _b64url(data: bytes) -> str:
+    """Base64url-encode bytes (no padding), per RFC 7636."""
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
 
 SCHEMA = {
     "name": "google_workspace",
@@ -253,7 +271,7 @@ def _api_request(method, url, token, data=None):
         return {"error": str(e)}
 
 
-def run(args):
+def run(args: dict) -> dict:
     """Main entry point for the google_workspace tool."""
     action = args.get("action", "")
 
@@ -280,6 +298,12 @@ def run(args):
         if not client_id:
             return {"error": "No credentials configured. Run 'setup' first."}
 
+        # Generate a fresh state + PKCE verifier/challenge for this flow.
+        state = secrets.token_urlsafe(32)
+        code_verifier = secrets.token_urlsafe(64)
+        code_challenge = _b64url(hashlib.sha256(code_verifier.encode()).digest())
+        _PENDING_STATES[state] = code_verifier
+
         params = {
             "client_id": client_id,
             "redirect_uri": REDIRECT_URI,
@@ -287,6 +311,9 @@ def run(args):
             "scope": " ".join(SCOPES),
             "access_type": "offline",
             "prompt": "consent",
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         }
         auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
@@ -310,6 +337,14 @@ def run(args):
         if not code:
             return {"error": "Authorization code is required for callback."}
 
+        # Validate the OAuth `state` to defeat login-CSRF / token injection.
+        # A callback whose state was never issued by our 'auth' action is
+        # rejected before any token exchange happens.
+        state = args.get("state", "")
+        code_verifier = _PENDING_STATES.pop(state, None)
+        if not state or code_verifier is None:
+            return {"error": "Invalid or missing OAuth state. Re-run 'auth'."}
+
         client_id, client_secret = _get_credentials()
         if not client_id:
             return {"error": "No credentials configured."}
@@ -321,6 +356,7 @@ def run(args):
                 "code": code,
                 "redirect_uri": REDIRECT_URI,
                 "grant_type": "authorization_code",
+                "code_verifier": code_verifier,
             }
         ).encode()
 

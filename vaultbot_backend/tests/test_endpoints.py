@@ -107,3 +107,23 @@ def test_task_rejects_missing_goal(client):
         assert "error" in data or "plan_id" not in data, (
             "POST /task with empty body should not return a plan"
         )
+
+
+def test_callback_escapes_reflected_error(client):
+    """GET /callback?error=<script> must HTML-escape the reflected value.
+
+    The /callback endpoint is auth-exempt, so a reflected XSS here is
+    reachable without a token. The error param must be escaped, never
+    interpolated raw into the HTML.
+    """
+    resp = client.get("/callback", params={"error": "<script>alert(1)</script>"})
+    assert resp.status_code == 400
+    body = resp.text
+    assert "<script>alert(1)</script>" not in body
+    assert "&lt;script&gt;" in body
+
+
+def test_callback_missing_code(client):
+    """GET /callback with no code returns a 400, not a 500."""
+    resp = client.get("/callback")
+    assert resp.status_code == 400
