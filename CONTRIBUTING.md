@@ -279,15 +279,25 @@ and keeps a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## Branch protection
 
-`main` is protected: it requires a code-owner approval before merge, and
-**force-push and branch deletion are disabled** on all branches. This is
-deliberate — it preserves the review gate and prevents history rewriting.
+`main` is protected by a ruleset that requires a code-owner approval
+before merge, and **force-push and branch deletion are disabled** on all
+branches. This is deliberate — it preserves the review gate and prevents
+history rewriting.
 
-Two practical consequences for contributors:
+The ruleset also requires **branches to be up to date with `main` before
+merging** (strict status checks). If `main` advances after your branch was
+created, your PR's required checks are invalidated and it cannot merge
+until the branch is updated onto the latest `main` and CI re-runs green.
+This guarantees no PR merges against a stale `main`.
+
+Practical consequences for contributors:
 
 - **Do not rebase-and-force-push a PR branch.** If your branch has
   diverged from `main`, merge `main` into it (or open a fresh branch)
   instead of force-pushing.
+- **Keep your branch current before merging.** When `main` moves, update
+  your branch (merge `main` into it) and let CI re-run before the PR can
+  merge. This is required, not optional.
 - **Orphaned branches cannot be deleted by the bot.** If a PR is closed
   without merging, its branch stays on the remote until a maintainer
   deletes it from the GitHub UI.
