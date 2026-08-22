@@ -153,25 +153,25 @@ if sys.platform != "win32":
     # 64 processes — generous for normal tool use, stops a naive fork bomb.
     _NPROC = int(os.environ.get("VAULTBOT_CODE_RUN_NPROC", "64"))
 
+    def _posix_preexec() -> None:
+        """``preexec_fn`` implementation (POSIX only). Applies RLIMIT_AS, CPU, NPROC."""
+        # RLIMIT_AS: total address space (virtual memory).
+        _resource.setrlimit(_resource.RLIMIT_AS, (_MEM_BYTES, _MEM_BYTES))
+        # RLIMIT_CPU: CPU seconds (soft, hard). SIGXCPU kills the child on exceed.
+        _resource.setrlimit(_resource.RLIMIT_CPU, (_CPU_SECONDS, _CPU_SECONDS))
+        # RLIMIT_NPROC: max processes this user may spawn. Catches fork bombs.
+        # Some platforms (e.g. macOS) don't support RLIMIT_NPROC — ignore if so.
+        with contextlib.suppress(ValueError, OSError):
+            # Unsupported or the limit is lower than the parent's current count
+            # (e.g. the backend itself already has many threads). Degrade
+            # gracefully — the timeout and mem cap are still in effect.
+            _resource.setrlimit(_resource.RLIMIT_NPROC, (_NPROC, _NPROC))
 
-def _posix_preexec() -> None:
-    """``preexec_fn`` implementation (POSIX only). Applies RLIMIT_AS, CPU, NPROC."""
-    # RLIMIT_AS: total address space (virtual memory).
-    _resource.setrlimit(_resource.RLIMIT_AS, (_MEM_BYTES, _MEM_BYTES))
-    # RLIMIT_CPU: CPU seconds (soft, hard). SIGXCPU kills the child on exceed.
-    _resource.setrlimit(_resource.RLIMIT_CPU, (_CPU_SECONDS, _CPU_SECONDS))
-    # RLIMIT_NPROC: max processes this user may spawn. Catches fork bombs.
-    # Some platforms (e.g. macOS) don't support RLIMIT_NPROC — ignore if so.
-    with contextlib.suppress(ValueError, OSError):
-        # Unsupported or the limit is lower than the parent's current count
-        # (e.g. the backend itself already has many threads). Degrade
-        # gracefully — the timeout and mem cap are still in effect.
-        _resource.setrlimit(_resource.RLIMIT_NPROC, (_NPROC, _NPROC))
-
-
-# The value to pass as ``preexec_fn=`` to subprocess.run / Popen. On POSIX
-# this is the callable that applies resource limits; on Windows it is None
-# (subprocess REJECTS a non-None preexec_fn on Windows — the parameter
-# itself is unsupported, not just the function body). Callers can pass this
-# unconditionally: ``preexec_fn=preexec_fn``.
-preexec_fn = _posix_preexec if sys.platform != "win32" else None
+    # The value to pass as ``preexec_fn=`` to subprocess.run / Popen. On POSIX
+    # this is the callable that applies resource limits; on Windows it is None
+    # (subprocess REJECTS a non-None preexec_fn on Windows — the parameter
+    # itself is unsupported, not just the function body). Callers can pass this
+    # unconditionally: ``preexec_fn=preexec_fn``.
+    preexec_fn = _posix_preexec
+else:
+    preexec_fn = None
