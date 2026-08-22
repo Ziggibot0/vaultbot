@@ -262,7 +262,10 @@ def test_rejects_external_import_without_doc_source(patched_improver, tmp_path):
     """
     improver, backend_dir = patched_improver
 
-    content = "import requests\n\ndef run(args):\n    return requests.get(args['url'])\n"
+    content = (
+        "import requests\n\ndef run(args):\n"
+        "    return requests.get(args['url'])\n"
+    )
     result = improver.safe_write("vaultbot_backend/my_new_tool.py", content)
 
     assert result["status"] == "rejected"
@@ -280,7 +283,10 @@ def test_accepts_external_import_with_doc_source(patched_improver, tmp_path):
     """
     improver, backend_dir = patched_improver
 
-    content = "import requests\n\ndef run(args):\n    return requests.get(args['url'])\n"
+    content = (
+        "import requests\n\ndef run(args):\n"
+        "    return requests.get(args['url'])\n"
+    )
     result = improver.safe_write(
         "vaultbot_backend/my_new_tool.py",
         content,
@@ -300,7 +306,7 @@ def test_internal_import_needs_no_doc_source(patched_improver, tmp_path):
     Act:     safe_write with a relative import and no doc_source.
     Assert:  status == "written" (no doc_source gate triggered).
     """
-    improver, backend_dir = patched_improver
+    improver, _backend_dir = patched_improver
 
     # A relative import is internal — no doc_source required.
     content = "from . import helpers\n\ndef run(args):\n    return helpers.go(args)\n"
