@@ -116,7 +116,6 @@ and the test `tests/test_no_silent_swallow.py` AST-scans for silent-swallow
 patterns. Both will catch new violations.
 
 The project has a typed error layer for surfacing:
-- `error_types.py` — `Diagnosis` dataclass + `ProblemCategory` enum
 - `diagnostics.py` — `classify_error(exc, context)` translates any
   exception into a `Diagnosis`
 - `chat_helpers.py` — `notify_problem(svc, websocket, exc, context=,
@@ -125,13 +124,46 @@ The project has a typed error layer for surfacing:
 Use `context={"category": "retrieval_broken"}` (or other subsystem
 categories) to tag errors that don't have a distinctive exception signature.
 
+## CI ratchets (behavior-capture and thinness)
+
+VaultBot's CI enforces two ratchets that prevent quality regressions
+monotonically. Both live in `.ci-baseline.json` and are checked by
+`.github/workflows/ci.yml`:
+
+### Debt ratchet (issue #21)
+
+The **debt ratchet** (`check_debt_ratchet.py`) wraps the two soft gates
+(pyright full, pytest integration) that run with `continue-on-error` so they
+surface pre-existing debt without blocking CI. The ratchet re-runs each soft
+gate, counts the current violations, and **fails CI if the count exceeds
+the committed baseline** in `.ci-baseline.json`. New debt is blocked; the
+baseline stays green and is lowered incrementally as debt is paid down.
+
+To lower the baseline: fix some violations, then lower the count in
+`.ci-baseline.json` in the same PR.
+
+The **thinness ratchet** (`check_thinness.py`) measures inline backend
+Python logic (non-blank, non-comment SLOC in `vaultbot_backend/` excluding
+`custom_tools/`, `tests/`, `scripts/`) and **fails CI if it exceeds the
+committed baseline** in `.ci-baseline.json`. This enforces the "thin
+backend" goal: logic should migrate out of inline `.py` modules into
+procedures, `custom_tools/`, or a thin interpreter, and this ratchet makes
+that migration monotonic — the count can only go down (or stay flat) as we
+thin.
+
+To lower the baseline: move inline logic into a procedure or custom tool,
+then lower the `thinness.sloc` value in `.ci-baseline.json` in the same PR.
+To accept new inline logic (discouraged), raise the baseline in the same PR.
+
 ## What to commit
 
 - Backend source code (`vaultbot/vaultbot_backend/*.py`)
 - The Obsidian plugin (`.obsidian/plugins/vaultbot/`)
 - `vaultbot/baseline/` directive templates
 - `README.md`, `CONTRIBUTING.md`, `LICENSE`
+- `providers.example.json` (documents the provider/model registry schema)
 - `vaultbot/.env.example`, `.gitignore`, `pyproject.toml`
+- `.ci-baseline.json` (debt + thinness ratchet baselines)
 - `vaultbot/setup.ps1`, `vaultbot/setup.sh` (one-click installers)
 
 ## What NOT to commit
