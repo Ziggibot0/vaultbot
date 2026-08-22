@@ -14,7 +14,7 @@
 fastapi==0.141.1
 # [standard] extras pull in websockets, httptools, watchfiles, etc.
 # Without websockets the FastAPI WebSocket endpoints crash on startup.
-uvicorn[standard]==0.52.3
+uvicorn[standard]==0.52.4
 requests==2.34.2
 beautifulsoup4==4.15.0
 # faiss-cpu 1.8.0 is built against numpy 1.x and breaks on numpy 2
@@ -28,7 +28,7 @@ watchdog==6.0.0
 numpy==2.5.2 ; python_full_version >= "3.12"
 numpy==2.4.6 ; python_full_version < "3.12"
 python-dotenv==1.2.3
-lxml==6.1.1
+lxml==6.1.2
 PyMuPDF==1.28.2
 # Pillow: used by llm_client.vision_capable() to render a test image.
 # html2text: used by textbook_ingest.parse_html() (HTML→Markdown).
@@ -59,7 +59,7 @@ click==8.4.2
 colorama==0.4.6 ; sys_platform == "win32"
 h11==0.16.0
 httptools==0.8.0
-idna==3.18
+idna==3.19
 packaging==26.3
 pydantic==2.13.4
 pydantic-core==2.46.4
