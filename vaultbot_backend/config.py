@@ -11,7 +11,7 @@ sites). Only the *default* values move here, so there's one place to see and
 tune every knob. Behavior is unchanged — this is a pure relocation refactor.
 
 Why a frozen dataclass (not a dict / not module globals):
-  - Type-checked: ``TUNABLES.trivial_max_len`` is an ``int`` to the type
+  - Type-checked: each ``TUNABLES.<field>`` is a concrete type to the type
     checker, not ``Any``.
   - Autocompletable: the IDE lists every tunable the moment you type
     ``TUNABLES.``.
@@ -37,76 +37,6 @@ class Tunables:
     Fields are grouped by subsystem in the order they appear below.
     Every value has a comment explaining what it controls and the unit.
     """
-
-    # ── Trivial-turn classifier (chat_handler._classify_trivial) ──────────
-    # Short greetings / confirmations routed to the small model directly.
-    trivial_max_len: int = 80  # max chars for a message to be "trivial"
-    trivial_exact: frozenset[str] = field(
-        default_factory=lambda: frozenset(
-            {
-                "hi",
-                "hello",
-                "hey",
-                "yo",
-                "sup",
-                "howdy",
-                "greetings",
-                "thanks",
-                "thank you",
-                "thx",
-                "ty",
-                "cool",
-                "nice",
-                "great",
-                "awesome",
-                "ok",
-                "okay",
-                "sure",
-                "got it",
-                "understood",
-                "makes sense",
-                "perfect",
-                "bye",
-                "goodbye",
-                "see ya",
-                "later",
-                "good night",
-                "yes",
-                "no",
-                "yep",
-                "nope",
-                "maybe",
-                "lol",
-                "haha",
-                "hmm",
-                "huh",
-            }
-        )
-    )
-    trivial_prefixes: tuple[str, ...] = (
-        "what can you do",
-        "who are you",
-        "what are you",
-        "introduce yourself",
-        "help",
-        "what's your name",
-        "what is your name",
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "sup ",
-        "hey ",
-        "hi ",
-        "hello ",
-        "yo ",
-        "howdy ",
-        "what's up",
-        "whats up",
-        "how's it goin",
-        "hows it goin",
-        "how are you",
-        "how's it going",
-    )
 
     # ── Proactive tool-result aging (chat_handler._age_old_tool_results) ──
     # Age-based stubbing of old tool results, INDEPENDENT of the token cap.
