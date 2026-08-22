@@ -245,10 +245,19 @@ async def execute_agent_tool(
                 if report.get("llm_synthesized"):
                     # LLM synthesis already produced a structured note with
                     # frontmatter, H2 prose sections, wikilinks, and Sources.
-                    # Write it directly -- skip double-processing.
+                    # Route it through inject_schema to sanitize placeholder
+                    # summaries, dedupe tags, and fill any missing required
+                    # fields before writing to disk.
                     try:
+                        from note_schema import inject_schema
+
+                        _sanitized = inject_schema(
+                            report["synthesis"],
+                            f"vaultbot-stuff/Knowledge/Research/{topic}.md",
+                            force_type="research",
+                        )
                         Path(note_path).write_text(
-                            report["synthesis"], encoding="utf-8"
+                            _sanitized, encoding="utf-8"
                         )
                     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log(

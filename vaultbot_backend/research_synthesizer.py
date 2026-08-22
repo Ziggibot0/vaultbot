@@ -361,6 +361,11 @@ def synthesize_note_markdown(report: dict[str, Any], summary: str | None = None)
     # survives.
     _synthesis = report.get("synthesis") or "(no corroborated findings extracted)"
     _synthesis = _strip_frontmatter(_synthesis).strip()
+    # Guard against an empty Key Findings section: if the synthesis was
+    # only frontmatter (or whitespace), use the explicit fallback so the
+    # section header is never shipped with no content beneath it.
+    if not _synthesis:
+        _synthesis = "(no corroborated findings extracted)"
     # Build the body content — frontmatter is injected by note_schema
     lines = [f"# {_topic}", ""]
     if summary:

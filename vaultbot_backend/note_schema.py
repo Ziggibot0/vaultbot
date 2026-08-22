@@ -37,6 +37,25 @@ REQUIRED_FIELDS: tuple[str, ...] = (
     "tags",
 )
 
+# Summary values that indicate the field was never filled in (the LLM
+# copied a prompt template placeholder verbatim).  Checked case-insensitively.
+_PLACEHOLDER_SUMMARIES: frozenset[str] = frozenset(
+    {
+        "summary",
+        "summaries",
+        "one-line description",
+        "one line description",
+        "description",
+        "placeholder",
+        "todo",
+        "tbd",
+        "n/a",
+        "na",
+        "none",
+        "null",
+    }
+)
+
 # Optional claim-schema fields.  Present only when the note makes a claim.
 CLAIM_FIELDS: tuple[str, ...] = (
     "supports",
@@ -269,6 +288,26 @@ def _infer_type(file_path: str) -> str:
     return _DEFAULT_TYPE
 
 
+def _is_placeholder_summary(value: Any) -> bool:
+    """Return True if *value* is an unfilled placeholder, not a real summary."""
+    if not isinstance(value, str):
+        return False
+    normalized = value.strip().lower().strip("\"'")
+    return normalized in _PLACEHOLDER_SUMMARIES
+
+
+def _dedupe_tags(tags: list[Any]) -> list[Any]:
+    """Remove duplicate tags (case-insensitive), preserving first occurrence."""
+    seen: set[str] = set()
+    deduped: list[Any] = []
+    for tag in tags:
+        key = tag.lower() if isinstance(tag, str) else str(tag)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(tag)
+    return deduped
+
+
 def _infer_summary(body: str) -> str:
     """Derive a one-line summary from the body's first heading or paragraph."""
     # First H1
@@ -291,7 +330,7 @@ def _infer_tags(file_path: str, note_type: str) -> list[str]:
     """Derive tags from the note type and parent directory name."""
     normalized = file_path.replace("\\", "/")
     parts = [p for p in normalized.split("/") if p and not p.endswith(".md")]
-    tags = [note_type]
+    tags: list[str] = [note_type]
     # Add the immediate parent directory as a tag (e.g. "Research", "Chat")
     if parts:
         parent = parts[-1]
@@ -303,7 +342,9 @@ def _infer_tags(file_path: str, note_type: str) -> list[str]:
             "user",
         ):
             tags.append(parent.lower())
-    return tags
+    # Dedupe case-insensitively — e.g. note_type="research" + parent="Research"
+    # would otherwise produce ["research", "research"].
+    return _dedupe_tags(tags)  # type: ignore[return-value]
 
 
 def _format_frontmatter(fm: dict[str, Any]) -> str:
@@ -389,8 +430,16 @@ def inject_schema(
         if field not in fm:
             missing.append(field)
 
-    if not missing and fm_str:
-        # All required fields present — no injection needed.
+    # Detect quality issues that require sanitization even when all fields
+    # are nominally present (placeholder summary, duplicate tags).
+    _has_placeholder_summary = _is_placeholder_summary(fm.get("summary", ""))
+    _tags_val = fm.get("tags")
+    _has_duplicate_tags = isinstance(_tags_val, list) and len(_tags_val) != len(
+        {t.lower() if isinstance(t, str) else str(t) for t in _tags_val}
+    )
+
+    if not missing and fm_str and not _has_placeholder_summary and not _has_duplicate_tags:
+        # All required fields present and clean — no injection needed.
         return content
 
     # --- Required fields (auto-inject only the missing ones) ---
@@ -403,7 +452,7 @@ def inject_schema(
     if "created" not in fm:
         # Preserve existing created date, default to today
         fm["created"] = existing_fm.get("created", today)
-    if "summary" not in fm:
+    if "summary" not in fm or _is_placeholder_summary(fm.get("summary", "")):
         fm["summary"] = _infer_summary(body)
     if "tags" not in fm:
         fm["tags"] = _infer_tags(file_path, fm.get("type", _DEFAULT_TYPE))
@@ -411,6 +460,10 @@ def inject_schema(
     # Ensure tags is a list
     if isinstance(fm.get("tags"), str):
         fm["tags"] = [t.strip() for t in fm["tags"].split(",")]
+
+    # Dedupe tags (case-insensitive, preserve first occurrence)
+    if isinstance(fm.get("tags"), list):
+        fm["tags"] = _dedupe_tags(fm["tags"])
 
     # Rebuild the note with the injected frontmatter
     new_fm_str = _format_frontmatter(fm)
@@ -488,6 +541,20 @@ def validate_schema(content: str) -> tuple[bool, list[str], list[str]]:
                             f"{field} list item must be a string, got: "
                             f"{type(item).__name__}"
                         )
+
+    # Validate summary is not a placeholder
+    if _is_placeholder_summary(fm.get("summary", "")):
+        errors.append(
+            f"Summary appears to be an unfilled placeholder: '"
+            f"{fm.get('summary')}' — call inject_schema() to auto-infer"
+        )
+
+    # Validate tags have no duplicates
+    _tags = fm.get("tags")
+    if isinstance(_tags, list):
+        _lower_tags = [t.lower() if isinstance(t, str) else str(t) for t in _tags]
+        if len(_lower_tags) != len(set(_lower_tags)):
+            errors.append("Duplicate tags detected — tags must be unique")
 
     # Warnings for missing optional claim fields on claim-like types
     claim_types = {
