@@ -1,3 +1,11 @@
+---
+name: Bug report
+about: Report a bug or request a feature
+title: ""
+labels: ""
+assignees: ""
+---
+
 ## What happened?
 
 <!-- Describe the issue or feature request -->
