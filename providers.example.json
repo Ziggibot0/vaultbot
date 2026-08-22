@@ -1,0 +1,80 @@
+{
+  "_comment": "Example provider/model registry. Copy to providers.json and edit. providers.json is gitignored. This file documents the full schema. See .env.example for legacy .env fallback vars.",
+
+  "providers": [
+    {
+      "id": "ollama-local",
+      "type": "ollama",
+      "base_url": "http://localhost:11434",
+      "api_key": "",
+      "label": "Ollama (this machine)"
+    },
+    {
+      "id": "openrouter",
+      "type": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "YOUR_OPENROUTER_API_KEY",
+      "label": "OpenRouter (cloud)"
+    },
+    {
+      "id": "openai",
+      "type": "openai",
+      "base_url": "https://api.openai.com",
+      "api_key": "YOUR_OPENAI_API_KEY",
+      "label": "OpenAI (cloud)"
+    },
+    {
+      "id": "browser",
+      "type": "browser",
+      "base_url": "",
+      "api_key": "",
+      "label": "Browser (Web Speech API)"
+    },
+    {
+      "id": "edge-tts",
+      "type": "edge-tts",
+      "base_url": "",
+      "api_key": "",
+      "label": "Edge TTS (free, Microsoft)"
+    }
+  ],
+
+  "models": [
+    {
+      "id": "ollama-local:qwen3.5:4b",
+      "model": "qwen3.5:4b",
+      "provider": "ollama-local",
+      "vision": true,
+      "instruct": true,
+      "free": true,
+      "label": "",
+      "kind": "llm"
+    },
+    {
+      "id": "openrouter:meta-llama/llama-3.3-70b-instruct",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "provider": "openrouter",
+      "vision": false,
+      "instruct": true,
+      "free": true,
+      "label": "",
+      "kind": "llm"
+    },
+    {
+      "id": "openai:gpt-4o-mini",
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "vision": true,
+      "instruct": true,
+      "free": false,
+      "label": "",
+      "kind": "llm"
+    }
+  ],
+
+  "roles": {
+    "big": "openrouter:meta-llama/llama-3.3-70b-instruct",
+    "vision": "ollama-local:qwen3.5:4b",
+    "small": "ollama-local:qwen3.5:4b"
+  }
+}
