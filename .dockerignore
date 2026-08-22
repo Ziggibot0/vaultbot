@@ -1,0 +1,81 @@
+# Secrets & personal config — never ship these into an image.
+.env
+.env.local
+.env.*.local
+providers.json
+providers.json.tmp
+vaultbot_backend/.vaultbot_auth_token
+vaultbot_backend/google_workspace_config.json
+vaultbot_backend/google_workspace_token.json
+vaultbot_backend/custom_tools/google_workspace_config.json
+vaultbot_backend/custom_tools/google_workspace_tokens.json
+.vaultbot-install-state.json
+
+# Python virtual environments
+.venv/
+vaultbot_venv/
+venv/
+env/
+
+# Python cache / build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.coverage
+.pytest_cache/
+
+# VaultBot runtime state (regenerated on first run)
+_test_*.py
+vaultbot_backend/identity/
+vaultbot_backend/sessions/
+vaultbot_backend/checkpoints/
+vaultbot_backend/vaultbot_index/
+vaultbot_backend/vaultbot/
+vaultbot_backend/vaultbot.pid
+vaultbot_backend/chat_loop_checkpoint.json
+vaultbot_backend/curriculum_state.json
+vaultbot_backend/touch_counts.json
+vaultbot_backend/embedding_drift.json
+vaultbot_backend/trigger_embeddings.json
+vaultbot_backend/conversation_state.json
+vaultbot_backend/procedure_failure_log.json
+vaultbot_backend/calibration_log.json
+vaultbot_backend/claim_verification_log.json
+vaultbot_backend/consolidation_log.json
+vaultbot_backend/rag_eval_log.json
+vaultbot_backend/golden_report.json
+vaultbot_backend/golden_set.json
+vaultbot_backend/golden_set.README.md
+
+# Logs
+vaultbot_backend/backend.log
+vaultbot_backend/debug_chat.log
+vaultbot_backend/backend.err
+vaultbot_backend/backend_stdout.log
+vaultbot_backend/backend_stdout.txt
+vaultbot_backend/backend_stderr.log
+vaultbot_backend/backend_stderr.txt
+*.log
+
+# Vault contents — user data, never belongs in an image.
+vault/
+myvault/
+vaultbot-stuff/
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git itself
+.git/
+.gitignore
+.gitattributes
+
+# CI / docs (not needed at runtime)
+.github/
+docs/
