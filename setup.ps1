@@ -1,4 +1,4 @@
-# ===========================================================================
+﻿# ===========================================================================
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
@@ -10,7 +10,6 @@
 # ===========================================================================
 
 $ErrorActionPreference = "Stop"
-$repoZip   = "https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
 $frameworkName = "VaultBot"   # the folder the repo (framework) clones into
 
 function Write-Step  { param($msg) Write-Host "`n>>> $msg" -ForegroundColor Cyan }
@@ -215,8 +214,10 @@ Write-Host ""
 #   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
 #   2. Community contributions = the vaultbot's submit_contribution tool
 #      pushes fixes to your fork and opens a PR upstream, with zero manual git.
-# If `gh` is missing or the user declines auth, we fall back to the zip
-# download so a non-sharing user still gets a working vault.
+# If `gh` is missing or the user declines auth, installation aborts with a
+# clear error. We never fall back to a zip snapshot: a zip has no git
+# history, so it can't update itself or share fixes, and we won't let a
+# user believe they got a working install when they didn't.
 #
 # The repo clones into a FRAMEWORK folder ($frameworkName). Inside it, the
 # `myvault/` subfolder is the user's Obsidian vault. The vault folder name
@@ -261,7 +262,7 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
 
     if (-not $ghOk) {
         # gh CLI is missing. Offer to install it so VaultBot can update itself
-        # and share fixes. If the user declines, fall back to the zip download.
+        # and share fixes. If the user declines, installation aborts (no zip).
         Write-Step "GitHub CLI not found"
         Write-Host "  VaultBot uses the GitHub CLI ('gh') to update itself and" -ForegroundColor Cyan
         Write-Host "  share fixes with the community. It's optional but recommended." -ForegroundColor Cyan
@@ -309,8 +310,8 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
             Write-Host "  A browser window will open. Sign in to GitHub, then" -ForegroundColor Yellow
             Write-Host "  copy the one-time code back into this window." -ForegroundColor Yellow
             Write-Host ""
-            Write-Host "  (No GitHub account? Just close the browser - VaultBot" -ForegroundColor DarkGray
-            Write-Host "   will still install, just without auto-updates.)" -ForegroundColor DarkGray
+            Write-Host "  (No GitHub account? VaultBot requires one to install - it" -ForegroundColor DarkGray
+            Write-Host "   installs as a fork so it can update itself and share fixes.)" -ForegroundColor DarkGray
             Write-Host ""
 
             $retry = $true
@@ -339,8 +340,9 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
             if (-not $authed) {
                 $ghOk = $false
                 Write-Warn2 "GitHub sign-in was skipped or didn't complete."
-                Write-Host "  VaultBot will install without auto-updates." -ForegroundColor DarkGray
-                Write-Host "  You can connect GitHub later by running:  gh auth login" -ForegroundColor DarkGray
+                Write-Host "  VaultBot needs a GitHub account to install (it installs as a" -ForegroundColor Yellow
+                Write-Host "  fork so it can update itself and share fixes)." -ForegroundColor Yellow
+                Write-Host "  Sign in with:  gh auth login   then re-run this installer." -ForegroundColor Yellow
             } else {
                 Write-OK "Signed in to GitHub"
             }
@@ -369,8 +371,10 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
             }
 
             if (-not (Test-Path $frameworkPath)) {
-                Write-Warn2 "GitHub clone/fork failed -- falling back to zip download."
-                $ghOk = $false
+                Write-Err "GitHub clone/fork failed."
+                Write-Host "  VaultBot could not be installed. Check your GitHub account" -ForegroundColor Yellow
+                Write-Host "  and network connection, then re-run this installer." -ForegroundColor Yellow
+                return
             } else {
                 Write-OK "VaultBot installed as a git fork (updates will merge cleanly)"
             }
@@ -378,23 +382,16 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
     }
 
     if (-not $ghOk) {
-        Write-Step "Downloading VaultBot..."
-        $zipPath = Join-Path $env:TEMP "vaultbot-setup.zip"
-        & curl.exe -sL -o $zipPath $repoZip
-        if (-not (Test-Path $zipPath) -or (Get-Item $zipPath).Length -lt 1000) {
-            # Fallback to .NET download if curl isn't available
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-            (New-Object System.Net.WebClient).DownloadFile($repoZip, $zipPath)
-        }
-
-        Write-Step "Extracting..."
-        $extractDir = Join-Path $env:TEMP "vaultbot-extract-$(Get-Random)"
-        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
-        $inner = Get-ChildItem $extractDir -Directory | Select-Object -First 1
-        Move-Item $inner.FullName $frameworkPath
-        Remove-Item $zipPath -Force
-        Remove-Item $extractDir -Recurse -Force
-        Write-OK "Downloaded to $frameworkPath"
+        Write-Err "VaultBot requires a GitHub account to install."
+        Write-Host "  VaultBot installs as a git fork so it can update itself and" -ForegroundColor Yellow
+        Write-Host "  share fixes. A zip snapshot can't do either, so we don't" -ForegroundColor Yellow
+        Write-Host "  install one." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  To continue:" -ForegroundColor Cyan
+        Write-Host "    1. Install the GitHub CLI:  winget install GitHub.cli" -ForegroundColor White
+        Write-Host "    2. Sign in:                 gh auth login" -ForegroundColor White
+        Write-Host "    3. Re-run this installer." -ForegroundColor White
+        return
     }
 }
 
