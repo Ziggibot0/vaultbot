@@ -114,6 +114,7 @@ def run(args: dict) -> dict:
         (r"os\.system\s*\(", "os.system() call"),
         (r"__import__\s*\(", "__import__() call"),
         (r"subprocess\.Popen.*shell\s*=\s*True", "subprocess with shell=True"),
+        (r"pickle\.loads?\s*\(", "pickle.load/loads (deserialization attack)"),
         # Data exfiltration
         (r"requests\.(post|put).*\.(env|env\b)", "HTTP request involving .env"),
         # Path traversal

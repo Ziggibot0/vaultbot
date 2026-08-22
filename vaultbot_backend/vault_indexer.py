@@ -15,7 +15,6 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import time
 from pathlib import Path
 from typing import Any
@@ -69,7 +68,7 @@ class VaultIndexer:
         self.index_path.mkdir(exist_ok=True)
 
         self.index_file = self.index_path / "index.faiss"
-        self.metadata_file = self.index_path / "metadata.pkl"
+        self.metadata_file = self.index_path / "metadata.json"
         self.timestamp_file = self.index_path / "timestamps.json"
 
         self.session_logger = session_logger
@@ -134,9 +133,11 @@ class VaultIndexer:
     def _load_index(self):
         """Load existing index and metadata from disk, or initialize new.
 
-        Handles on-disk formats: new (tuple of 3 or 4 with schema version +
-        IndexIDMap2) and legacy (list[dict] + IndexFlatL2, migrated in-place
-        via reconstruct — zero Ollama calls).
+        Metadata is stored as JSON (``metadata.json``) — never pickle, which
+        would allow arbitrary code execution from a tampered vault file. The
+        JSON schema is a dict with ``schema_version``, ``metadata`` (faiss id
+        -> meta dict, ids serialized as string keys), ``path_to_id``, and
+        ``next_id``.
         """
         if (
             self.index_file.exists()
@@ -145,67 +146,28 @@ class VaultIndexer:
         ):
             try:
                 self.index = faiss.read_index(str(self.index_file))
-                with open(self.metadata_file, "rb") as f:
-                    loaded = pickle.load(f)
-                with open(self.timestamp_file) as f:
+                with open(self.metadata_file, encoding="utf-8") as f:
+                    data = json.load(f)
+                with open(self.timestamp_file, encoding="utf-8") as f:
                     self.timestamps = json.load(f)
 
-                # Detect format: tuple(3)=v1, tuple(4)=v2+ (schema ver), list=legacy.
-                _stored_schema_version = 1
-                if isinstance(loaded, tuple) and len(loaded) == 4:
-                    (
-                        self._metadata,
-                        self._path_to_id,
-                        self._next_id,
-                        _stored_schema_version,
-                    ) = loaded
-                elif isinstance(loaded, tuple) and len(loaded) == 3:
-                    self._metadata, self._path_to_id, self._next_id = loaded
-                    # Normalize stale relative paths to absolute.
-                    for fid, meta in list(self._metadata.items()):
-                        fp = Path(meta["file_path"])
-                        if not fp.is_absolute():
-                            resolved = (self.vault_path / fp).resolve()
-                            old_key = meta["file_path"]
-                            meta["file_path"] = str(resolved)
-                            self._path_to_id.pop(old_key, None)
-                            self._path_to_id[str(resolved)] = fid
-                else:
-                    # Legacy list format — migrate to id-keyed dict + IndexIDMap2.
-                    _logger.info(
-                        "[migration] Detected legacy list-format; "
-                        "converting to IndexIDMap2..."
-                    )
-                    legacy_list = loaded if isinstance(loaded, list) else []
-                    self._metadata = {}
-                    self._path_to_id = {}
-                    old_index = self.index
-                    dim = old_index.d if old_index is not None else None
-                    self.index = None  # let _add_embedding_to_index create it
-                    for i, meta in enumerate(legacy_list):
-                        fp = Path(meta["file_path"])
-                        if not fp.is_absolute():
-                            fp = (self.vault_path / fp).resolve()
-                            meta["file_path"] = str(fp)
-                        try:
-                            vec = old_index.reconstruct(i).astype(np.float32)  # type: ignore
-                        except Exception:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                            _logger.info(
-                                f"[migration] Skipping unreconstructable "
-                                f"legacy vector {i} ({meta['file_path']})"
-                            )
-                            continue
-                        self._add_embedding_to_index(
-                            fp,
-                            vec,
-                            meta.get("last_modified", 0.0),
-                            meta.get("content_hash", ""),
-                            content_preview=meta.get("content_preview", ""),
-                        )
-                    self.dimension = dim
-                    _logger.info(
-                        f"[migration] Migrated {self._next_id} vectors to IndexIDMap2."
-                    )
+                _stored_schema_version = data.get("schema_version", 1)
+                # JSON serializes dict keys as strings; faiss ids are ints.
+                self._metadata = {
+                    int(fid): meta for fid, meta in data.get("metadata", {}).items()
+                }
+                self._path_to_id = data.get("path_to_id", {})
+                self._next_id = int(data.get("next_id", 0))
+
+                # Normalize stale relative paths to absolute.
+                for fid, meta in list(self._metadata.items()):
+                    fp = Path(meta["file_path"])
+                    if not fp.is_absolute():
+                        resolved = (self.vault_path / fp).resolve()
+                        old_key = meta["file_path"]
+                        meta["file_path"] = str(resolved)
+                        self._path_to_id.pop(old_key, None)
+                        self._path_to_id[str(resolved)] = fid
 
                 # If the embedding schema changed, stored vectors no longer
                 # match the text we now embed — discard and force full rebuild.
@@ -861,23 +823,21 @@ class VaultIndexer:
     def persist(self):
         """Save the index and metadata to disk.
 
-        The metadata pickle stores a tuple ``(_metadata, _path_to_id,
-        _next_id, EMBEDDING_SCHEMA_VERSION)`` so _load_index can detect the
-        format and migrate accordingly.
+        Metadata is written as JSON (``metadata.json``) — never pickle, which
+        would allow arbitrary code execution on load. faiss ids are ints, so
+        they are serialized as string keys and re-keyed to ints on load.
         """
         if self.index is not None:
             faiss.write_index(self.index, str(self.index_file))
-        with open(self.metadata_file, "wb") as f:
-            pickle.dump(
-                (
-                    self._metadata,
-                    self._path_to_id,
-                    self._next_id,
-                    EMBEDDING_SCHEMA_VERSION,
-                ),
-                f,
-            )
-        with open(self.timestamp_file, "w") as f:
+        data = {
+            "schema_version": EMBEDDING_SCHEMA_VERSION,
+            "metadata": {str(fid): meta for fid, meta in self._metadata.items()},
+            "path_to_id": self._path_to_id,
+            "next_id": self._next_id,
+        }
+        with open(self.metadata_file, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        with open(self.timestamp_file, "w", encoding="utf-8") as f:
             json.dump(self.timestamps, f)
         _logger.info(f"Index persisted to {self.index_path}")
 
