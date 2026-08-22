@@ -202,3 +202,36 @@ jobs:
         # dep that can't be looked up doesn't silently pass.
         run: |
           uv run pip-audit -r vaultbot_backend/requirements.txt --strict
+
+  release:
+    # Cut a GitHub release for every merge to main, tagged from the plugin
+    # manifest version. The in-Obsidian updater targets the latest release
+    # tag (not `main`), so a release is what makes "Update from GitHub" safe
+    # for non-technical users: they move between known-good, CI-passed
+    # releases instead of a moving branch (issue #280).
+    #
+    # If the tag already exists (version not bumped), this is a no-op.
+    name: Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(python -c "import json;print(json.load(open('myvault/.obsidian/plugins/vaultbot/manifest.json'))['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
