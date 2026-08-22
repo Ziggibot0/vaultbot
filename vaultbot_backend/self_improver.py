@@ -490,7 +490,9 @@ class SelfImprover:
 
     # --- code_run --------------------------------------------------------
 
-    def code_run(self, code: str, timeout: int = 15) -> dict[str, Any]:
+    def code_run(
+        self, code: str, timeout: int = 15, allow_write: bool = False
+    ) -> dict[str, Any]:
         """Execute Python code in a subprocess and return stdout/stderr/exit.
 
         CRASH FIX (agent_silent): previously used capture_output=True, which
@@ -499,10 +501,23 @@ class SelfImprover:
         single backend process was OOM-killed -> agent_silent. Now the child
         writes to temp files with a HARD BYTE CAP; the backend reads back only
         the tail. Backend memory stays flat no matter how much the child prints.
+
+        READ-ONLY GUARD (issue #207): by default the child runs with a guard
+        preamble that blocks file-write primitives (open 'w', Path.write_text,
+        shutil.copy, os.remove, ...). code_run is for TESTING only — the only
+        sanctioned way to modify backend source is the gated safe_write. Pass
+        ``allow_write=True`` to skip the guard for the rare legitimate case
+        (e.g. a test that must write a temp file).
         """
         venv_python = str(BACKEND_ROOT / ".venv" / "Scripts" / "python.exe")
         if not Path(venv_python).exists():
             venv_python = sys.executable
+
+        # Prepend the read-only guard unless the caller explicitly opted out.
+        if not allow_write:
+            from code_run_guard import build_guard_preamble
+
+            code = build_guard_preamble() + "\n" + code
 
         out_path = err_path = None
         try:

@@ -392,14 +392,25 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "to write or modify files. Use safe_write (Python), "
                 "js_safe_write (JavaScript), vault_safe_write (markdown), or "
                 "vault_append (markdown append) for any file modification. "
-                "code_run has no backup/rollback — files you create or modify "
-                "in code_run are permanent and untracked."
+                "code_run is READ-ONLY by default: file-write primitives "
+                "(open 'w', Path.write_text, shutil.copy, os.remove, ...) are "
+                "blocked and raise PermissionError. Pass allow_write=true only "
+                "for the rare legitimate case (e.g. a test that must write a "
+                "temp file)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "code": {"type": "string"},
                     "timeout": {"type": "integer", "default": 15},
+                    "allow_write": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "Set true to skip the read-only guard and allow "
+                            "file writes. Default false (read-only)."
+                        ),
+                    },
                 },
                 "required": ["code"],
             },
