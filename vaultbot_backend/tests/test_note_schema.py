@@ -326,6 +326,192 @@ def test_heal_vault_schema_skips_source_docs():
         shutil.rmtree(tmp)
 
 
+# ── Issue #176: placeholder summary, duplicate tags, empty Key Findings ──
+
+
+def test_infer_tags_dedupes_research_dir():
+    """_infer_tags must not produce duplicate 'research' tag.
+
+    When note_type='research' and the parent directory is 'Research',
+    the tag and dir-name collide — they must be deduped.
+    """
+    from note_schema import _infer_tags
+
+    tags = _infer_tags("vaultbot-stuff/Knowledge/Research/Topic.md", "research")
+    assert tags.count("research") == 1
+    # Non-colliding types still get both tags
+    tags2 = _infer_tags("vaultbot-stuff/Knowledge/Patterns/Foo.md", "pattern")
+    assert "pattern" in tags2
+    assert "patterns" in tags2
+
+
+def test_inject_schema_replaces_placeholder_summary():
+    """inject_schema must replace 'summary: SUMMARY' with an inferred value."""
+    content = (
+        "---\n"
+        "type: research\n"
+        "status: raw\n"
+        "created: 2026-08-22\n"
+        "summary: SUMMARY\n"
+        "tags: [research]\n"
+        "---\n"
+        "# Real Title Here\n\nSome content."
+    )
+    result = inject_schema(content, "vaultbot-stuff/Knowledge/Research/Test.md")
+    fm = parse_frontmatter(result)
+    # The placeholder must be replaced by the inferred H1 title
+    assert fm.get("summary") != "SUMMARY"
+    assert fm.get("summary") == "Real Title Here"
+    ok, errors, _ = validate_schema(result)
+    assert ok, f"Should be valid after injection: {errors}"
+
+
+def test_inject_schema_replaces_one_line_description_placeholder():
+    """inject_schema must replace 'summary: one-line description' placeholder."""
+    content = (
+        "---\n"
+        "type: research\n"
+        "status: raw\n"
+        "created: 2026-08-22\n"
+        "summary: one-line description\n"
+        "tags: [research]\n"
+        "---\n"
+        "# My Topic\n\nContent here."
+    )
+    result = inject_schema(content, "vaultbot-stuff/Knowledge/Research/My.md")
+    fm = parse_frontmatter(result)
+    assert fm.get("summary") == "My Topic"
+
+
+def test_inject_schema_dedupes_existing_duplicate_tags():
+    """inject_schema must dedupe tags that the LLM emitted twice."""
+    content = (
+        "---\n"
+        "type: research\n"
+        "status: raw\n"
+        "created: 2026-08-22\n"
+        "summary: A real summary\n"
+        "tags:\n"
+        "  - research\n"
+        "  - research\n"
+        "  - biology\n"
+        "---\n"
+        "# Topic\n\nContent."
+    )
+    result = inject_schema(content, "vaultbot-stuff/Knowledge/Research/Topic.md")
+    fm = parse_frontmatter(result)
+    tags = fm.get("tags", [])
+    lower_tags = [t.lower() for t in tags]
+    assert lower_tags.count("research") == 1
+    assert "biology" in lower_tags
+
+
+def test_inject_schema_dedupes_case_insensitive_tags():
+    """inject_schema must dedupe tags case-insensitively (Research vs research)."""
+    content = (
+        "---\n"
+        "type: research\n"
+        "status: raw\n"
+        "created: 2026-08-22\n"
+        "summary: A real summary\n"
+        "tags: [Research, research, Biology, biology]\n"
+        "---\n"
+        "# Topic\n\nContent."
+    )
+    result = inject_schema(content, "vaultbot-stuff/Knowledge/Research/Topic.md")
+    fm = parse_frontmatter(result)
+    tags = fm.get("tags", [])
+    lower_tags = [t.lower() for t in tags]
+    assert lower_tags.count("research") == 1
+    assert lower_tags.count("biology") == 1
+
+
+def test_validate_schema_rejects_placeholder_summary():
+    """validate_schema must flag 'summary: SUMMARY' as an error."""
+    content = (
+        "---\n"
+        "type: research\n"
+        "status: raw\n"
+        "created: 2026-08-22\n"
+        "summary: SUMMARY\n"
+        "tags: [research]\n"
+        "---\n"
+        "# Topic\n\nContent."
+    )
+    ok, errors, _ = validate_schema(content)
+    assert not ok
+    assert any("placeholder" in e.lower() for e in errors)
+
+
+def test_validate_schema_rejects_duplicate_tags():
+    """validate_schema must flag duplicate tags as an error."""
+    content = (
+        "---\n"
+        "type: research\n"
+        "status: raw\n"
+        "created: 2026-08-22\n"
+        "summary: A real summary\n"
+        "tags: [research, research]\n"
+        "---\n"
+        "# Topic\n\nContent."
+    )
+    ok, errors, _ = validate_schema(content)
+    assert not ok
+    assert any("duplicate" in e.lower() for e in errors)
+
+
+def test_synthesize_note_markdown_never_empty_key_findings():
+    """synthesize_note_markdown must never ship an empty Key Findings section.
+
+    Regression for issue #176: when report['synthesis'] is truthy but
+    contains only frontmatter, _strip_frontmatter yields an empty string.
+    The fallback text must be used so the section is never empty.
+    """
+    from research_synthesizer import synthesize_note_markdown
+
+    # synthesis is frontmatter-only (truthy but body is empty after strip)
+    report = {
+        "topic": "Test Topic",
+        "synthesis": "---\ntype: research\nsummary: x\ntags: [research]\n---\n",
+        "sources": [],
+        "source_count": 0,
+        "synthesis_facts": 0,
+        "gaps_filled": [],
+        "rounds": [],
+    }
+    result = synthesize_note_markdown(report, summary="A summary")
+    # The Key Findings section must contain the fallback text, not be empty
+    assert "## Key Findings" in result
+    findings_idx = result.index("## Key Findings")
+    after_header = result[findings_idx + len("## Key Findings") :]
+    # Skip to the next section header or end
+    next_section = after_header.find("## ")
+    if next_section == -1:
+        section_content = after_header
+    else:
+        section_content = after_header[:next_section]
+    assert section_content.strip() != "", "Key Findings section must not be empty"
+    assert "no corroborated findings" in section_content.lower()
+
+
+def test_synthesize_note_markdown_key_findings_with_real_content():
+    """synthesize_note_markdown preserves real synthesis content under Key Findings."""
+    from research_synthesizer import synthesize_note_markdown
+
+    report = {
+        "topic": "Real Topic",
+        "synthesis": "This is a real finding about the topic.",
+        "sources": [],
+        "source_count": 1,
+        "synthesis_facts": 1,
+        "gaps_filled": [],
+        "rounds": [],
+    }
+    result = synthesize_note_markdown(report, summary="A summary")
+    assert "## Key Findings" in result
+    assert "This is a real finding about the topic." in result
+
+
 if __name__ == "__main__":
     # Run all tests
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
