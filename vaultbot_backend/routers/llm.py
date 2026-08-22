@@ -18,7 +18,13 @@ from typing import Annotated, Any
 from app_state import get_services
 from fastapi import APIRouter, Depends, HTTPException
 from llm_client import build_role_client, clear_role_client_cache
-from providers import KNOWN_PROVIDERS, ROLES, ProviderRegistry, test_provider
+from providers import (
+    KNOWN_PROVIDERS,
+    ROLES,
+    ProviderRegistry,
+    assert_public_base_url,
+    test_provider,
+)
 from services import Services
 
 router = APIRouter()
@@ -577,6 +583,13 @@ async def add_provider(payload: dict, svc: Annotated[Services, Depends(get_servi
         return {"status": "error", "detail": "type must be 'ollama' or 'openai'"}, 400
     if not base_url:
         return {"status": "error", "detail": "base_url required"}, 400
+    # SSRF guard (issue #253): reject base_urls that resolve to private/
+    # metadata addresses BEFORE the backend probes them (which would send the
+    # caller-supplied bearer token to an internal/metadata endpoint).
+    try:
+        assert_public_base_url(base_url)
+    except ValueError as e:
+        return {"status": "error", "detail": str(e)}, 400
     try:
         prov = reg.add_provider(pid, ptype, base_url, api_key=api_key, label=label)
     except ValueError as e:
