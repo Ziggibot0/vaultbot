@@ -157,6 +157,12 @@ vaultbot_backend/_dream_pass_themes.json
 # Personal communication preferences (operator-specific, not shippable)
 Communication-Preferences.md
 
+# GitHub Copilot agent instructions (operator-specific, not shippable)
+# These contain the two-account PR split (ziggibot-uni / Ziggibot0) and
+# internal troubleshooting directives. Remote contributors must NOT see
+# them or submit PRs as ziggibot-uni.
+.github/instructions/
+
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # The vault itself - the USER'S mind
 # The vault is personal knowledge, chat history, directives, and notes.
