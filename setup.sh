@@ -209,6 +209,74 @@ if [ "$OLLAMA_OK" = false ]; then
     fi
 fi
 
+# Obsidian — the app the user actually talks to VaultBot through. Unlike
+# Python/Git/Ollama, the installer previously ASSUMED Obsidian was already
+# installed, so a fresh machine would reach the end, fail to open the
+# `obsidian://` deep link (no protocol handler registered), and leave the
+# user with a "complete" install they couldn't use. Detect it the same way
+# as the other prerequisites and auto-install it when missing.
+#
+# Obsidian is NOT in the default apt/dnf repos, so the generic install_pkg
+# helper can't fetch it. We install it per-platform:
+#   - macOS:  `brew install --cask obsidian`
+#   - Linux:  download the official .deb (Debian/Ubuntu) or .AppImage
+#             (everything else) from obsidian.md and install it.
+install_obsidian() {
+    if command -v brew &>/dev/null; then
+        brew install --cask obsidian >/dev/null 2>&1
+    elif command -v apt-get &>/dev/null; then
+        # Debian/Ubuntu: official .deb from obsidian.md.
+        local deb="/tmp/obsidian.deb"
+        curl -fsSL -o "$deb" "https://github.com/obsidianmd/obsidian-releases/releases/latest/download/obsidian_amd64.deb" 2>/dev/null \
+            && sudo apt-get install -y "$deb" >/dev/null 2>&1
+    else
+        # Other Linux: official AppImage, installed to ~/.local/bin. We also
+        # write a .desktop entry so the `obsidian://` URI handler is
+        # registered (Obsidian's deep link needs it on Linux) and the app
+        # shows up in the launcher.
+        local appimg="$HOME/.local/bin/obsidian"
+        local desktop="$HOME/.local/share/applications/obsidian.desktop"
+        mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+        if ! curl -fsSL -o "$appimg" "https://github.com/obsidianmd/obsidian-releases/releases/latest/download/Obsidian-x86_64.AppImage" 2>/dev/null; then
+            return 1
+        fi
+        chmod +x "$appimg"
+        cat > "$desktop" <<EOF
+[Desktop Entry]
+Name=Obsidian
+Exec=$HOME/.local/bin/obsidian %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/obsidian;
+Categories=Office;
+EOF
+        update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+    fi
+}
+
+OBSIDIAN_OK=false
+if command -v obsidian &>/dev/null; then
+    OBSIDIAN_OK=true
+    echo "  [OK] Obsidian: $(command -v obsidian)"
+elif [ -d "/Applications/Obsidian.app" ]; then
+    OBSIDIAN_OK=true
+    echo "  [OK] Obsidian: /Applications/Obsidian.app"
+elif [ -d "$HOME/.local/share/obsidian" ] || [ -d "/opt/obsidian" ]; then
+    OBSIDIAN_OK=true
+    echo "  [OK] Obsidian installed"
+fi
+if [ "$OBSIDIAN_OK" = false ]; then
+    if install_obsidian; then
+        OBSIDIAN_OK=true
+        echo "  [OK] Obsidian installed"
+    else
+        echo "  [!]  Could not auto-install Obsidian."
+        echo "       Download Obsidian from https://obsidian.md, then re-run."
+        open "https://obsidian.md" 2>/dev/null || xdg-open "https://obsidian.md" 2>/dev/null || true
+        exit 1
+    fi
+fi
+
 # ── 2. Ask the user's name ──────────────────────────────────────────────────
 echo ""
 echo "  What's your name? VaultBot will call you by this."
@@ -683,6 +751,23 @@ echo ""
 echo "  VaultBot knows your name is $OWNER_NAME."
 echo ""
 
-# Try to open Obsidian deep-linked to the vault
-ESCAPED_PATH=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$VAULT_PATH" 2>/dev/null || echo "$VAULT_PATH")
+# Try to open Obsidian deep-linked to the vault.
+#
+# The `obsidian://open` action's `path` parameter must point at a FILE
+# inside the vault, NOT the vault folder itself — Obsidian searches for the
+# most specific vault that CONTAINS that file path, and a bare folder
+# doesn't match. So we deep-link to a real file inside the vault and let
+# Obsidian resolve the vault from it. We prefer any .md note, then fall back
+# to the .obsidian/app.json we just wrote (guaranteed to exist after step
+# 7b), then to the vault folder as a last resort.
+OPEN_TARGET=""
+FIRST_NOTE=$(find "$VAULT_PATH" -name '*.md' -type f 2>/dev/null | head -n 1)
+if [ -n "$FIRST_NOTE" ]; then
+    OPEN_TARGET="$FIRST_NOTE"
+elif [ -f "$APP_JSON" ]; then
+    OPEN_TARGET="$APP_JSON"
+else
+    OPEN_TARGET="$VAULT_PATH"
+fi
+ESCAPED_PATH=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$OPEN_TARGET" 2>/dev/null || echo "$OPEN_TARGET")
 open "obsidian://open?path=$ESCAPED_PATH" 2>/dev/null || xdg-open "obsidian://open?path=$ESCAPED_PATH" 2>/dev/null || true
