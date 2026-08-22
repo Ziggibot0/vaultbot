@@ -72,7 +72,6 @@ cp vaultbot/.env.example .env   # fill in your values
 The backend is started automatically by the Obsidian plugin. For manual
 testing: `vaultbot_venv/Scripts/python.exe vaultbot/vaultbot_backend/main.py`
 (Windows) or `vaultbot_venv/bin/python vaultbot/vaultbot_backend/main.py` (macOS/Linux).
-```
 
 ## Safe self-editing
 
