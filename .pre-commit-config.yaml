@@ -16,26 +16,26 @@ repos:
       - id: check-baseline-markers
         name: Block non-baseline System/ files
         description: >
-          Scans staged .md files under vaultbot/System/ and blocks
+          Scans staged .md files under vault/vaultbot-stuff/System/ and blocks
           any that lack "baseline: true" in their YAML frontmatter. This
           keeps personal/bespoke procedures from accidentally shipping.
-        entry: python vaultbot/vaultbot_backend/scripts/check_baseline_markers.py
+        entry: python vaultbot_backend/scripts/check_baseline_markers.py
         language: system
-        files: ^vaultbot/System/.*\.md$
+        files: ^vault/vaultbot-stuff/System/.*\.md$
         stages: [pre-commit]
         pass_filenames: false
 
       - id: check-procedure-frontmatter
         name: Block procedures with invalid frontmatter
         description: >
-          Scans staged .md files under vaultbot/System/ and blocks any
+          Scans staged .md files under vault/vaultbot-stuff/System/ and blocks any
           procedure note (type: procedure) missing required frontmatter
           fields (type, description, when_to_use, allowed_tools,
           falsifiable_if, status, model_cartridge, created, summary, tags).
           Reuses procedure_validator — the same gate Procedure-Creator
           applies at publication time.
-        entry: python vaultbot/vaultbot_backend/scripts/check_procedure_frontmatter.py
+        entry: python vaultbot_backend/scripts/check_procedure_frontmatter.py
         language: system
-        files: ^vaultbot/System/.*\.md$
+        files: ^vault/vaultbot-stuff/System/.*\.md$
         stages: [pre-commit]
         pass_filenames: false
