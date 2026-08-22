@@ -523,4 +523,7 @@ version: test with `code_run` before `tool_create`, use `safe_write` for
 backend edits, and never commit your `.env` or vault contents. CI enforces
 two ratchets (debt + thinness) that prevent quality regressions — see
 [CONTRIBUTING.md](CONTRIBUTING.md#ci-ratchets-behavior-capture-and-thinness)
+
+**Code of conduct:** All participants are expected to follow our
+[Code of Conduct](CODE_OF_CONDUCT.md).
 for details.
