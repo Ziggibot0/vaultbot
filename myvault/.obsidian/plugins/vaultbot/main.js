@@ -1017,6 +1017,23 @@ class VaultBotPlugin extends Plugin {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
+	// Resolve the latest release tag from GitHub. Returns the tag name
+	// (e.g. "v1.5.1") or null if it can't be determined (offline, no
+	// releases yet, etc.). Used so updates target known-good releases
+	// instead of a moving branch.
+	// ─────────────────────────────────────────────────────────────────────
+	async resolveLatestTag() {
+		try {
+			const resp = await fetch('https://api.github.com/repos/Ziggibot0/vaultbot/releases/latest', { cache: 'no-store' });
+			if (!resp.ok) return null;
+			const rel = await resp.json();
+			return rel && rel.tag_name ? rel.tag_name : null;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
 	// Check the latest version available on GitHub without applying it.
 	// Fetches the repo's manifest.json from the raw GitHub URL and compares
 	// its version field against the locally-installed manifest. Resolves to
@@ -1024,7 +1041,7 @@ class VaultBotPlugin extends Plugin {
 	// ─────────────────────────────────────────────────────────────────────
 	async checkLatestVersion(ref) {
 		const fs = require('fs');
-		const refSpec = (ref && String(ref).trim()) || 'main';
+		let refSpec = (ref && String(ref).trim()) || 'latest';
 		let currentVersion = '?';
 		try {
 			const vaultRoot = this.app.vault.adapter.getBasePath
@@ -1035,6 +1052,14 @@ class VaultBotPlugin extends Plugin {
 				currentVersion = JSON.parse(fs.readFileSync(manPath, 'utf8')).version || '?';
 			}
 		} catch (e) {}
+		// 'latest' resolves to the latest release tag (known-good), so
+		// "Check for updates" compares against a release, not a moving
+		// branch. A concrete branch/tag name is used as-is.
+		if (refSpec === 'latest') {
+			const tag = await this.resolveLatestTag();
+			if (!tag) return { error: 'Could not determine the latest release', current: currentVersion };
+			refSpec = tag;
+		}
 		// Use the GitHub API (works for branches + tags) to get the manifest.
 		const apiUrl = `https://raw.githubusercontent.com/Ziggibot0/vaultbot/${encodeURIComponent(refSpec)}/myvault/.obsidian/plugins/vaultbot/manifest.json`;
 		try {
@@ -1096,7 +1121,15 @@ class VaultBotPlugin extends Plugin {
 			vaultRoot = this.app.vault.configDir.replace(/[\\/]\.obsidian[\\/]?$/, '');
 		}
 
-		const refSpec = (ref && String(ref).trim()) || 'main';
+		let refSpec = (ref && String(ref).trim()) || 'latest';
+		// 'latest' resolves to the latest release tag (known-good), so
+		// updates target a release, not a moving branch. A concrete
+		// branch/tag name is used as-is.
+		if (refSpec === 'latest') {
+			const tag = await this.resolveLatestTag();
+			if (!tag) throw new Error('Could not determine the latest release. Try a specific branch or tag.');
+			refSpec = tag;
+		}
 		// GitHub serves a tarball for any branch/tag/commit ref. The archive
 		// prefix is always "<repo>-<ref-with-slashes-collapsed>/" — but the
 		// safest way to find the prefix is to list the archive and read the
@@ -2957,9 +2990,9 @@ containerEl.createEl('h3', {text: 'Safety'});
 
 		const updateRow = containerEl.createDiv({attr: {style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;'}});
 		const refInput = updateRow.createEl('input', {type: 'text', attr: {
-			placeholder: 'main (branch or tag)',
+			placeholder: 'latest (or a branch/tag)',
 			style: 'flex:1;min-width:140px;'}});
-		refInput.value = 'main';
+		refInput.value = 'latest';
 		const checkBtn = updateRow.createEl('button', {text: 'Check for updates'});
 		const updateBtn = updateRow.createEl('button', {text: 'Update from GitHub', cls: 'mod-cta'});
 		const updateStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin-top:6px;'}});
@@ -2984,7 +3017,7 @@ containerEl.createEl('h3', {text: 'Safety'});
 			checkBtn.setAttribute('disabled', 'disabled');
 			checkBtn.setText('Checking\u2026');
 			try {
-				const info = await this.plugin.checkLatestVersion(refInput.value.trim() || 'main');
+				const info = await this.plugin.checkLatestVersion(refInput.value.trim() || 'latest');
 				if (info.error) {
 					updateStatusEl.setText(`Check failed: ${info.error}`);
 				} else if (info.updateAvailable) {
@@ -3068,7 +3101,7 @@ containerEl.createEl('h3', {text: 'Safety'});
 			try {
 				const res = await this.plugin.performSelfUpdate((msg) => {
 					updateStatusEl.setText(msg);
-				}, refInput.value.trim() || 'main');
+				}, refInput.value.trim() || 'latest');
 				if (res && res.ok) {
 					updateStatusEl.setText(`Done. VaultBot is now v${res.version}.`);
 					new Notice(`VaultBot updated to v${res.version}.`);
