@@ -1,8 +1,8 @@
 """Tests for the method-aware auth gate (issue #253 / #230).
 
-Verifies that mutating methods (POST/PUT/DELETE/PATCH) on /llm/* require
-auth, while GET stays open and the explicit always-required paths still
-require auth regardless of method.
+Verifies that ANY mutating method (POST/PUT/DELETE/PATCH) requires auth,
+regardless of path, while GET stays open and the explicit always-required
+paths still require auth regardless of method.
 
 Run: pytest tests/test_auth_gate.py -v
 """
@@ -30,9 +30,30 @@ class TestAuthRequiredForMethod:
             ("/llm/set_model", "POST"),
             ("/llm/providers", "PUT"),
             ("/llm/providers", "PATCH"),
+            # issue #230: every mutating endpoint, not just /llm/*
+            ("/restart", "POST"),
+            ("/reload-plugin", "POST"),
+            ("/update/rollback", "POST"),
+            ("/config", "POST"),
+            ("/models/pull", "POST"),
+            ("/set_model", "POST"),
+            ("/research_tool", "POST"),
+            ("/ingest_learning_material", "POST"),
+            ("/autonomous/trigger", "POST"),
+            ("/consolidation/run", "POST"),
+            ("/task", "POST"),
+            ("/tournament/run", "POST"),
+            ("/tournament/staging", "POST"),
+            ("/tournament/staging/clear", "POST"),
+            ("/tournament/staging/abc", "DELETE"),
+            ("/broadcast_questionnaire", "POST"),
+            ("/user_response", "POST"),
+            ("/stt", "POST"),
+            ("/tts", "POST"),
+            ("/checkpoints/recover", "POST"),
         ],
     )
-    def test_mutating_llm_requires_auth(self, path, method):
+    def test_mutating_requires_auth(self, path, method):
         assert is_auth_required_for_method(path, method) is True
 
     @pytest.mark.parametrize(
@@ -44,9 +65,15 @@ class TestAuthRequiredForMethod:
             ("/llm/vision_check", "GET"),
             ("/models", "GET"),
             ("/health", "GET"),
+            ("/config/effective", "GET"),
+            ("/autonomous/status", "GET"),
+            ("/autonomous/gaps", "GET"),
+            ("/custom_tools", "GET"),
+            ("/tournament/models", "GET"),
+            ("/sessions", "GET"),
         ],
     )
-    def test_read_llm_does_not_require_auth(self, path, method):
+    def test_read_does_not_require_auth(self, path, method):
         assert is_auth_required_for_method(path, method) is False
 
     @pytest.mark.parametrize(

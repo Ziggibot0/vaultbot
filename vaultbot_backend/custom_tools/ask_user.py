@@ -206,11 +206,20 @@ def run(
     }
 
     try:
+        headers = {"Content-Type": "application/json"}
+        try:
+            from auth import read_token as _read_token
+
+            _tok = _read_token()
+            if _tok:
+                headers["X-VaultBot-Token"] = _tok
+        except Exception:  # noqa: BLE001 — token is best-effort; auth may be disabled
+            pass
         req = urllib.request.Request(
             "http://127.0.0.1:8000/broadcast_questionnaire",
             method="POST",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         urllib.request.urlopen(req, timeout=30)
     except Exception as e:  # noqa: BLE001 — best-effort: send failure returns error to caller

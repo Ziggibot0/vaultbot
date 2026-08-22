@@ -49,12 +49,40 @@ import requests
 BACKEND_URL = os.getenv("VAULTBOT_BACKEND_URL", "http://localhost:8000")
 RESEARCH_TIMEOUT = int(os.getenv("VAULTBOT_RESEARCH_TIMEOUT", "180"))
 
+# The shared-secret auth token lives next to the backend (vaultbot_backend/
+# .vaultbot_auth_token). The MCP server is spawned by the plugin and is a
+# trusted internal caller, so it reads the token and attaches it to mutating
+# requests (POST /research_tool, POST /custom_tools/call) — which now require
+# auth even from localhost (issue #230).
+_TOKEN_FILE = Path(__file__).resolve().parent / ".vaultbot_auth_token"
+
+
+def _auth_token() -> str:
+    """Read the backend's shared-secret token ("" if absent/corrupt)."""
+    try:
+        token = _TOKEN_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    if len(token) == 64 and all(c in "0123456789abcdef" for c in token):
+        return token
+    return ""
+
+
+def _auth_headers() -> dict[str, str]:
+    """Headers for mutating backend calls, including the token when present."""
+    headers: dict[str, str] = {}
+    token = _auth_token()
+    if token:
+        headers["X-VaultBot-Token"] = token
+    return headers
+
 
 def _backend_research(topic: str, depth: str = "deep") -> dict[str, Any]:
     try:
         resp = requests.post(
             f"{BACKEND_URL}/research_tool",
             json={"topic": topic, "depth": depth},
+            headers=_auth_headers(),
             timeout=RESEARCH_TIMEOUT,
         )
         resp.raise_for_status()
@@ -95,6 +123,7 @@ def _backend_call_custom_tool(name: str, args: dict[str, Any]) -> dict[str, Any]
         resp = requests.post(
             f"{BACKEND_URL}/custom_tools/call",
             json={"name": name, "args": args},
+            headers=_auth_headers(),
             timeout=RESEARCH_TIMEOUT,
         )
         resp.raise_for_status()

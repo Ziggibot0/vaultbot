@@ -65,21 +65,12 @@ _AUTH_REQUIRED_PATHS: frozenset[str] = frozenset(
     }
 )
 
-# HTTP methods that mutate state. Any mutating request to a path under one of
-# the prefixes below requires auth, even from localhost. This closes the
-# "dozens of mutating endpoints are open" hole (issue #230) for the LLM config
-# surface specifically (issue #253): a local process or DNS-rebinding/browser
-# attack could otherwise POST /llm/providers to reconfigure the LLM provider
-# or exfiltrate a bearer token via the SSRF probe.
+# HTTP methods that mutate state. ANY mutating request requires auth, even
+# from localhost. This closes the "dozens of mutating endpoints are open"
+# hole (issue #230): a local process or DNS-rebinding/browser attack could
+# otherwise POST /restart, /update/rollback, /config, /models/pull, etc. to
+# restart the backend, roll back code, or reconfigure the LLM provider.
 _MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "DELETE", "PATCH"})
-
-# Path prefixes whose mutating methods require auth. GET stays open (the
-# plugin reads the provider/model lists without a token).
-_AUTH_REQUIRED_PREFIXES: frozenset[str] = frozenset(
-    {
-        "/llm/",
-    }
-)
 
 
 def _generate_token() -> str:
@@ -120,6 +111,25 @@ def get_or_create_token() -> str:
     return token
 
 
+def read_token() -> str:
+    """Read the existing token WITHOUT creating one.
+
+    Returns "" if the token file is missing or corrupt. Used by trusted
+    internal callers (the MCP server, procedure subprocesses) that need to
+    authenticate to the backend but must NOT create a token (only the backend
+    itself creates the token on first boot).
+    """
+    if not _TOKEN_FILE.exists():
+        return ""
+    try:
+        token = _TOKEN_FILE.read_text(encoding="utf-8").strip()
+    except Exception:  # noqa: BLE001 — unreadable token file means no token available
+        return ""
+    if len(token) == 64 and all(c in "0123456789abcdef" for c in token):
+        return token
+    return ""
+
+
 def is_auth_exempt(path: str) -> bool:
     """Return True if the given path doesn't require authentication."""
     # Normalize: strip trailing slash, ensure leading slash.
@@ -145,22 +155,16 @@ def is_auth_required(path: str) -> bool:
 def is_auth_required_for_method(path: str, method: str) -> bool:
     """Return True if this (path, method) requires authentication.
 
-    Extends ``is_auth_required`` with a prefix rule: any MUTATING method
-    (POST/PUT/DELETE/PATCH) on a path under an auth-required prefix (e.g.
-    ``/llm/``) requires the token, even from localhost. GET stays open so the
-    plugin can read provider/model lists without a token.
+    Extends ``is_auth_required`` with a blanket rule: ANY mutating method
+    (POST/PUT/DELETE/PATCH) requires the token, even from localhost. This
+    closes issue #230 — every state-changing endpoint (restart, rollback,
+    config, model pull, provider add, etc.) is now auth-gated. Read-only
+    methods (GET/HEAD/OPTIONS) stay open so the plugin can read lists and
+    health without a token.
     """
     if is_auth_required(path):
         return True
-    if method.upper() not in _MUTATING_METHODS:
-        return False
-    p = path.rstrip("/")
-    if not p.startswith("/"):
-        p = "/" + p
-    return any(
-        p == prefix.rstrip("/") or p.startswith(prefix)
-        for prefix in _AUTH_REQUIRED_PREFIXES
-    )
+    return method.upper() in _MUTATING_METHODS
 
 
 def validate_token(token: str | None) -> bool:

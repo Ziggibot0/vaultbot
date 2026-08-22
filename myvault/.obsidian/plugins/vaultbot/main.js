@@ -471,7 +471,7 @@ class VaultBotPlugin extends Plugin {
 	async runTournament(modelIds, role) {
 		try {
 			const r = await fetch(this.settings.backendUrl + '/tournament/run', {
-				method: 'POST', headers: {'Content-Type': 'application/json'},
+				method: 'POST', headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify({model_ids: modelIds, role: role})});
 			return await r.json();
 		} catch (e) { return {status: 'error', detail: String(e)}; }
@@ -483,7 +483,7 @@ class VaultBotPlugin extends Plugin {
 		try {
 			await fetch(this.settings.backendUrl + '/config', {
 				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
+				headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify({
 					tavily_api_key: this.settings.tavilyApiKey || '',
 					research_backend: this.settings.researchBackend || 'tavily'
@@ -801,7 +801,7 @@ class VaultBotPlugin extends Plugin {
 				try {
 					await fetch(this.settings.backendUrl + '/models/pull', {
 						method: 'POST',
-						headers: {'Content-Type': 'application/json'},
+						headers: this._authHeaders({'Content-Type': 'application/json'}),
 						body: JSON.stringify({model: m.name})
 					});
 				} catch (e) {
@@ -2253,7 +2253,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					row.createEl('span', {text: e.provider_label || e.provider, attr: {style: 'font-size:0.7em;opacity:0.5;'}});
 					const rm = row.createEl('button', {text: '✕', attr: {style: 'font-size:0.7em;padding:0 4px;'}});
 					rm.addEventListener('click', async () => {
-						await fetch(this.plugin.settings.backendUrl + '/tournament/staging/' + encodeURIComponent(e.id), {method: 'DELETE'});
+						await fetch(this.plugin.settings.backendUrl + '/tournament/staging/' + encodeURIComponent(e.id), {method: 'DELETE', headers: this.plugin._authHeaders()});
 						refreshStagingList();
 					});
 				});
@@ -2271,7 +2271,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 			if (!model) { stagingStatusEl.setText('Pick or type a model name.'); return; }
 			stagingStatusEl.setText('Adding...');
 			const r = await fetch(this.plugin.settings.backendUrl + '/tournament/staging', {
-				method: 'POST', headers: {'Content-Type': 'application/json'},
+				method: 'POST', headers: this.plugin._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify({model, provider})});
 			const data = await r.json();
 			if (data.status === 'ok') {
@@ -2291,7 +2291,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 			stagingListEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
 		});
 		stagingClearBtn.addEventListener('click', async () => {
-			await fetch(this.plugin.settings.backendUrl + '/tournament/staging/clear', {method: 'POST'});
+			await fetch(this.plugin.settings.backendUrl + '/tournament/staging/clear', {method: 'POST', headers: this.plugin._authHeaders()});
 			refreshStagingList();
 			new Notice('Tournament staging cleared.');
 		});
@@ -2319,7 +2319,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 			try {
 				const r = await fetch(this.plugin.settings.backendUrl + '/tournament/run', {
-					method: 'POST', headers: {'Content-Type': 'application/json'},
+					method: 'POST', headers: this.plugin._authHeaders({'Content-Type': 'application/json'}),
 					body: JSON.stringify({contestants, role})});
 				const result = await r.json();
 				tourneyResultsEl.empty();
@@ -3173,7 +3173,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 			try {
 				const resp = await fetch(
 					this.plugin.settings.backendUrl + '/update/rollback',
-					{method: 'POST'});
+					{method: 'POST', headers: this.plugin._authHeaders()});
 				const data = await resp.json();
 				if (data.status === 'ok') {
 					updateStatusEl.setText(
@@ -4145,7 +4145,7 @@ class VaultBotSidebarView extends ItemView {
 
 					const r = await fetch(this.plugin.settings.backendUrl + '/tts', {
 
-						method: 'POST', headers: {'Content-Type':'application/json'},
+						method: 'POST', headers: this.plugin._authHeaders({'Content-Type':'application/json'}),
 
 						body: JSON.stringify({text: sentence})
 
@@ -4371,7 +4371,7 @@ class VaultBotSidebarView extends ItemView {
 
 					try {
 
-						const r = await fetch(this.plugin.settings.backendUrl + '/stt', {method: 'POST', body: blob});
+						const r = await fetch(this.plugin.settings.backendUrl + '/stt', {method: 'POST', body: blob, headers: this.plugin._authHeaders()});
 
 						const j = await r.json();
 
@@ -4677,7 +4677,7 @@ class VaultBotSidebarView extends ItemView {
 					try {
 						new Notice('Restoring last version...');
 						const resp = await fetch(
-							this.backendUrl + '/update/rollback', {method: 'POST'});
+							this.backendUrl + '/update/rollback', {method: 'POST', headers: this.plugin._authHeaders()});
 						const data = await resp.json();
 						if (data.status === 'ok') {
 							new Notice(`Restored ${data.restored} file(s) from backup. Restarting...`);
