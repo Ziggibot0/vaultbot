@@ -241,6 +241,10 @@ typeCheckingMode = "basic"
 # fixture-building suite; `pytest -m ollama` is reserved for the golden-gate
 # workflow which has a live Ollama service container.
 [tool.pytest.ini_options]
+# Consolidated config — previously duplicated in vaultbot_backend/pytest.ini
+# (issue #175). pytest.ini took precedence when running from
+# vaultbot_backend/, causing local-vs-CI divergence. That file is now deleted;
+# this is the single source of truth.
 testpaths = ["vaultbot_backend/tests"]
 markers = [
     "unit: pure logic tests — no I/O, no network, no Ollama, no FAISS. Always gate CI.",
@@ -249,6 +253,11 @@ markers = [
     "endpoints: tests needing the FastAPI app (uses __allows_main_import__ opt-in).",
 ]
 addopts = "-q"
+# Suppress deprecation warnings from third-party deps that flood output and
+# obscure real failures. Carried over from the deleted pytest.ini.
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
 
 # ── coverage ────────────────────────────────────────────────────────────────
 # pytest-cov measures coverage on the unit suite. The floor is a RATCHET:
