@@ -461,6 +461,37 @@ def run(args: dict) -> dict:
         run_git(["branch", "-D", branch_name], vault_root)
         return {"error": f"Could not commit changes: {err}"}
 
+    # 8b. Rebase onto the latest upstream main to avoid stale-branch conflicts.
+    # The contribution branch is created from the local main, which may be
+    # behind the upstream repo (e.g. a directory rename landed upstream after
+    # this clone was made — see the vault/ -> myvault/ rename that broke PR
+    # #269). Rebase onto the latest upstream main so the PR doesn't conflict
+    # on merge. If the rebase conflicts, abort and surface it loudly rather
+    # than pushing a PR that can't merge.
+    upstream_url = f"https://github.com/{upstream_owner}/{upstream_repo}.git"
+    ok, _, fetch_err = run_git(["fetch", upstream_url, "main"], vault_root)
+    if ok:
+        ok, _, rebase_err = run_git(["rebase", "FETCH_HEAD"], vault_root)
+        if not ok:
+            run_git(["rebase", "--abort"], vault_root)
+            run_git(["checkout", "main"], vault_root)
+            run_git(["branch", "-D", branch_name], vault_root)
+            return {
+                "error": (
+                    "Could not rebase the contribution branch onto the latest "
+                    "upstream main. Your local main is stale relative to "
+                    f"{upstream_owner}/{upstream_repo}. Sync it (git pull) and "
+                    "re-run, or resolve the conflict manually."
+                ),
+                "detail": rebase_err,
+            }
+    else:
+        print(
+            f"[submit_contribution] Warning: could not fetch upstream main "
+            f"({fetch_err}); pushing without rebasing. The PR may conflict.",
+            file=sys.stderr,
+        )
+
     # 9. Push — fork-based or direct
     if has_push_access:
         # === DIRECT PUSH FLOW (user has write access) ===
