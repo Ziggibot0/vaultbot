@@ -46,6 +46,7 @@ be used when the tree is already known to be CI-clean.
        "title": args.get("title", ""),
        "description": args.get("description", ""),
        "files": args.get("files", []),
+       "skip_ci": args.get("skip_ci", False),
    })
    print(result)
    ```
