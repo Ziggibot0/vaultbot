@@ -1,3 +1,10 @@
+---
+type: synthesis
+status: active
+created: 2026-07-29
+summary: "VaultBot GitHub-facing README"
+tags: [readme, reference]
+---
 # VaultBot
 
 [![CI](https://github.com/Ziggibot0/vaultbot/workflows/CI/badge.svg)](https://github.com/Ziggibot0/vaultbot/actions/workflows/ci.yml)
@@ -220,12 +227,12 @@ close and reopen Obsidian) for changes to take effect.
 | Variable | What it does | Default |
 |----------|-------------|---------|
 | `VAULTBOT_OWNER` | Your name. VaultBot addresses you by this. | (empty — it calls you "the user" until it learns) |
-| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (only used when `LLM_BACKEND=ollama`; the installer can pull it for you, or manually `ollama pull` it) | `qwen3:latest` |
+| `OLLAMA_LLM_MODEL` | Local LLM for synthesis (LEGACY — use `providers.json` instead; only used by `migrate_from_env()` on first boot) | (empty) |
 | `OLLAMA_EMBED_MODEL` | The embedding model (auto-pulled by the installer, ~270 MB) | `nomic-embed-text` |
 | `LLM_BACKEND` | `ollama` (local, free, **default — zero-config**) or `openai` (cloud, any OpenAI-compatible API — recommended for laptops) | `ollama` |
 | `LLM_API_KEY` | Cloud API key (leave blank for local-only; if `LLM_BACKEND=openai` but this is empty, the backend fails with a clear error — set the key to use the cloud backend) | (empty) |
 | `LLM_BASE_URL` | Cloud API base URL (OpenAI, OpenRouter, LM Studio, vLLM, etc.) | `https://api.openai.com` |
-| `LLM_MODEL` | Cloud model name (only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
+| `LLM_MODEL` | Cloud model name (LEGACY — use `providers.json` instead; only used when `LLM_BACKEND=openai`) | `gpt-4o-mini` |
 | `VAULTBOT_RESEARCH_BACKEND` | `freesearch` (keyless) or `tavily` (API key) | `freesearch` |
 | `TAVILY_API_KEY` | Tavily search API key (only if using `tavily`) | (empty) |
 | `SEARXNG_PORT` | Port for the optional self-hosted SearXNG container | `8080` |
@@ -483,6 +490,8 @@ The backend (~95 modules) is organized into these key areas:
 ├── README.md                      # GitHub-facing README
 ├── CONTRIBUTING.md                # GitHub-facing contributing guide
 ├── SECURITY.md                    # Security policy
+├── providers.example.json         # Example provider/model registry (copy to providers.json)
+├── .ci-baseline.json              # Debt + thinness ratchet baselines (CI enforces monotonic improvement)
 └── LICENSE                        # MIT license
 ```
 
@@ -511,4 +520,7 @@ private security advisory on GitHub instead of a public issue. See
 
 **Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md). The short
 version: test with `code_run` before `tool_create`, use `safe_write` for
-backend edits, and never commit your `.env` or vault contents.
+backend edits, and never commit your `.env` or vault contents. CI enforces
+two ratchets (debt + thinness) that prevent quality regressions — see
+[CONTRIBUTING.md](CONTRIBUTING.md#ci-ratchets-behavior-capture-and-thinness)
+for details.
