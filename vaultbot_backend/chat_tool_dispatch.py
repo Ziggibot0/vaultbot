@@ -256,9 +256,7 @@ async def execute_agent_tool(
                             f"vaultbot-stuff/Knowledge/Research/{topic}.md",
                             force_type="research",
                         )
-                        Path(note_path).write_text(
-                            _sanitized, encoding="utf-8"
-                        )
+                        Path(note_path).write_text(_sanitized, encoding="utf-8")
                     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                         session_logger.log(
                             "research_note_write_failed",
