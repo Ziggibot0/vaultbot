@@ -137,9 +137,36 @@ Write-Host "      VaultBot Installer" -ForegroundColor Cyan
 Write-Host "  =============================" -ForegroundColor Cyan
 Write-Host ""
 
-# -- 1. Prerequisite checks -------------------------------------------------
+# -- 1. Prerequisite checks (auto-install what's missing) -------------------
+# VaultBot should be one paste for a non-technical user. So instead of just
+# DETECTING Python/Git/Ollama and telling the user to install them, we
+# AUTO-INSTALL them via winget when they're missing. The user never has to
+# remember "Add Python to PATH" — winget's Python installer does it for us.
 Write-Step "Checking prerequisites..."
-$missing = @()
+
+# Refresh PATH from the registry so freshly-installed tools are visible in
+# this session without a restart. winget installs to a path that may not be
+# on the current session's PATH.
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+# Install a package via winget if it's available; returns $true on success.
+function Install-ViaWinget {
+    param([string]$PackageId, [string]$Label)
+    Write-Step "Installing $Label (one-time)..."
+    try {
+        & winget install --id $PackageId --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -eq 0) {
+            Refresh-Path
+            Write-OK "$Label installed"
+            return $true
+        }
+    } catch {
+        Write-Warn2 "Could not auto-install $Label."
+    }
+    return $false
+}
 
 # Python 3.11+
 # Try several launchers in order: `python` (on PATH), `py` (the Windows
@@ -170,35 +197,69 @@ foreach ($launcher in @("python", "py", "python3")) {
     }
 }
 if (-not $pyOk) {
-    $missing += "Python 3.11+  ->  https://python.org/downloads`n         (check 'Add Python to PATH' during install!)"
-    if ($pyErr) {
+    # Auto-install Python via winget (sets PATH for us — no "Add to PATH"
+    # footgun). If winget isn't available or fails, fall back to the
+    # download page.
+    if (Install-ViaWinget "Python.Python.3.12" "Python 3.12") {
+        $pyOk = $true
+        Write-OK "Python installed and on PATH"
+    } else {
         Write-Warn2 "Python check failed: $pyErr"
-        Write-Warn2 "If Python is already installed, re-run its installer and tick 'Add Python to PATH'."
+        Write-Host "  Could not auto-install Python. Install it from" -ForegroundColor Yellow
+        Write-Host "  https://python.org/downloads (check 'Add Python to PATH')," -ForegroundColor Yellow
+        Write-Host "  then re-run this installer." -ForegroundColor Yellow
+        Start-Process "https://python.org/downloads"
+        return
     }
 }
 
-# Ollama
+# Git — needed to download and update VaultBot. Auto-install if missing.
+$gitOk = $false
+try {
+    $gv = & git --version 2>&1
+    if ($LASTEXITCODE -eq 0) { $gitOk = $true; Write-OK "Git: $gv" }
+} catch {}
+if (-not $gitOk) {
+    if (Install-ViaWinget "Git.Git" "Git") {
+        $gitOk = $true
+    } else {
+        Write-Warn2 "Could not auto-install Git."
+        Write-Host "  Install Git from https://git-scm.com/downloads, then" -ForegroundColor Yellow
+        Write-Host "  re-run this installer." -ForegroundColor Yellow
+        Start-Process "https://git-scm.com/downloads"
+        return
+    }
+}
+
+# Ollama — a background service, harder to fully bundle. Auto-install the
+# app via winget if possible; otherwise open the download page. The user
+# still needs to run Ollama once (it starts a tray service), but we remove
+# the "find the download" step.
 $ollamaOk = $false
 try {
     $ov = & ollama --version 2>&1
     if ($LASTEXITCODE -eq 0) { $ollamaOk = $true; Write-OK "Ollama: $ov" }
 } catch {}
 if (-not $ollamaOk) {
-    $missing += "Ollama  ->  https://ollama.com"
-}
-
-if ($missing.Count -gt 0) {
-    Write-Host ""
-    Write-Host "  Almost there! Install these first, then run the command again:" -ForegroundColor Red
-    Write-Host ""
-    foreach ($m in $missing) { Write-Host "    - $m" -ForegroundColor Yellow }
-    Write-Host ""
-    # Open download pages in the browser so they just click
-    foreach ($m in $missing) {
-        if ($m -match "python\.org") { Start-Process "https://python.org/downloads" }
-        if ($m -match "ollama\.com") { Start-Process "https://ollama.com" }
+    if (-not (Install-ViaWinget "Ollama.Ollama" "Ollama")) {
+        Write-Warn2 "Could not auto-install Ollama."
+        Write-Host "  Download Ollama from https://ollama.com and run it once," -ForegroundColor Yellow
+        Write-Host "  then re-run this installer." -ForegroundColor Yellow
+        Start-Process "https://ollama.com"
+        return
     }
-    return  # exits the iex scope without killing the terminal window
+    # winget installs Ollama but the service may not be running yet. Check
+    # again; if still not found, tell the user to launch it once.
+    try {
+        $ov = & ollama --version 2>&1
+        if ($LASTEXITCODE -eq 0) { $ollamaOk = $true; Write-OK "Ollama: $ov" }
+    } catch {}
+    if (-not $ollamaOk) {
+        Write-Warn2 "Ollama installed but not running yet."
+        Write-Host "  Open the Ollama app once to start its background service," -ForegroundColor Yellow
+        Write-Host "  then re-run this installer." -ForegroundColor Yellow
+        return
+    }
 }
 
 # -- 2. Ask the user's name --------------------------------------------------
