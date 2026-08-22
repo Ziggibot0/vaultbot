@@ -1313,6 +1313,54 @@
 }
 
 /* =========================================================================
+   Collapsible settings sections Ã¢â‚¬â€ Phase 7
+   Each settings section is a <details> disclosure so the tab reads as a
+   clean table of contents. Everyday sections are open by default; rare /
+   advanced sections are collapsed. The summary is styled as a section
+   header (replacing the old flat <h3> headings).
+   ========================================================================= */
+.vaultbot-section {
+	margin: 4px 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+.vaultbot-section[open] {
+	border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+}
+.vaultbot-section-summary {
+	cursor: pointer;
+	font-size: 1em;
+	font-weight: 600;
+	color: var(--text-normal);
+	padding: 8px 12px;
+	background-color: var(--background-secondary);
+	list-style: none;
+	user-select: none;
+}
+.vaultbot-section-summary:hover {
+	background-color: var(--background-modifier-hover);
+}
+.vaultbot-section-summary::-webkit-details-marker {
+	display: none;
+}
+/* Chevron indicator so the collapsed/expanded state is obvious. */
+.vaultbot-section-summary::before {
+	content: '\25B8';
+	display: inline-block;
+	margin-right: 8px;
+	font-size: 0.8em;
+	color: var(--text-muted);
+	transition: transform 0.15s ease;
+}
+.vaultbot-section[open] > .vaultbot-section-summary::before {
+	transform: rotate(90deg);
+}
+.vaultbot-section-body {
+	padding: 4px 12px 12px 12px;
+}
+
+/* =========================================================================
    Directives + Voice sections Ã¢â‚¬â€ Phase 6
    The directives panel uses Obsidian's built-in Setting component (already
    styled), so only the section descriptions need minimal styling. The voice
