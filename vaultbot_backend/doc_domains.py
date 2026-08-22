@@ -117,14 +117,14 @@ def _derive_from_metadata(module: str) -> str | None:
 
     # Prefer an explicit "Documentation" Project-URL, then Home-page.
     candidates: list[str] = []
-    for key, value in meta.items():
-        if key == "Project-URL":
-            # value is "Label, URL"
-            label, _, url = value.partition(",")
-            if "documentation" in label.lower():
-                candidates.append(url.strip())
-        elif key == "Home-page":
-            candidates.append(value.strip())
+    for value in meta.get_all("Project-URL", []):
+        # value is "Label, URL"
+        label, _, url = value.partition(",")
+        if "documentation" in label.lower():
+            candidates.append(url.strip())
+    home_pages = meta.get_all("Home-page", [])
+    if home_pages:
+        candidates.append(home_pages[0].strip())
 
     for url in candidates:
         if not url:
