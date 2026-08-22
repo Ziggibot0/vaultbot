@@ -71,6 +71,44 @@ def backup_path(target: Path, backend_root: Path, trash_dir: Path) -> Path:
     return bak.with_suffix(bak.suffix + ".bak")
 
 
+def detect_external_imports(content: str, internal_modules: set[str]) -> list[str]:
+    """Return the top-level modules imported by ``content`` that are NOT
+    VaultBot-internal.
+
+    "Internal" means: a relative import (``from . import x``), or a
+    top-level module whose name is in ``internal_modules`` (the backend's
+    own ``.py`` stems plus the ``routers`` / ``custom_tools`` / ``identity``
+    packages). Everything else — stdlib (``os``, ``json``, ``re``, ...) and
+    third-party (``requests``, ``bs4``, ``numpy``, ...) — is "external" and
+    must be doc-proven before a write.
+
+    Returns a deduped, order-preserving list of external module names.
+    """
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    external: list[str] = []
+    seen: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
+                if top not in internal_modules and top not in seen:
+                    seen.add(top)
+                    external.append(top)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                continue  # relative import — internal
+            if node.module is None:
+                continue
+            top = node.module.split(".")[0]
+            if top not in internal_modules and top not in seen:
+                seen.add(top)
+                external.append(top)
+    return external
+
+
 def safe_write(
     file_path: str,
     content: str,
@@ -84,6 +122,7 @@ def safe_write(
     copy_backend_fn,
     verify_import_fn,
     run_pytest_fn,
+    doc_source: str | list[str] | None = None,
 ) -> dict[str, Any]:
     """Write a file with safety verification. Use this INSTEAD of
     code_write when editing backend source code (.py files under
@@ -92,6 +131,11 @@ def safe_write(
 
     Safety checks (in order, fail-fast):
       1. Syntax: the content must parse as valid Python (ast.parse).
+      1b. Doc-source gate: any import of a non-VaultBot module (stdlib
+         or third-party) requires a ``doc_source`` URL proving the edit
+         was checked against official docs. An edit that can't cite a
+         source is rejected — the code analogue of the chat closed-set
+         citation gate. Run Prove-Code-Change to satisfy it.
       2. Encoding: written as UTF-8 (avoids the mojibake corruption
          the agent's code_write introduced on 2026-07-25).
       3. Import verification: if the target is a core backend module,
@@ -115,6 +159,9 @@ def safe_write(
     Args:
       file_path: path relative to vault root.
       content: the new file content.
+      doc_source: optional URL (or list of URLs) naming the official
+        documentation the edit was checked against. Required when the
+        content imports any non-VaultBot module (stdlib or third-party).
       dry_run: if True, run all checks but do NOT write to disk.
         Returns the verification result so the agent can preview
         whether an edit would be safe before committing it.
@@ -207,6 +254,42 @@ def safe_write(
             "error": f"SyntaxError: {e.msg} (line {e.lineno})",
             "hint": "Fix the syntax error; nothing was written.",
         }
+
+    # --- 1a. Doc-source gate (semantic provenance, no disk touch) ---
+    # The edit must PROVE its external API usage against real docs, not
+    # model weights. Any import of a non-VaultBot module (stdlib or
+    # third-party) requires a `doc_source` (URL or list of URLs) naming
+    # the official documentation the edit was checked against. This is
+    # the code analogue of the chat closed-set citation gate: an edit
+    # that can't point at a source is rejected, exactly like an uncited
+    # chat claim. Run Prove-Code-Change to satisfy this automatically.
+    _internal = {p.stem for p in backend_dir.glob("*.py")}
+    _internal |= {"routers", "custom_tools", "identity"}
+    _external = detect_external_imports(content, _internal)
+    if _external and not doc_source:
+        checks["doc_source"] = f"FAIL: {len(_external)} external import(s) uncited"
+        log_fn(
+            "safe_write_doc_source_rejected",
+            {"file_path": str(full), "external_imports": _external},
+        )
+        return {
+            "status": "rejected",
+            "checks": checks,
+            "error": (
+                f"Unproven external API usage: {', '.join(_external)}. "
+                "This edit imports modules outside VaultBot's own code "
+                "without citing the documentation it was checked against."
+            ),
+            "hint": (
+                "Run Prove-Code-Change to fetch the official docs for "
+                "these modules, verify the edit against them, and attach "
+                "a doc_source. Then re-call safe_write with "
+                "doc_source=<official docs URL>. Writing from model "
+                "weights is not allowed."
+            ),
+        }
+    if _external:
+        checks["doc_source"] = "ok"
 
     # --- 1b. Import-target check (any backend .py, before disk touch) ---
     # Catches "I wrote `from chat_helpers import run_with_heartbeat` but

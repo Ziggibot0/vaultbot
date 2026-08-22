@@ -37,6 +37,14 @@ jobs:
           # commits, not just the shallow tip.
           fetch-depth: 0
 
+      - name: Verify setup.sh syntax (HARD GATE)
+        # The macOS/Linux installer (setup.sh) was updated in #149 to match
+        # the new layout, but its syntax was never verified — the dev
+        # machine has no bash/WSL. A syntax error would silently break the
+        # one-liner install for every macOS/Linux user. bash -n catches
+        # parse errors without executing the script (issue #151).
+        run: bash -n setup.sh
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:

@@ -315,9 +315,19 @@ class SelfImprover:
     }
 
     def safe_write(
-        self, file_path: str, content: str, dry_run: bool = False
+        self,
+        file_path: str,
+        content: str,
+        dry_run: bool = False,
+        doc_source: str | list[str] | None = None,
     ) -> dict[str, Any]:
-        """Write a Python file with safety verification (delegates to safe_writer)."""
+        """Write a Python file with safety verification (delegates to safe_writer).
+
+        ``doc_source`` is the official-docs URL (or list of URLs) the edit
+        was checked against. Required when the content imports any
+        non-VaultBot module (stdlib or third-party) — see the doc-source
+        gate in safe_writer.safe_write.
+        """
         return safe_writer.safe_write(
             file_path,
             content,
@@ -331,6 +341,7 @@ class SelfImprover:
             self._copy_backend_for_check,
             self._verify_import_in_subprocess,
             self._run_pytest_in_subprocess,
+            doc_source,
         )
 
     def js_safe_write(

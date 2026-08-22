@@ -2,7 +2,7 @@
 # Simulates a clean Linux environment with Python, git, curl, node
 #
 # Usage:
-#   docker build -t vaultbot-test vaultbot/
+#   docker build -t vaultbot-test .
 #   docker run --rm vaultbot-test
 
 FROM python:3.11-slim
