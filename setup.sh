@@ -7,7 +7,6 @@
 # ═══════════════════════════════════════════════════════════════════════════
 set -e
 
-REPO_ZIP="https://github.com/Ziggibot0/vaultbot/archive/refs/heads/main.zip"
 FRAMEWORK_NAME="VaultBot"
 
 # ── Install-state resume helpers ──────────────────────────────────────────
@@ -185,8 +184,10 @@ echo ""
 #   1. Updates = `git pull upstream main` (a clean merge, not an overwrite).
 #   2. Community contributions = the vaultbot's submit_contribution tool
 #      pushes fixes to your fork and opens a PR upstream, with zero manual git.
-# If `gh` is missing or the user declines auth, we fall back to the zip
-# download so a non-sharing user still gets a working vault.
+# If `gh` is missing or the user declines auth, installation aborts with a
+# clear error. We never fall back to a zip snapshot: a zip has no git
+# history, so it can't update itself or share fixes, and we won't let a
+# user believe they got a working install when they didn't.
 #
 # The repo clones into a FRAMEWORK folder ($FRAMEWORK_NAME). Inside it, the
 # `myvault/` subfolder is the user's Obsidian vault. The vault folder name
@@ -223,7 +224,7 @@ else
 
     if [ "$GH_OK" = false ]; then
         # gh CLI is missing. Offer to install it so VaultBot can update itself
-        # and share fixes. If the user declines, fall back to the zip download.
+        # and share fixes. If the user declines, installation aborts (no zip).
         echo ">>> GitHub CLI not found"
         echo "  VaultBot uses the GitHub CLI ('gh') to update itself and"
         echo "  share fixes with the community. It's optional but recommended."
@@ -267,8 +268,8 @@ else
             echo "  A browser window will open. Sign in to GitHub, then"
             echo "  copy the one-time code back into this window."
             echo ""
-            echo "  (No GitHub account? Just close the browser — VaultBot"
-            echo "   will still install, just without auto-updates.)"
+            echo "  (No GitHub account? VaultBot requires one to install - it"
+            echo "   installs as a fork so it can update itself and share fixes.)"
             echo ""
 
             RETRY=true
@@ -288,8 +289,9 @@ else
             if [ "$AUTHD" = false ]; then
                 GH_OK=false
                 echo "  [!]  GitHub sign-in was skipped or didn't complete."
-                echo "       VaultBot will install without auto-updates."
-                echo "       You can connect GitHub later by running:  gh auth login"
+                echo "       VaultBot needs a GitHub account to install (it installs"
+                echo "       as a fork so it can update itself and share fixes)."
+                echo "       Sign in with:  gh auth login   then re-run this installer."
             else
                 echo "  [OK] Signed in to GitHub"
             fi
@@ -317,8 +319,10 @@ else
             fi
 
             if [ ! -d "$FRAMEWORK_PATH" ]; then
-                echo "  [!]  GitHub clone/fork failed -- falling back to zip download."
-                GH_OK=false
+                echo "  [X]  GitHub clone/fork failed."
+                echo "       VaultBot could not be installed. Check your GitHub account"
+                echo "       and network connection, then re-run this installer."
+                exit 1
             else
                 echo "  [OK] VaultBot installed as a git fork (updates will merge cleanly)"
             fi
@@ -326,23 +330,16 @@ else
     fi
 
     if [ "$GH_OK" = false ]; then
-        echo ">>> Downloading VaultBot..."
-        TMP_ZIP="/tmp/vaultbot-setup-$$.zip"
-        TMP_EXTRACT="/tmp/vaultbot-extract-$$"
-        curl -fsSL -o "$TMP_ZIP" "$REPO_ZIP"
-        echo ">>> Extracting..."
-        mkdir -p "$TMP_EXTRACT"
-        # macOS tar auto-detects zip; Linux tar needs -xzf
-        if [[ "$(uname)" == "Darwin" ]]; then
-            tar -xf "$TMP_ZIP" -C "$TMP_EXTRACT"
-        else
-            tar -xzf "$TMP_ZIP" -C "$TMP_EXTRACT"
-        fi
-        INNER=$(ls -d "$TMP_EXTRACT"/*/ | head -1)
-        mv "$INNER" "$FRAMEWORK_PATH"
-        rm -f "$TMP_ZIP"
-        rm -rf "$TMP_EXTRACT"
-        echo "  [OK] Downloaded to $FRAMEWORK_PATH"
+        echo "  [X]  VaultBot requires a GitHub account to install."
+        echo "       VaultBot installs as a git fork so it can update itself and"
+        echo "       share fixes. A zip snapshot can't do either, so we don't"
+        echo "       install one."
+        echo ""
+        echo "       To continue:"
+        echo "         1. Install the GitHub CLI (https://cli.github.com)"
+        echo "         2. Sign in:  gh auth login"
+        echo "         3. Re-run this installer."
+        exit 1
     fi
 fi
 
