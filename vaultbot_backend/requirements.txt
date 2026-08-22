@@ -28,7 +28,7 @@ watchdog==6.0.0
 numpy==2.5.2 ; python_full_version >= "3.12"
 numpy==2.4.6 ; python_full_version < "3.12"
 python-dotenv==1.2.3
-lxml==6.1.1
+lxml==6.1.2
 PyMuPDF==1.28.2
 # Pillow: used by llm_client.vision_capable() to render a test image.
 # html2text: used by textbook_ingest.parse_html() (HTML→Markdown).
