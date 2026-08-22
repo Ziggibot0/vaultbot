@@ -177,6 +177,15 @@ vault/vaultbot-stuff/Memory/
 vault/vaultbot-stuff/Knowledge/
 User/
 
+# Root-level vault content (VAULT_PATH=. makes the repo root the vault root).
+# When the vault root IS the repo root, VaultBot writes generated notes to
+# root-level vaultbot-stuff/ and vaultbot/ instead of vault/vaultbot-stuff/.
+# These are the user's personal mind (chat logs, research notes) plus
+# generated artifacts (Codebase-Map.md) — never commit them. The shippable
+# framework under vault/vaultbot-stuff/System/ is unaffected.
+vaultbot-stuff/
+vaultbot/
+
 # Baseline-marked Knowledge/ notes (baseline: true in frontmatter) are
 # shippable and must NOT be gitignored. Git can't read frontmatter, so
 # these are un-ignored explicitly. Keep in sync with golden_set.json —
@@ -281,6 +290,7 @@ boot_*.log
 # MCP client config (generated dynamically by plugin on startup)
 vault/.obsidian/plugins/vaultbot/mcp.json
 .vscode/mcp.json
+vault/.vscode/mcp.json
 
 # Personal Obsidian settings (regenerated per user)
 vault/.obsidian/appearance.json
