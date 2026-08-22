@@ -189,9 +189,10 @@ echo ""
 # download so a non-sharing user still gets a working vault.
 #
 # The repo clones into a FRAMEWORK folder ($FRAMEWORK_NAME). Inside it, the
-# `vault/` subfolder is the user's Obsidian vault — we rename it to the
-# user's chosen name below. The backend (vaultbot_backend/) and .venv/ live
-# at the framework root, OUTSIDE the vault, so the user never sees them.
+# `myvault/` subfolder is the user's Obsidian vault. The vault folder name
+# is fixed ("myvault") so that upstream updates always land in the right
+# place. The backend (vaultbot_backend/) and .venv/ live at the framework
+# root, OUTSIDE the vault, so the user never sees them.
 # Detect if we're already inside a VaultBot repo. This happens when the
 # user cloned the repo and ran the installer from inside it. Use the
 # existing repo instead of cloning a nested copy.
@@ -345,53 +346,19 @@ else
     fi
 fi
 
-# ── 3b. Name the vault ─────────────────────────────────────────────────────
-# The repo ships a `vault/` subfolder (the user's Obsidian vault). Rename it
-# to the user's chosen name so they can have a different VaultBot per project.
-echo ""
-echo "  What should your vault be called?"
-echo "  (You can have a different VaultBot for each project.)"
-printf "  Vault name (default: vault) "
-read -r CHOSEN_VAULT
-[ -z "$CHOSEN_VAULT" ] && CHOSEN_VAULT="vault"
-VAULT_PATH="$FRAMEWORK_PATH/$CHOSEN_VAULT"
-SHIPPED_VAULT="$FRAMEWORK_PATH/vault"
-if [ "$CHOSEN_VAULT" = "vault" ]; then
-    # User chose the default name - no rename needed, use the shipped vault.
-    VAULT_PATH="$SHIPPED_VAULT"
-elif [ -d "$SHIPPED_VAULT" ] && [ ! -d "$VAULT_PATH" ]; then
-    # Rename the shipped vault to the user's chosen name. In a git repo,
-    # use `git mv` so git tracks the rename and doesn't restore vault/ on
-    # the next checkout (which would create a duplicate empty vault/
-    # alongside the renamed folder). Also update .gitignore rules that
-    # reference vault/ to use the new name, then commit so it persists.
-    if [ -d "$FRAMEWORK_PATH/.git" ]; then
-        cd "$FRAMEWORK_PATH"
-        if git mv vault "$CHOSEN_VAULT" 2>/dev/null; then
-            # Update .gitignore: replace the vault/ path prefix with the
-            # new vault name in all rules (ignore + un-ignore).
-            GITIGNORE_PATH="$FRAMEWORK_PATH/.gitignore"
-            if [ -f "$GITIGNORE_PATH" ]; then
-                # sed -i isn't portable on macOS (needs backup ext). Use
-                # a temp file + mv instead.
-                sed "s#^\(!\?\)vault/#\1$CHOSEN_VAULT/#" "$GITIGNORE_PATH" > "${GITIGNORE_PATH}.tmp" && \
-                    mv "${GITIGNORE_PATH}.tmp" "$GITIGNORE_PATH"
-            fi
-            git add .gitignore
-            git -c user.name="VaultBot Installer" -c user.email="installer@vaultbot.local" \
-                commit -m "chore: rename vault/ to $CHOSEN_VAULT/ (installer)" >/dev/null 2>&1 || true
-        else
-            # git mv failed - fall back to a filesystem rename.
-            mv "$SHIPPED_VAULT" "$CHOSEN_VAULT"
-        fi
-        cd - >/dev/null
-    else
-        mv "$SHIPPED_VAULT" "$CHOSEN_VAULT"
-    fi
-    echo "  [OK] Vault named '$CHOSEN_VAULT'"
-elif [ ! -d "$VAULT_PATH" ]; then
+# ── 3b. Set the vault path ─────────────────────────────────────────────────
+# The repo ships a `myvault/` subfolder (the user's Obsidian vault). The
+# folder name is FIXED to "myvault" so that `git pull` updates (new
+# procedures, Knowledge notes, plugin code) always merge into the right
+# place. Allowing users to rename the vault folder broke updates: a
+# renamed vault meant upstream changes to vaultbot-stuff/System/Procedures/
+# etc. landed in `vault/` (the old name) while the user's vault lived
+# elsewhere, so nobody got procedure updates. Keeping the name fixed
+# eliminates that entire class of sync bugs.
+VAULT_PATH="$FRAMEWORK_PATH/myvault"
+if [ ! -d "$VAULT_PATH" ]; then
     mkdir -p "$VAULT_PATH"
-    echo "  [!]  No shipped vault/ found -- created an empty '$CHOSEN_VAULT' folder."
+    echo "  [!]  No shipped myvault/ found -- created an empty 'myvault' folder."
 fi
 
 # Now that $VAULT_PATH exists, set the install-state file path so steps

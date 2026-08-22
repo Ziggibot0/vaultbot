@@ -219,9 +219,11 @@ Write-Host ""
 # download so a non-sharing user still gets a working vault.
 #
 # The repo clones into a FRAMEWORK folder ($frameworkName). Inside it, the
-# `vault/` subfolder is the user's Obsidian vault - we rename it to the
-# user's chosen name below. The backend (vaultbot_backend/) and .venv/ live
-# at the framework root, OUTSIDE the vault, so the user never sees them.
+# `myvault/` subfolder is the user's Obsidian vault. The vault folder name
+# is fixed ("myvault") so that upstream updates (new procedures, Knowledge
+# notes, plugin code) always land in the right place for every user. The
+# backend (vaultbot_backend/) and .venv/ live at the framework root, OUTSIDE
+# the vault, so the user never sees them.
 # Detect if we're already inside a VaultBot repo. This happens when:
 #   1. The user cloned the repo and ran the installer from inside it.
 #   2. On case-insensitive filesystems (Windows NTFS), "$PWD/VaultBot"
@@ -396,55 +398,19 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
     }
 }
 
-# -- 3b. Name the vault -----------------------------------------------------
-# The repo ships a `vault/` subfolder (the user's Obsidian vault). Rename it
-# to the user's chosen name so they can have a different VaultBot per project.
-Write-Host ""
-Write-Host "  What should your vault be called?" -ForegroundColor Cyan
-Write-Host "  (You can have a different VaultBot for each project.)" -ForegroundColor DarkGray
-$chosenVault = Read-Host "  Vault name (default: vault)"
-if ([string]::IsNullOrWhiteSpace($chosenVault)) { $chosenVault = "vault" }
-$vaultPath = Join-Path $frameworkPath $chosenVault
-$shippedVault = Join-Path $frameworkPath "vault"
-if ($chosenVault -eq "vault") {
-    # User chose the default name - no rename needed, use the shipped vault.
-    $vaultPath = $shippedVault
-} elseif ((Test-Path $shippedVault) -and -not (Test-Path $vaultPath)) {
-    # Rename the shipped vault to the user's chosen name. In a git repo,
-    # use `git mv` so git tracks the rename and doesn't restore vault/
-    # on the next checkout (which would create a duplicate empty vault/
-    # alongside the renamed folder). Also update .gitignore rules that
-    # reference vault/ to use the new name, then commit so it persists.
-    $gitDir = Join-Path $frameworkPath ".git"
-    if (Test-Path $gitDir) {
-        Push-Location $frameworkPath
-        try {
-            & git mv vault $chosenVault
-            if ($LASTEXITCODE -ne 0) {
-                # git mv failed - fall back to a filesystem rename.
-                Rename-Item $shippedVault $chosenVault
-            } else {
-                # Update .gitignore: replace the vault/ path prefix with
-                # the new vault name in all rules (ignore + un-ignore).
-                $gitignorePath = Join-Path $frameworkPath ".gitignore"
-                if (Test-Path $gitignorePath) {
-                    $giContent = Get-Content $gitignorePath -Raw
-                    $giContent = $giContent -replace '(?m)^(!?)vault/', '${1}' + $chosenVault + '/'
-                    [System.IO.File]::WriteAllText($gitignorePath, $giContent, [System.Text.UTF8Encoding]::new($false))
-                }
-                & git add .gitignore
-                # Use a temporary git identity so the commit succeeds even
-                # if the user hasn't configured git user.name/email yet.
-                & git -c user.name="VaultBot Installer" -c user.email="installer@vaultbot.local" commit -m "chore: rename vault/ to $chosenVault/ (installer)" 2>&1 | Out-Null
-            }
-        } finally { Pop-Location }
-    } else {
-        Rename-Item $shippedVault $chosenVault
-    }
-    Write-OK "Vault named '$chosenVault'"
-} elseif (-not (Test-Path $vaultPath)) {
+# -- 3b. Set the vault path ------------------------------------------------
+# The repo ships a `myvault/` subfolder (the user's Obsidian vault). The
+# folder name is FIXED to "myvault" so that `git pull` updates (new
+# procedures, Knowledge notes, plugin code) always merge into the right
+# place. Allowing users to rename the vault folder broke updates: a
+# renamed vault meant upstream changes to vaultbot-stuff/System/Procedures/
+# etc. landed in `vault/` (the old name) while the user's vault lived
+# elsewhere, so nobody got procedure updates. Keeping the name fixed
+# eliminates that entire class of sync bugs.
+$vaultPath = Join-Path $frameworkPath "myvault"
+if (-not (Test-Path $vaultPath)) {
     New-Item -ItemType Directory -Path $vaultPath | Out-Null
-    Write-Warn2 "No shipped vault/ found - created an empty '$chosenVault' folder."
+    Write-Warn2 "No shipped myvault/ found - created an empty 'myvault' folder."
 }
 
 # Now that $vaultPath exists, set the install-state file path so steps

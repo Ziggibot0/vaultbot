@@ -124,7 +124,7 @@ def run(args: dict) -> dict:
 
     ALLOWED_PATHS = [
         "vaultbot_backend/",
-        "vault/",
+        "myvault/",
         "vaultbot-stuff/",
         ".obsidian/plugins/vaultbot/",
         ".gitignore",

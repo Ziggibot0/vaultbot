@@ -25,8 +25,8 @@ section "1. Create fake user content (must survive update)"
 mkdir -p "$VAULT_PATH/User"
 echo "# My personal note" > "$VAULT_PATH/User/my-note.md"
 
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Memory/Chat"
-echo "fake chat log" > "$VAULT_PATH/vault/vaultbot-stuff/Memory/Chat/test-chat.md"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Chat"
+echo "fake chat log" > "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Chat/test-chat.md"
 
 mkdir -p "$VAULT_PATH/vaultbot_backend/sessions"
 echo '{"session":"fake"}' > "$VAULT_PATH/vaultbot_backend/sessions/test.jsonl"
@@ -107,8 +107,8 @@ done
 ok "Backend code copied from archive"
 
 section "5. Simulate plugin file copy"
-SRC_PLUGIN="$ARCHIVE_ROOT/vault/.obsidian/plugins/vaultbot"
-DST_PLUGIN="$VAULT_PATH/vault/.obsidian/plugins/vaultbot"
+SRC_PLUGIN="$ARCHIVE_ROOT/myvault/.obsidian/plugins/vaultbot"
+DST_PLUGIN="$VAULT_PATH/myvault/.obsidian/plugins/vaultbot"
 
 # Backup data.json (the plugin does this)
 if [ -f "$DST_PLUGIN/data.json" ]; then
@@ -136,7 +136,7 @@ check_survived() {
 }
 
 check_survived "$VAULT_PATH/User/my-note.md"
-check_survived "$VAULT_PATH/vault/vaultbot-stuff/Memory/Chat/test-chat.md"
+check_survived "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Chat/test-chat.md"
 check_survived "$VAULT_PATH/vaultbot_backend/sessions/test.jsonl"
 check_survived "$VAULT_PATH/vaultbot_backend/identity/IDENTITY.md"
 check_survived "$VAULT_PATH/vaultbot_backend/custom_tools/my_custom_tool.py"
@@ -170,9 +170,9 @@ fi
 section "8. Post-update import test"
 VENV_PYTHON="$VAULT_PATH/.venv/bin/python"
 # Ensure directories the backend expects exist
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Memory/Chat"
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Memory/Build-Log"
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Knowledge/Research"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Chat"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Build-Log"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Knowledge/Research"
 cd "$VAULT_PATH"
 VAULT_PATH="$VAULT_PATH" "$VENV_PYTHON" -c "
 import sys, os

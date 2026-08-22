@@ -1,7 +1,7 @@
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Secrets & personal config
 # NEVER commit - API keys, owner name, local paths.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
@@ -14,17 +14,17 @@ vaultbot_backend/custom_tools/google_workspace_config.json
 vaultbot_backend/custom_tools/google_workspace_tokens.json
 .vaultbot-install-state.json
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Python virtual environment
 # setup.ps1/setup.sh create .venv (hidden in Obsidian). vaultbot_venv/
 # kept as a legacy pattern in case an old install left one behind.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 .venv/
 vaultbot_venv/
 venv/
 env/
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Nested vault from in-repo installer runs
 # If someone runs setup.ps1/setup.sh inside the repo itself, it creates a
 # VaultBot/ subfolder â€” never commit that.
@@ -34,9 +34,9 @@ env/
 # folder and ignored every new source file. The nested-installer scenario is
 # an edge case not worth silently dropping source code.
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Python cache
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -46,10 +46,10 @@ __pycache__/
 .coverage
 .pytest_cache/
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # VaultBot runtime state (regenerated on first run)
 # These are YOUR vault's state - another user's VaultBot makes its own.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 _test_*.py
 vaultbot_backend/identity/
 vaultbot_backend/sessions/
@@ -163,12 +163,12 @@ Communication-Preferences.md
 # them or submit PRs as ziggibot-uni.
 .github/instructions/
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # The vault itself - the USER'S mind
 # The vault is personal knowledge, chat history, directives, and notes.
 # A baseline vault ships empty; each user grows their own.
 # These hierarchical folders (now under vaultbot/) are where VaultBot writes its output:
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 
 # Vault-root hygiene: VaultBot must NEVER create Memory/, Knowledge/, or
 # System/ at the vault root. All generated content lives under vaultbot/.
@@ -179,19 +179,19 @@ Communication-Preferences.md
 
 # Hierarchical-layout personal vault content (post-reorg)
 # These are the USER'S mind: chat logs, personal knowledge, personal notes.
-# vault/vaultbot-stuff/System/ ships framework defaults (filtered below) but the rest is personal.
-vault/vaultbot-stuff/Memory/
-vault/vaultbot-stuff/Knowledge/
+# myvault/vaultbot-stuff/System/ ships framework defaults (filtered below) but the rest is personal.
+myvault/vaultbot-stuff/Memory/
+myvault/vaultbot-stuff/Knowledge/
 User/
 
 # Root-level vault content (VAULT_PATH=. makes the repo root the vault root).
 # When the vault root IS the repo root, VaultBot writes generated notes to
-# root-level vaultbot-stuff/ and vaultbot/ instead of vault/vaultbot-stuff/.
+# root-level vaultbot-stuff/ and vaultbot/ instead of myvault/vaultbot-stuff/.
 # These are the user's personal mind (chat logs, research notes) plus
 # generated artifacts (Codebase-Map.md) — never commit them.
 #
 # Anchored to root (leading /) so they do NOT match the shippable
-# vault/vaultbot-stuff/ tree. The shippable System/ framework is gated by
+# myvault/vaultbot-stuff/ tree. The shippable System/ framework is gated by
 # the `baseline: true` frontmatter marker (enforced by the
 # check_baseline_markers.py pre-commit hook), NOT by these ignores.
 /vaultbot-stuff/
@@ -202,49 +202,49 @@ User/
 # these are un-ignored explicitly. Keep in sync with golden_set.json —
 # every expected/seed note must resolve to a committed file or the golden
 # gate scores 0 recall in CI.
-!vault/vaultbot-stuff/Knowledge/
-vault/vaultbot-stuff/Knowledge/*
-!vault/vaultbot-stuff/Knowledge/Concepts/
-vault/vaultbot-stuff/Knowledge/Concepts/*
-!vault/vaultbot-stuff/Knowledge/Concepts/FUSED-Retrieval.md
-!vault/vaultbot-stuff/Knowledge/Concepts/Vault-Cluster-Analysis.md
-!vault/vaultbot-stuff/Knowledge/Concepts/Vault-Graph-Analysis.md
-!vault/vaultbot-stuff/Knowledge/Concepts/Low-Power-Pedal-Assumption.md
-!vault/vaultbot-stuff/Knowledge/Concepts/Self-Edit-Verification-Directive.md
-!vault/vaultbot-stuff/Knowledge/Concepts/Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec.md
-!vault/vaultbot-stuff/Knowledge/Research/
-vault/vaultbot-stuff/Knowledge/Research/*
-!vault/vaultbot-stuff/Knowledge/Research/Vault-Longevity-Architecture.md
-!vault/vaultbot-stuff/Knowledge/Research/how-bacteria-communicate.md
-!vault/vaultbot-stuff/Knowledge/Research/How-to-implement-OAuth2-authentication-in-an-Expressjs-application-passport-stra.md
-!vault/vaultbot-stuff/Knowledge/Research/hermeneutics-theory-of-interpretation-the-hermeneutic-circle-how-meaning-is-deri.md
-!vault/vaultbot-stuff/Knowledge/Research/RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g.md
-!vault/vaultbot-stuff/Knowledge/Research/Small-Model-Driving-Architecture.md
-!vault/vaultbot-stuff/Knowledge/Biology/
-vault/vaultbot-stuff/Knowledge/Biology/*
-!vault/vaultbot-stuff/Knowledge/Biology/Homeostasis-and-Animal-Regulation.md
-!vault/vaultbot-stuff/Knowledge/Biology/Artificial-Homeostasis-and-VaultBot-Regulation.md
-!vault/vaultbot-stuff/Knowledge/Biology/Homeostasis-Through-the-Knowledge-Triad.md
-!vault/vaultbot-stuff/Knowledge/Architecture/
-vault/vaultbot-stuff/Knowledge/Architecture/*
-!vault/vaultbot-stuff/Knowledge/Architecture/Small-Model-Driving-Architecture.md
+!myvault/vaultbot-stuff/Knowledge/
+myvault/vaultbot-stuff/Knowledge/*
+!myvault/vaultbot-stuff/Knowledge/Concepts/
+myvault/vaultbot-stuff/Knowledge/Concepts/*
+!myvault/vaultbot-stuff/Knowledge/Concepts/FUSED-Retrieval.md
+!myvault/vaultbot-stuff/Knowledge/Concepts/Vault-Cluster-Analysis.md
+!myvault/vaultbot-stuff/Knowledge/Concepts/Vault-Graph-Analysis.md
+!myvault/vaultbot-stuff/Knowledge/Concepts/Low-Power-Pedal-Assumption.md
+!myvault/vaultbot-stuff/Knowledge/Concepts/Self-Edit-Verification-Directive.md
+!myvault/vaultbot-stuff/Knowledge/Concepts/Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec.md
+!myvault/vaultbot-stuff/Knowledge/Research/
+myvault/vaultbot-stuff/Knowledge/Research/*
+!myvault/vaultbot-stuff/Knowledge/Research/Vault-Longevity-Architecture.md
+!myvault/vaultbot-stuff/Knowledge/Research/how-bacteria-communicate.md
+!myvault/vaultbot-stuff/Knowledge/Research/How-to-implement-OAuth2-authentication-in-an-Expressjs-application-passport-stra.md
+!myvault/vaultbot-stuff/Knowledge/Research/hermeneutics-theory-of-interpretation-the-hermeneutic-circle-how-meaning-is-deri.md
+!myvault/vaultbot-stuff/Knowledge/Research/RAG-evaluation-metrics-how-to-measure-retrieval-quality-in-retrieval-augmented-g.md
+!myvault/vaultbot-stuff/Knowledge/Research/Small-Model-Driving-Architecture.md
+!myvault/vaultbot-stuff/Knowledge/Biology/
+myvault/vaultbot-stuff/Knowledge/Biology/*
+!myvault/vaultbot-stuff/Knowledge/Biology/Homeostasis-and-Animal-Regulation.md
+!myvault/vaultbot-stuff/Knowledge/Biology/Artificial-Homeostasis-and-VaultBot-Regulation.md
+!myvault/vaultbot-stuff/Knowledge/Biology/Homeostasis-Through-the-Knowledge-Triad.md
+!myvault/vaultbot-stuff/Knowledge/Architecture/
+myvault/vaultbot-stuff/Knowledge/Architecture/*
+!myvault/vaultbot-stuff/Knowledge/Architecture/Small-Model-Driving-Architecture.md
 
 # Personal files inside the shippable System/ framework tree
-vault/vaultbot-stuff/System/Identity/Sean-Communication-Preferences.md
-vault/vaultbot-stuff/System/Identity/Auto-Resume-Directive.md
-vault/vaultbot-stuff/System/Identity/Autonomy-Directive.md
-vault/vaultbot-stuff/System/Identity/IDK-Fallback-Directive.md
-vault/vaultbot-stuff/System/Identity/No-Wikipedia-Directive.md
-vault/vaultbot-stuff/System/Identity/Fractal-Entropy-Principle.md
-vault/vaultbot-stuff/System/Identity/Self-Edit-Verification-Directive.md
-vault/vaultbot-stuff/System/Patterns/Cross-Session-Patterns-*.md
-vault/vaultbot-stuff/System/Quality-Gates/Calibration-via-Operator-Feedback.md
-vault/vaultbot-stuff/System/Architecture/Small-Model-Path-to-AGI.md
-vault/vaultbot-stuff/System/Architecture/Vault-Longevity-Architecture.md
+myvault/vaultbot-stuff/System/Identity/Sean-Communication-Preferences.md
+myvault/vaultbot-stuff/System/Identity/Auto-Resume-Directive.md
+myvault/vaultbot-stuff/System/Identity/Autonomy-Directive.md
+myvault/vaultbot-stuff/System/Identity/IDK-Fallback-Directive.md
+myvault/vaultbot-stuff/System/Identity/No-Wikipedia-Directive.md
+myvault/vaultbot-stuff/System/Identity/Fractal-Entropy-Principle.md
+myvault/vaultbot-stuff/System/Identity/Self-Edit-Verification-Directive.md
+myvault/vaultbot-stuff/System/Patterns/Cross-Session-Patterns-*.md
+myvault/vaultbot-stuff/System/Quality-Gates/Calibration-via-Operator-Feedback.md
+myvault/vaultbot-stuff/System/Architecture/Small-Model-Path-to-AGI.md
+myvault/vaultbot-stuff/System/Architecture/Vault-Longevity-Architecture.md
 
 # Personal root directives + notes (operator relationship with their bot)
 # Anchored to root (leading /) so VaultBot's own shippable directives under
-# vault/vaultbot-stuff/baseline/ and vault/vaultbot-stuff/System/Identity/ are NOT ignored — only
+# myvault/vaultbot-stuff/baseline/ and myvault/vaultbot-stuff/System/Identity/ are NOT ignored — only
 # root-level directive files (the user's personal copies) are.
 2026-*.md
 /*-Directive.md
@@ -266,25 +266,25 @@ Research-Engine-Robustness-Requirement.md
 *-Pattern.md
 *-Requirement.md
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Learning materials (user-supplied PDFs)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 learningMaterial/
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Obsidian config (user local workspace settings)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-vault/.obsidian/workspace.json
-vault/.obsidian/workspace-mobile.json
-vault/.obsidian/app.json
-vault/.obsidian/graph.json
-vault/.obsidian/hotkeys.json
-vault/.obsidian/plugins/obsidian-git/data.json
-vault/.obsidian/plugins/vaultbot/data.json
+# ─────────────────────────────────────────────────────────────────────
+myvault/.obsidian/workspace.json
+myvault/.obsidian/workspace-mobile.json
+myvault/.obsidian/app.json
+myvault/.obsidian/graph.json
+myvault/.obsidian/hotkeys.json
+myvault/.obsidian/plugins/obsidian-git/data.json
+myvault/.obsidian/plugins/vaultbot/data.json
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # OS / editor cruft
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -293,32 +293,32 @@ desktop.ini
 *~
 .vscode/settings.json
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Stray boot/test logs
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 boot_*.log
 
 # MCP client config (generated dynamically by plugin on startup)
-vault/.obsidian/plugins/vaultbot/mcp.json
+myvault/.obsidian/plugins/vaultbot/mcp.json
 .vscode/mcp.json
-vault/.vscode/mcp.json
+myvault/.vscode/mcp.json
 
 # Personal Obsidian settings (regenerated per user)
-vault/.obsidian/appearance.json
-vault/.obsidian/hotkeys.json
-vault/.obsidian/core-plugins.json
+myvault/.obsidian/appearance.json
+myvault/.obsidian/hotkeys.json
+myvault/.obsidian/core-plugins.json
 # Backup files
 *.bak
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 # Personal content (NOT part of VaultBot)
 # The user's personal notes, lyrics, projects, etc. live alongside the
 # repo but must never be committed as part of VaultBot.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────
 Lyrics/
 
 # Local-only vault artifacts (not for public repo)
 vault_inventory_md.csv
 /procedures/
-vault/.obsidian/workspace.json
+myvault/.obsidian/workspace.json
 

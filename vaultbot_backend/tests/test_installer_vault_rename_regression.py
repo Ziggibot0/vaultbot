@@ -1,7 +1,6 @@
-"""Regression test: installer in-repo detection + git-aware vault rename.
+"""Regression test: installer in-repo detection + fixed vault name.
 
-Guards against the two bugs that caused a duplicate ``vault/`` folder
-alongside the user-renamed vault (e.g. ``myvault/``):
+Guards against two classes of bugs:
 
 1. **In-repo detection failure.** When the installer was run inside an
    existing clone (or on case-insensitive filesystems where ``VaultBot``
@@ -10,13 +9,14 @@ alongside the user-renamed vault (e.g. ``myvault/``):
    fix detects this by checking for ``vaultbot_backend/`` + ``setup.ps1``
    (or ``setup.sh``) in ``$PWD`` and in the candidate framework folder.
 
-2. **Git-unaware vault rename.** ``Rename-Item`` / ``mv`` on the
-   git-tracked ``vault/`` folder didn't tell git about the rename, so
-   ``git checkout`` restored ``vault/`` with all 282 tracked files —
-   creating a duplicate empty-ish ``vault/`` alongside the renamed
-   vault. The fix uses ``git mv`` + a ``.gitignore`` path-prefix update
-   + a commit when inside a git repo, so the rename persists across
-   checkouts.
+2. **Vault folder rename breaking updates.** The installer previously
+   asked users to name their vault folder and then ``git mv``-ed the
+   shipped ``vault/`` to the chosen name. This broke ``git pull``
+   updates: upstream changes to ``vaultbot-stuff/System/Procedures/``
+   etc. landed in ``vault/`` (the old name) while the user's vault lived
+   elsewhere, so nobody got procedure updates. The fix REMOVES the
+   rename entirely — the vault folder name is FIXED to ``myvault`` so
+   upstream updates always merge into the right place for every user.
 
 This is a source-level guard, not a runtime test: PowerShell/bash aren't
 available in the Linux CI runner, so we assert on the script text itself.
@@ -27,7 +27,6 @@ Run: pytest tests/test_installer_vault_rename_regression.py -v
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -105,84 +104,47 @@ def test_sh_aborts_on_non_vaultbot_folder(setup_sh_text: str) -> None:
     )
 
 
-# ── Git-aware vault rename ────────────────────────────────────────────────
+# ── Fixed vault name (no rename) ──────────────────────────────────────────
 
 
-def test_ps1_uses_git_mv_for_vault_rename(setup_ps1_text: str) -> None:
-    """setup.ps1 must use `git mv` to rename vault/ when inside a git repo.
+def test_ps1_uses_fixed_vault_name(setup_ps1_text: str) -> None:
+    """setup.ps1 must use a FIXED vault folder name ("myvault"), not ask the user.
 
-    A plain ``Rename-Item`` doesn't tell git about the rename, so
-    ``git checkout`` restores ``vault/`` — creating a duplicate folder
-    alongside the renamed vault.
+    Allowing users to rename the vault folder broke `git pull` updates:
+    upstream changes to vaultbot-stuff/System/Procedures/ etc. landed in
+    ``vault/`` (the old name) while the user's vault lived elsewhere.
+    The vault folder name is now FIXED to ``myvault`` so updates always
+    merge into the right place for every user.
     """
-    assert "git mv vault" in setup_ps1_text, (
-        "setup.ps1 no longer uses `git mv vault` for the vault rename — "
-        "the git-aware rename guard regressed (would cause duplicate vault/ "
-        "on next checkout)."
+    assert '"myvault"' in setup_ps1_text or "'myvault'" in setup_ps1_text, (
+        "setup.ps1 no longer uses a fixed 'myvault' vault name — the "
+        "update-safe vault name guard regressed."
+    )
+    # Must NOT ask the user to name the vault (that was the old broken flow).
+    assert "What should your vault be called" not in setup_ps1_text, (
+        "setup.ps1 is asking the user to name the vault again — this "
+        "breaks git pull updates for renamed vaults."
+    )
+    # Must NOT use git mv to rename vault/ (the rename is gone entirely).
+    assert "git mv vault" not in setup_ps1_text, (
+        "setup.ps1 still uses `git mv vault` — the vault rename logic "
+        "should have been removed entirely."
     )
 
 
-def test_ps1_updates_gitignore_on_rename(setup_ps1_text: str) -> None:
-    """setup.ps1 must update .gitignore path prefixes when renaming vault/."""
-    # The regex replacement changes vault/ → <new-name>/ in .gitignore rules.
-    assert "vault/" in setup_ps1_text and "gitignore" in setup_ps1_text.lower(), (
-        "setup.ps1 no longer updates .gitignore when renaming vault/ — "
-        "the gitignore path-prefix update regressed."
+def test_sh_uses_fixed_vault_name(setup_sh_text: str) -> None:
+    """setup.sh must use a FIXED vault folder name ("myvault"), not ask the user."""
+    assert '"myvault"' in setup_sh_text or "'myvault'" in setup_sh_text, (
+        "setup.sh no longer uses a fixed 'myvault' vault name — the "
+        "update-safe vault name guard regressed."
     )
-    # Must commit the rename so it persists across checkouts.
-    assert re.search(r"git.*commit.*rename vault", setup_ps1_text, re.IGNORECASE), (
-        "setup.ps1 no longer commits the vault rename — the rename won't "
-        "persist across git checkouts, causing a duplicate vault/."
+    # Must NOT ask the user to name the vault (that was the old broken flow).
+    assert "What should your vault be called" not in setup_sh_text, (
+        "setup.sh is asking the user to name the vault again — this "
+        "breaks git pull updates for renamed vaults."
     )
-
-
-def test_ps1_skips_rename_for_default_name(setup_ps1_text: str) -> None:
-    """setup.ps1 must skip the rename when the user chose the default 'vault'."""
-    assert '$chosenVault -eq "vault"' in setup_ps1_text, (
-        "setup.ps1 no longer skips the rename when the user chose the "
-        "default name 'vault' — this would cause an unnecessary git mv."
-    )
-
-
-def test_sh_uses_git_mv_for_vault_rename(setup_sh_text: str) -> None:
-    """setup.sh must use `git mv` to rename vault/ when inside a git repo."""
-    assert "git mv vault" in setup_sh_text, (
-        "setup.sh no longer uses `git mv vault` for the vault rename — "
-        "the git-aware rename guard regressed (would cause duplicate vault/ "
-        "on next checkout)."
-    )
-
-
-def test_sh_updates_gitignore_on_rename(setup_sh_text: str) -> None:
-    """setup.sh must update .gitignore path prefixes when renaming vault/."""
-    assert "gitignore" in setup_sh_text.lower(), (
-        "setup.sh no longer updates .gitignore when renaming vault/ — "
-        "the gitignore path-prefix update regressed."
-    )
-    assert re.search(
-        r"git.*commit.*rename vault", setup_sh_text, re.IGNORECASE | re.DOTALL
-    ), (
-        "setup.sh no longer commits the vault rename — the rename won't "
-        "persist across git checkouts, causing a duplicate vault/."
-    )
-
-
-def test_sh_skips_rename_for_default_name(setup_sh_text: str) -> None:
-    """setup.sh must skip the rename when the user chose the default 'vault'."""
-    assert '"vault"' in setup_sh_text and "no rename needed" in setup_sh_text.lower(), (
-        "setup.sh no longer skips the rename when the user chose the "
-        "default name 'vault' — this would cause an unnecessary git mv."
-    )
-
-
-def test_sh_git_mv_falls_back_to_mv(setup_sh_text: str) -> None:
-    """setup.sh must fall back to plain `mv` if `git mv` fails (non-git repo)."""
-    assert 'mv "$SHIPPED_VAULT" "$CHOSEN_VAULT"' in setup_sh_text, (
-        "setup.sh no longer falls back to a filesystem `mv` when `git mv` "
-        "fails — the non-git-repo fallback regressed."
-    )
-    # The fallback must exist in the else branch of the git mv check.
-    assert "git mv failed" in setup_sh_text.lower(), (
-        "setup.sh no longer documents the git mv fallback — the non-git "
-        "fallback path regressed."
+    # Must NOT use git mv to rename vault/ (the rename is gone entirely).
+    assert "git mv vault" not in setup_sh_text, (
+        "setup.sh still uses `git mv vault` — the vault rename logic "
+        "should have been removed entirely."
     )
