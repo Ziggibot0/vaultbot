@@ -222,9 +222,34 @@ Write-Host ""
 # `vault/` subfolder is the user's Obsidian vault - we rename it to the
 # user's chosen name below. The backend (vaultbot_backend/) and .venv/ live
 # at the framework root, OUTSIDE the vault, so the user never sees them.
+# Detect if we're already inside a VaultBot repo. This happens when:
+#   1. The user cloned the repo and ran the installer from inside it.
+#   2. On case-insensitive filesystems (Windows NTFS), "$PWD/VaultBot"
+#      case-insensitively matches an existing "vaultbot/" folder, so
+#      Test-Path returns true even though the folder name differs.
+# In both cases, use the existing repo instead of cloning a nested copy.
 $frameworkPath = Join-Path $PWD $frameworkName
-if (Test-Path $frameworkPath) {
-    Write-Warn2 "Folder '$frameworkName' already exists here -- using it."
+$inExistingRepo = $false
+
+if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
+    (Test-Path (Join-Path $PWD "setup.ps1"))) {
+    # Case 1: $PWD itself is a VaultBot repo (installer run from inside it).
+    $frameworkPath = $PWD
+    $inExistingRepo = $true
+    Write-Warn2 "Already inside a VaultBot repo -- using this folder."
+} elseif (Test-Path $frameworkPath) {
+    # Case 2: $frameworkPath exists. On Windows, "VaultBot" might
+    # case-insensitively match "vaultbot". Verify it's a VaultBot repo
+    # before using it; abort if it's an unrelated folder to avoid clobbering.
+    if ((Test-Path (Join-Path $frameworkPath "vaultbot_backend")) -and
+        (Test-Path (Join-Path $frameworkPath "setup.ps1"))) {
+        $inExistingRepo = $true
+        Write-Warn2 "Found existing VaultBot repo -- using it."
+    } else {
+        Write-Err "Folder '$frameworkName' already exists but isn't a VaultBot repo."
+        Write-Host "  Pick a different location or remove the existing folder." -ForegroundColor Yellow
+        return
+    }
 } else {
     $ghOk = $false
     try {
@@ -381,8 +406,41 @@ $chosenVault = Read-Host "  Vault name (default: vault)"
 if ([string]::IsNullOrWhiteSpace($chosenVault)) { $chosenVault = "vault" }
 $vaultPath = Join-Path $frameworkPath $chosenVault
 $shippedVault = Join-Path $frameworkPath "vault"
-if ((Test-Path $shippedVault) -and -not (Test-Path $vaultPath)) {
-    Rename-Item $shippedVault $chosenVault
+if ($chosenVault -eq "vault") {
+    # User chose the default name - no rename needed, use the shipped vault.
+    $vaultPath = $shippedVault
+} elseif ((Test-Path $shippedVault) -and -not (Test-Path $vaultPath)) {
+    # Rename the shipped vault to the user's chosen name. In a git repo,
+    # use `git mv` so git tracks the rename and doesn't restore vault/
+    # on the next checkout (which would create a duplicate empty vault/
+    # alongside the renamed folder). Also update .gitignore rules that
+    # reference vault/ to use the new name, then commit so it persists.
+    $gitDir = Join-Path $frameworkPath ".git"
+    if (Test-Path $gitDir) {
+        Push-Location $frameworkPath
+        try {
+            & git mv vault $chosenVault
+            if ($LASTEXITCODE -ne 0) {
+                # git mv failed - fall back to a filesystem rename.
+                Rename-Item $shippedVault $chosenVault
+            } else {
+                # Update .gitignore: replace the vault/ path prefix with
+                # the new vault name in all rules (ignore + un-ignore).
+                $gitignorePath = Join-Path $frameworkPath ".gitignore"
+                if (Test-Path $gitignorePath) {
+                    $giContent = Get-Content $gitignorePath -Raw
+                    $giContent = $giContent -replace '(?m)^(!?)vault/', '${1}' + $chosenVault + '/'
+                    [System.IO.File]::WriteAllText($gitignorePath, $giContent, [System.Text.UTF8Encoding]::new($false))
+                }
+                & git add .gitignore
+                # Use a temporary git identity so the commit succeeds even
+                # if the user hasn't configured git user.name/email yet.
+                & git -c user.name="VaultBot Installer" -c user.email="installer@vaultbot.local" commit -m "chore: rename vault/ to $chosenVault/ (installer)" 2>&1 | Out-Null
+            }
+        } finally { Pop-Location }
+    } else {
+        Rename-Item $shippedVault $chosenVault
+    }
     Write-OK "Vault named '$chosenVault'"
 } elseif (-not (Test-Path $vaultPath)) {
     New-Item -ItemType Directory -Path $vaultPath | Out-Null
