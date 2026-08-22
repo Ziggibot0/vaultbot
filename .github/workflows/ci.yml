@@ -27,8 +27,10 @@ jobs:
       fail-fast: false
       matrix:
         # 3.11 is the declared floor (pyproject.toml target-version = py311).
-        # 3.12 is the runtime version in the dev venv.
-        python-version: ["3.11", "3.12"]
+        # 3.12 is the runtime version in the dev venv. 3.13 and 3.14 are
+        # what python.org now installs by default on new machines, so they
+        # are covered too — every version up to 3.14 is a hard gate.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
