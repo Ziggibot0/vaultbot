@@ -3,3 +3,6 @@ contact_links:
   - name: VaultBot documentation
     url: https://github.com/Ziggibot0/vaultbot#readme
     about: Read the README and docs before filing an issue.
+  - name: GitHub Discussions
+    url: https://github.com/Ziggibot0/vaultbot/discussions
+    about: Ask questions, share ideas, and discuss with the community.
