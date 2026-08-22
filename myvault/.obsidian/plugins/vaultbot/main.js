@@ -2950,7 +2950,8 @@ containerEl.createEl('h3', {text: 'Safety'});
 			'Allow your VaultBot to submit improvements (bug fixes, new tools, ' +
 			'documentation) to the upstream VaultBot repo as pull requests. ' +
 			'Your notes, chat logs, and personal data are NEVER included \u2014 ' +
-			'only code files. You also need a GITHUB_TOKEN in your .env file. ' +
+			'only code files. You need to sign in to GitHub once (use the ' +
+			'button below) so your VaultBot can push. ' +
 			'See CONTRIBUTING.md for details.',
 			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
 
@@ -2964,6 +2965,85 @@ containerEl.createEl('h3', {text: 'Safety'});
 					await this.plugin.saveSettings();
 					new Notice(value ? 'Contributions enabled' : 'Contributions disabled');
 				}));
+
+		// Guided GitHub sign-in: a non-technical user should never have to
+		// know what `gh` is. This button detects the GitHub CLI, walks the
+		// user through `gh auth login` (a browser flow), and verifies it
+		// completed — all from inside Obsidian, no terminal.
+		const ghStatusEl = containerEl.createEl('div', {attr: {style: 'opacity:0.7;font-size:0.8em;min-height:1em;margin:4px 0 8px 0;'}});
+		const ghSignInBtn = containerEl.createEl('button', {text: 'Sign in to GitHub', cls: 'mod-cta'});
+
+		const checkGhStatus = async () => {
+			const { execFile } = require('child_process');
+			const run = (args) => new Promise((resolve) => {
+				execFile('gh', args, { timeout: 15000 }, (err, stdout) => {
+					resolve(err ? null : (stdout || '').trim());
+				});
+			});
+			// Is gh installed at all?
+			const ver = await run(['--version']);
+			if (ver === null) {
+				ghStatusEl.setText('GitHub CLI not installed. Click "Sign in to GitHub" to install it.');
+				return 'missing';
+			}
+			// Is it authenticated?
+			const status = await run(['auth', 'status']);
+			if (status === null) {
+				ghStatusEl.setText('GitHub CLI installed but not signed in. Click "Sign in to GitHub".');
+				return 'unauthed';
+			}
+			ghStatusEl.setText('Signed in to GitHub. Your VaultBot can share fixes.');
+			return 'authed';
+		};
+
+		ghSignInBtn.addEventListener('click', async () => {
+			ghSignInBtn.setAttribute('disabled', 'disabled');
+			ghSignInBtn.setText('Working\u2026');
+			const { execFile } = require('child_process');
+			const run = (args) => new Promise((resolve) => {
+				execFile('gh', args, { timeout: 120000 }, (err, stdout) => {
+					resolve(err ? null : (stdout || '').trim());
+				});
+			});
+
+			// 1. If gh is missing, try to install it via winget (Windows) or
+			//    tell the user where to get it.
+			const ver = await run(['--version']);
+			if (ver === null) {
+				ghStatusEl.setText('Installing GitHub CLI\u2026');
+				try {
+					const { execFileSync } = require('child_process');
+					execFileSync('winget', ['install', '--id', 'GitHub.cli', '--silent', '--accept-package-agreements', '--accept-source-agreements'], { stdio: 'ignore', timeout: 300000 });
+					ghStatusEl.setText('GitHub CLI installed. Signing in\u2026');
+				} catch (e) {
+					ghStatusEl.setText('Could not install GitHub CLI automatically. Install it from https://cli.github.com, then click again.');
+					ghSignInBtn.removeAttribute('disabled');
+					ghSignInBtn.setText('Sign in to GitHub');
+					return;
+				}
+			}
+
+			// 2. Run the browser login flow. This opens a browser window; the
+			//    user signs in and copies the one-time code back.
+			ghStatusEl.setText('A browser window will open. Sign in to GitHub, then return here.');
+			new Notice('Opening GitHub sign-in in your browser\u2026');
+			await run(['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web']);
+
+			// 3. Verify it completed (gh auth login can exit 0 even if the
+			//    user closed the browser early).
+			const status = await run(['auth', 'status']);
+			if (status === null) {
+				ghStatusEl.setText('Sign-in did not complete. Click "Sign in to GitHub" to try again.');
+			} else {
+				ghStatusEl.setText('Signed in to GitHub. Your VaultBot can share fixes.');
+				new Notice('Signed in to GitHub.');
+			}
+			ghSignInBtn.removeAttribute('disabled');
+			ghSignInBtn.setText('Sign in to GitHub');
+		});
+
+		// Show current status on load.
+		checkGhStatus();
 
 		containerEl.createEl('h3', {text: 'Updates'});
 

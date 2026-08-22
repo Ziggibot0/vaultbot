@@ -260,9 +260,10 @@ def run(args: dict) -> dict:
         return {
             "error": "gh CLI not found or not authenticated.",
             "hint": (
-                "Install the GitHub CLI from https://cli.github.com and run "
-                "'gh auth login' to sign in. VaultBot uses gh for community "
-                "contributions so you never have to manage a token by hand."
+                "Sign in to GitHub from the VaultBot settings panel "
+                "(Settings → Community plugins → VaultBot → gear icon → "
+                "'Sign in to GitHub'). This walks you through the one-time "
+                "sign-in in your browser — no terminal needed."
             ),
         }
 
