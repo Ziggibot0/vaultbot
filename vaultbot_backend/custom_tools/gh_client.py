@@ -59,6 +59,8 @@ def gh_available() -> bool:
             ["gh", "auth", "status"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
         )
         return r.returncode == 0
@@ -90,6 +92,8 @@ def _bot_env() -> dict[str, str] | None:
             ["gh", "auth", "token", "--user", bot_user],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -115,6 +119,8 @@ def gh(
             ["gh", *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             cwd=cwd,
             env=_bot_env(),
@@ -160,6 +166,8 @@ def gh_api(
             input=json.dumps(body) if body is not None else None,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             env=_bot_env(),
         )
@@ -205,6 +213,8 @@ def gh_raw(owner: str, repo: str, ref: str, path: str, timeout: int = 30) -> str
             ["gh", *cmd],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             env=_bot_env(),
         )
