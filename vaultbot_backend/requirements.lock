@@ -24,8 +24,8 @@
 #
 # NOTE: dev tools (ruff, pyright, pytest) are pinned here too so the dev
 # environment is reproducible, but they are NOT required to run the
-# backend. requirements-dev.txt is the source for those; the versions
-# below mirror it so a fresh clone gets matching tooling.
+# backend. pyproject.toml [project.optional-dependencies].dev is the
+# source for those; the versions below mirror it so a fresh clone gets matching tooling.
 
 annotated-doc==0.0.5
 annotated-types==0.8.0
