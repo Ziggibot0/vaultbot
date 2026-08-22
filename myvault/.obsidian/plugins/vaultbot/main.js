@@ -1842,14 +1842,32 @@ class VaultBotSettingTab extends PluginSettingTab {
 	}
 
 	async display() {
-		const {containerEl} = this;
-		containerEl.empty();
+		const rootEl = this.containerEl;
+		rootEl.empty();
 
-		containerEl.createEl('h2', {text: 'VaultBot Settings'});
+		rootEl.createEl('h2', {text: 'VaultBot Settings'});
+
+		// Collapsible section helper: returns the body element to append
+		// content to. Everyday sections are open by default; rare/advanced
+		// sections are collapsed so the tab reads as a clean table of
+		// contents instead of a wall of controls.
+		const addSection = (title, open = false) => {
+			const details = rootEl.createEl('details', {cls: 'vaultbot-section'});
+			if (open) details.setAttribute('open', '');
+			details.createEl('summary', {text: title, cls: 'vaultbot-section-summary'});
+			return details.createEl('div', {cls: 'vaultbot-section-body'});
+		};
+
+		// Mutable alias: reassigned to each section's body as we go, so the
+		// existing `containerEl` references below land inside the right
+		// disclosure instead of the top-level container.
+		let containerEl = rootEl;
 
 		// Backend URL moved to the Advanced disclosure at the bottom of
 		// the settings tab — a non-tech user should never need to change it.
 		// The config status panel below shows effective values instead.
+
+		containerEl = addSection('General', true);
 
 		new Setting(containerEl)
 			.setName('Auto-start backend')
@@ -1881,7 +1899,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// register models. Once a model is in the pot, ANY role (big / small /
 		// vision) can use it — picked from the header dropdowns or here. Local
 		// Ollama, OpenRouter, OpenAI, etc. all behave the same.
-		containerEl.createEl('h3', {text: 'AI Models & Providers'});
+		containerEl = addSection('AI Models & Providers', true);
 		containerEl.createEl('div', {text:
 			'Add a provider once (paste its API key), then add its models. ' +
 			'Every model you add appears in the Big / Small / Vision pickers in ' +
@@ -2126,7 +2144,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// adding to the main pot. Add models by picking a provider (from
 		// the SAME provider list you already configured above) and typing
 		// the model name. Then run a tournament to see how they perform.
-		containerEl.createEl('h3', {text: 'Model Tournament'});
+		containerEl = addSection('Model Tournament', false);
 		containerEl.createEl('div', {text:
 			'Add models to the tournament staging pot below — these are ' +
 			'separate from your main model pot. Test them against vaultbot-' +
@@ -2406,7 +2424,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// so the user can see which config source is "winning" (plugin panel
 		// vs .env file) without grepping .env. Conflicts (panel and .env
 		// disagree) are shown as warnings. Calls GET /config/effective.
-		containerEl.createEl('h3', {text: 'Configuration Status'});
+		containerEl = addSection('Configuration Status', false);
 		const configStatusEl = containerEl.createEl('div',
 			{cls: 'vaultbot-config-status'});
 		const configRefreshBtn = containerEl.createEl('button',
@@ -2482,7 +2500,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 		// No pigeonholing — same add-provider + add-model flow as the LLMs.
 
-		containerEl.createEl('h3', {text: 'Talk Mode'});
+		containerEl = addSection('Talk Mode', true);
 
 		containerEl.createEl('p', {text: 'When on, the Call button in the sidebar lets you have a real-time spoken conversation. VaultBot speaks as it types (in chunks), and you can talk back. This is the JARVIS mode.', attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
 
@@ -2562,7 +2580,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 		// becomes the model id for the tts role.
 
-		containerEl.createEl('h3', {text: 'Speech Models (STT / TTS)'});
+		containerEl = addSection('Speech Models (STT / TTS)', true);
 
 		containerEl.createEl('p', {text: 'STT and TTS use the same pot as your LLMs — add any provider (OpenAI, Groq, a local Whisper server, Edge TTS, the browser) and assign it to the role. Edge TTS + Browser are built in and free. The Call button appears in the sidebar once Talk Mode is on.', attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
 
@@ -2847,13 +2865,8 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// but still accessible for the rare case it's needed. The placeholder
 		// is 127.0.0.1 (not localhost — the code rewrites localhost to
 		// 127.0.0.1 on load to avoid the IPv6/IPv4 resolution bug).
-		const advDisclosure = containerEl.createEl('details',
-			{cls: 'vaultbot-advanced'});
-		advDisclosure.createEl('summary',
-			{text: 'Advanced', cls: 'vaultbot-advanced-summary'});
-		const advBody = advDisclosure.createEl('div');
-		advBody.style.marginTop = '8px';
-		new Setting(advBody)
+		containerEl = addSection('Advanced', false);
+		new Setting(containerEl)
 			.setName('Backend URL')
 			.setDesc('URL of the VaultBot backend API. Only change this if you ' +
 				'run the backend on a different port or host.')
@@ -2865,7 +2878,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', {text: 'Research Backend'});
+		containerEl = addSection('Research Backend', true);
 
 		new Setting(containerEl)
 			.setName('Search backend')
@@ -2898,7 +2911,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 		// (one starts while the other restarts), leaving the backend in a
 		// half-up state. Use the sidebar Restart button instead.
 
-containerEl.createEl('h3', {text: 'Safety'});
+		containerEl = addSection('Safety', true);
 		containerEl.createEl('div', {text:
 			'Safe Mode prevents VaultBot from modifying its own code, creating ' +
 			'new tools, executing arbitrary Python, restarting the backend, or ' +
@@ -2945,7 +2958,7 @@ containerEl.createEl('h3', {text: 'Safety'});
 						: 'BS Detector runs silently — VaultBot will tell you gently');
 				}));
 
-		containerEl.createEl('h3', {text: 'Community contributions'});
+		containerEl = addSection('Community contributions', false);
 		containerEl.createEl('div', {text:
 			'Allow your VaultBot to submit improvements (bug fixes, new tools, ' +
 			'documentation) to the upstream VaultBot repo as pull requests. ' +
@@ -3045,7 +3058,7 @@ containerEl.createEl('h3', {text: 'Safety'});
 		// Show current status on load.
 		checkGhStatus();
 
-		containerEl.createEl('h3', {text: 'Updates'});
+		containerEl = addSection('Updates', false);
 
 		// One-click self-updater. Pulls the latest CODE from GitHub and
 		// applies it over the live vault. User state is never touched:
