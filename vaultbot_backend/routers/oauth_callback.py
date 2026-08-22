@@ -8,22 +8,34 @@ The /callback path is auth-exempt (see auth.py) because Google's redirect
 arrives without the VaultBot shared-secret token.
 """
 
+import html
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["oauth"])
 
 
 @router.get("/callback")
 async def google_oauth_callback(request: Request):
-    """Google OAuth 2.0 callback — exchanges auth code for tokens."""
+    """Google OAuth 2.0 callback — exchanges auth code for tokens.
+
+    Every value reflected into the returned HTML is HTML-escaped, and raw
+    exception text is never rendered (it could leak details or be used for
+    reflected XSS on this auth-exempt endpoint).
+    """
     code = request.query_params.get("code", "")
     error = request.query_params.get("error", "")
+    state = request.query_params.get("state", "")
 
     if error:
         return HTMLResponse(
             content=(
-                f"<h2>Authorization failed</h2><p>Google returned error: {error}</p>"
+                "<h2>Authorization failed</h2>"
+                f"<p>Google returned error: {html.escape(error)}</p>"
             ),
             status_code=400,
         )
@@ -48,10 +60,13 @@ async def google_oauth_callback(request: Request):
     try:
         from custom_tools.google_workspace import run as gw_run
 
-        result = gw_run({"action": "callback", "code": code})
+        result = gw_run({"action": "callback", "code": code, "state": state})
         if "error" in result:
             return HTMLResponse(
-                content=f"<h2>Token exchange failed</h2><p>{result['error']}</p>",
+                content=(
+                    "<h2>Token exchange failed</h2>"
+                    f"<p>{html.escape(result['error'])}</p>"
+                ),
                 status_code=500,
             )
 
@@ -62,8 +77,16 @@ async def google_oauth_callback(request: Request):
                 "and return to Obsidian.</p>"
             )
         )
-    except Exception as e:
+    except Exception:
+        # Never reflect the raw exception — it may contain URL fragments or
+        # other sensitive detail, and this endpoint is auth-exempt. Log it
+        # server-side (fail-loud) but return a generic message to the client.
+        logger.exception("OAuth callback token exchange failed")
         return HTMLResponse(
-            content=f"<h2>Internal error</h2><p>{e}</p>",
+            content=(
+                "<h2>Internal error</h2>"
+                "<p>Something went wrong during token exchange. "
+                "Please try the authorization flow again.</p>"
+            ),
             status_code=500,
         )

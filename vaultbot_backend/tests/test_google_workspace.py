@@ -13,6 +13,7 @@ Only the leaf module `custom_tools.google_workspace` is imported — never
 `main` (see conftest.py hard-fence).
 """
 
+import hashlib
 import json
 import urllib.request
 from datetime import UTC, datetime
@@ -30,6 +31,14 @@ def patched_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(gw, "CONFIG_PATH", tmp_path / "config.json")
     monkeypatch.setattr(gw, "TOKEN_PATH", tmp_path / "tokens.json")
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def clear_pending_states():
+    """Clear the module-level in-flight OAuth state between tests."""
+    gw._PENDING_STATES.clear()
+    yield
+    gw._PENDING_STATES.clear()
 
 
 # ── config / token persistence ───────────────────────────────────────────────
@@ -93,14 +102,87 @@ def test_auth_returns_url_with_expected_params(patched_paths, monkeypatch):
     assert "access_type=offline" in result["auth_url"]
 
 
+def test_auth_issues_state_and_pkce(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw.webbrowser, "open", lambda url: None)
+    gw._save_config({"client_id": "cid", "client_secret": "csec"})
+    result = gw.run({"action": "auth"})
+    url = result["auth_url"]
+    assert "state=" in url
+    assert "code_challenge=" in url
+    assert "code_challenge_method=S256" in url
+    # The issued state must be tracked with a verifier for the callback.
+    assert len(gw._PENDING_STATES) == 1
+    state, verifier = next(iter(gw._PENDING_STATES.items()))
+    assert state in url
+    # The challenge must be the S256 hash of the verifier.
+    expected = gw._b64url(hashlib.sha256(verifier.encode()).digest())
+    assert f"code_challenge={expected}" in url
+
+
+def test_callback_success_exchanges_code(patched_paths, monkeypatch):
+    import urllib.request
+
+    gw._save_config({"client_id": "cid", "client_secret": "csec"})
+    # Issue a real state via 'auth'.
+    monkeypatch.setattr(gw.webbrowser, "open", lambda url: None)
+    gw.run({"action": "auth"})
+    state, verifier = next(iter(gw._PENDING_STATES.items()))
+
+    captured = {}
+
+    class FakeResp:
+        def read(self):
+            return json.dumps(
+                {"access_token": "tok", "refresh_token": "ref", "expires_in": 3600}
+            ).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=10):
+        captured["data"] = req.data.decode()
+        return FakeResp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    result = gw.run({"action": "callback", "code": "abc", "state": state})
+    assert result["status"] == "ok"
+    # The exchange must include the PKCE verifier and the code.
+    assert "code=abc" in captured["data"]
+    assert f"code_verifier={verifier}" in captured["data"]
+    assert "grant_type=authorization_code" in captured["data"]
+    # The state is consumed (single-use).
+    assert state not in gw._PENDING_STATES
+
+
 def test_callback_requires_code(patched_paths):
     assert gw.run({"action": "callback"}) == {
         "error": "Authorization code is required for callback."
     }
 
 
-def test_callback_requires_credentials(patched_paths):
+def test_callback_rejects_missing_state(patched_paths):
     assert gw.run({"action": "callback", "code": "abc"}) == {
+        "error": "Invalid or missing OAuth state. Re-run 'auth'."
+    }
+
+
+def test_callback_rejects_unknown_state(patched_paths):
+    assert gw.run({"action": "callback", "code": "abc", "state": "bogus"}) == {
+        "error": "Invalid or missing OAuth state. Re-run 'auth'."
+    }
+
+
+def test_callback_requires_credentials(patched_paths):
+    # A valid state is issued by 'auth', but no credentials are configured.
+    gw._save_config({})
+    state = gw.run({"action": "auth"})  # no credentials → error, no state issued
+    assert "error" in state
+    # Manually seed a pending state to reach the credentials check.
+    gw._PENDING_STATES["s"] = "verifier"
+    assert gw.run({"action": "callback", "code": "abc", "state": "s"}) == {
         "error": "No credentials configured."
     }
 
