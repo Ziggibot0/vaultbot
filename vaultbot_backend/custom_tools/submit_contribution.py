@@ -557,6 +557,12 @@ def run(args: dict) -> dict:
         pr_head = f"{gh_username}:{branch_name}"
 
     # 10. Create PR via GitHub API
+    from custom_tools.gh_client import get_instance_id
+
+    instance_id = get_instance_id()
+    attribution = f"*Submitted by: @{gh_username}*"
+    if instance_id:
+        attribution += f"\n*Instance: `{instance_id}`*"
     pr_body = f"""## Community Contribution
 
 {description or "No description provided."}
@@ -568,7 +574,7 @@ def run(args: dict) -> dict:
 
 ---
 *This PR was submitted via VaultBot's community contribution system.*
-*Submitted by: @{gh_username}*
+{attribution}
 """
 
     pr_payload = {

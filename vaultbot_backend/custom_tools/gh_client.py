@@ -68,6 +68,31 @@ def gh_available() -> bool:
         return False
 
 
+def get_instance_id() -> str:
+    """Return this VaultBot instance's stable ID, or "" if unavailable.
+
+    The instance ID is the *identity* of this VaultBot instance — stable
+    across restarts, model swaps, and GitHub accounts. It is NOT the GitHub
+    account: one account can drive many instances (laptop + desktop, multiple
+    vaults), and one instance can be driven by whichever account is authed at
+    push time. The account is a *credential* (a transport for pushing); the
+    instance ID is the *thing*.
+
+    The ID is generated once by ``identity.py`` and stored in
+    ``vaultbot_backend/identity/INSTANCE_ID`` (gitignored, so it never leaks
+    into a PR). This helper reads it directly so the contribution tools can
+    attribute a PR/issue to the instance without needing the full Identity
+    singleton.
+    """
+    try:
+        identity_dir = os.path.join(_backend_dir, "identity")
+        instance_id_path = os.path.join(identity_dir, "INSTANCE_ID")
+        with open(instance_id_path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except (OSError, FileNotFoundError):
+        return ""
+
+
 def _bot_env() -> dict[str, str] | None:
     """Return an env dict that makes ``gh`` act as the bot account, or None.
 
