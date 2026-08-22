@@ -43,6 +43,18 @@ def _run_review(monkeypatch, prs, files, check_runs, reviews=None):
 
     monkeypatch.setattr(gh_client, "gh_available", lambda: True)
 
+    # resolve_upstream() runs for real when not monkeypatched. On a fork
+    # CI checkout (origin → cadenKel/vaultbot, no upstream remote), it
+    # returns ("cadenKel", "vaultbot"), so the code-owner approval gate
+    # compares review logins against "cadenKel" instead of "Ziggibot0".
+    # Pin it to the canonical upstream so the approval tests are
+    # deterministic regardless of which fork CI runs on.
+    from custom_tools import upstream_identity
+
+    monkeypatch.setattr(
+        upstream_identity, "resolve_upstream", lambda: ("Ziggibot0", "vaultbot")
+    )
+
     def _fake_gh_api(method, path, body=None, timeout=60):
         if path.endswith("/pulls/1"):
             return prs[0]
@@ -146,6 +158,12 @@ def test_merge_blocked_when_approval_unknown(monkeypatch):
     check_runs = [{"name": "CI", "status": "completed", "conclusion": "success"}]
 
     monkeypatch.setattr(gh_client, "gh_available", lambda: True)
+    # Same deterministic upstream as _run_review (see comment there).
+    from custom_tools import upstream_identity
+
+    monkeypatch.setattr(
+        upstream_identity, "resolve_upstream", lambda: ("Ziggibot0", "vaultbot")
+    )
 
     def _fake_gh_api(method, path, body=None, timeout=60):
         if path.endswith("/pulls/1"):
