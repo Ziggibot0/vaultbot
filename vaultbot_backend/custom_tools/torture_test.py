@@ -294,7 +294,7 @@ def run(args: dict) -> dict:
         (r"base64\.b64decode\s*\(.*exec", "Base64 decode + exec pattern"),
         (r"curl\s+.*\$\(", "curl with command substitution"),
         (r"wget\s+.*\|.*sh", "wget pipe to shell"),
-        (r"pickle\.loads\s*\(", "pickle.loads (deserialization attack)"),
+        (r"pickle\.loads?\s*\(", "pickle.load/loads (deserialization attack)"),
         (r"marshal\.loads\s*\(", "marshal.loads (deserialization)"),
         (r"ctypes\.CDLL\s*\(", "Dynamic library loading"),
         (r"__import__\s*\(\s*['\"]os['\"]\s*\)", "Dynamic OS import"),

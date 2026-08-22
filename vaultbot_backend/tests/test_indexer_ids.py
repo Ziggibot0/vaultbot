@@ -15,8 +15,8 @@ These tests verify the core claims of the Phase 1 migration:
    of the embed input (validates the rev_map contract for drift reranking).
 6. Add-then-update-same-path keeps `ntotal` constant (no duplicate vectors)
    and maps `_path_to_id` to the new id.
-7. Legacy list-format metadata.pkl is migrated to the new tuple format on
-   load without calling Ollama.
+7. Metadata is persisted as JSON (metadata.json), never pickle — a tampered
+   vault file cannot trigger arbitrary code execution on load.
 
 Uses real FAISS + a stub OllamaClient that counts embedding calls so we can
 assert the zero-embedding-on-delete invariant.
@@ -25,7 +25,6 @@ assert the zero-embedding-on-delete invariant.
 from __future__ import annotations
 
 import json
-import pickle
 import sys
 from pathlib import Path
 
@@ -337,78 +336,70 @@ def test_reconstruct_embedding_returns_none_for_unknown(tmp_vault):
     assert indexer.reconstruct_embedding(str(vault / "alpha.md")) is None
 
 
-def test_legacy_list_format_migration_zero_embedding(tmp_path, monkeypatch):
-    """A legacy list-format metadata.pkl + IndexFlatL2 should be detected as
-    schema-v1 on load. Because the embedding schema has since changed
-    (procedures now embed their description surface, not full content), the
-    stale reconstructed vectors are DISCARDED and the indexer flags itself
-    for a full re-embed on the next index_missing_or_changed() call.
+def test_metadata_persist_round_trip_json(tmp_vault):
+    """persist() writes metadata.json; a fresh indexer loads it back intact.
 
-    The load itself still does zero Ollama calls — the migration reconstructs
-    from the old flat index first, then the schema check wipes the result.
-    The actual re-embedding happens later (in index_missing_or_changed),
-    which is the production startup path.
+    faiss ids are ints but JSON serializes dict keys as strings, so the
+    round-trip must re-key them back to ints on load.
     """
-    vault = tmp_path / "vault"
-    vault.mkdir()
-    index_dir = tmp_path / "index"
-    index_dir.mkdir()
-    monkeypatch.setenv("VAULT_PATH", str(vault))
-    monkeypatch.setenv("VAULTBOT_INDEX_PREVIEW_CHARS", "0")
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
 
-    # Build a legacy on-disk state: IndexFlatL2 + list[dict] metadata.
-    dim = 768
-    legacy_index = faiss.IndexFlatL2(dim)
-    vecs = np.random.RandomState(42).randn(3, dim).astype(np.float32)
-    faiss.normalize_L2(vecs)
-    legacy_index.add(vecs)
+    a = _write_note(vault, "alpha", "Alpha note about apples.")
+    b = _write_note(vault, "beta", "Beta note about bananas.")
+    indexer._add_file_to_index(a)
+    indexer._add_file_to_index(b)
+    indexer.persist()
 
-    legacy_meta = [
-        {"file_path": str(vault / "a.md"), "last_modified": 1.0, "content_hash": "h1"},
-        {"file_path": str(vault / "b.md"), "last_modified": 2.0, "content_hash": "h2"},
-        {"file_path": str(vault / "c.md"), "last_modified": 3.0, "content_hash": "h3"},
-    ]
-    # Write the files so they exist on disk for the later re-embed.
-    for p, content in zip(
-        ["a.md", "b.md", "c.md"], ["aaa", "bbb", "ccc"], strict=False
-    ):
-        (vault / p).write_text(content, encoding="utf-8")
-
-    faiss.write_index(legacy_index, str(index_dir / "index.faiss"))
-    with open(index_dir / "metadata.pkl", "wb") as f:
-        pickle.dump(legacy_meta, f)  # legacy: a LIST, not a tuple
-    with open(index_dir / "timestamps.json", "w") as f:
-        json.dump({m["file_path"]: m["last_modified"] for m in legacy_meta}, f)
-
-    # Load — should detect legacy format and migrate (in __init__).
-    import importlib
-
+    # The metadata file must be JSON, not pickle.
+    assert (index_dir / "metadata.json").exists()
+    assert not (index_dir / "metadata.pkl").exists()
+    with open(index_dir / "metadata.json", encoding="utf-8") as f:
+        raw = json.load(f)
     import vault_indexer
 
-    if not hasattr(vault_indexer.faiss, "IndexIDMap2"):
-        if "faiss" in sys.modules and not hasattr(sys.modules["faiss"], "IndexIDMap2"):
-            del sys.modules["faiss"]
-        importlib.reload(vault_indexer)
-    VaultIndexer = vault_indexer.VaultIndexer
-    indexer = VaultIndexer(vault_path=str(vault), index_path=str(index_dir))
-    # Replace ollama with a counter to assert zero calls during load.
-    indexer.ollama_client = _CountingOllama()
+    assert raw["schema_version"] == vault_indexer.EMBEDDING_SCHEMA_VERSION
+    assert raw["next_id"] == 2
+    # Keys are strings in JSON.
+    assert all(isinstance(k, str) for k in raw["metadata"])
 
-    assert indexer.ollama_client.embeddings_call_count == 0, (
-        "Load must not re-embed — re-embedding is deferred to "
-        "index_missing_or_changed()"
+    # A fresh indexer loads the JSON back with int keys and correct state.
+    indexer2 = _make_indexer(vault, index_dir)
+    assert indexer2._next_id == 2
+    assert indexer2._path_to_id == indexer._path_to_id
+    assert set(indexer2._metadata) == set(indexer._metadata)
+    assert all(isinstance(k, int) for k in indexer2._metadata)
+
+
+def test_metadata_is_not_pickle(tmp_vault):
+    """A tampered metadata file must not be unpickled (no RCE surface).
+
+    Regression guard for the pickle.load deserialization vulnerability: the
+    indexer must read metadata as JSON only. A file containing a pickle
+    payload (or any non-JSON bytes) must be rejected and trigger a clean
+    re-index, never executed.
+    """
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+
+    a = _write_note(vault, "alpha", "Alpha note.")
+    indexer._add_file_to_index(a)
+    indexer.persist()
+
+    # Overwrite metadata.json with a malicious pickle payload. If the indexer
+    # ever unpickles it, this would execute os.system and create a marker file.
+    marker = index_dir / "pwned"
+    import pickle
+
+    payload = pickle.dumps(
+        {"__reduce__": (__import__("os").system, (f"touch {marker}",))}
     )
-    # The schema-version check discards the stale reconstructed vectors and
-    # flags for a full rebuild.
-    assert indexer._needs_full_rebuild is True
-    assert indexer.index is None or indexer.index.ntotal == 0, (
-        "Stale legacy vectors should have been discarded"
-    )
-    # A subsequent index_missing_or_changed() re-embeds all files and clears
-    # the flag.
-    indexer.index_missing_or_changed()
-    assert indexer._needs_full_rebuild is False
-    assert isinstance(indexer.index, faiss.IndexIDMap2)
-    assert indexer.index.ntotal == 3
-    for p in ["a.md", "b.md", "c.md"]:
-        assert str(vault / p) in indexer._path_to_id
+    (index_dir / "metadata.json").write_bytes(payload)
+
+    # Loading must NOT execute the payload; it must fall back to a clean
+    # re-index (json.load raises, caught by the best-effort handler).
+    indexer2 = _make_indexer(vault, index_dir)
+    assert not marker.exists(), "pickle payload was executed — RCE regression"
+    # The corrupt metadata is discarded; the indexer re-initializes empty.
+    assert indexer2._metadata == {}
+    assert indexer2._next_id == 0

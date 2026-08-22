@@ -121,24 +121,21 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
         snippets.append(
             'if "vault_search" in allowed:\n'
             "    def vault_search(query, k=5):\n"
-            "        import faiss, numpy as np, requests, pickle\n"
+            "        import faiss, numpy as np, requests, json\n"
             '        _vs = {"index": None, "metadata": {}, "loaded": False}\n'
             '        if not _vs["loaded"]:\n'
             '            _vs["loaded"] = True\n'
             '            idx_dir = Path(vault_path) / "vaultbot" / '
             '"vaultbot_backend" / "vaultbot_index"\n'
             '            idx_file = idx_dir / "index.faiss"\n'
-            '            meta_file = idx_dir / "metadata.pkl"\n'
+            '            meta_file = idx_dir / "metadata.json"\n'
             "            if idx_file.exists() and meta_file.exists():\n"
             "                try:\n"
             '                    _vs["index"] = faiss.read_index(str(idx_file))\n'
-            '                    with open(meta_file, "rb") as f:\n'
-            "                        raw = pickle.load(f)\n"
-            "                    if isinstance(raw, tuple) and len(raw) >= 3:\n"
-            '                        _vs["metadata"] = raw[0]\n'
-            "                    elif isinstance(raw, list):\n"
-            '                        _vs["metadata"] = {i: m for i, m in '
-            "enumerate(raw)}\n"
+            '                    with open(meta_file, encoding="utf-8") as f:\n'
+            "                        raw = json.load(f)\n"
+            '                    _vs["metadata"] = {int(fid): m for fid, m in '
+            'raw.get("metadata", {}).items()}\n'
             "                except Exception:\n"
             "                    pass\n"
             '        if _vs["index"] is not None and _vs["metadata"]:\n'

@@ -426,7 +426,7 @@ def _make_indexer(tmp_path):
     idx.index_path = tmp_path / "idx"
     idx.index_path.mkdir(exist_ok=True)
     idx.index_file = idx.index_path / "index.faiss"
-    idx.metadata_file = idx.index_path / "metadata.pkl"
+    idx.metadata_file = idx.index_path / "metadata.json"
     idx.timestamp_file = idx.index_path / "timestamps.json"
     idx.ollama_client = _StubOllama()
     idx.dimension = None
