@@ -32,6 +32,7 @@ _BASELINE_PATH = _REPO_ROOT / ".ci-baseline.json"
 _BACKEND_DIR = _REPO_ROOT / "vaultbot_backend"
 
 _PYRIGHT_SUMMARY_RE = re.compile(r"(\d+) errors?, (\d+) warnings?, (\d+) informations?")
+_PYRIGHT_VERSION_RE = re.compile(r"pyright (\d+\.\d+\.\d+)")
 _PYTEST_SUMMARY_RE = re.compile(r"(\d+) (?:failed|passed)")
 
 
@@ -44,8 +45,16 @@ def _load_baseline() -> dict:
     return json.loads(_BASELINE_PATH.read_text(encoding="utf-8"))
 
 
-def _run_pyright() -> tuple[int, int]:
-    """Return (errors, warnings) from `pyright --level warning`."""
+def _run_pyright() -> tuple[int, int, str | None]:
+    """Return (errors, warnings, version) from `pyright --level warning`.
+
+    The version is parsed from `pyright --version` so the ratchet can detect
+    when the installed pyright differs from the version the baseline was
+    measured against. A version bump changes pyright's type-inference counts
+    even with zero code changes, so a stale baseline would either false-fail
+    ("debt grew") or silently hide real debt. See the version-drift check in
+    ``main()``.
+    """
     result = subprocess.run(
         ["uv", "run", "pyright", "--level", "warning", "vaultbot_backend/"],
         cwd=_BACKEND_DIR.parent,
@@ -60,8 +69,30 @@ def _run_pyright() -> tuple[int, int]:
     if not m:
         print("debt-ratchet: could not parse pyright summary", file=sys.stderr)
         print(output[-2000:], file=sys.stderr)
-        return (-1, -1)
-    return int(m.group(1)), int(m.group(2))
+        return (-1, -1, None)
+    version = _pyright_version()
+    return int(m.group(1)), int(m.group(2)), version
+
+
+def _pyright_version() -> str | None:
+    """Return the installed pyright version string (e.g. "1.1.411"), or None.
+
+    ``python -m pyright --version`` prints a single line like
+    "pyright 1.1.411". (The ``pyright`` console script's ``--version`` does
+    not emit output on Windows, so we invoke the module form, which is
+    cross-platform.) If the version can't be determined (tool missing,
+    unexpected output), return None so the caller can decide whether that's
+    fatal.
+    """
+    result = subprocess.run(
+        ["uv", "run", "python", "-m", "pyright", "--version"],
+        cwd=_BACKEND_DIR.parent,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    m = _PYRIGHT_VERSION_RE.search(result.stdout + result.stderr)
+    return m.group(1) if m else None
 
 
 def _run_pytest_integration() -> tuple[int, int]:
@@ -112,8 +143,34 @@ def main() -> int:
     # Pyright ratchet. The baseline is keyed by Python version because
     # pyright's type-inference count differs slightly between 3.11 and 3.12
     # stdlib stubs (e.g. 454 vs 456 errors).
-    py_errors, py_warnings = _run_pyright()
+    py_errors, py_warnings, py_version = _run_pyright()
     py_base = baseline.get("pyright", {})
+
+    # Version-drift guard: the baseline's counts are only meaningful for the
+    # pyright version they were measured against. A pyright bump (via uv.lock
+    # re-resolution or a manual version change) shifts the counts even with
+    # zero code changes, so a stale baseline would either false-fail ("debt
+    # grew") or silently hide real debt. Fail loudly and tell the author to
+    # re-measure and refresh the baseline in the same PR.
+    recorded_version = baseline.get("pyright_version")
+    if recorded_version is None:
+        failures.append(
+            "pyright: baseline is missing 'pyright_version' — add the version "
+            "from `pyright --version` to .ci-baseline.json"
+        )
+    elif py_version is None:
+        failures.append(
+            "pyright: could not determine installed version — is pyright "
+            "installed in the dev environment?"
+        )
+    elif py_version != recorded_version:
+        failures.append(
+            f"pyright version drift: installed {py_version} != baseline "
+            f"{recorded_version}. Re-measure the counts and update "
+            f"'pyright_version' (and the per-version counts) in "
+            f".ci-baseline.json in the same PR."
+        )
+
     if py_errors < 0:
         failures.append("pyright: could not determine count")
     else:
@@ -134,7 +191,8 @@ def main() -> int:
             )
         print(
             f"debt-ratchet: pyright {py_errors} errors / {py_warnings} warnings "
-            f"(baseline {base_errors} / {base_warnings}, py{py_ver})"
+            f"(baseline {base_errors} / {base_warnings}, py{py_ver}, "
+            f"pyright {py_version})"
         )
 
     # Pytest integration ratchet.
