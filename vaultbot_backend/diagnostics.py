@@ -178,6 +178,27 @@ def _is_agent_silent(exc: BaseException, ctx: dict[str, Any]) -> bool:
     return isinstance(exc, AgentSilentError)
 
 
+def _is_speech_unavailable(exc: BaseException, ctx: dict[str, Any]) -> bool:
+    """A configured TTS/STT provider's dependency is missing or broken.
+
+    The default ``edge-tts`` provider needs the optional ``edge-tts``
+    package. When it isn't installed the import inside ``speech.py``
+    raises ``ModuleNotFoundError``/``ImportError``; the previous code
+    only ``logger.warning``-ed and returned a bare error dict, so the
+    user got no audio and no explanation. This predicate recognizes that
+    import failure (and the context-tagged ``speech_unavailable`` tag
+    callers can use for runtime relay/endpoint failures) so the factory
+    can surface a FIXABLE remedy card (issue #182).
+    """
+    if (ctx.get("category") or "").strip().lower() == "speech_unavailable":
+        return True
+    text = _exc_text(exc)
+    return (
+        ("edge_tts" in text or "edge-tts" in text)
+        and ("importerror" in text or "modulenotfounderror" in text)
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Factories — build the user-facing message + remedy per category
 # ─────────────────────────────────────────────────────────────────────────
@@ -403,6 +424,50 @@ def _f_agent_silent(exc, ctx) -> Diagnosis:
     )
 
 
+def _f_speech_unavailable(exc, ctx) -> Diagnosis:
+    """A configured TTS/STT provider can't run (missing dep or dead relay).
+
+    The default ``edge-tts`` provider needs the optional ``edge-tts``
+    package. Without it TTS silently produced no audio (issue #182);
+    this factory surfaces a FIXABLE remedy card instead. The remedy hint
+    adapts to the provider: for edge-tts it tells the user to install the
+    package; for an OpenAI-compatible endpoint it suggests checking the
+    provider's URL/key.
+    """
+    provider = ctx.get("provider", "")
+    role = ctx.get("role", "speech")
+    text = _exc_text(exc)
+    if "edge_tts" in text or "edge-tts" in text or provider == "edge-tts":
+        return make_diagnosis(
+            ProblemCategory.SPEECH_UNAVAILABLE,
+            user_message=(
+                f"{role.upper()} isn't available — the free Edge TTS "
+                "voice needs the 'edge-tts' package, which isn't installed."
+            ),
+            remedy_hint=(
+                "Run: pip install edge-tts  (then restart VaultBot). "
+                "Or pick a different voice in Settings → Speech Models."
+            ),
+            action="open_settings",
+            raw_for_log=repr(exc),
+        )
+    # OpenAI-compatible or unknown provider: the endpoint/key is the
+    # likely culprit.
+    return make_diagnosis(
+        ProblemCategory.SPEECH_UNAVAILABLE,
+        user_message=(
+            f"{role.upper()} isn't available — the configured speech "
+            "provider couldn't be reached."
+        ),
+        remedy_hint=(
+            "Check the provider's URL and API key in Settings → Speech "
+            "Models, then restart VaultBot."
+        ),
+        action="open_settings",
+        raw_for_log=repr(exc),
+    )
+
+
 def _f_generic(exc, ctx) -> Diagnosis:
     stage = ctx.get("stage", "")
     stage_part = f" while {stage}" if stage else ""
@@ -442,6 +507,11 @@ _REGISTRY: list[tuple[Predicate, Factory]] = [
     # the generic fallback so the user sees the agent_silent card, not a
     # generic "something went wrong".
     (_is_agent_silent, _f_agent_silent),
+    # Speech provider unavailable: a missing edge-tts import or a dead
+    # relay must surface a remedy card, not silent no-audio (issue #182).
+    # Matched before the generic fallback so the user sees the install
+    # hint instead of "something went wrong".
+    (_is_speech_unavailable, _f_speech_unavailable),
     # Model problems before ollama-down: a 404 model-not-found is a
     # ConnectionError-shaped HTTPError sometimes, and the model message
     # is more actionable than "Ollama is down" (which would be wrong).

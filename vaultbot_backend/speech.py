@@ -33,12 +33,44 @@ import io
 import logging
 from typing import Any
 
+from diagnostics import classify_error
+from error_types import ProblemCategory, make_diagnosis
+
 logger = logging.getLogger(__name__)
 
 # A sentinel returned to the plugin when the role points at the browser
 # provider — tells the frontend to use the Web Speech API instead of a
 # server round-trip. Kept as a module constant so the router + plugin agree.
 BROWSER_SENTINEL = {"browser": True}
+
+
+def _speech_error(
+    exc: BaseException,
+    *,
+    role: str,
+    provider: str,
+    fallback_msg: str,
+) -> dict[str, Any]:
+    """Build a loud, typed speech-failure result.
+
+    The previous code did ``logger.warning(...)`` and returned a bare
+    ``{"error": ...}`` dict, so a missing ``edge-tts`` package (the
+    default TTS provider) silently produced no audio with no explanation
+    (issue #182). This helper classifies the exception through the same
+    ``classify_error`` chokepoint the rest of the backend uses and
+    attaches the resulting ``Diagnosis`` to the returned dict under
+    ``diagnosis`` — the same key the frontend already renders as a
+    remedy card for chat/research problems.
+
+    The ``error`` string is kept for backward compatibility with plugin
+    code that reads it, but the ``diagnosis`` payload is the loud path.
+    """
+    logger.warning("%s %s failed: %s", role.upper(), provider, exc)
+    diag = classify_error(
+        exc,
+        context={"role": role, "provider": provider, "category": "speech_unavailable"},
+    )
+    return {"error": fallback_msg, "diagnosis": diag.to_dict()}
 
 
 def _resolve(svc, role: str):
@@ -77,7 +109,16 @@ def transcribe(svc, audio_bytes: bytes, filename: str = "audio.webm") -> dict[st
     entry, prov = _resolve(svc, "stt")
     if entry is None or prov is None:
         return {
-            "error": "No STT model configured. Pick one in Settings → Speech Models."
+            "error": "No STT model configured. Pick one in Settings → Speech Models.",
+            "diagnosis": make_diagnosis(
+                ProblemCategory.SPEECH_UNAVAILABLE,
+                user_message=(
+                    "STT isn't available — no speech-to-text model is "
+                    "configured."
+                ),
+                remedy_hint="Pick a speech model in Settings → Speech Models.",
+                action="open_settings",
+            ).to_dict(),
         }
     if prov.type == "browser":
         return {
@@ -115,9 +156,10 @@ def _transcribe_openai(
         r.raise_for_status()
         text = r.json().get("text", "").strip()
         return {"text": text}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("STT openai failed: %s", e)
-        return {"error": f"{type(e).__name__}: {e}"}
+    except Exception as e:  # noqa: BLE001 — classified + surfaced via _speech_error
+        return _speech_error(
+            e, role="stt", provider="openai", fallback_msg=f"{type(e).__name__}: {e}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +174,16 @@ async def synthesize(svc, text: str) -> dict[str, Any]:
     entry, prov = _resolve(svc, "tts")
     if entry is None or prov is None:
         return {
-            "error": "No TTS model configured. Pick one in Settings → Speech Models."
+            "error": "No TTS model configured. Pick one in Settings → Speech Models.",
+            "diagnosis": make_diagnosis(
+                ProblemCategory.SPEECH_UNAVAILABLE,
+                user_message=(
+                    "TTS isn't available — no text-to-speech model is "
+                    "configured."
+                ),
+                remedy_hint="Pick a speech model in Settings → Speech Models.",
+                action="open_settings",
+            ).to_dict(),
         }
     if not text.strip():
         return {"error": "empty text"}
@@ -160,9 +211,10 @@ async def _synthesize_edge_tts(entry, text: str) -> dict[str, Any]:
         if not audio:
             return {"error": "edge-tts produced no audio (check the voice name)"}
         return {"audio": audio, "content_type": "audio/mpeg"}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("TTS edge-tts failed: %s", e)
-        return {"error": f"{type(e).__name__}: {e}"}
+    except Exception as e:  # noqa: BLE001 — classified + surfaced via _speech_error
+        return _speech_error(
+            e, role="tts", provider="edge-tts", fallback_msg=f"{type(e).__name__}: {e}"
+        )
 
 
 async def _synthesize_openai(prov, entry, text: str) -> dict[str, Any]:
@@ -215,9 +267,10 @@ async def _synthesize_openai(prov, entry, text: str) -> dict[str, Any]:
         r.raise_for_status()
         ct = r.headers.get("content-type", "audio/mpeg")
         return {"audio": r.content, "content_type": ct}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("TTS openai failed: %s", e)
-        return {"error": f"{type(e).__name__}: {e}"}
+    except Exception as e:  # noqa: BLE001 — classified + surfaced via _speech_error
+        return _speech_error(
+            e, role="tts", provider="openai", fallback_msg=f"{type(e).__name__}: {e}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +302,12 @@ async def list_tts_voices(svc) -> dict[str, Any]:
                 ],
                 "provider_type": "edge-tts",
             }
-        except Exception as e:  # noqa: BLE001
-            return {"voices": [], "error": str(e)}
+        except Exception as e:  # noqa: BLE001 — surfaced as a diagnosis below
+            diag = classify_error(
+                e, context={"role": "tts", "provider": "edge-tts",
+                            "category": "speech_unavailable"}
+            )
+            return {"voices": [], "error": str(e), "diagnosis": diag.to_dict()}
     if prov.type == "browser":
         return {"voices": [], "provider_type": "browser"}
     if prov.type == "openai":
