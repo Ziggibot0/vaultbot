@@ -530,10 +530,12 @@ class ProviderRegistry:
                         self._roles[role] = mid
             except Exception as e:  # noqa: BLE001 — a broken registry must never crash boot
                 print(f"[WARN] ProviderRegistry.load failed ({e}); starting empty.")
-            # Always ensure the synthetic ``browser`` provider exists so the
-            # speech roles (stt/tts) have a home for their model selections.
-            # It's idempotent: a no-op if it's already in the file.
-            self._ensure_browser_provider()
+            # Always ensure the built-in default providers exist so the
+            # speech roles (stt/tts) have a home for their model selections
+            # AND OpenRouter is available as a one-click cloud endpoint out
+            # of the box (the installer already collects an OpenRouter key).
+            # Idempotent: a no-op for any provider already in the file.
+            self._ensure_default_providers()
 
     def save(self) -> None:
         """Persist to providers.json (atomic: temp + replace)."""
@@ -550,14 +552,19 @@ class ProviderRegistry:
             except Exception as e:  # noqa: BLE001 — best-effort persist; surfacing is the endpoint's job
                 print(f"[WARN] ProviderRegistry.save failed: {e}")
 
-    def _ensure_browser_provider(self) -> None:
-        """Ensure the built-in ``browser`` + ``edge-tts`` providers exist.
+    def _ensure_default_providers(self) -> None:
+        """Ensure the built-in default providers exist.
 
-        These give stt/tts a home out of the box (browser fallback + free
-        Edge TTS) so the user can use voice immediately without configuring
-        an endpoint. They're still free to add ANY other provider (OpenAI,
-        Groq, a local Whisper server, etc.) and point stt/tts at it — same
-        pot, same dropdown. Idempotent + held under the lock.
+        - ``browser`` + ``edge-tts`` give stt/tts a home out of the box
+          (browser fallback + free Edge TTS) so the user can use voice
+          immediately without configuring an endpoint.
+        - ``openrouter`` is seeded as a default cloud endpoint (empty key)
+          so the user never has to add it by hand — the installer already
+          collects an OpenRouter key, and ``migrate_from_env`` fills it in.
+
+        The user is still free to add ANY other provider (OpenAI, Groq, a
+        local Whisper server, etc.) and point any role at it — same pot,
+        same dropdown. Idempotent + held under the lock.
         """
         with self._lock:
             changed = False
@@ -575,6 +582,14 @@ class ProviderRegistry:
                     type="edge-tts",
                     base_url="",
                     label="Edge TTS (free, Microsoft)",
+                )
+                changed = True
+            if "openrouter" not in self._providers:
+                self._providers["openrouter"] = Provider(
+                    id="openrouter",
+                    type="openai",
+                    base_url="https://openrouter.ai/api",
+                    label="OpenRouter",
                 )
                 changed = True
             if changed:
@@ -760,6 +775,12 @@ class ProviderRegistry:
         if reg._path.exists():
             return reg
         with reg._lock:
+            # Seed the built-in default providers (browser, edge-tts, and the
+            # empty OpenRouter endpoint) so a fresh install has them out of the
+            # box. load() skips this on a missing file (it early-returns), so
+            # the migration path must do it explicitly. The OpenRouter key the
+            # installer collected is filled in by _ensure_openai_provider below.
+            reg._ensure_default_providers()
             # Ollama local provider + its three legacy cartridge models.
             host = (os.getenv("OLLAMA_HOST") or "http://localhost:11434").strip()
             try:
@@ -848,22 +869,36 @@ class ProviderRegistry:
         return reg
 
     def _ensure_openai_provider(self) -> str:
-        """Create (or reuse) the migrated OpenAI provider; return its id."""
-        prov_id = "openai"
-        if prov_id in self._providers:
-            return prov_id
+        """Create (or reuse) the migrated OpenAI-compatible provider; return its id.
+
+        If the legacy ``LLM_BASE_URL`` points at OpenRouter, the provider is
+        created as ``openrouter`` (with the OpenRouter label) so the user's
+        OpenRouter key lands on the right provider instead of a mislabeled
+        "OpenAI" entry. If the default ``openrouter`` provider was already
+        seeded empty by ``_ensure_default_providers``, the key is filled in
+        here rather than left blank.
+        """
         base_url = (os.getenv("LLM_BASE_URL") or "https://api.openai.com").strip()
         api_key = (os.getenv("LLM_API_KEY") or "").strip()
         try:
             base_url = normalize_base_url(base_url, "openai")
         except ValueError:
             base_url = "https://api.openai.com"
+        is_openrouter = "openrouter.ai" in base_url.lower()
+        prov_id = "openrouter" if is_openrouter else "openai"
+        existing = self._providers.get(prov_id)
+        if existing is not None:
+            # The default provider was seeded empty; fill in the key the
+            # installer collected so the user isn't left with a blank key.
+            if api_key and not existing.api_key:
+                existing.api_key = api_key
+            return prov_id
         self._providers[prov_id] = Provider(
             id=prov_id,
             type="openai",
             base_url=base_url,
             api_key=api_key,
-            label="OpenAI",
+            label="OpenRouter" if is_openrouter else "OpenAI",
         )
         return prov_id
 
