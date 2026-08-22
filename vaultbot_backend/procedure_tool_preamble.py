@@ -484,9 +484,18 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '                _payload["source_allowlist"] = source_allowlist\n'
             "            if source_denylist:\n"
             '                _payload["source_denylist"] = source_denylist\n'
+            "            _headers = {}\n"
+            "            try:\n"
+            "                from auth import read_token as _read_token\n"
+            "                _tok = _read_token()\n"
+            "                if _tok:\n"
+            '                    _headers["X-VaultBot-Token"] = _tok\n'
+            "            except Exception:\n"
+            "                pass\n"
             "            resp = _requests.post(\n"
             '                "http://localhost:8000/research_tool",\n'
             "                json=_payload,\n"
+            "                headers=_headers,\n"
             "                timeout=120\n"
             "            )\n"
             "            resp.raise_for_status()\n"

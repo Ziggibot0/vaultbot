@@ -206,11 +206,20 @@ def run(args: dict) -> dict:
 
     # --- Send restart signal ------------------------------------------
     try:
+        headers = {"Content-Type": "application/json"}
+        try:
+            from auth import read_token as _read_token
+
+            _tok = _read_token()
+            if _tok:
+                headers["X-VaultBot-Token"] = _tok
+        except Exception:  # noqa: BLE001 — token is best-effort; auth may be disabled
+            pass
         req = urllib.request.Request(
             "http://127.0.0.1:8000/restart",
             method="POST",
             data=json.dumps({}).encode(),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         resp = urllib.request.urlopen(req, timeout=5)
         result = json.loads(resp.read())
