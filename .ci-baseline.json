@@ -2,19 +2,19 @@
   "_comment": "Debt ratchet baseline (issue #21). CI fails if the current count EXCEEDS these values. Lower them as debt is paid down. pyright counts are from `pyright --level warning vaultbot_backend/`; pytest counts are from `pytest -m integration`. pyright is keyed by Python version because its type-inference count differs slightly between 3.11 and 3.12 stdlib stubs.",
   "pyright": {
     "3.11": {
-      "errors": 454,
+      "errors": 374,
       "warnings": 11
     },
     "3.12": {
-      "errors": 456,
+      "errors": 376,
       "warnings": 11
     },
     "3.13": {
-      "errors": 467,
+      "errors": 387,
       "warnings": 11
     },
     "3.14": {
-      "errors": 452,
+      "errors": 372,
       "warnings": 7
     }
   },

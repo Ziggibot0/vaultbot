@@ -98,7 +98,7 @@ async def websocket_endpoint(
     # Store the session_id on the websocket so chat_handler and tools can
     # read it for per-session persistence (conversation_state, working_memory,
     # checkpoint).  Updated on /new when a new SessionLogger is rolled.
-    websocket.session_id = session_logger.session_id
+    setattr(websocket, "session_id", session_logger.session_id)
     # Record this as the most recently active session so a reconnect
     # without an explicit sid still finds it.
     touch_last_session(session_logger.session_id, session_logger.title)
@@ -259,7 +259,7 @@ async def websocket_endpoint(
             session_logger.log("restart_adopt_failed", {"error": str(_e)})
     try:
         restored = load_history(session_id=session_logger.session_id)
-        websocket.conversation_history = restored
+        setattr(websocket, "conversation_history", restored)
         # Rebuild the conversation index from the restored history so
         # the bot can recall what was said before the restart.
         if restored:
@@ -275,7 +275,7 @@ async def websocket_endpoint(
         # History file is corrupt. load_history already backed it up.
         # Start fresh + notify the user so they know their conversation
         # was lost, rather than silently amnesia-ing.
-        websocket.conversation_history = []
+        setattr(websocket, "conversation_history", [])
         _hist_diag = classify_error(
             _hist_err, {"category": "history_lost", "stage": "reconnecting"}
         )
@@ -292,7 +292,7 @@ async def websocket_endpoint(
     # only on explicit /new.
     _saved_wm = TaskList.load_from_disk(session_id=session_logger.session_id)
     if _saved_wm is not None and _saved_wm.has_plan():
-        websocket.working_memory = _saved_wm
+        setattr(websocket, "working_memory", _saved_wm)
         session_logger.log(
             "working_memory_restored",
             {
@@ -301,8 +301,8 @@ async def websocket_endpoint(
             },
         )
     else:
-        websocket.working_memory = TaskList()
-    _restored = websocket.conversation_history
+        setattr(websocket, "working_memory", TaskList())
+    _restored = getattr(websocket, "conversation_history")
     if _restored:
         session_logger.log(
             "conversation_history_restored",
@@ -372,7 +372,7 @@ async def websocket_endpoint(
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
                     logger.debug("swallowed: %s", e)
 
-        websocket._current_task = asyncio.create_task(_auto_resume())
+        setattr(websocket, "_current_task", asyncio.create_task(_auto_resume()))
 
     try:
         while True:
@@ -400,7 +400,7 @@ async def websocket_endpoint(
                     # Set the cancel flag FIRST so _check_cancelled() raises
                     # CancelledError at every phase boundary in the agentic
                     # loop — not just at await points.
-                    websocket._cancelled = True
+                    setattr(websocket, "_cancelled", True)
                     # Close the active HTTP streaming response so the
                     # executor thread (blocked in response.iter_lines()) is
                     # unblocked immediately.
@@ -417,18 +417,18 @@ async def websocket_endpoint(
                 task = getattr(websocket, "_current_task", None)
                 if task and not task.done():
                     task._stopped_by_user = True
-                    websocket._cancelled = True
+                    setattr(websocket, "_cancelled", True)
                     with contextlib.suppress(Exception):
                         svc.ollama_client.cancel_active_stream()
                     task.cancel()
-                websocket.conversation_history = []
+                setattr(websocket, "conversation_history", [])
                 # Capture the old session_id before rolling a new one so we
                 # can clear ONLY this session's persisted state — other
                 # tabs' sessions are untouched.
                 _old_sid = getattr(websocket, "session_id", None)
                 # Clear the working-memory task list too so /new wipes the plan.
                 if hasattr(websocket, "working_memory"):
-                    websocket.working_memory.clear()
+                    getattr(websocket, "working_memory").clear()
                     # Also wipe the persisted working-memory state for the
                     # old session only.
                     try:
@@ -456,7 +456,7 @@ async def websocket_endpoint(
                 session_logger = SessionLogger()
                 # Update the websocket's session_id to the new session so
                 # subsequent save/load calls target the new session's files.
-                websocket.session_id = session_logger.session_id
+                setattr(websocket, "session_id", session_logger.session_id)
                 # Point the last-active pointer at the new session.
                 touch_last_session(session_logger.session_id, session_logger.title)
                 session_logger.log(
@@ -549,7 +549,7 @@ async def websocket_endpoint(
                     task = getattr(websocket, "_current_task", None)
                     if task and not task.done():
                         task._stopped_by_user = True
-                        websocket._cancelled = True
+                        setattr(websocket, "_cancelled", True)
                         with contextlib.suppress(Exception):
                             svc.ollama_client.cancel_active_stream()
                         task.cancel()
@@ -823,7 +823,7 @@ async def websocket_endpoint(
             # Interrupt-on-send: cancel any in-flight turn.
             task = getattr(websocket, "_current_task", None)
             if task and not task.done():
-                websocket._cancelled = True
+                setattr(websocket, "_cancelled", True)
                 with contextlib.suppress(Exception):
                     svc.ollama_client.cancel_active_stream()
                 task.cancel()
@@ -866,7 +866,7 @@ async def websocket_endpoint(
                     try:
                         if msg_type == "research":
                             await handle_research(
-                                svc, websocket, user_message, session_logger
+                                websocket, user_message, session_logger, svc
                             )
                         else:
                             await handle_chat(
@@ -906,7 +906,7 @@ async def websocket_endpoint(
 
                 return asyncio.create_task(_run())
 
-            websocket._current_task = _spawn_handler()
+            setattr(websocket, "_current_task", _spawn_handler())
     except WebSocketDisconnect:
         session_logger.log("websocket_disconnect", {"reason": "client_disconnected"})
     except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
