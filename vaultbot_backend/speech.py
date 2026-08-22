@@ -51,26 +51,30 @@ def _speech_error(
     provider: str,
     fallback_msg: str,
 ) -> dict[str, Any]:
-    """Build a loud, typed speech-failure result.
-
-    The previous code did ``logger.warning(...)`` and returned a bare
-    ``{"error": ...}`` dict, so a missing ``edge-tts`` package (the
-    default TTS provider) silently produced no audio with no explanation
-    (issue #182). This helper classifies the exception through the same
-    ``classify_error`` chokepoint the rest of the backend uses and
-    attaches the resulting ``Diagnosis`` to the returned dict under
-    ``diagnosis`` — the same key the frontend already renders as a
-    remedy card for chat/research problems.
-
-    The ``error`` string is kept for backward compatibility with plugin
-    code that reads it, but the ``diagnosis`` payload is the loud path.
-    """
+    """Classify a speech failure and attach a Diagnosis (issue #182)."""
     logger.warning("%s %s failed: %s", role.upper(), provider, exc)
     diag = classify_error(
         exc,
         context={"role": role, "provider": provider, "category": "speech_unavailable"},
     )
     return {"error": fallback_msg, "diagnosis": diag.to_dict()}
+
+
+def _not_configured(role: str) -> dict[str, Any]:
+    """Diagnosis for a speech role with no model configured (issue #182)."""
+    return {
+        "error": (
+            f"No {role.upper()} model configured. Pick one in Settings → Speech Models."
+        ),
+        "diagnosis": make_diagnosis(
+            ProblemCategory.SPEECH_UNAVAILABLE,
+            user_message=(
+                f"{role.upper()} isn't available — no {role} model is configured."
+            ),
+            remedy_hint="Pick a speech model in Settings → Speech Models.",
+            action="open_settings",
+        ).to_dict(),
+    }
 
 
 def _resolve(svc, role: str):
@@ -108,17 +112,7 @@ def transcribe(svc, audio_bytes: bytes, filename: str = "audio.webm") -> dict[st
     """
     entry, prov = _resolve(svc, "stt")
     if entry is None or prov is None:
-        return {
-            "error": "No STT model configured. Pick one in Settings → Speech Models.",
-            "diagnosis": make_diagnosis(
-                ProblemCategory.SPEECH_UNAVAILABLE,
-                user_message=(
-                    "STT isn't available — no speech-to-text model is configured."
-                ),
-                remedy_hint="Pick a speech model in Settings → Speech Models.",
-                action="open_settings",
-            ).to_dict(),
-        }
+        return _not_configured("stt")
     if prov.type == "browser":
         return {
             **BROWSER_SENTINEL,
@@ -172,17 +166,7 @@ async def synthesize(svc, text: str) -> dict[str, Any]:
     """
     entry, prov = _resolve(svc, "tts")
     if entry is None or prov is None:
-        return {
-            "error": "No TTS model configured. Pick one in Settings → Speech Models.",
-            "diagnosis": make_diagnosis(
-                ProblemCategory.SPEECH_UNAVAILABLE,
-                user_message=(
-                    "TTS isn't available — no text-to-speech model is configured."
-                ),
-                remedy_hint="Pick a speech model in Settings → Speech Models.",
-                action="open_settings",
-            ).to_dict(),
-        }
+        return _not_configured("tts")
     if not text.strip():
         return {"error": "empty text"}
     if prov.type == "browser":

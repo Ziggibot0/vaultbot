@@ -92,10 +92,7 @@ class ProblemCategory(str, Enum):  # noqa: UP042 - str+Enum for JSON serializati
     # done until the user has text"), not a normal stop. Fail-loud: the
     # user sees a problem card, never silence.
     AGENT_SILENT = "agent_silent"
-    # A configured speech (TTS/STT) provider's dependency is missing or its
-    # endpoint is unreachable. The default edge-tts provider needs the
-    # optional ``edge-tts`` package; without it TTS silently produces no
-    # audio. Fail-loud: surface a remedy card instead of silence (issue #182).
+    # TTS/STT provider dep missing or endpoint unreachable (issue #182).
     SPEECH_UNAVAILABLE = "speech_unavailable"
     # Catch-all: nothing more specific matched. Last resort.
     GENERIC = "generic"
