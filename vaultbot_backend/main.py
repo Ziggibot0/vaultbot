@@ -80,12 +80,12 @@ dotenv_path = os.path.join(_FRAMEWORK_ROOT, ".env")
 load_dotenv(dotenv_path, override=True)
 
 # Resolve VAULT_PATH relative to the framework root.  The user's vault is
-# the `vault/` subfolder of the framework root by default; the installer
-# renames it to the user's chosen name and writes an absolute VAULT_PATH
-# into .env.  When .env says VAULT_PATH=vault (relative), it resolves to
-# <framework>/vault.  This makes every vault_path=os.getenv("VAULT_PATH", ...)
+# the `myvault/` subfolder of the framework root by default.  The vault
+# folder name is FIXED to "myvault" so upstream updates always land in the
+# right place.  When .env says VAULT_PATH=myvault (relative), it resolves to
+# <framework>/myvault.  This makes every vault_path=os.getenv("VAULT_PATH", ...)
 # call site resolve correctly regardless of the process working directory.
-_vp = os.environ.get("VAULT_PATH", "vault")
+_vp = os.environ.get("VAULT_PATH", "myvault")
 if not os.path.isabs(_vp):
     os.environ["VAULT_PATH"] = os.path.normpath(os.path.join(_FRAMEWORK_ROOT, _vp))
 

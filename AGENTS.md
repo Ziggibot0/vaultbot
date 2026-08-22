@@ -10,7 +10,7 @@ wins — flag the discrepancy instead of guessing.
 - Repo root is the top-level directory returned by
   `git rev-parse --show-toplevel` (NOT `vaultbot/` — that's a subfolder).
 - Backend source: `vaultbot/vaultbot_backend/`
-- Procedures: `vaultbot/System/Procedures/`
+- Procedures: `myvault/System/Procedures/`
 - CI workflow: `.github/workflows/ci.yml`
 
 ## Hard rules (non-negotiable)
@@ -72,7 +72,7 @@ deadlocks.
 ## Before declaring done
 
 - `git status` is clean (or only the intended files are staged).
-- Backend boots: `python vaultbot/vaultbot_backend/main.py` with no
+- Backend boots: `python vaultbot_backend/main.py` with no
   `ImportError`/`Traceback`.
 - If the fix is a recurring class of problem, add a procedure under
-  `vaultbot/System/Procedures/` (per `.github/instructions/PROCEDURE-DIRECTIVE.instructions.md`).
+  `myvault/vaultbot-stuff/System/Procedures/` (per `.github/instructions/PROCEDURE-DIRECTIVE.instructions.md`).

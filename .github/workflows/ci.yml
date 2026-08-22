@@ -74,7 +74,7 @@ jobs:
         run: uv run ruff format --check vaultbot_backend/
 
       - name: Baseline-marker check (HARD GATE)
-        # Every committed .md under vault/vaultbot-stuff/System/ must carry
+        # Every committed .md under myvault/vaultbot-stuff/System/ must carry
         # "baseline: true" frontmatter. This is the same check the
         # pre-commit hook runs, but in --all mode it scans the whole
         # committed tree (CI has no staging area). Hard gate: the 11
@@ -130,7 +130,7 @@ jobs:
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
-          VAULT_PATH: ${{ github.workspace }}/vault
+          VAULT_PATH: ${{ github.workspace }}/myvault
         run: |
           mkdir -p "$VAULT_PATH/vaultbot-stuff/Memory/Chat"
           mkdir -p "$VAULT_PATH/vaultbot-stuff/Knowledge"
@@ -148,7 +148,7 @@ jobs:
         env:
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
-          VAULT_PATH: ${{ github.workspace }}/vault
+          VAULT_PATH: ${{ github.workspace }}/myvault
         run: |
           uv run pytest -q -m "integration" --tb=short
         continue-on-error: true

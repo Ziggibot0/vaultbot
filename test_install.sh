@@ -50,9 +50,9 @@ check_file "LICENSE"
 check_file ".env.example"
 check_file "vaultbot_backend/requirements.txt"
 check_file "vaultbot_backend/main.py"
-check_file "vault/vaultbot-stuff/baseline/identity/IDENTITY.md"
-check_file "vault/.obsidian/plugins/vaultbot/main.js"
-check_file "vault/.obsidian/plugins/vaultbot/manifest.json"
+check_file "myvault/vaultbot-stuff/baseline/identity/IDENTITY.md"
+check_file "myvault/.obsidian/plugins/vaultbot/main.js"
+check_file "myvault/.obsidian/plugins/vaultbot/manifest.json"
 
 # Check .gitignore exists and has key entries
 if [ -f "$VAULT_PATH/.gitignore" ]; then
@@ -102,9 +102,9 @@ fi
 
 section "5. Backend import test"
 # Create directories the backend expects to exist
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Memory/Chat"
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Memory/Build-Log"
-mkdir -p "$VAULT_PATH/vault/vaultbot-stuff/Knowledge/Research"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Chat"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Memory/Build-Log"
+mkdir -p "$VAULT_PATH/myvault/vaultbot-stuff/Knowledge/Research"
 cd "$VAULT_PATH"
 VAULT_PATH="$VAULT_PATH" "$VENV_PYTHON" -c "
 import sys, os
@@ -125,7 +125,7 @@ cd "$VAULT_PATH"
 cp .env .env.test-backup
 echo "GITHUB_TOKEN=ghp_fake_token_for_testing" > .env
 # Create fake sensitive dirs
-mkdir -p vault/vaultbot-stuff/Memory/Chat
+mkdir -p myvault/vaultbot-stuff/Memory/Chat
 mkdir -p vaultbot_backend/sessions
 echo "fake session" > vaultbot_backend/sessions/test.jsonl
 

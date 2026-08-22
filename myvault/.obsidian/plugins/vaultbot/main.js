@@ -1036,7 +1036,7 @@ class VaultBotPlugin extends Plugin {
 			}
 		} catch (e) {}
 		// Use the GitHub API (works for branches + tags) to get the manifest.
-		const apiUrl = `https://raw.githubusercontent.com/Ziggibot0/vaultbot/${encodeURIComponent(refSpec)}/vault/.obsidian/plugins/vaultbot/manifest.json`;
+		const apiUrl = `https://raw.githubusercontent.com/Ziggibot0/vaultbot/${encodeURIComponent(refSpec)}/myvault/.obsidian/plugins/vaultbot/manifest.json`;
 		try {
 			const resp = await fetch(apiUrl, { cache: 'no-store' });
 			if (!resp.ok) return { error: `GitHub returned ${resp.status}`, current: currentVersion };

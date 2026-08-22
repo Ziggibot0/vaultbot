@@ -364,7 +364,7 @@ def run(args: dict) -> dict:
     # --- Test 5: Path whitelist check ---
     ALLOWED_PREFIXES = [
         "vaultbot_backend/",
-        "vault/",
+        "myvault/",
         "vaultbot-stuff/",
         ".obsidian/plugins/vaultbot/",
         ".gitignore",

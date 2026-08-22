@@ -33,7 +33,7 @@ from doc_domains import resolve_doc_domain
 # The real procedure note, read from disk (never written).
 _PROCEDURES_DIR = (
     Path(__file__).resolve().parent.parent.parent
-    / "vault"
+    / "myvault"
     / "vaultbot-stuff"
     / "System"
     / "Procedures"

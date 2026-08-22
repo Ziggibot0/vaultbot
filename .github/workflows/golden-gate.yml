@@ -105,7 +105,7 @@ jobs:
         env:
           OLLAMA_BASE_URL: http://localhost:11434
           OLLAMA_EMBED_MODEL: nomic-embed-text
-          VAULT_PATH: ${{ github.workspace }}/vault
+          VAULT_PATH: ${{ github.workspace }}/myvault
           VAULTBOT_SKIP_LOCK: "1"
           VAULTBOT_SKIP_WATCHER: "1"
         run: |
