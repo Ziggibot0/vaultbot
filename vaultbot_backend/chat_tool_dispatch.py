@@ -628,6 +628,7 @@ async def execute_agent_tool(
                 args.get("description", ""),
                 args.get("parameters", {}),
                 args.get("code", ""),
+                doc_source=args.get("doc_source"),
             ),
         )
         # Hot-reload so the new tool is callable immediately.

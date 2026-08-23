@@ -444,6 +444,15 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                             "automatically)."
                         ),
                     },
+                    "doc_source": {
+                        "type": "string",
+                        "description": (
+                            "Official docs URL the code was checked against. "
+                            "REQUIRED if the tool imports network, os, "
+                            "subprocess, importlib, or sys — without it the "
+                            "tool is rejected (issue #228)."
+                        ),
+                    },
                 },
                 "required": ["tool_name", "description", "parameters", "code"],
             },
