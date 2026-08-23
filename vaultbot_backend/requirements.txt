@@ -41,7 +41,7 @@ psutil==7.2.2
 # docker: used by searxng_manager.py to run the SearXNG container. Without
 # it the import fails at startup and SearXNG silently drops out of the
 # search pool (the "one thin source per claim" symptom).
-docker==7.1.0
+docker==7.2.0
 # httpx: used by speech.py for OpenAI-compatible TTS (_synthesize_openai).
 # Was listed as httpx2 (wrong package) in dev deps — code imports httpx (issue #172).
 httpx==0.28.1
