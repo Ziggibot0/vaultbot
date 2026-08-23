@@ -28,7 +28,7 @@ from chat_context import (
     estimate_conv_tokens as _estimate_conv_tokens,
 )
 from chat_context import (
-    sanitize_tool_history as _sanitize_tool_history,
+    project_for_provider as _project_for_provider,
 )
 from chat_context import (
     tool_actually_wrote as _tool_actually_wrote,
@@ -381,23 +381,31 @@ async def run_agentic_loop(
                         ),
                     },
                 )
-            # Tool-history sanitization is a NARROW workaround for the
-            # glm-5.2:cloud-via-Ollama bug (the model returns empty when it
-            # sees ANY prior tool_calls / tool-role messages). Every other
-            # provider (OpenAI-compatible, Anthropic, direct GLM cloud, real
-            # Ollama models like qwen/llama/nemotron) gets NATIVE tool
-            # protocol -- the sanitizer corrupts it into flat system messages
-            # and destroys tool_call IDs the model expects to reference.
-            # See /memories/glm-ollama-tool-calls-broken.md.
+            # ── Provider-safe message projection ──────────────────────
+            # Strip all internal bookkeeping fields (thinking, timestamp,
+            # digested, etc.) before sending to ANY provider. This is
+            # universal — no per-model heuristics. It does two things:
+            #
+            # 1. Preserves the KV cache: the token sequence for prior
+            #    messages stays stable across rounds (no new thinking
+            #    content appended), so Ollama's prefix cache hits instead
+            #    of re-evaluating the entire prompt every round.
+            #
+            # 2. Prevents generation corruption: the model never sees its
+            #    own prior reasoning (thinking) as regular text, which
+            #    pollutes attention and causes degenerate repetition.
+            #
+            # For glm-via-Ollama (which returns empty on tool_calls/tool
+            # role), we also flatten tool calls to system messages. This
+            # is a protocol bug specific to that model, not a general
+            # heuristic — see /memories/glm-ollama-tool-calls-broken.md.
             _model_name = (svc.ollama_client.llm_model or "").lower()
             _client_cls = svc.ollama_client.__class__.__name__.lower()
-            _needs_sanitize = os.getenv(
+            _flatten = os.getenv(
                 "VAULTBOT_FORCE_SANITIZE_TOOL_HISTORY", "0"
             ) == "1" or ("ollama" in _client_cls and "glm" in _model_name)
-            st._model_conversation = (
-                _sanitize_tool_history(conversation)
-                if _needs_sanitize
-                else conversation
+            st._model_conversation = _project_for_provider(
+                conversation, flatten_tool_calls=_flatten
             )
 
             (
