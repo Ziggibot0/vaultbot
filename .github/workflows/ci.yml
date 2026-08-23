@@ -190,7 +190,7 @@ jobs:
         # gitleaks scans the whole repo for leaked secrets/credentials before
         # anything ships. No config needed — default rules cover common
         # credential formats.
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
