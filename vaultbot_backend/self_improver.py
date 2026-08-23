@@ -519,7 +519,7 @@ class SelfImprover:
         if not allow_write:
             from code_run_guard import build_guard_preamble
 
-            code = build_guard_preamble(BACKEND_ROOT) + "\n" + code
+            code = build_guard_preamble(str(BACKEND_ROOT)) + "\n" + code
 
         out_path = err_path = None
         try:
