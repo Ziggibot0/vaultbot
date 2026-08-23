@@ -27,6 +27,7 @@ from chat_helpers import (
 )
 from chat_preflight import check_cancelled, dispatch_procedure_core
 from fastapi import WebSocket
+from procedure_suggestion_gate import check_procedure_suggestion
 from services import Services
 from weaving import weave_textbook_notes
 from working_memory import TaskList
@@ -34,6 +35,12 @@ from working_memory import TaskList
 # Fire-and-forget task registry: keeps strong references to background
 # tasks so they aren't garbage-collected mid-flight.
 _background_tasks: set[asyncio.Task] = set()
+
+# Per-session set of tool_names the suggestion gate has already nudged for.
+# A tool is nudged at most once per session so the model can't loop on the
+# nudge itself; the second call to the same tool passes through. Keyed by
+# session_logger.session_id (one WebSocket == one session == one set).
+_suggested_per_session: dict[str, set[str]] = {}
 
 
 async def execute_agent_tool(
@@ -75,6 +82,35 @@ async def execute_agent_tool(
         msg = blocked_tool_message(tool_name)
         session_logger.log("safe_mode_blocked", {"tool": tool_name})
         return {"error": msg, "safe_mode_blocked": True}
+
+    # ── Procedure suggestion gate ("autofill") ────────────────────────
+    # Before executing a raw tool the model reached for, check whether a
+    # procedure exists whose FIRST STEP calls the same tool AND whose
+    # trigger/when_to_use matches the user message. If so, return a
+    # suggestion instead of executing — the model is told which procedure
+    # matches and can call execute_procedure("X") or reply 'proceed'.
+    # This nudges the model toward procedures instead of improvising their
+    # logic by hand (see session eb8143f7: Git-Sync-Upstream existed but
+    # the model called code_run + vaultbot_sync raw ~10 times).
+    # One nudge per (tool_name, session) so the model can't loop on it.
+    _ft_index = getattr(svc, "first_tool_index", None)
+    if isinstance(_ft_index, dict) and _ft_index:
+        _sid = getattr(session_logger, "session_id", "")
+        _suggested = _suggested_per_session.setdefault(_sid, set())
+        _sug = check_procedure_suggestion(
+            tool_name, user_message, _ft_index, already_suggested=_suggested
+        )
+        if _sug is not None:
+            session_logger.log(
+                "procedure_suggestion",
+                {
+                    "tool": tool_name,
+                    "procedure": _sug.get("procedure_suggestion"),
+                    "description": _sug.get("description", ""),
+                    "user_message": user_message[:200],
+                },
+            )
+            return _sug
 
     if tool_name == "vault_research":
         # ── Web research gate ──────────────────────────────────────────
