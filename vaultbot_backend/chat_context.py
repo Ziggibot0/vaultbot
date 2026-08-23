@@ -3,7 +3,7 @@
 Extracted from ``chat_handler.py`` -- these functions operate on the
 ``conversation`` list: deduplication of seen search results, proactive
 tool-result aging, hard token-cap enforcement, code-read digesting, and
-Ollama tool-call history sanitization.
+provider-safe message projection.
 
 All are pure functions (no ``Services`` dependency, no I/O, no WebSocket
 access). They take a conversation list and return a new/modified list.
@@ -16,6 +16,211 @@ import os
 from typing import Any
 
 from config import TUNABLES
+
+# ── Provider-safe message projection ────────────────────────────────────
+#
+# The internal conversation list carries fields the model should never see:
+# ``thinking`` (prior reasoning), ``timestamp``, ``digested``,
+# ``original_chars``, etc. These are bookkeeping fields for the frontend
+# UI, the session log, and the loop logic. Sending them to the LLM
+# provider corrupts the token sequence in two ways:
+#
+#   1. **KV cache invalidation**: the token sequence changes every round
+#      (new ``thinking`` content appended), so Ollama can't reuse the
+#      cached prefix and re-evaluates the entire prompt from scratch.
+#      This is the "almost completely restart inference instead of
+#      caching" symptom — the user waits 2+ minutes for a simple answer.
+#
+#   2. **Generation corruption**: non-spec fields like ``thinking`` get
+#      passed through the provider's chat template as raw text, polluting
+#      the model's attention with its own prior reasoning. This causes
+#      degenerate text repetition ("Let me sync first...Let me sync
+#      first...Let me sync first...").
+#
+# The fix is a single universal projection: before sending to ANY
+# provider, strip every field that isn't part of the OpenAI message spec.
+# This replaces the per-model-family ``sanitize_tool_history`` heuristic
+# (which only fired for glm models) with a clean, model-agnostic approach.
+#
+# See: session eb8143f7 (qwen3.6:27b degenerate looping + 2-min latency).
+
+# Fields that are part of the OpenAI chat-completions message spec and
+# safe to send to any provider. Everything else is internal bookkeeping.
+_SPEC_FIELDS: frozenset[str] = frozenset(
+    {
+        "role",
+        "content",
+        "tool_calls",
+        "tool_call_id",
+        "name",
+    }
+)
+
+# Fields that should be stripped from assistant messages when the model
+# uses native tool protocol (not the glm-flattened system-message path).
+# ``thinking`` is the main offender — it's reasoning text the model already
+# produced and should never see again in its input context.
+_STRIP_FROM_ASSISTANT: frozenset[str] = frozenset(
+    {
+        "thinking",
+        "timestamp",
+        "digested",
+        "original_chars",
+    }
+)
+
+
+def project_for_provider(
+    conversation: list[dict[str, Any]],
+    *,
+    flatten_tool_calls: bool = False,
+) -> list[dict[str, Any]]:
+    """Return a provider-safe copy of the conversation.
+
+    Strips all internal bookkeeping fields (``thinking``, ``timestamp``,
+    ``digested``, etc.) that are not part of the OpenAI message spec.
+    This ensures the token sequence is stable across rounds so the
+    provider's KV cache can hit on the prefix, and prevents the model
+    from seeing its own prior reasoning as regular text.
+
+    Args:
+        conversation: The internal conversation list (mutated by the loop).
+        flatten_tool_calls: When True, also run the glm-specific tool-call
+            flattening (convert ``tool`` role → ``system`` role, strip
+            ``tool_calls`` from assistant messages). This is the old
+            ``sanitize_tool_history`` behavior, needed only for glm-via-
+            Ollama which returns empty when it sees tool_calls/tool-role
+            messages. When False (default), tool calls and tool results
+            pass through with native protocol — only non-spec fields are
+            stripped.
+
+    Returns:
+        A new list of new dicts. The original conversation is not modified.
+    """
+    if flatten_tool_calls:
+        return _project_flattened(conversation)
+    return _project_native(conversation)
+
+
+def _project_native(conversation: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project for native tool protocol (all providers except glm-via-Ollama).
+
+    Strips non-spec fields but keeps ``tool_calls`` and ``tool`` role
+    messages intact so the model can reference prior tool interactions
+    via the standard protocol.
+    """
+    projected = []
+    for msg in conversation:
+        role = msg.get("role", "")
+        new_msg: dict[str, Any] = {"role": role}
+        # content — always include (even if empty string)
+        new_msg["content"] = msg.get("content", "")
+        # tool_calls — keep for assistant messages (native protocol)
+        if msg.get("tool_calls"):
+            new_msg["tool_calls"] = msg["tool_calls"]
+        # tool_call_id — keep for tool-role messages
+        if msg.get("tool_call_id"):
+            new_msg["tool_call_id"] = msg["tool_call_id"]
+        # name — keep (used by some providers for tool naming)
+        if msg.get("name"):
+            new_msg["name"] = msg["name"]
+        projected.append(new_msg)
+    return projected
+
+
+def _project_flattened(conversation: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project for glm-via-Ollama (flatten tool calls to system messages).
+
+    This is the old ``sanitize_tool_history`` behavior: convert ``tool``
+    role messages to ``system`` role with combined call+result info, and
+    strip ``tool_calls`` from assistant messages. Also strips ``thinking``
+    and other non-spec fields.
+
+    Kept as a separate path because glm-5.2:cloud via Ollama returns
+    completely empty when it sees tool_calls/tool-role messages — this is
+    a protocol bug specific to that model, not a general heuristic.
+    """
+    # Build a lookup of tool_call_id → tool_call args from assistant messages
+    # so we can pair tool results with their originating tool calls.
+    tool_call_lookup: dict[str, dict] = {}
+    for msg in conversation:
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg.get("tool_calls", []):
+                tc_id = tc.get("id", "")
+                if tc_id:
+                    tool_call_lookup[tc_id] = tc
+
+    projected = []
+    for msg in conversation:
+        role = msg.get("role", "")
+        # Tool role messages → system role with full call+result info
+        if role == "tool":
+            tool_content = msg.get("content", "")
+            tool_name = msg.get("tool_name", "tool")
+            tool_call_id = msg.get("tool_call_id", "")
+            # Look up the original tool call args
+            tc = tool_call_lookup.get(tool_call_id, {})
+            fn = tc.get("function", {}) if tc else {}
+            args_raw = fn.get("arguments", "{}") if fn else "{}"
+            try:
+                args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                args_str = json.dumps(args, default=str)[:300]
+            except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
+                args_str = str(args_raw)[:300]
+            # Build the combined system message
+            result_text = tool_content
+            # Read tools (vault_read_note, code_read) return the ENTIRE file:
+            # never truncate them here, even when sanitizing for Ollama, so
+            # the model gets the whole file in one read. Other tool results
+            # are capped to keep the sanitized history bounded.
+            if (
+                tool_name not in ("code_read", "vault_read_note")
+                and len(result_text) > 2000
+            ):
+                result_text = result_text[:2000] + "...[truncated]"
+            system_content = (
+                f"[Tool call: {tool_name}({args_str}) returned: {result_text}]"
+            )
+            # Merge multiple tool results into one system message if the
+            # previous projected message is also a tool-result system msg.
+            if (
+                projected
+                and projected[-1].get("role") == "system"
+                and str(projected[-1].get("content", "")).startswith("[Tool call:")
+            ):
+                projected[-1]["content"] += "\n" + system_content
+            else:
+                projected.append({"role": "system", "content": system_content})
+            continue
+        # Assistant messages with tool_calls → strip tool_calls, keep content
+        if role == "assistant" and msg.get("tool_calls"):
+            content = msg.get("content", "") or ""
+            # Keep the model's actual text. If empty (tool-only round), use
+            # empty string -- the system message with the tool result provides
+            # the context. Using a placeholder like "(working...)" or "." caused
+            # the model to echo it back in subsequent rounds.
+            projected.append({"role": "assistant", "content": content})
+            continue
+        # All other messages: keep only spec fields
+        new_msg: dict[str, Any] = {"role": role}
+        new_msg["content"] = msg.get("content", "")
+        projected.append(new_msg)
+    return projected
+
+
+# ---------------------------------------------------------------------------
+# Ollama tool-call history sanitization (backward compat)
+# ---------------------------------------------------------------------------
+
+
+def sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Backward-compat alias for :func:`project_for_provider` with flattening.
+
+    Kept so existing import sites (``from chat_context import
+    sanitize_tool_history``) don't break. New code should call
+    ``project_for_provider`` directly.
+    """
+    return project_for_provider(conversation, flatten_tool_calls=True)
 
 
 def _leading_system_count(conversation: list[dict[str, Any]]) -> int:
@@ -607,107 +812,3 @@ def digest_code_read(result: dict[str, Any]) -> dict[str, Any]:
     new["digested"] = True
     new["original_chars"] = len(content)
     return new
-
-
-# ---------------------------------------------------------------------------
-# Ollama tool-call history sanitization
-# ---------------------------------------------------------------------------
-
-
-def sanitize_tool_history(conversation: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert tool-call messages to a format the model can handle.
-
-    glm-5.2:cloud via Ollama returns completely empty when the conversation
-    history contains assistant messages with ``tool_calls`` or ``tool`` role
-    messages. This function creates a sanitized copy where:
-
-    - Assistant messages with ``tool_calls``: the ``tool_calls`` field is
-      stripped. The assistant's ``content`` is kept as-is (the model's text).
-      If content is empty, a minimal placeholder is used.
-    - ``tool`` role messages are converted to ``system`` role messages that
-      describe both the tool call AND its result in one message:
-      ``[Tool call: name({args}) returned: {result}]``
-      This pairs the tool call (from the preceding assistant's tool_calls)
-      with the tool result (from the tool message) so the model sees the
-      full context of what it called and what it got back.
-
-    The original conversation is NOT modified -- the loop logic still needs
-    the ``tool_calls`` field for round tracking. Only the copy sent to
-    Ollama is sanitized.
-
-    This is the fix for "VaultBot stops after a few tool calls" -- the model
-    goes empty on every round after the first tool call because it sees
-    ``tool_calls`` in the history.
-    """
-    # Build a lookup of tool_call_id → tool_call args from assistant messages
-    # so we can pair tool results with their originating tool calls.
-    tool_call_lookup: dict[str, dict] = {}
-    for msg in conversation:
-        if msg.get("role") == "assistant" and msg.get("tool_calls"):
-            for tc in msg.get("tool_calls", []):
-                tc_id = tc.get("id", "")
-                if tc_id:
-                    tool_call_lookup[tc_id] = tc
-
-    sanitized = []
-    for msg in conversation:
-        role = msg.get("role", "")
-        # Tool role messages → system role with full call+result info
-        if role == "tool":
-            tool_content = msg.get("content", "")
-            tool_name = msg.get("tool_name", "tool")
-            tool_call_id = msg.get("tool_call_id", "")
-            # Look up the original tool call args
-            tc = tool_call_lookup.get(tool_call_id, {})
-            fn = tc.get("function", {}) if tc else {}
-            args_raw = fn.get("arguments", "{}") if fn else "{}"
-            try:
-                args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
-                args_str = json.dumps(args, default=str)[:300]
-            except Exception:  # noqa: BLE001 -- best-effort, returns error/empty to caller -- see CONTRIBUTING.md no-silent-fallbacks
-                args_str = str(args_raw)[:300]
-            # Build the combined system message
-            result_text = tool_content
-            # Read tools (vault_read_note, code_read) return the ENTIRE file:
-            # never truncate them here, even when sanitizing for Ollama, so
-            # the model gets the whole file in one read. Other tool results
-            # are capped to keep the sanitized history bounded.
-            if (
-                tool_name not in ("code_read", "vault_read_note")
-                and len(result_text) > 2000
-            ):
-                result_text = result_text[:2000] + "...[truncated]"
-            system_content = (
-                f"[Tool call: {tool_name}({args_str}) returned: {result_text}]"
-            )
-            # Merge multiple tool results into one system message if the
-            # previous sanitized message is also a tool-result system msg.
-            if (
-                sanitized
-                and sanitized[-1].get("role") == "system"
-                and str(sanitized[-1].get("content", "")).startswith("[Tool call:")
-            ):
-                sanitized[-1]["content"] += "\n" + system_content
-            else:
-                sanitized.append({"role": "system", "content": system_content})
-            continue
-        # Assistant messages with tool_calls → strip tool_calls, keep content
-        if role == "assistant" and msg.get("tool_calls"):
-            content = msg.get("content", "") or ""
-            thinking = msg.get("thinking", "") or ""
-            # Keep the model's actual text. If empty (tool-only round), use
-            # empty string -- the system message with the tool result provides
-            # the context. Using a placeholder like "(working...)" or "." caused
-            # the model to echo it back in subsequent rounds.
-            if not content.strip():
-                content = ""
-            new_msg = {"role": "assistant", "content": content}
-            if thinking:
-                new_msg["thinking"] = thinking
-            sanitized.append(new_msg)
-            continue
-        # All other messages pass through (strip any stray tool_calls)
-        new_msg = dict(msg)
-        new_msg.pop("tool_calls", None)
-        sanitized.append(new_msg)
-    return sanitized

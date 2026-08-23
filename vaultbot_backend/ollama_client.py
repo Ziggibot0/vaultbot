@@ -504,6 +504,10 @@ class OllamaClient(_BASE):
                 payload["options"]["num_ctx"] = _ctx
         except Exception:  # noqa: BLE001 — best-effort context window
             pass
+        # repeat_penalty: see chat() for rationale (session eb8143f7).
+        payload["options"]["repeat_penalty"] = float(
+            os.environ.get("VAULTBOT_REPEAT_PENALTY", "1.3")
+        )
         if system:
             payload["system"] = system
         if max_tokens is not None:
@@ -892,6 +896,16 @@ class OllamaClient(_BASE):
                 _extra_opts["num_ctx"] = _ctx
         except Exception:  # noqa: BLE001 — best-effort context detection
             pass  # best-effort — if /api/show fails, Ollama uses its default
+        # repeat_penalty: defend against degenerate text repetition where
+        # the model loops on a sentence fragment ("Let me sync first...Let
+        # me sync first..."). Ollama's default is 1.1, which handles simple
+        # word repetition but not sentence-fragment loops. 1.3 is a moderate
+        # value that discourages repetition without over-penalizing
+        # legitimate re-use of common phrases. Configurable via env so
+        # users can tune it for their model. See session eb8143f7.
+        _extra_opts["repeat_penalty"] = float(
+            os.environ.get("VAULTBOT_REPEAT_PENALTY", "1.3")
+        )
         if _extra_opts:
             payload["options"] = _extra_opts
         # keep_alive so the model stays resident between calls.

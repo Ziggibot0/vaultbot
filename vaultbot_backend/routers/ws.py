@@ -69,12 +69,18 @@ async def websocket_endpoint(
     the operator having to send a wake-up message. See [[Auto-Resume-Directive]].
     """
     # ── Session resume: reuse the same session_id across reconnects ──
-    # Priority: explicit frontend sid > last-active pointer > new UUID.
+    # The frontend sends ?sid=<uuid> ONLY when the user explicitly picks a
+    # past session from the "Recent" dropdown. When no sid is provided
+    # (panel open, fresh tab, reconnect after WS drop without explicit
+    # resume), the backend mints a NEW session — no last-active-pointer
+    # fallback. This means closing and reopening the panel always starts
+    # fresh, and the user uses the "Recent" button to pick back up an old
+    # conversation. The restart-resume path (below, gated on
+    # _RESTART_CONTEXT_PATH) is separate and still works for backend
+    # restarts.
     _resume_sid = None
     with contextlib.suppress(Exception):
         _resume_sid = websocket.query_params.get("sid")
-    if not _resume_sid:
-        _resume_sid = read_last_session()
     # Validate a frontend-provided sid actually has state on disk; if not,
     # ignore it (stale plugin-side value after a /new on a different tab)
     # and fall through to a new UUID so we don't silently adopt a dead id.
