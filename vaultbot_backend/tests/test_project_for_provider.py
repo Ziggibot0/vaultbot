@@ -8,7 +8,6 @@ that isn't part of the OpenAI message spec before sending to ANY provider.
 
 from chat_context import project_for_provider, sanitize_tool_history
 
-
 # ── Native projection (all providers except glm-via-Ollama) ──────────────
 
 
@@ -51,10 +50,23 @@ def test_native_keeps_tool_calls():
         {
             "role": "assistant",
             "content": "",
-            "tool_calls": [{"id": "call_1", "function": {"name": "vault_search", "arguments": "{}"}}],
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "function": {
+                        "name": "vault_search",
+                        "arguments": "{}",
+                    },
+                }
+            ],
             "thinking": "I should search",
         },
-        {"role": "tool", "content": "result", "tool_call_id": "call_1", "tool_name": "vault_search"},
+        {
+            "role": "tool",
+            "content": "result",
+            "tool_call_id": "call_1",
+            "tool_name": "vault_search",
+        },
     ]
     projected = project_for_provider(conv)
     assistant = projected[0]
@@ -68,7 +80,12 @@ def test_native_keeps_tool_calls():
 def test_native_strips_tool_name():
     """tool_name is internal; the provider uses tool_call_id for pairing."""
     conv = [
-        {"role": "tool", "content": "result", "tool_call_id": "c1", "tool_name": "vault_search"},
+        {
+            "role": "tool",
+            "content": "result",
+            "tool_call_id": "c1",
+            "tool_name": "vault_search",
+        },
     ]
     projected = project_for_provider(conv)
     assert "tool_name" not in projected[0]
@@ -109,9 +126,22 @@ def test_flattened_removes_tool_role():
         {
             "role": "assistant",
             "content": "",
-            "tool_calls": [{"id": "c1", "function": {"name": "vault_search", "arguments": "{}"}}],
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "function": {
+                        "name": "vault_search",
+                        "arguments": "{}",
+                    },
+                }
+            ],
         },
-        {"role": "tool", "content": "result", "tool_call_id": "c1", "tool_name": "vault_search"},
+        {
+            "role": "tool",
+            "content": "result",
+            "tool_call_id": "c1",
+            "tool_name": "vault_search",
+        },
     ]
     projected = project_for_provider(conv, flatten_tool_calls=True)
     for m in projected:
@@ -124,7 +154,15 @@ def test_flattened_strips_tool_calls():
         {
             "role": "assistant",
             "content": "text",
-            "tool_calls": [{"id": "c1", "function": {"name": "vault_search", "arguments": "{}"}}],
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "function": {
+                        "name": "vault_search",
+                        "arguments": "{}",
+                    },
+                }
+            ],
         },
     ]
     projected = project_for_provider(conv, flatten_tool_calls=True)
@@ -134,7 +172,17 @@ def test_flattened_strips_tool_calls():
 def test_flattened_strips_thinking():
     """Flattened mode must also strip thinking."""
     conv = [
-        {"role": "assistant", "content": "x", "thinking": "hmm", "tool_calls": [{"id": "c1", "function": {"name": "t", "arguments": "{}"}}]},
+        {
+            "role": "assistant",
+            "content": "x",
+            "thinking": "hmm",
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "function": {"name": "t", "arguments": "{}"},
+                }
+            ],
+        },
     ]
     projected = project_for_provider(conv, flatten_tool_calls=True)
     assert "thinking" not in projected[0]
