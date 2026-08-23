@@ -107,22 +107,16 @@ def test_gate_no_fire_when_trigger_does_not_overlap():
         "Git-Status-Check": _idx_entry({"code_run"}, ["check the daily standup"]),
     }
     # User message shares no words with the trigger -> no suggestion for code_run.
-    sug = check_procedure_suggestion(
-        "code_run", "sync the repo with upstream", idx
-    )
+    sug = check_procedure_suggestion("code_run", "sync the repo with upstream", idx)
     assert sug is None
 
 
 def test_gate_code_run_requires_trigger_overlap():
     idx = {
-        "Git-Sync-Upstream": _idx_entry(
-            {"code_run"}, ["sync upstream repo stash"]
-        ),
+        "Git-Sync-Upstream": _idx_entry({"code_run"}, ["sync upstream repo stash"]),
     }
     # Overlap on "sync" and "upstream" -> fires.
-    sug = check_procedure_suggestion(
-        "code_run", "sync the upstream repo please", idx
-    )
+    sug = check_procedure_suggestion("code_run", "sync the upstream repo please", idx)
     assert sug is not None
 
 
@@ -135,17 +129,13 @@ def test_gate_vaultbot_sync_allows_zero_overlap():
             {"vaultbot_sync"}, ["sync upstream repo stash"]
         ),
     }
-    sug = check_procedure_suggestion(
-        "vaultbot_sync", "yo what's good", idx
-    )
+    sug = check_procedure_suggestion("vaultbot_sync", "yo what's good", idx)
     assert sug is not None
 
 
 def test_gate_skips_flagged_procedures():
     idx = {
-        "Bad-Proc": _idx_entry(
-            {"vaultbot_sync"}, ["sync"], status="flagged"
-        ),
+        "Bad-Proc": _idx_entry({"vaultbot_sync"}, ["sync"], status="flagged"),
     }
     sug = check_procedure_suggestion("vaultbot_sync", "sync the repo", idx)
     assert sug is None  # flagged procedures are blocked from execution
@@ -153,9 +143,7 @@ def test_gate_skips_flagged_procedures():
 
 def test_gate_picks_highest_trigger_overlap():
     idx = {
-        "Git-Sync-Upstream": _idx_entry(
-            {"vaultbot_sync"}, ["sync upstream repo"]
-        ),
+        "Git-Sync-Upstream": _idx_entry({"vaultbot_sync"}, ["sync upstream repo"]),
         "Git-Sync-Origin": _idx_entry(
             {"vaultbot_sync"}, ["sync upstream repo with origin main"]
         ),
@@ -172,9 +160,7 @@ def test_gate_picks_highest_trigger_overlap():
 
 def test_gate_dedup_once_per_session():
     idx = {
-        "Git-Sync-Upstream": _idx_entry(
-            {"vaultbot_sync"}, ["sync upstream repo"]
-        ),
+        "Git-Sync-Upstream": _idx_entry({"vaultbot_sync"}, ["sync upstream repo"]),
     }
     already: set[str] = set()
     sug1 = check_procedure_suggestion(
@@ -200,9 +186,7 @@ def test_gate_strips_stopwords_from_trigger_match():
     idx = {
         "Daily-Check": _idx_entry({"vaultbot_sync"}, ["the daily check"]),
     }
-    sug = check_procedure_suggestion(
-        "vaultbot_sync", "the repo is synced", idx
-    )
+    sug = check_procedure_suggestion("vaultbot_sync", "the repo is synced", idx)
     # vaultbot_sync is direct -> fires anyway (zero overlap is allowed).
     # This is intended: the tool name is the cue. Verify the message is
     # still well-formed.
@@ -219,8 +203,8 @@ def test_build_index_from_synthetic_proc_index(tmp_path):
         "---\n"
         "type: procedure\n"
         "status: experimental\n"
-        "description: \"Syncs local repo with upstream main.\"\n"
-        "when_to_use: \"When you need to sync with upstream before work.\"\n"
+        'description: "Syncs local repo with upstream main."\n'
+        'when_to_use: "When you need to sync with upstream before work."\n'
         "tags:\n"
         "  - git\n"
         "  - sync\n"
@@ -233,7 +217,7 @@ def test_build_index_from_synthetic_proc_index(tmp_path):
         "```python\n"
         "import subprocess\n"
         "from custom_tools.vaultbot_sync import run as _sync\n"
-        "r = _sync({\"target\": \"main\"})\n"
+        'r = _sync({"target": "main"})\n'
         "```\n",
         encoding="utf-8",
     )
