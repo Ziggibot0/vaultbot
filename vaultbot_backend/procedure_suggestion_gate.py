@@ -29,6 +29,7 @@ See:
 
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any
 
@@ -232,6 +233,119 @@ def check_procedure_suggestion(
         "procedure_suggestion": best_stem,
         "first_tool": tool_name,
         "description": description,
+        "message": msg,
+        "proceed_keyword": "proceed",
+    }
+
+
+def _normalize_name(name: str) -> str:
+    """Lowercase and strip all non-alphanumeric chars for fuzzy matching.
+
+    ``Triage- GitHub- Issues`` and ``Triage-GitHub-Issues`` both normalize to
+    ``triagithubissues``, so whitespace/case/hyphen mangling collapses to the
+    same key before similarity is measured.
+    """
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def check_procedure_name_suggestion(
+    proc_name: str,
+    user_message: str,
+    proc_index: dict[str, dict[str, Any]],
+    k: int = 5,
+) -> dict[str, Any] | None:
+    """Return a top-k suggestion dict when ``proc_name`` doesn't resolve.
+
+    Fires when the model calls ``execute_procedure`` with a name that isn't
+    an exact stem in ``proc_index`` (a typo, extra spaces, wrong case, or a
+    hallucinated name). Ranks every known procedure by (1) name similarity
+    to the mangled name and (2) intent overlap with the user message, and
+    returns the top ``k`` exact stems so the model can *select* a valid name
+    instead of re-generating one from memory.
+
+    Returns ``None`` when ``proc_name`` already resolves (exact stem match)
+    or when no candidate clears the minimum similarity floor — in both cases
+    the caller proceeds with normal resolution.
+
+    The returned dict mirrors ``check_procedure_suggestion`` so the model's
+    handling is uniform:
+
+    .. code-block:: python
+
+        {
+            "procedure_suggestion": "Triage-GitHub-Issues",
+            "candidates": ["Triage-GitHub-Issues", "Solve-GitHub-Issue", ...],
+            "message": "No procedure named 'Triage- GitHub- Issues' exists. "
+                       "Closest matches: ... Call execute_procedure with one "
+                       "of these exact names, or reply 'proceed' to abandon "
+                       "the procedure and answer directly.",
+            "proceed_keyword": "proceed",
+        }
+
+    Args:
+        proc_name: The (possibly mangled) procedure name the model passed.
+        user_message: The current user turn's text (intent match cue).
+        proc_index: The stem -> {path, frontmatter} map from
+            ``procedure_tracker.get_procedure_index()``.
+        k: Number of candidates to return (default 5).
+    """
+    if not proc_name or not proc_index:
+        return None
+    # Exact match — the name resolves, no suggestion needed.
+    if proc_name in proc_index:
+        return None
+
+    user_words = _words(user_message) if user_message else set()
+    norm_target = _normalize_name(proc_name)
+
+    scored: list[tuple[float, int, str, dict[str, Any]]] = []
+    for stem, entry in proc_index.items():
+        fm = entry.get("frontmatter") or {}
+        # Skip flagged procedures — they're blocked from execution.
+        if str(fm.get("status", "")).strip().lower() == "flagged":
+            continue
+        # Name similarity: difflib ratio on normalized names.
+        name_sim = difflib.SequenceMatcher(
+            None, norm_target, _normalize_name(stem)
+        ).ratio()
+        # Intent overlap: trigger list + when_to_use/description vs message.
+        triggers = fm.get("trigger") or []
+        if isinstance(triggers, str):
+            triggers = [triggers]
+        intent = _trigger_overlap(user_words, triggers)
+        for field in ("when_to_use", "description"):
+            v = fm.get(field)
+            if isinstance(v, str) and v:
+                intent = max(intent, len(user_words & _words(v)))
+        scored.append((name_sim, intent, stem, entry))
+
+    if not scored:
+        return None
+
+    # Sort by name similarity (primary) then intent overlap (tiebreak).
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    top = scored[:k]
+
+    # Minimum floor: if the best name similarity is too low, the mangled
+    # name is probably a hallucination, not a typo — don't suggest.
+    if top[0][0] < 0.4:
+        return None
+
+    candidates = [stem for _, _, stem, _ in top]
+    best_stem = candidates[0]
+    best_desc = (top[0][3].get("frontmatter") or {}).get("description", "")
+
+    msg = (
+        f"No procedure named '{proc_name}' exists. Closest matches: "
+        + ", ".join(candidates)
+        + ". Call execute_procedure with one of these exact names, or reply "
+        "'proceed' to abandon the procedure and answer directly."
+    )
+
+    return {
+        "procedure_suggestion": best_stem,
+        "candidates": candidates,
+        "description": best_desc,
         "message": msg,
         "proceed_keyword": "proceed",
     }
