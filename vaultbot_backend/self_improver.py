@@ -581,11 +581,54 @@ class SelfImprover:
     # --- tool_create -----------------------------------------------------
 
     def tool_create(
-        self, tool_name: str, description: str, parameters: dict[str, Any], code: str
+        self,
+        tool_name: str,
+        description: str,
+        parameters: dict[str, Any],
+        code: str,
+        doc_source: str | None = None,
     ) -> dict[str, Any]:
         """Create a new tool file in custom_tools/, load it, and register it.
         `code` must define a `run(args: dict) -> dict` function.
-        Returns the new tool's schema if it loaded successfully."""
+        Returns the new tool's schema if it loaded successfully.
+
+        SECURITY GATE (issue #228): agent-authored tool code that imports
+        exfiltration/escape primitives (network, raw OS/process, dynamic import)
+        is rejected unless a `doc_source` is provided. The curated custom_tools/
+        fleet is committed and trusted, so it never passes through this gate —
+        only tools the agent authors at runtime are checked. See
+        custom_tool_gate.py for the model and the residual-risk note."""
+        import custom_tool_gate
+
+        gated = custom_tool_gate.gate_agent_tool_code(code, BACKEND_DIR, doc_source)
+        if gated["status"] == "rejected":
+            self._log(
+                "custom_tool_create_blocked",
+                {
+                    "tool_name": tool_name,
+                    "dangerous_imports": gated["dangerous_imports"],
+                },
+            )
+            return {
+                "status": "rejected",
+                "tool_name": tool_name,
+                "dangerous_imports": gated["dangerous_imports"],
+                "error": gated["error"],
+                "hint": gated["hint"],
+            }
+        if doc_source and gated.get("dangerous_imports"):
+            # A doc_source was provided to allow a dangerous import — log it so
+            # the operator can review the agent's intent. This is NOT a silent
+            # pass: it is a recorded, reviewable exception.
+            self._log(
+                "custom_tool_create_doc_sourced",
+                {
+                    "tool_name": tool_name,
+                    "dangerous_imports": gated["dangerous_imports"],
+                    "doc_source": doc_source,
+                },
+            )
+
         safe = self._safe_name(tool_name)
         file_path = CUSTOM_TOOLS_DIR / f"{safe}.py"
         # Wrap the agent's code with a SCHEMA header so it self-registers.
