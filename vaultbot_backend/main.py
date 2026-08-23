@@ -1103,6 +1103,17 @@ try:
     # The lazy rebuild in chat_handler._run_procedure_direct stays as a
     # safety net for procedures created/edited mid-session.
     procedure_tracker._stem_index = _proc_idx
+    # Build the procedure first-tool index for the suggestion gate
+    # (procedure_suggestion_gate.py). Cheap single parse pass over every
+    # procedure note; cached on Services so the gate fires on the first
+    # tool call of the first turn, not only after a procedure is run.
+    try:
+        from procedure_first_tool_index import build_first_tool_index
+
+        svc.first_tool_index = build_first_tool_index(_proc_idx)
+    except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
+        default_session_logger.log("first_tool_index_failed", {"error": str(e)})
+        svc.first_tool_index = None
 except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
     default_session_logger.log("procedure_status_index_failed", {"error": str(e)})
 
