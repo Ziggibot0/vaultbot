@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Walk all procedure .md files, extract the custom_tools and run_procedure references, and map each procedure to the backend source files it depends on. Writes vaultbot/Knowledge/Architecture/Procedure-Code-Map.md."

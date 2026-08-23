@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Pre-flight checklist for the Dev-Cycle. Verifies git is configured, gh CLI is authenticated, required env vars are set, working tree is clean, and the repo is on main. Returns a structured pass/fail report."

@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Back up ALL personal vault content (gitignored procedures, memories, chat logs, knowledge notes, build logs) to a private GitHub repo. Uses a separate 'personal' remote and a 'personal-backup' branch so the public repo never sees the files. The .gitignore protects the public repo; this procedure force-adds to the private repo only."

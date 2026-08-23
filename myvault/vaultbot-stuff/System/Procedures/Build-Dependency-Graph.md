@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Walk all backend .py files with ast, extract import dependencies, and build a forward/reverse dependency graph. Writes vaultbot/Knowledge/Architecture/Dependency-Graph.md. Deterministic AST walk — no LLM, no embeddings."

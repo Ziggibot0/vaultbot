@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Run the CI hard gates locally: ruff check, ruff format --check, and pytest unit tests. Mirrors the gates in .github/workflows/ci.yml and the preflight in submit_contribution.py. Returns a structured pass/fail dict for each gate."

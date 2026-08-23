@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Given a file path or module name, traverse the dependency graph and procedure-code map to predict which other modules and procedures would be affected by a change. Returns a structured JSON impact report."

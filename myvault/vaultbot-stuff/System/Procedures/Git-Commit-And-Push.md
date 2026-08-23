@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: false
+baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Stage, commit, and push changes to the current branch. Refuses to push to main/master. Uses conventional commit format. Can amend the previous commit if args.amend is true (for iterative CI fixes on the same PR)."
