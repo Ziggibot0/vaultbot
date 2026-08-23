@@ -550,6 +550,16 @@ async def run_agentic_loop(
                             except (json.JSONDecodeError, TypeError):
                                 _tr = {}
                             break
+                    # A procedure-suggestion result is a *nudge*, not a write
+                    # attempt. The gate intercepted the raw call and returned a
+                    # suggestion dict (procedure_suggestion / proceed_keyword)
+                    # instead of executing it. Counting that as a failed write
+                    # pollutes the anti-thrash counter and can trip the
+                    # failed_write_streak break on a legitimate turn. Skip it.
+                    if isinstance(_tr, dict) and (
+                        "procedure_suggestion" in _tr or "proceed_keyword" in _tr
+                    ):
+                        continue
                     if not _tool_actually_wrote(_tn, _tr):
                         st._turn_failed_write_count += 1
                         _round_failed_write = True
