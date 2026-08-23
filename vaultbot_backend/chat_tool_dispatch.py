@@ -27,7 +27,10 @@ from chat_helpers import (
 )
 from chat_preflight import check_cancelled, dispatch_procedure_core
 from fastapi import WebSocket
-from procedure_suggestion_gate import check_procedure_suggestion
+from procedure_suggestion_gate import (
+    check_procedure_name_suggestion,
+    check_procedure_suggestion,
+)
 from services import Services
 from weaving import weave_textbook_notes
 from working_memory import TaskList
@@ -754,6 +757,29 @@ async def execute_agent_tool(
                     "procedure_blocked",
                     {"procedure": proc_name, "status": core.get("status", "unknown")},
                 )
+            # ── Procedure name-miss suggestion (issue #337) ──────────
+            # The model called execute_procedure with a name that doesn't
+            # resolve (typo, extra spaces, hallucination). Return a top-k
+            # list of the closest real procedure names so it can SELECT an
+            # exact name instead of re-generating one from memory. This is
+            # the "procedure suggestion" the gate is named for — it fires on
+            # the procedure tool itself, not on raw tools.
+            if str(core.get("error", "")).startswith("procedure not found:"):
+                _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
+                if isinstance(_proc_idx, dict) and _proc_idx:
+                    _name_sug = check_procedure_name_suggestion(
+                        proc_name, user_message, _proc_idx
+                    )
+                    if _name_sug is not None:
+                        session_logger.log(
+                            "procedure_name_suggestion",
+                            {
+                                "procedure": proc_name,
+                                "candidates": _name_sug.get("candidates", []),
+                                "user_message": user_message[:200],
+                            },
+                        )
+                        return _name_sug
             return core
 
         result = core["result"]

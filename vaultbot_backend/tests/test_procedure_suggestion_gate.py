@@ -17,7 +17,10 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from procedure_first_tool_index import _extract_first_tools, build_first_tool_index
-from procedure_suggestion_gate import check_procedure_suggestion
+from procedure_suggestion_gate import (
+    check_procedure_name_suggestion,
+    check_procedure_suggestion,
+)
 
 # ── _extract_first_tools ─────────────────────────────────────────────────
 
@@ -260,3 +263,89 @@ def test_build_index_skips_procedures_with_no_first_tool():
     }
     idx = build_first_tool_index(proc_index)
     assert idx == {}
+
+
+# ── check_procedure_name_suggestion ─────────────────────────────────────
+
+
+def _proc_index_entry(description="", status="", trigger=None, when_to_use=""):
+    fm: dict = {}
+    if description:
+        fm["description"] = description
+    if status:
+        fm["status"] = status
+    if trigger:
+        fm["trigger"] = trigger
+    if when_to_use:
+        fm["when_to_use"] = when_to_use
+    return {"path": "", "frontmatter": fm}
+
+
+def test_name_suggestion_returns_none_on_exact_match():
+    idx = {"Triage-GitHub-Issues": _proc_index_entry()}
+    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", "any", idx)
+    assert sug is None
+
+
+def test_name_suggestion_recovers_mangled_name():
+    idx = {
+        "Triage-GitHub-Issues": _proc_index_entry(
+            description="Triage open GitHub issues by urgency.",
+            trigger=["triage github issues"],
+        ),
+        "Solve-GitHub-Issue": _proc_index_entry(
+            description="Solve a GitHub issue and open a PR.",
+            trigger=["solve github issue"],
+        ),
+    }
+    sug = check_procedure_name_suggestion(
+        "Triage- GitHub- Issues", "are you sure that's still open?", idx
+    )
+    assert sug is not None
+    assert sug["procedure_suggestion"] == "Triage-GitHub-Issues"
+    assert "Triage-GitHub-Issues" in sug["candidates"]
+    assert "proceed" in sug["message"]
+    assert sug["proceed_keyword"] == "proceed"
+
+
+def test_name_suggestion_returns_top_k_candidates():
+    idx = {
+        f"Proc-{i}": _proc_index_entry(description=f"procedure number {i}")
+        for i in range(10)
+    }
+    # "Proc- 3" (extra space) is NOT an exact match, but normalizes to the
+    # same key as "Proc-3" -> should rank it first among the top-k.
+    sug = check_procedure_name_suggestion("Proc- 3", "do something", idx, k=5)
+    assert sug is not None
+    assert len(sug["candidates"]) == 5
+    assert sug["candidates"][0] == "Proc-3"
+
+
+def test_name_suggestion_skips_flagged():
+    idx = {
+        "Triage-GitHub-Issues": _proc_index_entry(status="flagged"),
+    }
+    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", "any", idx)
+    # Exact name matches but it's flagged -> still returns None (no suggestion
+    # for a blocked procedure; the caller's status gate handles the block).
+    assert sug is None
+
+
+def test_name_suggestion_no_fire_when_too_dissimilar():
+    idx = {
+        "Triage-GitHub-Issues": _proc_index_entry(description="triage issues"),
+    }
+    # A completely unrelated hallucinated name -> below similarity floor.
+    sug = check_procedure_name_suggestion("Zzzz-Qqqq-Wwww", "any", idx)
+    assert sug is None
+
+
+def test_name_suggestion_no_fire_when_index_empty():
+    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", "any", {})
+    assert sug is None
+
+
+def test_name_suggestion_no_fire_when_name_empty():
+    idx = {"Triage-GitHub-Issues": _proc_index_entry()}
+    sug = check_procedure_name_suggestion("", "any", idx)
+    assert sug is None
