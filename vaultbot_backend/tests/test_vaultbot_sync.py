@@ -134,7 +134,7 @@ def test_sync_to_latest_tag(monkeypatch):
             (True, "origin\nupstream\n", ""),  # remote
             (True, "Fetching upstream\n", ""),  # fetch
             (True, "main\n", ""),  # branch --show-current
-            (True, "v0.2.0\n", ""),  # describe --tags
+            (True, "v0.3.0\n", ""),  # describe --tags
             (True, "3\n", ""),  # rev-list count (3 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (True, "Merge made\n", ""),  # merge
@@ -150,9 +150,9 @@ def test_sync_to_latest_tag(monkeypatch):
     )
     result = vs.run({})
     assert result["status"] == "success"
-    assert "v0.2.0" in result["target"]
+    assert "v0.3.0" in result["target"]
     assert "stable" in result["target"]
-    assert result["merge_ref"] == "v0.2.0"
+    assert result["merge_ref"] == "v0.3.0"
     assert result["commits_pulled"] == 3
     assert len(result["new_commits"]) == 3
     assert result["previous_head"] == "abc123"
@@ -266,7 +266,7 @@ def test_merge_conflict_reports_files(monkeypatch):
             (True, "origin\nupstream\n", ""),  # remote
             (True, "Fetching upstream\n", ""),  # fetch
             (True, "main\n", ""),  # branch --show-current
-            (True, "v0.2.0\n", ""),  # describe --tags
+            (True, "v0.3.0\n", ""),  # describe --tags
             (True, "3\n", ""),  # rev-list count (3 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (False, "Auto-merge failed\n", "conflict in file.py"),  # merge fails
@@ -295,7 +295,7 @@ def test_fork_sync_failure_does_not_fail_sync(monkeypatch):
             (True, "origin\nupstream\n", ""),  # remote
             (True, "Fetching upstream\n", ""),  # fetch
             (True, "main\n", ""),  # branch --show-current
-            (True, "v0.2.0\n", ""),  # describe --tags --abbrev=0
+            (True, "v0.3.0\n", ""),  # describe --tags --abbrev=0
             (True, "1\n", ""),  # rev-list count (1 behind)
             (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
             (True, "Merge made\n", ""),  # merge
