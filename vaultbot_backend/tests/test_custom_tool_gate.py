@@ -17,6 +17,7 @@ pytestmark = pytest.mark.unit
 
 # ── Direct gate tests ────────────────────────────────────────────────────
 
+
 def test_gate_rejects_os_import_without_doc_source(tmp_path):
     import custom_tool_gate as g
 
@@ -87,9 +88,10 @@ def test_gate_does_not_flag_internal_vaultbot_modules(tmp_path):
 
 # ── tool_create integration tests ────────────────────────────────────────
 
+
 def _make_improver(tmp_path, monkeypatch):
-    from self_improver import SelfImprover
     import self_improver as si_mod
+    from self_improver import SelfImprover
 
     custom_dir = tmp_path / "custom_tools"
     custom_dir.mkdir()
@@ -98,7 +100,8 @@ def _make_improver(tmp_path, monkeypatch):
     improver.session_logger = MagicMock()
     monkeypatch.setattr(si_mod, "CUSTOM_TOOLS_DIR", custom_dir)
     monkeypatch.setattr(
-        SelfImprover, "_safe_name",
+        SelfImprover,
+        "_safe_name",
         staticmethod(lambda name: name.replace(" ", "_").lower()),
     )
     monkeypatch.setattr(SelfImprover, "load_custom_tools", lambda self: None)
