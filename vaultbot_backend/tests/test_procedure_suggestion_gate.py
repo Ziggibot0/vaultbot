@@ -19,7 +19,6 @@ pytestmark = pytest.mark.unit
 from procedure_first_tool_index import _extract_first_tools, build_first_tool_index
 from procedure_suggestion_gate import check_procedure_suggestion
 
-
 # ── _extract_first_tools ─────────────────────────────────────────────────
 
 
