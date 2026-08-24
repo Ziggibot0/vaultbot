@@ -105,15 +105,13 @@ SCHEMA = {
             "summary": {
                 "type": "string",
                 "description": (
-                    "Event summary/title "
-                    "(calendar_create, calendar_update)."
+                    "Event summary/title (calendar_create, calendar_update)."
                 ),
             },
             "event_id": {
                 "type": "string",
                 "description": (
-                    "Google Calendar event ID "
-                    "(calendar_update, calendar_delete)."
+                    "Google Calendar event ID (calendar_update, calendar_delete)."
                 ),
             },
             "location": {
@@ -383,9 +381,7 @@ def _list_event_conflicts(token, calendar_id, start, end, ignore_event_id=""):
             "maxResults": 50,
         }
     )
-    url = (
-        f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events?{params}"
-    )
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events?{params}"
     result = _api_request("GET", url, token)
     if "error" in result:
         return {"error": result["error"]}
@@ -761,11 +757,15 @@ def run(args: dict) -> dict:
             local_end = datetime.combine(parsed.date(), dt_time.max)
             utc_offset = _time.timezone if _time.daylight == 0 else _time.altzone
             tz = timezone(timedelta(seconds=-utc_offset))
-            time_min = local_start.replace(tzinfo=tz).astimezone(UTC).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
+            time_min = (
+                local_start.replace(tzinfo=tz)
+                .astimezone(UTC)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
             )
-            time_max = local_end.replace(tzinfo=tz).astimezone(UTC).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
+            time_max = (
+                local_end.replace(tzinfo=tz)
+                .astimezone(UTC)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
             )
 
         if not time_min or not time_max:
@@ -783,11 +783,7 @@ def run(args: dict) -> dict:
         if "error" in result:
             return result
 
-        busy = (
-            result.get("calendars", {})
-            .get(calendar_id, {})
-            .get("busy", [])
-        )
+        busy = result.get("calendars", {}).get(calendar_id, {}).get("busy", [])
         return {
             "calendar_id": calendar_id,
             "time_min": time_min,
