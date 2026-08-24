@@ -243,6 +243,106 @@ class SessionLogger:
         except Exception as e:  # noqa: BLE001 — token tracking is observability; a failure must not crash the chat loop, but it MUST be visible
             print(f"[SessionLogger] add_token_usage failed: {e}")
 
+    # ── Per-turn orchestration attribution ───────────────────────────────
+
+    def log_route_decision(
+        self,
+        route: str,
+        confidence: float,
+        reason: str,
+        *,
+        turn_index: int | None = None,
+    ) -> None:
+        """Emit a ``route_decision`` event for one turn.
+
+        ``route`` must be one of ``deterministic``, ``small_model``,
+        ``procedure``, or ``big_model``.  ``confidence`` is a float in
+        [0, 1].  ``reason`` is a short reason code (e.g.
+        ``action_signal``, ``clarification_or_explanation``,
+        ``mixed_or_unsettled``).
+
+        Never raises — routing attribution is observability-only and must
+        not crash the chat loop.
+        """
+        try:
+            data: dict[str, Any] = {
+                "route": route,
+                "confidence": round(float(confidence), 4),
+                "reason": reason,
+            }
+            if turn_index is not None:
+                data["turn_index"] = turn_index
+            self.log("route_decision", data)
+        except Exception as e:  # noqa: BLE001 — observability; must not crash the loop
+            print(f"[SessionLogger] log_route_decision failed: {e}")
+
+    def log_turn_cost(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        *,
+        tool_latency_ms: float = 0.0,
+        cost_usd: float | None = None,
+        model: str | None = None,
+        turn_index: int | None = None,
+    ) -> None:
+        """Emit a ``turn_cost`` event with token counts and estimated cost.
+
+        ``tool_latency_ms`` is the sum of all tool-call durations for
+        this turn.  ``cost_usd`` is an optional pre-computed estimate
+        (e.g. from a configurable per-token rate); when ``None`` it is
+        omitted from the event so callers are not forced to implement
+        billing logic.
+
+        Never raises.
+        """
+        try:
+            data: dict[str, Any] = {
+                "prompt_tokens": int(prompt_tokens or 0),
+                "completion_tokens": int(completion_tokens or 0),
+                "total_tokens": int((prompt_tokens or 0) + (completion_tokens or 0)),
+                "tool_latency_ms": round(float(tool_latency_ms or 0.0), 2),
+            }
+            if cost_usd is not None:
+                data["cost_usd"] = round(float(cost_usd), 8)
+            if model is not None:
+                data["model"] = model
+            if turn_index is not None:
+                data["turn_index"] = turn_index
+            self.log("turn_cost", data)
+        except Exception as e:  # noqa: BLE001 — observability; must not crash the loop
+            print(f"[SessionLogger] log_turn_cost failed: {e}")
+
+    def log_turn_efficiency(
+        self,
+        tool_rounds: int,
+        completion_outcome: str,
+        *,
+        repeated_tool_calls: list[str] | None = None,
+        turn_index: int | None = None,
+    ) -> None:
+        """Emit a ``turn_efficiency`` event.
+
+        ``tool_rounds`` is the number of LLM→tool round-trips in this
+        turn.  ``completion_outcome`` is a short outcome label such as
+        ``success``, ``fallback``, ``error``, or ``truncated``.
+        ``repeated_tool_calls`` is an optional list of tool names that
+        were called more than once (signals routing inefficiency).
+
+        Never raises.
+        """
+        try:
+            data: dict[str, Any] = {
+                "tool_rounds": int(tool_rounds or 0),
+                "completion_outcome": completion_outcome,
+                "repeated_tool_calls": list(repeated_tool_calls or []),
+            }
+            if turn_index is not None:
+                data["turn_index"] = turn_index
+            self.log("turn_efficiency", data)
+        except Exception as e:  # noqa: BLE001 — observability; must not crash the loop
+            print(f"[SessionLogger] log_turn_efficiency failed: {e}")
+
     def log_tool_call(
         self,
         tool: str,
