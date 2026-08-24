@@ -383,11 +383,15 @@ def _list_event_conflicts(token, calendar_id, start, end, ignore_event_id=""):
     )
     url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events?{params}"
     result = _api_request("GET", url, token)
+    if not isinstance(result, dict):
+        return {"error": "Unexpected response type from Google Calendar API."}
     if "error" in result:
         return {"error": result["error"]}
 
     conflicts = []
     for ev in result.get("items", []):
+        if not isinstance(ev, dict):
+            continue
         if ev.get("id") == ignore_event_id:
             continue
         conflicts.append(

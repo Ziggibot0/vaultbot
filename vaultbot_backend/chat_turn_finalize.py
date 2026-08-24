@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from chat_loop_state import TurnState
@@ -129,6 +130,11 @@ async def finalize_turn(
         },
     )
 
+    # finalize_turn is called from handle_chat with a live TurnState, but keep
+    # a defensive fallback for type-safety and tests that may call it directly.
+    if st is None:
+        st = TurnState()
+
     # --- Grounding enforcement: closed-set citation gate ----------------
     # The big LLM is a synthesis router. Its answer must cite notes from
     # the per-turn allowed-citations set (st._allowed_citations), built
@@ -152,7 +158,7 @@ async def finalize_turn(
     _is_temporal = bool(getattr(st, "_is_temporal_question", False))
     _is_coaching = bool(getattr(st, "_is_coaching_turn", False))
     _is_conversational = False
-    _graph_lookup = None
+    _graph_lookup: Callable[[str], bool] | None = None
     # Tool-sourced answer detection (issue #132): when the turn's facts
     # came from LIVE tool calls (calendar, code_read, github_issues, etc.)
     # rather than vault retrieval, the answer is grounded in the tool's
@@ -165,10 +171,8 @@ async def finalize_turn(
     try:
 
         def _graph_lookup(_wl):
-            return bool(
-                svc.vault_graph.get_note(_wl)
-                and svc.vault_graph.get_note(_wl).get("file_path")
-            )
+            note = svc.vault_graph.get_note(_wl)
+            return bool(isinstance(note, dict) and note.get("file_path"))
 
     except Exception:  # noqa: BLE001 — best-effort
         _graph_lookup = None
