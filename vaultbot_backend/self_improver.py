@@ -512,10 +512,12 @@ class SelfImprover:
             venv_python = sys.executable
 
         # Prepend the read-only guard unless the caller explicitly opted out.
+        # (issues #207 + #229: blocks writes, network egress, and reads of
+        # secret files like .env / providers.json inside the repo root.)
         if not allow_write:
             from code_run_guard import build_guard_preamble
 
-            code = build_guard_preamble() + "\n" + code
+            code = build_guard_preamble(str(BACKEND_ROOT)) + "\n" + code
 
         out_path = err_path = None
         try:
