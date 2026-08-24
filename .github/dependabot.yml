@@ -5,7 +5,18 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # The `dependencies` label lets the auto-merge workflow (and humans)
+    # identify these PRs at a glance. Patch/minor bumps are auto-merged
+    # once CI + code-owner review pass; major bumps stay manual.
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"

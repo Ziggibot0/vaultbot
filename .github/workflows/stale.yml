@@ -1,0 +1,40 @@
+# Stale-issue/PR hygiene — labels then closes dead issues and PRs so the
+# tracker doesn't become a graveyard the maintenance agent has to wade
+# through. Exempts security, pinned, and heartbeat issues (those are the
+# ones that MUST stay visible).
+name: Stale
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-issue-stale: 60
+          days-before-issue-close: 14
+          days-before-pr-stale: 45
+          days-before-pr-close: 7
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          exempt-issue-labels: "pinned,security,maintenance-heartbeat,good first issue"
+          exempt-pr-labels: "pinned,security"
+          stale-issue-message: >
+            This issue has been idle for 60 days and will be closed in 14 days
+            if there's no further activity. If it's still relevant, comment to
+            keep it open.
+          close-issue-message: >
+            Closed after 14 days of inactivity. Reopen if still relevant.
+          stale-pr-message: >
+            This PR has been idle for 45 days and will be closed in 7 days if
+            there's no further activity.
+          close-pr-message: >
+            Closed after 7 days of inactivity.

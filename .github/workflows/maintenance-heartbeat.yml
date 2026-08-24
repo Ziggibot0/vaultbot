@@ -1,0 +1,78 @@
+# Daily maintenance heartbeat — runs the fast, high-signal gates on `main`
+# even when no PR is open, so drift from upstream deps, bit-rot, and
+# "silent feature death" (the 2026-07-30 audit's exact failure mode) get
+# caught within 24h instead of weeks later.
+#
+# This is deliberately LIGHTER than ci.yml: a single Python version and the
+# three gates most likely to drift on their own (ruff, unit tests, and the
+# CVE audit). The full 4-version matrix still runs on every PR/push.
+#
+# On failure it opens ONE issue (deduped by label) so the cloud agent has a
+# concrete, discoverable thing to fix — this is the "perpetual maintenance"
+# loop's trigger.
+name: Maintenance heartbeat
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  heartbeat:
+    name: ruff + unit tests + CVE audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
+
+      - name: Ruff check (HARD GATE)
+        run: uv run ruff check vaultbot_backend/
+
+      - name: Pytest — unit tests (HARD GATE)
+        working-directory: vaultbot_backend
+        env:
+          VAULTBOT_SKIP_LOCK: "1"
+          VAULTBOT_SKIP_WATCHER: "1"
+          VAULT_PATH: ${{ github.workspace }}/myvault
+        run: |
+          mkdir -p "$VAULT_PATH/vaultbot-stuff/Memory/Chat"
+          mkdir -p "$VAULT_PATH/vaultbot-stuff/Knowledge"
+          mkdir -p "$VAULT_PATH/vaultbot-stuff/System"
+          uv run pytest -q -m "unit" --tb=short
+
+      - name: Dependency vulnerability audit (pip-audit)
+        run: uv run pip-audit -r vaultbot_backend/requirements.txt --strict
+
+      - name: Open issue on failure (deduped)
+        if: failure()
+        run: |
+          if gh issue list --label "maintenance-heartbeat" --state open --json number | grep -q '"number"'; then
+            echo "Heartbeat issue already open; skipping duplicate."
+          else
+            gh issue create \
+              --title "Maintenance heartbeat failed" \
+              --label "maintenance-heartbeat" \
+              --body "The daily maintenance heartbeat failed on \`main\`.
+
+              Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+              This is the self-maintenance loop's trigger — a cloud agent should
+              investigate and open a fix PR."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
