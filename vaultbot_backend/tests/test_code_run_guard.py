@@ -79,6 +79,16 @@ class TestCodeRunReadOnlyGuard:
         assert result.get("exit_code") == 0
         assert target.exists()
 
+    def test_truncation_metadata_is_returned(self, improver):
+        result = improver.code_run("print('x' * 5000)")
+        assert result.get("exit_code") == 0
+        assert "stdout_head" in result
+        assert "stdout_tail" in result
+        assert "stdout_total_bytes" in result
+        assert "stdout_total_lines" in result
+        assert "truncated" in result
+        assert result["truncated"] is False or result["stdout_total_bytes"] > 0
+
 
 class TestCodeRunNetworkIsolation:
     """issue #229: code_run must not be able to open the network."""
