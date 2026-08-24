@@ -13,6 +13,7 @@ from citation_gate import (
     build_reprimand,
     build_sources_block,
     build_trust_badge,
+    detect_conversational,
     detect_temporal_question,
     extract_wikilinks,
     score_grounding,
@@ -41,6 +42,44 @@ class TestDetectTemporalQuestion:
 
     def test_case_insensitive(self):
         assert detect_temporal_question("WHAT WERE WE WORKING ON LAST?") is True
+
+
+class TestDetectConversational:
+    def test_short_greeting(self):
+        assert detect_conversational("Hey Sean! I'm here and ready.") is True
+
+    def test_sup_homie(self):
+        assert detect_conversational("sup homie") is True
+
+    def test_short_no_punctuation(self):
+        assert detect_conversational("hi") is True
+
+    def test_long_answer_not_conversational(self):
+        # >200 chars -> substantive multi-claim answer, not casual.
+        long = (
+            "This is a substantive multi-claim answer that explains how the "
+            "grounding gate works and why short greetings should be exempted "
+            "from the redundant re-citation retry. It goes on for a while and "
+            "makes several distinct factual points that need vault grounding. "
+            "There is more than one sentence here. And yet another one."
+        )
+        assert detect_conversational(long) is False
+
+    def test_short_with_multiple_sentence_marks_still_conversational(self):
+        # Short AND has punctuation marks -> still casual (length is the signal).
+        assert detect_conversational("First claim. Second claim.") is True
+
+    def test_empty(self):
+        assert detect_conversational("") is False
+        assert detect_conversational(None) is False
+
+    def test_custom_max_len(self):
+        assert detect_conversational("a" * 300, max_len=400) is True
+        assert detect_conversational("a" * 500, max_len=400) is False
+
+    def test_greeting_with_wikilink_still_conversational(self):
+        # A short greeting that cites a chat-log note is still conversational.
+        assert detect_conversational("Hey Sean [[Chat-yo]]") is True
 
 
 class TestExtractWikilinks:
