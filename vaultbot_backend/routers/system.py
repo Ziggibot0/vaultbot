@@ -366,30 +366,12 @@ async def health(svc: Annotated[Services, Depends(get_services)]) -> dict[str, A
         ollama_ok = False
     extra = {
         "ollama": ollama_ok,
-        "autonomous_enabled": svc.autonomous_researcher.enabled,
-        "autonomous_running": bool(
-            svc.autonomous_researcher._thread
-            and svc.autonomous_researcher._thread.is_alive()
-        ),
         "index_vectors": svc.vault_indexer.index.ntotal
         if svc.vault_indexer.index
         else 0,
         "graph_nodes": len(svc.vault_graph.nodes),
     }
-    result = svc.health_monitor.health(extra=extra)
-    # If the researcher thread is alive but the heartbeat is stale for
-    # more than 3x the cycle interval, the researcher is likely stuck
-    # in a long operation (web request, LLM call) or hung. Surface this
-    # so the operator knows the researcher isn't actually making progress.
-    if extra["autonomous_running"] and not result["ok"]:
-        interval = svc.autonomous_researcher.interval_seconds
-        if result.get("last_heartbeat_age_s", 0) > interval * 3:
-            result["researcher_stuck"] = True
-            result["researcher_stuck_reason"] = (
-                f"heartbeat stale for {result['last_heartbeat_age_s']}s "
-                f"(cycle interval: {interval}s)"
-            )
-    return result
+    return svc.health_monitor.health(extra=extra)
 
 
 @router.get("/ollama/stats")
@@ -515,32 +497,6 @@ async def reload_plugin_endpoint(svc: Annotated[Services, Depends(get_services)]
             "(disable + re-enable). Backend stays running."
         ),
     }
-
-
-# --- /checkpoints: crash-recovery status --------------------------------
-
-
-@router.get("/checkpoints")
-async def checkpoint_status(
-    svc: Annotated[Services, Depends(get_services)],
-) -> dict[str, Any]:
-    """Return the autonomous researcher's checkpoint state so the UI can
-    show whether there's interrupted work to resume after a crash.
-    """
-    return svc.checkpointer.summary()
-
-
-@router.post("/checkpoints/recover")
-async def recover_checkpoints(svc: Annotated[Services, Depends(get_services)]):
-    """Manually trigger recovery of any interrupted research work."""
-    try:
-        loop = asyncio.get_event_loop()
-        recovery = await loop.run_in_executor(
-            None, svc.checkpointer.recover, svc.autonomous_researcher
-        )
-        return recovery
-    except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-        return {"error": str(e)}, 500
 
 
 @router.get("/supervision/nssm")

@@ -22,9 +22,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from amem_evolution import AMemeEvolution
-    from autonomous_researcher import AutonomousResearcher
     from calibration import CalibrationTracker
-    from checkpointer import Checkpointer
     from claim_verifier import ClaimVerifier
     from context_budgeter import ContextBudgeter
     from embedding_drift import EmbeddingDrift
@@ -78,9 +76,7 @@ class Services:
     # Research
     research_engine: ResearchEngine
     search_client: FreeSearch
-    autonomous_researcher: AutonomousResearcher
     knowledge_curriculum: KnowledgeCurriculum
-    checkpointer: Checkpointer
     procedure_tracker: ProcedureTracker
     # Self-improvement + identity
     self_improver: SelfImprover

@@ -467,8 +467,12 @@ async def execute_agent_tool(
         return await loop.run_in_executor(None, _read_note_by_title)
 
     if tool_name == "vault_gaps":
-        gaps = await loop.run_in_executor(
-            None, svc.autonomous_researcher._identify_gaps
+        gaps = await run_with_heartbeat(
+            svc,
+            websocket,
+            "finding gaps",
+            svc.knowledge_curriculum.propose_next_gaps,
+            10,
         )
         return {"gaps": gaps[:20], "count": len(gaps)}
 
@@ -513,7 +517,17 @@ async def execute_agent_tool(
         return await loop.run_in_executor(None, _do_export)
 
     if tool_name == "vaultbot_status":
-        return svc.autonomous_researcher.status()
+        return {
+            "running": True,
+            "research": "on-demand only",
+            "tools": [
+                "vault_search",
+                "vault_research",
+                "vault_gaps",
+                "execute_procedure",
+            ],
+            "gaps_count": len(svc.knowledge_curriculum.propose_next_gaps() or []),
+        }
 
     if tool_name == "read_session_log":
         # Read VaultBot's own session logs (issue #134). Wraps
