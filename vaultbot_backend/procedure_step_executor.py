@@ -233,6 +233,7 @@ def _run_llm_step(
     step: Step,
     prior_results: dict[float, str],
     llm_client: Any = None,
+    procedure_args: dict | None = None,
 ) -> tuple[bool, str, str | None]:
     """Execute an LLM step via the cartridge-selected client with minimal context.
 
@@ -252,11 +253,32 @@ def _run_llm_step(
     if step.llm_instruction is None:
         return False, "", "LLM step has no instruction"
 
+    llm_instruction = step.llm_instruction
+    for key, value in (procedure_args or {}).items():
+        llm_instruction = llm_instruction.replace(
+            "{{ " + str(key) + " }}",
+            str(value),
+        ).replace(
+            "{{" + str(key) + "}}",
+            str(value),
+        )
+
     # Build minimal context from prior results
     prior_context = ""
     if prior_results:
         prior_lines = []
         for num, out in prior_results.items():
+            # prior_results values are step outputs (usually JSON strings),
+            # but a code step may stash a non-string (e.g. an int issue
+            # number or a dict) in prior_results. Coerce to str before
+            # slicing — a bare `out[:2000]` crashes with
+            # `'int' object is not subscriptable` (see Dev-Cycle Step 3
+            # stashing selected_issue_number as an int).
+            if not isinstance(out, str):
+                try:
+                    out = json.dumps(out, default=str)
+                except Exception:  # noqa: BLE001
+                    out = str(out)
             snippet = out[:2000] + ("..." if len(out) > 2000 else "")
             prior_lines.append(f"Step {num} output:\n{snippet}")
         prior_context = "\n\n".join(prior_lines)
@@ -266,7 +288,7 @@ def _run_llm_step(
         prompt_parts.append("## Prior Step Results\n")
         prompt_parts.append(prior_context)
         prompt_parts.append("\n\n---\n\n")
-    prompt_parts.append(step.llm_instruction)
+    prompt_parts.append(llm_instruction)
 
     prompt = "\n".join(prompt_parts)
 

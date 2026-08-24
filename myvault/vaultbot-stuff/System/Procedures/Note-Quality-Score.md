@@ -16,7 +16,7 @@ allowed_tools:
   - vault_list
   - code_read
   - llm_generate
-summary: Note-Quality-Score
+summary: SUMMARY
 tags:
   - procedure
   - procedures

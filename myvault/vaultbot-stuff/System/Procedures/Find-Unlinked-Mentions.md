@@ -16,7 +16,7 @@ allowed_tools:
   - vault_list
 provides:
   - Pattern-Scan
-summary: Find-Unlinked-Mentions
+summary: SUMMARY
 tags:
   - procedure
   - procedures

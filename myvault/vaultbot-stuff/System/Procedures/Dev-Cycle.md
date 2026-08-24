@@ -2,7 +2,7 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: medium
+model_cartridge: big
 created: 2026-08-22
 description: "The main autonomous dev cycle: sync → triage → pick issue → branch → fix → CI preflight → commit → PR → iterate. Orchestrates all the git/CI/procedure sub-procedures into one loop. Stops when CI passes and the PR is submitted, or after max iterations."
 when_to_use: "When asked to 'work on an issue', 'pick up the next issue', or 'run the dev cycle'. This is the top-level orchestrator."
@@ -108,6 +108,8 @@ if issue_number:
         print(result)
     else:
         title = issue.get("title", f"fix-issue-{issue_number}")
+        prior_results["selected_issue_number"] = issue_number
+        prior_results["selected_issue_title"] = title
         branch_name = f"{args.get('branch_prefix', 'fix')}/issue-{issue_number}"
         branch_result = run_procedure("Git-Create-Branch", {"branch_name": branch_name})
         print(json.dumps({"step": "branch", "issue": issue_number, "title": title, "result": branch_result}, default=str))
@@ -118,14 +120,23 @@ else:
     if isinstance(issues_result, dict) and "error" in issues_result:
         print(json.dumps({"error": f"Failed to list issues: {issues_result}"}, default=str))
     else:
-        # Take the first open issue
-        issues = issues_result if isinstance(issues_result, list) else []
+        # Take the first open issue.
+        # github_issues.list returns a dict with an "issues" list.
+        issues = []
+        if isinstance(issues_result, dict):
+            issues = issues_result.get("issues", [])
+        elif isinstance(issues_result, list):
+            # Backward compatibility with legacy shape.
+            issues = issues_result
+
         if not issues:
             print(json.dumps({"info": "No open issues to work on"}))
         else:
             first = issues[0] if isinstance(issues[0], dict) else {}
             num = first.get("number", "unknown")
             title = first.get("title", "untitled")
+            prior_results["selected_issue_number"] = num
+            prior_results["selected_issue_title"] = title
             branch_name = f"{args.get('branch_prefix', 'fix')}/issue-{num}"
             branch_result = run_procedure("Git-Create-Branch", {"branch_name": branch_name})
             print(json.dumps({"step": "branch", "issue": num, "title": title, "result": branch_result}, default=str))
@@ -166,9 +177,16 @@ only if CI is green and the safety scan passes.
 ```python
 import json
 
-issue_number = args.get("issue_number", "unknown")
-title = f"fix: resolve issue #{issue_number}"
-description = f"Fixes #{issue_number}\n\nAutonomously resolved by VaultBot Dev-Cycle procedure."
+issue_number = args.get("issue_number")
+if not issue_number:
+    issue_number = prior_results.get("selected_issue_number", "unknown")
+
+if str(issue_number).isdigit():
+    title = f"fix: resolve issue #{issue_number}"
+    description = f"Fixes #{issue_number}\n\nAutonomously resolved by VaultBot Dev-Cycle procedure."
+else:
+    title = f"fix: resolve issue {issue_number}"
+    description = "Autonomously resolved by VaultBot Dev-Cycle procedure."
 
 from custom_tools.submit_contribution import run as _submit
 submit_result = _submit({"title": title, "description": description})

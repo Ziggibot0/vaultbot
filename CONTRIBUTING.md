@@ -38,8 +38,9 @@ excludes these, but double-check before pushing:
   SELF_MODEL.md) — these are personal, regenerate per user
 - `vaultbot/learningMaterial/` — the user's PDFs
 
-The `baseline/` folder holds templates; the `vaultbot_backend/identity/`
-folder holds *one user's* live identity. Don't confuse them.
+Curated shippable vault notes are marked with `baseline: true` in their
+frontmatter. The `vaultbot_backend/identity/` folder holds *one user's* live
+identity. Don't confuse the two.
 
 ## Development setup
 
@@ -188,7 +189,7 @@ To accept new inline logic (discouraged), raise the baseline in the same PR.
 
 - Backend source code (`vaultbot/vaultbot_backend/*.py`)
 - The Obsidian plugin (`.obsidian/plugins/vaultbot/`)
-- `vaultbot/baseline/` directive templates
+- `myvault/vaultbot-stuff/System/` notes marked `baseline: true`
 - `README.md`, `CONTRIBUTING.md`, `LICENSE`
 - `providers.example.json` (documents the provider/model registry schema)
 - `vaultbot/.env.example`, `.gitignore`, `pyproject.toml`

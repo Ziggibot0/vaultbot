@@ -174,7 +174,6 @@ with them. The `.gitignore` keeps personal data out of git, and a
 │  │  • vaultbot_backend/*.py    (all backend code)     │   │
 │  │  • System/**/*.md           (baseline: true only)  │   │
 │  │  • .obsidian/plugins/       (plugin source)        │   │
-│  │  • baseline/                (directive templates)   │   │
 │  │  • Root docs                (README, LICENSE, etc) │   │
 │  └──────────────────────────────────────────────────┘   │
 │                                                          │

@@ -470,7 +470,7 @@ async def execute_procedure(
         elif step.step_type == "llm":
             # to_thread keeps the event loop unblocked (see code step above).
             success, output, error = await asyncio.to_thread(
-                _run_llm_step, step, prior_results, llm_client
+                _run_llm_step, step, prior_results, llm_client, procedure_args
             )
             if success:
                 sr = StepResult(

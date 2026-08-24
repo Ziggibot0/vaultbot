@@ -9,7 +9,7 @@ tags:
   - context-management
   - procedures
   - architecture
-summary: Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec
+summary: SUMMARY
 ---
 
 # Sliding-Window-Conversation-Trail-Tools-as-Procedures-Spec
@@ -48,5 +48,4 @@ The spec formalizes what the system already does partially, making it explicit a
 ## Related
 
 - [[Chat-Consolidation]] — implements the compression layer
-- [[Route-Task]] — implements the procedure dispatch layer
 - [[Execution-Loop-Dominance-Pattern]] — the loop that benefits from this architecture

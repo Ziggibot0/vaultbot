@@ -5,7 +5,7 @@ baseline: true
 model_cartridge: small
 created: 2026-08-06
 description: "Build a complete, tested, verified procedure from a task description. This is the one-shot procedure factory: give it a task, get back a working procedure on disk. It composes drafting (LLM step), big-model quality review (code step with llm_generate), vault_safe_write (disk), Verify-Procedure-Args (static checks), vault_lint (link/frontmatter quality), and Test-Procedure-Until-Pass (dynamic test→fix→retest loop). The result is a procedure that has been drafted, reviewed, written, statically verified, dynamically tested, auto-fixed if broken, and linted. It also inventories the existing procedure library and composes pre-existing procedures (via run_procedure + provides) with new glue steps, so complex procedures are built by orchestration rather than reinvention. Use this whenever you need a new procedure — it replaces the manual draft→review→write→test→fix→lint workflow with a single call."
-when_to_use: "When the user says 'make a procedure for X', when you identify a gap that needs a new procedure, when you want to create a procedure and know it actually works before trusting it, when you're tired of the manual draft→review→write→test→fix→lint cycle, when you want a procedure built strong from the start, when you need to build a new skill as a procedure, when you want to automate a workflow you just did manually, when you realize you're doing something repetitive that should be proceduralized, when you need a one-shot procedure factory, when someone says 'create a procedure', 'build a procedure', 'make a procedure', 'automate this', 'proceduralize this', or 'turn this into a procedure'"
+when_to_use: When the user says 'make a procedure for X', when you identify a gap that needs a new procedure, when you want to create a procedure and know it actually works before trusting it, when you're tired of the manual draft→review→write→test→fix→lint cycle, when you want a procedure built strong from the start, when you need to build a new skill as a procedure, when you want to automate a workflow you just did manually, when you realize you're doing something repetitive that should be proceduralized, when you need a one-shot procedure factory, when someone says 'create a procedure', 'build a procedure', 'make a procedure', 'automate this', 'proceduralize this', or 'turn this into a procedure'
 falsifiable_if: the built procedure passes all checks but produces wrong output on real use, the review step approves a draft with obvious flaws, or the test loop reports success when the procedure actually fails (verifiable by running the procedure manually)
 applies_to:
   - procedure-creation
@@ -27,7 +27,7 @@ task: "What the procedure should do. Be specific: 'extract all wikilinks from a 
 procedure_name: Optional. The name for the new procedure. If omitted, the review step will suggest one.
 tools_available: Optional. Comma-separated list of tools the procedure can use. Defaults to the standard set.
 test_args: Optional. JSON object of arguments to pass when testing the procedure.
-summary: Build-Procedure
+summary: The Build-Procedure tool automates end-to-end procedure creation by orchestrating LLM cognitive steps with code-based file I/O and verification to eliminate subprocess pollution.
 tags:
   - procedure
   - procedures

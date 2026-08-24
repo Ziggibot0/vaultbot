@@ -5,12 +5,12 @@ baseline: true
 model_cartridge: small
 created: 2026-08-22
 description: "Triage the VaultBot repo's open GitHub issues: score each on a deterministic urgency/importance rubric (7 Habits quadrant Q1-Q4), pick the single top Q1 issue, hand it off to Solve-GitHub-Issue, and report the full quadrant table. Read-only on GitHub except for the Solve-GitHub-Issue handoff."
-when_to_use: "When asked to 'triage the issues', 'what should we fix first', 'prioritize our GitHub issues', or as the first step of an autonomous issue sweep."
-falsifiable_if: "The procedure ranks a documentation issue above a correctness bug, or reports a Q1 issue that is not actually open, or hands off an issue that is not the top-ranked Q1."
+when_to_use: When asked to 'triage the issues', 'what should we fix first', 'prioritize our GitHub issues', or as the first step of an autonomous issue sweep.
+falsifiable_if: The procedure ranks a documentation issue above a correctness bug, or reports a Q1 issue that is not actually open, or hands off an issue that is not the top-ranked Q1.
 allowed_tools:
   - code_read
   - run_procedure
-summary: Triage-GitHub-Issues
+summary: SUMMARY
 tags:
   - procedure
   - procedures

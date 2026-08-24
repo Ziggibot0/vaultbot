@@ -5,8 +5,8 @@ baseline: true
 model_cartridge: small
 created: 2026-08-19
 description: "Generate a structured map of VaultBot's own backend source: every module with its docstring, top-level functions/classes, and imports. Writes vaultbot/Knowledge/Architecture/Codebase-Map.md. Deterministic AST walk — no LLM, no embeddings. Run this when the code changes, then read the map instantly via the codebase_map tool."
-when_to_use: "When you need to understand VaultBot's own code before editing it, when the codebase map is missing or stale, or when asked 'what does your code look like'."
-falsifiable_if: "The map misses a module, mislabels a function/class, or the generated note is unreadable by the codebase_map tool."
+when_to_use: When you need to understand VaultBot's own code before editing it, when the codebase map is missing or stale, or when asked 'what does your code look like'.
+falsifiable_if: The map misses a module, mislabels a function/class, or the generated note is unreadable by the codebase_map tool.
 applies_to:
   - self-knowledge
   - code-comprehension
@@ -14,7 +14,7 @@ applies_to:
   - codebase-map
 allowed_tools:
   - code_read
-summary: Codebase-Map
+summary: SUMMARY
 tags:
   - procedure
   - procedures

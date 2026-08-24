@@ -2,7 +2,7 @@
 type: claim
 status: raw
 created: 2026-08-03
-summary: "Security Policy: Report VaultBot vulnerabilities via GitHub Security Advisories; expect acknowledgement within 7 days for severity-based fix timelines; scope covers backend, plugin, and baseline templates"
+summary: "Security Policy: Report VaultBot vulnerabilities via GitHub Security Advisories; expect acknowledgement within 7 days for severity-based fix timelines; scope covers backend, plugin, and baseline-marked System notes"
 tags:
   - vulnerability-reporting
   - github-policy
@@ -36,7 +36,7 @@ Please include:
 
 This policy covers the VaultBot backend (`vaultbot_backend/`), the
 Obsidian plugin (`.obsidian/plugins/vaultbot/`), and the standard
-`baseline/` directive templates shipped with this repository.
+`System/` notes marked `baseline: true` that are shipped with this repository.
 
 It does **not** cover:
 

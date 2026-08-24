@@ -43,7 +43,7 @@ architecture) is still running the old version.
 
 1. New procedures / identity rules / architecture docs don't appear after update.
    → The updater only copied `vaultbot/vaultbot_backend/` and the plugin files,
-   skipping `vaultbot/System/`, `vaultbot/baseline/`, `vaultbot/docs/`, and
+   skipping `vaultbot/System/`, `vaultbot/docs/`, and
    top-level config files.
 
 2. Setup scripts (`setup.ps1`, `setup.sh`) or `pyproject.toml` not updated.

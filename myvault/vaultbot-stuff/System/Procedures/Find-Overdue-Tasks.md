@@ -16,7 +16,7 @@ allowed_tools:
   - vault_list
 provides:
   - Pattern-Scan
-summary: Find-Overdue-Tasks
+summary: SUMMARY
 tags:
   - procedure
   - procedures

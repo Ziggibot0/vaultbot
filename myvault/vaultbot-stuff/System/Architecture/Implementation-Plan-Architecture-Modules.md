@@ -8,7 +8,7 @@ tags:
   - implementation
   - plan
   - modules
-summary: "Implementation Plan: Architecture Modules"
+summary: SUMMARY
 ---
 
 # Implementation Plan: Architecture Modules

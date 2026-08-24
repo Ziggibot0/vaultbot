@@ -16,7 +16,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Smart-Note-Compare
+summary: SUMMARY
 tags:
   - procedure
   - procedures

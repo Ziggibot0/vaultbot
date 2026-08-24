@@ -2,11 +2,11 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: medium
+model_cartridge: big
 created: 2026-08-19
-description: "The CI-failure feedback loop for pull requests. Given a PR number (or 'latest'), checks its CI status via pr_feedback, reads the failure annotations, diagnoses the root cause, applies a fix with safe_write/edit_lines, runs Run-CI-Gates locally to verify the fix, commits and pushes, then loops back to check CI again. Max 3 iterations. This is the workflow a human developer does when a PR fails CI — codified so VaultBot can do it autonomously."
-when_to_use: "When a PR's CI has failed, when asked to 'fix the PR', 'iterate on the PR', 'the PR failed CI fix it', when pr_feedback shows failing checks, or when you submitted a contribution and want to verify it goes green."
-falsifiable_if: "The procedure reports a PR as fixed when CI is still failing, or pushes a fix that doesn't address the actual CI error."
+description: The CI-failure feedback loop for pull requests. Given a PR number (or 'latest'), checks its CI status via pr_feedback, reads the failure annotations, diagnoses the root cause, applies a fix with safe_write/edit_lines, runs Run-CI-Gates locally to verify the fix, commits and pushes, then loops back to check CI again. Max 3 iterations. This is the workflow a human developer does when a PR fails CI — codified so VaultBot can do it autonomously.
+when_to_use: When a PR's CI has failed, when asked to 'fix the PR', 'iterate on the PR', 'the PR failed CI fix it', when pr_feedback shows failing checks, or when you submitted a contribution and want to verify it goes green.
+falsifiable_if: The procedure reports a PR as fixed when CI is still failing, or pushes a fix that doesn't address the actual CI error.
 applies_to:
   - git-workflow
   - ci
@@ -21,7 +21,7 @@ allowed_tools:
   - edit_lines
   - run_procedure
   - llm_generate
-summary: Iterate-PR
+summary: SUMMARY
 tags:
   - procedure
   - procedures

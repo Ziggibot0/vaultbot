@@ -352,20 +352,9 @@ def small_model_digest(
 
 
 # ---------------------------------------------------------------------------
-# Framework-forced procedure execution (preflight routing)
-# ---------------------------------------------------------------------------
-# The framework runs Route-Task BEFORE the big model sees the conversation,
-# then auto-executes small-cartridge chain steps. The big model becomes a
-# step-worker that receives pre-computed results and only handles big-cartridge
-# procedures + final synthesis. This removes the "decide what to do" cognitive
-# load from the big model — a local LLM can follow a chain much more reliably
-# than it can read a 1000-word prompt and self-route.
-
-
-# ---------------------------------------------------------------------------
 # Shared procedure dispatch core
 # ---------------------------------------------------------------------------
-# Both run_procedure_direct (preflight framework path) and the
+# Both run_procedure_direct (framework/background path) and the
 # execute_procedure tool handler (model-driven path) share the same core:
 # file resolution → status gate → compile → cartridge selection →
 # tracker log forwarding → execute_procedure call.  This function
@@ -451,7 +440,14 @@ async def dispatch_procedure_core(
         return {"error": f"not a procedure note: {proc_name}"}
 
     # --- Cartridge selection ---
-    _cartridge = getattr(proc, "model_cartridge", "big") or "big"
+    _cartridge = str(getattr(proc, "model_cartridge", "big") or "big").strip().lower()
+    if _cartridge not in {"big", "small", "vision"}:
+        return {
+            "error": (
+                f"invalid model_cartridge for procedure {proc_name}: "
+                f"{_cartridge!r}; expected one of: big, small, vision"
+            )
+        }
     _proc_llm_client = svc.ollama_client
     try:
         if _cartridge == "small":
@@ -507,10 +503,10 @@ async def run_procedure_direct(
 ) -> dict[str, Any]:
     """Run a procedure directly from the framework (not from a model tool call).
 
-    Used in the preflight to run Route-Task and auto-execute small-cartridge
-    chain steps before the big model ever sees the conversation. Returns a
-    dict with procedure, overall_passed, final_output, cartridge, etc.
-    On any error, returns {"error": ...} — the caller handles fallback.
+    Used by framework/background tasks that need to execute a procedure without
+    going through the agentic tool loop. Returns a dict with procedure,
+    overall_passed, final_output, cartridge, etc. On any error, returns
+    {"error": ...}; the caller decides how to handle it.
 
     When ``websocket`` is provided, per-step progress events are streamed
     to the UI so the user can see what the procedure is doing in real time

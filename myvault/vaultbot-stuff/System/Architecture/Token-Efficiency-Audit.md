@@ -13,7 +13,7 @@ tags:
 depends_on:
   - "[[Context-Budgeting-for-Vault-Growth]]"
   - "[[Framework-Friction-Fix-Plan]]"
-summary: Token Efficiency Audit
+summary: SUMMARY
 ---
 
 # Token Efficiency Audit

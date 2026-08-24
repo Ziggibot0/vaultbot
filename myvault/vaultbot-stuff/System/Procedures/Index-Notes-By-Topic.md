@@ -15,7 +15,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: Index-Notes-By-Topic
+summary: SUMMARY
 tags:
   - procedure
   - procedures

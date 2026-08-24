@@ -1,13 +1,12 @@
-"""Turn preparation: calibration, RAG, context building, preflight routing.
+"""Turn preparation: calibration, RAG, and context building.
 
 Extracted from ``chat_handler.py`` -- ``prepare_turn`` runs BEFORE the
 agentic loop starts. It does vault graph refresh, fused retrieval (query
 rewrite + expand + parallel retrieve + rerank), conversation-aware
-retrieval, context budgeting, procedure surface build, Route-Task
-preflight routing, confirmation-context injection, and the trivial-turn
-shortcut. Returns the fully-built conversation list plus all the
-per-turn state the agentic loop needs, or ``None`` if the turn was
-trivial and handled directly.
+retrieval, context budgeting, procedure surface build, confirmation-context
+injection, and the trivial-turn shortcut. Returns the fully-built
+conversation list plus all the per-turn state the agentic loop needs, or
+``None`` if the turn was trivial and handled directly.
 
 This is a leaf module in the chat-handler family (see ``chat_context.py``,
 ``chat_preflight.py``, ``chat_helpers.py`` for the established pattern).
@@ -17,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
 
 from abstract_context import build_abstract_context
 from agent_tools import (
@@ -31,12 +29,6 @@ from chat_helpers import (
 )
 from chat_preflight import (
     check_cancelled as _check_cancelled,
-)
-from chat_preflight import (
-    deterministic_procedure_hint as _deterministic_procedure_hint,
-)
-from chat_preflight import (
-    run_procedure_direct as _run_procedure_direct,
 )
 from citation_gate import build_allowed_citations
 from conversation_index import build_conversation_context
@@ -61,7 +53,7 @@ async def prepare_turn(
     _cp,
     _resumed_tool_history: list,
 ) -> tuple | None:
-    """Setup, RAG, preflight routing, trivial-turn shortcut.
+    """Setup, RAG, procedure surface routing, trivial-turn shortcut.
 
     Returns (conversation, results, system_prompt, all_tools, custom_schemas,
     procedures_in_context, retrieved_paths, chat_start_time, loop,
@@ -262,115 +254,6 @@ async def prepare_turn(
         },
     )
 
-    # --- Route-Task preflight (intent classifier) ---------------------
-    # Route-Task classifies intent and returns a procedure chain. It's
-    # cheap (1 small-model LLM call). Think (the BS detector / premise
-    # gate) is NOT run here -- it's an opt-in tool the big model can call
-    # via execute_procedure("Think") if it decides a question needs
-    # structured premise checking.
-    #
-    # Skipped for: resumed turns (model is mid-task).
-    _preflight_chain: list[str] = []
-    _preflight_results: list[dict[str, Any]] = []
-    _preflight_category = ""
-    if not _resumed_tool_history:
-
-        async def _run_route() -> dict[str, Any]:
-            """Run Route-Task. Returns {"error": ...} on failure."""
-            try:
-                await send_progress(svc, websocket, "routing", {})
-                _result = await _run_procedure_direct(
-                    svc,
-                    "Route-Task",
-                    proc_args={"intent": user_message},
-                    session_logger=session_logger,
-                    user_message=user_message,
-                    websocket=websocket,
-                )
-                await send_progress(svc, websocket, "routing_done", {})
-                return _result
-            except Exception as e:  # noqa: BLE001
-                session_logger.log("preflight_route_failed", {"error": str(e)})
-                await notify_console_failure(
-                    svc,
-                    websocket,
-                    f"Route-Task procedure failed: {e}",
-                    context="preflight_route",
-                )
-                return {"error": str(e)}
-
-        # Run Route-Task (the sole preflight router).
-        _route_result = await _run_route()
-
-        # --- Process Route-Task result ---
-        if not _route_result.get("error"):
-            _route_output = _route_result.get("final_output", "")
-            if _route_output:
-                try:
-                    _parsed = json.loads(_route_output)
-                except (json.JSONDecodeError, TypeError):
-                    _parsed = {}
-                _preflight_category = _parsed.get("category", "")
-                _preflight_chain = _parsed.get("procedure_chain", [])
-                if isinstance(_preflight_chain, list) and _preflight_chain:
-                    session_logger.log(
-                        "preflight_route",
-                        {
-                            "category": _preflight_category,
-                            "chain": _preflight_chain,
-                        },
-                    )
-                    # Auto-execute small-cartridge chain steps.
-                    # Big-cartridge steps are left for the big model.
-                    for _chain_proc in _preflight_chain:
-                        # Check cartridge before running.
-                        _chain_cartridge = "big"
-                        try:
-                            _idx = (
-                                getattr(svc.procedure_tracker, "_stem_index", None)
-                                or {}
-                            )
-                            _entry = _idx.get(_chain_proc) or {}
-                            _fm = _entry.get("frontmatter") or {}
-                            _chain_cartridge = (
-                                str(_fm.get("model_cartridge", "big")).strip().lower()
-                                or "big"
-                            )
-                        except Exception:  # noqa: BLE001
-                            pass
-                        if _chain_cartridge == "small":
-                            await send_progress(
-                                svc, websocket, f"running {_chain_proc}", {}
-                            )
-                            _chain_result = await _run_procedure_direct(
-                                svc,
-                                _chain_proc,
-                                proc_args={"intent": user_message},
-                                session_logger=session_logger,
-                                user_message=user_message,
-                                websocket=websocket,
-                            )
-                            _preflight_results.append(_chain_result)
-                            session_logger.log(
-                                "preflight_chain_step",
-                                {
-                                    "procedure": _chain_proc,
-                                    "cartridge": _chain_cartridge,
-                                    "passed": _chain_result.get("overall_passed"),
-                                },
-                            )
-                        else:
-                            # Big-cartridge: stop here, let the
-                            # big model handle the rest.
-                            _preflight_results.append(
-                                {
-                                    "procedure": _chain_proc,
-                                    "cartridge": _chain_cartridge,
-                                    "pending": True,
-                                }
-                            )
-                            break
-
     # Conversation-aware retrieval: search the conversation index for
     # prior turns relevant to this query. This is what lets the bot
     # "remember what it just said" -- when the user asks a follow-up,
@@ -554,11 +437,9 @@ async def prepare_turn(
 
     # Procedure Discovery Service: surface one-line capability lines for
     # any procedures that FUSED retrieval matched for THIS query.
-    # The procedure hint (suggested action) is intentionally NOT injected
-    # into the system prompt here. It is appended as the FINAL system
-    # message, AFTER the user message, so it is the last thing the model
-    # reads before acting -- giving it an immediate starting point.
-    _suggested_action = ""
+    # This is the only routing surface: FUSED retrieval supplies the
+    # procedure candidates and the big model chooses what to do with that
+    # context in the moment.
     try:
         _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
         _proc_surface = build_procedure_surface(results, _proc_idx)
@@ -570,34 +451,6 @@ async def prepare_turn(
                     "lines": _proc_surface.count("\n"),
                 },
             )
-            # --- Deterministic procedure routing hint ----------------
-            # The small-model hint used to make a round-trip to Ollama to
-            # pick which procedure matches the query. But FUSED retrieval
-            # already ranked these same procedures by embedding+graph
-            # similarity to the query -- the best-matching one is simply
-            # the highest-scored surfaced procedure. Reusing that score
-            # is zero-LLM, zero-new-embedding, and never worse than the
-            # small model's pick (it was choosing from the same surface).
-            # Skipped for greetings/trivial messages (no procedure is the
-            # right answer there) and for flagged procedures (can't run).
-            try:
-                _hint = _deterministic_procedure_hint(results, _proc_idx, user_message)
-                if _hint:
-                    _suggested_action = (
-                        f"# SUGGESTED ACTION (pre-classification -- "
-                        f"verify before executing): consider "
-                        f'execute_procedure("{_hint}") if it matches '
-                        f"the task above."
-                    )
-                    session_logger.log(
-                        "procedure_hint",
-                        {
-                            "hint": _hint,
-                            "source": "fused_score",
-                        },
-                    )
-            except Exception as e:  # noqa: BLE001
-                session_logger.log("procedure_hint_failed", {"error": str(e)})
     except Exception as e:  # noqa: BLE001
         session_logger.log("procedure_surface_failed", {"error": str(e)})
         await notify_console_failure(
@@ -744,76 +597,6 @@ async def prepare_turn(
         {"role": "user", "content": user_message, "timestamp": loop.time()}
     )
 
-    # --- Preflight chain results injection ----------------------------
-    # If the framework already ran Route-Task and auto-executed small-
-    # cartridge chain steps, inject the results as a system message
-    # AFTER the user message. The big model sees what was already done
-    # and what remains. This replaces the old "SUGGESTED ACTION" hint
-    # with concrete pre-computed results.
-    if _preflight_chain:
-        _pf_lines = [
-            "# PREFLIGHT ROUTING (framework already ran Route-Task)",
-            f"Category: {_preflight_category}",
-            f"Full chain: {' → '.join(_preflight_chain)}",
-            "",
-        ]
-        _pending_chain: list[str] = []
-        for _pr in _preflight_results:
-            _pn = _pr.get("procedure", "?")
-            if _pr.get("pending"):
-                _pending_chain.append(_pn)
-            else:
-                _pf_lines.append(
-                    f"✓ {_pn} -- ALREADY EXECUTED (passed: "
-                    f"{_pr.get('overall_passed', '?')})"
-                )
-                _fo = _pr.get("final_output", "")
-                if _fo:
-                    _pf_lines.append(f"  Result: {str(_fo)[:500]}")
-        if _pending_chain:
-            _pf_lines.append("")
-            _pf_lines.append(
-                f"# YOUR JOB: run the remaining chain steps: "
-                f"{' → '.join(_pending_chain)}"
-            )
-            _pf_lines.append(
-                "Call execute_procedure for each in order. Do NOT "
-                "re-run the already-executed steps above. After the "
-                "chain completes, synthesize a final answer for the "
-                "user."
-            )
-        else:
-            _pf_lines.append("")
-            _pf_lines.append(
-                "# YOUR JOB: all chain steps are done. Synthesize a "
-                "final answer for the user from the results above."
-            )
-        _pf_block = "\n".join(_pf_lines)
-        # Use 'user' role (not 'system') because Ollama's /v1/chat/completions
-        # rejects system messages that appear after a user message
-        # ("system message must be at the beginning"). This block is
-        # context for the user's question, so 'user' role is correct.
-        conversation.append({"role": "user", "content": _pf_block})
-        session_logger.log(
-            "preflight_chain_injected",
-            {
-                "category": _preflight_category,
-                "chain": _preflight_chain,
-                "executed": sum(1 for p in _preflight_results if not p.get("pending")),
-                "pending": len(_pending_chain),
-            },
-        )
-    elif _suggested_action:
-        # Fallback: no preflight chain, use the old deterministic hint.
-        # 'user' role, not 'system' -- see preflight_chain_injected comment.
-        conversation.append({"role": "user", "content": _suggested_action})
-        session_logger.log(
-            "suggested_action_injected",
-            {
-                "position": "post_user",
-            },
-        )
-
     # --- Confirmation context injection -------------------------------
     # When the user replies with a short confirmation ("yeah do that",
     # "do it", "go ahead", "proceed", "sounds good", "ok do it", "yes
@@ -899,8 +682,8 @@ async def prepare_turn(
                 f"agreed to the above. Call plan_task to structure the "
                 f"work, then execute it."
             )
-            # 'user' role, not 'system' -- see preflight_chain_injected
-            # comment (Ollama rejects post-user system messages).
+            # 'user' role, not 'system' -- Ollama rejects post-user system
+            # messages.
             conversation.append({"role": "user", "content": _confirm_ctx})
             session_logger.log(
                 "confirmation_context_injected",

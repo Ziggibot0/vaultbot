@@ -124,12 +124,6 @@ class Services:
     # wired).  Drives the retrieval gate that drops notes whose inhibitors
     # match the query.  See trigger_store.py.
     trigger_store: TriggerStore | None = None
-    # Procedure first-tool index for the suggestion gate
-    # (procedure_suggestion_gate.py). {stem: {first_tools, triggers,
-    # description, status}} built once at startup from the procedure
-    # stem index. None when not wired (tests); the gate no-ops without it.
-    first_tool_index: dict | None = None
-
     @property
     def vault_path(self) -> str:
         """Resolved vault root path (single source of truth).

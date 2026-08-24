@@ -22,7 +22,7 @@ falsifiable_if: it upgrades a note that is actually low-quality, misses notes th
 success_count: 0
 failure_count: 0
 success_rate: 0.0
-summary: Dream-Curate-Research
+summary: SUMMARY
 tags:
   - procedure
   - procedures

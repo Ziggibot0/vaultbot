@@ -17,7 +17,7 @@ allowed_tools:
   - code_run
   - run_procedure
   - llm_generate
-summary: Verify-Backend-Change
+summary: SUMMARY
 tags:
   - procedure
   - procedures

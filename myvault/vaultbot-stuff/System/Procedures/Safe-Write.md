@@ -9,11 +9,11 @@ when_to_use: When you need to edit a .py file under vaultbot_backend/. Verifies 
 allowed_tools:
   - safe_write
   - code_read
-summary: Safe-Write
+summary: SUMMARY
 tags:
   - procedure
   - procedures
-falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+falsifiable_if: the procedure produces incorrect output or fails to complete its stated task
 ---
 
 # Safe-Write

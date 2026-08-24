@@ -243,9 +243,8 @@ myvault/vaultbot-stuff/System/Architecture/Small-Model-Path-to-AGI.md
 myvault/vaultbot-stuff/System/Architecture/Vault-Longevity-Architecture.md
 
 # Personal root directives + notes (operator relationship with their bot)
-# Anchored to root (leading /) so VaultBot's own shippable directives under
-# myvault/vaultbot-stuff/baseline/ and myvault/vaultbot-stuff/System/Identity/ are NOT ignored ΓÇö only
-# root-level directive files (the user's personal copies) are.
+# Anchored to root (leading /) so the user's personal copies are ignored,
+# while VaultBot's shippable System/Identity notes remain available.
 2026-*.md
 /*-Directive.md
 /*-Communication-Preferences.md

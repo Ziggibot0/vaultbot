@@ -80,4 +80,3 @@ adding a new model requires editing the procedure.
 
 - [[Ollama-Model-Search]] — discovers/pulls models via the search tool
 - [[Model-Tournament]] — benchmarks pulled models against each other
-- [[Small-Model-Route]] — routes tasks to the appropriate small model

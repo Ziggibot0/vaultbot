@@ -8,11 +8,11 @@ description: Restart the VaultBot backend process and reconnect.
 when_to_use: When the backend needs a restart after code changes or if it's unresponsive.
 allowed_tools:
   - backend_restart
-summary: Backend-Restart
+summary: SUMMARY
 tags:
   - procedure
   - procedures
-falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
+falsifiable_if: the procedure produces incorrect output or fails to complete its stated task
 ---
 
 # Backend-Restart

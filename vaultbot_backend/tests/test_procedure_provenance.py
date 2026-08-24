@@ -41,6 +41,15 @@ def _warnings(text: str) -> list[str]:
     return validate_procedure_text(text).get("warnings", [])
 
 
+def test_invalid_model_cartridge_errors():
+    invalid = "med" + "ium"
+    fm = _FM.replace("---\n", f"---\nmodel_cartridge: {invalid}\n", 1)
+    result = validate_procedure_text(fm + _BODY)
+
+    assert result["passed"] is False
+    assert any("Invalid 'model_cartridge'" in e for e in result["errors"])
+
+
 def test_no_provenance_warns():
     """A procedure with no sources/depends_on/## Related warns."""
     warnings = _warnings(_FM + _BODY)

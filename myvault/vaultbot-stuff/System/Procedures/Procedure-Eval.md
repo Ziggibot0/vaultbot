@@ -14,7 +14,7 @@ applies_to:
   - meta-procedure
 allowed_tools:
   - vault_list
-summary: Procedure-Eval
+summary: SUMMARY
 tags:
   - procedure
   - procedures

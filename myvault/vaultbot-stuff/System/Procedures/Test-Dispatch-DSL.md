@@ -40,7 +40,7 @@ The YAML Dispatch DSL needed a smoke test to prove the full pipeline — classif
       research: [Research-Batch, Cross-Check-Claims]
       vault-maintenance: [Dream-Pass]
       self-improvement: [Discover-Procedures]
-    default: [Small-Model-Route]
+    default: []
     output_as: chain
 
 - call:

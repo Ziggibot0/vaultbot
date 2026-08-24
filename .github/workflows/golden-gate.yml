@@ -115,7 +115,7 @@ jobs:
           from vault_indexer import VaultIndexer
           idx = VaultIndexer(vault_path=os.environ['VAULT_PATH'])
           # Seed-index ALL vault markdown. The golden set spans root
-          # directives, Knowledge/, System/Procedures/, and baseline/, so a
+          # directives, Knowledge/, and System/Procedures/, so a
           # narrow filter (e.g. only 'baseline'/'directive' paths) misses most
           # expected notes. Use the indexer's own collector so the canonical
           # ignore rules (_is_ignored_path) apply — this is the same file set

@@ -15,7 +15,7 @@ applies_to:
 allowed_tools:
   - vault_search
   - llm_generate
-summary: Note-Topic-Classifier
+summary: SUMMARY
 tags:
   - procedure
   - procedures

@@ -50,7 +50,7 @@ check_file "LICENSE"
 check_file ".env.example"
 check_file "vaultbot_backend/requirements.txt"
 check_file "vaultbot_backend/main.py"
-check_file "myvault/vaultbot-stuff/baseline/identity/IDENTITY.md"
+check_file "myvault/vaultbot-stuff/System/Procedures/Dev-Cycle.md"
 check_file "myvault/.obsidian/plugins/vaultbot/main.js"
 check_file "myvault/.obsidian/plugins/vaultbot/manifest.json"
 

@@ -13,7 +13,7 @@ tags:
   - circle
 source_count: 8
 fact_count: 16
-summary: hermeneutics - theory of interpretation, the hermeneutic circle, how meaning is derived from text and context, especially as applied to knowledge management
+summary: SUMMARY
 ---
 
 # hermeneutics - theory of interpretation, the hermeneutic circle, how meaning is derived from text and context, especially as applied to knowledge management

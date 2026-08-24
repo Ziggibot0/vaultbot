@@ -121,17 +121,11 @@ class TestSafetyNetsRemain:
         assert "_WRITE_TOOLS" in src, "Write-tool classification must remain"
         assert "_tool_actually_wrote" in src, "Write-success check must remain"
 
-    def test_suggestion_dict_not_counted_as_failed_write(self):
-        # A procedure-suggestion result (procedure_suggestion / proceed_keyword)
-        # is a nudge, not a write attempt. The failed-write tracker must skip it
-        # so a nudge never increments the anti-thrash counter (issue #340).
+    def test_no_deleted_nudge_carveout_in_failed_write_tracker(self):
+        # Removed nudge paths must not leave an escape hatch in failed-write
+        # tracking; actual write-tool outcomes should be counted directly.
         src = _all_chat_source()
-        assert '"procedure_suggestion" in _tr' in src, (
-            "Suggestion-dict skip guard must remain in the failed-write tracker"
-        )
-        assert '"proceed_keyword" in _tr' in src, (
-            "Suggestion-dict skip guard must remain in the failed-write tracker"
-        )
+        assert '"proceed_keyword" in _tr' not in src
 
     def test_max_rounds_remains(self):
         src = _all_chat_source()
@@ -175,11 +169,10 @@ class TestSystemPromptNoThreats:
 
     def test_permissive_tone_in_prompt(self):
         src = _source(_AGENT_TOOLS)
-        # The prompt communicates framework-handled routing via the
-        # PREFLIGHT ROUTING block and the "You are a router" directive.
-        # The exact wording has evolved; check for the current phrasing.
-        assert "PREFLIGHT ROUTING" in src, (
-            "System prompt must tell model the framework handles routing"
+        # The prompt communicates routing through the retrieved procedure
+        # surface, not a hardcoded preflight chain.
+        assert "retrieved procedure surface" in src, (
+            "System prompt must tell model to use the retrieval-built procedure surface"
         )
 
 

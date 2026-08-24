@@ -19,7 +19,7 @@ allowed_tools:
 success_count: 4
 failure_count: 1
 success_rate: 0.8
-summary: Procedure-Coverage-Check
+summary: SUMMARY
 tags:
   - procedure
   - procedures
@@ -30,7 +30,8 @@ tags:
 ## When to Run This
 
 Quick check: does a procedure already exist for what I'm about to do?
-Lighter than [[Small-Model-Route]] — just a yes/no with the procedure name.
+This is an audit helper, not the live router. The live routing surface comes
+from FUSED retrieval and the retrieved procedure surface.
 
 In `full_audit` mode, this also replaces the former Procedure-Library-Audit:
 it walks every procedure, extracts its coverage scope, and flags tasks that
@@ -38,7 +39,7 @@ recurring in chat history but have no procedure covering them.
 
 ## Why This Exists
 
-Before doing manual tool calls, the vaultbot needs to know whether a procedure already handles the task. This procedure closes that gap with a quick yes/no coverage check, and in `full_audit` mode audits the whole library for gaps. The tradeoff is that it is deliberately lighter than [[Small-Model-Route]] — just a yes/no with the procedure name rather than a full routing decision.
+Before doing manual tool calls, the vaultbot may need to know whether a procedure already handles the task. This procedure closes that gap with a quick yes/no coverage check, and in `full_audit` mode audits the whole library for gaps. It does not decide the live route; FUSED retrieval surfaces procedure candidates for the model to choose from in context.
 
 ## Arguments
 
@@ -140,6 +141,5 @@ result = _json.dumps(parsed)
 
 ## Related
 
-- [[Small-Model-Route]] — the heavier routing decision this check is lighter than
 - [[Procedure-Library-Index]] — the catalog of procedures this check searches
 - [[Procedure-Eval]] — scores procedure health alongside coverage
