@@ -382,12 +382,11 @@ useful if you want to understand the design philosophy.
 If your VaultBot has made changes to the framework code that you think would
 benefit other users, you can ask it to submit a pull request directly:
 
-1. **Set up a GitHub token.** Create a personal access token with `repo`
-   scope at https://github.com/settings/tokens and add it to your `.env`:
-   ```
-   GITHUB_TOKEN=ghp_your_token_here
-   GITHUB_USERNAME=your_github_username
-   ```
+1. **Sign in from the VaultBot UI (no terminal needed).**
+   - Open: Settings → Community plugins → VaultBot → gear icon
+   - In **Community contributions**, click **Sign in to GitHub**
+   - Follow the browser flow once; VaultBot uses your `gh` login from then on
+   - Turn on **Allow contributions** to opt in
 
 2. **Ask your VaultBot to submit.** Tell it something like:
    > "Submit your changes to the GitHub repo as a PR"
@@ -402,6 +401,6 @@ benefit other users, you can ask it to submit a pull request directly:
 4. **Review.** Sean (the maintainer) reviews every PR manually. Nothing
    auto-merges. If your change benefits the community, it ships.
 
-The tool will refuse to run without a `GITHUB_TOKEN` and will never include
-vault contents, chat logs, or personal data — only the code files you've
-changed.
+The tool will refuse to run until GitHub sign-in is complete and
+**Allow contributions** is enabled. It never includes vault contents, chat
+logs, or personal data — only the code files you've changed.

@@ -52,9 +52,9 @@ directly each item advances that proof.
 
 - **Energy-savings dashboard.** Quantify the energy saved by small-model
   cartridge work versus a large model, per query and cumulatively.
-- **Community contribution loop.** Lower the barrier for non-technical
-  contributors (the `gh auth login` hurdle) so the procedure library can
-  grow from outside the core project.
+- **Community contribution loop.** Keep reducing friction from "I found a
+  fix" to "PR is open" (guided in-app sign-in + contribution toggle are in
+  place; next step is tightening the end-to-end UX).
 - **The redundancy goal.** The cloud model's only job is to make itself
   redundant as fast as possible.
 
