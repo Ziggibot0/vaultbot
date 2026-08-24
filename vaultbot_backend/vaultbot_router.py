@@ -151,4 +151,5 @@ def route_vaultbot_message(text: str) -> dict[str, Any]:
         "confidence": routed["confidence"],
         "procedure_hint": None,
         "next_action": _build_next_action(routed["route"], text, routed["evidence"]),
+        "next_action": _build_next_action(routed["route"], text, routed["evidence"]),
     }
