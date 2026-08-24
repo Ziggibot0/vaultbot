@@ -39,8 +39,6 @@ class TestAuthRequiredForMethod:
             ("/set_model", "POST"),
             ("/research_tool", "POST"),
             ("/ingest_learning_material", "POST"),
-            ("/autonomous/trigger", "POST"),
-            ("/consolidation/run", "POST"),
             ("/task", "POST"),
             ("/tournament/run", "POST"),
             ("/tournament/staging", "POST"),
@@ -50,7 +48,6 @@ class TestAuthRequiredForMethod:
             ("/user_response", "POST"),
             ("/stt", "POST"),
             ("/tts", "POST"),
-            ("/checkpoints/recover", "POST"),
         ],
     )
     def test_mutating_requires_auth(self, path, method):
@@ -66,8 +63,6 @@ class TestAuthRequiredForMethod:
             ("/models", "GET"),
             ("/health", "GET"),
             ("/config/effective", "GET"),
-            ("/autonomous/status", "GET"),
-            ("/autonomous/gaps", "GET"),
             ("/custom_tools", "GET"),
             ("/tournament/models", "GET"),
             ("/sessions", "GET"),

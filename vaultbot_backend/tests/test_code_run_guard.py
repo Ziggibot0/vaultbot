@@ -1,8 +1,13 @@
-"""Tests for the code_run read-only guard (issue #207, Gap 2).
+"""Tests for the code_run guard (issues #207 and #229).
 
-Verifies that ``code_run`` blocks file-write primitives by default and
-allows them when ``allow_write=True``. Uses a real subprocess (the venv
-python) so the guard preamble actually executes, but writes only to a
+Verifies that ``code_run`` blocks:
+- file writes (issue #207),
+- network egress (issue #229), and
+- reads of secret/credential files (.env, providers.json, *_tokens.json,
+  *_config.json) (issue #229),
+
+and allows writes when ``allow_write=True``. Uses a real subprocess (the
+venv python) so the guard preamble actually executes, but writes only to a
 throwaway tmp dir — never the live backend.
 """
 
@@ -73,3 +78,98 @@ class TestCodeRunReadOnlyGuard:
         result = improver.code_run(code, allow_write=True)
         assert result.get("exit_code") == 0
         assert target.exists()
+
+
+class TestCodeRunNetworkIsolation:
+    """issue #229: code_run must not be able to open the network."""
+
+    def test_requests_import_is_blocked(self, improver):
+        code = "import requests\nprint(1)"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "network" in result.get("stderr", "").lower()
+
+    def test_socket_import_is_blocked(self, improver):
+        code = "import socket\nprint(1)"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "network" in result.get("stderr", "").lower()
+
+    def test_urllib_import_is_blocked(self, improver):
+        code = "import urllib.request\nprint(1)"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "network" in result.get("stderr", "").lower()
+
+    def test_http_client_import_is_blocked(self, improver):
+        code = "import http.client\nprint(1)"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "network" in result.get("stderr", "").lower()
+
+    def test_plain_import_still_works(self, improver):
+        # Non-network stdlib imports must keep working.
+        result = improver.code_run("import os, json, sys\nprint('ok')")
+        assert result.get("exit_code") == 0
+        assert "ok" in result.get("stdout", "")
+
+
+class TestCodeRunSecretFileReads:
+    """issue #229: code_run must not be able to read secret/credential files."""
+
+    def test_env_file_read_is_blocked(self, improver, tmp_path):
+        secret = tmp_path / ".env"
+        secret.write_text("API_KEY=supersecret", encoding="utf-8")
+        code = f"print(open({str(secret)!r}).read())"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "secret" in result.get("stderr", "").lower()
+        assert "supersecret" not in result.get("stdout", "")
+
+    def test_providers_json_read_is_blocked(self, improver, tmp_path):
+        providers = tmp_path / "providers.json"
+        providers.write_text('{"key": "abc"}', encoding="utf-8")
+        code = f"from pathlib import Path\nprint(Path({str(providers)!r}).read_text())"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "abc" not in result.get("stdout", "")
+
+    def test_tokens_json_read_is_blocked(self, improver, tmp_path):
+        tokens = tmp_path / "github_tokens.json"
+        tokens.write_text('{"gh": "abc"}', encoding="utf-8")
+        code = f"open({str(tokens)!r}).read()"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "abc" not in result.get("stdout", "")
+
+    def test_config_json_read_is_blocked(self, improver, tmp_path):
+        config = tmp_path / "app_config.json"
+        config.write_text('{"token": "xyz"}', encoding="utf-8")
+        code = f"open({str(config)!r}).read()"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "xyz" not in result.get("stdout", "")
+
+    def test_unrelated_json_outside_repo_still_reads(self, improver, tmp_path):
+        # A plain config.json OUTSIDE the repo root must NOT be blocked —
+        # scoping avoids false positives on package fixtures.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        cfg = outside / "config.json"
+        cfg.write_text('{"data": "value"}', encoding="utf-8")
+        code = f"print(open({str(cfg)!r}).read())"
+        result = improver.code_run(code)
+        assert result.get("exit_code") == 0
+        assert "value" in result.get("stdout", "")
+
+    def test_env_read_blocked_even_outside_repo(self, improver, tmp_path):
+        # .env is ALWAYS protected regardless of location (it is a secret
+        # filename, not a repo-scoped one).
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        secret = outside / ".env"
+        secret.write_text("SECRET=leak", encoding="utf-8")
+        code = f"open({str(secret)!r}).read()"
+        result = improver.code_run(code)
+        assert result.get("exit_code") != 0
+        assert "leak" not in result.get("stdout", "")

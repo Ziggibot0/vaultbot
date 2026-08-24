@@ -121,6 +121,18 @@ class TestSafetyNetsRemain:
         assert "_WRITE_TOOLS" in src, "Write-tool classification must remain"
         assert "_tool_actually_wrote" in src, "Write-success check must remain"
 
+    def test_suggestion_dict_not_counted_as_failed_write(self):
+        # A procedure-suggestion result (procedure_suggestion / proceed_keyword)
+        # is a nudge, not a write attempt. The failed-write tracker must skip it
+        # so a nudge never increments the anti-thrash counter (issue #340).
+        src = _all_chat_source()
+        assert '"procedure_suggestion" in _tr' in src, (
+            "Suggestion-dict skip guard must remain in the failed-write tracker"
+        )
+        assert '"proceed_keyword" in _tr' in src, (
+            "Suggestion-dict skip guard must remain in the failed-write tracker"
+        )
+
     def test_max_rounds_remains(self):
         src = _all_chat_source()
         assert "_MAX_ROUNDS" in src, "MAX_ROUNDS safety net must remain"

@@ -28,7 +28,7 @@ from chat_context import (
     estimate_conv_tokens as _estimate_conv_tokens,
 )
 from chat_context import (
-    sanitize_tool_history as _sanitize_tool_history,
+    project_for_provider as _project_for_provider,
 )
 from chat_context import (
     tool_actually_wrote as _tool_actually_wrote,
@@ -148,7 +148,7 @@ async def run_agentic_loop(
                 # /v1/chat/completions rejects system messages that appear
                 # after user/assistant messages ("system message must be at
                 # the beginning"), returning a 500. Same rule as the
-                # preflight_chain_injected / go_find_out injections below.
+                # preflight_chain_injected injection below.
                 conversation.append(
                     {
                         "role": "user",
@@ -381,23 +381,31 @@ async def run_agentic_loop(
                         ),
                     },
                 )
-            # Tool-history sanitization is a NARROW workaround for the
-            # glm-5.2:cloud-via-Ollama bug (the model returns empty when it
-            # sees ANY prior tool_calls / tool-role messages). Every other
-            # provider (OpenAI-compatible, Anthropic, direct GLM cloud, real
-            # Ollama models like qwen/llama/nemotron) gets NATIVE tool
-            # protocol -- the sanitizer corrupts it into flat system messages
-            # and destroys tool_call IDs the model expects to reference.
-            # See /memories/glm-ollama-tool-calls-broken.md.
+            # ── Provider-safe message projection ──────────────────────
+            # Strip all internal bookkeeping fields (thinking, timestamp,
+            # digested, etc.) before sending to ANY provider. This is
+            # universal — no per-model heuristics. It does two things:
+            #
+            # 1. Preserves the KV cache: the token sequence for prior
+            #    messages stays stable across rounds (no new thinking
+            #    content appended), so Ollama's prefix cache hits instead
+            #    of re-evaluating the entire prompt every round.
+            #
+            # 2. Prevents generation corruption: the model never sees its
+            #    own prior reasoning (thinking) as regular text, which
+            #    pollutes attention and causes degenerate repetition.
+            #
+            # For glm-via-Ollama (which returns empty on tool_calls/tool
+            # role), we also flatten tool calls to system messages. This
+            # is a protocol bug specific to that model, not a general
+            # heuristic — see /memories/glm-ollama-tool-calls-broken.md.
             _model_name = (svc.ollama_client.llm_model or "").lower()
             _client_cls = svc.ollama_client.__class__.__name__.lower()
-            _needs_sanitize = os.getenv(
+            _flatten = os.getenv(
                 "VAULTBOT_FORCE_SANITIZE_TOOL_HISTORY", "0"
             ) == "1" or ("ollama" in _client_cls and "glm" in _model_name)
-            st._model_conversation = (
-                _sanitize_tool_history(conversation)
-                if _needs_sanitize
-                else conversation
+            st._model_conversation = _project_for_provider(
+                conversation, flatten_tool_calls=_flatten
             )
 
             (
@@ -542,6 +550,16 @@ async def run_agentic_loop(
                             except (json.JSONDecodeError, TypeError):
                                 _tr = {}
                             break
+                    # A procedure-suggestion result is a *nudge*, not a write
+                    # attempt. The gate intercepted the raw call and returned a
+                    # suggestion dict (procedure_suggestion / proceed_keyword)
+                    # instead of executing it. Counting that as a failed write
+                    # pollutes the anti-thrash counter and can trip the
+                    # failed_write_streak break on a legitimate turn. Skip it.
+                    if isinstance(_tr, dict) and (
+                        "procedure_suggestion" in _tr or "proceed_keyword" in _tr
+                    ):
+                        continue
                     if not _tool_actually_wrote(_tn, _tr):
                         st._turn_failed_write_count += 1
                         _round_failed_write = True
@@ -582,30 +600,6 @@ async def run_agentic_loop(
                     "total_findings": len(st._findings),
                 },
             )
-
-            # --- Go-find-out system message injection ------------------------
-            # If go-find-out fired this round, inject the research results as a
-            # user message AFTER the tool results are appended.
-            # NOTE: 'user' role, not 'system' -- Ollama's /v1/chat/completions
-            # rejects system messages that appear after user/assistant/tool
-            # messages ("system message must be at the beginning"). Using
-            # 'user' role still conveys the instruction effectively.
-            if st._go_find_out_msg:
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": st._go_find_out_msg,
-                    }
-                )
-                session_logger.log(
-                    "go_find_out_system_msg_injected",
-                    {
-                        "round": st.round_idx,
-                        "msg_chars": len(st._go_find_out_msg),
-                    },
-                )
-                # Clear so it only fires once.
-                st._go_find_out_msg = ""
 
             # NO mid-loop truncation. Compression/pruning is a preflight
             # event (once per turn, before the first LLM call) -- never

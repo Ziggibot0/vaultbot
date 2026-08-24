@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 # acquire_lock() → sys.exit) and crashes every WebSocket handler.
 # main.py writes to it via app_state.set_startup_reindex_failed().
 
-# Main event loop reference, set during lifespan startup. Used by
-# background-thread callbacks (e.g. researcher crash) to schedule
-# coroutines on the main loop via run_coroutine_threadsafe.
+# Main event loop reference, set during lifespan startup.
 main_event_loop: asyncio.AbstractEventLoop | None = None
 
 # Strong references to background tasks so they aren't garbage-collected
@@ -36,8 +34,6 @@ _background_tasks: set[asyncio.Task] = set()
 import app_state  # noqa: E402
 import uvicorn  # noqa: E402
 from amem_evolution import AMemeEvolution  # noqa: E402
-from autonomous_researcher import AutonomousResearcher  # noqa: E402
-from checkpointer import Checkpointer  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 from embedding_drift import EmbeddingDrift  # noqa: E402
 from fastapi import FastAPI, Request, WebSocket  # noqa: E402
@@ -197,12 +193,13 @@ async def lifespan(app: FastAPI):
         loop = asyncio.get_event_loop()
         main_event_loop = loop
 
-        # Purge stale crash-recovery partials. The old in-vault location
-        # (vaultbot_backend/partials/) caused Obsidian's file-recovery core
-        # plugin to race the backend's delete and spam ENOENT errors, so
-        # partials now live in the OS temp dir. Clean both locations on
-        # startup: any leftover partial is from a previous crashed session
-        # that already restarted, so it's stale and safe to remove.
+        # Purge stale crash-recovery partials from chat streaming. The old
+        # in-vault location (vaultbot_backend/partials/) caused Obsidian's
+        # file-recovery core plugin to race the backend's delete and spam
+        # ENOENT errors, so partials now live in the OS temp dir. Clean both
+        # locations on startup: any leftover partial is from a previous
+        # crashed session that already restarted, so it's stale and safe to
+        # remove.
         def _purge_partials():
             import tempfile
 
@@ -371,59 +368,13 @@ async def lifespan(app: FastAPI):
             )
             _preload_thread.start()
 
-        # Start the autonomous researcher so it begins filling vault gaps
-        # in the background. It waits a short grace period before its first
-        # cycle so the index/graph are settled.
+        # Start the health monitor watchdog. The autonomous background
+        # researcher has been removed; the watchdog now tracks general
+        # backend liveness for the /health endpoint.
         try:
-            autonomous_researcher.start()
-            # Wire the health monitor's heartbeat into the researcher so the
-            # /health endpoint reflects live autonomous activity.
-            autonomous_researcher._heartbeat = health_monitor.heartbeat
             health_monitor.start_watchdog(check_interval=300)
-            # Recover any interrupted research from a previous crash.
-            # The checkpointer stores in-flight work; on startup we check for
-            # status="running" checkpoints and re-queue them so the
-            # researcher actually retries them instead of just logging.
-            try:
-                recovery = checkpointer.recover(autonomous_researcher)
-                if recovery.get("recovered"):
-                    startup_logger.log(
-                        "checkpointer_recovered",
-                        {
-                            "interrupted_count": len(recovery["recovered"]),
-                            "topics": [c.topic for c in recovery["recovered"]],
-                        },
-                    )
-                    # Re-queue the interrupted gaps so the next cycle
-                    # researches them FIRST, before the curriculum's
-                    # normal proposals. This is the actual retry.
-                    recovered_gaps = []
-                    for ckpt in recovery["recovered"]:
-                        recovered_gaps.append(
-                            ckpt.gap
-                            if ckpt.gap
-                            else {
-                                "kind": ckpt.kind,
-                                "topic": ckpt.topic,
-                                "priority": 9999,  # top priority
-                                "normalized_name": ckpt.topic.lower(),
-                                "referenced_by": [],
-                            }
-                        )
-                    if recovered_gaps:
-                        autonomous_researcher._recovered_gaps = recovered_gaps
-                        startup_logger.log(
-                            "checkpointer_requeued",
-                            {
-                                "count": len(recovered_gaps),
-                                "topics": [g["topic"] for g in recovered_gaps],
-                            },
-                        )
-            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                startup_logger.log("checkpointer_recovery_failed", {"error": str(e)})
-            startup_logger.log("autonomous_researcher_started", {})
         except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-            startup_logger.log_exception(e, context="autonomous_researcher_start")
+            startup_logger.log("health_monitor_start_failed", {"error": str(e)})
     except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
         startup_logger.log_exception(e, context="server_startup")
     finally:
@@ -435,12 +386,6 @@ async def lifespan(app: FastAPI):
     shutdown_logger = SessionLogger()
     shutdown_logger.log("server_shutdown", {"stage": "begin"})
     try:
-        # Stop the autonomous researcher first so it doesn't fire mid-shutdown.
-        try:
-            autonomous_researcher.stop()
-            shutdown_logger.log("autonomous_researcher_stopped", {})
-        except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-            shutdown_logger.log_exception(e, context="autonomous_researcher_stop")
         # Stop watching the vault for changes and persist the index
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, vault_indexer.stop_watching)
@@ -648,8 +593,8 @@ note_creator = NoteCreator(
     session_logger=default_session_logger,
 )
 
-# LLM-light deep research engine. Used by both the /research_tool endpoint
-# (for MCP clients) and the autonomous researcher. No LLM calls inside.
+# LLM-light deep research engine. Used by the /research_tool endpoint
+# (for MCP clients). No LLM calls inside.
 # Shared credibility tracker — measures how trustworthy a source domain is
 # based on how often its claims hold up under verification. Both the
 # research engine (uses scores as synthesis weights) and the claim verifier
@@ -671,102 +616,15 @@ research_engine.credibility = source_credibility
 # --- The VaultBot spine: the vault is the mind, the model is plumbing ---
 # Knowledge curriculum (Voyager-style self-directed growth): decides what the
 # vault should learn next based on diversity + state + completed/failed.
-# Instantiated BEFORE the autonomous researcher so the researcher can use it.
 knowledge_curriculum = KnowledgeCurriculum(
     vault_graph=vault_graph, session_logger=default_session_logger
 )
 
-# Checkpointer: persists the autonomous researcher's in-flight work so a
-# crashed/restarted backend can resume mid-research instead of losing it.
-# OpenHands event-sourcing pattern (arXiv:2511.03690). Instantiated BEFORE
-# the autonomous researcher so the researcher can use it.
-checkpointer = Checkpointer(
-    checkpoint_dir=str(Path(__file__).with_name("checkpoints")),
-    session_logger=default_session_logger,
-)
-
 # Procedure tracker: the deterministic feedback loop for procedural notes.
-# Logs validation pass/fail per procedure, triggers re-research when
-# failures exceed threshold, and tracks quality promotion. Instantiated
-# BEFORE the autonomous researcher so the researcher can use it.
+# Logs validation pass/fail per procedure and tracks quality promotion.
 procedure_tracker = ProcedureTracker(
     log_path=str(Path(__file__).with_name("procedure_failure_log.json")),
     vault_path=os.getenv("VAULT_PATH", "."),
-)
-
-# Autonomous researcher: scans the vault for knowledge gaps and fills them
-# in the background. Started on server startup; can be toggled via the API.
-
-
-def _researcher_crash_callback(error: str) -> None:
-    """Broadcast a type:"problem" WS event when the researcher thread crashes.
-
-    Called from the researcher's daemon thread (not the main event loop), so
-    it uses asyncio.run_coroutine_threadsafe to bridge into the main loop.
-    If no loop is available or no connections are active, the problem is
-    still logged to the default session logger.
-    """
-    import json as _json
-
-    from diagnostics import classify_error
-
-    try:
-        diag = classify_error(RuntimeError(error), {"stage": "autonomous researcher"})
-        diag.user_message = (
-            "VaultBot's autonomous researcher stopped unexpectedly. "
-            "It won't fill knowledge gaps on its own until you restart. "
-            "Your chat still works normally."
-        )
-        diag.remedy_hint = "Click Restart to start the researcher again."
-        payload = _json.dumps({"type": "problem", "diagnosis": diag.to_dict()})
-        # manager is module-level (defined below); at call time (crash) it
-        # will already be assigned. The researcher thread outlives startup.
-        if (
-            manager is not None
-            and manager.active_connections
-            and main_event_loop is not None
-            and main_event_loop.is_running()
-        ):
-            asyncio.run_coroutine_threadsafe(
-                manager.broadcast(payload), main_event_loop
-            )
-        default_session_logger.log(
-            "problem_notified",
-            {
-                "category": diag.category.value,
-                "user_message": diag.user_message,
-                "source": "autonomous_researcher_crash",
-            },
-        )
-    except Exception as notify_err:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-        # The crash notification itself failed — log it loudly.
-        # This is the one place where we MUST not silently pass:
-        # if the user doesn't know the researcher crashed, they think
-        # the vault is being maintained when it isn't.
-        default_session_logger.log_exception(
-            notify_err, context="autonomous_researcher_crash_notification"
-        )
-        print(
-            f"[CRITICAL] Researcher crashed AND crash notification failed: {notify_err}"
-        )
-
-
-autonomous_researcher = AutonomousResearcher(
-    vault_path=os.getenv("VAULT_PATH", "."),
-    vault_graph=vault_graph,
-    vault_indexer=vault_indexer,
-    note_creator=note_creator,
-    session_logger=default_session_logger,
-    interval_seconds=int(os.getenv("VAULTBOT_AUTONOMOUS_INTERVAL", "600")),
-    max_researches_per_cycle=int(os.getenv("VAULTBOT_AUTONOMOUS_MAX", "2")),
-    min_dangling_references=int(os.getenv("VAULTBOT_AUTONOMOUS_MIN_REFS", "1")),
-    thin_note_threshold=int(os.getenv("VAULTBOT_AUTONOMOUS_THIN", "200")),
-    search_client=search_client,
-    curriculum=knowledge_curriculum,
-    checkpointer=checkpointer,
-    procedure_tracker=procedure_tracker,
-    ollama_client=ollama_client,
-    on_crash=_researcher_crash_callback,
 )
 
 # Self-improvement engine: lets VaultBot read/write its own code, run code in
@@ -850,9 +708,8 @@ fused_retriever = FusedRetriever(
 
 # Chat-loop checkpoint/resume (multi-day sturdiness): snapshots an in-flight
 # agentic turn (round idx, tool history, working memory, partial answer) so a
-# crash/restart RESUMES mid-turn instead of restarting it. Distinct from the
-# research `checkpointer` (which snapshots the autonomous researcher's gap
-# list). One file, atomic writes, cleared on normal completion.
+# crash/restart RESUMES mid-turn instead of restarting it. One file, atomic
+# writes, cleared on normal completion.
 from chat_checkpoint import ChatLoopCheckpointer  # noqa: E402
 
 # Legacy singleton for back-compat (non-session callers). Per-session
@@ -890,8 +747,8 @@ lazy_condenser = LazyCondenser(
     session_logger=default_session_logger,
 )
 
-# Health monitor: heartbeat + liveness for the autonomous researcher + a
-# /health endpoint so a watchdog can detect hangs.
+# Health monitor: heartbeat + liveness for /health so a watchdog can
+# detect hangs.
 health_monitor = HealthMonitor(session_logger=default_session_logger)
 
 # Context budgeter: ensures retrieved vault context fits within the model's
@@ -953,9 +810,8 @@ claim_verifier = ClaimVerifier(
 
 # Pattern extractor: deterministic extraction of cross-session patterns from
 # chat logs. Scans episodic memory, finds recurring topics, sentiment
-# patterns, tool usage, and self-model drift. Feeds consolidation gaps to
-# the autonomous researcher. Pure deterministic -- no LLM calls.
-# See [[Semantic-Consolidation-Architecture]].
+# patterns, tool usage, and self-model drift. Pure deterministic -- no LLM
+# calls. See [[Semantic-Consolidation-Architecture]].
 pattern_extractor = PatternExtractor(
     vault_path=os.getenv("VAULT_PATH", "."),
 )
@@ -1058,9 +914,7 @@ svc = Services(
     note_creator=note_creator,
     research_engine=research_engine,
     search_client=search_client,
-    autonomous_researcher=autonomous_researcher,
     knowledge_curriculum=knowledge_curriculum,
-    checkpointer=checkpointer,
     procedure_tracker=procedure_tracker,
     self_improver=self_improver,
     identity=identity,
@@ -1129,7 +983,6 @@ set_services(svc)
 # instead of main.py's module-level globals.  Migrated routes are deleted
 # from main.py as they move into routers/.  See routers/__init__.py for the
 # migration order.
-from routers import autonomous as _autonomous_router  # noqa: E402
 from routers import config as _config_router  # noqa: E402
 from routers import custom_tools as _custom_tools_router  # noqa: E402
 from routers import identity as _identity_router  # noqa: E402
@@ -1146,7 +999,6 @@ app.include_router(_system_router.router)
 app.include_router(_llm_router.router)
 app.include_router(_config_router.router)
 app.include_router(_research_router.router)
-app.include_router(_autonomous_router.router)
 app.include_router(_custom_tools_router.router)
 app.include_router(_task_router.router)
 app.include_router(_identity_router.router)
@@ -1178,10 +1030,10 @@ async def shutdown_endpoint(request: Request):
     """Self-terminate the backend so the Obsidian plugin can stop it
     deterministically on close without relying on Windows taskkill from a
     process that is itself tearing down. We flush the response first, then
-    run the graceful shutdown path (stop autonomous researcher, persist the
-    index) in a background thread and hard-exit. os._exit is the hard
-    guarantee — no signal handling, no dependence on the event loop staying
-    alive — so the process always dies even if a background thread is stuck.
+    run the graceful shutdown path (persist the index) in a background thread
+    and hard-exit. os._exit is the hard guarantee — no signal handling, no
+    dependence on the event loop staying alive — so the process always dies
+    even if a background thread is stuck.
 
     Accepts and ignores any request body (including the Blob sent by
     navigator.sendBeacon during teardown, which FastAPI would otherwise 422
@@ -1204,10 +1056,6 @@ async def shutdown_endpoint(request: Request):
 
             time.sleep(0.25)
             # Run the graceful shutdown path synchronously (best effort).
-            try:
-                autonomous_researcher.stop()
-            except Exception as e:  # noqa: BLE001 — best-effort — see CONTRIBUTING.md no-silent-fallbacks
-                logger.debug("swallowed: %s", e)
             try:
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(vault_indexer.stop_watching())

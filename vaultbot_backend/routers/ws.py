@@ -69,12 +69,18 @@ async def websocket_endpoint(
     the operator having to send a wake-up message. See [[Auto-Resume-Directive]].
     """
     # ── Session resume: reuse the same session_id across reconnects ──
-    # Priority: explicit frontend sid > last-active pointer > new UUID.
+    # The frontend sends ?sid=<uuid> ONLY when the user explicitly picks a
+    # past session from the "Recent" dropdown. When no sid is provided
+    # (panel open, fresh tab, reconnect after WS drop without explicit
+    # resume), the backend mints a NEW session — no last-active-pointer
+    # fallback. This means closing and reopening the panel always starts
+    # fresh, and the user uses the "Recent" button to pick back up an old
+    # conversation. The restart-resume path (below, gated on
+    # _RESTART_CONTEXT_PATH) is separate and still works for backend
+    # restarts.
     _resume_sid = None
     with contextlib.suppress(Exception):
         _resume_sid = websocket.query_params.get("sid")
-    if not _resume_sid:
-        _resume_sid = read_last_session()
     # Validate a frontend-provided sid actually has state on disk; if not,
     # ignore it (stale plugin-side value after a /new on a different tab)
     # and fall through to a new UUID so we don't silently adopt a dead id.
@@ -354,25 +360,8 @@ async def websocket_endpoint(
                     "to re-explain anything. Just do it.",
                     session_logger,
                 )
-            except asyncio.CancelledError:
-                session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                session_logger.log_exception(e, context="auto_resume")
-                # Surface auto-resume failures as a typed problem so the
-                # UI shows a remedy card, not a raw "Server error: …".
-                diag = classify_error(e, {"stage": "resuming after restart"})
-                await svc.manager.send_personal_message(
-                    json.dumps({"type": "problem", "diagnosis": diag.to_dict()}),
-                    websocket,
-                    session_logger=session_logger,
-                )
-            finally:
-                try:
-                    svc.autonomous_researcher.resume_after_chat()
-                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    logger.debug("swallowed: %s", e)
-
-        setattr(websocket, "_current_task", asyncio.create_task(_auto_resume()))
+            except Exception as e:  # noqa: BLE001 -- best-effort auto-resume
+                logger.warning("auto_resume failed: %s", e)
 
     try:
         while True:
@@ -898,11 +887,7 @@ async def websocket_endpoint(
                             websocket,
                         )
                     finally:
-                        # Chat-priority: always release the researcher pause.
-                        try:
-                            svc.autonomous_researcher.resume_after_chat()
-                        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                            logger.debug("swallowed: %s", e)
+                        pass
 
                 return asyncio.create_task(_run())
 

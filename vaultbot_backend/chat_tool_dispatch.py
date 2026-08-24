@@ -27,7 +27,10 @@ from chat_helpers import (
 )
 from chat_preflight import check_cancelled, dispatch_procedure_core
 from fastapi import WebSocket
-from procedure_suggestion_gate import check_procedure_suggestion
+from procedure_suggestion_gate import (
+    check_procedure_name_suggestion,
+    check_procedure_suggestion,
+)
 from services import Services
 from weaving import weave_textbook_notes
 from working_memory import TaskList
@@ -50,11 +53,19 @@ async def execute_agent_tool(
     session_logger,
     websocket: WebSocket | None = None,
     user_message: str = "",
+    conversation: list | None = None,
 ) -> dict[str, Any]:
     """Execute one tool call from the chat LLM. Runs in the async context.
 
     `websocket` is passed so long-running tools (vault_research) can push
     live progress events to the UI instead of going silent for 30-60s.
+
+    `conversation` is the LIVE in-memory conversation list for the current
+    turn (the same list the agentic loop appends to). It is passed so the
+    ``backend_restart`` tool can force-save the ACTUAL current thread before
+    restarting — ``websocket.conversation_history`` is only synced to the
+    live list at the END of a turn, so a mid-turn restart would otherwise
+    persist only the stale pre-turn history and lose the whole live thread.
     """
     # Module-level imports from chat_helpers, weaving — no longer deferred
     # from main (circular dependency eliminated).
@@ -464,8 +475,12 @@ async def execute_agent_tool(
         return await loop.run_in_executor(None, _read_note_by_title)
 
     if tool_name == "vault_gaps":
-        gaps = await loop.run_in_executor(
-            None, svc.autonomous_researcher._identify_gaps
+        gaps = await run_with_heartbeat(
+            svc,
+            websocket,
+            "finding gaps",
+            svc.knowledge_curriculum.propose_next_gaps,
+            10,
         )
         return {"gaps": gaps[:20], "count": len(gaps)}
 
@@ -510,7 +525,17 @@ async def execute_agent_tool(
         return await loop.run_in_executor(None, _do_export)
 
     if tool_name == "vaultbot_status":
-        return svc.autonomous_researcher.status()
+        return {
+            "running": True,
+            "research": "on-demand only",
+            "tools": [
+                "vault_search",
+                "vault_research",
+                "vault_gaps",
+                "execute_procedure",
+            ],
+            "gaps_count": len(svc.knowledge_curriculum.propose_next_gaps() or []),
+        }
 
     if tool_name == "read_session_log":
         # Read VaultBot's own session logs (issue #134). Wraps
@@ -625,6 +650,7 @@ async def execute_agent_tool(
                 args.get("description", ""),
                 args.get("parameters", {}),
                 args.get("code", ""),
+                doc_source=args.get("doc_source"),
             ),
         )
         # Hot-reload so the new tool is callable immediately.
@@ -754,6 +780,29 @@ async def execute_agent_tool(
                     "procedure_blocked",
                     {"procedure": proc_name, "status": core.get("status", "unknown")},
                 )
+            # ── Procedure name-miss suggestion (issue #337) ──────────
+            # The model called execute_procedure with a name that doesn't
+            # resolve (typo, extra spaces, hallucination). Return a top-k
+            # list of the closest real procedure names so it can SELECT an
+            # exact name instead of re-generating one from memory. This is
+            # the "procedure suggestion" the gate is named for — it fires on
+            # the procedure tool itself, not on raw tools.
+            if str(core.get("error", "")).startswith("procedure not found:"):
+                _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
+                if isinstance(_proc_idx, dict) and _proc_idx:
+                    _name_sug = check_procedure_name_suggestion(
+                        proc_name, user_message, _proc_idx
+                    )
+                    if _name_sug is not None:
+                        session_logger.log(
+                            "procedure_name_suggestion",
+                            {
+                                "procedure": proc_name,
+                                "candidates": _name_sug.get("candidates", []),
+                                "user_message": user_message[:200],
+                            },
+                        )
+                        return _name_sug
             return core
 
         result = core["result"]
@@ -975,7 +1024,15 @@ async def execute_agent_tool(
                             "tasks": len(_wm.tasks),
                         },
                     )
-                _conv = getattr(websocket, "conversation_history", None)
+                # Force-save the LIVE conversation before restarting. The
+                # live ``conversation`` list (passed down from the agentic
+                # loop) is the ACTUAL current thread — it may be far longer
+                # than ``websocket.conversation_history``, which is only
+                # synced to the live list at the END of a turn. A mid-turn
+                # restart that reads only the stale websocket copy would
+                # persist a truncated thread and lose the whole live turn.
+                # Prefer the live list; fall back to the websocket copy.
+                _conv = conversation or getattr(websocket, "conversation_history", None)
                 if _conv:
                     from conversation_state import save_history
 
@@ -986,6 +1043,11 @@ async def execute_agent_tool(
                         "conv_force_saved_before_restart",
                         {
                             "turns": len(_conv),
+                            "source": (
+                                "live_conversation"
+                                if conversation
+                                else "websocket_history"
+                            ),
                         },
                     )
             except Exception as _e:  # noqa: BLE001 — best-effort

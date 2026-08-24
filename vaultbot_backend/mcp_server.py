@@ -31,8 +31,8 @@ VaultBot exposes tools through two paths with different audiences:
     MCP clients see a curated surface: 3 vault tools (vault_research,
     vault_gaps, vaultbot_status) + N agent-authored custom tools. The
     self-improvement meta-tools (code_read, code_run, safe_write, etc.)
-    are NOT exposed — they're for the in-vault agent's autonomous growth,
-    not for external clients. This is by design: an external MCP client
+    are NOT exposed — they're for the in-vault agent's growth, not for
+    external clients. This is by design: an external MCP client
     asking "research X" should get research, not the ability to rewrite
     the backend's source code.
 """
@@ -93,7 +93,7 @@ def _backend_research(topic: str, depth: str = "deep") -> dict[str, Any]:
 
 def _backend_status() -> dict[str, Any]:
     try:
-        resp = requests.get(f"{BACKEND_URL}/autonomous/status", timeout=10)
+        resp = requests.get(f"{BACKEND_URL}/health", timeout=10)
         resp.raise_for_status()
         return resp.json()
     except requests.RequestException as e:
@@ -101,12 +101,9 @@ def _backend_status() -> dict[str, Any]:
 
 
 def _backend_gaps() -> dict[str, Any]:
-    try:
-        resp = requests.get(f"{BACKEND_URL}/autonomous/gaps", timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as e:
-        return {"error": f"backend unreachable: {e}"}
+    # gaps are surfaced by the chat tool schema /ws; external MCP clients
+    # ask for vault_research or vault_gaps via the backend's chat path.
+    return {"gaps": [], "note": "Use vault_gaps via the chat interface."}
 
 
 def _backend_custom_tools() -> dict[str, Any]:
@@ -179,9 +176,8 @@ TOOLS = [
     {
         "name": "vaultbot_status",
         "description": (
-            "Report whether the VaultBot backend and its autonomous "
-            "researcher are running, plus recent autonomous research "
-            "history."
+            "Report whether the VaultBot backend is running and what "
+            "research tools are available."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },

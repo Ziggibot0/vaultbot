@@ -3452,9 +3452,11 @@ class VaultBotSidebarView extends ItemView {
 						item.createEl('span', {
 							cls: 'vaultbot-history-preview',
 							text: s.preview || '(no messages)'});
-						// Load the session's messages read-only on click.
-						// We read the .jsonl via a new /sessions/{id} endpoint
-						// (added below) and render the user/assistant turns.
+						// Resume the session on click: set the session ID and
+						// reconnect the WebSocket with ?sid=<id> so the
+						// backend loads that session's history + working
+						// memory. The rendered turns are shown while the
+						// reconnect happens in the background.
 						item.addEventListener('click', async () => {
 							historyPanel.style.display = 'none';
 							historyToggle.setText('Recent');
@@ -3529,6 +3531,13 @@ class VaultBotSidebarView extends ItemView {
 							} catch (e) {
 								new Notice('Could not load that conversation.');
 							}
+						// Reconnect with this session's ID so the backend
+						// resumes it — loads the history + working memory
+						// so the user can continue the conversation.
+						currentSessionId = s.session_id;
+						sessionTitleEl.setText(s.title || 'Resumed Session');
+						if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+						connectWebSocket();
 						});
 					}
 				}
