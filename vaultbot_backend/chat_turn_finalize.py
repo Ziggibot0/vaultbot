@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from chat_loop_state import TurnState
@@ -129,6 +130,11 @@ async def finalize_turn(
         },
     )
 
+    # finalize_turn is called from handle_chat with a live TurnState, but keep
+    # a defensive fallback for type-safety and tests that may call it directly.
+    if st is None:
+        st = TurnState()
+
     # --- Grounding enforcement: closed-set citation gate ----------------
     # The big LLM is a synthesis router. Its answer must cite notes from
     # the per-turn allowed-citations set (st._allowed_citations), built
@@ -150,8 +156,9 @@ async def finalize_turn(
     _grounding_caution = ""
     _is_idk = False
     _is_temporal = bool(getattr(st, "_is_temporal_question", False))
+    _is_coaching = bool(getattr(st, "_is_coaching_turn", False))
     _is_conversational = False
-    _graph_lookup = None
+    _graph_lookup: Callable[[str], bool] | None = None
     # Tool-sourced answer detection (issue #132): when the turn's facts
     # came from LIVE tool calls (calendar, code_read, github_issues, etc.)
     # rather than vault retrieval, the answer is grounded in the tool's
@@ -164,10 +171,8 @@ async def finalize_turn(
     try:
 
         def _graph_lookup(_wl):
-            return bool(
-                svc.vault_graph.get_note(_wl)
-                and svc.vault_graph.get_note(_wl).get("file_path")
-            )
+            note = svc.vault_graph.get_note(_wl)
+            return bool(isinstance(note, dict) and note.get("file_path"))
 
     except Exception:  # noqa: BLE001 — best-effort
         _graph_lookup = None
@@ -202,6 +207,7 @@ async def finalize_turn(
                     "retry_count": getattr(st, "_grounding_retry_count", 0),
                     "is_idk": _is_idk,
                     "is_temporal": _is_temporal,
+                    "is_coaching": _is_coaching,
                     "is_conversational": _is_conversational,
                     "is_tool_sourced": _is_tool_sourced,
                 },
@@ -210,6 +216,7 @@ async def finalize_turn(
                 _score["failed"]
                 and not _is_idk
                 and not _is_temporal
+                and not _is_coaching
                 and not _is_conversational
                 and not _is_tool_sourced
             ):
@@ -239,10 +246,17 @@ async def finalize_turn(
                     )
                     final_answer += _grounding_caution
             elif _score["failed"] and (
-                _is_idk or _is_temporal or _is_conversational or _is_tool_sourced
+                _is_idk
+                or _is_temporal
+                or _is_coaching
+                or _is_conversational
+                or _is_tool_sourced
             ):
                 # IDK answer failed grounding (expected — it has no factual
                 # claims to cite), a temporal/recency question (grounded
+                # in conversation history, not the vault closed set), a
+                # coaching/planning turn (issue #277; user intent is
+                # life-management guidance, not factual vault synthesis), a
                 # in conversation history, not the vault closed set), a
                 # short conversational answer (greeting/small-talk with no
                 # vault content to ground — issue #334), or a tool-sourced
@@ -253,6 +267,7 @@ async def finalize_turn(
                     {
                         "retry_count": getattr(st, "_grounding_retry_count", 0),
                         "is_temporal": _is_temporal,
+                        "is_coaching": _is_coaching,
                         "is_conversational": _is_conversational,
                         "is_tool_sourced": _is_tool_sourced,
                     },
@@ -261,6 +276,7 @@ async def finalize_turn(
                 _score["grounding_score"] < 0.5
                 and _score["total_wikilinks"] > 0
                 and not _is_temporal
+                and not _is_coaching
                 and not _is_conversational
                 and not _is_tool_sourced
             ):
@@ -312,6 +328,7 @@ async def finalize_turn(
     if (
         not _is_idk
         and not _is_temporal
+        and not _is_coaching
         and not _is_conversational
         and not _is_tool_sourced
     ):
@@ -333,6 +350,7 @@ async def finalize_turn(
             "provenance_surface_skipped_idk",
             {
                 "is_temporal": _is_temporal,
+                "is_coaching": _is_coaching,
                 "is_conversational": _is_conversational,
                 "is_tool_sourced": _is_tool_sourced,
             },

@@ -52,6 +52,9 @@ SCHEMA = {
                     "callback",
                     "calendar_list",
                     "calendar_create",
+                    "calendar_update",
+                    "calendar_delete",
+                    "calendar_freebusy",
                     "tasks_list",
                     "tasks_create",
                     "docs_get",
@@ -63,6 +66,10 @@ SCHEMA = {
             "max_results": {
                 "type": "integer",
                 "description": "Max events to return (calendar_list).",
+            },
+            "calendar_id": {
+                "type": "string",
+                "description": "Calendar ID (defaults to 'primary').",
             },
             "date": {
                 "type": "string",
@@ -95,13 +102,48 @@ SCHEMA = {
                 "type": "string",
                 "description": "Event end time ISO 8601 (calendar_create).",
             },
+            "summary": {
+                "type": "string",
+                "description": (
+                    "Event summary/title (calendar_create, calendar_update)."
+                ),
+            },
+            "event_id": {
+                "type": "string",
+                "description": (
+                    "Google Calendar event ID (calendar_update, calendar_delete)."
+                ),
+            },
             "location": {
                 "type": "string",
-                "description": "Event location (calendar_create).",
+                "description": "Event location (calendar_create, calendar_update).",
             },
             "description": {
                 "type": "string",
-                "description": "Event description (calendar_create).",
+                "description": "Event description (calendar_create, calendar_update).",
+            },
+            "recurrence": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "RFC5545 RRULE list for recurring events, e.g. "
+                    "['RRULE:FREQ=WEEKLY;COUNT=8'] (calendar_create, calendar_update)."
+                ),
+            },
+            "reminders": {
+                "type": "object",
+                "description": (
+                    "Reminder config (calendar_create, calendar_update). "
+                    "Use {'useDefault': false, 'overrides': "
+                    "[{'method':'popup','minutes':60}]}."
+                ),
+            },
+            "allow_conflicts": {
+                "type": "boolean",
+                "description": (
+                    "If true, calendar_create/update proceeds even "
+                    "when overlap is detected."
+                ),
             },
             "tasklist_id": {
                 "type": "string",
@@ -269,6 +311,102 @@ def _api_request(method, url, token, data=None):
         return {"error": f"HTTP {e.code}: {error_body}"}
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
         return {"error": str(e)}
+
+
+def _as_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def _normalize_recurrence(raw):
+    if raw is None or raw == "":
+        return None, None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return None, None
+        return [s], None
+    if isinstance(raw, list):
+        vals = [str(x).strip() for x in raw if str(x).strip()]
+        if not vals:
+            return None, None
+        return vals, None
+    return None, "recurrence must be a string or list of strings"
+
+
+def _normalize_reminders(raw):
+    if raw is None or raw == "":
+        return None, None
+    if not isinstance(raw, dict):
+        return None, "reminders must be an object"
+
+    out = {}
+    if "useDefault" in raw:
+        out["useDefault"] = bool(raw.get("useDefault"))
+
+    if "overrides" in raw:
+        overrides = raw.get("overrides")
+        if not isinstance(overrides, list):
+            return None, "reminders.overrides must be a list"
+        norm_overrides = []
+        for item in overrides:
+            if not isinstance(item, dict):
+                return None, "each reminders override must be an object"
+            method = str(item.get("method", "popup")).strip() or "popup"
+            minutes = item.get("minutes")
+            if not isinstance(minutes, int):
+                return None, "reminders override minutes must be an integer"
+            norm_overrides.append({"method": method, "minutes": minutes})
+        out["overrides"] = norm_overrides
+
+    if not out:
+        return None, "reminders object is empty"
+    if "overrides" in out and "useDefault" not in out:
+        out["useDefault"] = False
+    return out, None
+
+
+def _list_event_conflicts(token, calendar_id, start, end, ignore_event_id=""):
+    params = urlencode(
+        {
+            "singleEvents": "true",
+            "orderBy": "startTime",
+            "timeMin": start,
+            "timeMax": end,
+            "maxResults": 50,
+        }
+    )
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events?{params}"
+    result = _api_request("GET", url, token)
+    if not isinstance(result, dict):
+        return {"error": "Unexpected response type from Google Calendar API."}
+    if "error" in result:
+        return {"error": result["error"]}
+
+    conflicts = []
+    for ev in result.get("items", []):
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("id") == ignore_event_id:
+            continue
+        conflicts.append(
+            {
+                "id": ev.get("id", ""),
+                "summary": ev.get("summary", "(no title)"),
+                "start": ev.get("start", {}).get(
+                    "dateTime", ev.get("start", {}).get("date", "")
+                ),
+                "end": ev.get("end", {}).get(
+                    "dateTime", ev.get("end", {}).get("date", "")
+                ),
+            }
+        )
+    return {"conflicts": conflicts}
 
 
 def run(args: dict) -> dict:
@@ -444,8 +582,9 @@ def run(args: dict) -> dict:
             time_min = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         max_results = args.get("max_results", 10)
+        calendar_id = args.get("calendar_id", "primary")
         url = (
-            f"https://www.googleapis.com/calendar/v3/calendars/primary/events"
+            f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
             f"?maxResults={max_results}"
             f"&timeMin={time_min}"
             f"&singleEvents=true"
@@ -470,6 +609,9 @@ def run(args: dict) -> dict:
                     "end": end,
                     "location": ev.get("location", ""),
                     "description": ev.get("description", ""),
+                    "recurrence": ev.get("recurrence", []),
+                    "recurring_event_id": ev.get("recurringEventId", ""),
+                    "reminders": ev.get("reminders", {}),
                 }
             )
         return {"events": events}
@@ -478,10 +620,26 @@ def run(args: dict) -> dict:
         summary = args.get("summary", "")
         start = args.get("start", "")
         end = args.get("end", "")
+        calendar_id = args.get("calendar_id", "primary")
         if not summary or not start or not end:
             return {
                 "error": "summary, start, and end are required for calendar_create."
             }
+
+        allow_conflicts = _as_bool(args.get("allow_conflicts"), default=False)
+        if not allow_conflicts:
+            conflict_check = _list_event_conflicts(token, calendar_id, start, end)
+            if "error" in conflict_check:
+                return {"error": f"Conflict check failed: {conflict_check['error']}"}
+            conflicts = conflict_check.get("conflicts", [])
+            if conflicts:
+                return {
+                    "error": (
+                        "Time conflict detected. "
+                        "Set allow_conflicts=true to force create."
+                    ),
+                    "conflicts": conflicts,
+                }
 
         event_data = {
             "summary": summary,
@@ -492,10 +650,150 @@ def run(args: dict) -> dict:
             event_data["location"] = args["location"]
         if args.get("description"):
             event_data["description"] = args["description"]
+        recurrence, recurrence_err = _normalize_recurrence(args.get("recurrence"))
+        if recurrence_err:
+            return {"error": recurrence_err}
+        if recurrence:
+            event_data["recurrence"] = recurrence
+        reminders, reminders_err = _normalize_reminders(args.get("reminders"))
+        if reminders_err:
+            return {"error": reminders_err}
+        if reminders:
+            event_data["reminders"] = reminders
 
-        url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
         result = _api_request("POST", url, token, event_data)
         return result
+
+    # --- Calendar: update event ---
+    if action == "calendar_update":
+        event_id = args.get("event_id", "")
+        if not event_id:
+            return {"error": "event_id is required for calendar_update."}
+
+        calendar_id = args.get("calendar_id", "primary")
+        patch_data = {}
+
+        for key in ("summary", "location", "description"):
+            if key in args and args.get(key) is not None:
+                patch_data[key] = args.get(key)
+
+        if args.get("start"):
+            patch_data["start"] = {"dateTime": args.get("start")}
+        if args.get("end"):
+            patch_data["end"] = {"dateTime": args.get("end")}
+
+        recurrence, recurrence_err = _normalize_recurrence(args.get("recurrence"))
+        if recurrence_err:
+            return {"error": recurrence_err}
+        if recurrence is not None:
+            patch_data["recurrence"] = recurrence
+
+        reminders, reminders_err = _normalize_reminders(args.get("reminders"))
+        if reminders_err:
+            return {"error": reminders_err}
+        if reminders is not None:
+            patch_data["reminders"] = reminders
+
+        if not patch_data:
+            return {
+                "error": (
+                    "No update fields provided. Include one of summary, start, end, "
+                    "location, description, recurrence, or reminders."
+                )
+            }
+
+        allow_conflicts = _as_bool(args.get("allow_conflicts"), default=False)
+        if not allow_conflicts and args.get("start") and args.get("end"):
+            conflict_check = _list_event_conflicts(
+                token,
+                calendar_id,
+                args.get("start"),
+                args.get("end"),
+                ignore_event_id=event_id,
+            )
+            if "error" in conflict_check:
+                return {"error": f"Conflict check failed: {conflict_check['error']}"}
+            conflicts = conflict_check.get("conflicts", [])
+            if conflicts:
+                return {
+                    "error": (
+                        "Time conflict detected. "
+                        "Set allow_conflicts=true to force update."
+                    ),
+                    "conflicts": conflicts,
+                }
+
+        url = (
+            f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/"
+            f"{event_id}"
+        )
+        return _api_request("PATCH", url, token, patch_data)
+
+    # --- Calendar: delete event ---
+    if action == "calendar_delete":
+        event_id = args.get("event_id", "")
+        if not event_id:
+            return {"error": "event_id is required for calendar_delete."}
+        calendar_id = args.get("calendar_id", "primary")
+        url = (
+            f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/"
+            f"{event_id}"
+        )
+        result = _api_request("DELETE", url, token)
+        if isinstance(result, dict) and "error" in result:
+            return result
+        return {"status": "deleted", "event_id": event_id, "calendar_id": calendar_id}
+
+    # --- Calendar: free/busy windows ---
+    if action == "calendar_freebusy":
+        calendar_id = args.get("calendar_id", "primary")
+        date = args.get("date", "")
+        time_min = args.get("time_min", "")
+        time_max = args.get("time_max", "")
+
+        if date and (not time_min or not time_max):
+            import time as _time
+            from datetime import time as dt_time
+
+            parsed = datetime.strptime(date, "%Y-%m-%d")
+            local_start = datetime.combine(parsed.date(), dt_time.min)
+            local_end = datetime.combine(parsed.date(), dt_time.max)
+            utc_offset = _time.timezone if _time.daylight == 0 else _time.altzone
+            tz = timezone(timedelta(seconds=-utc_offset))
+            time_min = (
+                local_start.replace(tzinfo=tz)
+                .astimezone(UTC)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
+            )
+            time_max = (
+                local_end.replace(tzinfo=tz)
+                .astimezone(UTC)
+                .strftime("%Y-%m-%dT%H:%M:%SZ")
+            )
+
+        if not time_min or not time_max:
+            return {
+                "error": "time_min and time_max are required for calendar_freebusy."
+            }
+
+        payload = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "items": [{"id": calendar_id}],
+        }
+        url = "https://www.googleapis.com/calendar/v3/freeBusy"
+        result = _api_request("POST", url, token, payload)
+        if "error" in result:
+            return result
+
+        busy = result.get("calendars", {}).get(calendar_id, {}).get("busy", [])
+        return {
+            "calendar_id": calendar_id,
+            "time_min": time_min,
+            "time_max": time_max,
+            "busy": busy,
+        }
 
     # --- Tasks: list task lists or tasks ---
     if action == "tasks_list":

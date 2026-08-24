@@ -13,6 +13,7 @@ from citation_gate import (
     build_reprimand,
     build_sources_block,
     build_trust_badge,
+    detect_coaching_turn,
     detect_conversational,
     detect_temporal_question,
     extract_wikilinks,
@@ -80,6 +81,22 @@ class TestDetectConversational:
     def test_greeting_with_wikilink_still_conversational(self):
         # A short greeting that cites a chat-log note is still conversational.
         assert detect_conversational("Hey Sean [[Chat-yo]]") is True
+
+
+class TestDetectCoachingTurn:
+    def test_daily_planning_prompt(self):
+        assert detect_coaching_turn("What should I do today?") is True
+
+    def test_burnout_prompt(self):
+        msg = "I'm tired and overwhelmed, help me prioritize"
+        assert detect_coaching_turn(msg) is True
+
+    def test_non_coaching_fact_query(self):
+        assert detect_coaching_turn("Explain how FAISS works") is False
+
+    def test_empty(self):
+        assert detect_coaching_turn("") is False
+        assert detect_coaching_turn(None) is False
 
 
 class TestExtractWikilinks:

@@ -340,6 +340,49 @@ def detect_conversational(answer: str, max_len: int | None = None) -> bool:
     return len(answer.strip()) <= cap
 
 
+# ── Coaching/planning user-turn detection ─────────────────────────────
+# Student life/coaching prompts ("what should I do today", "help me
+# prioritize", "I'm exhausted") are not factual-knowledge claims. For
+# these turns, enforcing per-sentence vault citations causes false alarms
+# and awkward invented citations. We detect these user intents and exempt
+# the final answer from the closed-set grounding retry.
+_COACHING_PATTERNS: list[str] = [
+    "what should i do today",
+    "plan my day",
+    "help me prioritize",
+    "prioritize my",
+    "i'm tired",
+    "im tired",
+    "i am tired",
+    "burned out",
+    "burnt out",
+    "overwhelmed",
+    "should i skip",
+    "study plan",
+    "time block",
+    "schedule my",
+    "what should i focus on",
+    "too much to do",
+    "i have too much",
+    "need motivation",
+    "feeling stressed",
+    "help me balance",
+]
+
+
+def detect_coaching_turn(text: str) -> bool:
+    """Return True when the user turn is coaching/planning oriented.
+
+    This is a fast keyword/phrase scan on the USER message (not the model
+    answer). It is intentionally narrow: only clear life-management intents
+    are exempted from grounding retries.
+    """
+    if not text:
+        return False
+    _low = text.lower()
+    return any(p in _low for p in _COACHING_PATTERNS)
+
+
 # ── Reprimand ─────────────────────────────────────────────────────────
 
 

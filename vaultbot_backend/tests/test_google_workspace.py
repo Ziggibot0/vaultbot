@@ -343,3 +343,172 @@ def test_api_request_generic_error(patched_paths, monkeypatch):
     result = gw._api_request("GET", "https://example.com", "tok")
     assert "error" in result
     assert "boom" in result["error"]
+
+
+# ── calendar student-ux extensions (#271) ──────────────────────────────────
+
+
+def test_calendar_list_surfaces_recurrence_and_reminders(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+
+    def fake_api(method, url, token, data=None):
+        assert method == "GET"
+        return {
+            "items": [
+                {
+                    "id": "evt1",
+                    "summary": "Cell Bio Lab",
+                    "start": {"dateTime": "2026-09-01T09:00:00Z"},
+                    "end": {"dateTime": "2026-09-01T10:00:00Z"},
+                    "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=8"],
+                    "recurringEventId": "series1",
+                    "reminders": {"useDefault": False, "overrides": []},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gw, "_api_request", fake_api)
+    result = gw.run({"action": "calendar_list", "time_min": "2026-09-01T00:00:00Z"})
+    assert result["events"][0]["recurrence"] == ["RRULE:FREQ=WEEKLY;COUNT=8"]
+    assert result["events"][0]["recurring_event_id"] == "series1"
+    assert result["events"][0]["reminders"]["useDefault"] is False
+
+
+def test_calendar_create_includes_recurrence_and_reminders(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+    monkeypatch.setattr(gw, "_list_event_conflicts", lambda *a, **k: {"conflicts": []})
+
+    captured = {}
+
+    def fake_api(method, url, token, data=None):
+        captured["method"] = method
+        captured["url"] = url
+        captured["data"] = data
+        return {"id": "evt-created"}
+
+    monkeypatch.setattr(gw, "_api_request", fake_api)
+    result = gw.run(
+        {
+            "action": "calendar_create",
+            "summary": "Exam",
+            "start": "2026-09-10T13:00:00Z",
+            "end": "2026-09-10T14:00:00Z",
+            "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=2"],
+            "reminders": {
+                "useDefault": False,
+                "overrides": [{"method": "popup", "minutes": 1440}],
+            },
+        }
+    )
+    assert result["id"] == "evt-created"
+    assert captured["method"] == "POST"
+    assert captured["data"]["recurrence"] == ["RRULE:FREQ=WEEKLY;COUNT=2"]
+    assert captured["data"]["reminders"]["overrides"][0]["minutes"] == 1440
+
+
+def test_calendar_create_blocks_on_conflict(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+    monkeypatch.setattr(
+        gw,
+        "_list_event_conflicts",
+        lambda *a, **k: {
+            "conflicts": [
+                {
+                    "id": "evt-existing",
+                    "summary": "Existing class",
+                    "start": "2026-09-10T13:00:00Z",
+                    "end": "2026-09-10T14:00:00Z",
+                }
+            ]
+        },
+    )
+    result = gw.run(
+        {
+            "action": "calendar_create",
+            "summary": "Exam",
+            "start": "2026-09-10T13:00:00Z",
+            "end": "2026-09-10T14:00:00Z",
+        }
+    )
+    assert "error" in result
+    assert "conflicts" in result
+    assert result["conflicts"][0]["id"] == "evt-existing"
+
+
+def test_calendar_update_requires_event_id(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+    result = gw.run({"action": "calendar_update", "summary": "new"})
+    assert result == {"error": "event_id is required for calendar_update."}
+
+
+def test_calendar_update_uses_patch(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+    monkeypatch.setattr(gw, "_list_event_conflicts", lambda *a, **k: {"conflicts": []})
+
+    captured = {}
+
+    def fake_api(method, url, token, data=None):
+        captured["method"] = method
+        captured["url"] = url
+        captured["data"] = data
+        return {"id": "evt1", "status": "confirmed"}
+
+    monkeypatch.setattr(gw, "_api_request", fake_api)
+    result = gw.run(
+        {
+            "action": "calendar_update",
+            "event_id": "evt1",
+            "summary": "Updated",
+            "start": "2026-09-10T15:00:00Z",
+            "end": "2026-09-10T16:00:00Z",
+        }
+    )
+    assert result["id"] == "evt1"
+    assert captured["method"] == "PATCH"
+    assert "evt1" in captured["url"]
+    assert captured["data"]["summary"] == "Updated"
+
+
+def test_calendar_delete_requires_event_id(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+    result = gw.run({"action": "calendar_delete"})
+    assert result == {"error": "event_id is required for calendar_delete."}
+
+
+def test_calendar_delete_returns_deleted_status(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+    monkeypatch.setattr(gw, "_api_request", lambda *a, **k: {})
+    result = gw.run({"action": "calendar_delete", "event_id": "evt1"})
+    assert result["status"] == "deleted"
+    assert result["event_id"] == "evt1"
+
+
+def test_calendar_freebusy_returns_busy_windows(patched_paths, monkeypatch):
+    monkeypatch.setattr(gw, "_get_access_token", lambda: ("tok", None))
+
+    def fake_api(method, url, token, data=None):
+        assert method == "POST"
+        assert "freeBusy" in url
+        return {
+            "calendars": {
+                "primary": {
+                    "busy": [
+                        {
+                            "start": "2026-09-10T13:00:00Z",
+                            "end": "2026-09-10T14:00:00Z",
+                        }
+                    ]
+                }
+            }
+        }
+
+    monkeypatch.setattr(gw, "_api_request", fake_api)
+    result = gw.run(
+        {
+            "action": "calendar_freebusy",
+            "time_min": "2026-09-10T00:00:00Z",
+            "time_max": "2026-09-11T00:00:00Z",
+        }
+    )
+    assert result["calendar_id"] == "primary"
+    assert len(result["busy"]) == 1
