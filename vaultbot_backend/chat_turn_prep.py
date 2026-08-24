@@ -157,12 +157,16 @@ def _validate_route_task_output(raw_output: Any) -> tuple[bool, str, dict[str, A
     if rationale_code not in ROUTE_TASK_ALLOWED_RATIONALE_CODES:
         return False, "rationale_code must be a string in the allowed enum set", {}
 
-    return True, "", {
-        "category": category,
-        "procedure_chain": normalized_chain,
-        "confidence": round(confidence, 4),
-        "rationale_code": rationale_code,
-    }
+    return (
+        True,
+        "",
+        {
+            "category": category,
+            "procedure_chain": normalized_chain,
+            "confidence": round(confidence, 4),
+            "rationale_code": rationale_code,
+        },
+    )
 
 
 async def prepare_turn(
@@ -503,22 +507,16 @@ async def prepare_turn(
                 # Check cartridge before running.
                 _chain_cartridge = "big"
                 try:
-                    _idx = (
-                        getattr(svc.procedure_tracker, "_stem_index", None)
-                        or {}
-                    )
+                    _idx = getattr(svc.procedure_tracker, "_stem_index", None) or {}
                     _entry = _idx.get(_chain_proc) or {}
                     _fm = _entry.get("frontmatter") or {}
                     _chain_cartridge = (
-                        str(_fm.get("model_cartridge", "big")).strip().lower()
-                        or "big"
+                        str(_fm.get("model_cartridge", "big")).strip().lower() or "big"
                     )
                 except Exception:  # noqa: BLE001
                     pass
                 if _chain_cartridge == "small":
-                    await send_progress(
-                        svc, websocket, f"running {_chain_proc}", {}
-                    )
+                    await send_progress(svc, websocket, f"running {_chain_proc}", {})
                     _chain_result = await _run_procedure_direct(
                         svc,
                         _chain_proc,
