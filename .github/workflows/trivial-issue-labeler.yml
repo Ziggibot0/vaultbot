@@ -3,6 +3,9 @@ name: Trivial issue labeler
 on:
   issues:
     types: [opened, edited, reopened]
+  workflow_dispatch:
+  schedule:
+    - cron: "15 4 * * *" # daily 04:15 UTC
 
 permissions:
   issues: write
@@ -10,27 +13,13 @@ permissions:
 jobs:
   label-trivial:
     runs-on: ubuntu-latest
-    if: ${{ github.event.issue.pull_request == null }}
     steps:
       - name: Apply high-confidence trivial labeling
         uses: actions/github-script@v7
         with:
           script: |
-            const issue = context.payload.issue;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const number = issue.number;
-            const existing = new Set((issue.labels || []).map(l => l.name));
-
-            if (existing.has("no-auto-triage")) {
-              core.info("Issue opted out via no-auto-triage.");
-              return;
-            }
-
-            const title = (issue.title || "").toLowerCase();
-            const body = (issue.body || "").toLowerCase();
-            const text = `${title}\n${body}`;
-
             const easySignals = [
               "typo", "spelling", "grammar", "readme", "documentation",
               "docs", "broken link", "link fix", "wording", "rename",
@@ -44,35 +33,94 @@ jobs:
               "performance", "slow", "timeout", "incident", "production"
             ];
 
-            const hasEasy = easySignals.some(s => text.includes(s));
-            const hasHard = hardSignals.some(s => text.includes(s));
-            const hasStackTrace = /exception|traceback|stack\s*trace|error\s*:\s*/i.test(text);
-            const hasCodeFence = /```/.test(body);
+            function classifyIssue(issue) {
+              const existing = new Set((issue.labels || []).map(l => l.name));
+              if (existing.has("no-auto-triage")) {
+                return { eligible: false, reason: "opted-out", labelsToAdd: [] };
+              }
 
-            const bodyLen = (issue.body || "").trim().length;
-            const titleLen = (issue.title || "").trim().length;
-            const isShort = titleLen <= 120 && bodyLen <= 1200;
+              const title = (issue.title || "").toLowerCase();
+              const body = (issue.body || "").toLowerCase();
+              const text = `${title}\n${body}`;
 
-            const isTrivial = hasEasy && !hasHard && !hasStackTrace && !hasCodeFence && isShort;
+              const hasEasy = easySignals.some(s => text.includes(s));
+              const hasHard = hardSignals.some(s => text.includes(s));
+              const hasStackTrace = /exception|traceback|stack\s*trace|error\s*:\s*/i.test(text);
+              const hasCodeFence = /```/.test(body);
 
-            if (!isTrivial) {
-              core.info("Issue did not meet high-confidence trivial criteria.");
+              const bodyLen = (issue.body || "").trim().length;
+              const titleLen = (issue.title || "").trim().length;
+              const isShort = titleLen <= 120 && bodyLen <= 1200;
+
+              const isTrivial = hasEasy && !hasHard && !hasStackTrace && !hasCodeFence && isShort;
+              if (!isTrivial) {
+                return { eligible: false, reason: "not-trivial", labelsToAdd: [] };
+              }
+
+              const labelsToAdd = ["trivial", "copilot-candidate"].filter(name => !existing.has(name));
+              if (!labelsToAdd.length) {
+                return { eligible: false, reason: "already-labeled", labelsToAdd: [] };
+              }
+
+              return { eligible: true, reason: "trivial", labelsToAdd };
+            }
+
+            async function maybeLabel(issue) {
+              const decision = classifyIssue(issue);
+              if (!decision.eligible) {
+                core.info(`Skip #${issue.number}: ${decision.reason}`);
+                return false;
+              }
+
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issue.number,
+                labels: decision.labelsToAdd,
+              });
+
+              core.info(`Added labels to #${issue.number}: ${decision.labelsToAdd.join(", ")}`);
+              return true;
+            }
+
+            // Event mode: handle just the triggering issue.
+            if (context.eventName === "issues") {
+              const issue = context.payload.issue;
+              if (issue.pull_request) {
+                core.info("Skip PR-backed issue event.");
+                return;
+              }
+              await maybeLabel(issue);
               return;
             }
 
-            const labelsToAdd = ["trivial", "copilot-candidate"]
-              .filter(name => !existing.has(name));
+            // Sweep mode: check current open backlog, idempotently.
+            let page = 1;
+            let labeledCount = 0;
+            while (true) {
+              const res = await github.rest.issues.listForRepo({
+                owner,
+                repo,
+                state: "open",
+                per_page: 100,
+                page,
+              });
 
-            if (!labelsToAdd.length) {
-              core.info("No new labels needed.");
-              return;
+              const issues = res.data.filter(i => !i.pull_request);
+              if (!issues.length) {
+                break;
+              }
+
+              for (const issue of issues) {
+                if (await maybeLabel(issue)) {
+                  labeledCount += 1;
+                }
+              }
+
+              if (res.data.length < 100) {
+                break;
+              }
+              page += 1;
             }
 
-            await github.rest.issues.addLabels({
-              owner,
-              repo,
-              issue_number: number,
-              labels: labelsToAdd,
-            });
-
-            core.info(`Added labels to #${number}: ${labelsToAdd.join(", ")}`);
+            core.info(`Sweep complete. Newly labeled issues: ${labeledCount}`);
