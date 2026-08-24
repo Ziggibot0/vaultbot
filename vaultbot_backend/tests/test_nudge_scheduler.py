@@ -16,6 +16,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _patch_vault_root(tmp_path, monkeypatch):
     import paths
+
     monkeypatch.setattr(paths, "VAULT_ROOT", tmp_path, raising=False)
     monkeypatch.setattr("paths._resolve_vault_root", lambda: tmp_path)
     yield
@@ -28,7 +29,6 @@ from nudge_scheduler import (
     build_nudge_message,
     compute_urgency,
 )
-
 
 # ── compute_urgency ───────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ class TestComputeUrgency:
 
 class TestQuietHours:
     def test_midnight_is_quiet_wrapped_window(self):
-        # 22–8 wraps midnight; hour 0 is inside quiet window
+        # 22-8 wraps midnight; hour 0 is inside quiet window
         assert _in_quiet_hours(22, 8, _hour=0) is True
 
     def test_evening_is_quiet(self):
@@ -94,7 +94,7 @@ class TestQuietHours:
         assert _in_quiet_hours(22, 8, _hour=8) is False
 
     def test_non_wrapping_window(self):
-        # quiet 12–14 covers hours 12 and 13
+        # quiet 12-14 covers hours 12 and 13
         assert _in_quiet_hours(12, 14, _hour=12) is True
         assert _in_quiet_hours(12, 14, _hour=13) is True
         assert _in_quiet_hours(12, 14, _hour=14) is False
@@ -106,12 +106,16 @@ class TestQuietHours:
 
 class TestBuildNudgeMessage:
     def test_overdue_message(self):
-        msg = build_nudge_message({"title": "Lab report", "target_date": "2025-01-01"}, "overdue")
+        msg = build_nudge_message(
+            {"title": "Lab report", "target_date": "2025-01-01"}, "overdue"
+        )
         assert "overdue" in msg.lower() or "⚠️" in msg
         assert "Lab report" in msg
 
     def test_today_message(self):
-        msg = build_nudge_message({"title": "Submit essay", "target_date": "2025-01-10"}, "today")
+        msg = build_nudge_message(
+            {"title": "Submit essay", "target_date": "2025-01-10"}, "today"
+        )
         assert "today" in msg.lower() or "📅" in msg
         assert "Submit essay" in msg
 
@@ -133,15 +137,23 @@ class TestWasNudgedRecently:
 
     def test_recent_nudge_via_append_log(self, tmp_path):
         import nudge_scheduler as ns
+
         # Manually write a recent nudge record
         now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        ns._append_nudge_log({"ts": now, "goal_id": "gA", "urgency": "today", "message": "test"})
+        ns._append_nudge_log(
+            {"ts": now, "goal_id": "gA", "urgency": "today", "message": "test"}
+        )
         assert ns._was_nudged_recently("gA", 3600) is True
 
     def test_old_nudge_returns_false(self, tmp_path):
         import nudge_scheduler as ns
-        old_ts = (datetime.now(UTC) - timedelta(seconds=7200)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        ns._append_nudge_log({"ts": old_ts, "goal_id": "gB", "urgency": "overdue", "message": "old"})
+
+        old_ts = (datetime.now(UTC) - timedelta(seconds=7200)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        ns._append_nudge_log(
+            {"ts": old_ts, "goal_id": "gB", "urgency": "overdue", "message": "old"}
+        )
         assert ns._was_nudged_recently("gB", 3600) is False
 
 
@@ -172,6 +184,7 @@ class TestNudgeSchedulerInit:
     def test_is_user_idle_old_message(self):
         sched = NudgeScheduler(idle_seconds=1)
         import time
+
         sched.update_user_activity("s2")
         time.sleep(0.01)
         # idle_seconds=1 but user messaged just now — test that flag logic exists

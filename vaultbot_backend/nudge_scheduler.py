@@ -26,6 +26,7 @@ failures are logged but never surface to the user.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -52,9 +53,8 @@ def _nudge_log_path() -> Path:
 def _append_nudge_log(record: dict[str, Any]) -> None:
     p = _nudge_log_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    with _nudge_log_lock:
-        with p.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with _nudge_log_lock, p.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def _read_nudge_log(last_n: int = 500) -> list[dict[str, Any]]:
@@ -66,10 +66,8 @@ def _read_nudge_log(last_n: int = 500) -> list[dict[str, Any]]:
     for line in lines[-last_n:]:
         line = line.strip()
         if line:
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 records.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
     return records
 
 
@@ -113,8 +111,10 @@ def _was_nudged_recently(goal_id: str, throttle_seconds: int) -> bool:
     return False
 
 
-def _in_quiet_hours(quiet_start: int = 22, quiet_end: int = 8, *, _hour: int | None = None) -> bool:
-    """True if the current local hour is in the quiet window [quiet_start, quiet_end)."""
+def _in_quiet_hours(
+    quiet_start: int = 22, quiet_end: int = 8, *, _hour: int | None = None
+) -> bool:
+    """True if local hour is inside [quiet_start, quiet_end)."""
     hour = _hour if _hour is not None else datetime.now().hour  # local time
     if quiet_start > quiet_end:  # wraps midnight
         return hour >= quiet_start or hour < quiet_end
@@ -140,7 +140,10 @@ def build_nudge_message(goal: dict[str, Any], urgency: str) -> str:
     title = goal.get("title", "a goal")
     target = goal.get("target_date", "")
     label_map = {
-        "overdue": f"⚠️ **{title}** is overdue (was due {target}). Want to reschedule or mark it done?",
+        "overdue": (
+            f"⚠️ **{title}** is overdue (was due {target}). "
+            "Want to reschedule or mark it done?"
+        ),
         "today": f"📅 **{title}** is due today! What's your next action?",
         "tomorrow": f"🔔 **{title}** is due tomorrow ({target}). Time to push on this.",
         "48h": f"⏳ **{title}** is due in 2 days ({target}). Any blockers to clear?",
@@ -157,13 +160,15 @@ class NudgeScheduler:
     def __init__(
         self,
         *,
-        scan_interval: int = 300,       # seconds between scans
-        throttle_seconds: int = 3600,   # min time between nudges for same goal
-        idle_seconds: int = 60,         # user must be idle this long before nudge
-        quiet_start: int = 22,          # quiet hours start (local hour)
-        quiet_end: int = 8,             # quiet hours end (local hour)
+        scan_interval: int = 300,  # seconds between scans
+        throttle_seconds: int = 3600,  # min time between nudges for same goal
+        idle_seconds: int = 60,  # user must be idle this long before nudge
+        quiet_start: int = 22,  # quiet hours start (local hour)
+        quiet_end: int = 8,  # quiet hours end (local hour)
     ) -> None:
-        self.scan_interval = int(os.environ.get("VAULTBOT_NUDGE_INTERVAL", scan_interval))
+        self.scan_interval = int(
+            os.environ.get("VAULTBOT_NUDGE_INTERVAL", scan_interval)
+        )
         self.throttle_seconds = throttle_seconds
         self.idle_seconds = idle_seconds
         self.quiet_start = quiet_start
@@ -199,10 +204,8 @@ class NudgeScheduler:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
 
     async def _scan_loop(self) -> None:
         while self._running:
@@ -248,28 +251,41 @@ class NudgeScheduler:
                     continue
                 try:
                     await self._manager.send_personal_message(
-                        {"type": "nudge", "message": message, "urgency": urgency,
-                         "goal_id": goal_id},
+                        {
+                            "type": "nudge",
+                            "message": message,
+                            "urgency": urgency,
+                            "goal_id": goal_id,
+                        },
                         ws,
                     )
                     delivered = True
                     logger.info(
-                        "nudge_scheduler: nudge delivered goal_id=%s urgency=%s session=%s",
-                        goal_id, urgency, session_id,
+                        (
+                            "nudge_scheduler: nudge delivered "
+                            "goal_id=%s urgency=%s session=%s"
+                        ),
+                        goal_id,
+                        urgency,
+                        session_id,
                     )
                 except Exception:  # noqa: BLE001 — best-effort delivery
-                    logger.debug("nudge_scheduler: delivery failed session=%s", session_id)
+                    logger.debug(
+                        "nudge_scheduler: delivery failed session=%s", session_id
+                    )
         except Exception:  # noqa: BLE001 — best-effort background task
             logger.warning("nudge_scheduler: _deliver_nudge failed", exc_info=True)
             return
 
         if delivered:
-            _append_nudge_log({
-                "ts": _now_iso(),
-                "goal_id": goal_id,
-                "urgency": urgency,
-                "message": message,
-            })
+            _append_nudge_log(
+                {
+                    "ts": _now_iso(),
+                    "goal_id": goal_id,
+                    "urgency": urgency,
+                    "message": message,
+                }
+            )
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

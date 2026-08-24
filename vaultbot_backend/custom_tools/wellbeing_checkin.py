@@ -35,19 +35,19 @@ SCHEMA: dict[str, Any] = {
             },
             "mood": {
                 "type": "number",
-                "description": "Mood score 1 (very low) to 5 (excellent) — required for 'checkin'.",
+                "description": "Mood score 1-5 (required for checkin).",
             },
             "energy": {
                 "type": "number",
-                "description": "Energy score 1 (exhausted) to 5 (full energy) — required for 'checkin'.",
+                "description": "Energy score 1-5 (required for checkin).",
             },
             "stress": {
                 "type": "number",
-                "description": "Stress score 1 (calm) to 5 (overwhelmed) — required for 'checkin'.",
+                "description": "Stress score 1-5 (required for checkin).",
             },
             "note": {
                 "type": "string",
-                "description": "Optional free-text note (e.g. 'rough sleep, big exam tomorrow').",
+                "description": "Optional free-text note.",
             },
             "tags": {
                 "type": "array",
@@ -62,7 +62,7 @@ SCHEMA: dict[str, Any] = {
             },
             "last_n": {
                 "type": "integer",
-                "description": "Number of records to return for 'history' (default 10).",
+                "description": "Number of records for history (default 10).",
             },
         },
         "required": ["action"],

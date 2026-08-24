@@ -40,7 +40,7 @@ SCHEMA: dict[str, Any] = {
             "status_filter": {
                 "type": "string",
                 "enum": ["active", "completed", "archived", "paused"],
-                "description": "Filter goals by status (goal_list). Omit for all goals.",
+                "description": "Status filter for goal_list; omit to list all goals.",
             },
             "id": {
                 "type": "string",

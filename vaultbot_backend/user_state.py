@@ -123,9 +123,7 @@ def _validate_single_goal(g: Any) -> None:
     if missing:
         raise ValueError(f"Goal missing required keys: {missing}")
     if g["status"] not in _ALLOWED_GOAL_STATUSES:
-        raise ValueError(
-            f"goal status {g['status']!r} not in {_ALLOWED_GOAL_STATUSES}"
-        )
+        raise ValueError(f"goal status {g['status']!r} not in {_ALLOWED_GOAL_STATUSES}")
 
 
 def _validate_checkin(data: Any) -> dict[str, Any]:
@@ -226,7 +224,9 @@ def upsert_goal(goal: dict[str, Any]) -> dict[str, Any]:
         container["goals"] = goals
         _validate_goals(container)
         _atomic_write_json(_state_dir() / "goals.json", container)
-    logger.info("user_state: goal %s id=%s title=%r", action, goal["id"], goal.get("title"))
+    logger.info(
+        "user_state: goal %s id=%s title=%r", action, goal["id"], goal.get("title")
+    )
     return goal
 
 
@@ -269,9 +269,8 @@ def append_checkin(record: dict[str, Any]) -> dict[str, Any]:
         record = {**record, "ts": _now_iso()}
     _validate_checkin(record)
     p = _ensure_state_dir() / "wellbeing.jsonl"
-    with _wellbeing_lock:
-        with p.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with _wellbeing_lock, p.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     logger.info(
         "user_state: checkin mood=%s energy=%s stress=%s",
         record.get("mood"),
@@ -307,9 +306,7 @@ def wellbeing_summary(days: int = 7) -> dict[str, Any]:
 
     cutoff = datetime.now(UTC) - timedelta(days=days)
     recent = [
-        r
-        for r in read_checkins(last_n=200)
-        if _parse_iso(r.get("ts", "")) >= cutoff
+        r for r in read_checkins(last_n=200) if _parse_iso(r.get("ts", "")) >= cutoff
     ]
     if not recent:
         return {"count": 0, "days": days}
@@ -318,8 +315,10 @@ def wellbeing_summary(days: int = 7) -> dict[str, Any]:
     avg_energy = round(sum(r["energy"] for r in recent) / count, 2)
     avg_stress = round(sum(r["stress"] for r in recent) / count, 2)
     # Burnout risk: simple heuristic — high stress + low energy
-    burnout_risk = "high" if avg_stress >= 4 and avg_energy <= 2 else (
-        "medium" if avg_stress >= 3.5 or avg_energy <= 2.5 else "low"
+    burnout_risk = (
+        "high"
+        if avg_stress >= 4 and avg_energy <= 2
+        else ("medium" if avg_stress >= 3.5 or avg_energy <= 2.5 else "low")
     )
     return {
         "count": count,
@@ -371,9 +370,14 @@ def regenerate_user_model() -> str:
         "## Recent Wellbeing",
     ]
     if wb.get("count", 0) > 0:
+        avg_line = (
+            f"- Avg mood: {wb['avg_mood']}/5 | "
+            f"energy: {wb['avg_energy']}/5 | "
+            f"stress: {wb['avg_stress']}/5"
+        )
         lines += [
             f"- Check-ins (last {wb['days']}d): {wb['count']}",
-            f"- Avg mood: {wb['avg_mood']}/5 | energy: {wb['avg_energy']}/5 | stress: {wb['avg_stress']}/5",
+            avg_line,
             f"- Burnout risk: **{wb['burnout_risk']}**",
         ]
     else:
@@ -411,7 +415,7 @@ def build_boot_summary() -> str:
             top = active[0]["title"]
             parts.append(f"Top goal: {top}")
             if len(active) > 1:
-                parts.append(f"(+{len(active)-1} more active)")
+                parts.append(f"(+{len(active) - 1} more active)")
         if wb.get("count", 0) > 0:
             parts.append(
                 f"Recent wellbeing: mood {wb['avg_mood']}/5 "

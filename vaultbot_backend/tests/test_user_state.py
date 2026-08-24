@@ -6,9 +6,6 @@ reads or writes the real vault.  Runs entirely offline.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from pathlib import Path
-
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -18,16 +15,15 @@ pytestmark = pytest.mark.unit
 def _patch_vault_root(tmp_path, monkeypatch):
     """Redirect paths.VAULT_ROOT to a throwaway tmp tree for every test."""
     import paths
+
     monkeypatch.setattr(paths, "VAULT_ROOT", tmp_path, raising=False)
     # Also replace the lazy __getattr__ result for the module.
     monkeypatch.setattr("paths._resolve_vault_root", lambda: tmp_path)
-    import user_state
     # Clear caches / force re-resolution
     yield
 
 
 import user_state
-
 
 # ── Profile ──────────────────────────────────────────────────────────────────
 
@@ -69,7 +65,9 @@ class TestGoals:
         assert result["goals"] == []
 
     def test_upsert_and_list_goals(self):
-        user_state.upsert_goal({"id": "g1", "title": "Pass biochem", "status": "active"})
+        user_state.upsert_goal(
+            {"id": "g1", "title": "Pass biochem", "status": "active"}
+        )
         goals = user_state.list_goals()
         assert len(goals) == 1
         assert goals[0]["title"] == "Pass biochem"
@@ -83,12 +81,16 @@ class TestGoals:
 
     def test_list_goals_status_filter(self):
         user_state.upsert_goal({"id": "g1", "title": "Active goal", "status": "active"})
-        user_state.upsert_goal({"id": "g2", "title": "Done goal", "status": "completed"})
+        user_state.upsert_goal(
+            {"id": "g2", "title": "Done goal", "status": "completed"}
+        )
         assert len(user_state.list_goals(status_filter="active")) == 1
         assert len(user_state.list_goals(status_filter="completed")) == 1
 
     def test_complete_goal(self):
-        user_state.upsert_goal({"id": "g1", "title": "Finish thesis", "status": "active"})
+        user_state.upsert_goal(
+            {"id": "g1", "title": "Finish thesis", "status": "active"}
+        )
         result = user_state.complete_goal("g1")
         assert result is not None
         assert result["status"] == "completed"
@@ -147,7 +149,7 @@ class TestWellbeing:
         assert len(checkins) == 5
 
     def test_read_checkins_last_n(self):
-        for i in range(10):
+        for _i in range(10):
             user_state.append_checkin({"mood": 3, "energy": 3, "stress": 2})
         assert len(user_state.read_checkins(last_n=3)) == 3
 
