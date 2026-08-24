@@ -4,7 +4,6 @@ import importlib
 from pathlib import Path
 
 import pytest
-
 from vaultbot_router import route_vaultbot_message
 
 pytestmark = pytest.mark.unit

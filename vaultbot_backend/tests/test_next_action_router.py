@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from next_action_router import build_next_action
 
 pytestmark = pytest.mark.unit
