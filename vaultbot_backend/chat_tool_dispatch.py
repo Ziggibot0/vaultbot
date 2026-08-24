@@ -468,7 +468,11 @@ async def execute_agent_tool(
 
     if tool_name == "vault_gaps":
         gaps = await run_with_heartbeat(
-            svc, websocket, "finding gaps", svc.knowledge_curriculum.propose_next_gaps, 10
+            svc,
+            websocket,
+            "finding gaps",
+            svc.knowledge_curriculum.propose_next_gaps,
+            10,
         )
         return {"gaps": gaps[:20], "count": len(gaps)}
 

@@ -454,9 +454,10 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
         return f"{result.get('count', 0)} gaps found"
     if tool_name == "vaultbot_status":
         st = result
-        return (
-            "running" if st.get("running") else "stopped"
-        ) + f", research={st.get('research', 'unknown')}, gaps={st.get('gaps_count', 0)}"
+        status = "running" if st.get("running") else "stopped"
+        research = st.get("research", "unknown")
+        gaps = st.get("gaps_count", 0)
+        return f"{status}, research={research}, gaps={gaps}"
     if tool_name == "code_read":
         return (
             f"{result.get('total_lines', 0)} lines from {result.get('file_path', '?')}"
