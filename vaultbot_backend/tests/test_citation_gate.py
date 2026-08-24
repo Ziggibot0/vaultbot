@@ -13,6 +13,7 @@ from citation_gate import (
     build_reprimand,
     build_sources_block,
     build_trust_badge,
+    classify_coaching_turn,
     detect_coaching_turn,
     detect_conversational,
     detect_temporal_question,
@@ -97,6 +98,30 @@ class TestDetectCoachingTurn:
     def test_empty(self):
         assert detect_coaching_turn("") is False
         assert detect_coaching_turn(None) is False
+
+
+class TestClassifyCoachingTurn:
+    def test_invalid_input(self):
+        assert classify_coaching_turn("") == ("unknown", 0.0)
+        assert classify_coaching_turn(None) == ("unknown", 0.0)
+
+    def test_phrase_hit_is_coaching(self):
+        label, confidence = classify_coaching_turn("What should I do today?")
+        assert label == "coaching"
+        assert confidence > 0.0
+
+    def test_token_hits_is_coaching(self):
+        label, confidence = classify_coaching_turn(
+            "I feel overwhelmed and stressed. Help me prioritize my schedule"
+        )
+        assert label == "coaching"
+        assert confidence >= 0.7
+
+    def test_fact_query_is_knowledge(self):
+        assert classify_coaching_turn("Explain how FAISS works") == (
+            "knowledge",
+            0.0,
+        )
 
 
 class TestExtractWikilinks:
