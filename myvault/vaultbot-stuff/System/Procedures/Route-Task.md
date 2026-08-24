@@ -79,7 +79,7 @@ Categories (match by keyword or meaning):
 - unknown: none of the above clearly match
 
 Return JSON in this exact format:
-{"category": "<category>", "chain": ["<proc1>", "<proc2>", ...]}
+{"category": "<category>", "procedure_chain": ["<proc1>", "<proc2>", ...], "confidence": 0.0, "rationale_code": "<reason>"}
 
 Chain mappings (use these exact procedure names):
 - research: ["Research-Batch", "Cross-Check-Claims", "Vault-Lint"]
@@ -103,7 +103,6 @@ import json
 # Step 1 output is the LLM's JSON response
 raw = prior_results[0] if prior_results else "{}"
 if isinstance(raw, str):
-    # Strip any markdown fences or extra text
     raw = raw.strip()
     if raw.startswith("```"):
         lines = raw.split("\n")
@@ -114,20 +113,29 @@ if isinstance(raw, str):
 try:
     dispatch = json.loads(raw)
 except (json.JSONDecodeError, TypeError):
-    dispatch = {"category": "unknown", "chain": ["Small-Model-Route"]}
+    dispatch = {"category": "unknown", "procedure_chain": ["Small-Model-Route"], "confidence": 0.0, "rationale_code": "schema_fallback"}
+
+allowed_categories = {"research", "vault-maintenance", "self-improvement", "gap-filling", "chat-consolidation", "question-answering", "code-editing", "fact-checking", "conversational", "unknown"}
+allowed_codes = {"action_signal", "clarification_or_explanation", "mixed_or_unsettled", "research_signal", "maintenance_signal", "self_improvement_signal", "gap_filling_signal", "chat_consolidation_signal", "question_answering_signal", "code_editing_signal", "fact_checking_signal", "conversational_signal", "unknown_signal", "schema_fallback"}
 
 category = dispatch.get("category", "unknown")
-chain = dispatch.get("chain", ["Small-Model-Route"])
+chain = dispatch.get("procedure_chain", dispatch.get("chain", ["Small-Model-Route"]))
+confidence = dispatch.get("confidence", 0.0)
+rationale_code = dispatch.get("rationale_code", "schema_fallback")
 
-# Validate: every procedure in the chain must be a non-empty string
-chain = [p for p in chain if isinstance(p, str) and p.strip()]
-
-# Conversational messages need no procedure chain — the model just
-# responds naturally. An empty chain is correct here, not a fallback.
-if not chain and category == "conversational":
-    chain = []
-elif not chain:
+if not isinstance(category, str) or category not in allowed_categories:
+    category = "unknown"
+if not isinstance(chain, list):
     chain = ["Small-Model-Route"]
+chain = [p for p in chain if isinstance(p, str) and p.strip()]
+if not chain and category != "conversational":
+    chain = ["Small-Model-Route"]
+if isinstance(confidence, (int, float)):
+    confidence = max(0.0, min(1.0, float(confidence)))
+else:
+    confidence = 0.0
+if not isinstance(rationale_code, str) or rationale_code not in allowed_codes:
+    rationale_code = "schema_fallback"
 
 # Research backing for each branch
 backing = {
@@ -146,6 +154,8 @@ backing = {
 result = json.dumps({
     "category": category,
     "procedure_chain": chain,
+    "confidence": round(confidence, 4),
+    "rationale_code": rationale_code,
     "research_backing": backing.get(category, backing["unknown"]),
     "instructions": f"Run each procedure in order: {' → '.join(chain)}. Pass relevant args from the original intent to each procedure.",
 }, indent=2)
