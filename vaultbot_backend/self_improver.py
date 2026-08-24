@@ -546,27 +546,57 @@ class SelfImprover:
                     preexec_fn=preexec_fn,
                 )
 
-            def _tail(path, n):
+            def _read_window(path, n, *, head: bool = False):
                 with open(path, "rb") as f:
-                    f.seek(0, 2)
-                    size = f.tell()
-                    f.seek(max(0, size - n))
-                    return f.read().decode("utf-8", errors="replace")
+                    data = f.read()
+                text = data.decode("utf-8", errors="replace")
+                if head:
+                    return text[:n]
+                return text[-n:] if n > 0 else text
 
-            stdout_tail = _tail(out_path, TUNABLES.code_run_stdout_tail)
-            stderr_tail = _tail(err_path, TUNABLES.code_run_stderr_tail)
-            truncated = False
-            with contextlib.suppress(OSError):
-                truncated = (
-                    os.path.getsize(out_path) > TUNABLES.code_run_stdout_tail
-                ) or (os.path.getsize(err_path) > TUNABLES.code_run_stderr_tail)
+            def _read_stats(path):
+                try:
+                    size = os.path.getsize(path)
+                except OSError:
+                    size = 0
+                with open(path, "rb") as f:
+                    data = f.read()
+                text = data.decode("utf-8", errors="replace")
+                lines = len(text.splitlines()) if text else 0
+                return size, lines, text
+
+            stdout_size, stdout_lines, stdout_text = _read_stats(out_path)
+            stderr_size, stderr_lines, stderr_text = _read_stats(err_path)
+            stdout_head = _read_window(out_path, TUNABLES.code_run_stdout_tail, head=True)
+            stdout_tail = _read_window(out_path, TUNABLES.code_run_stdout_tail)
+            stderr_head = _read_window(err_path, TUNABLES.code_run_stderr_tail, head=True)
+            stderr_tail = _read_window(err_path, TUNABLES.code_run_stderr_tail)
+            stdout_truncated = stdout_size > TUNABLES.code_run_stdout_tail
+            stderr_truncated = stderr_size > TUNABLES.code_run_stderr_tail
+            truncated = stdout_truncated or stderr_truncated
             result = {
                 "stdout": stdout_tail,
+                "stdout_head": stdout_head,
+                "stdout_tail": stdout_tail,
+                "stdout_total_bytes": stdout_size,
+                "stdout_total_lines": stdout_lines,
                 "stderr": stderr_tail,
+                "stderr_head": stderr_head,
+                "stderr_tail": stderr_tail,
+                "stderr_total_bytes": stderr_size,
+                "stderr_total_lines": stderr_lines,
                 "exit_code": proc.returncode,
+                "truncated": truncated,
             }
             if truncated:
                 result["output_truncated"] = True
+                result["_truncation_notice"] = (
+                    "Output was truncated to the head/tail window for this tool result. "
+                    f"stdout bytes={stdout_size}, stderr bytes={stderr_size}; "
+                    f"stdout lines={stdout_lines}, stderr lines={stderr_lines}."
+                )
+            else:
+                result["output_truncated"] = False
             return result
         except subprocess.TimeoutExpired:
             return {"error": "timeout", "timeout": timeout}
