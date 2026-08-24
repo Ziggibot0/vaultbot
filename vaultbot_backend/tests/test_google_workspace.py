@@ -34,9 +34,11 @@ def patched_paths(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def clear_pending_states():
-    """Clear the module-level in-flight OAuth state between tests."""
+def clear_pending_states(monkeypatch):
+    """Clear the module-level in-flight OAuth state and env vars between tests."""
     gw._PENDING_STATES.clear()
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     yield
     gw._PENDING_STATES.clear()
 
@@ -86,10 +88,12 @@ def test_setup_saves_credentials(patched_paths):
     assert gw._load_config() == {"client_id": "cid", "client_secret": "csec"}
 
 
-def test_auth_requires_credentials(patched_paths):
-    assert gw.run({"action": "auth"}) == {
-        "error": "No credentials configured. Run 'setup' first."
-    }
+def test_auth_requires_credentials(patched_paths, monkeypatch):
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
+    result = gw.run({"action": "auth"})
+    assert "error" in result
+    assert "not configured" in result["error"]
 
 
 def test_auth_returns_url_with_expected_params(patched_paths, monkeypatch):
@@ -164,15 +168,15 @@ def test_callback_requires_code(patched_paths):
 
 
 def test_callback_rejects_missing_state(patched_paths):
-    assert gw.run({"action": "callback", "code": "abc"}) == {
-        "error": "Invalid or missing OAuth state. Re-run 'auth'."
-    }
+    result = gw.run({"action": "callback", "code": "abc"})
+    assert "error" in result
+    assert "Invalid or missing OAuth state" in result["error"]
 
 
 def test_callback_rejects_unknown_state(patched_paths):
-    assert gw.run({"action": "callback", "code": "abc", "state": "bogus"}) == {
-        "error": "Invalid or missing OAuth state. Re-run 'auth'."
-    }
+    result = gw.run({"action": "callback", "code": "abc", "state": "bogus"})
+    assert "error" in result
+    assert "Invalid or missing OAuth state" in result["error"]
 
 
 def test_callback_requires_credentials(patched_paths):
@@ -187,20 +191,29 @@ def test_callback_requires_credentials(patched_paths):
     }
 
 
-def test_status_unconfigured(patched_paths):
+def test_status_unconfigured(patched_paths, monkeypatch):
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     result = gw.run({"action": "status"})
     assert result["configured"] is False
     assert result["authenticated"] is False
+    assert "hint" in result
+    assert len(result["hint"]) > 0
 
 
-def test_status_configured_but_unauthenticated(patched_paths):
+def test_status_configured_but_unauthenticated(patched_paths, monkeypatch):
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     gw._save_config({"client_id": "cid", "client_secret": "csec"})
     result = gw.run({"action": "status"})
     assert result["configured"] is True
     assert result["authenticated"] is False
+    assert "sign_in" in result["hint"]
 
 
-def test_status_authenticated(patched_paths):
+def test_status_authenticated(patched_paths, monkeypatch):
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     gw._save_config({"client_id": "cid", "client_secret": "csec"})
     gw._save_tokens(
         {
@@ -212,10 +225,75 @@ def test_status_authenticated(patched_paths):
     result = gw.run({"action": "status"})
     assert result["configured"] is True
     assert result["authenticated"] is True
+    assert result["hint"] == ""
 
 
 def test_unknown_action_returns_error(patched_paths):
     assert gw.run({"action": "bogus"}) == {"error": "Unknown action: bogus"}
+
+
+# ── env-var credential support (#373) ──────────────────────────────────────
+
+
+def test_get_credentials_from_env_vars(patched_paths, monkeypatch):
+    """Env vars take priority over config file."""
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "env-cid")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "env-csec")
+    # Even if config file has different values, env vars win.
+    gw._save_config({"client_id": "file-cid", "client_secret": "file-csec"})
+    assert gw._get_credentials() == ("env-cid", "env-csec")
+
+
+def test_get_credentials_falls_back_to_config(patched_paths, monkeypatch):
+    """When env vars are not set, fall back to config file."""
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
+    gw._save_config({"client_id": "file-cid", "client_secret": "file-csec"})
+    assert gw._get_credentials() == ("file-cid", "file-csec")
+
+
+def test_auth_works_with_env_vars_only(patched_paths, monkeypatch):
+    """User can sign in without running setup — just env vars."""
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "env-cid")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "env-csec")
+    monkeypatch.setattr(gw.webbrowser, "open", lambda url: None)
+    result = gw.run({"action": "auth"})
+    assert result["status"] == "auth_started"
+    assert "client_id=env-cid" in result["auth_url"]
+
+
+def test_sign_in_alias_works(patched_paths, monkeypatch):
+    """sign_in is a user-friendly alias for auth."""
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "env-cid")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "env-csec")
+    monkeypatch.setattr(gw.webbrowser, "open", lambda url: None)
+    result = gw.run({"action": "sign_in"})
+    assert result["status"] == "auth_started"
+    assert "accounts.google.com" in result["auth_url"]
+
+
+def test_sign_in_requires_credentials(patched_paths, monkeypatch):
+    """sign_in gives a helpful error when no credentials configured."""
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
+    result = gw.run({"action": "sign_in"})
+    assert "error" in result
+    assert "not configured" in result["error"]
+
+
+def test_status_shows_configured_with_env_vars(patched_paths, monkeypatch):
+    """status reports configured=True when env vars are set, no config file."""
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "env-cid")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "env-csec")
+    result = gw.run({"action": "status"})
+    assert result["configured"] is True
+    assert result["authenticated"] is False
+    assert "sign_in" in result["hint"]
+
+
+def test_sign_in_action_in_enum(patched_paths):
+    """sign_in must be in the action enum so it's not rejected as unknown."""
+    assert "sign_in" in gw.SCHEMA["parameters"]["properties"]["action"]["enum"]
 
 
 # ── _get_access_token ────────────────────────────────────────────────────────

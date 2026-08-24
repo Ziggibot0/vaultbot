@@ -8,6 +8,7 @@ import base64
 import contextlib
 import hashlib
 import json
+import os
 import secrets
 import webbrowser
 from datetime import UTC, datetime, timedelta, timezone
@@ -36,10 +37,11 @@ SCHEMA = {
     "name": "google_workspace",
     "description": (
         "Interact with Google Workspace APIs (Calendar, Tasks, Docs). "
-        "Requires one-time OAuth setup: call 'setup' with client_id and "
-        "client_secret, then 'auth' to get a browser sign-in URL, then "
-        "'callback' with the auth code. After that, calendar/tasks/docs "
-        "actions work with stored tokens (auto-refreshed)."
+        "If GOOGLE_OAUTH_CLIENT_ID is set in the environment, just call "
+        "'sign_in' to open a browser for Google sign-in — no setup needed. "
+        "Otherwise call 'setup' with client_id and client_secret, then "
+        "'sign_in' or 'auth'. After sign-in, calendar/tasks/docs actions "
+        "work with stored tokens (auto-refreshed)."
     ),
     "parameters": {
         "type": "object",
@@ -48,6 +50,8 @@ SCHEMA = {
                 "type": "string",
                 "enum": [
                     "setup",
+                    "auth",
+                    "sign_in",
                     "auth",
                     "callback",
                     "calendar_list",
@@ -211,6 +215,17 @@ def _save_tokens(tokens):
 
 
 def _get_credentials():
+    """Return (client_id, client_secret) from env vars or config file.
+
+    Env vars take priority so a maintainer can bake credentials into the
+    deployment (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET) and
+    end users never need to touch the GCP console. Falls back to the
+    config file for backwards compatibility.
+    """
+    client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+    if client_id and client_secret:
+        return client_id, client_secret
     cfg = _load_config()
     return cfg.get("client_id"), cfg.get("client_secret")
 
@@ -430,11 +445,21 @@ def run(args: dict) -> dict:
         _save_config(cfg)
         return {"status": "ok", "message": "Credentials saved."}
 
-    # --- Auth: start OAuth flow ---
-    if action == "auth":
+    # --- Auth / sign_in: start OAuth flow ---
+    # 'sign_in' is a user-friendly alias for 'auth'. Both open a browser
+    # tab so the user can sign in with Google. No GCP console work needed
+    # when GOOGLE_OAUTH_CLIENT_ID is set in the environment (#373).
+    if action in ("auth", "sign_in"):
         client_id, client_secret = _get_credentials()
         if not client_id:
-            return {"error": "No credentials configured. Run 'setup' first."}
+            return {
+                "error": (
+                    "Google OAuth credentials are not configured. Ask the "
+                    "maintainer to set GOOGLE_OAUTH_CLIENT_ID and "
+                    "GOOGLE_OAUTH_CLIENT_SECRET environment variables, or "
+                    "run 'setup' with your own client_id and client_secret."
+                )
+            }
 
         # Generate a fresh state + PKCE verifier/challenge for this flow.
         state = secrets.token_urlsafe(32)
@@ -462,8 +487,10 @@ def run(args: dict) -> dict:
             "status": "auth_started",
             "auth_url": auth_url,
             "message": (
-                "Open this URL to sign in. After consent, Google will "
-                "redirect to localhost:8000/callback."
+                "A browser tab should have opened for Google sign-in. "
+                "After you consent, Google will redirect back and "
+                "authentication completes automatically. If no browser "
+                "opened, visit the auth_url manually."
             ),
         }
 
@@ -481,7 +508,7 @@ def run(args: dict) -> dict:
         state = args.get("state", "")
         code_verifier = _PENDING_STATES.pop(state, None)
         if not state or code_verifier is None:
-            return {"error": "Invalid or missing OAuth state. Re-run 'auth'."}
+            return {"error": "Invalid or missing OAuth state. Re-run 'sign_in'."}
 
         client_id, client_secret = _get_credentials()
         if not client_id:
@@ -523,7 +550,9 @@ def run(args: dict) -> dict:
     if action == "status":
         cfg = _load_config()
         tokens = _load_tokens()
-        configured = bool(cfg.get("client_id"))
+        # Credentials are configured if either env vars or config file has them
+        env_configured = bool(os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip())
+        configured = env_configured or bool(cfg.get("client_id"))
         authenticated = bool(tokens and tokens.get("access_token"))
 
         # Check token expiry
@@ -536,11 +565,22 @@ def run(args: dict) -> dict:
             except Exception:  # noqa: BLE001 — best-effort: malformed timestamp leaves token_expires None
                 pass
 
+        # Helpful hint when not yet authenticated
+        hint = ""
+        if not configured:
+            hint = (
+                "Ask the maintainer to set GOOGLE_OAUTH_CLIENT_ID and "
+                "GOOGLE_OAUTH_CLIENT_SECRET, or run 'setup' with your own."
+            )
+        elif not authenticated:
+            hint = "Call 'sign_in' to open a browser and connect your Google account."
+
         return {
             "configured": configured,
             "authenticated": authenticated,
             "token_expires_at": token_expires,
             "scopes": " ".join(tokens.get("scope", "").split()) if tokens else "",
+            "hint": hint,
         }
 
     # --- All other actions require authentication ---
