@@ -119,6 +119,8 @@ allowed_categories = {"research", "vault-maintenance", "self-improvement", "gap-
 allowed_codes = {"action_signal", "clarification_or_explanation", "mixed_or_unsettled", "research_signal", "maintenance_signal", "self_improvement_signal", "gap_filling_signal", "chat_consolidation_signal", "question_answering_signal", "code_editing_signal", "fact_checking_signal", "conversational_signal", "unknown_signal", "schema_fallback"}
 
 category = dispatch.get("category", "unknown")
+# Backward-compatibility for older Route-Task output during rollout; remove once
+# the strict schema is fully enforced in all callers.
 chain = dispatch.get("procedure_chain", dispatch.get("chain", ["Small-Model-Route"]))
 confidence = dispatch.get("confidence", 0.0)
 rationale_code = dispatch.get("rationale_code", "schema_fallback")

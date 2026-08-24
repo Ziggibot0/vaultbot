@@ -124,8 +124,10 @@ def _validate_route_task_output(raw_output: Any) -> tuple[bool, str, dict[str, A
         return False, f"missing required keys: {', '.join(missing)}", {}
 
     category = payload.get("category")
-    if not isinstance(category, str) or category not in ROUTE_TASK_ALLOWED_CATEGORIES:
-        return False, "category is missing or not in the allowed enum set", {}
+    if not isinstance(category, str):
+        return False, "category must be a string", {}
+    if category not in ROUTE_TASK_ALLOWED_CATEGORIES:
+        return False, "category is not in the allowed enum set", {}
 
     chain = payload.get("procedure_chain")
     if not isinstance(chain, list):
@@ -150,11 +152,10 @@ def _validate_route_task_output(raw_output: Any) -> tuple[bool, str, dict[str, A
         return False, "confidence must be between 0.0 and 1.0", {}
 
     rationale_code = payload.get("rationale_code")
-    if (
-        not isinstance(rationale_code, str)
-        or rationale_code not in ROUTE_TASK_ALLOWED_RATIONALE_CODES
-    ):
-        return False, "rationale_code is missing or not in the allowed enum set", {}
+    if not isinstance(rationale_code, str):
+        return False, "rationale_code must be a string", {}
+    if rationale_code not in ROUTE_TASK_ALLOWED_RATIONALE_CODES:
+        return False, "rationale_code must be a string in the allowed enum set", {}
 
     return True, "", {
         "category": category,
@@ -473,74 +474,79 @@ async def prepare_turn(
                             _repair_result.get("error", "repair failed"),
                             raw_output="",
                         )
-            if _route_payload is None:
-                _route_payload = dict(ROUTE_TASK_FALLBACK)
-                session_logger.log_route_schema_fallback(
-                    fallback_category=_route_payload["category"],
-                    fallback_chain=_route_payload["procedure_chain"],
-                    confidence=_route_payload["confidence"],
-                    rationale_code=_route_payload["rationale_code"],
+        if _route_payload is None:
+            _route_payload = dict(ROUTE_TASK_FALLBACK)
+            if _route_result.get("error"):
+                session_logger.log_route_schema_invalid(
+                    f"Route-Task execution failed: {_route_result.get('error')}",
+                    raw_output="",
                 )
-            _preflight_category = _route_payload.get("category", "")
-            _preflight_chain = _route_payload.get("procedure_chain", [])
-            if isinstance(_preflight_chain, list) and _preflight_chain:
-                session_logger.log(
-                    "preflight_route",
-                    {
-                        "category": _preflight_category,
-                        "chain": _preflight_chain,
-                    },
-                )
-                # Auto-execute small-cartridge chain steps.
-                # Big-cartridge steps are left for the big model.
-                for _chain_proc in _preflight_chain:
-                    # Check cartridge before running.
-                    _chain_cartridge = "big"
-                    try:
-                        _idx = (
-                            getattr(svc.procedure_tracker, "_stem_index", None)
-                            or {}
-                        )
-                        _entry = _idx.get(_chain_proc) or {}
-                        _fm = _entry.get("frontmatter") or {}
-                        _chain_cartridge = (
-                            str(_fm.get("model_cartridge", "big")).strip().lower()
-                            or "big"
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                    if _chain_cartridge == "small":
-                        await send_progress(
-                            svc, websocket, f"running {_chain_proc}", {}
-                        )
-                        _chain_result = await _run_procedure_direct(
-                            svc,
-                            _chain_proc,
-                            proc_args={"intent": user_message},
-                            session_logger=session_logger,
-                            user_message=user_message,
-                            websocket=websocket,
-                        )
-                        _preflight_results.append(_chain_result)
-                        session_logger.log(
-                            "preflight_chain_step",
-                            {
-                                "procedure": _chain_proc,
-                                "cartridge": _chain_cartridge,
-                                "passed": _chain_result.get("overall_passed"),
-                            },
-                        )
-                    else:
-                        # Big-cartridge: stop here, let the
-                        # big model handle the rest.
-                        _preflight_results.append(
-                            {
-                                "procedure": _chain_proc,
-                                "cartridge": _chain_cartridge,
-                                "pending": True,
-                            }
-                        )
-                        break
+            session_logger.log_route_schema_fallback(
+                fallback_category=_route_payload["category"],
+                fallback_chain=_route_payload["procedure_chain"],
+                confidence=_route_payload["confidence"],
+                rationale_code=_route_payload["rationale_code"],
+            )
+        _preflight_category = _route_payload.get("category", "")
+        _preflight_chain = _route_payload.get("procedure_chain", [])
+        if isinstance(_preflight_chain, list) and _preflight_chain:
+            session_logger.log(
+                "preflight_route",
+                {
+                    "category": _preflight_category,
+                    "chain": _preflight_chain,
+                },
+            )
+            # Auto-execute small-cartridge chain steps.
+            # Big-cartridge steps are left for the big model.
+            for _chain_proc in _preflight_chain:
+                # Check cartridge before running.
+                _chain_cartridge = "big"
+                try:
+                    _idx = (
+                        getattr(svc.procedure_tracker, "_stem_index", None)
+                        or {}
+                    )
+                    _entry = _idx.get(_chain_proc) or {}
+                    _fm = _entry.get("frontmatter") or {}
+                    _chain_cartridge = (
+                        str(_fm.get("model_cartridge", "big")).strip().lower()
+                        or "big"
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                if _chain_cartridge == "small":
+                    await send_progress(
+                        svc, websocket, f"running {_chain_proc}", {}
+                    )
+                    _chain_result = await _run_procedure_direct(
+                        svc,
+                        _chain_proc,
+                        proc_args={"intent": user_message},
+                        session_logger=session_logger,
+                        user_message=user_message,
+                        websocket=websocket,
+                    )
+                    _preflight_results.append(_chain_result)
+                    session_logger.log(
+                        "preflight_chain_step",
+                        {
+                            "procedure": _chain_proc,
+                            "cartridge": _chain_cartridge,
+                            "passed": _chain_result.get("overall_passed"),
+                        },
+                    )
+                else:
+                    # Big-cartridge: stop here, let the
+                    # big model handle the rest.
+                    _preflight_results.append(
+                        {
+                            "procedure": _chain_proc,
+                            "cartridge": _chain_cartridge,
+                            "pending": True,
+                        }
+                    )
+                    break
 
     # Conversation-aware retrieval: search the conversation index for
     # prior turns relevant to this query. This is what lets the bot
