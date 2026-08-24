@@ -551,9 +551,7 @@ def run(args: dict) -> dict:
         cfg = _load_config()
         tokens = _load_tokens()
         # Credentials are configured if either env vars or config file has them
-        env_configured = bool(
-            os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
-        )
+        env_configured = bool(os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip())
         configured = env_configured or bool(cfg.get("client_id"))
         authenticated = bool(tokens and tokens.get("access_token"))
 
