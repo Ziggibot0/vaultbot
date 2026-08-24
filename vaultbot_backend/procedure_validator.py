@@ -402,9 +402,15 @@ def validate_procedure_text(
         )
 
     checks_run.append("model_cartridge_exists")
-    if not fm.get("model_cartridge"):
+    _cartridge = str(fm.get("model_cartridge", "")).strip().lower()
+    if not _cartridge:
         errors.append(
             "Frontmatter missing 'model_cartridge' (must be one of: small, big, vision)"
+        )
+    elif _cartridge not in {"small", "big", "vision"}:
+        errors.append(
+            "Invalid 'model_cartridge' value "
+            f"{_cartridge!r} (must be one of: small, big, vision)"
         )
 
     checks_run.append("created_exists")

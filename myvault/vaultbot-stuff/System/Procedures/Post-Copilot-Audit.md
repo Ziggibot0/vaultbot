@@ -246,7 +246,7 @@ validation: contains "Changed Files" and "Safety Pattern Check" and "Risk Assess
   audit — reading files, understanding changes, checking patterns, writing
   the report. Now 95% of the work is deterministic code and only the final
   synthesis uses the small model.
-- The procedure can be chained after [[Route-Task]] as the audit branch.
+- The procedure can be surfaced by FUSED retrieval when audit context matches.
 
 ## Related
 

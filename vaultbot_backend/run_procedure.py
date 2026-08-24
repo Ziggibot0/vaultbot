@@ -239,7 +239,22 @@ def main() -> int:
         try:
             from llm_client import get_cartridge
 
-            cartridge = getattr(proc, "model_cartridge", None) or "big"
+            cartridge = (
+                str(getattr(proc, "model_cartridge", None) or "big").strip().lower()
+            )
+            if cartridge not in {"big", "small", "vision"}:
+                print(
+                    json.dumps(
+                        {
+                            "error": (
+                                f"invalid model_cartridge for procedure "
+                                f"{args.procedure_name}: {cartridge!r}; "
+                                "expected one of: big, small, vision"
+                            ),
+                        }
+                    )
+                )
+                return 1
             llm_client = get_cartridge(cartridge)
             if llm_client is None:
                 # Cartridge not assigned — fall back to big

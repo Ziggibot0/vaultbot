@@ -4,8 +4,8 @@ status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-06
-description: Pre-check that runs before any routing or tool work. Detects explicit user directives (negations, prohibitions, mandates) and checks whether any vault design doc, architecture note, or procedure contradicts them. If conflict exists, the user directive wins — the vault note is flagged for review, not obeyed.
-when_to_use: before Route-Task, before any tool work, whenever the user says "don't", "never", "always", "NO", or any explicit prohibition/mandate
+description: Pre-check that runs before tool work. Detects explicit user directives (negations, prohibitions, mandates) and checks whether any vault design doc, architecture note, or procedure contradicts them. If conflict exists, the user directive wins — the vault note is flagged for review, not obeyed.
+when_to_use: before tool work whenever the user says "don't", "never", "always", "NO", or any explicit prohibition/mandate
 falsifiable_if: a user directive is overridden by a vault note despite this check running, or a false positive flags a non-conflicting note
 applies_to:
   - directive-enforcement
@@ -129,8 +129,8 @@ directives = step2.get("directives", [])
 
 # The resolution is simple: user directives win. Always.
 # Any vault note that contradicts a user directive is flagged, not obeyed.
-# The procedure returns a "constraint" object that downstream steps
-# (Route-Task, any procedure) MUST check before acting.
+# The procedure returns a "constraint" object that downstream steps MUST
+# check before acting.
 
 constraints = []
 for d in directives:
@@ -144,22 +144,16 @@ result = json.dumps({
     "conflict_resolved": True,
     "constraints": constraints,
     "override_rule": "USER DIRECTIVE > vault notes > procedures > model weights",
-    "instructions": "Pass these constraints to Route-Task and all downstream procedures. If any step would violate a constraint, STOP and report the conflict to the user."
+    "instructions": "Pass these constraints to downstream procedures. If any step would violate a constraint, STOP and report the conflict to the user."
 })
 ```
 
 ## Usage
 
-Call this BEFORE Route-Task:
+Call this before tool work when the user gives an explicit directive:
 
 ```
 execute_procedure('User-Directive-Override-Check', args={'intent': '<user request>'})
-```
-
-Then pass the constraints to Route-Task:
-
-```
-execute_procedure('Route-Task', args={'intent': '<user request>', 'constraints': <constraints from check>})
 ```
 
 ## Falsifiability
@@ -171,6 +165,5 @@ This procedure is falsifiable if:
 
 ## Related
 
-- [[Route-Task]] — the router this check runs before
 - [[Authority-Check]] — resolves authority conflicts between user and vault
 - [[Preflight-Safety-Check]] — the preflight safety gate

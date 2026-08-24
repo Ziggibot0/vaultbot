@@ -66,7 +66,7 @@ A note can look good on one axis while failing on another — faithful but disco
 - After writing a new research note (self-assessment before finalizing)
 - During a vault audit (batch-assess notes to prioritize improvements)
 - When the operator asks "how good is this note?"
-- As part of the [[Route-Task]] procedure's vault-maintenance branch
+- When FUSED retrieval surfaces it for vault-maintenance work
 
 Do NOT run on: chat logs, sacred journal files, or locked notes.
 
@@ -385,5 +385,4 @@ result = json.dumps({
 - [[Note-Quality-Score]] — composed procedure for connectivity axis
 - [[Evaluate-Retrieval]] — composed procedure for utility axis
 - [[Verify-Claims]] — broader verification procedure that includes vault cross-referencing
-- [[Route-Task]] — dispatches to this procedure for vault-maintenance tasks
 - [[Procedure-Composition-Patterns]] — how this procedure composes others

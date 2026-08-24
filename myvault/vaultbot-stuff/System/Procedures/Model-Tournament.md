@@ -335,4 +335,3 @@ Keep it concise. This recommendation will be shown to the user.]
 
 - [[Ollama-Model-Search]] — discovers/pulls candidate models to test
 - [[Ollama-Pull-Models]] — pulls models by tag before a tournament
-- [[Small-Model-Route]] — routes tasks to the appropriate small model

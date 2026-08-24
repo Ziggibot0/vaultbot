@@ -63,7 +63,7 @@ The [[Proc-Step-Summary]] procedure handles the verify phase with:
 
 Without this directive, self-edits could introduce subtle bugs that only manifest later — when the system tries to use a broken function, it fails in a way that's hard to trace back to the edit. The verification gate catches problems at the earliest possible moment, when the context of what changed is still fresh.
 
-This is especially important for [[Route-Task]] and other procedures that compose multiple sub-procedures — a broken sub-procedure could cascade failures through the entire chain.
+This is especially important for procedures that compose other procedures — a broken sub-procedure could cascade failures through the entire workflow.
 
 ## Related
 
