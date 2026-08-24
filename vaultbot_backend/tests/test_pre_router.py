@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
 from pre_router import pre_route_message
+
+pytestmark = pytest.mark.unit
 
 
 def test_pre_route_prefers_procedure_for_actionable_requests():
