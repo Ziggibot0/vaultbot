@@ -28,7 +28,7 @@ from typing import Any
 
 from config import TUNABLES
 
-# ── [[wikilink]] parsing ──────────────────────────────────────────────────
+# ── [[wikilink]] parsing ──────────────────────────────────────────────
 # Matches [[Note-Name]], [[Note-Name|alias]], [[Note-Name#heading]].
 # Capture group 1 = the note stem (what we compare against the closed set).
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]")
@@ -46,7 +46,7 @@ def extract_wikilinks(text: str) -> list[str]:
     return out
 
 
-# ── Closed-set construction ────────────────────────────────────────────────
+# ── Closed-set construction ───────────────────────────────────────────
 # The rendered vault context labels each note as a `### [[Note-Name]]`
 # header (both the abstract L0/L1/L2 path and the legacy
 # build_graph_context path use this format). We parse those headers to
@@ -129,7 +129,7 @@ def add_citation_target(
     return allowed
 
 
-# ── Grounding score ───────────────────────────────────────────────────────
+# ── Grounding score ───────────────────────────────────────────────────
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -227,7 +227,7 @@ def score_grounding(
     }
 
 
-# ── IDK detection ────────────────────────────────────────────────────────
+# ── IDK detection ─────────────────────────────────────────────────────
 # Shared detector for "I don't know" / admission-of-ignorance answers.
 # Used by the grounding gate (skip retry on IDK), the provenance verifier
 # (skip entailment on IDK), and the trust badge (show a different badge).
@@ -265,7 +265,7 @@ def detect_idk(answer: str) -> bool:
     return any(p in _low for p in _IDK_PATTERNS)
 
 
-# ── Temporal-question detection ──────────────────────────────────────────
+# ── Temporal-question detection ───────────────────────────────────────
 # Recency/continuity questions ("what were we working on last?") must be
 # grounded in the PRIOR CONVERSATION section (which carries timestamps),
 # NOT the closed-set vault citation gate. The closed set is built from
@@ -312,7 +312,35 @@ def detect_temporal_question(text: str) -> bool:
     return any(p in _low for p in _TEMPORAL_PATTERNS)
 
 
-# ── Reprimand ─────────────────────────────────────────────────────────────
+# ── Conversational-answer detection ───────────────────────────────────
+# Casual greetings and small-talk ("hi", "sup homie", "hey Sean, ready")
+# are NOT factual claims — they carry no vault content to ground, so the
+# grounding gate would otherwise false-alarm (0% grounded) and force a
+# redundant second model call to re-cite a greeting. We detect these short
+# conversational answers and exempt them from the grounding retry (same
+# escape hatch as IDK and temporal questions). See issue #334.
+#
+# The signal is LENGTH: an answer at or under ``conversational_max_len``
+# chars is too short to be a substantive multi-claim answer needing vault
+# grounding. A greeting can still carry a [[wikilink]] (e.g. to a chat-log
+# note) — the point is not to punish brevity, only to skip the pointless
+# re-citation retry on casual replies.
+def detect_conversational(answer: str, max_len: int | None = None) -> bool:
+    """Return True if ``answer`` is a short conversational/casual reply.
+
+    A reply is conversational when it is at or under ``max_len`` chars
+    (default ``TUNABLES.conversational_max_len``). This is a fast string
+    scan — no LLM call, no I/O. It lets the grounding gate skip the
+    re-citation retry on greetings and small-talk that carry no vault
+    content to ground (issue #334).
+    """
+    if not answer:
+        return False
+    cap = max_len if max_len is not None else TUNABLES.conversational_max_len
+    return len(answer.strip()) <= cap
+
+
+# ── Reprimand ─────────────────────────────────────────────────────────
 
 
 def build_reprimand(
@@ -363,7 +391,7 @@ def build_reprimand(
     )
 
 
-# ── Positive provenance surface (scholar-trust) ──────────────────────────
+# ── Positive provenance surface (scholar-trust) ───────────────────────
 # The grounding gate above is NEGATIVE (reprimand on failure). These helpers
 # build the POSITIVE surface: a trust badge + a "## Sources" block listing
 # the cited vault notes as clickable [[wikilinks]], so a scholar can see
