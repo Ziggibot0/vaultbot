@@ -1,0 +1,78 @@
+name: Trivial issue labeler
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  issues: write
+
+jobs:
+  label-trivial:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.issue.pull_request == null }}
+    steps:
+      - name: Apply high-confidence trivial labeling
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const number = issue.number;
+            const existing = new Set((issue.labels || []).map(l => l.name));
+
+            if (existing.has("no-auto-triage")) {
+              core.info("Issue opted out via no-auto-triage.");
+              return;
+            }
+
+            const title = (issue.title || "").toLowerCase();
+            const body = (issue.body || "").toLowerCase();
+            const text = `${title}\n${body}`;
+
+            const easySignals = [
+              "typo", "spelling", "grammar", "readme", "documentation",
+              "docs", "broken link", "link fix", "wording", "rename",
+              "comment only", "format", "whitespace", "nit", "small cleanup"
+            ];
+
+            const hardSignals = [
+              "security", "vulnerability", "token", "auth", "oauth", "cve",
+              "data loss", "corruption", "crash", "panic", "deadlock",
+              "race", "incorrect result", "regression", "memory leak",
+              "performance", "slow", "timeout", "incident", "production"
+            ];
+
+            const hasEasy = easySignals.some(s => text.includes(s));
+            const hasHard = hardSignals.some(s => text.includes(s));
+            const hasStackTrace = /exception|traceback|stack\s*trace|error\s*:\s*/i.test(text);
+            const hasCodeFence = /```/.test(body);
+
+            const bodyLen = (issue.body || "").trim().length;
+            const titleLen = (issue.title || "").trim().length;
+            const isShort = titleLen <= 120 && bodyLen <= 1200;
+
+            const isTrivial = hasEasy && !hasHard && !hasStackTrace && !hasCodeFence && isShort;
+
+            if (!isTrivial) {
+              core.info("Issue did not meet high-confidence trivial criteria.");
+              return;
+            }
+
+            const labelsToAdd = ["trivial", "copilot-candidate"]
+              .filter(name => !existing.has(name));
+
+            if (!labelsToAdd.length) {
+              core.info("No new labels needed.");
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: number,
+              labels: labelsToAdd,
+            });
+
+            core.info(`Added labels to #${number}: ${labelsToAdd.join(", ")}`);

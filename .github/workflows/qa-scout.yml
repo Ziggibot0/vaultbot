@@ -1,0 +1,98 @@
+name: QA scout
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # daily 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies (locked)
+        run: uv sync --frozen --extra dev
+
+      - name: Run multi-angle QA checks (non-blocking capture)
+        id: checks
+        working-directory: vaultbot_backend
+        run: |
+          set +e
+          ALL_OK=1
+          rm -f ../qa-report.md
+
+          run_check () {
+            NAME="$1"
+            shift
+            OUT="$(mktemp)"
+            "$@" > "$OUT" 2>&1
+            CODE=$?
+            if [ $CODE -eq 0 ]; then
+              echo "## PASS: $NAME" >> ../qa-report.md
+              echo >> ../qa-report.md
+            else
+              ALL_OK=0
+              echo "## FAIL: $NAME" >> ../qa-report.md
+              echo >> ../qa-report.md
+              echo "\`\`\`text" >> ../qa-report.md
+              tail -n 120 "$OUT" >> ../qa-report.md
+              echo "\`\`\`" >> ../qa-report.md
+              echo >> ../qa-report.md
+            fi
+          }
+
+          run_check "Ruff lint" uv run ruff check .
+          run_check "Unit tests" uv run pytest -q -m unit --tb=short
+          run_check "Hot-path pyright" uv run pyright --level error vault_indexer.py chat_handler.py fused_retrieval.py
+
+          echo "all_ok=$ALL_OK" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert QA tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALL_OK: ${{ steps.checks.outputs.all_ok }}
+        run: |
+          OPEN_ISSUE=$(gh issue list --label "qa-scout" --state open --json number --jq '.[0].number // empty')
+
+          if [ "$ALL_OK" = "1" ]; then
+            if [ -n "$OPEN_ISSUE" ]; then
+              gh issue comment "$OPEN_ISSUE" --body "QA scout is green in run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Closing this tracker."
+              gh issue close "$OPEN_ISSUE"
+            fi
+            exit 0
+          fi
+
+          REPORT=$(cat qa-report.md)
+          BODY=$(cat <<EOF
+QA scout found real failures on \`main\`.
+
+Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+This is a single rolling issue (upserted) to avoid issue bloat.
+
+$REPORT
+EOF
+)
+
+          if [ -n "$OPEN_ISSUE" ]; then
+            gh issue edit "$OPEN_ISSUE" --title "QA scout failures on main" --body "$BODY"
+          else
+            gh issue create \
+              --title "QA scout failures on main" \
+              --label "qa-scout" \
+              --body "$BODY"
+          fi

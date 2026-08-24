@@ -1,0 +1,78 @@
+name: Label bootstrap
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1" # weekly Monday 04:00 UTC
+
+permissions:
+  issues: write
+
+jobs:
+  ensure-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update operational labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              {
+                name: "trivial",
+                color: "0E8A16",
+                description: "High-confidence low-complexity issue suitable for autonomous handling"
+              },
+              {
+                name: "copilot-candidate",
+                color: "1D76DB",
+                description: "Issue is a candidate for Copilot cloud agent delegation"
+              },
+              {
+                name: "no-auto-triage",
+                color: "B60205",
+                description: "Exclude this issue from automatic labeling and assignment"
+              },
+              {
+                name: "qa-scout",
+                color: "5319E7",
+                description: "Tracking issue opened by QA scout workflow"
+              },
+              {
+                name: "vulnerability-radar",
+                color: "D93F0B",
+                description: "Tracking issue opened by dependency vulnerability radar"
+              }
+            ];
+
+            for (const l of labels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: l.name,
+                });
+
+                await github.rest.issues.updateLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: l.name,
+                  new_name: l.name,
+                  color: l.color,
+                  description: l.description,
+                });
+                core.info(`Updated label: ${l.name}`);
+              } catch (err) {
+                if (err.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    name: l.name,
+                    color: l.color,
+                    description: l.description,
+                  });
+                  core.info(`Created label: ${l.name}`);
+                } else {
+                  throw err;
+                }
+              }
+            }
