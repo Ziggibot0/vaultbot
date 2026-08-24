@@ -11,7 +11,9 @@ import re
 from typing import Any
 
 
-def pre_route_message(text: str, rules: dict[str, list[str]] | None = None) -> dict[str, Any]:
+def pre_route_message(
+    text: str, rules: dict[str, list[str]] | None = None
+) -> dict[str, Any]:
     """Route a message to a cheap execution path.
 
     The implementation favors deterministic, evidence-based scoring over a

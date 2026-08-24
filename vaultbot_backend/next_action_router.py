@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_next_action(route: str, text: str, evidence: list[str] | None = None) -> dict[str, Any]:
+def build_next_action(
+    route: str, text: str, evidence: list[str] | None = None
+) -> dict[str, Any]:
     """Return a compact next-action object for the route decision."""
     evidence = evidence or []
     if route == "procedure":
