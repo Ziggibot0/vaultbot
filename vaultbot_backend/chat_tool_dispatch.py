@@ -53,11 +53,19 @@ async def execute_agent_tool(
     session_logger,
     websocket: WebSocket | None = None,
     user_message: str = "",
+    conversation: list | None = None,
 ) -> dict[str, Any]:
     """Execute one tool call from the chat LLM. Runs in the async context.
 
     `websocket` is passed so long-running tools (vault_research) can push
     live progress events to the UI instead of going silent for 30-60s.
+
+    `conversation` is the LIVE in-memory conversation list for the current
+    turn (the same list the agentic loop appends to). It is passed so the
+    ``backend_restart`` tool can force-save the ACTUAL current thread before
+    restarting — ``websocket.conversation_history`` is only synced to the
+    live list at the END of a turn, so a mid-turn restart would otherwise
+    persist only the stale pre-turn history and lose the whole live thread.
     """
     # Module-level imports from chat_helpers, weaving — no longer deferred
     # from main (circular dependency eliminated).
@@ -1016,7 +1024,15 @@ async def execute_agent_tool(
                             "tasks": len(_wm.tasks),
                         },
                     )
-                _conv = getattr(websocket, "conversation_history", None)
+                # Force-save the LIVE conversation before restarting. The
+                # live ``conversation`` list (passed down from the agentic
+                # loop) is the ACTUAL current thread — it may be far longer
+                # than ``websocket.conversation_history``, which is only
+                # synced to the live list at the END of a turn. A mid-turn
+                # restart that reads only the stale websocket copy would
+                # persist a truncated thread and lose the whole live turn.
+                # Prefer the live list; fall back to the websocket copy.
+                _conv = conversation or getattr(websocket, "conversation_history", None)
                 if _conv:
                     from conversation_state import save_history
 
@@ -1027,6 +1043,11 @@ async def execute_agent_tool(
                         "conv_force_saved_before_restart",
                         {
                             "turns": len(_conv),
+                            "source": (
+                                "live_conversation"
+                                if conversation
+                                else "websocket_history"
+                            ),
                         },
                     )
             except Exception as _e:  # noqa: BLE001 — best-effort

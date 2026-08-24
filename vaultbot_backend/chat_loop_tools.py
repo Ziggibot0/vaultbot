@@ -191,6 +191,7 @@ async def execute_round_tools(
                 session_logger,
                 websocket,
                 user_message=user_message,
+                conversation=conversation,
             )
         except Exception as e:  # noqa: BLE001
             session_logger.log_exception(e, context=f"tool_{tool_name}")
