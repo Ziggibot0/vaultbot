@@ -207,19 +207,6 @@ async def handle_chat(
         # system prompt, not the conversation history. The model always sees
         # what it already did without re-reading dropped messages. Zero LLM
         # cost (deterministic).
-        # Go-find-out escalation: counts consecutive vault_search calls
-        # where ALL results were already seen. When this hits the threshold,
-        # the harness auto-runs vault_research on the user's question to go
-        # find the missing information on the web instead of looping.
-        # Track the last vault_search query so go-find-out uses it as the
-        # research topic instead of the raw user message. The user message
-        # is a conversational instruction ("dude fix the researcher") -- not
-        # a web search query. The model's own vault_search query is a
-        # focused research topic that the search engines can actually use.
-        # When go-find-out fires, the research summary is stored here so it
-        # can be injected as a system message after the tool results are
-        # appended. A system message is more authoritative than a tool result
-        # -- the model treats it as framework-level instruction, not optional data.
 
         # Partial-answer crash protection: write the streamed-so-far answer to a
         # temp file so a crash mid-stream doesn't lose it.

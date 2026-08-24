@@ -148,7 +148,7 @@ async def run_agentic_loop(
                 # /v1/chat/completions rejects system messages that appear
                 # after user/assistant messages ("system message must be at
                 # the beginning"), returning a 500. Same rule as the
-                # preflight_chain_injected / go_find_out injections below.
+                # preflight_chain_injected injection below.
                 conversation.append(
                     {
                         "role": "user",
@@ -600,30 +600,6 @@ async def run_agentic_loop(
                     "total_findings": len(st._findings),
                 },
             )
-
-            # --- Go-find-out system message injection ------------------------
-            # If go-find-out fired this round, inject the research results as a
-            # user message AFTER the tool results are appended.
-            # NOTE: 'user' role, not 'system' -- Ollama's /v1/chat/completions
-            # rejects system messages that appear after user/assistant/tool
-            # messages ("system message must be at the beginning"). Using
-            # 'user' role still conveys the instruction effectively.
-            if st._go_find_out_msg:
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": st._go_find_out_msg,
-                    }
-                )
-                session_logger.log(
-                    "go_find_out_system_msg_injected",
-                    {
-                        "round": st.round_idx,
-                        "msg_chars": len(st._go_find_out_msg),
-                    },
-                )
-                # Clear so it only fires once.
-                st._go_find_out_msg = ""
 
             # NO mid-loop truncation. Compression/pruning is a preflight
             # event (once per turn, before the first LLM call) -- never

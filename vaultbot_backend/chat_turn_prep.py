@@ -26,7 +26,6 @@ from agent_tools import (
 )
 from chat_helpers import (
     notify_console_failure,
-    notify_info,
     run_with_heartbeat,
     send_progress,
 )
@@ -520,40 +519,6 @@ async def prepare_turn(
     # Inject the identity boot context so the agent wakes up coherent.
     identity_context = svc.identity.boot_context()
 
-    # Gather live state so the system prompt is a real briefing, not static.
-    try:
-        _t_gaps = loop.time()
-        gaps = await run_with_heartbeat(
-            svc,
-            websocket,
-            "finding gaps",
-            svc.knowledge_curriculum.propose_next_gaps,
-            10,
-        )
-        session_logger.log(
-            "gaps_proposed",
-            {
-                "gap_count": len(gaps),
-                "duration_ms": (loop.time() - _t_gaps) * 1000,
-            },
-        )
-    except Exception as e:  # noqa: BLE001
-        session_logger.log("gaps_propose_failed", {"error": str(e)})
-        await notify_info(
-            svc,
-            websocket,
-            "I couldn't scan for knowledge gaps right now. "
-            "This doesn't affect your answer.",
-        )
-        gaps = []
-    gaps_summary = (
-        "\n".join(
-            f"- [{g.get('kind')}] {g.get('topic')} (priority {g.get('priority', 0)})"
-            for g in gaps[:10]
-        )
-        or "(none detected)"
-    )
-
     # Build the combined tool list.
     custom_schemas = svc.self_improver.custom_tool_schemas()
     custom_tool_names = [s["function"]["name"] for s in custom_schemas]
@@ -573,7 +538,6 @@ async def prepare_turn(
     # The briefing is rebuilt fresh every turn so newly-created tools and
     # edits appear immediately.
     _briefing = build_system_prompt_briefing(
-        gaps_summary,
         custom_tools=custom_tools_desc,
         custom_tool_names=custom_tool_names,
     )
@@ -643,14 +607,6 @@ async def prepare_turn(
             context="procedure_surface",
         )
 
-    # --- Route-Task preflight runs earlier now (before auto-research) ---
-    # The Route-Task block was moved to BEFORE the auto-research gate so
-    # its classification result can prevent unnecessary web scraping on
-    # conversational messages. See issue #25. The variables
-    # _preflight_chain, _preflight_results, and _preflight_category are set
-    # in the earlier block and used here for the auto-research gate condition
-    # and later for preflight chain injection.
-
     # If we're resuming an interrupted turn, tell the model what it already
     # did so it continues instead of re-running tools.
     if _resumed_tool_history:
@@ -686,7 +642,6 @@ async def prepare_turn(
             "system_prompt_length": len(system_prompt),
             "vault_context_length": len(context),
             "context_length": len(context),
-            "gaps_reported": len(gaps),
             "custom_tools": len(custom_schemas),
             "total_tools": len(all_tools),
             "conversation_turns_recalled": len(_conv_results),
