@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pre_router import pre_route_message
 from next_action_router import build_next_action
+from pre_router import pre_route_message
 
 
 def route_vaultbot_message(text: str) -> dict[str, Any]:
