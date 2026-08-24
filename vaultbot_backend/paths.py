@@ -146,7 +146,7 @@ def resolve_write_path(file_path: str | Path) -> Path | None:
     """
     p = Path(file_path)
     roots = [_resolve_vault_root()]
-    if FRAMEWORK_ROOT != roots[0]:
+    if roots[0] != FRAMEWORK_ROOT:
         roots.append(FRAMEWORK_ROOT)
     for root in roots:
         candidate = (root / p).resolve()
