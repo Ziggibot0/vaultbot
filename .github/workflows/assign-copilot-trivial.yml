@@ -1,0 +1,134 @@
+name: Assign Copilot on trivial issues
+
+on:
+  issues:
+    types: [labeled, reopened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  assign-copilot:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.issue.pull_request == null &&
+      github.event.issue.state == 'open' &&
+      (
+        github.event.action == 'reopened' ||
+        github.event.label.name == 'trivial'
+      )
+    steps:
+      - name: Skip with guidance when PAT is missing
+        if: ${{ secrets.COPILOT_AGENT_PAT == '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const marker = "<!-- copilot-agent-pat-missing -->";
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 50,
+            });
+
+            if (comments.data.some(c => (c.body || "").includes(marker))) {
+              core.info("Missing-PAT guidance already posted.");
+              return;
+            }
+
+            const body = [
+              marker,
+              "Skipping Copilot assignment because secret `COPILOT_AGENT_PAT` is not configured.",
+              "",
+              "Needed token type:",
+              "- Personal Access Token (user token)",
+              "- Fine-grained permissions: metadata (read), actions/contents/issues/pull requests (read+write)",
+              "",
+              "Why: GitHub's Copilot assignment API rejects app installation tokens and workflow tokens."
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body,
+            });
+
+      - name: Assign copilot-swe-agent to trivial issue
+        if: ${{ secrets.COPILOT_AGENT_PAT != '' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.COPILOT_AGENT_PAT }}
+          script: |
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const number = issue.number;
+            const labels = new Set((issue.labels || []).map(l => l.name));
+            const assignees = (issue.assignees || []).map(a => a.login);
+
+            if (!labels.has("trivial") || labels.has("no-auto-triage")) {
+              core.info("Issue not eligible for auto assignment.");
+              return;
+            }
+
+            if (assignees.includes("copilot-swe-agent[bot]")) {
+              core.info("Copilot already assigned.");
+              return;
+            }
+
+            // Deduplicate work: skip if issue already has a linked open PR.
+            let hasLinkedOpenPr = false;
+            try {
+              const prs = await github.request("GET /repos/{owner}/{repo}/issues/{issue_number}/timeline", {
+                owner,
+                repo,
+                issue_number: number,
+                mediaType: { previews: ["mockingbird"] },
+                per_page: 100,
+              });
+
+              hasLinkedOpenPr = prs.data.some(item =>
+                item.event === "cross-referenced" &&
+                item.source && item.source.issue && item.source.issue.pull_request && item.source.issue.state === "open"
+              );
+            } catch (err) {
+              core.warning(`Timeline probe failed, continuing with assignment attempt: ${err.message}`);
+            }
+
+            if (hasLinkedOpenPr) {
+              core.info("Skipping assignment because an open linked PR already exists.");
+              return;
+            }
+
+            try {
+              await github.request("POST /repos/{owner}/{repo}/issues/{issue_number}/assignees", {
+                owner,
+                repo,
+                issue_number: number,
+                assignees: ["copilot-swe-agent[bot]"],
+                agent_assignment: {
+                  target_repo: `${owner}/${repo}`,
+                  base_branch: "main",
+                  custom_instructions: "This issue is labeled trivial. Keep scope narrow, add/adjust tests when applicable, and open a focused PR.",
+                  custom_agent: "",
+                  model: ""
+                }
+              });
+            } catch (err) {
+              core.warning(`Copilot assignment failed: ${err.message}`);
+              return;
+            }
+
+            const labelsToAdd = ["agent-assigned"].filter(name => !labels.has(name));
+            if (labelsToAdd.length) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: number,
+                labels: labelsToAdd,
+              });
+            }
