@@ -68,7 +68,7 @@ import tempfile  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-from paths import VAULT_ROOT  # noqa: E402
+from paths import VAULT_ROOT, resolve_write_path  # noqa: E402
 
 # custom_tools/md_safe_replace.py -> parent.parent = vaultbot_backend/
 try:
@@ -154,14 +154,16 @@ def run(args: dict) -> dict:
         result["blocked_reason"] = "old_str is empty — nothing to replace"
         return result
 
-    # 4. Path traversal check
-    if _is_path_traversal(file_path_str, VAULT_ROOT):
+    # 4. Resolve the write path against VAULT_ROOT then FRAMEWORK_ROOT
+    #    (issue #341). Repo-facing markdown (README.md, AGENTS.md) lives at
+    #    the repo root, not inside the vault.
+    full_path = resolve_write_path(file_path_str)
+    if full_path is None:
         result["blocked_reason"] = (
-            f"Path traversal detected: {file_path_str} resolves outside vault root"
+            f"Path traversal detected: {file_path_str} resolves outside "
+            "vault root and repo root"
         )
         return result
-
-    full_path = (VAULT_ROOT / file_path_str).resolve()
     result["checks"]["resolved_path"] = str(full_path)
 
     # 5. File must exist
