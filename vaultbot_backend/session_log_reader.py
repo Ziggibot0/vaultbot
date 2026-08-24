@@ -77,6 +77,10 @@ _EVENT_CATEGORIES: dict[str, str] = {
     "console_error": "error",
     "notify_console_failure": "error",
     "problem_notified": "error",
+    # orchestration attribution (issue #365)
+    "route_decision": "orchestration",
+    "turn_cost": "orchestration",
+    "turn_efficiency": "orchestration",
     # research
     "research_begin": "research",
     "research_error": "research",
