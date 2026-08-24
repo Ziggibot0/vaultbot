@@ -282,7 +282,7 @@ def test_sign_in_requires_credentials(patched_paths, monkeypatch):
 
 
 def test_status_shows_configured_with_env_vars(patched_paths, monkeypatch):
-    """status reports configured=True when env vars are set, even without config file."""
+    """status reports configured=True when env vars are set, no config file."""
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "env-cid")
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "env-csec")
     result = gw.run({"action": "status"})
