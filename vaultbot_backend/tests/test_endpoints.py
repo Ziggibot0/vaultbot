@@ -42,9 +42,9 @@ def client():
 
     We use `TestClient(app)` directly (not `with TestClient(app) as c:`)
     so the lifespan startup/shutdown DON'T fire — the startup tries to
-    load the real FAISS index, start the file watcher, and start the
-    autonomous researcher, which hangs when a real backend is already
-    running. The route handlers read module-level globals that are
+    load the real FAISS index and start the file watcher, which hangs
+    when a real backend is already running. The route handlers read
+    module-level globals that are already
     already constructed at import time, so the routes work without
     the lifespan having run.
 

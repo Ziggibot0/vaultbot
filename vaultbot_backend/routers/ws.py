@@ -360,25 +360,8 @@ async def websocket_endpoint(
                     "to re-explain anything. Just do it.",
                     session_logger,
                 )
-            except asyncio.CancelledError:
-                session_logger.log("auto_resume_cancelled", {"reason": "interrupted"})
-            except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                session_logger.log_exception(e, context="auto_resume")
-                # Surface auto-resume failures as a typed problem so the
-                # UI shows a remedy card, not a raw "Server error: …".
-                diag = classify_error(e, {"stage": "resuming after restart"})
-                await svc.manager.send_personal_message(
-                    json.dumps({"type": "problem", "diagnosis": diag.to_dict()}),
-                    websocket,
-                    session_logger=session_logger,
-                )
-            finally:
-                try:
-                    svc.autonomous_researcher.resume_after_chat()
-                except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                    logger.debug("swallowed: %s", e)
-
-        setattr(websocket, "_current_task", asyncio.create_task(_auto_resume()))
+            except Exception as e:  # noqa: BLE001 -- best-effort auto-resume
+                logger.warning("auto_resume failed: %s", e)
 
     try:
         while True:
@@ -904,11 +887,7 @@ async def websocket_endpoint(
                             websocket,
                         )
                     finally:
-                        # Chat-priority: always release the researcher pause.
-                        try:
-                            svc.autonomous_researcher.resume_after_chat()
-                        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-                            logger.debug("swallowed: %s", e)
+                        pass
 
                 return asyncio.create_task(_run())
 

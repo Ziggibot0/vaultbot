@@ -27,7 +27,7 @@ discoverable from this file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,7 @@ class Tunables:
     # Override via env var VAULTBOT_MAX_SEND_TOKENS.
     max_send_tokens: int = 800000
 
-    # ── File-read result cap (chat_handler truncate_tool_result) ──────────
+    # ── File-read result cap (chat_handler truncate_tool_result) ─────────
     # Maximum chars for code_read / vault_read_note tool results before
     # they're truncated. The user wants the model to read the WHOLE file —
     # no truncation except for extremely long files that would actually hurt
@@ -97,7 +97,7 @@ class Tunables:
     code_run_stdout_tail: int = 4000  # bytes of stdout read back
     code_run_stderr_tail: int = 2000  # bytes of stderr read back
 
-    # ── Vault context file count cap ──────────────────────────────────────
+    # ── Vault context file count cap ─────────────────────────────────────
     # Maximum number of files (L1 cards + MOC + L0 drill-down in the abstract
     # path, or raw notes in the legacy path) that the retrieved vault context
     # can show the model at any given time. This is the hard ceiling on how
@@ -137,20 +137,13 @@ class Tunables:
     # growth from endless feedback.
     trigger_max_phrases: int = 15
 
-    # ── Vault-centric synthesis + provenance (2026-08-16) ──────────────────
+    # ── Vault-centric synthesis + provenance (2026-08-16) ────────────────
     # The big LLM is a ROUTER/SYNTHESIZER over vault notes. These tunables
-    # enforce closed-set citation and auto-research-then-answer.
+    # enforce closed-set citation.
     #
-    #   auto_research_on_empty: when the preflight FUSED retrieval returns
-    #     zero usable results (or all below min_retrieval_score), fire
-    #     vault_research ONCE synchronously before building context so the
-    #     model never sees an empty vault context. The freshly-researched
-    #     note becomes a valid citation target. Override via env var
-    #     VAULTBOT_AUTO_RESEARCH_ON_EMPTY (0 = disable).
     #   min_retrieval_score: the FUSED similarity score below which a
-    #     result is treated as "not really retrieved" for the empty-retrieval
-    #     gate. Results below this count as empty. Override via env var
-    #     VAULTBOT_MIN_RETRIEVAL_SCORE.
+    #     result is treated as "not really retrieved". Results below this
+    #     count as empty. Override via env var VAULTBOT_MIN_RETRIEVAL_SCORE.
     #   max_grounding_retries: how many times finalize_turn may re-enter the
     #     agentic loop to demand a re-cited answer before shipping the answer
     #     with a ⚠️ caution (last resort so the user is never left with no
@@ -159,6 +152,11 @@ class Tunables:
     #     [[wikilink]] from the allowed-citations set that triggers a grounding
     #     retry. 0.30 = retry if >30% of sentences are uncited. Only applies
     #     to answers >3 sentences (short answers are hard to split cleanly).
+    #   conversational_max_len: max char length of an answer that is treated
+    #     as a casual/conversational reply (greeting, small-talk) and exempted
+    #     from the grounding retry (issue #334). A short answer carries no
+    #     vault content to ground, so forcing a re-citation retry on it wastes
+    #     an LLM round. Override via env var VAULTBOT_CONVERSATIONAL_MAX_LEN.
     #   legacy_seed_note_cap: per-note char cap for the TOP seed notes in the
     #     legacy build_graph_context path (the common personal-vault case).
     #     Seeds get more body (4000) so the model can synthesize accurately;
@@ -170,37 +168,10 @@ class Tunables:
     #     the abstract (L0/L1/L2) path. The top seed keeps DRILL_CAP=12000;
     #     seeds 2-3 get this smaller cap so multi-note synthesis isn't
     #     limited to one note's full body.
-    auto_research_on_empty: bool = True
-    # Categories from Route-Task classification that should trigger
-    # auto-research when retrieval is empty/irrelevant. Messages classified
-    # as other categories (e.g. conversational, code-editing) will NOT
-    # trigger auto-research even if the vault has nothing relevant — the
-    # classification is a stronger signal of user intent than retrieval
-    # scores alone. See issue #25.
-    #
-    # "question-answering" is included because the Route-Task prompt
-    # distinguishes it from "research" by vault coverage ("vault already
-    # has the info" vs "vault doesn't cover it") — a signal the small
-    # model cannot know at classification time. Excluding it would block
-    # legitimate research on genuine questions when the vault is empty,
-    # leaving the model to answer ungrounded from weights. The
-    # "conversational" category (added in #26) is what actually prevents
-    # backchannel research; question-answering must still be allowed to
-    # research when retrieval comes up empty.
-    auto_research_categories: frozenset[str] = field(
-        default_factory=lambda: frozenset(
-            {"research", "gap-filling", "question-answering", "unknown"}
-        )
-    )
-    # How many search rounds the auto-research-then-answer preflight runs
-    # when the vault has no coverage for a query. 1 round = 1 query = ~1-2
-    # sources (thin, single-source claims). 3 rounds + gap-fill yields
-    # multiple corroborating sources per claim. Override via env var
-    # VAULTBOT_AUTO_RESEARCH_ROUNDS.
-    auto_research_rounds: int = 3
     min_retrieval_score: float = 0.15
     max_grounding_retries: int = 1
     ungrounded_sentence_threshold: float = 0.30
+    conversational_max_len: int = 200
     legacy_seed_note_cap: int = 4000
     legacy_walked_note_cap: int = 900
     abstract_extra_drill_cap: int = 4000

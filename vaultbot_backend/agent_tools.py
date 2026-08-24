@@ -197,9 +197,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "name": "vaultbot_status",
             "description": (
                 "Report VaultBot's operational state: whether the backend "
-                "and autonomous background researcher are running, and recent "
-                "autonomous research history. Call this if the user asks "
-                "what you've been doing or what you can do."
+                "is running, what research tools are available, and the "
+                "current knowledge gaps. Call this if the user asks what "
+                "you've been doing or what you can do."
             ),
             "parameters": {"type": "object", "properties": {}},
         },
@@ -812,17 +812,15 @@ def _local_now() -> datetime:
 
 
 def build_system_prompt_briefing(
-    autonomous_state: dict[str, Any],
-    gaps_summary: str,
     custom_tools: str = "",
     custom_tool_names: list[str] | None = None,
 ) -> str:
     """Build the DYNAMIC per-turn system prompt WITHOUT the vault context.
 
     This is the stable briefing: rules + procedure index + tool schemas +
-    live system state + current gaps. It is rebuilt fresh every turn so
-    newly-created tools, edits, and gap changes appear immediately — the
-    VaultBot is meant to change itself, so the prompt must reflect that.
+    live system state. It is rebuilt fresh every turn so newly-created
+    tools and edits appear immediately — the VaultBot is meant to change
+    itself, so the prompt must reflect that.
 
     The identity/mission/personality lives in IDENTITY.md (boot_context),
     NOT here. This function returns operational rules only — the model
@@ -841,34 +839,12 @@ def build_system_prompt_briefing(
     is responsible for prepending the identity boot_context and for
     injecting the vault context as its own message.
     """
-    running = autonomous_state.get("running", False)
-    enabled = autonomous_state.get("enabled", False)
-    last_run = autonomous_state.get("last_run")
-    history_count = autonomous_state.get("history_count", 0)
-
-    state_lines = []
-    if enabled and running:
-        state_lines.append(
-            "The autonomous background researcher IS RUNNING. It scans the "
-            "vault for knowledge gaps and researches them on its own, writing "
-            "linked notes."
-        )
-    else:
-        state_lines.append(
-            "The autonomous background researcher is currently OFF. You can "
-            "still research on demand using vault_research."
-        )
-    if history_count:
-        state_lines.append(f"It has completed {history_count} research cycle(s).")
-    if last_run:
-        researched = last_run.get("researched", [])
-        if researched:
-            topics = [r.get("topic", "?") for r in researched if r.get("ok")]
-            if topics:
-                state_lines.append(
-                    "Most recently it researched and wrote notes for: "
-                    + ", ".join(topics)
-                )
+    state_lines = [
+        "Research is on-demand only. There is no autonomous background "
+        "researcher. Use vault_research when the user asks you to research "
+        "something, or when the vault context is empty and the user clearly "
+        "wants an answer."
+    ]
 
     # Current date/time in LOCAL time, so the model has a reliable anchor
     # for "today", "tomorrow", "yesterday", and any time-relative question.
@@ -980,7 +956,5 @@ def build_system_prompt_briefing(
         f"blocker honestly. Never fabricate results.\n\n"
         f"# YOUR CUSTOM TOOLS\n"
         f"{custom_tools or '(none yet — use tool_create to build some)'}\n\n"
-        f"# CURRENT SYSTEM STATE\n" + "\n".join(state_lines) + "\n\n"
-        f"# CURRENT VAULT KNOWLEDGE GAPS\n"
-        f"{gaps_summary}"
+        f"# CURRENT SYSTEM STATE\n" + "\n".join(state_lines)
     )

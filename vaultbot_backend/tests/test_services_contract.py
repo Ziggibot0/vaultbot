@@ -40,9 +40,7 @@ def _stub_services(**overrides):
         note_creator=MagicMock(),
         research_engine=MagicMock(),
         search_client=MagicMock(),
-        autonomous_researcher=MagicMock(),
         knowledge_curriculum=MagicMock(),
-        checkpointer=MagicMock(),
         procedure_tracker=MagicMock(),
         self_improver=MagicMock(),
         identity=MagicMock(),
@@ -121,7 +119,7 @@ def test_services_required_fields_present():
         "amem",
         "pattern_extractor",
         "procedure_tracker",
-        "autonomous_researcher",
+        "knowledge_curriculum",
         "vault_path",
     ):
         assert hasattr(svc, attr), (
