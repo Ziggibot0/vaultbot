@@ -17,8 +17,8 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from session_logger import SessionLogger
 from orchestration_report import session_orchestration_report
+from session_logger import SessionLogger
 
 
 # ── SessionLogger event-emission tests ───────────────────────────────────
@@ -48,7 +48,11 @@ def test_log_route_decision_emits_correct_schema(tmp_path: Path) -> None:
 
 def test_log_route_decision_without_turn_index(tmp_path: Path) -> None:
     s = SessionLogger(log_dir=str(tmp_path))
-    s.log_route_decision(route="small_model", confidence=0.6, reason="clarification_or_explanation")
+    s.log_route_decision(
+        route="small_model",
+        confidence=0.6,
+        reason="clarification_or_explanation",
+    )
     s.close()
 
     events = _read_events(s._file_path)
@@ -130,7 +134,12 @@ def _write_session_with_two_turns(tmp_path: Path) -> Path:
 
     # Turn 1: procedure route
     s.log("chat_begin", {"user_message": "fix the CI"})
-    s.log_route_decision(route="procedure", confidence=0.9, reason="action_signal", turn_index=1)
+    s.log_route_decision(
+        route="procedure",
+        confidence=0.9,
+        reason="action_signal",
+        turn_index=1,
+    )
     s.log_turn_cost(
         prompt_tokens=200,
         completion_tokens=100,
@@ -147,7 +156,12 @@ def _write_session_with_two_turns(tmp_path: Path) -> Path:
 
     # Turn 2: small_model route with a repeated tool call
     s.log("chat_begin", {"user_message": "explain the error"})
-    s.log_route_decision(route="small_model", confidence=0.7, reason="clarification_or_explanation", turn_index=2)
+    s.log_route_decision(
+        route="small_model",
+        confidence=0.7,
+        reason="clarification_or_explanation",
+        turn_index=2,
+    )
     s.log_turn_cost(
         prompt_tokens=50,
         completion_tokens=40,

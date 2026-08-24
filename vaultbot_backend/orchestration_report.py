@@ -98,7 +98,13 @@ def session_orchestration_report(
     try:
         lines = log_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        return {"error": f"cannot read log: {exc}", "session_id": "", "turns": [], "summary": {}, "comparisons": {}}
+        return {
+            "error": f"cannot read log: {exc}",
+            "session_id": "",
+            "turns": [],
+            "summary": {},
+            "comparisons": {},
+        }
 
     for line in lines:
         if not line.strip():
@@ -200,13 +206,19 @@ def session_orchestration_report(
             comparisons["cost_usd_per_turn_delta"] = round(
                 summary["avg_cost_usd_per_turn"] - baselines["cost_usd_per_turn"], 8
             )
-        if "tool_latency_ms_per_turn" in baselines and "avg_tool_latency_ms_per_turn" in summary:
+        if (
+            "tool_latency_ms_per_turn" in baselines
+            and "avg_tool_latency_ms_per_turn" in summary
+        ):
             comparisons["tool_latency_ms_per_turn_delta"] = round(
                 summary["avg_tool_latency_ms_per_turn"]
                 - baselines["tool_latency_ms_per_turn"],
                 2,
             )
-        if "tool_rounds_per_turn" in baselines and "avg_tool_rounds_per_turn" in summary:
+        if (
+            "tool_rounds_per_turn" in baselines
+            and "avg_tool_rounds_per_turn" in summary
+        ):
             comparisons["tool_rounds_per_turn_delta"] = round(
                 summary["avg_tool_rounds_per_turn"] - baselines["tool_rounds_per_turn"],
                 3,
@@ -255,7 +267,10 @@ def main(argv: list[str] | None = None) -> int:
 
     log_path = _find_log(args.session, Path(args.sessions_dir))
     if log_path is None:
-        print(f"[orchestration_report] Session not found: {args.session}", file=sys.stderr)
+        print(
+            f"[orchestration_report] Session not found: {args.session}",
+            file=sys.stderr,
+        )
         return 1
 
     report = session_orchestration_report(log_path)
