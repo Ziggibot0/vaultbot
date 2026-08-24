@@ -117,9 +117,9 @@ def _run_pyright() -> tuple[int, int, str | None]:
 def _parse_pytest_junit(path: Path) -> tuple[int, int]:
     try:
         root = ET.parse(path).getroot()
-    except ET.ParseError:
+    except (ET.ParseError, OSError):
         print(
-            f"debt-ratchet: could not parse pytest JUnit XML: {path}",
+            f"debt-ratchet: could not read/parse pytest JUnit XML: {path}",
             file=sys.stderr,
         )
         return (-1, -1)

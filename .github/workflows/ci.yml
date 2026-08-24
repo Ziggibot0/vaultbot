@@ -107,8 +107,7 @@ jobs:
         # without provenance or rationale.
         run: python vaultbot_backend/scripts/check_procedure_provenance.py
 
-      - name: Pyright (non-blocking â€” pre-existing debt, enforced later)
-        id: pyright_soft_gate
+      - name: Pyright (non-blocking â€" pre-existing debt, enforced later)
         # Non-blocking per Phase 2 decision in pyproject.toml. Reports type
         # errors as warnings so the team sees the debt but CI stays green.
         # Config is in pyproject.toml [tool.pyright].  Emit JSON so the debt
@@ -116,7 +115,6 @@ jobs:
         run: |
           set +e
           uv run pyright --level warning --outputjson vaultbot_backend/ > pyright-report.json
-          echo "status=$?" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
       - name: Pyright — hot-path files (HARD GATE)
@@ -147,7 +145,6 @@ jobs:
             --cov-fail-under=15
 
       - name: Pytest — integration tests (soft gate)
-        id: pytest_integration
         # Tests marked `pytestmark = pytest.mark.integration` — these need
         # FAISS or vault fixtures that may not be fully buildable in a
         # bare CI runner.  Soft gate: failures are reported but don't fail
@@ -162,7 +159,6 @@ jobs:
         run: |
           set +e
           uv run pytest -q -m "integration" --tb=short --junitxml="${{ github.workspace }}/pytest-integration.xml"
-          echo "status=$?" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
       - name: Debt ratchet (HARD GATE)
