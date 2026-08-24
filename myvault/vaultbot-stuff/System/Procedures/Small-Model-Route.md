@@ -1,11 +1,11 @@
 ---
 type: procedure
-status: experimental
+status: flagged
 baseline: true
 model_cartridge: small
 created: 2026-08-02
-description: Route a task intent to the best procedure for it. Given a description of what the vaultbot is about to do, searches the procedure library and uses the small model to pick the single best-matching procedure by comparing the task intent to each procedure's when_to_use. Returns the procedure name or 'none'. Use when the big model is about to do something and wants to know if a procedure already handles it.
-when_to_use: when the big model is about to start a task and wants to know which procedure to call, when deciding which procedure fits a step, or when the procedure surface didn't surface an obvious match
+description: Deprecated legacy router. Kept for historical context only. This path depends on freeform model selection over prose fields and is no longer the canonical routing policy.
+when_to_use: never for live policy routing; historical reference only
 falsifiable_if: the router picks a procedure that doesn't apply to the task, or misses a procedure that obviously applies
 applies_to:
   - procedure-routing
@@ -17,11 +17,23 @@ allowed_tools:
   - llm_generate
 summary: SUMMARY
 tags:
-  - procedure
-  - procedures
+    - procedure
+    - procedures
+    - deprecated
+    - legacy-heuristic
 ---
 
 # Small-Model-Route
+
+## Status
+
+Deprecated and flagged. Do not use this as the policy router.
+
+Replacements:
+
+- [[Route-Task]] for structured task classification
+- Deterministic preflight routing in backend (`chat_preflight.py`)
+- [[Decision-Tree-Router]] when explicit deterministic branches are required
 
 ## When to Run This
 

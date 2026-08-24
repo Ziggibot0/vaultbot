@@ -1,22 +1,37 @@
 ---
 type: procedure
-status: draft
+status: flagged
 baseline: true
 created: 2026-08-10
 summary: "Router procedure for the VaultBot loop – orchestrates procedure selection based on intent and context."
 description: |
-  The Router acts as a top‑level dispatcher. It examines the user request, determines which core procedure to invoke (search, research, lint, etc.), handles edge cases, and ensures the result is written to an appropriate note.
-  Because it centralizes decision logic, the VaultBot loop can be extended by adding new intent‑to‑procedure mappings without changing this file.
+  DEPRECATED (heuristic router). This procedure uses bespoke keyword mapping and
+  is retained only as historical context. Do not execute it for live routing.
+  Use deterministic routing and explicit procedure contracts instead.
 tags:
   - router
   - loop
-when_to_use: "when the user asks to run this procedure"
+  - deprecated
+  - legacy-heuristic
+when_to_use: "never for live routing; read-only historical reference"
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
 allowed_tools:
   - llm_generate
   - vault_safe_write
 model_cartridge: big
 ---
+
+## Status
+
+Deprecated and flagged. This procedure demonstrates the anti-pattern now
+documented in AGENTS/CONTRIBUTING: bespoke keyword heuristics for behavior
+policy.
+
+Use these instead:
+
+- [[Route-Task]] for structured intent classification
+- [[Decision-Tree-Router]] for deterministic branching
+- [[Flywheel-Issue-Autopilot]] for issue queue execution
 
 ## Overview
 The Router operates in three phases:

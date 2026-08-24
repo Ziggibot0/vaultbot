@@ -30,6 +30,21 @@ See
 [`Knowledge/Architecture/VaultBot-Strategic-Vision.md`](Knowledge/Architecture/VaultBot-Strategic-Vision.md)
 for the full strategic vision.
 
+## Design Rule: No Bespoke Heuristics
+
+VaultBot does not treat one-off heuristics as architecture. Language is too
+variable for fragile keyword tricks, and edge cases grow over time.
+
+Contributor rule:
+
+1. Do not add ad-hoc phrase matching as policy logic.
+2. Prefer deterministic and inspectable mechanisms: typed inputs, validated
+  procedure contracts, retrieval/ranking with explicit scoring, and tests.
+3. When uncertainty remains, fail loudly or escalate rather than silently
+  guessing.
+
+This keeps behavior stable as phrasing changes and makes failures debuggable.
+
 ## Overview
 
 VaultBot is a **personal AI research agent** that lives inside an Obsidian

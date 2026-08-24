@@ -153,6 +153,27 @@ The project has a typed error layer for surfacing:
 Use `context={"category": "retrieval_broken"}` (or other subsystem
 categories) to tag errors that don't have a distinctive exception signature.
 
+## No bespoke heuristics
+
+Do not solve behavior/routing problems with one-off heuristics (for example:
+hard-coded keyword lists, ad-hoc regex intent matchers, phrase-specific
+"shortcuts", or hand-tuned branches for one observed prompt).
+
+Reason: entropy guarantees new edge cases, and users phrase requests in many
+different ways. A brittle heuristic that passes one prompt usually fails on
+the next variant.
+
+Preferred pattern:
+
+1. Use deterministic data and structure over phrase guessing (typed args,
+   explicit procedure inputs, validated enums, retrieval-ranked candidates).
+2. Express policy as reusable rules/rubrics with measurable thresholds, not
+   bespoke string checks.
+3. Add tests that cover paraphrases and misspellings for any user-language
+   entry point.
+4. If no robust deterministic path exists yet, fail loudly and surface the
+   gap instead of adding a fragile shortcut.
+
 ## CI ratchets (behavior-capture and thinness)
 
 VaultBot's CI enforces two ratchets that prevent quality regressions

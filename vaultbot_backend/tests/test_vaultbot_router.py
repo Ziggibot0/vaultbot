@@ -10,6 +10,15 @@ def test_route_vaultbot_message_prefers_procedure_for_repo_work():
     assert result["procedure_hint"] == "Solve-GitHub-Issue"
 
 
+def test_route_vaultbot_message_picks_flywheel_autopilot_for_issue_queue():
+    result = route_vaultbot_message(
+        "get to work on the github issues in flywheel order"
+    )
+
+    assert result["route"] == "procedure"
+    assert result["procedure_hint"] == "Flywheel-Issue-Autopilot"
+
+
 def test_route_vaultbot_message_uses_small_model_for_simple_questions():
     result = route_vaultbot_message("what is the status of the repo")
 

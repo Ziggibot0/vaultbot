@@ -27,6 +27,10 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 
 A three-layer dichotomous key that routes tasks through the vault's procedure stack. Each layer asks a binary question that the framework can answer deterministically, so the small model is never asked to reason — it only executes bounded steps at leaf nodes.
 
+Policy note: do not add bespoke keyword heuristics to this router. Keep
+branching deterministic and contract-based (typed outputs, explicit thresholds,
+and testable rules).
+
 The design follows the dichotomous key pattern from [[Phylogenetic-Trees-and-Dichotomous-Keys]]: each node is a binary question with deterministic answers, and the small model only fires at classification leaf nodes. The architecture follows [[Deterministic-Scaffolding-for-Small-Models]]: the framework evaluates conditions and tells the LLM what to do, rather than the LLM deciding what to do.
 
 **Why three layers?** Because the three questions — "what is this?", "do we already have it?", and "did it work?" — are orthogonal. They cover different failure modes and each can be improved independently. Layer 1 was already built as [[Route-Task]]; this procedure adds Layers 2 and 3 without duplicating Layer 1's logic.

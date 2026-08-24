@@ -63,6 +63,12 @@ The mission is the direction. The work is getting there.
 For the full strategic vision, see
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
+Contributor policy: do not add bespoke heuristics (one-off keyword hacks,
+phrase-specific routing, or ad-hoc fast paths) as behavior logic. Natural
+language phrasing drifts, and edge cases keep appearing. Prefer deterministic,
+inspectable mechanisms (typed interfaces, explicit procedure contracts,
+scored retrieval/rubrics, and tests).
+
 ---
 
 ## Table of contents

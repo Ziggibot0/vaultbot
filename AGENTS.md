@@ -32,6 +32,12 @@ wins — flag the discrepancy instead of guessing.
    working tree has unrelated edits, stash or move them aside first.
 4. **CI is the gate.** `ruff check --select F` and `pytest -m unit` are hard
    gates. Run both locally before pushing; don't push and hope.
+5. **No bespoke heuristics.** Do not ship one-off keyword hacks, intent
+   guessers, or "fast path" pattern checks as behavior policy. Entropy always
+   creates a new edge case, and natural language is too variable for brittle
+   phrase matching. Use deterministic mechanisms (typed schemas, ranked
+   retrieval, explicit procedure surfaces, validated rules, or tests-backed
+   scoring rubrics) so behavior is explainable and stable.
 
 ## Workflow (branch → commit → PR → CI → merge)
 

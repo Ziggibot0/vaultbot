@@ -21,6 +21,9 @@ def _pre_route_message(text: str) -> dict[str, Any]:
         "build",
         "test",
         "issue",
+        "issues",
+        "github",
+        "flywheel",
         "pr",
         "commit",
         "push",
@@ -100,11 +103,31 @@ def route_vaultbot_message(text: str) -> dict[str, Any]:
     status or explanatory turns on the small-model path, and escalate the rest.
     """
     routed = _pre_route_message(text)
+    lower = text.lower()
     if routed["route"] == "procedure":
         procedure_hint = "Solve-GitHub-Issue"
-        if any(term in text.lower() for term in ["merge", "pr", "pull request"]):
+        # "Get to work on issues" should kick off the flywheel queue runner.
+        if (
+            any(term in lower for term in ["flywheel", "issue queue", "next issue"])
+            or (
+                "issue" in lower
+                and any(
+                    term in lower
+                    for term in [
+                        "get to work",
+                        "start",
+                        "autopilot",
+                        "in order",
+                        "queue",
+                        "sweep",
+                    ]
+                )
+            )
+        ):
+            procedure_hint = "Flywheel-Issue-Autopilot"
+        elif any(term in lower for term in ["merge", "pr", "pull request"]):
             procedure_hint = "Solve-GitHub-Issue"
-        elif any(term in text.lower() for term in ["sync", "upstream", "branch"]):
+        elif any(term in lower for term in ["sync", "upstream", "branch"]):
             procedure_hint = "Git-Sync-Upstream"
         return {
             "route": routed["route"],
