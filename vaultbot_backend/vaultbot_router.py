@@ -22,8 +22,11 @@ def _pre_route_message(text: str) -> dict[str, Any]:
         "test",
         "issue",
         "issues",
+        "prs",
         "github",
         "flywheel",
+        "overnight",
+        "sleep",
         "pr",
         "commit",
         "push",
@@ -108,7 +111,19 @@ def route_vaultbot_message(text: str) -> dict[str, Any]:
         procedure_hint = "Solve-GitHub-Issue"
         # "Get to work on issues" should kick off the flywheel queue runner.
         if (
-            any(term in lower for term in ["flywheel", "issue queue", "next issue"])
+            any(
+                term in lower
+                for term in [
+                    "flywheel",
+                    "issue queue",
+                    "next issue",
+                    "overnight",
+                    "while i sleep",
+                    "while im asleep",
+                    "sleep",
+                    "crank out prs",
+                ]
+            )
             or (
                 "issue" in lower
                 and any(
@@ -150,6 +165,5 @@ def route_vaultbot_message(text: str) -> dict[str, Any]:
         "route": routed["route"],
         "confidence": routed["confidence"],
         "procedure_hint": None,
-        "next_action": _build_next_action(routed["route"], text, routed["evidence"]),
         "next_action": _build_next_action(routed["route"], text, routed["evidence"]),
     }

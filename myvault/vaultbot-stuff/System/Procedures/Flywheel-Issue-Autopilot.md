@@ -5,7 +5,7 @@ baseline: true
 model_cartridge: medium
 created: 2026-08-24
 description: "Autonomously process open GitHub issues in flywheel order. Ranks issues with the existing urgency/importance rubric, then runs Solve-GitHub-Issue for each issue in sequence to open PRs without manual handoffs."
-when_to_use: "When asked to 'get to work on GitHub issues', 'run the flywheel', or 'work through issues in order'."
+when_to_use: "When asked to 'get to work on GitHub issues', 'run the flywheel', 'work through issues in order', or run issue PR work overnight while the user sleeps."
 falsifiable_if: "The procedure skips a higher-ranked issue, or claims completion without attempting Solve-GitHub-Issue on the ordered queue."
 allowed_tools:
   - code_read
@@ -39,6 +39,8 @@ open PRs continuously.
   Defaults to all open issues.
 - `args.only_q1` (optional): if true, process only Q1 issues.
   Defaults to false.
+- `args.skip_if_open_pr` (optional): if true (default), skip issues that
+    already appear in an open PR body/title as `fixes #N`/`closes #N`.
 
 ## Steps
 
@@ -47,6 +49,7 @@ open PRs continuously.
 ```python
 import json
 from datetime import datetime, timezone
+import re
 
 from custom_tools.github_issues import run as _issues
 
@@ -139,10 +142,55 @@ else:
         except Exception:
             pass
 
+    skipped_due_to_open_pr = []
+    if bool(args.get("skip_if_open_pr", True)):
+        try:
+            from custom_tools.gh_client import gh_api
+            from custom_tools.upstream_identity import resolve_upstream
+
+            upstream_owner, upstream_repo = resolve_upstream()
+            pulls = gh_api(
+                "GET",
+                f"repos/{upstream_owner}/{upstream_repo}/pulls?state=open&per_page=100",
+                timeout=30,
+            )
+
+            issue_nums_with_open_pr = set()
+            close_pat = re.compile(
+                r"\\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)\\s*#(\\d+)\\b",
+                re.IGNORECASE,
+            )
+            for pr in pulls if isinstance(pulls, list) else []:
+                text = f"{pr.get('title', '')}\n{pr.get('body', '')}"
+                for m in close_pat.findall(text):
+                    try:
+                        issue_nums_with_open_pr.add(int(m))
+                    except Exception:
+                        continue
+
+            kept = []
+            for item in scored:
+                num = item.get("number")
+                if isinstance(num, int) and num in issue_nums_with_open_pr:
+                    skipped_due_to_open_pr.append(
+                        {
+                            "issue_number": num,
+                            "title": item.get("title", ""),
+                            "reason": "open_pr_exists",
+                        }
+                    )
+                    continue
+                kept.append(item)
+            scored = kept
+        except Exception:
+            # Best effort: if PR discovery fails, continue with scored queue.
+            pass
+
     result = json.dumps({
         "queue": scored,
         "count": len(scored),
         "only_q1": only_q1,
+        "skipped_due_to_open_pr": skipped_due_to_open_pr,
     })
 
 print(result)
@@ -162,6 +210,11 @@ if isinstance(data, dict) and data.get("error"):
     result = json.dumps({"error": data.get("error")})
 else:
     queue = data.get("queue", []) if isinstance(data, dict) else []
+    skipped = (
+        data.get("skipped_due_to_open_pr", [])
+        if isinstance(data, dict)
+        else []
+    )
     processed = []
     for item in queue:
         num = item.get("number") if isinstance(item, dict) else None
@@ -181,6 +234,7 @@ else:
         {
             "requested": len(queue),
             "processed": len(processed),
+            "skipped_due_to_open_pr": skipped,
             "results": processed,
         },
         default=str,

@@ -19,6 +19,15 @@ def test_route_vaultbot_message_picks_flywheel_autopilot_for_issue_queue():
     assert result["procedure_hint"] == "Flywheel-Issue-Autopilot"
 
 
+def test_route_vaultbot_message_picks_flywheel_autopilot_for_overnight_work():
+    result = route_vaultbot_message(
+        "crank out prs for issues overnight while i sleep"
+    )
+
+    assert result["route"] == "procedure"
+    assert result["procedure_hint"] == "Flywheel-Issue-Autopilot"
+
+
 def test_route_vaultbot_message_uses_small_model_for_simple_questions():
     result = route_vaultbot_message("what is the status of the repo")
 
