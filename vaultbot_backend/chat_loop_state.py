@@ -84,14 +84,6 @@ class TurnState:
     # Findings ledger (anti-amnesia): 1-line entries per round.
     _findings: list = field(default_factory=list)
 
-    # Go-find-out escalation: consecutive vault_search rounds with all-seen.
-    _consecutive_all_seen: int = 0
-    _go_find_out_fired: bool = False
-    # Last vault_search query (used as the go-find-out research topic).
-    _last_search_query: str = ""
-    # Go-find-out system message, injected after tool results are appended.
-    _go_find_out_msg: str = ""
-
     # Failed-write streak (3 consecutive = break the loop).
     _turn_failed_write_count: int = 0
     # Consecutive thought-only rounds (5 = inject nudge, 7 = break).

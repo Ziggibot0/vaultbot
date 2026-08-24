@@ -812,16 +812,15 @@ def _local_now() -> datetime:
 
 
 def build_system_prompt_briefing(
-    gaps_summary: str,
     custom_tools: str = "",
     custom_tool_names: list[str] | None = None,
 ) -> str:
     """Build the DYNAMIC per-turn system prompt WITHOUT the vault context.
 
     This is the stable briefing: rules + procedure index + tool schemas +
-    live system state + current gaps. It is rebuilt fresh every turn so
-    newly-created tools, edits, and gap changes appear immediately — the
-    VaultBot is meant to change itself, so the prompt must reflect that.
+    live system state. It is rebuilt fresh every turn so newly-created
+    tools and edits appear immediately — the VaultBot is meant to change
+    itself, so the prompt must reflect that.
 
     The identity/mission/personality lives in IDENTITY.md (boot_context),
     NOT here. This function returns operational rules only — the model
@@ -957,7 +956,5 @@ def build_system_prompt_briefing(
         f"blocker honestly. Never fabricate results.\n\n"
         f"# YOUR CUSTOM TOOLS\n"
         f"{custom_tools or '(none yet — use tool_create to build some)'}\n\n"
-        f"# CURRENT SYSTEM STATE\n" + "\n".join(state_lines) + "\n\n"
-        f"# CURRENT VAULT KNOWLEDGE GAPS\n"
-        f"{gaps_summary}"
+        f"# CURRENT SYSTEM STATE\n" + "\n".join(state_lines)
     )

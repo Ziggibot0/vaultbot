@@ -134,14 +134,6 @@ async def execute_round_tools(
         # deterministically. See issue #86, Fix #5.
         _log_call_id = session_logger.next_call_id()
 
-        # Track the last vault_search query for go-find-out: when the
-        # vault has no answer and the harness auto-triggers web
-        # research, the search query is a focused research topic (not
-        # the raw user message, which is conversational and produces
-        # zero search hits). See [[How-to-Fix-Research-Engine-Returning-Garbage]].
-        if tool_name == "vault_search":
-            st._last_search_query = tool_args.get("query", "")
-
         await svc.manager.send_personal_message(
             json.dumps({"type": "tool_call", "tool": tool_name, "args": tool_args}),
             websocket,
@@ -312,137 +304,20 @@ async def execute_round_tools(
                 tool_result["results"] = _annotated
                 _new_count = len(_annotated) - len(_already_seen)
                 if _new_count == 0:
-                    # ALL results were already seen — increment the
-                    # go-find-out escalation counter.
-                    st._consecutive_all_seen += 1
-                    _go_find_out_threshold = int(
-                        os.getenv("VAULTBOT_GO_FIND_OUT_THRESHOLD", "3")
+                    # ALL results were already seen — tell the model to
+                    # stop searching and answer from what it has. No
+                    # auto-research: research is on-demand only (the model
+                    # calls vault_research itself if it decides it needs
+                    # more than the vault contains).
+                    tool_result["message"] = (
+                        f"All {len(_already_seen)} search results "
+                        f"are files you ALREADY retrieved this turn: "
+                        f"{_seen_names}. You have all the information "
+                        f"the vault contains on this topic. "
+                        f"STOP SEARCHING. Write your answer now "
+                        f"using the notes you already have. "
+                        f"Do NOT call vault_search again."
                     )
-                    if (
-                        st._consecutive_all_seen >= _go_find_out_threshold
-                        and not st._go_find_out_fired
-                    ):
-                        # GO FIND OUT: the vault doesn't have what the
-                        # model needs. Auto-trigger web research on the
-                        # user's original question and inject the result
-                        # as a tool result so the model gets new info.
-                        st._go_find_out_fired = True
-                        # Use the last vault_search query as the
-                        # research topic, NOT the raw user message.
-                        # The user message is conversational ("dude
-                        # stop relying on model weights...") — search
-                        # engines return nothing for that and the
-                        # relevance gate filters out what little
-                        # comes back, producing zero-source research.
-                        # The model's own search query is a proper
-                        # research topic that the engines can handle.
-                        _research_topic = st._last_search_query or user_message[:200]
-                        session_logger.log(
-                            "go_find_out_triggered",
-                            {
-                                "round": st.round_idx,
-                                "consecutive_all_seen": st._consecutive_all_seen,
-                                "query": _research_topic[:100],
-                                "source": "last_search_query"
-                                if st._last_search_query
-                                else "user_message",
-                            },
-                        )
-                        await svc.manager.send_personal_message(
-                            json.dumps(
-                                {
-                                    "type": "status",
-                                    "content": (
-                                        "Vault doesn't have enough — "
-                                        "researching on the web..."
-                                    ),
-                                }
-                            ),
-                            websocket,
-                            session_logger=session_logger,
-                        )
-                        try:
-                            _research_result = await execute_agent_tool(
-                                svc,
-                                "vault_research",
-                                {
-                                    "topic": _research_topic,
-                                    "depth": "quick",
-                                },
-                                session_logger,
-                                websocket,
-                                user_message=user_message,
-                            )
-                            # Build a compact summary of the research
-                            # result for the system message.
-                            _research_brief = ""
-                            if isinstance(_research_result, dict):
-                                _rb = _research_result.get("synthesis_brief", "")
-                                _kf = _research_result.get("key_facts", "")
-                                _np = _research_result.get("note_path", "")
-                                _parts = []
-                                if _rb:
-                                    _parts.append(_rb[:2000])
-                                if _kf:
-                                    _parts.append(f"Key facts:\n{_kf}")
-                                if _np:
-                                    _parts.append(
-                                        f"A permanent note was created at {_np}."
-                                    )
-                                _research_brief = "\n\n".join(_parts)
-                            # Store the system message for injection
-                            # after the tool results are appended.
-                            st._go_find_out_msg = (
-                                f"# GO-FIND-OUT: Web research "
-                                f"completed automatically\n"
-                                f"The vault did not contain enough "
-                                f"information for this question after "
-                                f"{st._consecutive_all_seen} searches. "
-                                f"I automatically researched it on the "
-                                f"web. Here are the results:\n\n"
-                                f"{_research_brief or '(no summary available)'}\n\n"
-                                f"Use these research results to answer "
-                                f"the user's question NOW. Do NOT call "
-                                f"vault_search again. Do NOT look for "
-                                f"procedures. You have the information "
-                                f"— write your answer."
-                            )
-                            # Also keep the tool result for the model
-                            # to see in the tool response.
-                            tool_result = {
-                                "go_find_out": True,
-                                "message": (
-                                    "Web research completed "
-                                    "automatically. See the system "
-                                    "message for results. Use them "
-                                    "to answer now — do NOT search "
-                                    "again."
-                                ),
-                                "research": _research_result,
-                            }
-                        except Exception as e:  # noqa: BLE001
-                            session_logger.log("go_find_out_failed", {"error": str(e)})
-                            tool_result["message"] = (
-                                f"All search results are files you "
-                                f"already have, and auto-research "
-                                f"failed ({e}). Answer from what you "
-                                f"already have — do NOT search again."
-                            )
-                    else:
-                        # Below threshold or already fired — tell the
-                        # model to stop searching and answer.
-                        tool_result["message"] = (
-                            f"All {len(_already_seen)} search results "
-                            f"are files you ALREADY retrieved this turn: "
-                            f"{_seen_names}. You have all the information "
-                            f"the vault contains on this topic. "
-                            f"STOP SEARCHING. Write your answer now "
-                            f"using the notes you already have. "
-                            f"Do NOT call vault_search again."
-                        )
-                else:
-                    # Some new results — reset the counter.
-                    st._consecutive_all_seen = 0
         session_logger.log(
             "tool_exec_exit",
             {
