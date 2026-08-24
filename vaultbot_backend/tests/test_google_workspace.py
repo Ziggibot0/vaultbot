@@ -15,6 +15,7 @@ Only the leaf module `custom_tools.google_workspace` is imported — never
 
 import hashlib
 import json
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 
@@ -269,7 +270,10 @@ def test_sign_in_alias_works(patched_paths, monkeypatch):
     monkeypatch.setattr(gw.webbrowser, "open", lambda url: None)
     result = gw.run({"action": "sign_in"})
     assert result["status"] == "auth_started"
-    assert "accounts.google.com" in result["auth_url"]
+    # Parse the host precisely rather than substring-matching the URL
+    # (substring checks on URLs are spoofable, e.g. "accounts.google.com.evil.com").
+    parsed = urllib.parse.urlparse(result["auth_url"])
+    assert parsed.hostname == "accounts.google.com"
 
 
 def test_sign_in_requires_credentials(patched_paths, monkeypatch):
