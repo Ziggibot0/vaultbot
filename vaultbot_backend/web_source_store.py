@@ -55,6 +55,24 @@ def _slugify(url: str, max_len: int = 80) -> str:
     return f"{s or 'source'}-{h}"
 
 
+def _validated_source_path(filename: str) -> Path:
+    """Return a safe absolute path for an archived source filename.
+
+    Rejects path traversal (``../``), absolute paths, and non-HTML targets.
+    """
+    name = (filename or "").strip()
+    if not name:
+        raise ValueError("missing source filename")
+    candidate = Path(name)
+    if candidate.is_absolute() or candidate.name != name or not name.endswith(".html"):
+        raise ValueError(f"invalid source filename: {filename}")
+    base = WEB_DIR.resolve()
+    resolved = (base / candidate).resolve()
+    if resolved.parent != base:
+        raise ValueError(f"invalid source filename: {filename}")
+    return resolved
+
+
 def _ensure_dirs() -> None:
     WEB_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -215,7 +233,7 @@ def list_sources(topic: str | None = None) -> list[dict[str, Any]]:
 
 def source_path(filename: str) -> Path:
     """Resolve a saved-source filename to its full path."""
-    return WEB_DIR / filename
+    return _validated_source_path(filename)
 
 
 def read_source_text(filename: str) -> str:

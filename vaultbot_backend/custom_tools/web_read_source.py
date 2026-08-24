@@ -72,10 +72,14 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
             return {"error": f"no archived source for URL: {url}"}
         filename = entry["file"]
 
-    path = source_path(filename)
+    try:
+        path = source_path(filename)
+    except ValueError:
+        return {"error": f"invalid archived filename: {filename}"}
     if not path.exists():
         return {"error": f"archived file not found: {filename}"}
 
+    filename = path.name
     text = read_source_text(filename)
     if not text:
         return {"error": f"could not extract text from {filename}"}
