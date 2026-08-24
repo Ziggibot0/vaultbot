@@ -20,7 +20,6 @@ pytestmark = pytest.mark.unit
 from orchestration_report import session_orchestration_report
 from session_logger import SessionLogger
 
-
 # ── SessionLogger event-emission tests ───────────────────────────────────
 
 
