@@ -104,3 +104,7 @@ class TurnState:
     # last?" from the PRIOR CONVERSATION section instead of being forced
     # to cite a stale vault note. Set by handle_chat from the user message.
     _is_temporal_question: bool = False
+    # Coaching/planning-turn flag (issue #277). When True, grounding retries
+    # are exempted because the user requested life-management coaching rather
+    # than vault-factual synthesis.
+    _is_coaching_turn: bool = False

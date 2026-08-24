@@ -150,6 +150,7 @@ async def finalize_turn(
     _grounding_caution = ""
     _is_idk = False
     _is_temporal = bool(getattr(st, "_is_temporal_question", False))
+    _is_coaching = bool(getattr(st, "_is_coaching_turn", False))
     _is_conversational = False
     _graph_lookup = None
     # Tool-sourced answer detection (issue #132): when the turn's facts
@@ -202,6 +203,7 @@ async def finalize_turn(
                     "retry_count": getattr(st, "_grounding_retry_count", 0),
                     "is_idk": _is_idk,
                     "is_temporal": _is_temporal,
+                    "is_coaching": _is_coaching,
                     "is_conversational": _is_conversational,
                     "is_tool_sourced": _is_tool_sourced,
                 },
@@ -210,6 +212,7 @@ async def finalize_turn(
                 _score["failed"]
                 and not _is_idk
                 and not _is_temporal
+                and not _is_coaching
                 and not _is_conversational
                 and not _is_tool_sourced
             ):
@@ -239,10 +242,17 @@ async def finalize_turn(
                     )
                     final_answer += _grounding_caution
             elif _score["failed"] and (
-                _is_idk or _is_temporal or _is_conversational or _is_tool_sourced
+                _is_idk
+                or _is_temporal
+                or _is_coaching
+                or _is_conversational
+                or _is_tool_sourced
             ):
                 # IDK answer failed grounding (expected — it has no factual
                 # claims to cite), a temporal/recency question (grounded
+                # in conversation history, not the vault closed set), a
+                # coaching/planning turn (issue #277; user intent is
+                # life-management guidance, not factual vault synthesis), a
                 # in conversation history, not the vault closed set), a
                 # short conversational answer (greeting/small-talk with no
                 # vault content to ground — issue #334), or a tool-sourced
@@ -253,6 +263,7 @@ async def finalize_turn(
                     {
                         "retry_count": getattr(st, "_grounding_retry_count", 0),
                         "is_temporal": _is_temporal,
+                        "is_coaching": _is_coaching,
                         "is_conversational": _is_conversational,
                         "is_tool_sourced": _is_tool_sourced,
                     },
@@ -261,6 +272,7 @@ async def finalize_turn(
                 _score["grounding_score"] < 0.5
                 and _score["total_wikilinks"] > 0
                 and not _is_temporal
+                and not _is_coaching
                 and not _is_conversational
                 and not _is_tool_sourced
             ):
@@ -312,6 +324,7 @@ async def finalize_turn(
     if (
         not _is_idk
         and not _is_temporal
+        and not _is_coaching
         and not _is_conversational
         and not _is_tool_sourced
     ):
@@ -333,6 +346,7 @@ async def finalize_turn(
             "provenance_surface_skipped_idk",
             {
                 "is_temporal": _is_temporal,
+                "is_coaching": _is_coaching,
                 "is_conversational": _is_conversational,
                 "is_tool_sourced": _is_tool_sourced,
             },
