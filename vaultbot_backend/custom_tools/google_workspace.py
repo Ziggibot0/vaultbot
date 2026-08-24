@@ -104,11 +104,17 @@ SCHEMA = {
             },
             "summary": {
                 "type": "string",
-                "description": "Event summary/title (calendar_create, calendar_update).",
+                "description": (
+                    "Event summary/title "
+                    "(calendar_create, calendar_update)."
+                ),
             },
             "event_id": {
                 "type": "string",
-                "description": "Google Calendar event ID (calendar_update, calendar_delete).",
+                "description": (
+                    "Google Calendar event ID "
+                    "(calendar_update, calendar_delete)."
+                ),
             },
             "location": {
                 "type": "string",
@@ -130,13 +136,15 @@ SCHEMA = {
                 "type": "object",
                 "description": (
                     "Reminder config (calendar_create, calendar_update). "
-                    "Use {'useDefault': false, 'overrides': [{'method':'popup','minutes':60}]}."
+                    "Use {'useDefault': false, 'overrides': "
+                    "[{'method':'popup','minutes':60}]}."
                 ),
             },
             "allow_conflicts": {
                 "type": "boolean",
                 "description": (
-                    "If true, calendar_create/update proceeds even when overlap is detected."
+                    "If true, calendar_create/update proceeds even "
+                    "when overlap is detected."
                 ),
             },
             "tasklist_id": {
@@ -626,7 +634,10 @@ def run(args: dict) -> dict:
             conflicts = conflict_check.get("conflicts", [])
             if conflicts:
                 return {
-                    "error": "Time conflict detected. Set allow_conflicts=true to force create.",
+                    "error": (
+                        "Time conflict detected. "
+                        "Set allow_conflicts=true to force create."
+                    ),
                     "conflicts": conflicts,
                 }
 
@@ -706,7 +717,10 @@ def run(args: dict) -> dict:
             conflicts = conflict_check.get("conflicts", [])
             if conflicts:
                 return {
-                    "error": "Time conflict detected. Set allow_conflicts=true to force update.",
+                    "error": (
+                        "Time conflict detected. "
+                        "Set allow_conflicts=true to force update."
+                    ),
                     "conflicts": conflicts,
                 }
 
@@ -739,8 +753,8 @@ def run(args: dict) -> dict:
         time_max = args.get("time_max", "")
 
         if date and (not time_min or not time_max):
-            from datetime import time as dt_time
             import time as _time
+            from datetime import time as dt_time
 
             parsed = datetime.strptime(date, "%Y-%m-%d")
             local_start = datetime.combine(parsed.date(), dt_time.min)
@@ -755,7 +769,9 @@ def run(args: dict) -> dict:
             )
 
         if not time_min or not time_max:
-            return {"error": "time_min and time_max are required for calendar_freebusy."}
+            return {
+                "error": "time_min and time_max are required for calendar_freebusy."
+            }
 
         payload = {
             "timeMin": time_min,

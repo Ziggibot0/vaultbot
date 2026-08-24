@@ -88,7 +88,8 @@ class TestDetectCoachingTurn:
         assert detect_coaching_turn("What should I do today?") is True
 
     def test_burnout_prompt(self):
-        assert detect_coaching_turn("I'm tired and overwhelmed, help me prioritize") is True
+        msg = "I'm tired and overwhelmed, help me prioritize"
+        assert detect_coaching_turn(msg) is True
 
     def test_non_coaching_fact_query(self):
         assert detect_coaching_turn("Explain how FAISS works") is False
