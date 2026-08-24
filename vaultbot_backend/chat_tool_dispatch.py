@@ -1032,9 +1032,7 @@ async def execute_agent_tool(
                 # restart that reads only the stale websocket copy would
                 # persist a truncated thread and lose the whole live turn.
                 # Prefer the live list; fall back to the websocket copy.
-                _conv = conversation or getattr(
-                    websocket, "conversation_history", None
-                )
+                _conv = conversation or getattr(websocket, "conversation_history", None)
                 if _conv:
                     from conversation_state import save_history
 
