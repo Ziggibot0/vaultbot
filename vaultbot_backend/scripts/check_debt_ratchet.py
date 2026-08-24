@@ -3,26 +3,26 @@
 
 The two remaining soft gates (pyright full, pytest integration) run with
 ``continue-on-error: true`` so they surface pre-existing debt without
-blocking CI. That means they show green even when they have failures, and
-nothing forces them to become hard gates.
+blocking CI. This script enforces the baseline by comparing the current
+counts against the committed values in ``.ci-baseline.json``.
 
-This script is the enforcement mechanism (issue #21): it re-runs each soft
-gate, counts the current violations, and compares against the committed
-baseline in ``.ci-baseline.json``. If the count *increases*, CI fails —
-new debt is blocked while the existing baseline stays green and can be
-lowered incrementally as debt is paid down.
+The script prefers machine-readable reports (``pyright --outputjson`` and
+``pytest --junitxml``) whenever they are available, because they avoid regex
+parsing of tool output. When no artifact path is supplied, the script falls
+back to invoking the tools directly so it still works locally.
 
 Exit 0 = within baseline. Exit 1 = debt grew (or a tool failed to run).
-
-Stdlib only — no dependencies beyond Python 3.11+.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import re
+import os
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # The script lives at vaultbot_backend/scripts/, so the repo root (where
@@ -31,66 +31,19 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _BASELINE_PATH = _REPO_ROOT / ".ci-baseline.json"
 _BACKEND_DIR = _REPO_ROOT / "vaultbot_backend"
 
-_PYRIGHT_SUMMARY_RE = re.compile(r"(\d+) errors?, (\d+) warnings?, (\d+) informations?")
-_PYRIGHT_VERSION_RE = re.compile(r"pyright (\d+\.\d+\.\d+)")
-_PYTEST_SUMMARY_RE = re.compile(r"(\d+) (?:failed|passed)")
 
-
-def _load_baseline() -> dict:
-    if not _BASELINE_PATH.exists():
+def _load_baseline(path: Path | None = None) -> dict:
+    baseline_path = path or _BASELINE_PATH
+    if not baseline_path.exists():
         print(
-            f"debt-ratchet: baseline file not found: {_BASELINE_PATH}", file=sys.stderr
+            f"debt-ratchet: baseline file not found: {baseline_path}", file=sys.stderr
         )
         return {}
-    return json.loads(_BASELINE_PATH.read_text(encoding="utf-8"))
-
-
-def _run_pyright() -> tuple[int, int, str | None]:
-    """Return (errors, warnings, version) from `pyright --level warning`.
-
-    The version is parsed from `pyright --version` so the ratchet can detect
-    when the installed pyright differs from the version the baseline was
-    measured against. A version bump changes pyright's type-inference counts
-    even with zero code changes, so a stale baseline would either false-fail
-    ("debt grew") or silently hide real debt. See the version-drift check in
-    ``main()``.
-
-    Tools are invoked via ``sys.executable -m <tool>`` rather than a nested
-    ``uv run``. This script is itself launched with ``uv run python ...`` (in
-    CI) or directly from the venv (locally), so ``sys.executable`` is already
-    the venv interpreter and the tools are on its path. A nested ``uv run``
-    hits a "uv trampoline failed to canonicalize script path" error on
-    Windows, which made the ratchet unrunnable locally.
-    """
-    result = subprocess.run(
-        [sys.executable, "-m", "pyright", "--level", "warning", "vaultbot_backend/"],
-        cwd=_BACKEND_DIR.parent,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    # pyright exits 1 when there are errors; that's expected. We only care
-    # about the summary line, which is on stdout.
-    output = result.stdout + result.stderr
-    m = _PYRIGHT_SUMMARY_RE.search(output)
-    if not m:
-        print("debt-ratchet: could not parse pyright summary", file=sys.stderr)
-        print(output[-2000:], file=sys.stderr)
-        return (-1, -1, None)
-    version = _pyright_version()
-    return int(m.group(1)), int(m.group(2)), version
+    return json.loads(baseline_path.read_text(encoding="utf-8"))
 
 
 def _pyright_version() -> str | None:
-    """Return the installed pyright version string (e.g. "1.1.411"), or None.
-
-    ``python -m pyright --version`` prints a single line like
-    "pyright 1.1.411". (The ``pyright`` console script's ``--version`` does
-    not emit output on Windows, so we invoke the module form, which is
-    cross-platform.) If the version can't be determined (tool missing,
-    unexpected output), return None so the caller can decide whether that's
-    fatal.
-    """
+    """Return the installed pyright version string or None."""
     result = subprocess.run(
         [sys.executable, "-m", "pyright", "--version"],
         cwd=_BACKEND_DIR.parent,
@@ -98,67 +51,148 @@ def _pyright_version() -> str | None:
         text=True,
         timeout=120,
     )
-    m = _PYRIGHT_VERSION_RE.search(result.stdout + result.stderr)
-    return m.group(1) if m else None
+    text = (result.stdout + result.stderr).strip()
+    if not text:
+        return None
+    for line in text.splitlines():
+        if line.startswith("pyright "):
+            version = line.split()[1].strip()
+            return version
+    return None
+
+
+def _parse_pyright_report(report: dict) -> tuple[int, int]:
+    summary = report.get("summary", {})
+    errors = int(summary.get("errorCount", 0) or 0)
+    warnings = int(summary.get("warningCount", 0) or 0)
+    return errors, warnings
+
+
+def _read_pyright_report(path: Path) -> tuple[int, int, str | None]:
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        print(
+            f"debt-ratchet: could not read pyright JSON report: {path}",
+            file=sys.stderr,
+        )
+        return (-1, -1, None)
+    version = _pyright_version()
+    errors, warnings = _parse_pyright_report(report)
+    return errors, warnings, version
+
+
+def _run_pyright() -> tuple[int, int, str | None]:
+    """Return (errors, warnings, version) from `pyright --level warning`."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pyright",
+            "--level",
+            "warning",
+            "--outputjson",
+            "vaultbot_backend/",
+        ],
+        cwd=_BACKEND_DIR.parent,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    output = result.stdout.strip()
+    if not output:
+        print("debt-ratchet: could not parse pyright JSON", file=sys.stderr)
+        print((result.stderr or result.stdout)[-2000:], file=sys.stderr)
+        return (-1, -1, None)
+    try:
+        report = json.loads(output)
+    except json.JSONDecodeError:
+        print("debt-ratchet: could not parse pyright JSON", file=sys.stderr)
+        print(output[-2000:], file=sys.stderr)
+        return (-1, -1, None)
+    version = _pyright_version()
+    return (*_parse_pyright_report(report), version)
+
+
+def _parse_pytest_junit(path: Path) -> tuple[int, int]:
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        print(
+            f"debt-ratchet: could not read/parse pytest JUnit XML: {path}",
+            file=sys.stderr,
+        )
+        return (-1, -1)
+
+    # The JUnit root can be either a <testsuite ...> or a <testsuites> wrapper.
+    # Some outputs contain multiple <testsuite> nodes, so sum them all.
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    if not suites:
+        return (0, 0)
+    tests = sum(int(s.attrib.get("tests", 0) or 0) for s in suites)
+    failures = sum(int(s.attrib.get("failures", 0) or 0) for s in suites)
+    return failures, tests
 
 
 def _run_pytest_integration() -> tuple[int, int]:
     """Return (failures, total) from `pytest -m integration`."""
-    import os
-
     env = dict(os.environ)
     env["VAULTBOT_SKIP_LOCK"] = "1"
     env["VAULTBOT_SKIP_WATCHER"] = "1"
     env["VAULT_PATH"] = str(_REPO_ROOT)
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-m", "integration", "--tb=no"],
-        cwd=_BACKEND_DIR,
-        capture_output=True,
-        text=True,
-        timeout=600,
-        env=env,
-    )
-    output = result.stdout + result.stderr
-    # Parse the summary line like "25 passed, 647 deselected" or
-    # "1 failed, 24 passed, 647 deselected". The summary is the last line
-    # containing a "N passed"/"N failed" token.
-    summary = [
-        ln for ln in output.splitlines() if re.search(r"\d+ (failed|passed)", ln)
-    ]
-    if not summary:
-        print("debt-ratchet: could not parse pytest summary", file=sys.stderr)
-        print(output[-2000:], file=sys.stderr)
-        return (-1, -1)
-    line = summary[-1]
-    failed = 0
-    total = 0
-    for m in re.finditer(r"(\d+) (failed|passed)", line):
-        n = int(m.group(1))
-        total += n
-        if m.group(2) == "failed":
-            failed = n
-    return failed, total
+    with tempfile.TemporaryDirectory(prefix="vaultbot-ratchet-") as tmp_dir:
+        junit_path = Path(tmp_dir) / "pytest-integration.xml"
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-m",
+                "integration",
+                "--tb=no",
+                "--junitxml",
+                str(junit_path),
+            ],
+            cwd=_BACKEND_DIR,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=env,
+            check=False,
+        )
+        if not junit_path.exists():
+            print("debt-ratchet: could not produce pytest JUnit XML", file=sys.stderr)
+            return (-1, -1)
+        return _parse_pytest_junit(junit_path)
 
 
 def main() -> int:
-    baseline = _load_baseline()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--baseline", type=Path, default=_BASELINE_PATH)
+    parser.add_argument(
+        "--pyright-json",
+        type=Path,
+        help="path to pyright --outputjson report",
+    )
+    parser.add_argument(
+        "--pytest-junitxml",
+        type=Path,
+        help="path to pytest --junitxml report",
+    )
+    args = parser.parse_args()
+
+    baseline = _load_baseline(args.baseline)
     if not baseline:
         return 1
 
     failures: list[str] = []
 
-    # Pyright ratchet. The baseline is keyed by Python version because
-    # pyright's type-inference count differs slightly between 3.11 and 3.12
-    # stdlib stubs (e.g. 454 vs 456 errors).
-    py_errors, py_warnings, py_version = _run_pyright()
+    if args.pyright_json is not None:
+        py_errors, py_warnings, py_version = _read_pyright_report(args.pyright_json)
+    else:
+        py_errors, py_warnings, py_version = _run_pyright()
     py_base = baseline.get("pyright", {})
 
-    # Version-drift guard: the baseline's counts are only meaningful for the
-    # pyright version they were measured against. A pyright bump (via uv.lock
-    # re-resolution or a manual version change) shifts the counts even with
-    # zero code changes, so a stale baseline would either false-fail ("debt
-    # grew") or silently hide real debt. Fail loudly and tell the author to
-    # re-measure and refresh the baseline in the same PR.
     recorded_version = baseline.get("pyright_version")
     if recorded_version is None:
         failures.append(
@@ -184,7 +218,6 @@ def main() -> int:
         py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
         ver_base = py_base.get(py_ver)
         if ver_base is None:
-            # Fall back to a flat {errors, warnings} shape for backward compat.
             ver_base = py_base if "errors" in py_base else {}
         base_errors = ver_base.get("errors", 0)
         base_warnings = ver_base.get("warnings", 0)
@@ -202,8 +235,10 @@ def main() -> int:
             f"pyright {py_version})"
         )
 
-    # Pytest integration ratchet.
-    it_failures, it_total = _run_pytest_integration()
+    if args.pytest_junitxml is not None:
+        it_failures, it_total = _parse_pytest_junit(args.pytest_junitxml)
+    else:
+        it_failures, it_total = _run_pytest_integration()
     it_base = baseline.get("pytest_integration", {})
     if it_failures < 0:
         failures.append("pytest integration: could not determine count")
