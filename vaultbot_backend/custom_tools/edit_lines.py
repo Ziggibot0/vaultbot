@@ -36,8 +36,8 @@ For other files: backs up to trash/, writes atomically.
 USAGE
 -----
 - To EDIT lines: replace lines 45-52 with new_content.
-- To INSERT after line N: replace lines N+1 to N (empty range) — but
-  this tool requires start_line <= end_line. Instead, replace line N
+- To INSERT after line N: replace lines N+1 to N (empty range) —
+  but this tool requires start_line <= end_line. Instead, replace line N
   with "original line N content\nnew inserted content".
 - To DELETE lines: replace lines N-M with empty string ("").
 """
@@ -49,7 +49,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from paths import VAULT_ROOT
+from paths import FRAMEWORK_ROOT, VAULT_ROOT, resolve_write_path
 
 # custom_tools/edit_lines.py -> parent = custom_tools
 # -> parent.parent = vaultbot_backend
@@ -199,6 +199,18 @@ def _apply_line_replacement(
     return result
 
 
+def _backup_relpath(backup_path: Path) -> str:
+    """Return backup_path relative to VAULT_ROOT or FRAMEWORK_ROOT (whichever
+    contains it). Backups live under vaultbot_backend/trash/ (FRAMEWORK_ROOT),
+    so relative_to(VAULT_ROOT) alone throws for repo-root edits (issue #341)."""
+    for root in (VAULT_ROOT, FRAMEWORK_ROOT):
+        try:
+            return str(backup_path.relative_to(root.resolve()))
+        except ValueError:
+            continue
+    return str(backup_path)
+
+
 def _write_md_safe(
     file_path_str: str,
     full_path: Path,
@@ -223,19 +235,27 @@ def _write_md_safe(
             "error": f"Sacred journal file — cannot edit: {file_path_str}",
         }
 
-    # Schema validation (if available)
+    # Schema validation (if available) - only for vault notes, not repo-root
+    # files (README.md, AGENTS.md) which aren't vault notes and don't need
+    # frontmatter.
     try:
-        from note_schema import validate_schema
+        full_path.relative_to(VAULT_ROOT.resolve())
+        in_vault = True
+    except ValueError:
+        in_vault = False
+    if in_vault:
+        try:
+            from note_schema import validate_schema
 
-        ok, errors, warnings = validate_schema(new_content)
-        if not ok:
-            return {
-                "status": "blocked",
-                "error": f"Schema validation failed: {'; '.join(errors)}",
-                "warnings": warnings,
-            }
-    except ImportError:
-        pass  # schema validation optional
+            ok, errors, warnings = validate_schema(new_content)
+            if not ok:
+                return {
+                    "status": "blocked",
+                    "error": f"Schema validation failed: {'; '.join(errors)}",
+                    "warnings": warnings,
+                }
+        except ImportError:
+            pass  # schema validation optional
 
     if dry_run:
         return {
@@ -272,7 +292,7 @@ def _write_md_safe(
         "status": "written",
         "file_path": str(full_path),
         "bytes_written": len(new_content),
-        "backup_path": str(backup_path.relative_to(VAULT_ROOT)),
+        "backup_path": _backup_relpath(backup_path),
     }
 
 
@@ -314,7 +334,7 @@ def _write_generic(
         "status": "written",
         "file_path": str(full_path),
         "bytes_written": len(new_content),
-        "backup_path": str(backup_path.relative_to(VAULT_ROOT)),
+        "backup_path": _backup_relpath(backup_path),
     }
 
 
@@ -358,16 +378,18 @@ def run(args: dict) -> dict:
             "error": f"end_line ({end_line}) must be >= start_line ({start_line})",
         }
 
-    # 3. Path traversal check
-    if _is_path_traversal(file_path_str, VAULT_ROOT):
+    # 3. Resolve the write path against VAULT_ROOT then FRAMEWORK_ROOT
+    #    (issue #341). Repo-facing files (README.md, AGENTS.md, .github/,
+    #    vaultbot_backend/) live at the repo root, not inside the vault.
+    full_path = resolve_write_path(file_path_str)
+    if full_path is None:
         return {
             "status": "error",
             "error": (
-                f"Path traversal detected: {file_path_str} resolves outside vault root"
+                f"Path traversal detected: {file_path_str} resolves outside "
+                "vault root and repo root"
             ),
         }
-
-    full_path = (VAULT_ROOT / file_path_str).resolve()
 
     # 4. File must exist
     if not full_path.exists():

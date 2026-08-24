@@ -139,7 +139,7 @@ jobs:
           mkdir -p "$VAULT_PATH/vaultbot-stuff/System"
           uv run pytest -q -m "unit" --tb=short \
             --cov=vaultbot_backend --cov-report=term-missing \
-            --cov-fail-under=10
+            --cov-fail-under=15
 
       - name: Pytest — integration tests (soft gate)
         # Tests marked `pytestmark = pytest.mark.integration` — these need

@@ -61,7 +61,7 @@ the proof itself is not demonstrated yet:
 The mission is the direction. The work is getting there.
 
 For the full strategic vision, see
-[`Knowledge/Architecture/VaultBot-Strategic-Vision.md`](Knowledge/Architecture/VaultBot-Strategic-Vision.md).
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ---
 
@@ -367,7 +367,7 @@ forbids approving your own). No one force-pushes — every change goes through
 a PR and CI.
 
 See
-[`vaultbot/System/Community-Contribution-System.md`](vaultbot/System/Community-Contribution-System.md)
+[`myvault/vaultbot-stuff/System/Community-Contribution-System.md`](myvault/vaultbot-stuff/System/Community-Contribution-System.md)
 for the full design.
 
 ---
@@ -450,7 +450,7 @@ and are boot-injected every session.
 VaultBot ships **curious, not opinionated**. It doesn't assume you want
 autonomy, or that you hate certain sources, or that you like bullet points.
 The `baseline/` folder contains starter directive templates you can copy
-into `vaultbot/System/Identity/` to set rules:
+into `myvault/vaultbot-stuff/System/Identity/` to set rules:
 
 - `Autonomy-Directive.md` — act on its own, report after the fact
 - `No-Wikipedia-Directive.md` — never reference training data, prefer primary sources
@@ -458,7 +458,8 @@ into `vaultbot/System/Identity/` to set rules:
 - `Communication-Preferences.md` — how you like to be talked to (template)
 
 Do NOT place directives at the vault root — the root is reserved for your
-personal notes. VaultBot's own directives live under `vaultbot/`.
+personal notes. VaultBot's own directives live under
+`myvault/vaultbot-stuff/System/Identity/`.
 
 Or just tell VaultBot in chat ("keep your answers short", "don't use
 Wikipedia") and it will store that as a directive note itself.
@@ -492,27 +493,35 @@ The backend (~95 modules) is organized into these key areas:
 
 ```
 .
-├── .obsidian/plugins/vaultbot/   # The Obsidian plugin (chat UI)
-├── vaultbot/
-│   ├── baseline/                  # Starter directive templates (not active)
-│   ├── vaultbot_backend/          # The Python backend (~95 modules)
-│   ├── System/                    # Architecture docs, procedures, playbooks
-│   ├── .env.example                # Template for .env (API keys, model config)
-│   ├── setup.ps1 / setup.sh       # One-click installers
-├── README.md                      # GitHub-facing README
-├── CONTRIBUTING.md                # GitHub-facing contributing guide
-├── GOVERNANCE.md                  # Decision-making model & succession plan
-├── SECURITY.md                    # Security policy
-├── providers.example.json         # Example provider/model registry (copy to providers.json)
-├── .ci-baseline.json              # Debt + thinness ratchet baselines (CI enforces monotonic improvement)
-└── LICENSE                        # MIT license
+├── myvault/                        # The Obsidian vault (your knowledge base)
+│   ├── .obsidian/plugins/vaultbot/ # The Obsidian plugin (chat UI)
+│   └── vaultbot-stuff/             # VaultBot's own notes (System, Knowledge, Memory, baseline)
+├── vaultbot_backend/               # The Python backend (~95 modules)
+├── docs/                           # Architecture & fix specification docs
+├── learningMaterial/               # PDFs / textbooks (gitignored)
+├── .github/workflows/ci.yml        # CI (lint, type-check, test, ratchets)
+├── AGENTS.md                       # Agent workflow rules
+├── ARCHITECTURE.md                 # Strategic vision & architecture
+├── CHANGELOG.md                    # Release history
+├── CODE_OF_CONDUCT.md              # Code of conduct
+├── CONTRIBUTING.md                 # GitHub-facing contributing guide
+├── GOVERNANCE.md                   # Decision-making model & succession plan
+├── SECURITY.md                     # Security policy
+├── ROADMAP.md                      # Roadmap
+├── README.md                       # GitHub-facing README
+├── providers.example.json          # Example provider/model registry (copy to providers.json)
+├── .ci-baseline.json               # Debt + thinness ratchet baselines (CI enforces monotonic improvement)
+├── pyproject.toml                  # ruff + pyright + pytest + coverage config
+├── setup.ps1 / setup.sh            # One-click installers
+├── .env.example                    # Template for .env (API keys, model config)
+└── LICENSE                         # MIT license
 ```
 
-Your personal content stays at the vault root:
-- `User/` — your notes (gitignored)
-- `vaultbot/Memory/` — chat logs (gitignored)
-- `vaultbot/Knowledge/` — research notes (gitignored)
-- `vaultbot/learningMaterial/` — PDFs / textbooks (gitignored)
+Your personal content stays in the vault (`myvault/`):
+- `myvault/User/` — your notes (gitignored)
+- `myvault/vaultbot-stuff/Memory/` — chat logs (gitignored)
+- `myvault/vaultbot-stuff/Knowledge/` — research notes (gitignored)
+- `learningMaterial/` — PDFs / textbooks (gitignored)
 - `.env` — API keys (gitignored)
 
 ## Governance

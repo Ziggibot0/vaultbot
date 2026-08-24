@@ -124,3 +124,43 @@ def is_within_content_roots(path: str | Path) -> bool:
         except ValueError:
             continue
     return False
+
+
+def resolve_write_path(file_path: str | Path) -> Path | None:
+    """Resolve a write path against VAULT_ROOT first, then FRAMEWORK_ROOT.
+
+    Returns the resolved Path if it lands inside either root, else None.
+
+    Handles the split layout (issue #341): vault notes live under
+    ``VAULT_ROOT`` (myvault) but repo-facing files (``README.md``,
+    ``AGENTS.md``, ``.github/``, ``vaultbot_backend/``) live at the repo
+    root (``FRAMEWORK_ROOT``). The write tools previously resolved only
+    against ``VAULT_ROOT``, so they blocked every repo-root file as "path
+    traversal" and contributions to the repo were impossible.
+
+    Security: the resolved path must land inside VAULT_ROOT or
+    FRAMEWORK_ROOT. A ``..`` that escapes BOTH roots returns None (the
+    caller blocks the write). Vault root wins for paths that exist in both;
+    otherwise the first root that contains an existing file is used. For a
+    brand-new file (create case) the vault root is the fallback.
+    """
+    p = Path(file_path)
+    roots = [_resolve_vault_root()]
+    if FRAMEWORK_ROOT != roots[0]:
+        roots.append(FRAMEWORK_ROOT)
+    for root in roots:
+        candidate = (root / p).resolve()
+        try:
+            candidate.relative_to(root.resolve())
+        except ValueError:
+            continue
+        if candidate.exists():
+            return candidate
+    # Nothing found yet — fall back to the vault root (for create-new notes),
+    # but ONLY if it stays inside the vault root.
+    fallback = (_resolve_vault_root() / p).resolve()
+    try:
+        fallback.relative_to(_resolve_vault_root().resolve())
+        return fallback
+    except ValueError:
+        return None

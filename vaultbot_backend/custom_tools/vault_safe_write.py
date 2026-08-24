@@ -67,7 +67,7 @@ import tempfile  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-from paths import VAULT_ROOT  # noqa: E402
+from paths import VAULT_ROOT, resolve_write_path  # noqa: E402
 
 # Determine paths from this file's location
 # custom_tools/vault_safe_write.py -> parent.parent = vaultbot_backend/
@@ -168,10 +168,14 @@ def run(args: dict) -> dict:
         result["blocked_reason"] = f"File must be a .md file (got: {file_path_str})"
         return result
 
-    # 3. Path traversal check
-    if _is_path_traversal(file_path_str, VAULT_ROOT):
+    # 3. Resolve the write path against VAULT_ROOT then FRAMEWORK_ROOT
+    #    (issue #341). Repo-facing markdown (README.md, AGENTS.md) lives at
+    #    the repo root, not inside the vault.
+    full_path = resolve_write_path(file_path_str)
+    if full_path is None:
         result["blocked_reason"] = (
-            f"Path traversal detected: {file_path_str} resolves outside vault root"
+            f"Path traversal detected: {file_path_str} resolves outside "
+            "vault root and repo root"
         )
         return result
 
@@ -184,7 +188,6 @@ def run(args: dict) -> dict:
         )
         return result
 
-    full_path = (VAULT_ROOT / file_path_str).resolve()
     result["checks"]["resolved_path"] = str(full_path)
 
     # 4. Content must not be empty
