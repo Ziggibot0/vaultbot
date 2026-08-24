@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 def _pre_route_message(text: str) -> dict[str, Any]:
     """Classify a message into procedure, small_model, or escalate."""
     if not text or not text.strip():

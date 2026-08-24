@@ -23,6 +23,7 @@ pytestmark = pytest.mark.unit
 from procedure_compiler import compile_from_text
 from step_gate_runtime import (
     _count_thing,
+    _code_step_timeout_seconds,
     _evaluate_condition,
     _parse_validation,
     _validate_step,
@@ -297,6 +298,20 @@ def test_code_step_executes(tmp_path):
     result = _run(proc, vault_path=str(tmp_path))
     assert result.overall_passed
     assert "4" in result.final_output
+
+
+def test_code_step_timeout_default():
+    assert _code_step_timeout_seconds([]) == 120
+
+
+def test_code_step_timeout_llm_generate():
+    assert _code_step_timeout_seconds(["llm_generate"]) == 300
+
+
+def test_code_step_timeout_run_procedure_orchestration():
+    # Orchestration code steps can call full child procedures and need a
+    # larger budget than the 120s utility-step default.
+    assert _code_step_timeout_seconds(["run_procedure"]) == 900
 
 
 def test_child_procedures_field_default_empty():

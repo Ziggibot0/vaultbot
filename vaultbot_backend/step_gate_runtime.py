@@ -50,6 +50,27 @@ from procedure_validators import (  # noqa: F401 — re-exported for tests/calle
     _validate_step,
 )
 
+# Code-step timeout policy (seconds).
+_CODE_STEP_TIMEOUT_DEFAULT = 120
+_CODE_STEP_TIMEOUT_LLM = 300
+_CODE_STEP_TIMEOUT_RUN_PROCEDURE = 900
+
+
+def _code_step_timeout_seconds(allowed_tools: list[str]) -> int:
+    """Return timeout budget for a code step based on allowed tools.
+
+    Orchestration procedures that call ``run_procedure`` can legitimately run
+    much longer than a normal utility code step because they may execute full
+    child procedures (issue solve loops, CI gates, etc.) inside one parent
+    step. Those should not be cut off at the 120s default.
+    """
+    tools = set(allowed_tools or [])
+    if "run_procedure" in tools:
+        return _CODE_STEP_TIMEOUT_RUN_PROCEDURE
+    if "llm_generate" in tools:
+        return _CODE_STEP_TIMEOUT_LLM
+    return _CODE_STEP_TIMEOUT_DEFAULT
+
 # ── Data structures ───────────────────────────────────────────────────────
 
 
@@ -407,7 +428,7 @@ async def execute_procedure(
 
         # --- Execute based on step type ---
         if step.step_type == "code":
-            _step_timeout = 300 if "llm_generate" in procedure.allowed_tools else 120
+            _step_timeout = _code_step_timeout_seconds(procedure.allowed_tools)
             # to_thread keeps the event loop unblocked so asyncio.wait_for
             # timeouts (e.g. Think preflight in chat_handler.py) can fire.
             success, output, error, tb, sub_prior = await asyncio.to_thread(
