@@ -282,14 +282,20 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Session: {report['session_id']}")
     print(f"Turns  : {s.get('turn_count', 0)}")
     print(f"Routes : {s.get('route_distribution', {})}")
-    print(f"Tokens : {s.get('total_tokens', 0)}  "
-          f"(prompt {s.get('total_prompt_tokens', 0)}  "
-          f"completion {s.get('total_completion_tokens', 0)})")
+    print(
+        f"Tokens : {s.get('total_tokens', 0)}  "
+        f"(prompt {s.get('total_prompt_tokens', 0)}  "
+        f"completion {s.get('total_completion_tokens', 0)})"
+    )
     if "total_cost_usd" in s:
-        print(f"Cost   : ${s['total_cost_usd']:.6f}  "
-              f"(avg ${s.get('avg_cost_usd_per_turn', 0):.6f}/turn)")
-    print(f"Tool latency: {s.get('total_tool_latency_ms', 0):.1f} ms total  "
-          f"({s.get('avg_tool_latency_ms_per_turn', 0):.1f} ms/turn avg)")
+        print(
+            f"Cost   : ${s['total_cost_usd']:.6f}  "
+            f"(avg ${s.get('avg_cost_usd_per_turn', 0):.6f}/turn)"
+        )
+    print(
+        f"Tool latency: {s.get('total_tool_latency_ms', 0):.1f} ms total  "
+        f"({s.get('avg_tool_latency_ms_per_turn', 0):.1f} ms/turn avg)"
+    )
     print(f"Tool rounds : {s.get('avg_tool_rounds_per_turn', 0):.2f}/turn avg")
     print(f"Repeated-tool flags: {s.get('turns_with_repeated_tool_calls', 0)} turns")
     print(f"Outcomes: {s.get('completion_outcomes', {})}")
