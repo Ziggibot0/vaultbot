@@ -241,7 +241,7 @@ def notify_problem_broadcast(
 
     Schedules ``notify_problem`` on all active websocket connections via
     ``manager.broadcast``. Use from background threads that don't own the
-    event loop (e.g. the autonomous researcher's crash callback).
+    event loop.
     """
     from diagnostics import classify_error
     from error_types import Diagnosis as _Diagnosis
@@ -456,7 +456,7 @@ def tool_result_summary(tool_name: str, result: Any) -> str:
         st = result
         return (
             "running" if st.get("running") else "stopped"
-        ) + f", {st.get('history_count', 0)} cycles"
+        ) + f", research={st.get('research', 'unknown')}, gaps={st.get('gaps_count', 0)}"
     if tool_name == "code_read":
         return (
             f"{result.get('total_lines', 0)} lines from {result.get('file_path', '?')}"

@@ -1,6 +1,6 @@
 """Tests for vault_graph concurrency — thread safety of the RLock guard.
 
-The watchdog / autonomous researcher thread calls refresh() while the chat
+The file watcher / background refresh thread calls refresh() while the chat
 loop reads nodes/edges/backlinks via dangling_links(), thin_notes(),
 neighbors(), etc.  Without a lock this raises
 ``RuntimeError: dictionary changed size during iteration``.

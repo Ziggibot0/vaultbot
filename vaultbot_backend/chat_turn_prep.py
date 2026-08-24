@@ -40,7 +40,6 @@ from chat_preflight import (
     run_procedure_direct as _run_procedure_direct,
 )
 from citation_gate import build_allowed_citations
-from config import TUNABLES
 from conversation_index import build_conversation_context
 from procedure_surface import build_procedure_surface
 from services import Services
@@ -265,11 +264,6 @@ async def prepare_turn(
     )
 
     # --- Route-Task preflight (intent classifier) ---------------------
-    # Runs BEFORE the auto-research gate (issue #25) so the classification
-    # result can prevent unnecessary web scraping on conversational
-    # backchannels ("yeah do that", "pretty good"). Only categories in
-    # TUNABLES.auto_researchclasses trigger auto-research.
-    #
     # Route-Task classifies intent and returns a procedure chain. It's
     # cheap (1 small-model LLM call). Think (the BS detector / premise
     # gate) is NOT run here -- it's an opt-in tool the big model can call
@@ -377,232 +371,6 @@ async def prepare_turn(
                                 }
                             )
                             break
-
-    # --- Auto-research-then-answer preflight gate (vault-centric) -------
-    # When FUSED retrieval returns nothing usable (empty OR all results
-    # below TUNABLES.min_retrieval_score), the vault has no answer. Rather
-    # than letting the model answer from its weights, fire vault_research
-    # ONCE synchronously, write a note, re-index, then re-retrieve so the
-    # model sees the freshly-researched note as a citation target. This is
-    # the "vault does its own work" pattern -- the big LLM never sees an
-    # empty context; it synthesizes from the new note with provenance.
-    # Gated behind TUNABLES.auto_research_on_empty. Skipped for trivial
-    # messages and resumed turns (those don't need fresh research).
-    #
-    # Topical-relevance check: even when results pass the score threshold,
-    # they may be topically irrelevant -- e.g., the vault returns
-    # gecko-adhesives and slime-molds notes for "what are cat whiskers
-    # made of?" because their FUSED similarity scores are above
-    # min_retrieval_score. We ask the small model to make a semantic
-    # relevance judgment (does any result actually answer the query?)
-    # instead of relying on lexical word overlap, which has an unbounded
-    # edge-case surface (synonyms, paraphrase, multi-word concepts,
-    # stopwords, morphology). The small model understands "sea shells" =
-    # mollusk shells and "cat whiskers" ≠ gecko adhesives -- a lexical
-    # heuristic never will.
-    #
-    # Fail-safe: on any error, timeout, or circuit-breaker trip, returns
-    # True (assume relevant) so we never block legitimate auto-research
-    # due to a broken helper -- the category gate is the primary guard.
-
-    def _is_topically_relevant(query: str, results: list[dict]) -> bool:
-        """Ask the small model whether any result is relevant to the query.
-
-        Returns True if the small model says at least one result is
-        relevant. Returns False if the model says none are relevant.
-        Returns True (fail-safe) on any error, empty results, or circuit
-        breaker trip -- never block auto-research due to a broken helper.
-        """
-        if not results:
-            return False
-        # Build a compact summary of each result (title + first 200 chars).
-        from pathlib import Path
-
-        _candidates = []
-        for r in results:
-            if not isinstance(r, dict):
-                continue
-            _fp = r.get("file_path", "") or ""
-            _stem = ""
-            try:
-                _stem = Path(_fp).stem if _fp else ""
-            except Exception:  # noqa: BLE001
-                _stem = ""
-            _snippet = (r.get("content", "") or "")[:200].replace("\n", " ")
-            _candidates.append(f"- {_stem}: {_snippet}")
-        if not _candidates:
-            return True  # nothing to check -- don't block
-        _prompt = (
-            "You are a relevance judge. The user asked a question and the "
-            "vault returned these notes. Do ANY of them contain information "
-            "that would help answer the question? Answer ONLY 'yes' or 'no'.\n\n"
-            f"Question: {query[:400]}\n\n"
-            "Notes:\n" + "\n".join(_candidates[:5]) + "\n\n"
-            "Relevant?"
-        )
-        try:
-            from llm_client import get_small_client_or_big
-            from small_model_filters import _breaker_trip, _client_chat
-
-            _client = get_small_client_or_big(session_logger)
-            if _client is None:
-                return True  # no model available -- fail-safe
-            _text = _client_chat(
-                _client,
-                _prompt,
-                temperature=0.1,
-                max_predict=8,  # "yes" or "no" -- 8 tokens is generous
-                breaker_key="relevance",
-            )
-            if not _text:
-                # Circuit breaker tripped or empty response -- fail-safe.
-                return True
-            _first = _text.strip().lower().split()[0] if _text.strip() else ""
-            _relevant = _first.startswith("y")
-            if not _relevant and not _first.startswith("n"):
-                # Garbled output -- can't trust it, fail-safe.
-                _breaker_trip("relevance")
-                return True
-            return _relevant
-        except Exception:  # noqa: BLE001 -- best-effort, never break chat
-            # Trip the breaker so a timing-out/erroring model costs zero
-            # latency on subsequent turns (30-min cooldown), matching the
-            # garbled-output path. Fail-safe still returns True.
-            _breaker_trip("relevance")
-            return True
-
-    _auto_research_note: str | None = None
-    # Category gate (issue #25): only fire auto-research if Route-Task
-    # classified the message as a research-worthy category. This prevents
-    # conversational backchannels ("yeah do that", "pretty good") from
-    # triggering web scraping just because the vault has no relevant notes.
-    # When _preflight_category is empty (trivial message, resumed turn, or
-    # Route-Task failure), fall back to the old behavior for safety.
-    _category_allows_research = (
-        not _preflight_category
-        or _preflight_category in TUNABLES.auto_research_categories
-    )
-    if (
-        TUNABLES.auto_research_on_empty
-        and not _resumed_tool_history
-        and _category_allows_research
-    ):
-        _usable = [
-            r
-            for r in results
-            if isinstance(r, dict)
-            and r.get("score", 0.0) >= TUNABLES.min_retrieval_score
-        ]
-        # Semantic topical-relevance gate: ask the small model whether
-        # any result is relevant to the query. This catches the case where
-        # retrieval returned high-score-but-irrelevant notes (e.g., gecko
-        # adhesives for "cat whiskers") without relying on lexical overlap.
-        _topically_relevant = _is_topically_relevant(
-            _rewritten_query or user_message, _usable
-        )
-        if _usable and not _topically_relevant:
-            from pathlib import Path as _Path
-
-            _stems = []
-            for r in _usable[:5]:
-                _fp = r.get("file_path", "") if isinstance(r, dict) else ""
-                _stems.append(_Path(_fp).stem if _fp else "")
-            session_logger.log(
-                "auto_research_topical_miss",
-                {
-                    "query": (_rewritten_query or user_message)[:80],
-                    "result_stems": _stems,
-                    "judge": "small_model",
-                },
-            )
-        if not _usable or not _topically_relevant:
-            try:
-                await send_progress(
-                    svc,
-                    websocket,
-                    "auto_research",
-                    {"reason": "empty_retrieval", "query": _rewritten_query[:80]},
-                )
-                await svc.manager.send_personal_message(
-                    json.dumps(
-                        {
-                            "type": "status",
-                            "content": (
-                                "Nothing in the vault covers this -- "
-                                "researching it now..."
-                            ),
-                        }
-                    ),
-                    websocket,
-                    session_logger=session_logger,
-                )
-                # Lazy import to avoid any circular dependency.
-                from research_handler import run_research_and_write_note
-
-                _auto_research_note = await run_research_and_write_note(
-                    websocket,
-                    _rewritten_query,
-                    session_logger,
-                    svc,
-                    max_rounds=TUNABLES.auto_research_rounds,
-                )
-                if _auto_research_note:
-                    session_logger.log(
-                        "auto_research_fired",
-                        {
-                            "note_path": _auto_research_note,
-                            "query": _rewritten_query[:80],
-                        },
-                    )
-                    # Re-retrieve so the new note is in the results set.
-                    _fused = await run_with_heartbeat(
-                        svc,
-                        websocket,
-                        "re-retrieving vault",
-                        svc.fused_retriever.retrieve,
-                        _rewritten_query,
-                        15,
-                        1,
-                    )
-                    _new = (
-                        _fused.get("results", [])
-                        if isinstance(_fused, dict)
-                        else (_fused or [])
-                    )
-                    if _new:
-                        results = dedup_results(results + _new) if results else _new
-                        if len(results) > 5:
-                            results = await rerank_results(
-                                svc,
-                                user_message,
-                                results,
-                                k=5,
-                                session_logger=session_logger,
-                            )
-                        else:
-                            results = results[:5]
-                    session_logger.log(
-                        "auto_research_reretrieve",
-                        {"result_count": len(results)},
-                    )
-                else:
-                    session_logger.log(
-                        "auto_research_no_note",
-                        {"query": _rewritten_query[:80]},
-                    )
-            except Exception as e:  # noqa: BLE001 -- best-effort, never break chat
-                session_logger.log("auto_research_failed", {"error": str(e)})
-    elif not _category_allows_research and not _resumed_tool_history:
-        # Log when auto-research was skipped due to the category gate
-        # (issue #25). This makes the gate's effect visible in session
-        # logs without adding latency.
-        session_logger.log(
-            "auto_research_category_skipped",
-            {
-                "query": user_message[:80],
-                "category": _preflight_category,
-            },
-        )
 
     # Conversation-aware retrieval: search the conversation index for
     # prior turns relevant to this query. This is what lets the bot
@@ -753,7 +521,6 @@ async def prepare_turn(
     identity_context = svc.identity.boot_context()
 
     # Gather live state so the system prompt is a real briefing, not static.
-    autonomous_state = svc.autonomous_researcher.status()
     try:
         _t_gaps = loop.time()
         gaps = await run_with_heartbeat(
@@ -806,7 +573,6 @@ async def prepare_turn(
     # The briefing is rebuilt fresh every turn so newly-created tools and
     # edits appear immediately.
     _briefing = build_system_prompt_briefing(
-        autonomous_state,
         gaps_summary,
         custom_tools=custom_tools_desc,
         custom_tool_names=custom_tool_names,

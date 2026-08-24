@@ -135,10 +135,6 @@ async def handle_chat(
         except Exception as e:  # noqa: BLE001 -- best-effort
             session_logger.log("chat_checkpoint_resume_failed", {"error": str(e)})
 
-    # Chat-priority: pause the autonomous researcher so it doesn't compete
-    # with this interactive turn for the Ollama GPU. Resumed in the finally
-    # block so it always clears.
-    svc.autonomous_researcher.pause_for_chat()
     try:
         _prep = await _prepare_turn(
             svc, websocket, user_message, session_logger, wm, _cp, _resumed_tool_history
@@ -350,4 +346,4 @@ async def handle_chat(
         )
 
     finally:
-        svc.autonomous_researcher.resume_after_chat()
+        pass
