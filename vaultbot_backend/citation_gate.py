@@ -369,6 +369,61 @@ _COACHING_PATTERNS: list[str] = [
     "help me balance",
 ]
 
+_COACHING_STRONG_TOKENS: set[str] = {
+    "burnout",
+    "burned",
+    "burnt",
+    "overwhelmed",
+    "stress",
+    "stressed",
+    "tired",
+    "exhausted",
+    "prioritize",
+    "schedule",
+    "study",
+    "balance",
+    "motivation",
+    "time",
+    "block",
+}
+
+_COACHING_WEAK_TOKENS: set[str] = {
+    "help",
+    "today",
+    "plan",
+    "focus",
+    "should",
+    "manage",
+    "need",
+    "feel",
+    "do",
+}
+
+
+def classify_coaching_turn(text: str) -> tuple[str, float]:
+    """Classify a user turn as coaching-like or knowledge-oriented.
+
+    Returns ``("coaching", confidence)`` when the message looks like
+    planning/life-management coaching, ``("knowledge", 0.0)`` for general
+    factual queries, and ``("unknown", 0.0)`` for empty/invalid input.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return "unknown", 0.0
+
+    normalized = re.sub(r"[^a-z0-9\s]", " ", text.lower()).strip()
+    words = set(normalized.split())
+
+    phrase_hits = sum(1 for phrase in _COACHING_PATTERNS if phrase in normalized)
+    strong_hits = len(words & _COACHING_STRONG_TOKENS)
+    weak_hits = len(words & _COACHING_WEAK_TOKENS)
+
+    score = (strong_hits * 1.0) + (weak_hits * 0.5) + (phrase_hits * 1.5)
+    if phrase_hits > 0 or score >= 2.0:
+        confidence = min(1.0, 0.35 + (0.15 * score))
+        return "coaching", round(confidence, 3)
+
+    return "knowledge", 0.0
+
 
 def detect_coaching_turn(text: str) -> bool:
     """Return True when the user turn is coaching/planning oriented.
@@ -377,10 +432,8 @@ def detect_coaching_turn(text: str) -> bool:
     answer). It is intentionally narrow: only clear life-management intents
     are exempted from grounding retries.
     """
-    if not text:
-        return False
-    _low = text.lower()
-    return any(p in _low for p in _COACHING_PATTERNS)
+    label, _ = classify_coaching_turn(text)
+    return label == "coaching"
 
 
 # ── Reprimand ─────────────────────────────────────────────────────────

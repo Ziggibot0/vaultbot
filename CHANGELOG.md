@@ -15,6 +15,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-24
+
+This release ships the back-to-school student-UX features: coaching-aware
+grounding and Google Calendar lifecycle upgrades. It is a **minor** bump
+because the calendar tool surface expands with new actions (update, delete,
+free/busy, reminders, recurrence) and the grounding gate gains a new
+coaching-turn exemption — both are additive, non-breaking changes to the
+vault/installer contract.
+
+### Added
+
+- **Coaching-aware grounding** — `citation_gate.detect_coaching_turn` now
+  detects student life/coaching prompts ("what should I do today", "help
+  me prioritize", "I'm overwhelmed") and exempts them from the closed-set
+  citation retry, so coaching answers aren't false-alarmed as ungrounded
+  (#277).
+- **Scored coaching classifier** — new `classify_coaching_turn` returns a
+  `(label, confidence)` tuple (phrase + strong/weak token scoring) so the
+  chat loop can log confidence and tune thresholds from real traffic. The
+  boolean `detect_coaching_turn` is now a backward-compatible wrapper.
+- **Calendar update / delete / free-busy** — the Google Workspace tool now
+  supports `calendar_update`, `calendar_delete`, and `calendar_freebusy`
+  actions, not just list/create (#271).
+- **Calendar reminders + recurrence** — `calendar_list` now surfaces
+  recurrence rules and reminder overrides; `calendar_create` accepts
+  `recurrence` (RRULE) and `reminders` fields (#271).
+- **Overlap conflict detection** — `calendar_create` and `calendar_update`
+  detect scheduling conflicts against existing events and surface them
+  before writing (#271).
+- **Targeted unit tests** — new tests cover the coaching classifier
+  (phrase, token, confidence, empty) and the calendar extensions
+  (recurrence, reminders, conflict detection).
+
+### Changed
+
+- **TurnState coaching flag** — `TurnState._is_coaching_turn` is set in
+  `handle_chat` from the user message and read in `finalize_turn` to skip
+  the grounding retry for coaching turns (#277).
+- **finalize_turn defensive fallback** — `finalize_turn` now constructs a
+  default `TurnState` when called with `st=None`, improving type-safety for
+  direct-call test paths.
+
 ## [0.3.0] - 2026-08-22
 
 This release adds trust-reranked retrieval, per-vault identity, security
