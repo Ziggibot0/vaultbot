@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from next_action_router import build_next_action
+
+pytestmark = pytest.mark.unit
 
 
 def test_build_next_action_sets_explicit_follow_up():
