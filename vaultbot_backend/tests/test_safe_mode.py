@@ -40,7 +40,7 @@ def developer_mode(monkeypatch):
     return safe_mode
 
 
-# ── Mode detection ──────────────────────────────────────────────────────
+# ── Mode detection ────────────────────────────────────────────────────────
 
 
 class TestModeDetection:
@@ -64,7 +64,7 @@ class TestModeDetection:
         assert safe_mode.is_safe_mode() is False
 
 
-# ── Dangerous tools blocked in Safe Mode ────────────────────────────────
+# ── Dangerous tools blocked in Safe Mode ──────────────────────────────────
 
 
 class TestDangerousToolsBlocked:
@@ -100,7 +100,7 @@ class TestDangerousToolsBlocked:
         )
 
 
-# ── Safe tools allowed in Safe Mode ─────────────────────────────────────
+# ── Safe tools allowed in Safe Mode ───────────────────────────────────────
 
 
 class TestSafeToolsAllowed:
@@ -141,7 +141,7 @@ class TestSafeToolsAllowed:
         )
 
 
-# ── edit_lines content-aware gate (is_file_edit_allowed) ────────────────
+# ── edit_lines content-aware gate (is_file_edit_allowed) ──────────────────
 
 
 class TestFileEditGate:
@@ -201,7 +201,7 @@ class TestFileEditGate:
         assert safe_mode_on.is_file_edit_allowed("vaultbot_backend/README.md") is True
 
 
-# ── edit_lines integration: Safe Mode blocks .py edits ──────────────────
+# ── edit_lines integration: Safe Mode blocks .py edits ────────────────────
 
 
 class TestEditLinesSafeModeIntegration:
@@ -228,10 +228,11 @@ class TestEditLinesSafeModeIntegration:
         py_file = tmp_path / "test_code.py"
         py_file.write_text("def foo():\n    return 1\n", encoding="utf-8")
 
-        # Monkeypatch edit_lines' VAULT_ROOT to our tmp_path
+        # Point path resolution at our tmp_path via VAULT_PATH (edit_lines
+        # resolves through paths.resolve_write_path(), not a module-level
+        # VAULT_ROOT attribute - issue #341).
+        monkeypatch.setenv("VAULT_PATH", str(tmp_path))
         import edit_lines
-
-        monkeypatch.setattr(edit_lines, "VAULT_ROOT", tmp_path)
 
         result = edit_lines.run(
             {
@@ -266,8 +267,11 @@ class TestEditLinesSafeModeIntegration:
 
         import edit_lines
 
+        # Point path resolution at our tmp_path via VAULT_PATH (issue #341).
+        monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+        # Also patch VAULT_ROOT (for backup_path.relative_to) and TRASH_DIR so
+        # backup doesn't write to real trash.
         monkeypatch.setattr(edit_lines, "VAULT_ROOT", tmp_path)
-        # Also patch TRASH_DIR so backup doesn't write to real trash
         monkeypatch.setattr(edit_lines, "TRASH_DIR", tmp_path / "trash")
 
         # Replace the body line "# Title" (line 8) with a new heading.
@@ -292,7 +296,8 @@ class TestEditLinesSafeModeIntegration:
 
         import edit_lines
 
-        monkeypatch.setattr(edit_lines, "VAULT_ROOT", tmp_path)
+        # Point path resolution at our tmp_path via VAULT_PATH (issue #341).
+        monkeypatch.setenv("VAULT_PATH", str(tmp_path))
         monkeypatch.setattr(edit_lines, "TRASH_DIR", tmp_path / "trash")
 
         # In developer mode, the safe_mode gate import will still import
