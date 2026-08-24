@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 _profile_lock = threading.Lock()
 _goals_lock = threading.Lock()
 _wellbeing_lock = threading.Lock()
+_user_model_lock = threading.Lock()
 
 # ── State directory ──────────────────────────────────────────────────────────
 _STATE_SUBDIR = Path("User") / "State"
@@ -190,20 +191,37 @@ def list_goals(status_filter: str | None = None) -> list[dict[str, Any]]:
 
 def upsert_goal(goal: dict[str, Any]) -> dict[str, Any]:
     """Insert or update a goal by ``id``.  Returns the stored goal dict."""
-    _validate_single_goal(goal)
+    if not isinstance(goal, dict):
+        raise ValueError(f"goal entry must be a dict, got {type(goal).__name__}")
+    if "id" not in goal:
+        raise ValueError("Goal missing required keys: {'id'}")
+    if "status" in goal and goal["status"] not in _ALLOWED_GOAL_STATUSES:
+        raise ValueError(
+            f"goal status {goal['status']!r} not in {_ALLOWED_GOAL_STATUSES}"
+        )
     with _goals_lock:
         container = read_goals()
         goals: list[dict[str, Any]] = container.get("goals", [])
-        goal = {**goal, "updated_at": _now_iso()}
         idx = next((i for i, g in enumerate(goals) if g.get("id") == goal["id"]), None)
+        goal = {**goal, "updated_at": _now_iso()}
         if idx is None:
+            # Insert: full validation required (title + status must be present)
+            if "title" not in goal:
+                raise ValueError("Goal missing required keys: {'title'}")
+            if "status" not in goal:
+                goal["status"] = "active"
             if "created_at" not in goal:
                 goal["created_at"] = goal["updated_at"]
+            _validate_single_goal(goal)
             goals.append(goal)
             action = "insert"
         else:
+            # Update: merge with existing so required fields are always present
             existing = goals[idx]
-            goals[idx] = {**existing, **goal}
+            merged = {**existing, **goal}
+            _validate_single_goal(merged)
+            goals[idx] = merged
+            goal = merged
             action = "update"
         container["goals"] = goals
         _validate_goals(container)
@@ -363,7 +381,7 @@ def regenerate_user_model() -> str:
 
     md = "\n".join(lines) + "\n"
     p = _ensure_state_dir() / "User-Model.md"
-    with _profile_lock:
+    with _user_model_lock:
         p.write_text(md, encoding="utf-8")
     logger.info("user_state: User-Model.md regenerated")
     return md

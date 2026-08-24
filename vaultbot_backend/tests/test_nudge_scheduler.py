@@ -73,22 +73,32 @@ class TestComputeUrgency:
 
 
 class TestQuietHours:
-    def test_midnight_is_quiet(self):
-        assert _in_quiet_hours(quiet_start=22, quiet_end=8) is True or True
-        # We can't easily mock datetime.now().hour without more machinery.
-        # Just ensure the function is callable and returns a bool.
-        result = _in_quiet_hours(22, 8)
-        assert isinstance(result, bool)
+    def test_midnight_is_quiet_wrapped_window(self):
+        # 22–8 wraps midnight; hour 0 is inside quiet window
+        assert _in_quiet_hours(22, 8, _hour=0) is True
 
-    def test_quiet_hours_wrapping(self):
-        # quiet 22-8 should flag hours 22, 23, 0, 1 .. 7
-        hour = 23
-        result = hour >= 22 or hour < 8
-        assert result is True
+    def test_evening_is_quiet(self):
+        assert _in_quiet_hours(22, 8, _hour=23) is True
 
-    def test_non_wrapping_quiet_hours(self):
-        # quiet 12-14 should flag 12 and 13 only
-        assert not _in_quiet_hours(12, 14) or True  # just ensure no crash
+    def test_morning_before_end_is_quiet(self):
+        assert _in_quiet_hours(22, 8, _hour=7) is True
+
+    def test_midday_is_not_quiet(self):
+        assert _in_quiet_hours(22, 8, _hour=12) is False
+
+    def test_boundary_start_is_quiet(self):
+        assert _in_quiet_hours(22, 8, _hour=22) is True
+
+    def test_boundary_end_is_not_quiet(self):
+        # quiet_end is exclusive
+        assert _in_quiet_hours(22, 8, _hour=8) is False
+
+    def test_non_wrapping_window(self):
+        # quiet 12–14 covers hours 12 and 13
+        assert _in_quiet_hours(12, 14, _hour=12) is True
+        assert _in_quiet_hours(12, 14, _hour=13) is True
+        assert _in_quiet_hours(12, 14, _hour=14) is False
+        assert _in_quiet_hours(12, 14, _hour=11) is False
 
 
 # ── build_nudge_message ───────────────────────────────────────────────────────

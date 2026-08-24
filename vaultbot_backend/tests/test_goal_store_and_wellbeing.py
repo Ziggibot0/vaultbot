@@ -36,7 +36,16 @@ class TestGoalStore:
         assert result["goal"]["status"] == "active"
         assert "id" in result["goal"]
 
-    def test_goal_upsert_missing_title_returns_error(self):
+    def test_goal_upsert_update_without_title(self):
+        """Updating an existing goal without a title should succeed (merges stored title)."""
+        from custom_tools import goal_store as gs
+        gs.run({"action": "goal_upsert", "id": "gu1", "title": "Original title"})
+        result = gs.run({"action": "goal_upsert", "id": "gu1", "target_date": "2030-01-01"})
+        assert result["status"] == "ok"
+        assert result["goal"]["id"] == "gu1"
+        assert result["goal"]["target_date"] == "2030-01-01"
+
+    def test_goal_upsert_missing_title_new_goal_returns_error(self):
         from custom_tools import goal_store as gs
         result = gs.run({"action": "goal_upsert"})
         assert "error" in result

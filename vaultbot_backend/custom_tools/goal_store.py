@@ -113,13 +113,18 @@ def _goal_list(args: dict[str, Any]) -> dict[str, Any]:
 def _goal_upsert(args: dict[str, Any]) -> dict[str, Any]:
     goal_id = args.get("id") or str(uuid.uuid4())
     title = args.get("title")
+    # title is required only for new goals (no existing id in the store)
     if not title:
-        return {"error": "title is required for goal_upsert"}
+        existing_goals = user_state.list_goals()
+        existing = next((g for g in existing_goals if g.get("id") == goal_id), None)
+        if existing is None:
+            return {"error": "title is required when creating a new goal"}
     goal: dict[str, Any] = {
         "id": goal_id,
-        "title": title,
         "status": args.get("status", "active"),
     }
+    if title:
+        goal["title"] = title
     for opt in ("priority", "target_date", "cadence", "notes"):
         if args.get(opt) is not None:
             goal[opt] = args[opt]

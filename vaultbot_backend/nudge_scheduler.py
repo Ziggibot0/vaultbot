@@ -113,9 +113,9 @@ def _was_nudged_recently(goal_id: str, throttle_seconds: int) -> bool:
     return False
 
 
-def _in_quiet_hours(quiet_start: int = 22, quiet_end: int = 8) -> bool:
+def _in_quiet_hours(quiet_start: int = 22, quiet_end: int = 8, *, _hour: int | None = None) -> bool:
     """True if the current local hour is in the quiet window [quiet_start, quiet_end)."""
-    hour = datetime.now().hour  # local time
+    hour = _hour if _hour is not None else datetime.now().hour  # local time
     if quiet_start > quiet_end:  # wraps midnight
         return hour >= quiet_start or hour < quiet_end
     return quiet_start <= hour < quiet_end
