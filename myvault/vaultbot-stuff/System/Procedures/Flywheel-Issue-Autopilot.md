@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: true
+baseline: false
 model_cartridge: medium
 created: 2026-08-24
 description: "Autonomously process open GitHub issues in flywheel order. Ranks issues with the existing urgency/importance rubric, then runs Solve-GitHub-Issue for each issue in sequence to open PRs without manual handoffs."
@@ -41,10 +41,26 @@ open PRs continuously.
   Defaults to false.
 - `args.skip_if_open_pr` (optional): if true (default), skip issues that
     already appear in an open PR body/title as `fixes #N`/`closes #N`.
+- `args.sync_first` (optional): if true (default), sync local repo with
+    upstream before processing issues.
 
 ## Steps
 
-### Step 1: Build the flywheel-ordered issue queue
+### Step 1: Sync with upstream before processing
+
+```python
+import json
+
+if bool(args.get("sync_first", True)):
+    sync = run_procedure("Git-Sync-Upstream", {})
+    result = json.dumps({"sync": sync}, default=str)
+else:
+    result = json.dumps({"sync": "skipped"})
+
+print(result)
+```
+
+### Step 2: Build the flywheel-ordered issue queue
 
 ```python
 import json
@@ -196,7 +212,7 @@ else:
 print(result)
 ```
 
-### Step 2: Process the queue with Solve-GitHub-Issue
+### Step 3: Process the queue with Solve-GitHub-Issue
 
 ```python
 import json
@@ -245,6 +261,7 @@ print(result)
 
 ## Related
 
+- [[Git-Sync-Upstream]] — sync gate before processing issues
 - [[Triage-GitHub-Issues]] — source of the flywheel ranking rubric
 - [[Solve-GitHub-Issue]] — issue-to-PR execution loop
 - [[Review-Contributions]] — merge gate used by Solve-GitHub-Issue

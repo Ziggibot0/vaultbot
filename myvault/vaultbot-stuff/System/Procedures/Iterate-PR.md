@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: true
+baseline: false
 model_cartridge: medium
 created: 2026-08-19
 description: "The CI-failure feedback loop for pull requests. Given a PR number (or 'latest'), checks its CI status via pr_feedback, reads the failure annotations, diagnoses the root cause, applies a fix with safe_write/edit_lines, runs Run-CI-Gates locally to verify the fix, commits and pushes, then loops back to check CI again. Max 3 iterations. This is the workflow a human developer does when a PR fails CI — codified so VaultBot can do it autonomously."

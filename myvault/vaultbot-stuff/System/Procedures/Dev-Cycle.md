@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: true
+baseline: false
 model_cartridge: medium
 created: 2026-08-22
 description: "The main autonomous dev cycle: sync → triage → pick issue → branch → fix → CI preflight → commit → PR → iterate. Orchestrates all the git/CI/procedure sub-procedures into one loop. Stops when CI passes and the PR is submitted, or after max iterations."

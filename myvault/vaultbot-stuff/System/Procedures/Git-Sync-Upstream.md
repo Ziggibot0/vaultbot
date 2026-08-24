@@ -1,7 +1,7 @@
 ---
 type: procedure
 status: experimental
-baseline: true
+baseline: false
 model_cartridge: small
 created: 2026-08-22
 description: "Sync the local repo with upstream main, handling stashed changes gracefully. Wraps the existing vaultbot_sync tool with stash/unstash so you don't lose uncommitted work during sync."
