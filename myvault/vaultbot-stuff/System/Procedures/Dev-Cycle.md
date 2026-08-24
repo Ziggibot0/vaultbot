@@ -119,7 +119,14 @@ else:
         print(json.dumps({"error": f"Failed to list issues: {issues_result}"}, default=str))
     else:
         # Take the first open issue
-        issues = issues_result if isinstance(issues_result, list) else []
+        # github_issues 'list' returns a dict with an "issues" key, not a bare list.
+        # Handle both shapes (dict-with-key, or a bare list) so triage never drops to [].
+        if isinstance(issues_result, dict):
+            issues = issues_result.get("issues", [])
+        elif isinstance(issues_result, list):
+            issues = issues_result
+        else:
+            issues = []
         if not issues:
             print(json.dumps({"info": "No open issues to work on"}))
         else:

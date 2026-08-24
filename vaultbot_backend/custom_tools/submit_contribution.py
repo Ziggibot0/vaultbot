@@ -73,6 +73,18 @@ def _failed_gates(gates: dict) -> dict:
     }
 
 
+def _auto_merge_enabled() -> bool:
+    """Return True when VAULTBOT_AUTO_MERGE is set to "true" (case-insensitive).
+
+    Pure helper — the env flag that turns on squash auto-merge for PRs the
+    vaultbot creates. Anything other than an exact "true" (unset, empty,
+    "false", "0", junk) means auto-merge is off.
+    """
+    import os
+
+    return os.environ.get("VAULTBOT_AUTO_MERGE", "").strip().lower() == "true"
+
+
 def _run_preflight_ci_gates(vault_root: str) -> dict:
     """Run the CI hard gates locally before pushing a PR.
 
@@ -624,13 +636,50 @@ def run(args: dict) -> dict:
             timeout=30,
         )
         pr_url = pr_data.get("html_url", "")
+        pr_number = pr_data.get("number")
+
+        # Auto-merge (opt-in): when VAULTBOT_AUTO_MERGE=true, enable squash
+        # auto-merge on the fresh PR so it merges the moment required status
+        # checks (CI) pass — no human step needed. Only meaningful on the
+        # direct flow where we push to the upstream repo. (The auto-merge
+        # endpoint is POST .../auto-merge, NOT the immediate PUT .../merge.)
+        auto_merge = _auto_merge_enabled()
+        if auto_merge and has_push_access and pr_number:
+            try:
+                gh_api(
+                    "POST",
+                    f"repos/{upstream_owner}/{upstream_repo}/pulls/{pr_number}/auto-merge",
+                    body={
+                        "merge_method": "squash",
+                        "commit_title": title,
+                    },
+                    timeout=30,
+                )
+            except GhError as e:
+                # Non-fatal: the PR is already created; surface a hint that
+                # auto-merge could not be enabled (e.g. pending checks block it).
+                run_git(["checkout", "main"], vault_root)
+                return {
+                    "status": "success",
+                    "pr_url": pr_url,
+                    "branch": branch_name,
+                    "flow": "direct",
+                    "message": (
+                        f"PR created: {pr_url}. Auto-merge could not be "
+                        f"enabled immediately (CI may still be pending): {e}"
+                    ),
+                }
+
         run_git(["checkout", "main"], vault_root)
         return {
             "status": "success",
             "pr_url": pr_url,
             "branch": branch_name,
             "flow": "direct" if has_push_access else "fork",
-            "message": f"PR created successfully: {pr_url}",
+            "message": (
+                f"PR created successfully: {pr_url}"
+                + (" (auto-merge enabled on CI pass)" if auto_merge else "")
+            ),
         }
     except GhError as e:
         run_git(["checkout", "main"], vault_root)

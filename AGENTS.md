@@ -31,7 +31,7 @@ wins — flag the discrepancy instead of guessing.
 4. **CI is the gate.** `ruff check --select F` and `pytest -m unit` are hard
    gates. Run both locally before pushing; don't push and hope.
 
-## Workflow (branch → commit → PR → CI → merge)
+## Workflow (branch → commit → PR → CI → auto-merge)
 
 1. `git checkout main && git pull --ff-only origin main`
 2. `git checkout -b <type>/<scope>-<short-desc>` (e.g. `fix/research-sources`)
@@ -42,20 +42,18 @@ wins — flag the discrepancy instead of guessing.
 6. `gh pr create --base main --head <branch> --title ... --body ...`
    Fill the PR template's safety checklist (`.github/pull_request_template.md`).
 7. `gh pr checks <N>` — wait for both Python 3.11 and 3.12 to go green.
-8. `gh pr merge <N> --squash --delete-branch`
 
-Branch protection on `main` requires a code-owner approval before any merge.
-Do NOT use `--admin` to force-merge past review — that bypasses the sign-off
-gate. The vaultbot's `review_contributions` tool enforces the same rule: it
-refuses to merge until the PR has an APPROVED review, and reports "awaiting
-approval" otherwise.
+Branch protection on `main` is **CI-only**: it merges automatically when the
+required status checks pass, with **no code-owner approval** required
+(`required_approving_review_count: 0`, no bypass actors). The vaultbot's
+`submit_contribution` enables squash auto-merge on every PR it authors when
+`VAULTBOT_AUTO_MERGE=true`, so PRs merge themselves the moment CI goes green —
+no manual `gh pr merge` and no approval step.
 
-The vaultbot authors PRs as a dedicated bot account, NOT as the code owner,
-so that a human maintainer can approve them (GitHub forbids approving your
-own PR). Set `VAULTBOT_GH_BOT_USER=<bot-account>` in the backend `.env` to
-make `gh_client` retrieve the bot's token from the keyring and run `gh` as
-the bot. Without it, `gh` uses the active account and the approval flow
-deadlocks.
+The vaultbot authors PRs as a dedicated bot account, NOT as the code owner.
+Set `VAULTBOT_GH_BOT_USER=<bot-account>` in the backend `.env` to make
+`gh_client` retrieve the bot's token from the keyring and run `gh` as the
+bot. Without it, `gh` uses the active account.
 
 ## Gotchas
 

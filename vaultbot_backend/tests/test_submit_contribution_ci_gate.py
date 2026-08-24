@@ -38,3 +38,23 @@ def test_failed_gates_ignores_skipped():
         "pytest": {"status": "pass", "output": ""},
     }
     assert sc._failed_gates(gates) == {}
+
+
+def test_auto_merge_enabled_true(monkeypatch):
+    monkeypatch.setenv("VAULTBOT_AUTO_MERGE", "true")
+    assert sc._auto_merge_enabled() is True
+
+
+def test_auto_merge_enabled_case_insensitive(monkeypatch):
+    monkeypatch.setenv("VAULTBOT_AUTO_MERGE", "TRUE")
+    assert sc._auto_merge_enabled() is True
+
+
+def test_auto_merge_disabled_unset(monkeypatch):
+    monkeypatch.delenv("VAULTBOT_AUTO_MERGE", raising=False)
+    assert sc._auto_merge_enabled() is False
+
+
+def test_auto_merge_disabled_false(monkeypatch):
+    monkeypatch.setenv("VAULTBOT_AUTO_MERGE", "false")
+    assert sc._auto_merge_enabled() is False
