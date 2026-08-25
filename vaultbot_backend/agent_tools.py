@@ -13,6 +13,7 @@ instances are). This module only holds the schemas + a registry so the
 system prompt and the handler share a single source of truth.
 """
 
+import os
 from datetime import datetime
 from typing import Any
 
@@ -800,6 +801,50 @@ def build_tool_list(
     return deduped
 
 
+# -- Procedure-first tool gating ------------------------------------------
+# When retrieval has already selected a procedure for this turn (preflight
+# fused-score hint or a pending Route-Task chain step), these raw "do the
+# work by hand" tools are withheld from the tool list so that calling
+# execute_procedure is the cheapest available action — the desired behavior
+# is also the easiest thing to do. Read/inspect tools (code_read,
+# vault_read_note, vault_search, ...) stay available so the model can
+# verify procedure output; edit_lines and vault_safe_write stay so a broken
+# procedure can be fixed in place. Gating is per-turn: the next user message
+# recomputes retrieval and the full tool list returns when no procedure
+# matches. Kill-switch: VAULTBOT_PROCEDURE_FIRST=0.
+PROCEDURE_FIRST_GATED_TOOLS: frozenset[str] = frozenset(
+    {
+        "code_run",  # ad-hoc subprocess — the #1 procedure substitute
+        "safe_write",  # full-file backend self-edit
+        "safe_replace",  # targeted backend self-edit
+        "js_safe_write",  # plugin self-edit
+        "js_safe_replace",  # plugin targeted edit
+        "md_safe_replace",  # direct note edit outside procedures
+    }
+)
+
+
+def procedure_first_enabled() -> bool:
+    """Whether procedure-first tool gating is active (default on)."""
+    return os.environ.get("VAULTBOT_PROCEDURE_FIRST", "1").strip().lower() not in (
+        "0",
+        "false",
+        "off",
+        "no",
+    )
+
+
+def gate_tools_for_procedure_first(
+    tools: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop PROCEDURE_FIRST_GATED_TOOLS from a tool schema list."""
+    return [
+        t
+        for t in tools
+        if t.get("function", {}).get("name", "") not in PROCEDURE_FIRST_GATED_TOOLS
+    ]
+
+
 def _local_now() -> datetime:
     """Return the current local wall-clock time (naive, local timezone).
 
@@ -930,21 +975,12 @@ def build_system_prompt_briefing(
         f"whose inhibitors match your query, so you see less noise over time. "
         f"These are tuned automatically by Dream Pass from user sentiment — "
         f"do NOT edit them manually.\n\n"
-        f"# AVAILABLE PROCEDURES\n"
-        f"Call execute_procedure(name) to run one. Load full details with "
-        f'vault_read_note("Procedure Name") when you need them.\n'
-        f"- Dream-Pass — vault maintenance, memory consolidation, dreaming "
-        f"[verified]\n"
-        f"- Build-Procedure — create a new procedure from a task description "
-        f"[active]\n"
-        f"- Think — structured reasoning scaffold for complex problems "
-        f"[experimental]\n"
-        f"- Critical-Path-Mine — extract reasoning paths from conversations "
-        f"[experimental]\n"
-        f"- Procedure-Creator — validate and publish a procedure draft "
-        f"[verified]\n"
-        f"- Migrate-Triggers — one-time migration: seed trigger lists from "
-        f"existing when_to_use fields [experimental]\n\n"
+        f"# PROCEDURES\n"
+        f"The procedures relevant to THIS query are listed in the '# RELEVANT "
+        f"PROCEDURES' section whenever retrieval finds any — that dynamic, "
+        f"per-query list is the only authoritative procedure menu. Call "
+        f"execute_procedure(name) to run one. Load full details with "
+        f'vault_read_note("Procedure Name") when you need them.\n\n'
         f"# TURN PROTOCOL\n"
         f"Tool calls continue the loop. A text-only response (no tool calls) "
         f"ends the turn. If you have unfinished work, keep calling tools. "

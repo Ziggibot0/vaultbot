@@ -95,21 +95,23 @@ async def execute_agent_tool(
         return {"error": msg, "safe_mode_blocked": True}
 
     # ── Procedure suggestion gate ("autofill") ────────────────────────
-    # Before executing a raw tool the model reached for, check whether a
-    # procedure exists whose FIRST STEP calls the same tool AND whose
-    # trigger/when_to_use matches the user message. If so, return a
-    # suggestion instead of executing — the model is told which procedure
-    # matches and can call execute_procedure("X") or reply 'proceed'.
-    # This nudges the model toward procedures instead of improvising their
-    # logic by hand (see session eb8143f7: Git-Sync-Upstream existed but
-    # the model called code_run + vaultbot_sync raw ~10 times).
+    # Before executing a raw tool the model reached for, check whether the
+    # retrieval-selected preflight hint procedure starts with that same
+    # tool. If so, return a suggestion instead of executing — the model is
+    # told which procedure retrieval picked and can call
+    # execute_procedure("X") or reply 'proceed'. This nudges the model
+    # toward procedures instead of improvising their logic by hand (see
+    # session eb8143f7: Git-Sync-Upstream existed but the model called
+    # code_run + vaultbot_sync raw ~10 times). No keyword heuristics: the
+    # candidate is whatever scored retrieval selected this turn.
     # One nudge per (tool_name, session) so the model can't loop on it.
     _ft_index = getattr(svc, "first_tool_index", None)
     if isinstance(_ft_index, dict) and _ft_index:
         _sid = getattr(session_logger, "session_id", "")
         _suggested = _suggested_per_session.setdefault(_sid, set())
+        _proc_hint = getattr(websocket, "_preflight_proc_hint", "") or ""
         _sug = check_procedure_suggestion(
-            tool_name, user_message, _ft_index, already_suggested=_suggested
+            tool_name, _proc_hint, _ft_index, already_suggested=_suggested
         )
         if _sug is not None:
             session_logger.log(
@@ -790,9 +792,7 @@ async def execute_agent_tool(
             if str(core.get("error", "")).startswith("procedure not found:"):
                 _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
                 if isinstance(_proc_idx, dict) and _proc_idx:
-                    _name_sug = check_procedure_name_suggestion(
-                        proc_name, user_message, _proc_idx
-                    )
+                    _name_sug = check_procedure_name_suggestion(proc_name, _proc_idx)
                     if _name_sug is not None:
                         session_logger.log(
                             "procedure_name_suggestion",

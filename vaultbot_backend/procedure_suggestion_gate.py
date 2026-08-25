@@ -1,12 +1,23 @@
 """Procedure suggestion gate — the "autofill" nudge.
 
 When the chat model emits a raw tool call (``vaultbot_sync``,
-``code_run``, ``github_issues``, …), this gate checks whether a procedure
-exists whose **first step calls the same tool** AND whose
-``trigger``/``when_to_use``/``tags`` match the current user message. If so,
-the gate returns a *suggestion* instead of executing the raw call: the model
-is told which procedure matches and is given the option to call
-``execute_procedure("X")`` or reply ``proceed`` to run its raw call as-is.
+``code_run``, ``github_issues``, …), this gate checks whether the
+**retrieval-selected preflight hint procedure** starts with that same
+tool. If so, the gate returns a *suggestion* instead of executing the raw
+call: the model is told which procedure retrieval already picked for this
+task and is given the option to call ``execute_procedure("X")`` or reply
+``proceed`` to run its raw call as-is.
+
+Candidate selection is score-driven end to end: the hint comes from FUSED
+retrieval ranking the procedure library against the user message (see
+``chat_turn_prep`` / ``chat_preflight.deterministic_procedure_hint``), and
+the gate only confirms that the hinted procedure's first step uses the
+tool in question — a structural property of the procedure, not a lexical
+match on the user's words. There are deliberately NO keyword/trigger-word
+heuristics here: word overlap between the user message and procedure
+triggers produced false suggestions (e.g. suggesting Analyze-Session-Log
+for a git-status ``code_run``), and Sean's standing rule is deterministic
+contracts + scored retrieval, never magic words.
 
 This is a nudge, not a hard block. The escape hatch (``proceed``) keeps the
 gate from dead-locking on edge cases where the procedure genuinely doesn't
@@ -24,6 +35,7 @@ exact moment the model reaches for the tool it would wrap.
 See:
   - ``procedure_first_tool_index.py`` — the index this consumes.
   - ``chat_tool_dispatch.execute_agent_tool`` — the call site.
+  - ``chat_turn_prep.prepare_turn`` — computes and stashes the hint.
   - [[Session-eb8143f7]] — the loop this fixes.
 """
 
@@ -50,126 +62,30 @@ _SUGGESTIBLE_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-# Minimum keyword-overlap score for a trigger to count as a match. A bare
-# ``code_run`` match is a weak signal (many procedures shell out), so we
-# require the trigger text to overlap the user message by at least one
-# word. This stops the gate from firing on every ``code_run`` the model
-# emits.
-_MIN_TRIGGER_OVERLAP = 1
-
-# Word splitter — non-alphanumeric runs. Lowercases for case-insensitive
-# overlap. Short stopwords are dropped so "the repo is synced" doesn't
-# match a procedure whose trigger is "the daily check".
-_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "the",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "being",
-        "to",
-        "of",
-        "in",
-        "on",
-        "at",
-        "for",
-        "with",
-        "and",
-        "or",
-        "not",
-        "this",
-        "that",
-        "it",
-        "its",
-        "i",
-        "you",
-        "we",
-        "they",
-        "me",
-        "my",
-        "your",
-        "our",
-        "do",
-        "does",
-        "did",
-        "so",
-        "as",
-        "if",
-        "then",
-        "please",
-        "can",
-        "could",
-        "would",
-        "should",
-        "will",
-        "just",
-        "now",
-        "up",
-        "down",
-        "out",
-        "into",
-        "from",
-        "by",
-    }
-)
-
-
-def _words(text: str) -> set[str]:
-    """Tokenise into lowercase word tokens, dropping stopwords + length<=2."""
-    toks = {w for w in re.split(r"[^a-z0-9]+", text.lower()) if len(w) > 2}
-    toks -= _STOPWORDS
-    return toks
-
-
-def _trigger_overlap(user_words: set[str], triggers: list[str]) -> int:
-    """Max word-overlap count between the user message and any trigger text."""
-    if not user_words or not triggers:
-        return 0
-    best = 0
-    for trig in triggers:
-        tw = _words(trig)
-        if not tw:
-            continue
-        overlap = len(user_words & tw)
-        if overlap > best:
-            best = overlap
-    return best
-
 
 def check_procedure_suggestion(
     tool_name: str,
-    user_message: str,
+    hint_stem: str,
     first_tool_index: dict[str, dict[str, Any]],
     already_suggested: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """Return a suggestion dict, or ``None`` to let the raw call proceed.
 
+    Fires only when ``hint_stem`` — the procedure that scored retrieval
+    already selected for this turn — starts with the tool the model just
+    reached for. No hint (or a hint whose first step uses different tools)
+    means no suggestion: the gate never invents candidates from word
+    overlap.
+
     The suggestion dict is returned to the model as a synthetic tool result
-    (see ``execute_agent_tool``). It is shaped so the model can act on it
-    without re-reading the procedure:
-
-    .. code-block:: python
-
-        {
-            "procedure_suggestion": "Git-Sync-Upstream",
-            "first_tool": "vaultbot_sync",
-            "description": "Syncs local repo with upstream main.",
-            "message": "Procedure 'Git-Sync-Upstream' starts with the same
-                        tool you just called (vaultbot_sync) and matches this
-                        task. Call execute_procedure('Git-Sync-Upstream') to
-                        run it, or reply 'proceed' to run vaultbot_sync as-is.",
-            "proceed_keyword": "proceed",
-        }
+    (see ``execute_agent_tool``), shaped so the model can act on it without
+    re-reading the procedure.
 
     Args:
         tool_name: The tool the model just called.
-        user_message: The current user turn's text (trigger match cue).
-        first_tool_index: The compiled {stem: {first_tools, triggers, …}}.
+        hint_stem: The preflight fused-score procedure hint for this turn
+            ("" when retrieval found no matching procedure).
+        first_tool_index: The compiled {stem: {first_tools, …}}.
         already_suggested: Per-session set of ``tool_name``s already nudged.
             A tool is nudged at most once per session so the model can't
             loop on the suggestion. Pass a live set to enable de-dup; pass
@@ -177,36 +93,18 @@ def check_procedure_suggestion(
     """
     if tool_name not in _SUGGESTIBLE_TOOLS:
         return None
+    if not hint_stem:
+        return None
     if already_suggested is not None and tool_name in already_suggested:
         return None
 
-    user_words = _words(user_message) if user_message else set()
-
-    # Find procedures whose first step calls ``tool_name`` AND whose
-    # trigger text overlaps the user message. When multiple match, pick
-    # the one with the highest trigger overlap (most specific).
-    best_stem: str | None = None
-    best_score = -1
-    best_entry: dict[str, Any] | None = None
-    for stem, entry in first_tool_index.items():
-        if tool_name not in entry.get("first_tools", set()):
-            continue
-        # Skip flagged procedures — they're blocked from execution.
-        if entry.get("status", "").lower() == "flagged":
-            continue
-        score = _trigger_overlap(user_words, entry.get("triggers", []))
-        # For ``code_run`` (weak first-tool signal) require trigger overlap
-        # >= the minimum. For a direct tool like ``vaultbot_sync`` the
-        # first-tool match is already strong — allow a zero-overlap match
-        # (the tool itself is the cue) but still prefer overlap.
-        if tool_name == "code_run" and score < _MIN_TRIGGER_OVERLAP:
-            continue
-        if score > best_score:
-            best_score = score
-            best_stem = stem
-            best_entry = entry
-
-    if best_stem is None or best_entry is None:
+    entry = first_tool_index.get(hint_stem)
+    if not entry:
+        return None
+    if tool_name not in entry.get("first_tools", set()):
+        return None
+    # Skip flagged procedures — they're blocked from execution.
+    if entry.get("status", "").lower() == "flagged":
         return None
 
     # Record the nudge so the same tool isn't nudged again this session.
@@ -215,11 +113,11 @@ def check_procedure_suggestion(
     if already_suggested is not None:
         already_suggested.add(tool_name)
 
-    description = best_entry.get("description", "")
+    description = entry.get("description", "")
     msg = (
-        f"A procedure matches this task and starts with the same tool you "
-        f"just called ({tool_name}). "
-        f"Procedure: {best_stem}."
+        f"Retrieval already selected a procedure for this task, and it "
+        f"starts with the same tool you just called ({tool_name}). "
+        f"Procedure: {hint_stem}."
     )
     if description:
         msg += f" {description}"
@@ -230,7 +128,7 @@ def check_procedure_suggestion(
     )
 
     return {
-        "procedure_suggestion": best_stem,
+        "procedure_suggestion": hint_stem,
         "first_tool": tool_name,
         "description": description,
         "message": msg,
@@ -245,7 +143,6 @@ def _normalize_name(name: str) -> str:
 
 def check_procedure_name_suggestion(
     proc_name: str,
-    user_message: str,
     proc_index: dict[str, dict[str, Any]],
     k: int = 5,
 ) -> dict[str, Any] | None:
@@ -253,21 +150,20 @@ def check_procedure_name_suggestion(
 
     Fires when the model calls ``execute_procedure`` with a name that isn't
     an exact stem in ``proc_index`` (typo, extra spaces, wrong case, or a
-    hallucination). Ranks known procedures by name similarity (difflib on
-    normalized names) then intent overlap with the user message, and returns
-    the top ``k`` exact stems so the model *selects* a valid name instead of
-    re-generating one from memory. Returns ``None`` on an exact match or when
-    no candidate clears the similarity floor. Mirrors
-    ``check_procedure_suggestion``'s dict shape (``procedure_suggestion``,
-    ``candidates``, ``message``, ``proceed_keyword``).
+    hallucination). Ranks known procedures by normalized name similarity
+    (difflib) and returns the top ``k`` exact stems so the model *selects*
+    a valid name instead of re-generating one from memory. Returns ``None``
+    on an exact match or when no candidate clears the similarity floor.
+    Mirrors ``check_procedure_suggestion``'s dict shape
+    (``procedure_suggestion``, ``candidates``, ``message``,
+    ``proceed_keyword``).
     """
     if not proc_name or not proc_index or proc_name in proc_index:
         return None
 
-    user_words = _words(user_message) if user_message else set()
     norm_target = _normalize_name(proc_name)
 
-    scored: list[tuple[float, int, str, dict[str, Any]]] = []
+    scored: list[tuple[float, str, dict[str, Any]]] = []
     for stem, entry in proc_index.items():
         fm = entry.get("frontmatter") or {}
         if str(fm.get("status", "")).strip().lower() == "flagged":
@@ -275,27 +171,19 @@ def check_procedure_name_suggestion(
         name_sim = difflib.SequenceMatcher(
             None, norm_target, _normalize_name(stem)
         ).ratio()
-        triggers = fm.get("trigger") or []
-        if isinstance(triggers, str):
-            triggers = [triggers]
-        intent = _trigger_overlap(user_words, triggers)
-        for field in ("when_to_use", "description"):
-            v = fm.get(field)
-            if isinstance(v, str) and v:
-                intent = max(intent, len(user_words & _words(v)))
-        scored.append((name_sim, intent, stem, entry))
+        scored.append((name_sim, stem, entry))
 
     if not scored:
         return None
 
-    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    scored.sort(key=lambda t: t[0], reverse=True)
     top = scored[:k]
     if top[0][0] < 0.4:
         return None
 
-    candidates = [stem for _, _, stem, _ in top]
+    candidates = [stem for _, stem, _ in top]
     best_stem = candidates[0]
-    best_desc = (top[0][3].get("frontmatter") or {}).get("description", "")
+    best_desc = (top[0][2].get("frontmatter") or {}).get("description", "")
 
     msg = (
         f"No procedure named '{proc_name}' exists. Closest matches: "

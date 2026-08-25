@@ -21,8 +21,11 @@ from typing import Any
 
 from abstract_context import build_abstract_context
 from agent_tools import (
+    PROCEDURE_FIRST_GATED_TOOLS,
     build_system_prompt_briefing,
     build_tool_list,
+    gate_tools_for_procedure_first,
+    procedure_first_enabled,
 )
 from chat_helpers import (
     notify_console_failure,
@@ -81,10 +84,31 @@ ROUTE_TASK_ALLOWED_RATIONALE_CODES = {
 }
 ROUTE_TASK_FALLBACK = {
     "category": "unknown",
-    "procedure_chain": ["Small-Model-Route"],
+    "procedure_chain": [],
     "confidence": 0.0,
     "rationale_code": "schema_fallback",
 }
+
+
+def _route_fallback_payload(
+    results: list[dict],
+    proc_idx: dict[str, dict[str, Any]] | None,
+    user_message: str,
+) -> dict[str, Any]:
+    """Build the Route-Task fallback payload when the router fails closed.
+
+    The old fallback chained into Small-Model-Route — asking a tiny model to
+    RE-derive a routing decision that FUSED retrieval already made (the
+    query was embedded and the whole procedure library ranked before
+    Route-Task even ran). Selection over generation: reuse the scored
+    retrieval pick as the chain. When no procedure clears the fused
+    threshold the chain is empty and the turn proceeds unrouted.
+    """
+    payload = dict(ROUTE_TASK_FALLBACK)
+    hint = _deterministic_procedure_hint(results, proc_idx, user_message)
+    if hint:
+        payload["procedure_chain"] = [hint]
+    return payload
 
 
 def _strip_json_fence(raw_output: Any) -> str:
@@ -479,7 +503,11 @@ async def prepare_turn(
                             raw_output="",
                         )
         if _route_payload is None:
-            _route_payload = dict(ROUTE_TASK_FALLBACK)
+            _route_payload = _route_fallback_payload(
+                results,
+                getattr(svc.procedure_tracker, "_stem_index", None),
+                user_message,
+            )
             if _route_result.get("error"):
                 session_logger.log_route_schema_invalid(
                     f"Route-Task execution failed: {_route_result.get('error')}",
@@ -734,6 +762,7 @@ async def prepare_turn(
     # message, AFTER the user message, so it is the last thing the model
     # reads before acting -- giving it an immediate starting point.
     _suggested_action = ""
+    _hint = ""
     try:
         _proc_idx = getattr(svc.procedure_tracker, "_stem_index", None)
         _proc_surface = build_procedure_surface(results, _proc_idx)
@@ -758,12 +787,6 @@ async def prepare_turn(
             try:
                 _hint = _deterministic_procedure_hint(results, _proc_idx, user_message)
                 if _hint:
-                    _suggested_action = (
-                        f"# SUGGESTED ACTION (pre-classification -- "
-                        f"verify before executing): consider "
-                        f'execute_procedure("{_hint}") if it matches '
-                        f"the task above."
-                    )
                     session_logger.log(
                         "procedure_hint",
                         {
@@ -781,6 +804,58 @@ async def prepare_turn(
             f"procedure surface build failed: {e}",
             context="procedure_surface",
         )
+
+    # --- Procedure-first turn contract --------------------------------
+    # Make calling the selected procedure the EASIEST action available:
+    # (1) the post-user message is a directive naming the exact
+    #     execute_procedure call (assembled below as _suggested_action);
+    # (2) raw "do the work by hand" tools are withheld for this turn, so
+    #     the procedure call is the cheapest path. Gating is score-driven
+    #     (fused retrieval over the procedure library), never keyword-
+    #     driven, and per-turn — the next user message recomputes it.
+    # The hint is also stashed on the websocket so the tool-dispatch
+    # suggestion gate can point at the SAME retrieval-selected procedure
+    # instead of re-deriving a candidate from word overlap.
+    websocket._preflight_proc_hint = _hint
+    _pf_pending = any(
+        isinstance(p, dict) and p.get("pending") for p in _preflight_results
+    )
+    _gated_tools: list[str] = []
+    if procedure_first_enabled() and (_hint or _pf_pending):
+        _names_before = {t.get("function", {}).get("name", "") for t in all_tools}
+        all_tools = gate_tools_for_procedure_first(all_tools)
+        _gated_tools = sorted(_names_before & PROCEDURE_FIRST_GATED_TOOLS)
+        session_logger.log(
+            "procedure_first_gating",
+            {
+                "removed": _gated_tools,
+                "hint": _hint,
+                "pending_chain": _pf_pending,
+                "tools_remaining": len(all_tools),
+            },
+        )
+    if _hint:
+        _action_lines = [
+            "# NEXT ACTION (pre-routed by scored retrieval)",
+            f'Your FIRST tool call this turn should be: execute_procedure("{_hint}")',
+            "Retrieval scored that procedure as the best match for the "
+            "user's request — running it IS the task. Do not re-derive by "
+            "hand what the procedure already does.",
+        ]
+        if _gated_tools:
+            _action_lines.append(
+                "Raw execution tools are withheld this turn "
+                f"({', '.join(_gated_tools)}). If the procedure fails, fix "
+                "it (edit_lines) and re-run it, or tell the user what "
+                "blocked you — do not improvise its logic by hand."
+            )
+        else:
+            _action_lines.append(
+                "If the procedure fails or clearly does not cover the task, "
+                "say so and propose the fix — do not silently improvise the "
+                "procedure's logic by hand."
+            )
+        _suggested_action = "\n".join(_action_lines)
 
     # If we're resuming an interrupted turn, tell the model what it already
     # did so it continues instead of re-running tools.
@@ -957,6 +1032,11 @@ async def prepare_turn(
                 "chain completes, synthesize a final answer for the "
                 "user."
             )
+            if _gated_tools:
+                _pf_lines.append(
+                    f"Raw execution tools ({', '.join(_gated_tools)}) are "
+                    "withheld this turn — route through the chain."
+                )
         else:
             _pf_lines.append("")
             _pf_lines.append(
