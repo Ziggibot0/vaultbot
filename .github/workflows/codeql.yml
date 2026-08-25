@@ -1,0 +1,57 @@
+# CodeQL security analysis (issue #324).
+#
+# Scans the Python backend for security vulnerabilities and bugs using
+# GitHub's CodeQL engine. Runs on every push/PR to main plus a weekly
+# scheduled scan to catch vulnerabilities introduced by dependency
+# changes even between code changes.
+#
+# NOTE: CodeQL results appear in the Security > Code scanning tab of the
+# repository. The GitHub Advanced Security setting must be enabled by a
+# repository admin at Settings > Security & analysis — this workflow file
+# alone is sufficient to activate scanning on a public repository.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly scan at 08:00 UTC on Monday to catch vulnerabilities introduced
+    # by dependency changes between code pushes.
+    - cron: "0 8 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Use the default query suite plus the security-extended suite for
+          # broader coverage of security vulnerabilities (CWE, OWASP Top 10).
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

@@ -1,0 +1,43 @@
+# Dependency review (issue #328).
+#
+# Blocks PRs that add dependencies with known vulnerabilities (CVEs) or
+# that use restrictive licenses. Runs on every PR to main that changes
+# dependency files (pyproject.toml, requirements.txt, uv.lock).
+#
+# This is complementary to the pip-audit check in ci.yml (which audits
+# the locked requirements.txt), but faster for PRs because it uses the
+# GitHub Advisory Database directly without installing packages.
+#
+# MANUAL STEP: "Dependency graph" must be enabled at
+# Settings > Security & analysis for dependency review to work on a
+# private repository. It is enabled by default for public repositories.
+name: Dependency review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write  # Allows the action to post a review comment on the PR.
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Fail on known vulnerabilities in added dependencies.
+          fail-on-severity: moderate
+          # Deny dependencies under these licenses (adjust as needed).
+          # AGPL-3.0 and SSPL-1.0 have strong copyleft requirements that
+          # may conflict with this project's MIT license.
+          deny-licenses: AGPL-3.0, SSPL-1.0
+          # Comment a summary of dependency changes on the PR for reviewers.
+          comment-summary-in-pr: true

@@ -1,0 +1,31 @@
+# Release drafter (issue #331).
+#
+# Keeps a draft GitHub Release up to date as PRs merge to main. The maintainer
+# reviews and publishes the draft when cutting a release.
+#
+# This does NOT auto-publish releases — it only drafts them. Publishing
+# still requires a human to click "Publish release" in the GitHub UI after
+# reviewing the draft notes. The release job in ci.yml then tags the
+# release when the draft is published.
+name: Release drafter
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Keep the draft in sync as labels change on open PRs.
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  update-release-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
