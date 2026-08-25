@@ -12,9 +12,50 @@ Pure function tests — no Services, no Ollama, no websocket.
 from __future__ import annotations
 
 import pytest
-from chat_turn_finalize import LIVE_FACT_TOOLS, is_tool_sourced
+from chat_turn_finalize import LIVE_FACT_TOOLS, is_tool_sourced, score_code_grounding
 
 pytestmark = pytest.mark.unit
+
+
+class TestScoreCodeGrounding:
+    """issue #387 — read-only code_run is not a doc-gate bypass."""
+
+    def test_empty_history(self):
+        score = score_code_grounding(None)
+        assert score == {
+            "safe_writes": 0,
+            "doc_proven": 0,
+            "unproven": 0,
+            "bypassed": False,
+        }
+
+    def test_readonly_code_run_is_not_bypass(self):
+        # Default code_run calls run under the read-only guard — no files
+        # can be written, so they must NOT trip the bypass flag.
+        score = score_code_grounding([{"tool": "code_run"}])
+        assert score["bypassed"] is False
+        score = score_code_grounding([{"tool": "code_run", "allow_write": False}])
+        assert score["bypassed"] is False
+
+    def test_write_capable_code_run_is_bypass(self):
+        score = score_code_grounding([{"tool": "code_run", "allow_write": True}])
+        assert score["bypassed"] is True
+
+    def test_code_write_is_bypass(self):
+        score = score_code_grounding([{"tool": "code_write"}])
+        assert score["bypassed"] is True
+
+    def test_doc_proven_safe_write_counts(self):
+        score = score_code_grounding(
+            [
+                {"tool": "code_run"},
+                {"tool": "safe_write", "doc_source": True},
+            ]
+        )
+        assert score["safe_writes"] == 1
+        assert score["doc_proven"] == 1
+        assert score["unproven"] == 0
+        assert score["bypassed"] is False
 
 
 class TestIsToolSourced:
