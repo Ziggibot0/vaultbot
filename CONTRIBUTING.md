@@ -125,8 +125,9 @@ modules where narrowing actually surfaces real bugs:
 | `chat_handler.py` | The chat loop — user-facing request handling |
 | `fused_retrieval.py` | Multi-channel retrieval — the answer pipeline |
 
-A new broad-except in any of these files fails the `ruff check --select F`
-CI gate. No per-file-ignores, no blanket exemptions.
+A new broad-except in any of these files fails the full `ruff check
+vaultbot_backend/` CI gate (the rule set selects `BLE001`). No
+per-file-ignores, no blanket exemptions.
 
 **Background and cleanup modules** (research cycles, post-ingest weaving,
 sandbox execution, embedding drift, etc.) are **best-effort by design**.
