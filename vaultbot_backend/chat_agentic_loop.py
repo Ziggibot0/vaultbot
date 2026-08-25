@@ -124,7 +124,7 @@ async def run_agentic_loop(
                         "failed_write_count": st._turn_failed_write_count,
                     },
                 )
-                st.final_answer += (
+                st.final_answer = (st.final_answer or st.interim_text) + (
                     "\n\n*The loop was stopped after 3 consecutive failed "
                     "writes. The findings above are what I was able to "
                     "determine, but I was unable to complete the task.*"
@@ -180,7 +180,7 @@ async def run_agentic_loop(
                             ),
                         },
                     )
-                    st.final_answer += (
+                    st.final_answer = (st.final_answer or st.interim_text) + (
                         "\n\n*The loop was stopped after "
                         f"{st._consecutive_thought_rounds} consecutive "
                         "thought-only rounds. I was stuck in a thinking "
@@ -462,7 +462,7 @@ async def run_agentic_loop(
                     # The model is responsible for deciding when it's done.
                     # (test_no_framework_intervention_on_unfinished_plan
                     #  enforces this -- no plan-completion checks here.)
-                    st.final_answer += round_text
+                    st.final_answer = round_text
                     session_logger.log(
                         "turn_done",
                         {
@@ -513,10 +513,11 @@ async def run_agentic_loop(
             st._tool_rounds_executed += 1
             st._double_silent_once = False
 
-            # Accumulate non-final round text so partial file captures all
-            # streamed text.
+            # Accumulate non-final round text as INTERIM narration so the
+            # partial file captures all streamed text without polluting the
+            # persisted final answer (issue #388).
             if round_text.strip() and round_text.strip() != ".":
-                st.final_answer += round_text
+                st.interim_text += round_text
 
             all_tools, custom_schemas = await execute_round_tools(
                 svc,
@@ -625,7 +626,7 @@ async def run_agentic_loop(
                         {
                             "user_message": user_message,
                             "round_idx": st.round_idx,
-                            "accumulated": st.final_answer,
+                            "accumulated": st.interim_text + st.final_answer,
                             "thinking": st.thinking_text,
                             "tool_history": st._turn_tool_history,
                             "working_memory": snapshot_working_memory(wm),
@@ -724,7 +725,12 @@ async def run_agentic_loop(
 
     except Exception as e:  # noqa: BLE001
         session_logger.log_exception(e, context="handle_chat_agentic_loop")
-        write_partial(st.partial_path, user_message, st.final_answer, st.thinking_text)
+        write_partial(
+            st.partial_path,
+            user_message,
+            st.interim_text + st.final_answer,
+            st.thinking_text,
+        )
         session_logger.log(
             "partial_answer_saved_on_crash",
             {
