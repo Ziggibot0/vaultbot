@@ -4,9 +4,8 @@
 # the 2026-07-30 audit found three features that had been dead for weeks
 # because nothing ran automatically. CI catches the next one before it ships.
 #
-# The offline pytest suite is the hard gate. The live golden-gate (needs
-# Ollama + a built index) runs in a separate workflow (golden-gate.yml)
-# because it needs a service container.
+# The offline pytest suite is the base hard gate. Retrieval-affecting changes
+# also run a live golden-gate job (service container + Ollama) as a hard gate.
 name: CI
 
 on:
@@ -23,6 +22,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-retrieval-changes:
+    name: Detect retrieval-affecting changes
+    runs-on: ubuntu-latest
+    outputs:
+      retrieval_changed: ${{ steps.detect.outputs.retrieval_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files for golden-gate scope
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" == "0000000000000000000000000000000000000000" ]]; then
+            base_sha="$(git rev-list --max-parents=0 "$head_sha" | tail -n1)"
+          fi
+
+          echo "Diff base: $base_sha"
+          echo "Diff head: $head_sha"
+
+          git diff --name-only "$base_sha" "$head_sha" > changed_files.txt
+          cat changed_files.txt
+
+          pattern='^(vaultbot_backend/(fused_retrieval\.py|vault_indexer\.py|vault_graph\.py|abstract_context\.py|weaving\.py|embedding_drift\.py|golden_eval\.py|golden_set\.json|run_golden_gate\.py|validate_golden_set\.py)|\.github/workflows/(golden-gate\.yml|ci\.yml))$'
+          if grep -Eq "$pattern" changed_files.txt; then
+            echo "retrieval_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Golden-gate scope changed: YES"
+          else
+            echo "retrieval_changed=false" >> "$GITHUB_OUTPUT"
+            echo "Golden-gate scope changed: NO"
+          fi
+
   lint-and-test:
     name: ruff + pyright + pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -217,6 +259,120 @@ jobs:
         run: |
           uv run pip-audit -r vaultbot_backend/requirements.txt --strict
 
+  golden-gate-retrieval:
+    name: Golden-gate retrieval run
+    needs: detect-retrieval-changes
+    if: needs.detect-retrieval-changes.outputs.retrieval_changed == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+        options: >-
+          --health-cmd "ollama list"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r vaultbot_backend/requirements.txt
+
+      - name: Cache Ollama nomic-embed-text model
+        id: cache-model
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.ollama
+          key: ollama-nomic-embed-text-1
+          lookup-only: true
+
+      - name: Pull nomic-embed-text (only if not cached)
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama pull nomic-embed-text
+
+      - name: Save Ollama model to cache
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.ollama
+          key: ollama-nomic-embed-text-1
+
+      - name: Confirm nomic-embed-text is available
+        run: ollama list
+
+      - name: Warm up embedding model
+        run: |
+          curl -s http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"warmup"}' > /dev/null
+          echo "Embedding model warmed up."
+
+      - name: Validate golden set against committed notes
+        working-directory: vaultbot_backend
+        run: |
+          python validate_golden_set.py --repo-root "${{ github.workspace }}"
+
+      - name: Build index + run golden gate
+        working-directory: vaultbot_backend
+        env:
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_EMBED_MODEL: nomic-embed-text
+          VAULT_PATH: ${{ github.workspace }}/myvault
+          VAULTBOT_SKIP_LOCK: "1"
+          VAULTBOT_SKIP_WATCHER: "1"
+        run: |
+          python -c "
+          import os, sys
+          sys.path.insert(0, '.')
+          from vault_indexer import VaultIndexer
+          idx = VaultIndexer(vault_path=os.environ['VAULT_PATH'])
+          md = [str(p) for p in idx._collect_md_files()]
+          if md:
+            idx.batch_add_files(md)
+          print(f'Indexed {len(md)} notes for golden-gate run.')
+          "
+          python run_golden_gate.py --vault "$VAULT_PATH" --min-recall 0.7 --k 5 --debug
+
+  golden-gate-required:
+    name: Golden-gate retrieval (HARD GATE)
+    needs: [detect-retrieval-changes, golden-gate-retrieval]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce retrieval gate verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ needs.detect-retrieval-changes.result }}" != "success" ]]; then
+            echo "Could not determine retrieval change scope."
+            exit 1
+          fi
+
+          if [[ "${{ needs.detect-retrieval-changes.outputs.retrieval_changed }}" != "true" ]]; then
+            echo "No retrieval-affecting changes detected; golden gate not required."
+            exit 0
+          fi
+
+          if [[ "${{ needs.golden-gate-retrieval.result }}" != "success" ]]; then
+            echo "Golden-gate retrieval failed or was cancelled."
+            exit 1
+          fi
+
+          echo "Golden-gate retrieval passed."
+
   release:
     # Cut a GitHub release for every merge to main, tagged from the plugin
     # manifest version. The in-Obsidian updater targets the latest release
@@ -227,7 +383,7 @@ jobs:
     # If the tag already exists (version not bumped), this is a no-op.
     name: Release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: lint-and-test
+    needs: [lint-and-test, golden-gate-required]
     runs-on: ubuntu-latest
     permissions:
       contents: write
