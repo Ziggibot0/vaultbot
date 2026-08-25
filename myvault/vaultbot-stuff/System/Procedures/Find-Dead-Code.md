@@ -39,7 +39,7 @@ Dead functions and classes accumulate in the backend and bloat the codebase, but
 1. ```python
 import re, json
 
-backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
 # Collect all definitions
 defs = []  # {name, file, line, kind}
 all_text = {}  # file -> text

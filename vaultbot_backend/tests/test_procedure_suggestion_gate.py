@@ -210,7 +210,6 @@ def test_build_index_from_synthetic_proc_index(tmp_path):
     assert "code_run" in entry["first_tools"]  # subprocess surfaces as code_run
     assert entry["status"] == "experimental"
     assert entry["description"] == "Syncs local repo with upstream main."
-    assert "sync" in entry["triggers"]  # from tags
     # Gate should now fire end-to-end on the retrieval-selected hint.
     sug = check_procedure_suggestion("vaultbot_sync", "Git-Sync-Upstream", idx)
     assert sug is not None

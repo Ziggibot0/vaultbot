@@ -37,7 +37,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-target = Path("vaultbot/vaultbot_backend/knowledge_curriculum.py")
+target = Path("vaultbot-stuff/vaultbot_backend/knowledge_curriculum.py")
 backup = target.with_suffix(".py.bak")
 
 # Read original
@@ -176,7 +176,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-target = Path("vaultbot/vaultbot_backend/fused_retrieval.py")
+target = Path("vaultbot-stuff/vaultbot_backend/fused_retrieval.py")
 backup = target.with_suffix(".py.bak")
 original = target.read_text(encoding="utf-8")
 shutil.copy2(target, backup)
@@ -214,7 +214,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-target = Path("vaultbot/vaultbot_backend/chat_handler.py")
+target = Path("vaultbot-stuff/vaultbot_backend/chat_handler.py")
 backup = target.with_suffix(".py.bak")
 original = target.read_text(encoding="utf-8")
 shutil.copy2(target, backup)
@@ -237,7 +237,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-target = Path("vaultbot/vaultbot_backend/compactor.py")
+target = Path("vaultbot-stuff/vaultbot_backend/compactor.py")
 backup = target.with_suffix(".py.bak")
 original = target.read_text(encoding="utf-8")
 shutil.copy2(target, backup)
@@ -294,7 +294,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-target = Path("vaultbot/vaultbot_backend/main.py")
+target = Path("vaultbot-stuff/vaultbot_backend/main.py")
 backup = target.with_suffix(".py.bak")
 original = target.read_text(encoding="utf-8")
 shutil.copy2(target, backup)

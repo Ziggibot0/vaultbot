@@ -78,7 +78,7 @@ else:
     except Exception as e:
         result = _json.dumps({"error": f"invalid regex: {e}"})
     else:
-        backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+        backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
         matches = []
         for py in backend_dir.rglob("*.py"):
             try:

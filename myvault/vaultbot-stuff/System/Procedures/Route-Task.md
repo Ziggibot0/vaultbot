@@ -57,7 +57,7 @@ Route-Task (small cartridge, thin orchestrator)
 │   ├── code-editing → Safe-Write → Proc-Step-Summary
 │   ├── fact-checking → Cross-Check-Claims → Find-Contradictions
 │   ├── conversational → (no chain — respond naturally, no research needed)
-│   └── default → Small-Model-Route
+│   └── unknown → (empty chain — the framework's fused-retrieval hint supplies the procedure downstream)
 ```
 
 ## Steps
@@ -66,7 +66,7 @@ Route-Task (small cartridge, thin orchestrator)
 
 1. [llm: Classify this user request into exactly one category. Reply with ONLY a JSON object, no other text.
 
-Categories (match by keyword or meaning):
+Categories (match by meaning):
 - research: learn, find, look up, investigate, study, what is, how does, explain a topic the vault doesn't cover
 - vault-maintenance: cleanup, consolidate, links, lint, gaps, dream pass, organize vault
 - self-improvement: build a tool, create a procedure, improve yourself, new ability, write code for the backend
@@ -91,7 +91,7 @@ Chain mappings (use these exact procedure names):
 - code-editing: ["Safe-Write", "Proc-Step-Summary"]
 - fact-checking: ["Cross-Check-Claims", "Find-Contradictions"]
 - conversational: []
-- unknown: ["Small-Model-Route"]
+- unknown: []
 
 User request: {{ intent }}]
 
@@ -113,7 +113,7 @@ if isinstance(raw, str):
 try:
     dispatch = json.loads(raw)
 except (json.JSONDecodeError, TypeError):
-    dispatch = {"category": "unknown", "procedure_chain": ["Small-Model-Route"], "confidence": 0.0, "rationale_code": "schema_fallback"}
+    dispatch = {"category": "unknown", "procedure_chain": [], "confidence": 0.0, "rationale_code": "schema_fallback"}
 
 allowed_categories = {"research", "vault-maintenance", "self-improvement", "gap-filling", "chat-consolidation", "question-answering", "code-editing", "fact-checking", "conversational", "unknown"}
 allowed_codes = {"action_signal", "clarification_or_explanation", "mixed_or_unsettled", "research_signal", "maintenance_signal", "self_improvement_signal", "gap_filling_signal", "chat_consolidation_signal", "question_answering_signal", "code_editing_signal", "fact_checking_signal", "conversational_signal", "unknown_signal", "schema_fallback"}
@@ -121,17 +121,19 @@ allowed_codes = {"action_signal", "clarification_or_explanation", "mixed_or_unse
 category = dispatch.get("category", "unknown")
 # Backward-compatibility for older Route-Task output during rollout; remove once
 # the strict schema is fully enforced in all callers.
-chain = dispatch.get("procedure_chain", dispatch.get("chain", ["Small-Model-Route"]))
+chain = dispatch.get("procedure_chain", dispatch.get("chain", []))
 confidence = dispatch.get("confidence", 0.0)
 rationale_code = dispatch.get("rationale_code", "schema_fallback")
 
 if not isinstance(category, str) or category not in allowed_categories:
     category = "unknown"
 if not isinstance(chain, list):
-    chain = ["Small-Model-Route"]
+    chain = []
 chain = [p for p in chain if isinstance(p, str) and p.strip()]
-if not chain and category != "conversational":
-    chain = ["Small-Model-Route"]
+# An empty chain is VALID: it tells the framework's fused-retrieval fallback
+# (chat_turn_prep._route_fallback_payload) to supply the procedure instead of
+# re-deriving a routing decision a small model already got wrong. Do NOT
+# synthesize a fallback chain here.
 if isinstance(confidence, (int, float)):
     confidence = max(0.0, min(1.0, float(confidence)))
 else:
@@ -179,5 +181,5 @@ This procedure is falsifiable if:
 ## Related
 
 - [[Decision-Tree-Router]] — the three-layer router that calls this for Layer 1 intent classification
-- [[Small-Model-Route]] — the default branch this dispatches to
+- [[Small-Model-Route]] — single-procedure matcher the big model can call directly when the surface misses
 - [[Research-Batch]] — the research chain this dispatches to

@@ -29,13 +29,13 @@ tags:
 Reads a VaultBot session's JSONL log and returns a structured summary of
 everything that happened: title, turns, tool calls + results, exceptions,
 console errors, and thinking. Sessions live in
-`vaultbot/vaultbot_backend/sessions/*.jsonl` — one file per chat
+`vaultbot-stuff/vaultbot_backend/sessions/*.jsonl` — one file per chat
 session, named by UUID, append-only.
 
 Read-only — never modifies a session file.
 
 This procedure now delegates to the standalone CLI reader
-(`vaultbot/vaultbot_backend/session_log_reader.py`), which uses the
+(`vaultbot-stuff/vaultbot_backend/session_log_reader.py`), which uses the
 canonical event types (`chat_begin`, `assistant_response`, `tool_call`,
 `tool_call_result`) instead of reverse-engineering raw websocket
 payloads. See `docs/SESSION-LOG-SCHEMA.md` for the full event schema.
@@ -60,7 +60,7 @@ payloads. See `docs/SESSION-LOG-SCHEMA.md` for the full event schema.
 import subprocess
 from pathlib import Path
 
-backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
 session_arg = (args.get("session") or "latest").strip()
 filter_arg = (args.get("filter") or "all").strip()
 

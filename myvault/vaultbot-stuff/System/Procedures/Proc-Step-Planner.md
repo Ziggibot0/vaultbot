@@ -49,7 +49,7 @@ else:
     p = Path(file_path)
     if not p.exists():
         # Try resolving relative to backend
-        p = Path(vault_path) / "vaultbot" / "vaultbot_backend" / file_path
+        p = Path(FRAMEWORK_ROOT) / "vaultbot_backend" / file_path
     if not p.exists():
         result = json.dumps({"error": f"file not found: {file_path}"})
     else:

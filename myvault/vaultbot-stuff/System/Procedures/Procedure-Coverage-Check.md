@@ -52,7 +52,7 @@ Before doing manual tool calls, the vaultbot needs to know whether a procedure a
 1. ```python
 import json
 
-proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures"
 procedures = []
 for p in proc_dir.glob("*.md"):
     try:

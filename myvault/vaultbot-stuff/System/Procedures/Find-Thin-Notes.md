@@ -54,7 +54,7 @@ try:
 except Exception:
     out_file = None
 if not out_file or not Path(out_file).exists():
-    out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
+    out_file = str(Path(os.environ.get("VAULT_PATH", ".")) / "vaultbot-stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
 
 data = json.loads(Path(out_file).read_text(encoding="utf-8"))
 records = data.get("notes", [])

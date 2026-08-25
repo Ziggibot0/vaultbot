@@ -58,7 +58,7 @@ from pathlib import Path
 # where `conversation = [...]` is constructed — this is where the
 # prompt pipeline's final order is determined.
 vault_root = Path(__file__).resolve().parent.parent.parent.parent
-backend = vault_root / "vaultbot" / "vaultbot_backend" / "chat_handler.py"
+backend = Path(FRAMEWORK_ROOT) / "vaultbot_backend" / "chat_handler.py"
 content = backend.read_text(encoding="utf-8")
 lines = content.splitlines()
 
@@ -86,7 +86,7 @@ from pathlib import Path
 # to system_prompt BEFORE the conversation list is built. These are blocks
 # injected into the first system message.
 vault_root = Path(__file__).resolve().parent.parent.parent.parent
-backend = vault_root / "vaultbot" / "vaultbot_backend" / "chat_handler.py"
+backend = Path(FRAMEWORK_ROOT) / "vaultbot_backend" / "chat_handler.py"
 content = backend.read_text(encoding="utf-8")
 lines = content.splitlines()
 
@@ -142,7 +142,7 @@ will be passed to Safe-Write if the user wants to apply it.]
 ### Step 7: Optional — apply and verify
 
 7. [llm: If the proposed change should be applied:
-  - Call `run_procedure("Safe-Write", {"file_path": "vaultbot/vaultbot_backend/chat_handler.py", "content": "<the full updated file>"})` to apply the edit with syntax check
+  - Call `run_procedure("Safe-Write", {"file_path": "vaultbot-stuff/vaultbot_backend/chat_handler.py", "content": "<the full updated file>"})` to apply the edit with syntax check
   - Call `run_procedure("Run-Test-Suite", {"filter": "not step_gate"})` to verify nothing broke
   - Call `run_procedure("Verify-Backend-Change", {})` to restart and verify health
   - Report the result

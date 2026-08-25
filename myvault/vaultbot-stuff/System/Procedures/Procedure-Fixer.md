@@ -314,7 +314,7 @@ for fix in fix_list:
         skipped.append({"what": fix.get("what", ""), "reason": "nice-to-have, deferred"})
 
 # Read the current procedure file
-proc_path = Path(vault_path) / "vaultbot" / "System" / "Procedures" / f"{target}.md"
+proc_path = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures" / f"{target}.md"
 current_content = ""
 if proc_path.exists():
     current_content = proc_path.read_text(encoding="utf-8", errors="replace")
@@ -346,7 +346,7 @@ Rules:
     # Write the patched content
     if patched_content and len(patched_content) > 50:
         write_result = vault_safe_write(
-            f"vaultbot/System/Procedures/{target}.md",
+            f"vaultbot-stuff/System/Procedures/{target}.md",
             patched_content
         )
         write_status = "written"
@@ -378,7 +378,7 @@ def get_prior(prior_results, step_num):
 
 step1 = json.loads(get_prior(prior_results, 1))
 target = step1.get("procedure_name", "")
-file_path = f"vaultbot/System/Procedures/{target}.md"
+file_path = f"vaultbot-stuff/System/Procedures/{target}.md"
 
 lint_result = vault_lint(file_path)
 
