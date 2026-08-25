@@ -83,10 +83,17 @@ def score_code_grounding(turn_tool_history: list | None) -> dict:
             safe_writes += 1
             if e.get("doc_source"):
                 doc_proven += 1
-        elif tool in ("code_write", "code_run"):
-            # code_write / code_run are the forbidden file-modification
-            # path (no doc gate). Flag as a potential bypass.
+        elif tool == "code_write":
+            # code_write is a forbidden file-modification path (no doc
+            # gate). Flag as a potential bypass.
             bypassed = True
+        elif tool == "code_run":
+            # code_run is read-only by default — the guard preamble blocks
+            # file writes in the subprocess (issue #207). Only a call that
+            # explicitly opted out via allow_write=True can actually modify
+            # files, so only that is a potential gate bypass (issue #387).
+            if e.get("allow_write"):
+                bypassed = True
     return {
         "safe_writes": safe_writes,
         "doc_proven": doc_proven,
