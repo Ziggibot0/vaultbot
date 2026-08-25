@@ -450,11 +450,19 @@ async def run_background_tasks(
                 )
                 return
             _final = _verify.get("final_output", "")
+            _verified_confidence = svc.calibration_tracker.estimate_answer_confidence(
+                verification_summary=_final
+            )
+            if _verified_confidence:
+                svc.calibration_tracker.log_answer_confidence(
+                    final_answer, _verified_confidence
+                )
             session_logger.log(
                 "provenance_verify_done",
                 {
                     "overall_passed": _verify.get("overall_passed"),
                     "output_len": len(_final),
+                    "confidence": _verified_confidence.get("calibrated_confidence"),
                 },
             )
             # Emit a lightweight event so the UI can upgrade the badge.
@@ -464,6 +472,7 @@ async def run_background_tasks(
                         {
                             "type": "provenance_verified",
                             "verdicts": _final,
+                            "confidence": _verified_confidence or None,
                         }
                     ),
                     websocket,

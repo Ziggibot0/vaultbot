@@ -160,6 +160,7 @@ async def finalize_turn(
     # force the model to cite irrelevant notes just to pass the gate.
     _allowed = getattr(st, "_allowed_citations", None) or {}
     _score: dict = {}
+    _confidence: dict = {}
     _grounding_caution = ""
     _is_idk = False
     _is_temporal = bool(getattr(st, "_is_temporal_question", False))
@@ -342,13 +343,27 @@ async def finalize_turn(
         try:
             from citation_gate import build_sources_block, build_trust_badge
 
-            _badge = build_trust_badge(_score) if _score else ""
+            if _score:
+                _confidence = svc.calibration_tracker.estimate_answer_confidence(
+                    grounding_score=_score
+                )
+                if _confidence:
+                    session_logger.log("answer_confidence_estimated", _confidence)
+            _badge = build_trust_badge(_score, _confidence) if _score else ""
             _sources = build_sources_block(final_answer, _allowed)
             if _sources:
                 final_answer = f"{final_answer}\n\n{_badge}\n\n{_sources}"
+                if _confidence:
+                    svc.calibration_tracker.log_answer_confidence(
+                        final_answer, _confidence
+                    )
                 session_logger.log(
                     "provenance_surface",
-                    {"badge": _badge, "sources": len(_sources.splitlines()) - 1},
+                    {
+                        "badge": _badge,
+                        "sources": len(_sources.splitlines()) - 1,
+                        "confidence": _confidence.get("calibrated_confidence"),
+                    },
                 )
         except Exception as _e:  # noqa: BLE001 — best-effort
             session_logger.log("provenance_surface_failed", {"error": str(_e)})
@@ -407,7 +422,13 @@ async def finalize_turn(
         session_logger.log("token_usage_emit_failed", {"error": str(_e)})
 
     await svc.manager.send_personal_message(
-        json.dumps({"type": "answer_done", "content": final_answer}),
+        json.dumps(
+            {
+                "type": "answer_done",
+                "content": final_answer,
+                "confidence": _confidence or None,
+            }
+        ),
         websocket,
         session_logger=session_logger,
     )
