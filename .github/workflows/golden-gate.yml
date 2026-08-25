@@ -1,9 +1,9 @@
 # Live golden-set retrieval gate â€” scores the REAL fused retriever against
 # golden_set.json using a service container running Ollama + nomic-embed-text.
 #
-# Runs on PRs that touch retrieval-affecting code (paths filter) and on
-# manual dispatch. Fails the workflow if aggregate recall@5 < 0.7 on the
-# seed golden set.
+# Runs on manual dispatch for ad-hoc diagnostics. The blocking PR/push gate
+# now lives in the main CI workflow, where it is enforced as a hard gate
+# for retrieval-affecting changes.
 #
 # The Ollama model (~270 MB) is cached in the Actions cache so only the
 # first run downloads it.
@@ -11,20 +11,6 @@ name: Golden-gate retrieval
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - "vaultbot_backend/fused_retrieval.py"
-      - "vaultbot_backend/vault_indexer.py"
-      - "vaultbot_backend/vault_graph.py"
-      - "vaultbot_backend/abstract_context.py"
-      - "vaultbot_backend/weaving.py"
-      - "vaultbot_backend/embedding_drift.py"
-      - "vaultbot_backend/golden_eval.py"
-      - "vaultbot_backend/golden_set.json"
-      - "vaultbot_backend/run_golden_gate.py"
-      - "vaultbot_backend/validate_golden_set.py"
-      - ".github/workflows/golden-gate.yml"
 
 permissions:
   contents: read
