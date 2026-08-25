@@ -40,7 +40,7 @@ Creating a new procedure needed a draft to review before committing it to the li
 1. ```python
 import json
 
-proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures"
 existing = [p.stem for p in proc_dir.glob("*.md")]
 result = json.dumps({"existing_procedures": existing})
 ```

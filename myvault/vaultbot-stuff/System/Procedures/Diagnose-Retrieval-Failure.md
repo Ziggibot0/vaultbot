@@ -66,7 +66,7 @@ A note or procedure that "should be found" by RAG but isn't can fall out at any 
    if not query or not target:
        result = "ERROR: both 'query' and 'target' are required"
    else:
-       backend = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+       backend = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
        if str(backend) not in sys.path:
            sys.path.insert(0, str(backend))
        from vault_indexer import VaultIndexer

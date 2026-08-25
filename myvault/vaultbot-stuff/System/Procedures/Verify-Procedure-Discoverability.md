@@ -64,7 +64,7 @@ A procedure could exist but never be reached by the vaultbot because RAG retriev
    if not proc_name:
        result = "ERROR: procedure_name is required"
    else:
-       proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
+       proc_dir = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures"
        proc_file = proc_dir / f"{proc_name}.md"
        if not proc_file.exists():
            matches = list(proc_dir.glob(f"{proc_name}*.md"))
@@ -95,7 +95,7 @@ A procedure could exist but never be reached by the vaultbot because RAG retriev
                test_queries = [fm.get("description", proc_name)[:80]]
 
            # Run the FusedRetriever
-           backend = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+           backend = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
            if str(backend) not in sys.path:
                sys.path.insert(0, str(backend))
            from vault_graph import VaultGraph

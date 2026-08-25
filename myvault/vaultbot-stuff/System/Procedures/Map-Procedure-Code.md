@@ -4,7 +4,7 @@ status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-22
-description: "Walk all procedure .md files, extract the custom_tools and run_procedure references, and map each procedure to the backend source files it depends on. Writes vaultbot/Knowledge/Architecture/Procedure-Code-Map.md."
+description: "Walk all procedure .md files, extract the custom_tools and run_procedure references, and map each procedure to the backend source files it depends on. Writes vaultbot-stuff/Knowledge/Architecture/Procedure-Code-Map.md."
 when_to_use: "When you need to understand which backend modules a procedure touches, or before editing a backend module to predict which procedures might break. Called by Predict-Change-Impact and Know-Thyself."
 falsifiable_if: The map misses a real tool reference, lists a phantom reference, or the output note is unreadable.
 applies_to:
@@ -39,7 +39,7 @@ bridge between the two worlds: procedure → tool name → Python module.
 
 ## Output
 
-Writes `vaultbot/Knowledge/Architecture/Procedure-Code-Map.md` with:
+Writes `vaultbot-stuff/Knowledge/Architecture/Procedure-Code-Map.md` with:
 - One `## <procedure>` section per procedure file
 - **Tools used:** custom_tools referenced in the procedure
 - **Sub-procedures:** other procedures called via `run_procedure`
@@ -61,9 +61,9 @@ from pathlib import Path
 
 vault_root = Path(vault_path)
 proc_dir = vault_root / "myvault" / "vaultbot-stuff" / "System" / "Procedures"
-backend_dir = vault_root / "vaultbot" / "vaultbot_backend"
+backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
 custom_tools_dir = backend_dir / "custom_tools"
-out_dir = vault_root / "vaultbot" / "Knowledge" / "Architecture"
+out_dir = vault_root / "vaultbot-stuff" / "Knowledge" / "Architecture"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_path = out_dir / "Procedure-Code-Map.md"
 

@@ -44,7 +44,7 @@ After a refactor renames or deletes files and functions, vault notes that refere
 import re, json
 
 all_files = vault_list()
-backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
 # Get all actual .py files and their function/class names
 actual_files = set()
 actual_symbols = set()

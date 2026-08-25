@@ -4,7 +4,7 @@ status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-19
-description: "Generate a structured map of VaultBot's own backend source: every module with its docstring, top-level functions/classes, and imports. Writes vaultbot/Knowledge/Architecture/Codebase-Map.md. Deterministic AST walk — no LLM, no embeddings. Run this when the code changes, then read the map instantly via the codebase_map tool."
+description: "Generate a structured map of VaultBot's own backend source: every module with its docstring, top-level functions/classes, and imports. Writes vaultbot-stuff/Knowledge/Architecture/Codebase-Map.md. Deterministic AST walk — no LLM, no embeddings. Run this when the code changes, then read the map instantly via the codebase_map tool."
 when_to_use: "When you need to understand VaultBot's own code before editing it, when the codebase map is missing or stale, or when asked 'what does your code look like'."
 falsifiable_if: "The map misses a module, mislabels a function/class, or the generated note is unreadable by the codebase_map tool."
 applies_to:
@@ -43,7 +43,7 @@ Understanding any part of the backend required per-file `code_read` round-trips,
 
 ## Output
 
-Writes `vaultbot/Knowledge/Architecture/Codebase-Map.md` with one `## <module>`
+Writes `vaultbot-stuff/Knowledge/Architecture/Codebase-Map.md` with one `## <module>`
 section per backend `.py` file, each containing the module docstring (first
 line), top-level functions/classes with line numbers, and imports.
 
@@ -62,8 +62,8 @@ import json
 import os
 from pathlib import Path
 
-backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
-out_dir = Path(vault_path) / "vaultbot" / "Knowledge" / "Architecture"
+backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
+out_dir = Path(vault_path) / "vaultbot-stuff" / "Knowledge" / "Architecture"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_path = out_dir / "Codebase-Map.md"
 

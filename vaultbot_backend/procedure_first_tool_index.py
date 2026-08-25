@@ -119,7 +119,7 @@ def build_first_tool_index(
     proc_index: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     """Compile every procedure in ``proc_index`` once and return a
-    ``{stem: {first_tools, triggers, description, status, allowed_tools}}`` map.
+    ``{stem: {first_tools, description, status, allowed_tools}}`` map.
 
     ``proc_index`` is the stem -> {path, frontmatter} map built by
     ``procedure_tracker.get_procedure_index``. This function does NOT rewalk
@@ -146,20 +146,8 @@ def build_first_tool_index(
         # gate would never fire for it.
         if not first_tools:
             continue
-        triggers: list[str] = []
-        # ``trigger`` and ``when_to_use`` are the matching signal. Both are
-        # free-text; we lowercase + split on non-word chars for cheap
-        # keyword overlap with the user message (no embeddings needed at
-        # dispatch time — the gate must be fast, it runs on every tool
-        # call).
-        for key in ("trigger", "when_to_use", "description"):
-            val = _fm_str(fm, key)
-            if val:
-                triggers.append(val.lower())
-        triggers.extend(t.lower() for t in _fm_list(fm, "tags"))
         out[stem] = {
             "first_tools": first_tools,
-            "triggers": triggers,
             "description": _fm_str(fm, "description"),
             "status": _fm_str(fm, "status"),
             "allowed_tools": _fm_list(fm, "allowed_tools"),

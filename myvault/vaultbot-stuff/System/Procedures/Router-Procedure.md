@@ -63,7 +63,7 @@ args['procedure_result'] = result
 
 ### Step 3.2: Write Summary Note
 ```python
-output_note_path = f"vaultbot/Knowledge/Router-Execution-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.md"
+output_note_path = f"vaultbot-stuff/Knowledge/Router-Execution-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.md"
 content = f"---\ntype: note\nstatus: completed\ncreated: {datetime.utcnow().isoformat()}\nsummary: Result of router execution for query '{args.get('user_query')}'\n---\n\n{json.dumps(args['procedure_result'], indent=2)}"
 vault_safe_write(content=content, dry_run=False, file_path=output_note_path)
 ```

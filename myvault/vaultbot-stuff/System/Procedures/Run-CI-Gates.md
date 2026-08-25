@@ -65,7 +65,7 @@ Pushing a PR that fails CI wastes a full GitHub Actions round-trip when the same
 import json, os
 
 # The backend lives at vault_path/vaultbot/vaultbot_backend
-backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
 if not os.path.isdir(backend_dir):
     # Fallback: try walking up from cwd
     backend_dir = str(Path(vault_path))
@@ -103,7 +103,7 @@ result = json.dumps({
 import json, subprocess, os, shutil
 
 # Re-discover config (each step is independent — no cross-step variables)
-backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
 if not os.path.isdir(backend_dir):
     backend_dir = str(Path(vault_path))
 
@@ -151,7 +151,7 @@ result = json.dumps(gate_results)
 import json, subprocess, os, shutil
 
 # Re-discover config (each step is independent)
-backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
 if not os.path.isdir(backend_dir):
     backend_dir = str(Path(vault_path))
 
@@ -212,7 +212,7 @@ you want fast feedback from ruff + pytest.
 import json, subprocess, os, shutil
 
 # Re-discover config
-backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
 if not os.path.isdir(backend_dir):
     backend_dir = str(Path(vault_path))
 
@@ -281,7 +281,7 @@ result = json.dumps(gate_results)
 import json, subprocess, os
 
 # Re-discover config
-backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
 if not os.path.isdir(backend_dir):
     backend_dir = str(Path(vault_path))
 

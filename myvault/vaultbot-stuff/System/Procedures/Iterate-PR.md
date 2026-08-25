@@ -217,7 +217,7 @@ import json, subprocess, os, sys
 # This walks up from the backend dir to find the actual .git directory,
 # handling both layouts (vault root IS the git repo, or git repo is one
 # level up like vaultbot-fork/ containing vaultbot/).
-backend_dir = str(Path(vault_path) / "vaultbot" / "vaultbot_backend")
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
 sys.path.insert(0, backend_dir)
 try:
     from upstream_identity import _find_git_root

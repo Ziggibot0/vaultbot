@@ -42,8 +42,8 @@ architecture) is still running the old version.
 ## Symptom → likely cause decision tree
 
 1. New procedures / identity rules / architecture docs don't appear after update.
-   → The updater only copied `vaultbot/vaultbot_backend/` and the plugin files,
-   skipping `vaultbot/System/`, `vaultbot/baseline/`, `vaultbot/docs/`, and
+   → The updater only copied `vaultbot-stuff/vaultbot_backend/` and the plugin files,
+   skipping `vaultbot-stuff/System/`, `vaultbot-stuff/baseline/`, `vaultbot/docs/`, and
    top-level config files.
 
 2. Setup scripts (`setup.ps1`, `setup.sh`) or `pyproject.toml` not updated.
@@ -78,13 +78,13 @@ architecture) is still running the old version.
    procedures that aren't in the repo are always preserved. Confirm this
    before broadening the copy scope.
 
-5. **Verify `.gitignore` coverage.** User-content dirs (`vaultbot/Memory/`,
-   `vaultbot/Knowledge/`, `User/`) must be in `.gitignore` so they never
+5. **Verify `.gitignore` coverage.** User-content dirs (`vaultbot-stuff/Memory/`,
+   `vaultbot-stuff/Knowledge/`, `User/`) must be in `.gitignore` so they never
    appear in the GitHub tarball. If they're gitignored, `copyCodeTree` will
    never see them in the archive and will never touch them in the live vault.
 
 6. **Broaden the copy scope.** Replace narrow subtree copies
-   (`vaultbot/vaultbot_backend/` only) with a full `vaultbot/` tree copy.
+   (`vaultbot-stuff/vaultbot_backend/` only) with a full `vaultbot/` tree copy.
    Add `copyCodeTree` calls for `.github/` and root-level meta files
    (`.gitignore`, `.pre-commit-config.yaml`, `README.md`).
 

@@ -42,9 +42,9 @@ The vaultbot was doing the same multi-step workflows manually over and over, wit
 import json, re
 from collections import Counter
 
-chat_dir = Path(vault_path) / "vaultbot" / "Memory" / "Chat"
+chat_dir = Path(vault_path) / "vaultbot-stuff" / "Memory" / "Chat"
 if not chat_dir.exists():
-    chat_dir = Path(vault_path) / "vaultbot" / "Memory"
+    chat_dir = Path(vault_path) / "vaultbot-stuff" / "Memory"
 
 # Collect tool-call sequences from chat logs
 sequences = []

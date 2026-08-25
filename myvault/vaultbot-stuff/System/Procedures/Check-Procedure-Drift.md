@@ -45,7 +45,7 @@ Procedure descriptions are what RAG uses for discovery, so a description that dr
 1. ```python
 import json, re
 
-proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
+proc_dir = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures"
 procedures = []
 for p in proc_dir.glob("*.md"):
     try:

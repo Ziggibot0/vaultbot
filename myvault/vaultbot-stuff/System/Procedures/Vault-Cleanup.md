@@ -44,7 +44,7 @@ Cleanup work was scattered across separate Find-* scanners, each rescanning the 
 import json
 
 run_procedure("Pattern-Scan")
-out_file = str(Path(vault_path) / "vaultbot" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
+out_file = str(Path(vault_path) / "vaultbot-stuff" / "Memory" / "Build-Log" / "pattern-scan-latest.json")
 data = json.loads(Path(out_file).read_text(encoding="utf-8"))
 records = data.get("notes", [])
 counts = data.get("counts", {})

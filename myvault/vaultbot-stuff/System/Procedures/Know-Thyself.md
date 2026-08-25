@@ -87,11 +87,11 @@ All probes run **independently** — no probe depends on another's output. Failu
 | Arg | Type | Default | Description |
 |-----|------|---------|-------------|
 | `depth` | string | "standard" | "minimal" (identity+capability only), "standard" (all 8), "deep" (adds graph analysis) |
-| `output_file` | string | auto | Custom path for JSON output (default: `vaultbot/Memory/Build-Log/know-thyself-latest.json`) |
+| `output_file` | string | auto | Custom path for JSON output (default: `vaultbot-stuff/Memory/Build-Log/know-thyself-latest.json`) |
 
 ## Output Contract
 
-**File written:** `vaultbot/Memory/Build-Log/know-thyself-latest.json`
+**File written:** `vaultbot-stuff/Memory/Build-Log/know-thyself-latest.json`
 
 Human‑readable summary is returned as the final output of the procedure.
 
@@ -117,7 +117,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
 # The runtime sets VAULT_PATH (not VAULT_ROOT). Fall back to the current
 # working directory if neither is set.
 vault_root = Path(os.environ.get("VAULT_PATH", os.environ.get("VAULT_ROOT", ".")))
-out_dir = vault_root / "vaultbot" / "Memory" / "Build-Log"
+out_dir = vault_root / "vaultbot-stuff" / "Memory" / "Build-Log"
 out_dir.mkdir(parents=True, exist_ok=True)
 
 # ---- Helpers -------------------------------------------------------------
@@ -139,8 +139,8 @@ def _as_json_str(val):
 # ---- Identity Probe -------------------------------------------------------
 identity_data = {}
 identities = [
-    ("identity_py", vault_root / "vaultbot" / "vaultbot_backend" / "identity.py"),
-    ("identity_py_tmp", vault_root / "vaultbot" / "System" / "Core" / "identity.py.tmp"),
+    ("identity_py", Path(FRAMEWORK_ROOT) / "vaultbot_backend" / "identity.py"),
+    ("identity_py_tmp", vault_root / "vaultbot-stuff" / "System" / "Core" / "identity.py.tmp"),
 ]
 for key, path in identities:
     if path.exists():
@@ -149,7 +149,7 @@ for key, path in identities:
 # also check for any identity markdown notes
 markdown_notes = []
 for note_name in ["Identity-Facts", "Autonomy-Directive", "VaultBot-Identity", "Core-Identity"]:
-    note_path = vault_root / "vaultbot" / "System" / "Core" / f"{note_name}.md"
+    note_path = vault_root / "vaultbot-stuff" / "System" / "Core" / f"{note_name}.md"
     if note_path.exists():
         markdown_notes.append({"note": note_name, "content": note_path.read_text(encoding="utf-8", errors="replace")[:3000]})
 id_data = {"markdown_notes": markdown_notes}
@@ -306,7 +306,7 @@ run_procedure("Know-Thyself", args={})
 run_procedure("Know-Thyself", args={"depth": "deep"})
 
 # Custom output path
-run_procedure("Know-Thyself", args={"output_file": "vaultbot/Memory/Build-Log/know-thyself-session-start.json"})
+run_procedure("Know-Thyself", args={"output_file": "vaultbot-stuff/Memory/Build-Log/know-thyself-session-start.json"})
 ```
 
 ## Related
