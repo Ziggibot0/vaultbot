@@ -30,8 +30,13 @@ wins — flag the discrepancy instead of guessing.
    enforcement/exception map.
 3. **One concern per branch.** Don't mix unrelated changes in one PR. If the
    working tree has unrelated edits, stash or move them aside first.
-4. **CI is the gate.** `ruff check --select F` and `pytest -m unit` are hard
-   gates. Run both locally before pushing; don't push and hope.
+4. **CI is the gate.** The hard gates are the FULL ruff rule set
+   (`ruff check vaultbot_backend/` — NOT `--select F`), the formatter
+   (`ruff format --check vaultbot_backend/`), and the unit suite
+   (`pytest -m unit`). Run ALL THREE locally before pushing; don't push
+   and hope. A change that passes `--select F` can still fail CI on E501,
+   RUF059, or formatting — the `--select F` shortcut is a lie that wastes
+   a CI round-trip.
 
 ## Workflow (branch → commit → PR → CI → merge)
 
@@ -43,7 +48,9 @@ wins — flag the discrepancy instead of guessing.
 5. `git push -u origin <branch>`
 6. `gh pr create --base main --head <branch> --title ... --body ...`
    Fill the PR template's safety checklist (`.github/pull_request_template.md`).
-7. `gh pr checks <N>` — wait for both Python 3.11 and 3.12 to go green.
+7. `gh pr checks <N>` — wait for the full matrix (Python 3.11–3.14) to go
+   green, plus the CodeQL Analyze jobs (they report last; "Expected —
+   waiting for status" is normal for the first minute).
 8. `gh pr merge <N> --squash --delete-branch`
 
 Branch protection on `main` requires a code-owner approval before any merge.
