@@ -399,27 +399,29 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="VaultBot API", lifespan=lifespan)
 
-# Allow the Obsidian Electron app (origin app://obsidian.md) and local browsers
-# to call the API without browser CORS preflight blocks.
+# Only the Obsidian Electron app is allowed to call the API. Browsers on
+# localhost (including 127.0.0.1 / local web pages) are not trusted CORS
+# callers, and mutating endpoints already require the shared-secret token.
 #
 # CORS note: allow_credentials is intentionally NOT set (defaults to False).
 # Starlette silently ignores credentials when allow_origins=["*"] — the
 # combination was a misconfiguration that read as "credentials protected" while
-# doing nothing. This backend is localhost-only and does not use cookies or
-# auth headers, so credentials are genuinely unnecessary. If a future change
-# tightens allow_origins to a real origin list, re-enable allow_credentials
-# there — not here.
+# doing nothing. This backend only accepts the exact Obsidian origin and does
+# not use cookies or browser auth. If a future change broadens the origin list,
+# re-enable allow_credentials there — not here.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "app://obsidian.md",
-        "http://localhost",
-        "http://localhost:*",
-        "http://127.0.0.1",
-        "http://127.0.0.1:*",
+    allow_origins=["app://obsidian.md"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Authorization",
+        "Content-Type",
+        "Origin",
+        "X-Requested-With",
+        "X-VaultBot-Token",
     ],
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # ── Rate limiting middleware ────────────────────────────────────────────
