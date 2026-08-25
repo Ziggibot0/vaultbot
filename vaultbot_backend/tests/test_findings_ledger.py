@@ -29,9 +29,7 @@ def test_long_error_is_truncated():
 
 
 def test_procedure_suggestion_is_suggested():
-    out = round_tool_outcome(
-        "code_run", {"procedure_suggestion": "Git-Sync-Upstream"}
-    )
+    out = round_tool_outcome("code_run", {"procedure_suggestion": "Git-Sync-Upstream"})
     assert out == "suggested"
 
 
