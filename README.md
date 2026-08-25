@@ -414,9 +414,11 @@ VaultBot is a work in progress. Being honest about what it doesn't do yet:
   (embedding drift, lazy condensing) are architecturally in place, but there is
   no benchmark showing measurable quality gain over time. Building that
   measurement is a top goal.
-- **No uncertainty quantification.** The claim verifier gives
-  supported/unsupported verdicts but not calibrated confidence scores.
-  Synthesized answers do not carry probability estimates.
+- **Confidence calibration is still young.** Chat answers now carry a
+  graded calibrated confidence estimate derived from grounding and
+  answer-verification signals, and low-confidence answers are surfaced
+  explicitly. But the calibration loop is still early-stage and will
+  improve as more operator feedback accumulates.
 - **FAISS uses brute-force search** (IndexFlatL2), which is fine up to ~50k
   notes. IVF or HNSW indexing would be needed beyond that.
 - **Single-user, localhost-only.** Not designed for multi-user or networked

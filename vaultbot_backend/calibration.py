@@ -7,11 +7,18 @@ Pure deterministic. No LLM calls. Structured logging + simple statistics.
 See [[Calibration-via-Operator-Feedback]] for the architecture rationale.
 """
 
+import hashlib
 import json
 import os
 import re
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Any
+
+
+def _clamp01(value: float) -> float:
+    """Clamp a numeric value into the inclusive 0..1 confidence range."""
+    return max(0.0, min(1.0, float(value)))
 
 
 class CalibrationTracker:
@@ -63,6 +70,9 @@ class CalibrationTracker:
         r"\bno,?\s*i (think|believe|want|need|mean)\b",
     )
 
+    def _utc_now(self) -> str:
+        return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
     def __init__(self, log_path: str | None = None):
         self.log_path = log_path or os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "calibration_log.json"
@@ -73,15 +83,247 @@ class CalibrationTracker:
         """Create the log file if it doesn't exist."""
         if not os.path.exists(self.log_path):
             with open(self.log_path, "w", encoding="utf-8") as f:
-                json.dump({"corrections": [], "gate_decisions": []}, f, indent=2)
+                json.dump(
+                    {
+                        "corrections": [],
+                        "gate_decisions": [],
+                        "answer_confidence": [],
+                    },
+                    f,
+                    indent=2,
+                )
+
+    def _with_defaults(self, data: dict) -> dict:
+        data.setdefault("corrections", [])
+        data.setdefault("gate_decisions", [])
+        data.setdefault("answer_confidence", [])
+        return data
 
     def _load(self) -> dict:
         with open(self.log_path, encoding="utf-8") as f:
-            return json.load(f)
+            return self._with_defaults(json.load(f))
 
     def _save(self, data: dict):
         with open(self.log_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def _answer_key(self, answer: str) -> str:
+        normalized = re.sub(r"\s+", " ", (answer or "").strip())
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+    def _confidence_band(self, confidence: float) -> str:
+        confidence = _clamp01(confidence)
+        if confidence < 0.4:
+            return "low"
+        if confidence < 0.75:
+            return "moderate"
+        return "high"
+
+    def _grounding_confidence(self, grounding_score: dict[str, Any] | None) -> float:
+        """Convert grounding metrics into a raw answer-confidence estimate."""
+        score = grounding_score or {}
+        total = int(score.get("total_wikilinks", 0) or 0)
+        sentences = int(score.get("sentences", 0) or 0)
+        failed = bool(score.get("failed", False))
+        grounding = _clamp01(score.get("grounding_score", 0.0) or 0.0)
+        ungrounded_ratio = _clamp01(score.get("ungrounded_ratio", 0.0) or 0.0)
+
+        if total == 0:
+            if sentences <= 1:
+                return 0.25
+            return 0.05 if failed else 0.15
+
+        citation_component = grounding
+        sentence_component = 1.0 - ungrounded_ratio
+        raw = (0.65 * citation_component) + (0.35 * sentence_component)
+        if failed:
+            raw *= 0.7
+        return round(_clamp01(raw), 4)
+
+    def _parse_verification_summary(
+        self, verification_summary: str | dict[str, Any] | None
+    ) -> dict[str, Any]:
+        if isinstance(verification_summary, dict):
+            return verification_summary
+        if (
+            not isinstance(verification_summary, str)
+            or not verification_summary.strip()
+        ):
+            return {}
+        try:
+            parsed = json.loads(verification_summary)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _verification_confidence(
+        self, verification_summary: dict[str, Any] | None
+    ) -> float:
+        """Roll per-claim entailment verdicts up into an answer-confidence score."""
+        summary = verification_summary or {}
+        supported = max(0, int(summary.get("supported", 0) or 0))
+        unsupported = max(0, int(summary.get("unsupported", 0) or 0))
+        contradicted = max(0, int(summary.get("contradicted", 0) or 0))
+        total = max(
+            0,
+            int(
+                summary.get(
+                    "total",
+                    supported + unsupported + contradicted,
+                )
+                or 0
+            ),
+        )
+        if total <= 0:
+            return 0.0
+        unknown = max(0, total - (supported + unsupported + contradicted))
+        weighted_negative = unsupported + unknown + (2 * contradicted)
+        denom = supported + weighted_negative
+        if denom <= 0:
+            return 0.0
+        return round(_clamp01(supported / denom), 4)
+
+    def calibrate_confidence(self, raw_confidence: float) -> dict[str, Any]:
+        """Calibrate a raw confidence estimate against historical outcomes."""
+        raw = round(_clamp01(raw_confidence), 4)
+        data = self._load()
+        labeled = [
+            entry
+            for entry in data.get("answer_confidence", [])
+            if isinstance(entry.get("observed_quality"), (int, float))
+        ]
+        if not labeled:
+            return {
+                "raw_confidence": raw,
+                "calibrated_confidence": raw,
+                "bucket": int(min(raw, 0.9999) * 10),
+                "sample_size": 0,
+                "calibration_scope": "raw",
+            }
+
+        bucket = int(min(raw, 0.9999) * 10)
+        same_bucket = [
+            entry
+            for entry in labeled
+            if int(min(_clamp01(entry.get("raw_confidence", 0.0)), 0.9999) * 10)
+            == bucket
+        ]
+        nearby = [
+            entry
+            for entry in labeled
+            if abs(
+                int(min(_clamp01(entry.get("raw_confidence", 0.0)), 0.9999) * 10)
+                - bucket
+            )
+            <= 1
+        ]
+        reference = same_bucket or nearby or labeled
+        scope = "bucket" if same_bucket else "nearby" if nearby else "global"
+        empirical = sum(float(e["observed_quality"]) for e in reference) / len(
+            reference
+        )
+        max_weight = 0.75 if scope == "bucket" else 0.55 if scope == "nearby" else 0.35
+        weight = min(max_weight, len(reference) / 8)
+        calibrated = ((1.0 - weight) * raw) + (weight * empirical)
+        return {
+            "raw_confidence": raw,
+            "calibrated_confidence": round(_clamp01(calibrated), 4),
+            "bucket": bucket,
+            "sample_size": len(reference),
+            "calibration_scope": scope,
+        }
+
+    def estimate_answer_confidence(
+        self,
+        grounding_score: dict[str, Any] | None = None,
+        verification_summary: str | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Estimate calibrated answer confidence from grounding or verification."""
+        if verification_summary is not None:
+            summary = self._parse_verification_summary(verification_summary)
+            if not summary:
+                return {}
+            verified_quality = self._verification_confidence(summary)
+            payload = self.calibrate_confidence(verified_quality)
+            payload.update(
+                {
+                    "stage": "verified",
+                    "band": self._confidence_band(payload["calibrated_confidence"]),
+                    "observed_quality": verified_quality,
+                    "verification_summary": summary,
+                    "total_claims": int(summary.get("total", 0) or 0),
+                    "supported_claims": int(summary.get("supported", 0) or 0),
+                    "unsupported_claims": int(summary.get("unsupported", 0) or 0),
+                    "contradicted_claims": int(summary.get("contradicted", 0) or 0),
+                }
+            )
+            return payload
+
+        if grounding_score is None:
+            return {}
+        payload = self.calibrate_confidence(self._grounding_confidence(grounding_score))
+        payload.update(
+            {
+                "stage": "grounding",
+                "band": self._confidence_band(payload["calibrated_confidence"]),
+                "total_citations": int(grounding_score.get("total_wikilinks", 0) or 0),
+                "allowed_cited": int(grounding_score.get("allowed_cited", 0) or 0),
+                "ungrounded_ratio": float(
+                    grounding_score.get("ungrounded_ratio", 0.0) or 0.0
+                ),
+                "grounding_score": float(
+                    grounding_score.get("grounding_score", 0.0) or 0.0
+                ),
+                "failed": bool(grounding_score.get("failed", False)),
+            }
+        )
+        return payload
+
+    def log_answer_confidence(self, answer: str, confidence: dict[str, Any]) -> dict:
+        """Persist a confidence estimate so future turns can calibrate against it."""
+        if not answer or not confidence:
+            return {}
+        entry = {
+            "timestamp": self._utc_now(),
+            "answer_key": self._answer_key(answer),
+            "answer_excerpt": (answer or "")[:240],
+            "stage": confidence.get("stage", "unknown"),
+            "band": confidence.get(
+                "band",
+                self._confidence_band(confidence.get("calibrated_confidence", 0.0)),
+            ),
+            "raw_confidence": round(
+                _clamp01(confidence.get("raw_confidence", 0.0) or 0.0), 4
+            ),
+            "calibrated_confidence": round(
+                _clamp01(confidence.get("calibrated_confidence", 0.0) or 0.0), 4
+            ),
+            "bucket": int(confidence.get("bucket", 0) or 0),
+            "sample_size": int(confidence.get("sample_size", 0) or 0),
+            "calibration_scope": confidence.get("calibration_scope", "raw"),
+            "corrected": False,
+        }
+        if confidence.get("stage") == "verified":
+            entry["observed_quality"] = round(
+                _clamp01(confidence.get("observed_quality", 0.0) or 0.0), 4
+            )
+            entry["outcome_source"] = "verification"
+            entry["verification_summary"] = confidence.get("verification_summary", {})
+        data = self._load()
+        assessments = data.get("answer_confidence", [])
+        for idx in range(len(assessments) - 1, -1, -1):
+            existing = assessments[idx]
+            if (
+                existing.get("answer_key") == entry["answer_key"]
+                and existing.get("stage") == entry["stage"]
+            ):
+                assessments[idx] = entry
+                break
+        else:
+            assessments.append(entry)
+        data["answer_confidence"] = assessments[-400:]
+        self._save(data)
+        return entry
 
     # --- Correction detection ---
 
@@ -207,7 +449,7 @@ class CalibrationTracker:
             )
 
         entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": self._utc_now(),
             "user_message": user_message[:500],
             "prev_answer": prev_answer[:2000] if prev_answer else "",
             "failure_type": failure_type,
@@ -217,6 +459,21 @@ class CalibrationTracker:
         }
 
         data = self._load()
+        answer_key = self._answer_key(prev_answer) if prev_answer else ""
+        matched_assessment = False
+        if answer_key:
+            for assessment in reversed(data.get("answer_confidence", [])):
+                if assessment.get("answer_key") != answer_key:
+                    continue
+                assessment["corrected"] = True
+                assessment["observed_quality"] = 0.0
+                assessment["outcome_source"] = "operator_correction"
+                assessment["correction_message"] = user_message[:500]
+                assessment["failure_type"] = failure_type
+                assessment["corrected_at"] = entry["timestamp"]
+                matched_assessment = True
+                break
+        entry["matched_answer_confidence"] = matched_assessment
         data["corrections"].append(entry)
         self._save(data)
 
@@ -233,7 +490,7 @@ class CalibrationTracker:
         (false negatives)
         """
         entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": self._utc_now(),
             "gate": gate_name,
             "note_path": note_path,
             "decision": decision,
@@ -288,6 +545,31 @@ class CalibrationTracker:
             "total": len(corrections),
             "by_type": dict(Counter(c["failure_type"] for c in corrections)),
         }
+
+        assessments = data.get("answer_confidence", [])
+        labeled = [
+            a
+            for a in assessments
+            if isinstance(a.get("observed_quality"), (int, float))
+        ]
+        if labeled:
+            report["_answer_confidence"] = {
+                "total_assessments": len(assessments),
+                "labeled_assessments": len(labeled),
+                "average_raw_confidence": round(
+                    sum(float(a.get("raw_confidence", 0.0)) for a in labeled)
+                    / len(labeled),
+                    4,
+                ),
+                "average_observed_quality": round(
+                    sum(float(a.get("observed_quality", 0.0)) for a in labeled)
+                    / len(labeled),
+                    4,
+                ),
+                "corrected_answers": sum(
+                    1 for a in labeled if bool(a.get("corrected", False))
+                ),
+            }
 
         return report
 

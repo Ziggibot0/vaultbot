@@ -494,22 +494,52 @@ def build_reprimand(
 # exactly where every answer came from. Pure string transforms — no I/O.
 
 
-def build_trust_badge(score: dict[str, Any]) -> str:
+def build_trust_badge(
+    score: dict[str, Any],
+    confidence: dict[str, Any] | None = None,
+) -> str:
     """Return a one-line trust badge describing grounding state.
 
-    Three states:
-      - "✓ Grounded in N vault notes"  (grounded, no failure)
-      - "⚠ Partially grounded"         (some citations but failed/low score)
-      - "✗ Ungrounded"                 (no citations at all)
-
-    The badge is coarse by design — the detailed per-claim verdict lives in
-    the provenance manifest, not the chat. This keeps the chat clean while
-    still giving the scholar an at-a-glance trust signal.
+    When calibrated confidence is available, show a graded badge so the
+    answer doesn't present weakly verified synthesis as equally certain.
     """
     total = score.get("total_wikilinks", 0)
     allowed_cited = score.get("allowed_cited", 0)
     failed = score.get("failed", False)
     grounding_score = score.get("grounding_score", 0.0)
+    if confidence:
+        calibrated = max(
+            0.0,
+            min(1.0, float(confidence.get("calibrated_confidence", 0.0) or 0.0)),
+        )
+        band = str(confidence.get("band", "") or "").lower()
+        if not band:
+            if calibrated < 0.4:
+                band = "low"
+            elif calibrated < 0.75:
+                band = "moderate"
+            else:
+                band = "high"
+        if band == "low":
+            icon = "⚠"
+            label = "Low confidence"
+        elif band == "moderate":
+            icon = "◒"
+            label = "Moderate confidence"
+        else:
+            icon = "✓"
+            label = "High confidence"
+        percent = round(calibrated * 100)
+        stage = confidence.get("stage")
+        if stage == "verified":
+            supported = int(confidence.get("supported_claims", 0) or 0)
+            total_claims = int(confidence.get("total_claims", 0) or 0)
+            detail = f"{supported}/{total_claims} claims supported"
+        elif total == 0:
+            detail = "no vault notes cited"
+        else:
+            detail = f"{allowed_cited}/{total} citations grounded"
+        return f"> {icon} **{label}** — {percent}% calibrated confidence ({detail})"
 
     if total == 0:
         return "> ✗ **Ungrounded** — no vault notes cited"
