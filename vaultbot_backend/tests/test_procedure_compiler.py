@@ -74,7 +74,8 @@ def test_compile_from_text_exemplar_procedure():
 def test_compile_procedure_caches_by_source_and_refreshes_on_change(tmp_path: Path):
     proc_path = tmp_path / "sample.md"
     proc_path.write_text(
-        "---\ntype: procedure\nstatus: experimental\n---\n## Steps\n1. ```python\nresult = 'first'\n```\n",
+        "---\ntype: procedure\nstatus: experimental\n---\n## Steps\n"
+        "1. ```python\nresult = 'first'\n```\n",
         encoding="utf-8",
     )
 
@@ -83,7 +84,8 @@ def test_compile_procedure_caches_by_source_and_refreshes_on_change(tmp_path: Pa
     assert first is second
 
     proc_path.write_text(
-        "---\ntype: procedure\nstatus: experimental\n---\n## Steps\n1. ```python\nresult = 'second'\n```\n",
+        "---\ntype: procedure\nstatus: experimental\n---\n## Steps\n"
+        "1. ```python\nresult = 'second'\n```\n",
         encoding="utf-8",
     )
     os.utime(proc_path, None)
