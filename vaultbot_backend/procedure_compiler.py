@@ -88,6 +88,7 @@ See:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import textwrap
@@ -96,6 +97,10 @@ from pathlib import Path
 from procedure_types import Procedure, Step  # noqa: F401 -- re-exported for callers
 
 logger = logging.getLogger(__name__)
+
+# Cache compiled procedures by file path and content hash so a changed note
+# recompiles immediately while unchanged notes reuse the same object.
+_PROCEDURE_COMPILE_CACHE: dict[str, tuple[str, Procedure]] = {}
 
 # PyYAML is optional -- only needed for ## Dispatch sections.
 # If missing, dispatch sections are silently skipped (no DSL).
@@ -617,5 +622,16 @@ def compile_procedure(file_path: str) -> Procedure | None:
     except Exception as e:  # noqa: BLE001 -- corrupt/locked file is non-fatal; caller treats None as "not a procedure"
         logger.debug("compile_procedure: could not read %s: %s", file_path, e)
         return None
+
+    source_key = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    cache_key = str(p.resolve())
+    cached = _PROCEDURE_COMPILE_CACHE.get(cache_key)
+    if cached is not None and cached[0] == source_key:
+        return cached[1]
+
     note_name = p.stem
-    return compile_from_text(note_name, text)
+    proc = compile_from_text(note_name, text)
+    if proc is not None:
+        proc.file_path = str(p)
+        _PROCEDURE_COMPILE_CACHE[cache_key] = (source_key, proc)
+    return proc

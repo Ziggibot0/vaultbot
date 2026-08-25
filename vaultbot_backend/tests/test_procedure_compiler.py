@@ -8,6 +8,9 @@ See [[Procedure-Subprocess-Architecture]] and
 [[Deterministic-Scaffolding-for-Small-Models]].
 """
 
+import os
+from pathlib import Path
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -17,6 +20,7 @@ from procedure_compiler import (
     _parse_frontmatter,
     _parse_steps,
     compile_from_text,
+    compile_procedure,
 )
 
 # ── Frontmatter ─────────────────────────────────────────────────────────
@@ -65,6 +69,30 @@ def test_compile_from_text_exemplar_procedure():
     text = "---\nexemplar_procedure: true\n---\n## Steps\n1. Do thing"
     proc = compile_from_text("X", text)
     assert proc is not None
+
+
+def test_compile_procedure_caches_by_source_and_refreshes_on_change(tmp_path: Path):
+    proc_path = tmp_path / "sample.md"
+    proc_path.write_text(
+        "---\ntype: procedure\nstatus: experimental\n---\n## Steps\n"
+        "1. ```python\nresult = 'first'\n```\n",
+        encoding="utf-8",
+    )
+
+    first = compile_procedure(str(proc_path))
+    second = compile_procedure(str(proc_path))
+    assert first is second
+
+    proc_path.write_text(
+        "---\ntype: procedure\nstatus: experimental\n---\n## Steps\n"
+        "1. ```python\nresult = 'second'\n```\n",
+        encoding="utf-8",
+    )
+    os.utime(proc_path, None)
+
+    third = compile_procedure(str(proc_path))
+    assert third is not first
+    assert third.steps[0].code == "result = 'second'"
 
 
 def test_compile_from_text_carries_allowed_tools():
