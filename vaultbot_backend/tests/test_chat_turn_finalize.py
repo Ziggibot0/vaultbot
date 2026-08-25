@@ -34,15 +34,11 @@ class TestScoreCodeGrounding:
         # can be written, so they must NOT trip the bypass flag.
         score = score_code_grounding([{"tool": "code_run"}])
         assert score["bypassed"] is False
-        score = score_code_grounding(
-            [{"tool": "code_run", "allow_write": False}]
-        )
+        score = score_code_grounding([{"tool": "code_run", "allow_write": False}])
         assert score["bypassed"] is False
 
     def test_write_capable_code_run_is_bypass(self):
-        score = score_code_grounding(
-            [{"tool": "code_run", "allow_write": True}]
-        )
+        score = score_code_grounding([{"tool": "code_run", "allow_write": True}])
         assert score["bypassed"] is True
 
     def test_code_write_is_bypass(self):
