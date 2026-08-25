@@ -82,3 +82,13 @@ class TestAuthRequiredForMethod:
     )
     def test_always_required_paths(self, path, method):
         assert is_auth_required_for_method(path, method) is True
+
+
+def test_cors_only_allows_obsidian_origin():
+    """Only the Obsidian app origin is allowed; localhost is rejected."""
+    import main
+
+    cors_mw = next(
+        m for m in main.app.user_middleware if m.cls.__name__ == "CORSMiddleware"
+    )
+    assert cors_mw.kwargs["allow_origins"] == ["app://obsidian.md"]

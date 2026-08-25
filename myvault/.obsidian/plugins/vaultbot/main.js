@@ -5119,13 +5119,20 @@ class VaultBotSidebarView extends ItemView {
 					// status line so the scholar sees verification happened.
 					try {
 						let verdicts = [];
-						try { verdicts = JSON.parse(msg.verdicts || '[]'); } catch (e) {}
+						if (Array.isArray(msg.verdicts)) {
+							verdicts = msg.verdicts;
+						} else {
+							try { verdicts = JSON.parse(msg.verdicts || '[]'); } catch (e) {}
+						}
+						const confidence = msg.confidence && typeof msg.confidence.calibrated_confidence === 'number'
+							? Math.round(msg.confidence.calibrated_confidence * 100)
+							: null;
 						const unsupported = Array.isArray(verdicts)
 							? verdicts.filter(v => v && v.verdict !== 'supported').length
 							: 0;
 						statusEl.setText(unsupported > 0
-							? `Verified — ${unsupported} claim(s) need review`
-							: 'Verified ✓');
+							? `Verified — ${unsupported} claim(s) need review${confidence !== null ? ` (${confidence}% confidence)` : ''}`
+							: `Verified ✓${confidence !== null ? ` (${confidence}% confidence)` : ''}`);
 					} catch (e) {
 						statusEl.setText('Verified ✓');
 					}
