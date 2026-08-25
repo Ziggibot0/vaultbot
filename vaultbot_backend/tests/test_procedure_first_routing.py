@@ -9,7 +9,7 @@ though fused retrieval had already surfaced the right procedure
 
 A. Code steps receive the runtime's procedure index (``procedures_index``)
    so meta-procedures never glob the vault for a hardcoded path.
-B. The Route-Task schema fallback reuses the fused-retrieval hint
+B. The embedding route payload reuses the fused-retrieval hint
    (selection over generation) instead of re-asking a small model.
 C. When a procedure is selected, raw "do it by hand" tools are withheld
    for the turn (VAULTBOT_PROCEDURE_FIRST=0 disables).
@@ -31,11 +31,11 @@ from agent_tools import (
     gate_tools_for_procedure_first,
     procedure_first_enabled,
 )
-from chat_turn_prep import _route_fallback_payload
+from chat_turn_prep import _embedding_route_payload
 from procedure_compiler import Step
 from procedure_step_executor import _run_code_step
 
-# ── A/B: Route-Task schema fallback prefers the fused hint ───────────────
+# ── A/B: embedding route payload prefers the fused hint ─────────────────
 
 
 def _proc_index(*names: str, flagged: tuple[str, ...] = ()) -> dict:
@@ -51,39 +51,39 @@ def _proc_index(*names: str, flagged: tuple[str, ...] = ()) -> dict:
     }
 
 
-def test_fallback_chain_uses_fused_hint():
+def test_embedding_route_uses_fused_hint():
     results = [{"file_path": "/vault/Review-PR-Procedure.md", "score": 0.5}]
-    payload = _route_fallback_payload(
+    payload = _embedding_route_payload(
         results, _proc_index("Review-PR-Procedure"), "crank out the prs please"
     )
     assert payload["procedure_chain"] == ["Review-PR-Procedure"]
     assert payload["category"] == "unknown"
-    assert payload["rationale_code"] == "schema_fallback"
+    assert payload["rationale_code"] == "embedding_route"
     assert payload["confidence"] == 0.0
 
 
-def test_fallback_chain_empty_when_retrieval_found_nothing():
-    payload = _route_fallback_payload([], _proc_index("Anything"), "do the thing")
+def test_embedding_route_empty_when_retrieval_found_nothing():
+    payload = _embedding_route_payload([], _proc_index("Anything"), "do the thing")
     assert payload["procedure_chain"] == []
 
 
-def test_fallback_chain_empty_when_hint_below_threshold():
+def test_embedding_route_empty_when_hint_below_threshold():
     # A weak retrieval score must not promote a procedure into the chain.
     results = [{"file_path": "/vault/Maybe.md", "score": 0.05}]
-    payload = _route_fallback_payload(results, _proc_index("Maybe"), "do the thing")
+    payload = _embedding_route_payload(results, _proc_index("Maybe"), "do the thing")
     assert payload["procedure_chain"] == []
 
 
-def test_fallback_skips_flagged_hint():
+def test_embedding_route_skips_flagged_hint():
     results = [{"file_path": "/vault/Bad.md", "score": 0.9}]
     idx = _proc_index("Bad", flagged=("Bad",))
-    payload = _route_fallback_payload(results, idx, "do the thing")
+    payload = _embedding_route_payload(results, idx, "do the thing")
     assert payload["procedure_chain"] == []
 
 
-def test_fallback_handles_missing_index():
+def test_embedding_route_handles_missing_index():
     results = [{"file_path": "/vault/X.md", "score": 0.9}]
-    payload = _route_fallback_payload(results, None, "do the thing")
+    payload = _embedding_route_payload(results, None, "do the thing")
     assert payload["procedure_chain"] == []
 
 
