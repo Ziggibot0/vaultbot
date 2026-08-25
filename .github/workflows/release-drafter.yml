@@ -7,14 +7,17 @@
 # still requires a human to click "Publish release" in the GitHub UI after
 # reviewing the draft notes. The release job in ci.yml then tags the
 # release when the draft is published.
+#
+# NOTE: only triggers on push to main, not on pull_request. release-drafter
+# requires its config file (release-drafter.yml) to already exist on the
+# default branch; running it on a PR that itself introduces that config
+# file fails with "Configuration file ... is not found. The configuration
+# file must reside in your default branch."
 name: Release drafter
 
 on:
   push:
     branches: [main]
-  pull_request:
-    # Keep the draft in sync as labels change on open PRs.
-    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
