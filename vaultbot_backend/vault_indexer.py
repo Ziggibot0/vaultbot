@@ -52,6 +52,11 @@ EMBEDDING_SCHEMA_VERSION = 4
 
 
 class VaultIndexer:
+    # Bound on the query-embedding memoization cache. Embeddings are
+    # deterministic for a given model + text, so caching is safe; the bound
+    # just prevents unbounded growth across a long-running process.
+    _EMBEDDING_CACHE_MAX = 128
+
     def __init__(
         self,
         vault_path: str,
@@ -81,6 +86,12 @@ class VaultIndexer:
         )
         self.dimension = None  # set after first embedding
         self.index = None
+        # Query-embedding memoization: the same query string is embedded
+        # multiple times per turn (vector channel, trigger gate, reranker),
+        # each a separate Ollama round-trip. Cache by (embed_model, text) so
+        # a turn's redundant calls collapse to one. Bounded LRU-ish dict.
+        self._embedding_cache: dict[tuple[str, str], np.ndarray] = {}
+        self._embedding_cache_order: list[tuple[str, str]] = []
         # Phase 1: id-keyed metadata + IndexIDMap2. _metadata: faiss id → meta dict;
         # _path_to_id: str(file_path) → faiss id (O(1) lookup). _next_id is monotonic;
         # tombstoned ids reused only after _rebuild_index compaction. The legacy
@@ -217,11 +228,35 @@ class VaultIndexer:
             return ""
 
     def _get_embedding(self, text: str) -> np.ndarray:
-        """Get embedding for text using Ollama (chunked for > 4000 chars)."""
+        """Get embedding for text using Ollama (chunked for > 4000 chars).
+
+        Memoized by (embed_model, text): the same query is embedded several
+        times per turn (vector channel, trigger gate, reranker), and each
+        was a separate Ollama round-trip. Returns a COPY so callers that
+        normalize in place (search_by_vector) can't corrupt the cache.
+        """
+        key = (getattr(self.ollama_client, "embed_model", ""), text)
+        # Lazy-init the cache so callers that build the indexer via
+        # __new__ (tests) don't need to set these attributes explicitly.
+        cache: dict = getattr(self, "_embedding_cache", None)
+        if cache is None:
+            cache = {}
+            self._embedding_cache = cache
+            self._embedding_cache_order = []
+        cached = cache.get(key)
+        if cached is not None:
+            return cached.copy()
         if len(text) > 4000:
-            return self._get_chunked_embedding(text)
-        embedding = self.ollama_client.embeddings(text)
-        return np.array(embedding, dtype=np.float32)
+            embedding = self._get_chunked_embedding(text)
+        else:
+            embedding = np.array(self.ollama_client.embeddings(text), dtype=np.float32)
+        cache[key] = embedding
+        self._embedding_cache_order.append(key)
+        # Bound the cache: evict oldest entries (FIFO) past the cap.
+        while len(self._embedding_cache_order) > self._EMBEDDING_CACHE_MAX:
+            oldest = self._embedding_cache_order.pop(0)
+            cache.pop(oldest, None)
+        return embedding.copy()
 
     _CHUNK_SIZE = CHUNK_SIZE
     _CHUNK_OVERLAP = CHUNK_OVERLAP
