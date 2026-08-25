@@ -565,11 +565,15 @@ class SelfImprover:
                 lines = len(text.splitlines()) if text else 0
                 return size, lines, text
 
-            stdout_size, stdout_lines, stdout_text = _read_stats(out_path)
-            stderr_size, stderr_lines, stderr_text = _read_stats(err_path)
-            stdout_head = _read_window(out_path, TUNABLES.code_run_stdout_tail, head=True)
+            stdout_size, stdout_lines, _ = _read_stats(out_path)
+            stderr_size, stderr_lines, _ = _read_stats(err_path)
+            stdout_head = _read_window(
+                out_path, TUNABLES.code_run_stdout_tail, head=True
+            )
             stdout_tail = _read_window(out_path, TUNABLES.code_run_stdout_tail)
-            stderr_head = _read_window(err_path, TUNABLES.code_run_stderr_tail, head=True)
+            stderr_head = _read_window(
+                err_path, TUNABLES.code_run_stderr_tail, head=True
+            )
             stderr_tail = _read_window(err_path, TUNABLES.code_run_stderr_tail)
             stdout_truncated = stdout_size > TUNABLES.code_run_stdout_tail
             stderr_truncated = stderr_size > TUNABLES.code_run_stderr_tail
@@ -591,7 +595,8 @@ class SelfImprover:
             if truncated:
                 result["output_truncated"] = True
                 result["_truncation_notice"] = (
-                    "Output was truncated to the head/tail window for this tool result. "
+                    "Output was truncated to the head/tail window for this "
+                    "tool result. "
                     f"stdout bytes={stdout_size}, stderr bytes={stderr_size}; "
                     f"stdout lines={stdout_lines}, stderr lines={stderr_lines}."
                 )
