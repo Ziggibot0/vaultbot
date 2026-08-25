@@ -1,13 +1,16 @@
-"""Tests for the procedure suggestion gate — the \"autofill\" nudge.
+"""Tests for the procedure suggestion gate — the "autofill" nudge.
 
 Pure-logic tests: no I/O, no LLM, no vault. Builds a synthetic first-tool
-index and verifies the gate fires/doesn't fire on the right (tool, message)
-combinations, including the once-per-session de-dup, the ``code_run``
-weak-signal floor, flagged-procedure skipping, and trigger-overlap ranking.
+index and verifies the gate fires only when the retrieval-selected
+preflight hint procedure starts with the tool the model just called,
+including the once-per-session de-dup and flagged-procedure skipping.
+Candidate selection is score-driven (the hint comes from FUSED retrieval
+upstream) — there are deliberately no keyword/trigger-overlap heuristics
+to test, because there are none in the gate.
 
 Motivated by session ``eb8143f7``: the model reached for raw ``vaultbot_sync``
 + ``code_run`` to sync the repo instead of calling
-``execute_procedure(\"Git-Sync-Upstream\")``.
+``execute_procedure("Git-Sync-Upstream")``.
 """
 
 from __future__ import annotations
@@ -68,7 +71,7 @@ def _idx_entry(first_tools, triggers, description="", status=""):
     }
 
 
-def test_gate_fires_when_tool_and_trigger_match():
+def test_gate_fires_when_hint_starts_with_called_tool():
     idx = {
         "Git-Sync-Upstream": _idx_entry(
             {"vaultbot_sync"},
@@ -76,9 +79,7 @@ def test_gate_fires_when_tool_and_trigger_match():
             description="Syncs local repo with upstream main.",
         )
     }
-    sug = check_procedure_suggestion(
-        "vaultbot_sync", "make sure that this repo is synced with upstream", idx
-    )
+    sug = check_procedure_suggestion("vaultbot_sync", "Git-Sync-Upstream", idx)
     assert sug is not None
     assert sug["procedure_suggestion"] == "Git-Sync-Upstream"
     assert sug["first_tool"] == "vaultbot_sync"
@@ -90,75 +91,53 @@ def test_gate_no_fire_when_tool_not_suggestible():
     idx = {
         "X": _idx_entry({"plan_task"}, ["plan a task"]),
     }
-    sug = check_procedure_suggestion("plan_task", "plan a task", idx)
+    sug = check_procedure_suggestion("plan_task", "X", idx)
     assert sug is None  # plan_task is not in _SUGGESTIBLE_TOOLS
 
 
-def test_gate_no_fire_when_no_procedure_calls_that_tool():
+def test_gate_no_fire_when_hint_uses_a_different_tool():
     idx = {
         "Git-Sync-Upstream": _idx_entry({"vaultbot_sync"}, ["sync"]),
     }
-    sug = check_procedure_suggestion("github_issues", "sync", idx)
+    sug = check_procedure_suggestion("github_issues", "Git-Sync-Upstream", idx)
     assert sug is None
 
 
-def test_gate_no_fire_when_trigger_does_not_overlap():
-    # Direct tool (vaultbot_sync) allows zero-overlap match per design
-    # (the tool itself is the cue), so use a NON-direct tool to test the
-    # trigger-overlap requirement. code_run is weak-signal: requires overlap.
+def test_gate_no_fire_when_no_hint():
+    # Retrieval found no matching procedure this turn -> the gate has no
+    # candidate and must stay silent (no lexical fallback heuristics).
     idx = {
         "Git-Status-Check": _idx_entry({"code_run"}, ["check the daily standup"]),
     }
-    # User message shares no words with the trigger -> no suggestion for code_run.
-    sug = check_procedure_suggestion("code_run", "sync the repo with upstream", idx)
+    sug = check_procedure_suggestion("code_run", "", idx)
     assert sug is None
 
 
-def test_gate_code_run_requires_trigger_overlap():
+def test_gate_no_fire_when_hint_not_in_index():
+    idx = {
+        "Git-Sync-Upstream": _idx_entry({"code_run"}, ["sync upstream repo"]),
+    }
+    sug = check_procedure_suggestion("code_run", "Nonexistent-Proc", idx)
+    assert sug is None
+
+
+def test_gate_fires_for_code_run_when_hint_shells_out():
+    # Procedures that shell out via subprocess surface as code_run in the
+    # first-tool index — the gate fires on the structural match alone.
     idx = {
         "Git-Sync-Upstream": _idx_entry({"code_run"}, ["sync upstream repo stash"]),
     }
-    # Overlap on "sync" and "upstream" -> fires.
-    sug = check_procedure_suggestion("code_run", "sync the upstream repo please", idx)
+    sug = check_procedure_suggestion("code_run", "Git-Sync-Upstream", idx)
     assert sug is not None
-
-
-def test_gate_vaultbot_sync_allows_zero_overlap():
-    # vaultbot_sync is a direct tool: the tool match is the cue, so a
-    # zero-overlap user message still fires (the model explicitly named
-    # the tool the procedure wraps).
-    idx = {
-        "Git-Sync-Upstream": _idx_entry(
-            {"vaultbot_sync"}, ["sync upstream repo stash"]
-        ),
-    }
-    sug = check_procedure_suggestion("vaultbot_sync", "yo what's good", idx)
-    assert sug is not None
+    assert sug["procedure_suggestion"] == "Git-Sync-Upstream"
 
 
 def test_gate_skips_flagged_procedures():
     idx = {
         "Bad-Proc": _idx_entry({"vaultbot_sync"}, ["sync"], status="flagged"),
     }
-    sug = check_procedure_suggestion("vaultbot_sync", "sync the repo", idx)
+    sug = check_procedure_suggestion("vaultbot_sync", "Bad-Proc", idx)
     assert sug is None  # flagged procedures are blocked from execution
-
-
-def test_gate_picks_highest_trigger_overlap():
-    idx = {
-        "Git-Sync-Upstream": _idx_entry({"vaultbot_sync"}, ["sync upstream repo"]),
-        "Git-Sync-Origin": _idx_entry(
-            {"vaultbot_sync"}, ["sync upstream repo with origin main"]
-        ),
-    }
-    # Both match; the second has more overlap ("origin", "main") -> wins.
-    sug = check_procedure_suggestion(
-        "vaultbot_sync",
-        "sync the upstream repo with origin main",
-        idx,
-    )
-    assert sug is not None
-    assert sug["procedure_suggestion"] == "Git-Sync-Origin"
 
 
 def test_gate_dedup_once_per_session():
@@ -167,33 +146,20 @@ def test_gate_dedup_once_per_session():
     }
     already: set[str] = set()
     sug1 = check_procedure_suggestion(
-        "vaultbot_sync", "sync upstream repo", idx, already_suggested=already
+        "vaultbot_sync", "Git-Sync-Upstream", idx, already_suggested=already
     )
     assert sug1 is not None
     assert "vaultbot_sync" in already
     # Second call same session -> no nudge (passes through).
     sug2 = check_procedure_suggestion(
-        "vaultbot_sync", "sync upstream repo", idx, already_suggested=already
+        "vaultbot_sync", "Git-Sync-Upstream", idx, already_suggested=already
     )
     assert sug2 is None
 
 
 def test_gate_no_fire_when_index_empty():
-    sug = check_procedure_suggestion("vaultbot_sync", "sync", {})
+    sug = check_procedure_suggestion("vaultbot_sync", "Git-Sync-Upstream", {})
     assert sug is None
-
-
-def test_gate_strips_stopwords_from_trigger_match():
-    # "the repo is synced" must not match a procedure whose trigger is
-    # "the daily check" — stopwords dropped, no real overlap.
-    idx = {
-        "Daily-Check": _idx_entry({"vaultbot_sync"}, ["the daily check"]),
-    }
-    sug = check_procedure_suggestion("vaultbot_sync", "the repo is synced", idx)
-    # vaultbot_sync is direct -> fires anyway (zero overlap is allowed).
-    # This is intended: the tool name is the cue. Verify the message is
-    # still well-formed.
-    assert sug is not None
 
 
 # ── build_first_tool_index (integration with the compiler) ──────────────
@@ -245,10 +211,8 @@ def test_build_index_from_synthetic_proc_index(tmp_path):
     assert entry["status"] == "experimental"
     assert entry["description"] == "Syncs local repo with upstream main."
     assert "sync" in entry["triggers"]  # from tags
-    # Gate should now fire end-to-end on a matching message.
-    sug = check_procedure_suggestion(
-        "vaultbot_sync", "sync the repo with upstream", idx
-    )
+    # Gate should now fire end-to-end on the retrieval-selected hint.
+    sug = check_procedure_suggestion("vaultbot_sync", "Git-Sync-Upstream", idx)
     assert sug is not None
     assert sug["procedure_suggestion"] == "Git-Sync-Upstream"
 
@@ -283,7 +247,7 @@ def _proc_index_entry(description="", status="", trigger=None, when_to_use=""):
 
 def test_name_suggestion_returns_none_on_exact_match():
     idx = {"Triage-GitHub-Issues": _proc_index_entry()}
-    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", "any", idx)
+    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", idx)
     assert sug is None
 
 
@@ -298,9 +262,7 @@ def test_name_suggestion_recovers_mangled_name():
             trigger=["solve github issue"],
         ),
     }
-    sug = check_procedure_name_suggestion(
-        "Triage- GitHub- Issues", "are you sure that's still open?", idx
-    )
+    sug = check_procedure_name_suggestion("Triage- GitHub- Issues", idx)
     assert sug is not None
     assert sug["procedure_suggestion"] == "Triage-GitHub-Issues"
     assert "Triage-GitHub-Issues" in sug["candidates"]
@@ -315,7 +277,7 @@ def test_name_suggestion_returns_top_k_candidates():
     }
     # "Proc- 3" (extra space) is NOT an exact match, but normalizes to the
     # same key as "Proc-3" -> should rank it first among the top-k.
-    sug = check_procedure_name_suggestion("Proc- 3", "do something", idx, k=5)
+    sug = check_procedure_name_suggestion("Proc- 3", idx, k=5)
     assert sug is not None
     assert len(sug["candidates"]) == 5
     assert sug["candidates"][0] == "Proc-3"
@@ -325,7 +287,7 @@ def test_name_suggestion_skips_flagged():
     idx = {
         "Triage-GitHub-Issues": _proc_index_entry(status="flagged"),
     }
-    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", "any", idx)
+    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", idx)
     # Exact name matches but it's flagged -> still returns None (no suggestion
     # for a blocked procedure; the caller's status gate handles the block).
     assert sug is None
@@ -336,16 +298,16 @@ def test_name_suggestion_no_fire_when_too_dissimilar():
         "Triage-GitHub-Issues": _proc_index_entry(description="triage issues"),
     }
     # A completely unrelated hallucinated name -> below similarity floor.
-    sug = check_procedure_name_suggestion("Zzzz-Qqqq-Wwww", "any", idx)
+    sug = check_procedure_name_suggestion("Zzzz-Qqqq-Wwww", idx)
     assert sug is None
 
 
 def test_name_suggestion_no_fire_when_index_empty():
-    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", "any", {})
+    sug = check_procedure_name_suggestion("Triage-GitHub-Issues", {})
     assert sug is None
 
 
 def test_name_suggestion_no_fire_when_name_empty():
     idx = {"Triage-GitHub-Issues": _proc_index_entry()}
-    sug = check_procedure_name_suggestion("", "any", idx)
+    sug = check_procedure_name_suggestion("", idx)
     assert sug is None

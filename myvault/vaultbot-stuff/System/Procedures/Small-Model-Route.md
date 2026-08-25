@@ -39,33 +39,23 @@ When the procedure surface doesn't obviously surface a match, the big model need
 ### Step 1: List all procedures with their when_to_use
 
 1. ```python
-import json, re
+import json
 
-proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
-procedures = []
-for p in proc_dir.glob("*.md"):
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        continue
-    if not text.startswith("---"):
-        continue
-    end = text.find("---", 3)
-    if end == -1:
-        continue
-    fm = text[3:end]
-    if "type: procedure" not in fm:
-        continue
-    name = p.stem
-    desc = ""
-    when = ""
-    for line in fm.split("\n"):
-        if line.strip().startswith("description:"):
-            desc = line.split(":", 1)[1].strip().strip('"').strip("'")
-        if line.strip().startswith("when_to_use:") or line.strip().startswith("when:"):
-            when = line.split(":", 1)[1].strip().strip('"').strip("'")
-    procedures.append({"name": name, "description": desc[:120], "when_to_use": when[:150]})
-
+# procedures_index is injected by the runtime (step_gate_runtime) — the
+# authoritative library snapshot: one dict per procedure with
+# name/description/when_to_use/status/model_cartridge. Do NOT glob the
+# vault for a hardcoded procedures path here: the folder moved once
+# already (vaultbot/ → vaultbot-stuff/) and the glob silently returned an
+# empty library, making every routing decision "no procedures found".
+procedures = [
+    {
+        "name": p.get("name", ""),
+        "description": (p.get("description") or "")[:120],
+        "when_to_use": (p.get("when_to_use") or "")[:150],
+    }
+    for p in procedures_index
+    if p.get("status", "").lower() != "flagged"
+]
 result = json.dumps({"procedures": procedures, "count": len(procedures)})
 ```
 
