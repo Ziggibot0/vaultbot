@@ -96,14 +96,15 @@ class BudgetState:
                 "Configure a local model as your default to avoid this."
             )
 
-        self.total_usd_spent += cost_usd
-        if self.total_usd_spent > self.usd_ceiling:
+        new_total = self.total_usd_spent + cost_usd
+        if new_total > self.usd_ceiling:
             raise BudgetExceeded(
                 f"Hard budget ceiling of ${self.usd_ceiling:.4f}/turn exceeded "
-                f"(spent ${self.total_usd_spent:.4f} after model='{model_name}'). "
+                f"(would spend ${new_total:.4f} after model='{model_name}'). "
                 "Stopping. Raise VAULTBOT_BUDGET_USD_PER_RUN or switch to a "
                 "local model."
             )
+        self.total_usd_spent = new_total
 
     def check_escalation(self, model_name: str) -> None:
         """Call before escalating to a big (cloud) model.

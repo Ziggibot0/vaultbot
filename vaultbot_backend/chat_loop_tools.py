@@ -432,7 +432,8 @@ async def execute_round_tools(
             "tool": tool_name,
             "result_summary": (tool_result_summary(tool_name, tool_result) or "")[:200],
             "result_signature": hashlib.sha1(
-                json.dumps(capped_result, default=str, sort_keys=True).encode("utf-8")
+                json.dumps(capped_result, default=str, sort_keys=True).encode("utf-8"),
+                usedforsecurity=False,
             ).hexdigest(),
         }
         # Code-grounding provenance: record whether a safe_write carried a
