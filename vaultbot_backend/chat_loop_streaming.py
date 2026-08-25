@@ -173,7 +173,7 @@ async def stream_llm_round(
                     write_partial(
                         st.partial_path,
                         user_message,
-                        st.final_answer + round_text,
+                        st.interim_text + st.final_answer + round_text,
                         st.thinking_text,
                     )
                     st._last_partial_write_s = _now_s
@@ -185,7 +185,7 @@ async def stream_llm_round(
             write_partial(
                 st.partial_path,
                 user_message,
-                st.final_answer + round_text,
+                st.interim_text + st.final_answer + round_text,
                 st.thinking_text,
             )
         from diagnostics import classify_error

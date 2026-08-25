@@ -349,6 +349,26 @@ def tool_actually_wrote(tool_name: str, result: Any) -> bool:
     return not result.get("error")
 
 
+def round_tool_outcome(tool_name: str, result: Any) -> str:
+    """Summarize the ACTUAL outcome of a tool call for the findings ledger.
+
+    Reads the tool result payload (not the write-failure heuristic) so the
+    ledger tells the model the truth about what happened (issue #386):
+    a failed search/read is ``failed(<error>)``, a procedure-suggestion
+    nudge is ``suggested``, and anything else is ``ok``.
+
+    Pure function; unit-tested in tests/test_findings_ledger.py.
+    """
+    if not isinstance(result, dict):
+        return "ok"
+    if "procedure_suggestion" in result or "proceed_keyword" in result:
+        return "suggested"
+    err = result.get("error")
+    if err:
+        return f"failed({str(err)[:60]})"
+    return "ok"
+
+
 # ---------------------------------------------------------------------------
 # Proactive tool-result aging -- keep the model focused on recent results
 # ---------------------------------------------------------------------------

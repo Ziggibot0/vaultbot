@@ -441,6 +441,13 @@ async def execute_round_tools(
                 tool_result.get("checks", {}).get("doc_source") == "ok"
             )
             _hist_entry["status"] = tool_result.get("status", "")
+        # Code-grounding bypass detection (issue #387): code_run is
+        # read-only by default (the guard preamble blocks writes), so a
+        # default code_run call is NOT a gate bypass. Record whether the
+        # caller explicitly opted into writes so score_code_grounding can
+        # tell a read-only inspection from a real file-modification path.
+        if tool_name == "code_run":
+            _hist_entry["allow_write"] = bool(tool_args.get("allow_write", False))
         st._turn_tool_history.append(_hist_entry)
 
     return all_tools, custom_schemas

@@ -31,6 +31,9 @@ from chat_context import (
     project_for_provider as _project_for_provider,
 )
 from chat_context import (
+    round_tool_outcome as _round_tool_outcome,
+)
+from chat_context import (
     tool_actually_wrote as _tool_actually_wrote,
 )
 from chat_loop_state import TurnState
@@ -124,7 +127,7 @@ async def run_agentic_loop(
                         "failed_write_count": st._turn_failed_write_count,
                     },
                 )
-                st.final_answer += (
+                st.final_answer = (st.final_answer or st.interim_text) + (
                     "\n\n*The loop was stopped after 3 consecutive failed "
                     "writes. The findings above are what I was able to "
                     "determine, but I was unable to complete the task.*"
@@ -181,7 +184,7 @@ async def run_agentic_loop(
                             ),
                         },
                     )
-                    st.final_answer += (
+                    st.final_answer = (st.final_answer or st.interim_text) + (
                         "\n\n*The loop was stopped after "
                         f"{st._consecutive_thought_rounds} consecutive "
                         "thought-only rounds. I was stuck in a thinking "
@@ -463,7 +466,7 @@ async def run_agentic_loop(
                     # The model is responsible for deciding when it's done.
                     # (test_no_framework_intervention_on_unfinished_plan
                     #  enforces this -- no plan-completion checks here.)
-                    st.final_answer += round_text
+                    st.final_answer = round_text
                     session_logger.log(
                         "turn_done",
                         {
@@ -514,10 +517,16 @@ async def run_agentic_loop(
             st._tool_rounds_executed += 1
             st._double_silent_once = False
 
-            # Accumulate non-final round text so partial file captures all
-            # streamed text.
+            # Accumulate non-final round text as INTERIM narration so the
+            # partial file captures all streamed text without polluting the
+            # persisted final answer (issue #388).
             if round_text.strip() and round_text.strip() != ".":
-                st.final_answer += round_text
+                st.interim_text += round_text
+
+            # Snapshot the conversation length so the findings ledger can
+            # read back exactly the tool messages appended THIS round
+            # (issue #386).
+            _pre_tool_msgs = len(conversation)
 
             all_tools, custom_schemas = await execute_round_tools(
                 svc,
@@ -537,8 +546,9 @@ async def run_agentic_loop(
             # --- Failed-write tracking (the ONLY safety net) ---
             # Count failed writes. 3 consecutive failed writes = genuine
             # thrash (model hammering a broken tool). This is the only
-            # framework-level break condition besides MAX_ROUNDS.
-            _round_failed_write = False
+            # framework-level break condition besides MAX_ROUNDS. Tool
+            # results are read back from the tool messages appended this
+            # round (issue #386: same payloads the findings ledger uses).
             for tc in round_tool_calls:
                 _tn = (tc.get("function", {}) or {}).get("name", "")
                 if _tn in _WRITE_TOOLS:
@@ -562,7 +572,6 @@ async def run_agentic_loop(
                         continue
                     if not _tool_actually_wrote(_tn, _tr):
                         st._turn_failed_write_count += 1
-                        _round_failed_write = True
                         session_logger.log(
                             "failed_write_detected",
                             {
@@ -578,16 +587,25 @@ async def run_agentic_loop(
                         st._turn_failed_write_count = 0
 
             # --- Findings ledger: append a 1-line entry for this round ---
-            _round_tools_summary = (
-                ", ".join(
-                    (tc.get("function", {}) or {}).get("name", "?")
-                    for tc in round_tool_calls
-                )
-                or "(no tools)"
-            )
-            _round_outcome = "write_failed" if _round_failed_write else "ok"
+            # Derive each tool's outcome from its ACTUAL result payload
+            # (the tool messages appended by execute_round_tools this
+            # round), not from the write-failure heuristic -- a failed
+            # read/search must not be reported as "ok", and a successful
+            # write tool must not be reported as "write_failed" when a
+            # DIFFERENT write tool in the same round failed (issue #386).
+            _outcomes: list[str] = []
+            for _m in conversation[_pre_tool_msgs:]:
+                if not (isinstance(_m, dict) and _m.get("role") == "tool"):
+                    continue
+                _tn = _m.get("tool_name", "?")
+                try:
+                    _tr = json.loads(_m.get("content", "{}"))
+                except (json.JSONDecodeError, TypeError):
+                    _tr = {}
+                _outcomes.append(f"{_tn}={_round_tool_outcome(_tn, _tr)}")
             _finding_entry = (
-                f"R{st.round_idx}: {_round_tools_summary} →' {_round_outcome}"
+                f"R{st.round_idx}: "
+                f"{', '.join(_outcomes) if _outcomes else '(no tools)'}"
             )
             if round_text.strip():
                 _finding_entry += f" | text: {round_text.strip()[:80]}"
@@ -636,7 +654,7 @@ async def run_agentic_loop(
                         {
                             "user_message": user_message,
                             "round_idx": st.round_idx,
-                            "accumulated": st.final_answer,
+                            "accumulated": st.interim_text + st.final_answer,
                             "thinking": st.thinking_text,
                             "tool_history": st._turn_tool_history,
                             "working_memory": snapshot_working_memory(wm),
@@ -735,7 +753,12 @@ async def run_agentic_loop(
 
     except Exception as e:  # noqa: BLE001
         session_logger.log_exception(e, context="handle_chat_agentic_loop")
-        write_partial(st.partial_path, user_message, st.final_answer, st.thinking_text)
+        write_partial(
+            st.partial_path,
+            user_message,
+            st.interim_text + st.final_answer,
+            st.thinking_text,
+        )
         session_logger.log(
             "partial_answer_saved_on_crash",
             {
