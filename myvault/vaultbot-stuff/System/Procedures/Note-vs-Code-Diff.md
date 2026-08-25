@@ -70,7 +70,7 @@ else:
     text = note_data["text"]
     # Find .py references
     py_files = list(set(re.findall(r'[\w_/]+\.py', text)))
-    backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+    backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
     code_chunks = []
     for pyf in py_files[:3]:
         cp = backend_dir / pyf

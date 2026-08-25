@@ -4,7 +4,7 @@ status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-22
-description: "Walk all backend .py files with ast, extract import dependencies, and build a forward/reverse dependency graph. Writes vaultbot/Knowledge/Architecture/Dependency-Graph.md. Deterministic AST walk — no LLM, no embeddings."
+description: "Walk all backend .py files with ast, extract import dependencies, and build a forward/reverse dependency graph. Writes vaultbot-stuff/Knowledge/Architecture/Dependency-Graph.md. Deterministic AST walk — no LLM, no embeddings."
 when_to_use: "When you need to understand which modules depend on which, or before editing code to predict blast radius. Called by Predict-Change-Impact and by Know-Thyself."
 falsifiable_if: The graph misses a real import, lists a phantom import, or the output note is unreadable.
 applies_to:
@@ -39,7 +39,7 @@ AST walk — no LLM, no embeddings.
 
 ## Output
 
-Writes `vaultbot/Knowledge/Architecture/Dependency-Graph.md` with:
+Writes `vaultbot-stuff/Knowledge/Architecture/Dependency-Graph.md` with:
 - One `## <module>` section per backend `.py` file
 - **Imports:** what this module imports from other backend modules
 - **Imported-by:** what other backend modules import this one
@@ -59,8 +59,8 @@ import json
 import os
 from pathlib import Path
 
-backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
-out_dir = Path(vault_path) / "vaultbot" / "Knowledge" / "Architecture"
+backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
+out_dir = Path(vault_path) / "vaultbot-stuff" / "Knowledge" / "Architecture"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_path = out_dir / "Dependency-Graph.md"
 

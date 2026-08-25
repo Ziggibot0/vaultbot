@@ -59,6 +59,7 @@ def _run_code_step(
     call_stack: list[str] | None = None,
     model_cartridge: str = "big",
     procedure_args: dict | None = None,
+    procedures_index: list[dict] | None = None,
 ) -> tuple[bool, str, str | None, str | None, dict]:
     """Execute a code step in a subprocess.
 
@@ -70,6 +71,12 @@ def _run_code_step(
     ``procedure_name`` and ``call_stack`` are passed to the subprocess
     so the injected ``run_procedure`` tool can detect cycles and enforce
     MAX_PROC_DEPTH when this step recurses into another procedure.
+
+    ``procedures_index`` is the runtime's compact procedure library
+    (name/description/when_to_use/status per procedure), injected into the
+    step namespace as ``procedures_index`` so meta-procedures (e.g.
+    Small-Model-Route) read the library from the runtime instead of
+    globbing the vault for a hardcoded directory path.
     """
     if step.code is None:
         return False, "", "code step has no code", "", {}
@@ -83,9 +90,12 @@ def _run_code_step(
         "from pathlib import Path\n"
         "\n"
         'vault_path = os.environ.get("VAULT_PATH", ".")\n'
+        "FRAMEWORK_ROOT = os.environ.get(\n"
+        '    "FRAMEWORK_ROOT", os.path.dirname(vault_path))\n'
         'prior_results = json.loads(os.environ.get("PRIOR_RESULTS", "{}"))\n'
         'allowed = json.loads(os.environ.get("PROCEDURE_ALLOWED_TOOLS", "[]"))\n'
         'procedure_args = json.loads(os.environ.get("PROCEDURE_ARGS", "{}"))\n'
+        'procedures_index = json.loads(os.environ.get("PROCEDURES_INDEX", "[]"))\n'
         'procedure_name = os.environ.get("PROCEDURE_SELF_NAME", "")\n'
         '_IGNORED_DIRS = {".git", ".obsidian", ".venv", "vaultbot_venv", '
         '"vaultbot_index", "sessions", "partials", "__pycache__"}\n'
@@ -95,11 +105,13 @@ def _run_code_step(
         '    "prior_results": prior_results,\n'
         '    "procedure_args": procedure_args,\n'
         '    "args": procedure_args,\n'
+        '    "procedures_index": procedures_index,\n'
         '    "procedure_name": procedure_name,\n'
         '    "Path": Path,\n'
         '    "json": json,\n'
         '    "os": os,\n'
         '    "vault_path": vault_path,\n'
+        '    "FRAMEWORK_ROOT": FRAMEWORK_ROOT,\n'
         '    "_IGNORED_DIRS": _IGNORED_DIRS,\n'
         "}\n"
         "\n"
@@ -141,11 +153,17 @@ def _run_code_step(
     # Prepare environment — scrubbed of secrets (API keys/tokens/passwords)
     # so LLM-authored procedure code cannot read or exfiltrate them. Only the
     # non-secret PROCEDURE_* overrides and PYTHONPATH/VAULT_PATH are added back.
+    # FRAMEWORK_ROOT is the repo root (parent of the vault): procedure code
+    # steps that need backend source paths (``vaultbot_backend/…``) resolve
+    # them against FRAMEWORK_ROOT, since those paths never lived inside the
+    # vault. See paths.py for the two-root layout.
     env = {
         **scrubbed_env(),
         "PYTHONPATH": str(backend_dir),
         "VAULT_PATH": vault_path,
+        "FRAMEWORK_ROOT": str(backend_dir.parent.resolve()),
         "PROCEDURE_ALLOWED_TOOLS": json.dumps(allowed_tools),
+        "PROCEDURES_INDEX": json.dumps(procedures_index or [], default=str),
         "PRIOR_RESULTS": json.dumps(prior_results, default=str),
         "PROCEDURE_SELF_NAME": procedure_name,
         "PROCEDURE_CALL_STACK": json.dumps(call_stack or []),

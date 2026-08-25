@@ -66,8 +66,8 @@ import os
 from pathlib import Path
 
 vault_root = Path(vault_path)
-dep_json_path = vault_root / "vaultbot" / "Knowledge" / "Architecture" / "Dependency-Graph.json"
-proc_json_path = vault_root / "vaultbot" / "Knowledge" / "Architecture" / "Procedure-Code-Map.json"
+dep_json_path = vault_root / "vaultbot-stuff" / "Knowledge" / "Architecture" / "Dependency-Graph.json"
+proc_json_path = vault_root / "vaultbot-stuff" / "Knowledge" / "Architecture" / "Procedure-Code-Map.json"
 
 target = args.get("target", "")
 depth = int(args.get("depth", 2))

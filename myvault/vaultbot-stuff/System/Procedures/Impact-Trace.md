@@ -48,7 +48,7 @@ target = args.get("function_name", args.get("target", ""))
 if not target:
     result = json.dumps({"error": "function_name or target argument required"})
 else:
-    backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+    backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
     importers = []
     callers = []
     for py in backend_dir.rglob("*.py"):
@@ -68,7 +68,7 @@ else:
                     callers.append({"file": rel, "line": i, "code": line.strip()[:100]})
 
     # Check procedures too
-    proc_dir = Path(vault_path) / "vaultbot" / "System" / "Procedures"
+    proc_dir = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures"
     proc_refs = []
     for p in proc_dir.glob("*.md"):
         try:

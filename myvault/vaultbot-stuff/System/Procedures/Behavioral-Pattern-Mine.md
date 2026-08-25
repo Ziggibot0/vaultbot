@@ -18,13 +18,13 @@ allowed_tools:
   - code_read
 summary: |
   Behavioral-Pattern-Mine scans session JSONL logs for recurring VaultBot tool-call sequences (n-grams of length 2-5) that appear across 3+ sessions and are NOT already covered by existing procedures.
-  1. List all session JSONL files under `vaultbot/vaultbot_backend/sessions`.
+  1. List all session JSONL files under `vaultbot-stuff/vaultbot_backend/sessions`.
   2. For each session, extract ordered tool-call sequences from tool_call_requested, custom_tool_executed, and tool_exec_enter events.
   3. Build n-gram frequency counts (lengths 2-5) across all sessions.
-  4. List all existing procedure names from `vaultbot/System/Procedures/`.
+  4. List all existing procedure names from `vaultbot-stuff/System/Procedures/`.
   5. Filter out sequences already covered by existing procedures.
   6. Rank remaining candidates by frequency x sequence length.
-  7. Write a JSON report to `vaultbot/Memory/Build-Log/behavioral-pattern-mine.json`.
+  7. Write a JSON report to `vaultbot-stuff/Memory/Build-Log/behavioral-pattern-mine.json`.
   8. Print a concise summary of top automation candidates.
 tags:
   - procedure
@@ -49,11 +49,11 @@ VaultBot performs the same tool-call sequences manually across many sessions, re
 
 ## Inputs
 
-No explicit arguments. The procedure scans `vaultbot/vaultbot_backend/sessions/` and `vaultbot/System/Procedures/`.
+No explicit arguments. The procedure scans `vaultbot-stuff/vaultbot_backend/sessions/` and `vaultbot-stuff/System/Procedures/`.
 
 ## Output Contract
 
-**File written:** `vaultbot/Memory/Build-Log/behavioral-pattern-mine.json`
+**File written:** `vaultbot-stuff/Memory/Build-Log/behavioral-pattern-mine.json`
 
 Human-readable summary is printed as the final output.
 
@@ -70,16 +70,16 @@ from collections import defaultdict
 
 # Resolve vault root (use injected vault_path from wrapper)
 vault_root = Path(vault_path)
-sessions_dir = vault_root / "vaultbot" / "vaultbot_backend" / "sessions"
-proc_dir = vault_root / "vaultbot" / "System" / "Procedures"
-output_dir = vault_root / "vaultbot" / "Memory" / "Build-Log"
+sessions_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend" / "sessions"
+proc_dir = vault_root / "vaultbot-stuff" / "System" / "Procedures"
+output_dir = vault_root / "vaultbot-stuff" / "Memory" / "Build-Log"
 output_dir.mkdir(parents=True, exist_ok=True)
 out_file = output_dir / "behavioral-pattern-mine.json"
 
 # Step 1: List all session JSONL files
 session_files = list(sessions_dir.rglob("*.jsonl"))
 if not session_files:
-    raise RuntimeError("No session logs found in vaultbot/vaultbot_backend/sessions.")
+    raise RuntimeError("No session logs found in vaultbot-stuff/vaultbot_backend/sessions.")
 
 # Step 2: Extract ordered tool-call sequences from each session JSONL
 # We mine THREE event types that represent VaultBot's actual tool calls:
@@ -220,7 +220,7 @@ from pathlib import Path
 from collections import defaultdict
 
 vault_root = Path(vault_path)
-sessions_dir = vault_root / "vaultbot" / "vaultbot_backend" / "sessions"
+sessions_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend" / "sessions"
 
 # Extract all stress_signal events across sessions
 stress_signals = []

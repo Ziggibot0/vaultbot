@@ -83,13 +83,13 @@ else:
     # Route directory if not specified
     if not directory:
         if note_type == "procedure":
-            directory = "vaultbot/System/Procedures"
+            directory = "vaultbot-stuff/System/Procedures"
         elif note_type in ("concept", "research", "reference"):
-            directory = "vaultbot/Knowledge/Concepts"
+            directory = "vaultbot-stuff/Knowledge/Concepts"
         elif note_type in ("memory", "chat"):
-            directory = "vaultbot/Memory/Chat"
+            directory = "vaultbot-stuff/Memory/Chat"
         else:
-            directory = "vaultbot/Knowledge/Concepts"
+            directory = "vaultbot-stuff/Knowledge/Concepts"
 
     # Get ALL existing notes across the entire vault
     all_files = vault_list()

@@ -32,11 +32,11 @@ their notes, their chat history, their API keys. The `.gitignore` already
 excludes these, but double-check before pushing:
 
 - `.env` — contains API keys and the owner's name
-- `vaultbot/Memory/` and `vaultbot/Knowledge/` — the user's notes, chats, research
-- `vaultbot/vaultbot_backend/sessions/` — chat logs
-- `vaultbot/vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
+- `myvault/vaultbot-stuff/Memory/` and `myvault/vaultbot-stuff/Knowledge/` — the user's notes, chats, research
+- `vaultbot_backend/sessions/` — chat logs
+- `vaultbot_backend/identity/` — the user's identity files (IDENTITY.md,
   SELF_MODEL.md) — these are personal, regenerate per user
-- `vaultbot/learningMaterial/` — the user's PDFs
+- `myvault/learningMaterial/` — the user's PDFs
 
 The `baseline/` folder holds templates; the `vaultbot_backend/identity/`
 folder holds *one user's* live identity. Don't confuse them.

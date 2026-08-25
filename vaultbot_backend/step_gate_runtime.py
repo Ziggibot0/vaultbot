@@ -53,6 +53,57 @@ from procedure_validators import (  # noqa: F401 — re-exported for tests/calle
 # ── Data structures ───────────────────────────────────────────────────────
 
 
+def _compact_procedures_index(
+    procedure_tracker: Any, vault_path: str
+) -> list[dict[str, str]]:
+    """Build the compact procedure library handed to every code step.
+
+    Meta-procedures (e.g. Small-Model-Route) need the list of procedures
+    with their description/when_to_use to make routing decisions. They used
+    to glob the vault for a hardcoded directory path — which broke silently
+    when the folder was renamed (``vaultbot/`` → ``vaultbot-stuff/``) and
+    returned an empty library. The runtime already holds the authoritative
+    index (the same one the chat handler uses to resolve
+    ``execute_procedure(name)``), so we serialize THAT into the step
+    namespace as ``procedures_index``. One source of truth, immune to vault
+    reorganisation.
+
+    Returns ``[]`` when no tracker is available (the step still runs; a
+    meta-procedure that requires the index fails loudly on the empty list
+    rather than silently globbing the wrong directory).
+    """
+    if procedure_tracker is None:
+        return []
+    idx = getattr(procedure_tracker, "_stem_index", None)
+    if idx is None:
+        try:
+            idx = procedure_tracker.get_procedure_index(vault_path)
+        except Exception:  # noqa: BLE001 — best-effort; empty index fails loudly downstream
+            return []
+    if not isinstance(idx, dict):
+        return []
+    compact: list[dict[str, str]] = []
+
+    def _scalar(fm: dict, key: str) -> str:
+        v = fm.get(key, "")
+        if isinstance(v, list):
+            return " ".join(str(x) for x in v).strip()
+        return str(v or "").strip()
+
+    for stem, entry in idx.items():
+        fm = (entry or {}).get("frontmatter") or {}
+        compact.append(
+            {
+                "name": stem,
+                "description": _scalar(fm, "description"),
+                "when_to_use": _scalar(fm, "when_to_use") or _scalar(fm, "when"),
+                "status": _scalar(fm, "status").lower(),
+                "model_cartridge": _scalar(fm, "model_cartridge").lower() or "big",
+            }
+        )
+    return compact
+
+
 @dataclass
 class StepResult:
     """Outcome of executing a single step.
@@ -330,6 +381,12 @@ async def execute_procedure(
     all_outputs: list[str] = []
     prior_results: dict[float, str] = {}
 
+    # The compact procedure library injected into every code step as
+    # ``procedures_index`` (see _compact_procedures_index). Built once per
+    # procedure run so all steps (and recursive children via run_procedure)
+    # see the same library snapshot.
+    _procedures_index = _compact_procedures_index(procedure_tracker, vault_path)
+
     # Build step lookup map
     step_map = {s.number: s for s in procedure.steps}
     executed_steps: set[int] = set()
@@ -421,6 +478,7 @@ async def execute_procedure(
                 call_stack=call_stack,
                 model_cartridge=getattr(procedure, "model_cartridge", "big"),
                 procedure_args=procedure_args,
+                procedures_index=_procedures_index,
             )
             if success:
                 # Merge subprocess prior_results back (step-added keys

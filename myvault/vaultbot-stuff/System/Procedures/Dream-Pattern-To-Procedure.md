@@ -46,7 +46,7 @@ Mined tool-call patterns are raw sequences, not procedures — they need a name,
 
 ## Inputs
 
-No explicit arguments. Reads `vaultbot/Memory/Build-Log/behavioral-pattern-mine.json`.
+No explicit arguments. Reads `vaultbot-stuff/Memory/Build-Log/behavioral-pattern-mine.json`.
 
 ## Output Contract
 
@@ -64,7 +64,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 vault_root = Path(vault_path)
-report_path = vault_root / "vaultbot" / "Memory" / "Build-Log" / "behavioral-pattern-mine.json"
+report_path = vault_root / "vaultbot-stuff" / "Memory" / "Build-Log" / "behavioral-pattern-mine.json"
 
 if not report_path.exists():
     raise RuntimeError("No pattern mine report found. Run Behavioral-Pattern-Mine first.")
@@ -144,7 +144,7 @@ if best_candidate is None:
         result = json.dumps({"status": "skipped", "reason": "no qualifying candidates"})
 else:
     # Read a sample session log to provide context
-    sessions_dir = vault_root / "vaultbot" / "vaultbot_backend" / "sessions"
+    sessions_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend" / "sessions"
     session_files = sorted(sessions_dir.rglob("*.jsonl"), reverse=True)
     
     target_tools = set(t.strip() for t in best_candidate["sequence"].split("->"))

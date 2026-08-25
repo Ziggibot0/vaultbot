@@ -47,7 +47,7 @@ func_name = args.get("function_name", "")
 if not func_name:
     result = json.dumps({"error": "function_name argument required"})
 else:
-    backend_dir = Path(vault_path) / "vaultbot" / "vaultbot_backend"
+    backend_dir = Path(FRAMEWORK_ROOT) / "vaultbot_backend"
     # Find all function definitions and calls
     all_funcs = {}  # name -> {file, line, calls: [names]}
     for py in backend_dir.rglob("*.py"):

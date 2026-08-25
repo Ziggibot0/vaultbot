@@ -66,7 +66,7 @@ Research notes with dead, low-credibility, or absent source links all look the s
 ## Inputs
 
 - `note_path` (required): the vault-relative path to the research note
-  to diagnose (e.g. `vaultbot/Knowledge/Research/Google-OAuth-20-...md`)
+  to diagnose (e.g. `vaultbot-stuff/Knowledge/Research/Google-OAuth-20-...md`)
 
 ## Steps
 

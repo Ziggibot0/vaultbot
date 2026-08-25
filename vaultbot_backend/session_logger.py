@@ -330,7 +330,7 @@ class SessionLogger:
         try:
             data: dict[str, Any] = {
                 "category": fallback_category,
-                "procedure_chain": list(fallback_chain or ["Small-Model-Route"]),
+                "procedure_chain": list(fallback_chain or []),
                 "confidence": round(float(confidence), 4),
                 "rationale_code": rationale_code,
             }

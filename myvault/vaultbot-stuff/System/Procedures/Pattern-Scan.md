@@ -60,7 +60,7 @@ The signal probes exist as standalone procedures so domain scanners can call the
 
 ## Output contract
 
-- **File written:** `vaultbot/Memory/Build-Log/pattern-scan-latest.json`
+- **File written:** `vaultbot-stuff/Memory/Build-Log/pattern-scan-latest.json`
   — the FULL per-note table + aggregates. Parents read this, NOT
   `final_output` (the CLI truncates `final_output` to 4000 chars).
 - **Return value (final step `result`):** a compact summary JSON:
@@ -115,7 +115,7 @@ from pathlib import Path
 
 # records is from Step 1
 vault = str(Path(vault_path).resolve())
-out_dir = Path(vault) / "vaultbot" / "Memory" / "Build-Log"
+out_dir = Path(vault) / "vaultbot-stuff" / "Memory" / "Build-Log"
 out_dir.mkdir(parents=True, exist_ok=True)
 out_file = out_dir / "pattern-scan-latest.json"
 

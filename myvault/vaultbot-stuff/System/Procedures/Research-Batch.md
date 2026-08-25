@@ -44,7 +44,7 @@ topics = args.get("topics", [])
 if not topics:
     # Fall back to dangling wikilinks from Pattern-Scan
     run_procedure("Find-Broken-Links")
-    out_file = str(Path(vault_path) / "vaultbot" / "Memory" / "Build-Log" / "pattern_scan_latest.json")
+    out_file = str(Path(vault_path) / "vaultbot-stuff" / "Memory" / "Build-Log" / "pattern_scan_latest.json")
     try:
         with open(out_file, "r", encoding="utf-8") as f:
             scan = json.load(f)
@@ -114,7 +114,7 @@ if isinstance(plans_raw, str):
 else:
     plans = plans_raw
 
-plan_file = str(Path(vault_path) / "vaultbot" / "Memory" / "Build-Log" / "research_batch_plan.json")
+plan_file = str(Path(vault_path) / "vaultbot-stuff" / "Memory" / "Build-Log" / "research_batch_plan.json")
 with open(plan_file, "w", encoding="utf-8") as f:
     json.dump(plans, f, indent=2)
 

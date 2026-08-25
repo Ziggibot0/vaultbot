@@ -70,7 +70,7 @@ result = json.dumps(contract, indent=2)
 2. ```python
 import json
 try:
-    listing = vault_list(directory="vaultbot/System/Procedures")
+    listing = vault_list(directory="vaultbot-stuff/System/Procedures")
     files = listing if isinstance(listing, list) else json.loads(listing).get("files", [])
     names = sorted(f.replace(".md", "").split("/")[-1] for f in files)
     result = json.dumps({"available_procedures": names, "count": len(names),
@@ -113,5 +113,5 @@ This procedure fails if a bootstrapped small model still raw-calls dangerous too
 ## Related
 
 - [[Route-Task]] — the front door every request goes through after bootstrap
-- [[Small-Model-Route]] — the single-procedure routing fallback
+- [[Small-Model-Route]] — single-procedure matcher the big model can call when the procedure surface misses
 - [[Safe-Write]] — the procedure-wrapped edit a bootstrapped model must route to

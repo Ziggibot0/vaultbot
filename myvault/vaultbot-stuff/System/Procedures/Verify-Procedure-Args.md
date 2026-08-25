@@ -48,9 +48,9 @@ proc_path = args.get("procedure_path", args.get("note_path", ""))
 if not proc_path:
     result = json.dumps({"error": "procedure_path or note_path argument required"})
 else:
-    p = Path(vault_path) / "vaultbot" / "System" / "Procedures" / proc_path
+    p = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures" / proc_path
     if not p.exists() and not proc_path.endswith(".md"):
-        p = Path(vault_path) / "vaultbot" / "System" / "Procedures" / f"{proc_path}.md"
+        p = Path(vault_path) / "vaultbot-stuff" / "System" / "Procedures" / f"{proc_path}.md"
     if not p.exists():
         p = Path(proc_path)
     if not p.exists():
