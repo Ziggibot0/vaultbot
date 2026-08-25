@@ -80,4 +80,5 @@ def test_verification_summary_rolls_up_to_answer_confidence(tmp_path):
     assert confidence["unsupported_claims"] == 1
     assert confidence["contradicted_claims"] == 1
     assert confidence["raw_confidence"] == 0.4
+    assert confidence["observed_quality"] == 0.4
     assert confidence["band"] == "moderate"

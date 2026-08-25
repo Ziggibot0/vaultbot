@@ -450,8 +450,39 @@ async def run_background_tasks(
                 )
                 return
             _final = _verify.get("final_output", "")
+            _verify_summary: dict = {}
+            if isinstance(_final, str) and _final.strip():
+                try:
+                    _parsed_verify = json.loads(_final)
+                    if isinstance(_parsed_verify, dict):
+                        _verify_summary = _parsed_verify
+                    elif isinstance(_parsed_verify, list):
+                        _verdict_items = [
+                            item for item in _parsed_verify if isinstance(item, dict)
+                        ]
+                        _verify_summary = {
+                            "total": len(_verdict_items),
+                            "supported": sum(
+                                1
+                                for item in _verdict_items
+                                if item.get("verdict") == "supported"
+                            ),
+                            "unsupported": sum(
+                                1
+                                for item in _verdict_items
+                                if item.get("verdict") == "unsupported"
+                            ),
+                            "contradicted": sum(
+                                1
+                                for item in _verdict_items
+                                if item.get("verdict") == "contradicted"
+                            ),
+                            "verdicts": _verdict_items,
+                        }
+                except json.JSONDecodeError:
+                    _verify_summary = {}
             _verified_confidence = svc.calibration_tracker.estimate_answer_confidence(
-                verification_summary=_final
+                verification_summary=_verify_summary or None
             )
             if _verified_confidence:
                 svc.calibration_tracker.log_answer_confidence(
@@ -471,7 +502,8 @@ async def run_background_tasks(
                     json.dumps(
                         {
                             "type": "provenance_verified",
-                            "verdicts": _final,
+                            "verdicts": _verify_summary.get("verdicts", []),
+                            "verification_summary": _verify_summary or None,
                             "confidence": _verified_confidence or None,
                         }
                     ),

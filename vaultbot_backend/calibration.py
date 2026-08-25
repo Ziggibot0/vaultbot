@@ -12,7 +12,7 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -69,6 +69,9 @@ class CalibrationTracker:
         r"\bactually (good|great|nice|cool|yeah|yes)\b",
         r"\bno,?\s*i (think|believe|want|need|mean)\b",
     )
+
+    def _utc_now(self) -> str:
+        return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     def __init__(self, log_path: str | None = None):
         self.log_path = log_path or os.path.join(
@@ -173,7 +176,8 @@ class CalibrationTracker:
         )
         if total <= 0:
             return 0.0
-        weighted_negative = unsupported + (2 * contradicted)
+        unknown = max(0, total - (supported + unsupported + contradicted))
+        weighted_negative = unsupported + unknown + (2 * contradicted)
         denom = supported + weighted_negative
         if denom <= 0:
             return 0.0
@@ -239,11 +243,13 @@ class CalibrationTracker:
             summary = self._parse_verification_summary(verification_summary)
             if not summary:
                 return {}
-            payload = self.calibrate_confidence(self._verification_confidence(summary))
+            verified_quality = self._verification_confidence(summary)
+            payload = self.calibrate_confidence(verified_quality)
             payload.update(
                 {
                     "stage": "verified",
                     "band": self._confidence_band(payload["calibrated_confidence"]),
+                    "observed_quality": verified_quality,
                     "verification_summary": summary,
                     "total_claims": int(summary.get("total", 0) or 0),
                     "supported_claims": int(summary.get("supported", 0) or 0),
@@ -278,7 +284,7 @@ class CalibrationTracker:
         if not answer or not confidence:
             return {}
         entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": self._utc_now(),
             "answer_key": self._answer_key(answer),
             "answer_excerpt": (answer or "")[:240],
             "stage": confidence.get("stage", "unknown"),
@@ -298,7 +304,9 @@ class CalibrationTracker:
             "corrected": False,
         }
         if confidence.get("stage") == "verified":
-            entry["observed_quality"] = entry["raw_confidence"]
+            entry["observed_quality"] = round(
+                _clamp01(confidence.get("observed_quality", 0.0) or 0.0), 4
+            )
             entry["outcome_source"] = "verification"
             entry["verification_summary"] = confidence.get("verification_summary", {})
         data = self._load()
@@ -441,7 +449,7 @@ class CalibrationTracker:
             )
 
         entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": self._utc_now(),
             "user_message": user_message[:500],
             "prev_answer": prev_answer[:2000] if prev_answer else "",
             "failure_type": failure_type,
@@ -482,7 +490,7 @@ class CalibrationTracker:
         (false negatives)
         """
         entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": self._utc_now(),
             "gate": gate_name,
             "note_path": note_path,
             "decision": decision,

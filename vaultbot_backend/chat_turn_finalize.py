@@ -426,7 +426,7 @@ async def finalize_turn(
             {
                 "type": "answer_done",
                 "content": final_answer,
-                "confidence": _confidence or None,
+                "confidence": _confidence if _confidence else None,
             }
         ),
         websocket,
