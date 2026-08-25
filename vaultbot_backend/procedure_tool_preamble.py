@@ -108,11 +108,12 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             "    # keep reasoning (synthesis needs it).\n"
             '    _think = False if _cartridge == "small" else None\n'
             '    def llm_generate(prompt, system="You are a procedure executor. '
-            'Follow the instruction. Output only the result."):\n'
+            'Follow the instruction. Output only the result.", '
+            "max_predict=256, timeout=30, think=_think):\n"
             '        messages = [{"role": "system", "content": system}, '
             '{"role": "user", "content": prompt}]\n'
             "        result = _client.chat(messages=messages, stream=False, "
-            "think=_think, max_predict=256, timeout=30)\n"
+            "think=think, max_predict=max_predict, timeout=timeout)\n"
             '        return result.get("response", "")\n'
             '    namespace["llm_generate"] = llm_generate\n'
         )

@@ -35,6 +35,14 @@ class TestLlmGenerateBounds:
         preamble = _build_tool_preamble(["llm_generate"])
         assert "think=_think" in preamble
 
+    def test_llm_generate_allows_override_args(self):
+        preamble = _build_tool_preamble(["llm_generate"])
+        assert "def llm_generate(prompt, system=" in preamble
+        assert "max_predict=256" in preamble
+        assert "timeout=30" in preamble
+        assert "max_predict=max_predict" in preamble
+        assert "timeout=timeout" in preamble
+
     def test_no_llm_generate_when_not_allowed(self):
         # A procedure without llm_generate in allowed_tools must not inject
         # the wrapper at all.
