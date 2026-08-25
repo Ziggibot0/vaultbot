@@ -21,7 +21,7 @@ This module injects a *guard preamble* into the subprocess that:
    ``*_config.json`` raise. ``.env``, ``.env.*``, and ``providers.json``
    are blocked unconditionally (regardless of location); ``*_tokens.json``
    and ``*_config.json`` are blocked only when they live under the repo
-   root (to avoid false positives on unrelated package fixtures).
+   root (or when repo root is unavailable, fail-closed to block).
    ``scrubbed_env()`` strips secret-named env vars but not secret files
    on disk; this closes that hole.
 
