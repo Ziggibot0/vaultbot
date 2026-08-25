@@ -238,7 +238,7 @@ class VaultIndexer:
         key = (getattr(self.ollama_client, "embed_model", ""), text)
         # Lazy-init the cache so callers that build the indexer via
         # __new__ (tests) don't need to set these attributes explicitly.
-        cache: dict = getattr(self, "_embedding_cache", None)
+        cache = getattr(self, "_embedding_cache", None)
         if cache is None:
             cache = {}
             self._embedding_cache = cache
