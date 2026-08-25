@@ -26,6 +26,9 @@ jobs:
   lint-and-test:
     name: ruff + pyright + pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # gitleaks-action posts review comments on PRs
     strategy:
       fail-fast: false
       matrix:
