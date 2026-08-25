@@ -345,6 +345,42 @@ class TestBuildTrustBadge:
         assert "note" in badge
         assert "notes" not in badge
 
+    def test_graded_badge_with_calibrated_confidence(self):
+        score = {
+            "total_wikilinks": 2,
+            "allowed_cited": 2,
+            "failed": False,
+            "grounding_score": 1.0,
+        }
+        confidence = {
+            "stage": "grounding",
+            "band": "high",
+            "calibrated_confidence": 0.82,
+        }
+        badge = build_trust_badge(score, confidence)
+        assert "High confidence" in badge
+        assert "82%" in badge
+        assert "2/2 citations grounded" in badge
+
+    def test_verified_badge_uses_claim_counts(self):
+        score = {
+            "total_wikilinks": 2,
+            "allowed_cited": 2,
+            "failed": False,
+            "grounding_score": 1.0,
+        }
+        confidence = {
+            "stage": "verified",
+            "band": "moderate",
+            "calibrated_confidence": 0.61,
+            "supported_claims": 3,
+            "total_claims": 5,
+        }
+        badge = build_trust_badge(score, confidence)
+        assert "Moderate confidence" in badge
+        assert "61%" in badge
+        assert "3/5 claims supported" in badge
+
 
 class TestBuildSourcesBlock:
     def test_lists_cited_notes(self):
