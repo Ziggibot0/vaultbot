@@ -386,8 +386,11 @@ META_TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "name": "code_run",
             "description": (
                 "Execute Python code in a sandboxed subprocess to test it "
-                "before writing or adopting it. Returns stdout, stderr, and "
-                "exit code. Use this to verify new tools work before creating "
+                "before writing or adopting it. Returns stdout, stderr, exit "
+                "code, and truncation metadata. Large outputs are capped and "
+                "returned as head/tail slices plus total byte/line counts so "
+                "you can reason about partial results without losing the entire "
+                "signal. Use this to verify new tools work before creating "
                 "them. IMPORTANT: code_run is for TESTING only — do NOT use it "
                 "to write or modify files. Use safe_write (Python), "
                 "js_safe_write (JavaScript), vault_safe_write (markdown), or "
