@@ -13,6 +13,7 @@ This is a leaf module in the chat-handler family (see ``chat_context.py``,
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -430,6 +431,9 @@ async def execute_round_tools(
             "round": st.round_idx,
             "tool": tool_name,
             "result_summary": (tool_result_summary(tool_name, tool_result) or "")[:200],
+            "result_signature": hashlib.sha1(
+                json.dumps(capped_result, default=str, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
         }
         # Code-grounding provenance: record whether a safe_write carried a
         # doc_source (the official-docs URL proving the edit was checked
