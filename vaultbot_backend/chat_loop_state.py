@@ -29,8 +29,14 @@ class TurnState:
     performs I/O or touches ``Services``.
     """
 
-    # Accumulated answer text (streamed chunks + non-final round text).
+    # Accumulated answer text (the FINAL synthesis round only).
     final_answer: str = ""
+    # Interim narration streamed during tool-calling rounds ("Let me
+    # check X..."). Kept separate from final_answer so the persisted chat
+    # history and chat notes read as a clean synthesis instead of a
+    # scratchpad (issue #388). Still captured in partial files and
+    # checkpoints so a crash loses nothing.
+    interim_text: str = ""
     # Accumulated reasoning text (the model's thinking stream).
     thinking_text: str = ""
     # Total streamed chunks across all rounds (for the llm_generate log).
