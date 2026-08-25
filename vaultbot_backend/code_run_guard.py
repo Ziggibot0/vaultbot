@@ -18,10 +18,12 @@ This module injects a *guard preamble* into the subprocess that:
 
 3. **Blocks reads of secret files** (issue #229) — ``open('.env')``,
    ``Path('providers.json').read_text()``, ``*_tokens.json``,
-   ``*_config.json`` *inside the repo root* raise. ``scrubbed_env()``
-   strips secret-named env vars but not secret files on disk; this closes
-   that hole. Scoped to the repo root so a test that reads an unrelated
-   ``config.json`` (e.g. a package fixture) is not falsely blocked.
+   ``*_config.json`` raise. ``.env``, ``.env.*``, and ``providers.json``
+   are blocked unconditionally (regardless of location); ``*_tokens.json``
+   and ``*_config.json`` are blocked only when they live under the repo
+   root (to avoid false positives on unrelated package fixtures).
+   ``scrubbed_env()`` strips secret-named env vars but not secret files
+   on disk; this closes that hole.
 
 This is defense-in-depth, NOT a true OS sandbox (see ``subprocess_utils.py``
 and ``SECURITY.md`` for the residual-risk note). A determined attacker who
@@ -75,32 +77,35 @@ def _code_run_network_blocked(*_a, **_k):
     )
 
 # --- secret-file detection (issue #229) -----------------------------------
-# A path is protected if its basename is a known secret/credential filename
-# AND (when a repo root is known) it lives under that repo root. Scoping to
-# the repo root avoids false positives on unrelated files with the same name.
+# Two tiers:
+#  • Always-blocked: .env, .env.*, providers.json — these names are
+#    unconditionally sensitive wherever they appear on disk.
+#  • Repo-scoped: *_tokens.json, *_config.json — only blocked when they
+#    live under _REPO_ROOT, to avoid false positives on package fixtures
+#    (e.g. a test that reads an unrelated tokens.json in a temp dir).
 def _is_protected_secret(path):
     try:
         p = _os.path.realpath(str(path))
     except Exception:
         return False
     base = _os.path.basename(p)
-    if not (
-        base == ".env"
-        or base.startswith(".env.")
-        or base == "providers.json"
-        or base.endswith("_tokens.json")
-        or base.endswith("_config.json")
-    ):
-        return False
-    if not _REPO_ROOT:
+    # Always-blocked names — no repo-root scoping needed.
+    if base == ".env" or base.startswith(".env.") or base == "providers.json":
         return True
-    try:
-        root = _os.path.realpath(_REPO_ROOT)
-        if _os.path.commonpath([root, p]) != root:
-            return False  # outside the repo root -> not a repo secret
-    except Exception:
-        return False
-    return True
+    # Repo-scoped names — only block if under the known repo root to avoid
+    # false positives on package fixtures.  When _REPO_ROOT is unset we
+    # cannot confirm location, so we fail closed (block) for safety.
+    if base.endswith("_tokens.json") or base.endswith("_config.json"):
+        if not _REPO_ROOT:
+            return True  # no root known → fail closed
+        try:
+            root = _os.path.realpath(_REPO_ROOT)
+            if _os.path.commonpath([root, p]) != root:
+                return False  # outside the repo root -> not a repo secret
+        except Exception:
+            return False
+        return True
+    return False
 
 # --- builtins.open: block writes AND secret reads -------------------------
 _orig_open = _builtins.open
