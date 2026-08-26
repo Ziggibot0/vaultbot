@@ -166,6 +166,8 @@ async def finalize_turn(
     _is_temporal = bool(getattr(st, "_is_temporal_question", False))
     _is_coaching = bool(getattr(st, "_is_coaching_turn", False))
     _is_conversational = False
+    _delivery_decision = None
+    _verification_summary: dict = {}
     _graph_lookup: Callable[[str], bool] | None = None
     # Tool-sourced answer detection (issue #132): when the turn's facts
     # came from LIVE tool calls (calendar, code_read, github_issues, etc.)
@@ -324,6 +326,74 @@ async def finalize_turn(
     except Exception as _e:  # noqa: BLE001 — best-effort
         session_logger.log("code_grounding_check_failed", {"error": str(_e)})
 
+    # --- Synchronous claim entailment: authoritative delivery gate -------
+    # Citation presence proves only that a note exists in the retrieved set.
+    # Before any substantive prose reaches answer_done, verify that each
+    # cited claim is entailed by its source. Missing/malformed verification
+    # fails closed into a transparent truth-gap response.
+    try:
+        from citation_gate import extract_wikilinks
+        from provenance_policy import (
+            build_truth_gap,
+            decide_delivery,
+            is_pure_acknowledgement,
+        )
+        from provenance_runtime import verify_answer_delivery
+
+        _is_acknowledgement = is_pure_acknowledgement(final_answer)
+        if _is_idk or _is_acknowledgement:
+            _delivery_decision = decide_delivery(None, substantive=False)
+        elif extract_wikilinks(final_answer):
+            _delivery_decision, _verification_summary = await verify_answer_delivery(
+                svc,
+                websocket,
+                session_logger,
+                "",
+                final_answer,
+            )
+            if _score.get("ungrounded_sentences", 0) > 0:
+                _delivery_decision = decide_delivery(
+                    [
+                        *(_verification_summary.get("verdicts", [])),
+                        {
+                            "claim": "one or more answer sentences lack evidence",
+                            "verdict": "unsupported",
+                        },
+                    ]
+                )
+        else:
+            _delivery_decision = decide_delivery(None)
+
+        session_logger.log(
+            "provenance_delivery_decision",
+            {
+                **_delivery_decision.as_dict(),
+                "verification_summary": _verification_summary,
+            },
+        )
+        if not _delivery_decision.deliverable:
+            session_logger.log(
+                "truth_gap",
+                {
+                    "disposition": _delivery_decision.disposition,
+                    "blocked_answer_length": len(final_answer),
+                },
+            )
+            final_answer = build_truth_gap(_delivery_decision)
+            _score = {}
+            _confidence = {}
+    except Exception as _e:  # noqa: BLE001
+        from provenance_policy import build_truth_gap, decide_delivery
+
+        _delivery_decision = decide_delivery(None)
+        session_logger.log(
+            "provenance_delivery_failed",
+            {"error": str(_e), **_delivery_decision.as_dict()},
+        )
+        final_answer = build_truth_gap(_delivery_decision)
+        _score = {}
+        _confidence = {}
+
     # --- Positive provenance surface: trust badge + Sources block --------
     # After grounding enforcement, append a POSITIVE affordance so a scholar
     # can see where the answer came from: a one-line trust badge + a
@@ -334,7 +404,9 @@ async def finalize_turn(
     # just the irrelevant notes the model was told it could cite, not
     # real provenance for a factual claim).
     if (
-        not _is_idk
+        _delivery_decision is not None
+        and _delivery_decision.deliverable
+        and not _is_idk
         and not _is_temporal
         and not _is_coaching
         and not _is_conversational
@@ -343,9 +415,9 @@ async def finalize_turn(
         try:
             from citation_gate import build_sources_block, build_trust_badge
 
-            if _score:
+            if _verification_summary:
                 _confidence = svc.calibration_tracker.estimate_answer_confidence(
-                    grounding_score=_score
+                    verification_summary=_verification_summary
                 )
                 if _confidence:
                     session_logger.log("answer_confidence_estimated", _confidence)
