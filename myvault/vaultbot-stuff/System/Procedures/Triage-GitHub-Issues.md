@@ -4,12 +4,11 @@ status: experimental
 baseline: true
 model_cartridge: small
 created: 2026-08-22
-description: "Triage the VaultBot repo's open GitHub issues: score each on a deterministic urgency/importance rubric (7 Habits quadrant Q1-Q4), pick the single top Q1 issue, hand it off to Solve-GitHub-Issue, and report the full quadrant table. Read-only on GitHub except for the Solve-GitHub-Issue handoff."
-when_to_use: "When asked to 'triage the issues', 'what should we fix first', 'prioritize our GitHub issues', or as the first step of an autonomous issue sweep."
-falsifiable_if: "The procedure ranks a documentation issue above a correctness bug, or reports a Q1 issue that is not actually open, or hands off an issue that is not the top-ranked Q1."
+description: "Triage the VaultBot repo's open GitHub issues: score each on a deterministic urgency/importance rubric (7 Habits quadrant Q1-Q4), identify the highest-priority Q1 issue, and report the full quadrant table. Read-only on GitHub."
+when_to_use: When asked to 'triage the issues', 'what should we fix first', 'prioritize our GitHub issues', or as the first step of an autonomous issue sweep.
+falsifiable_if: The procedure ranks a documentation issue above a correctness bug, reports a Q1 issue that is not actually open, or describes priority metadata as proof of implementation ease.
 allowed_tools:
   - code_read
-  - run_procedure
 summary: Triage-GitHub-Issues
 tags:
   - procedure
@@ -24,20 +23,19 @@ tags:
 ## Purpose
 
 List the VaultBot repo's open GitHub issues, score each on a deterministic
-urgency/importance rubric (the 7 Habits quadrant), pick the single
-highest-priority Q1 issue, hand it off to Solve-GitHub-Issue, and report the
-full quadrant table back to the user.
+urgency/importance rubric (the 7 Habits quadrant), identify the single
+highest-priority Q1 issue, and report the full quadrant table back to the user.
+This ranking does not establish which issue is easiest to implement.
 
 ## Why This Exists
 
 "Fix the most important issue" is only actionable if "most important" is
-defined deterministically. VaultBot can solve a single issue end-to-end
-(Solve-GitHub-Issue), but it has no way to rank open issues and pick the
-most important one first. This procedure closes that gap by turning the
+defined deterministically. This procedure closes that gap by turning the
 judgment into a label→score table plus a recency term, so the small-model
 cartridge applies it consistently without freeform gut feel. The tradeoff
 is that it ranks on metadata (labels, dates) rather than reading every body
-— reading bodies is Solve-GitHub-Issue's job once the top issue is chosen.
+— implementation ease remains unknown until issue bodies and relevant code
+surfaces are inspected.
 
 ## Steps
 
@@ -140,35 +138,8 @@ else:
 print(result)
 ```
 
-### Step 2: Hand the top Q1 issue off to Solve-GitHub-Issue
-
-```python
-import json
-
-try:
-    data = json.loads(output)
-except Exception:
-    data = {}
-top_number = data.get("top_number")
-if not top_number:
-    result = json.dumps(
-        {"error": "No Q1 issue to solve", "quadrant_table": data.get("quadrant_table", [])}
-    )
-else:
-    solved = run_procedure("Solve-GitHub-Issue", {"issue_number": int(top_number)})
-    result = json.dumps(
-        {
-            "top_number": top_number,
-            "solve_result": solved,
-            "quadrant_table": data.get("quadrant_table", []),
-        },
-        default=str,
-    )
-print(result)
-```
-
 ## Related
 
-- [[Solve-GitHub-Issue]] — the fix-to-PR loop this procedure hands the top issue to
+- [[Solve-GitHub-Issue]] — may be run separately after the user chooses an issue
 - [[Review-Contributions]] — the review-and-merge step inside Solve-GitHub-Issue
 - [[Submit-Contribution]] — the PR submission step inside Solve-GitHub-Issue

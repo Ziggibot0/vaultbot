@@ -111,6 +111,9 @@ _EVENT_CATEGORIES: dict[str, str] = {
     "provenance_verified_emit_failed": "background",
     "provenance_surface_failed": "background",
     "provenance_surface_skipped_idk": "background",
+    "provenance_delivery_decision": "provenance",
+    "provenance_delivery_failed": "provenance",
+    "truth_gap": "provenance",
     "model_relevance_tags_failed": "background",
 }
 
