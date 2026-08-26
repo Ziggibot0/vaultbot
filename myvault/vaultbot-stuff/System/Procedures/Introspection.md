@@ -15,7 +15,6 @@ allowed_tools:
 tags: [procedure, introspection, meta-reasoning, self-knowledge, provenance, deterministic]
 when_to_use: "when the user asks to run this procedure"
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
-model_cartridge: big
 ---
 
 # Introspection: Meta-Reasoning Layer

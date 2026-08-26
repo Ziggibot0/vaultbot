@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-09
 description: "Behavioral-Pattern-Mine scans all session JSONL logs for recurring VaultBot tool-call sequences (n-grams of length 2-5) that appear across 3+ sessions and are NOT already covered by existing procedures. It mines tool_call_requested, custom_tool_executed, and tool_exec_enter events -- the actual VaultBot tool calls, not backend plumbing. Surfaces automation candidates that should be consolidated into procedures."
 when_to_use: "During Dream-Pass, after chat consolidation, to detect manual patterns that should be automated. Also runnable standalone to audit for automation gaps."

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-22
 description: "Given a file path or module name, traverse the dependency graph and procedure-code map to predict which other modules and procedures would be affected by a change. Returns a structured JSON impact report."
 when_to_use: "Before editing a backend module or procedure, to understand the blast radius. Called by Dev-Cycle before making changes, and by Know-Thyself for self-awareness."

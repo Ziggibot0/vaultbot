@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: Download or read a textbook/reference resource and ingest it into the vault as linked notes. Accepts URLs or local file paths. Supports HTML, PDF, plain text, and Markdown.
 when: When learning a new subject systematically from a textbook or reference

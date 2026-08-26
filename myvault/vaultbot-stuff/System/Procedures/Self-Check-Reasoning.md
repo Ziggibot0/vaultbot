@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: big
 created: 2026-08-09
 description: "Self-Check-Reasoning runs the 7-question self-audit from the Critical Thinking knowledge note before presenting any conclusion. Uses [llm:] steps for each binary YES/NO question. Also runs the Steelman Self-Test. Call this before presenting any conclusion to catch fallacies and biases."
 when_to_use: "Before presenting any conclusion, argument, or answer. Run this as a pre-response audit. If any question returns YES (problem found), revise the reasoning before presenting."

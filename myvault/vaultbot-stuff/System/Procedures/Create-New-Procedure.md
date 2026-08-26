@@ -9,7 +9,6 @@ description: "This procedure generates a new markdown file for a standard operat
 when_to_use: "Run this procedure when creating a new standard operating procedure (SOP) or machine-executable procedure markdown file for the VaultBot system. This is triggered when: - A new task or workflow needs to be formalized into a repeatable procedure - An existing process has failed or shown gaps that require documentation - A user requests the creation of a procedure from a task description - A recurring operation needs to be standardized to ensure consistent execution"
 falsifiable_if: "The generated markdown file is missing required frontmatter fields (type, status, created, summary, tags)."
 allowed_tools: []
-model_cartridge: big
 ---
 
 ## Description

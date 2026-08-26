@@ -13,7 +13,6 @@ allowed_tools:
 tags: [procedure, audit, provenance, quality, research]
 when_to_use: "when the user asks to run this procedure"
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
-model_cartridge: big
 ---
 
 # Provenance Audit

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Scan a Python file for mutable default argument anti-patterns: def f(x=[]), def f(x={}), def f(x=set()). These are shared across calls and cause subtle bugs. Use when auditing code quality or reviewing function signatures."
 when_to_use: when auditing code quality, reviewing function signatures, checking for Python anti-patterns, or when asked 'are there mutable default arguments'

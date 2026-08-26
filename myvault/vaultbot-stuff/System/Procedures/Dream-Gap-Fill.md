@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-09
 description: "Fill knowledge gaps by creating missing notes for dangling wikilinks that have no match in the vault. Takes gaps flagged by Dream-Dangle-Fix and generates stub notes grounded in related vault content."
 when_to_use: as part of a Dream-Pass cycle after Dream-Dangle-Fix, or standalone when dangling links point to genuinely missing notes

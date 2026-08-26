@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Write a new procedure note from a spec. Given a task description, the small model drafts a complete procedure note with frontmatter (type, status, model_cartridge, description, when_to_use, allowed_tools) and step structure. Returns the full markdown for review. Does NOT write it to disk — the big model reviews and writes it with vault_safe_write.
 when_to_use: when you need to create a new procedure and want a draft to review, when Discover-Procedures or Tool-Usage-Report identified a candidate, or when asked to 'make a procedure for X'

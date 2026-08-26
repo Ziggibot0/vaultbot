@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-01
 description: "Find unlinked mentions — notes whose title is mentioned in plain text in other notes but NOT wrapped in a [[wikilink]]. Imports the Pattern-Scan engine's per-note table, then text-searches for raw mentions of candidate titles. Use to auto-suggest links that weave the graph tighter without creating new notes."
 when_to_use: when asked to find linking opportunities, unlinked mentions, or ways to weave the graph tighter without new notes

@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Run the VaultBot's proactive health battery by calling the backend's /diagnose, /health, /system/stats, and /ollama/stats endpoints. Returns a single consolidated health report: is the backend up, is the LLM backend reachable, is the configured model available, is the FAISS index healthy, are there config conflicts, plus live CPU/RAM/GPU stats. Fastest way to answer 'is everything okay?' Read-only — calling these endpoints has no side effects."
 when_to_use: "when asked 'are you healthy' / 'check your health' / 'is everything okay', at the start of any troubleshooting session, when something feels broken and you need a quick triage, before restarting to capture the pre-restart state"

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: "Analyze a backend function's call flow: what calls it, what it calls, and what the full execution path looks like. Given a function name, traces the call graph up (callers) and down (callees) two levels. Use when understanding how a function fits into the system before modifying it."
 when_to_use: before modifying a function to understand its place in the call graph, when debugging where a function gets called from, or when understanding execution flow

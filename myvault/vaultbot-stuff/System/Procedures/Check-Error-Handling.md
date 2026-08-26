@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Scan a Python file for error-handling anti-patterns: bare excepts, silent swallowing (except: pass), overly broad catches (except Exception), and missing exception types. Returns line-numbered violations. Use when auditing code quality or before a commit."
 when_to_use: when auditing error handling, before a commit, after editing a file, when checking for bare excepts or silent swallowing, or when asked 'does this code handle errors properly'

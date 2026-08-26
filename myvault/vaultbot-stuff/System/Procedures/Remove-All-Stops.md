@@ -16,7 +16,6 @@ tags:
   - procedures
 last_reviewed: 2026-08-15
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
-model_cartridge: small
 ---
 
 # Remove-All-Stops

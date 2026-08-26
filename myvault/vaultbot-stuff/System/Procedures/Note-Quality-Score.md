@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: "Score a vault note's quality on 5 dimensions: completeness, accuracy, connectivity, freshness, and clarity. Given a note path, reads the note, checks its links, frontmatter, and content, and the small model scores each dimension 1-5 with reasoning. Use when prioritizing which notes to improve."
 when_to_use: when prioritizing which notes to improve, when assessing vault quality, or when asked 'how good is this note'

@@ -21,7 +21,6 @@ success_count: 11
 failure_count: 2
 success_rate: 0.85
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
-model_cartridge: big
 ---
 
 # Multi-Perspective Lens (v4.1)

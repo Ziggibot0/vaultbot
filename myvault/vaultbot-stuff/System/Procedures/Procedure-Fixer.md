@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Fix a broken or failing procedure by composing existing meta-procedures as diagnostic sub-tasks. Given a procedure name, it runs Analyze-Failure-Log to find root causes, Check-Tool-Coverage to find missing allowed_tools, Procedure-Coverage-Check to find step-description gaps, and Check-Procedure-Drift to detect intent drift. Then synthesizes a diagnosis, applies a patch (frontmatter and/or steps), and runs Procedure-Eval to verify the fix. Use when a procedure has a high failure rate, when the user says 'fix this procedure', or after identifying a weak procedure."
 when_to_use: "when a procedure is failing, when a procedure has >50% failure rate, when asked to fix or repair a procedure, when Post-Copilot-Audit or Procedure-Eval flags a broken procedure, when a procedure step produces wrong output but doesn't throw an error, when a procedure's behavior doesn't match its spec, when debugging why a procedure step isn't working as expected, when a procedure runs without errors but gives incorrect results, when manually troubleshooting a procedure and you need a systematic diagnosis"

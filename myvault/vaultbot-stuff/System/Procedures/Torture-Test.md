@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: Run torture tests on a pull request before merging. Downloads changed files and runs syntax checks, malware scans, path whitelist checks, and .gitignore tampering checks.
 when: Before merging a PR to verify it passes safety checks

@@ -14,7 +14,10 @@ retrieval and subprocess execution.
 
 Required frontmatter fields (from procedure_validator):
     type, description, when_to_use (or when), allowed_tools,
-    falsifiable_if, status, model_cartridge, created, summary, tags
+    falsifiable_if, status, created, summary, tags
+
+Procedure-level ``model_cartridge`` is forbidden. Cartridge selection belongs
+to each LLM step.
 
 Exit 0 = all clear. Exit 1 = blocked, with a list of offending files.
 
@@ -157,11 +160,15 @@ def main() -> int:
         )
         print("fields (type, description, when_to_use, allowed_tools,", file=sys.stderr)
         print(
-            "falsifiable_if, status, model_cartridge, created, summary, tags),",
+            "falsifiable_if, status, created, summary, tags),",
             file=sys.stderr,
         )
         print(
-            "or have steps with no human-readable instruction header:",
+            "declare procedure-level model_cartridge, or have steps with no",
+            file=sys.stderr,
+        )
+        print(
+            "human-readable instruction header:",
             file=sys.stderr,
         )
         print("", file=sys.stderr)

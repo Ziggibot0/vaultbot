@@ -10,7 +10,6 @@ description: "This procedure converts a task description or identified workflow 
 when_to_use: "Run this procedure when drafting a new machine-executable procedure note for the vault. Triggered when: - A task description is provided and needs to be converted into a structured procedure markdown file. - A recurring failure or gap has been identified that warrants a documented, repeatable procedure. - A user explicitly requests creation of a new procedure from a task or workflow description."
 falsifiable_if: "The generated procedure markdown file fails to parse as valid YAML frontmatter."
 allowed_tools: []
-model_cartridge: big
 ---
 
 ## Description

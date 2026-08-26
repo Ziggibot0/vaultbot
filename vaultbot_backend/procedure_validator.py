@@ -9,7 +9,8 @@ Checks (all aligned with the unified procedure format from
 (UNIFIED — 2026-08-10)]]):
 
 1. **Frontmatter** — type, description, when_to_use, allowed_tools,
-   falsifiable_if, status, model_cartridge, created, summary, tags
+   falsifiable_if, status, created, summary, tags; cartridge selection belongs
+   to individual steps and is forbidden at procedure level
    (Friction: procedures without these can't be retrieved or executed)
 2. **Naming convention** — title must not use "How to" prefix
    (Friction: "How to" names sound like tutorials, not tools. Procedures
@@ -401,10 +402,11 @@ def validate_procedure_text(
             "(must be one of: experimental, active, verified, archived)"
         )
 
-    checks_run.append("model_cartridge_exists")
-    if not fm.get("model_cartridge"):
+    checks_run.append("model_cartridge_absent")
+    if "model_cartridge" in fm:
         errors.append(
-            "Frontmatter missing 'model_cartridge' (must be one of: small, big, vision)"
+            "Frontmatter must not declare 'model_cartridge' "
+            "(select the cartridge on each LLM step)"
         )
 
     checks_run.append("created_exists")

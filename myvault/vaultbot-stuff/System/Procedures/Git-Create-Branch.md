@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-22
 description: "Create a new git branch from main, push it to origin, and verify it exists. Refuses to create branches named main/master, refuses if working tree is dirty, refuses if already on the target branch name. Uses subprocess for all git operations — no custom tools needed."
 when_to_use: "When you need to create a feature or fix branch before starting work on an issue. Called by Dev-Cycle and Solve-GitHub-Issue."

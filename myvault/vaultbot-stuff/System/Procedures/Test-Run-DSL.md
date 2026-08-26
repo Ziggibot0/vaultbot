@@ -4,7 +4,6 @@ description: Test that the DSL `run` entry type correctly calls a sub-procedure 
 allowed_tools:
   - run_procedure
   - llm_generate
-model_cartridge: small
 version: 1.0.0
 activation: manual
 status: experimental

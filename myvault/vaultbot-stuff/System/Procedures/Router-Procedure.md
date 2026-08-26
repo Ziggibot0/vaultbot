@@ -15,7 +15,6 @@ falsifiable_if: "the procedure produces incorrect output or fails to complete it
 allowed_tools:
   - llm_generate
   - vault_safe_write
-model_cartridge: big
 ---
 
 ## Overview

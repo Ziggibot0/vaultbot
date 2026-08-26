@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: Safely delete a note from the vault with backup.
 when_to_use: When a note is garbage, duplicate, or needs to be removed. Backs up content before deleting.

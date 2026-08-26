@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-01
 updated: 2026-08-04
 description: "THIN ORCHESTRATOR: runs Vault-Walk → computes shared maps (backlinks, broken links, orphans, hubs, duplicates) → applies all signal logic → writes pattern-scan-latest.json. Pure code, zero LLM cost. This is the refactored version — the monolith is decomposed into Vault-Walk (independent per-note signals) + granular signal probes + this thin orchestrator."
