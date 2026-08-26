@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: Check a note for broken wikilinks, missing frontmatter, argument quality, and other issues. Run after writing or editing a note to verify quality. Returns a detailed report.
 when_to_use: after writing or editing a note, or when the user asks to check note quality

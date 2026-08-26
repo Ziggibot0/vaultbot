@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Check if a procedure's frontmatter status matches its actual reliability. Reads the procedure's success/fail counts from frontmatter and the failure log, and flags procedures where the status says verified but the success rate is below 70%, or where the status says experimental but the procedure has a high success rate and should be promoted. Use when auditing procedure trustworthiness.
 when_to_use: when auditing procedure trustworthiness, when checking if verified procedures still work, when promoting good experimental procedures, or when asked 'which procedures can I trust'

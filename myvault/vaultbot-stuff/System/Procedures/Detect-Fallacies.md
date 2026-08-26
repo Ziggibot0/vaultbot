@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-09
 description: "Detect-Fallacies deterministically pattern-matches input text against 30+ fallacy signatures from the Critical Thinking knowledge note. All classification happens in code — no LLM needed for detection. The small model only formats the output. This replaces the old DAG version where the small model hallucinated on classification steps."
 when_to_use: "Before presenting any argument or conclusion. Run this to check your reasoning for fallacies. Also callable on user-provided text to identify fallacies in external arguments."

@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-08-10
 description: "Audit and fix all layers in the chat pipeline that truncate file-read tool results (code_read, vault_read_note) before they reach the LLM. Ensures the model sees the WHOLE file in virtually all cases, with truncation only for extremely large files that would actually hurt the model."
 when_to_use: when the model is getting truncated file contents, when file reads seem incomplete, when adjusting how much of a file the model can see, or when tuning the balance between full-file reads and context-window safety

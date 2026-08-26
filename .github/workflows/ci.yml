@@ -139,7 +139,8 @@ jobs:
         # Every committed procedure note (type: procedure in frontmatter)
         # must carry the full required frontmatter set — type, description,
         # when_to_use, allowed_tools, falsifiable_if, status,
-        # model_cartridge, created, summary, tags. This is the same gate
+        # created, summary, tags — and must not declare model_cartridge at
+        # procedure level. Cartridge selection belongs to each step. This is the same gate
         # Procedure-Creator applies at publication time, enforced here so a
         # hand-edited or tool-bypassed procedure can't ship with incomplete
         # frontmatter and silently break RAG retrieval / subprocess

@@ -10,7 +10,6 @@ description: "Takes a task description and generates a structured, machine-execu
 when_to_use: "Run this procedure when you need to draft a new procedure markdown note from a task description. This is the starting point whenever a task or workflow needs to be formalized into a repeatable, machine-executable procedure within the vault. **Triggers:** - A task description has been provided and needs to be converted into a structured procedure - A recurring workflow needs to be documented as a repeatable procedure - An existing ad-hoc process needs to be formalized into the standard procedure format"
 falsifiable_if: "The generated markdown note is missing the `---` frontmatter block."
 allowed_tools: []
-model_cartridge: big
 ---
 
 ## Description

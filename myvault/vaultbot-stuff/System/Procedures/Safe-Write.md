@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: big
 created: 2026-07-31
 description: Safely edit backend Python source with syntax check and auto-rollback.
 when_to_use: When you need to edit a .py file under vaultbot_backend/. Verifies the edit won't break the backend.

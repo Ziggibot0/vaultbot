@@ -3,7 +3,6 @@ type: procedure
 description: Bare-minimum test — does llm_generate work in a code step?
 allowed_tools:
   - llm_generate
-model_cartridge: small
 version: 1.0.0
 activation: manual
 status: raw

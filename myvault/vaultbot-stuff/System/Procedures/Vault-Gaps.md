@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: "Detect the vault's knowledge gaps: dangling wikilinks (concepts linked but no note exists) and thin notes (exist but too short). Use when the user asks what's missing or to decide what to research."
 when_to_use: when the user asks about gaps, what's missing, or what to research next

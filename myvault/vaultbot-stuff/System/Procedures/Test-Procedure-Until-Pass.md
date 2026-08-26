@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Test a procedure by running it, and if it fails, automatically diagnose and fix it, then re-run — iterating until the procedure passes or a max retry cap is hit. This is the automated procedure-validation loop: it composes execute (run_procedure), diagnose+fix (Procedure-Fixer), and re-test into a single self-healing cycle. Use this when you create a new procedure, when you want to verify a procedure actually works, or when the user says 'test this procedure' or 'make sure this procedure works'. Pass procedure_name (the target) and any args the target needs via the args object."
 when_to_use: when testing a new procedure, when asked to verify a procedure works, when a procedure was just created and needs validation, when the user says 'test this procedure', when you want to auto-fix a failing procedure

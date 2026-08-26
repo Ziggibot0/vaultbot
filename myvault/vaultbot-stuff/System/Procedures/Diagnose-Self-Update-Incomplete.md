@@ -1,6 +1,5 @@
 ---
 type: procedure
-model_cartridge: big
 tags:
   - troubleshooting
   - self-updater

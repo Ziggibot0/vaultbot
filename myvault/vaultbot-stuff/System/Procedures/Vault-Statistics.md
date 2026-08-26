@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: "Calculate vault statistics: total notes, average note length, distribution by directory, frontmatter coverage, link density, orphan rate, and procedure coverage. Returns a compact statistical summary of the vault's current state. Use when assessing vault health or tracking growth over time."
 when_to_use: when assessing vault health, when tracking vault growth, when generating a status report, or when asked 'how is the vault doing'

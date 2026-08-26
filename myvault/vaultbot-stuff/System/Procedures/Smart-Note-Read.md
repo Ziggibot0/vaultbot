@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Read a vault note and extract its key points, claims, and action items in a structured format. Given a note path, the small model returns a summary, key facts, open questions, and action items. Use when you need to quickly understand what a note says without reading all of it.
 when_to_use: when you need to quickly understand a note without reading the whole thing, when summarizing a note for context, when extracting action items from a note, or when asked 'what does this note say'

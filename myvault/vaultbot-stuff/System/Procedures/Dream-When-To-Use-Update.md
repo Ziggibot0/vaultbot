@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: big
 created: 2026-08-14
 description: Scan all procedure notes for missing or thin when_to_use fields, generate better trigger language via LLM, and patch them in place. Self-improving retrieval feedback loop for Dream Pass.
 when_to_use: During Dream Pass (after Dream-Evaluate). When procedure retrieval fails to surface a procedure that should have been used. When procedures have missing or under-specified when_to_use frontmatter. When RAG retrieval quality needs improvement. When auditing procedure discoverability. When when_to_use fields are too thin for RAG to surface them. When you notice a procedure wasn't surfaced that should have been. When doing a vault-wide when_to_use audit. When enriching procedure trigger language. When improving procedure retrieval accuracy.

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-15
 description: "One-time migration: split each procedure's existing when_to_use string into a trigger frontmatter list (one item per clause) and add an empty inhibitor list. No LLM calls — pure text splitting. Idempotent: skips procedures that already have a trigger field. Leaves when_to_use in place for human readability and backward compatibility."
 when_to_use: "Run ONCE after the trigger/inhibitor system is deployed to seed trigger lists from existing when_to_use fields. When migrating the vault from the old when_to_use schema to the new trigger/inhibitor schema. When trigger fields are missing from procedures that have when_to_use."

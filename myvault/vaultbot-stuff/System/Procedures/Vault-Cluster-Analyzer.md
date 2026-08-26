@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: Analyze the vault graph's cluster structure and communities.
 when_to_use: When checking for topic clusters and community structure in the vault.

@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-08-10
 summary: "Parent reasoning procedure v4: redesigned for ~4B small model (qwen3.5:4b). Merged steps 1+2, batched verification, killed triple-try, combined classify+select, conditional step 5, single-call synthesis. ~4-6 LLM calls in parent (down from 20-28)."
 description: "BS detector + problem classification + lens dispatch + synthesis. v4: optimized for 4B model — batched calls, no triple-try, richer prompts."

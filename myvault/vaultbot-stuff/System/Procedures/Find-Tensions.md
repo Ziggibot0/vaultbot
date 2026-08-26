@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-03
 description: Find notes in the vault that take opposing positions on the same question. Scans architecture/semantic/claim notes for contradiction signals (status conflicts on shared dependency, prose contradiction words near wikilinks, explicit rejection language). Returns candidate tension pairs with the evidence context. One small-model call classifies whether each pair is a real tension or noise. Use when auditing vault coherence, before Dream-Pass, or when asked 'does the vault contradict itself'.
 when_to_use: when auditing vault coherence, before a Dream-Pass, when asked 'does the vault contradict itself', or when checking if notes that depend on the same concept take compatible positions

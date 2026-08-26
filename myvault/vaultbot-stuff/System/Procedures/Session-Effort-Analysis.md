@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-09
 updated: 2026-08-09
 description: "Session-Effort-Analysis scans all chat logs to quantify token consumption, tool usage patterns, and time spent across sessions. It aggregates data per session, highlights the most token-heavy tools, and suggests new procedures that could consolidate repetitive sequences.

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Check if procedure descriptions still match what they actually do, and optionally fix them. In detect mode (default), reads each procedure's frontmatter description and steps, then the small model verifies accuracy. In optimize mode, also writes improved descriptions directly to the procedure notes' frontmatter. Absorbs the former Procedure-Description-Optimizer. Use when procedure descriptions feel stale or need updating.
 when_to_use: when a procedure's description doesn't match what it does, when procedure descriptions are stale after edits, when auditing procedure quality, before relying on a procedure's description for discovery, or when you want to auto-fix stale descriptions

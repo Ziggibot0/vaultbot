@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-01
 description: Find orphan notes — notes with no incoming AND no outgoing resolved wikilinks (disconnected islands). Imports the Pattern-Scan engine and filters its per-note table to is_orphan=true. Use before linking, organizing, or running a dream pass.
 when_to_use: when asked which notes are disconnected/orphaned, before linking orphans into the graph, or during vault organization

@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-07-27
 last_reviewed: 2026-08-04
 description: "Biomimetic dream pass — thin orchestrator that runs 16 modular sub-procedures in sequence: Scan → Analyze → Dangle-Fix → Link → Chat-Consolidation → Session-Effort-Analysis → Behavioral-Pattern-Mine → Pattern-To-Procedure → Consolidate → Curate-Research → Prune → TODO-Track → Validate → Gap-Fill → Evaluate → Trigger-Inhibitor-Update. Each sub-procedure can also be run independently. Uses small cartridge — all reasoning lives in sub-procedures (Dream-Consolidate, Dream-Pattern-To-Procedure, and Dream-Trigger-Inhibitor-Update carry their own big cartridges)."
