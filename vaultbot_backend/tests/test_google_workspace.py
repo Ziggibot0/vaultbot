@@ -206,6 +206,8 @@ def test_save_helpers_swallow_oserror_from_chmod(patched_paths, monkeypatch):
     # Should not raise
     gw._save_config({"client_id": "x"})
     gw._save_tokens({"access_token": "t"})
+    assert json.loads(gw.CONFIG_PATH.read_text(encoding="utf-8")) == {"client_id": "x"}
+    assert json.loads(gw.TOKEN_PATH.read_text(encoding="utf-8")) == {}
     expected_targets = {
         f"{gw.CONFIG_PATH}.tmp",
         str(gw.CONFIG_PATH),
