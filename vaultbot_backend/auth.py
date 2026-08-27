@@ -34,14 +34,16 @@ Pure stdlib. No new dependencies.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import secrets
+import threading
 from pathlib import Path
-import logging
 
 logger = logging.getLogger(__name__)
 # Warn only once when auth bypass is enabled.
 _auth_bypass_warned = False
+_auth_bypass_warn_lock = threading.Lock()
 
 # The token file lives next to this module (in vaultbot_backend/).
 _TOKEN_FILE = Path(__file__).resolve().parent / ".vaultbot_auth_token"
@@ -187,12 +189,13 @@ def validate_token(token: str | None) -> bool:
     global _auth_bypass_warned
     if os.environ.get("VAULTBOT_SKIP_AUTH", "") == "1":
         # Warn once so CI/dev logs surface the bypass without spamming.
-        if not _auth_bypass_warned:
-            logger.warning(
-                "VaultBot auth validation DISABLED via VAULTBOT_SKIP_AUTH=1 — "
-                "this allows anonymous requests to mutating endpoints."
-            )
-            _auth_bypass_warned = True
+        with _auth_bypass_warn_lock:
+            if not _auth_bypass_warned:
+                logger.warning(
+                    "VaultBot auth validation DISABLED via VAULTBOT_SKIP_AUTH=1 — "
+                    "this allows anonymous requests to mutating endpoints."
+                )
+                _auth_bypass_warned = True
         return True
     if token is None:
         return False

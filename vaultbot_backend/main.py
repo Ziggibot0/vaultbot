@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -18,6 +19,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 # Avoid spamming the logs on every request when auth is intentionally disabled
 _auth_disabled_warned = False
+_auth_disabled_warn_lock = threading.Lock()
 
 # NOTE: the startup-reindex-failure flag lives in app_state.py (not here)
 # so routers/ws.py can read it via `from app_state import
@@ -486,11 +488,12 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             # Loud one-time warning so CI/devs notice auth is disabled, but
             # avoid spamming it on every request.
             global _auth_disabled_warned
-            if not _auth_disabled_warned:
-                logger.warning(
-                    "VAULTBOT_SKIP_AUTH=1 — authentication disabled. This is insecure and should only be used for tests."
-                )
-                _auth_disabled_warned = True
+            with _auth_disabled_warn_lock:
+                if not _auth_disabled_warned:
+                    logger.warning(
+                        "VAULTBOT_SKIP_AUTH=1 — authentication disabled. This is insecure and should only be used for tests."
+                    )
+                    _auth_disabled_warned = True
             return await call_next(request)
         if token is None:
             return JSONResponse(
