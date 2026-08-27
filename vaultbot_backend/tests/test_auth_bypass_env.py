@@ -6,10 +6,6 @@ longer bypasses authentication (it should only control the PID lock).
 
 from __future__ import annotations
 
-import os
-
-import pytest
-
 import auth
 
 
