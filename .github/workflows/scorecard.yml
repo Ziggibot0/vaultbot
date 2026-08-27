@@ -1,0 +1,49 @@
+# OpenSSF Scorecard (issue #327).
+#
+# Scorecard checks the repository for security best practices and uploads
+# results to the Security tab (SARIF format). Runs weekly and on every
+# push to main.
+#
+# MANUAL STEP: Enable "Dependency graph" and "Dependabot alerts" at
+# Settings > Security & analysis for the full Scorecard checks to pass.
+# This workflow file is sufficient to start scanning on a public repository.
+name: Scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly scan at 08:30 UTC on Monday.
+    - cron: "30 8 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  id-token: write  # Required for OIDC token used by Scorecard publish step.
+
+jobs:
+  analyze:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard analysis
+        uses: ossf/scorecard-action@62b2cac7ed8198b15735ed49ab1e5cf35480ba46 # v2.4.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publish results to the OpenSSF public dashboard. Remove this
+          # line to keep results private (only visible in the Security tab).
+          publish_results: true
+
+      - name: Upload Scorecard results to Security tab
+        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3
+        with:
+          sarif_file: results.sarif
+          category: scorecard
