@@ -22,7 +22,6 @@ success_count: 0
 failure_count: 0
 success_rate: 0.0
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
-model_cartridge: big
 ---
 
 # Root-Cause-Analysis Lens (v4.1)

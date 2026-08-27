@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Suggest tags for a note based on its content. Reads the note, extracts topics and themes, and the small model suggests 3-5 tags that match what the note is about. Checks existing tags in the vault for consistency. Use when tagging a new note or improving an untagged note's discoverability.
 when_to_use: when tagging a new note, when a note has no tags, when improving note discoverability, or when asked 'what tags should this note have'

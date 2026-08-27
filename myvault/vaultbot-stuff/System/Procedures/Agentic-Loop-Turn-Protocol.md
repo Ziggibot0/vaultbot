@@ -4,7 +4,6 @@ status: active
 baseline: true
 created: 2026-08-02
 updated: 2026-08-03
-model_cartridge: small
 record: true
 superseded_by: "chat_handler.py (2026-08-02 refactor)"
 summary: "HISTORICAL: Describes the old 3-phase PLAN→ACT→SYNTHESIZE state machine that was removed in the 2026-08-02 chat_handler.py refactor. Kept for project history."

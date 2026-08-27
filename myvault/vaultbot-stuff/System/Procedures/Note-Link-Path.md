@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Find the shortest path between two notes in the vault's wikilink graph. Given two note names, traces the wikilink path from one to the other using BFS. Returns the path as a chain of notes. Use when understanding how two concepts connect or when looking for missing links that would shorten the path.
 when_to_use: when understanding how two concepts connect, when looking for the relationship between notes, when finding missing links that would improve connectivity, or when asked 'how does X relate to Y'

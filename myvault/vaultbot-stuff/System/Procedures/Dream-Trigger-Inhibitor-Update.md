@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: big
 created: 2026-08-15
 description: "Feedback-driven trigger/inhibitor update for procedure and note retrieval. Scans session JSONL logs for model_relevance_tags events, pairs each with the user's next-message sentiment, applies an evidence threshold, LLM-distills query texts into concise trigger/inhibitor phrases, and patches note frontmatter. Closes the retrieval feedback loop: notes that proved helpful earn trigger phrases; notes that the user reacted negatively to earn inhibitor phrases. The retrieval gate then drops notes whose inhibitors match the query."
 when_to_use: "During Dream Pass (after Dream-Evaluate). When tuning trigger/inhibitor fields from user feedback. When procedure retrieval surfaces noise. When the vault has accumulated chat sessions with model_relevance_tags events. When improving retrieval precision by learning what NOT to surface. When closing the feedback loop between user sentiment and retrieval gating."

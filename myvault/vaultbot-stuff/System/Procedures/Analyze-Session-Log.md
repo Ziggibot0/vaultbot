@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Read and summarize any VaultBot chat session from its JSONL log. Finds a session by UUID, title (substring match), or 'latest', then extracts: title, start time, token totals, every user/assistant turn, every tool call with its result, every exception/console_error, and thinking-block count. Single entry point for looking at what happened in any past session — for both VaultBot self-diagnosis and operator troubleshooting. Use when Sean asks 'show me the last chat', 'what were you doing earlier', 'why did you crash', 'what happened in the last session', 'the session about X', or when resuming context after a restart. Read-only — never modifies a session file."
 when_to_use: when asked 'what happened in the last session', 'show me the last chat', 'what were you doing earlier', 'why did you crash', 'the session about X', 'what did you do earlier', 'what were we doing last time', when resuming context after a restart, when investigating a reported failure, when asked about any specific past session by title or UUID

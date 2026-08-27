@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Connect orphaned notes into the vault graph by finding semantically related notes and adding wikilinks. Takes graph analyzer output (with isolated_nodes) as input via args.
 when_to_use: As part of a Dream-Pass cycle after Dream-Analyze, or independently to connect orphan notes.

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: big
 created: 2026-08-09
 description: "Cite-Provenance takes a draft answer, splits it into claims, deterministically searches the vault for supporting notes, then has the LLM format the answer with inline wikilink citations. Every claim must cite a vault note."
 when_to_use: "After generating an answer, before presenting it. Run this to attach citations to every factual claim."

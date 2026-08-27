@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-22
 description: "Triage the VaultBot repo's open GitHub issues: score each on a deterministic urgency/importance rubric (7 Habits quadrant Q1-Q4), identify the highest-priority Q1 issue, and report the full quadrant table. Read-only on GitHub."
 when_to_use: When asked to 'triage the issues', 'what should we fix first', 'prioritize our GitHub issues', or as the first step of an autonomous issue sweep.

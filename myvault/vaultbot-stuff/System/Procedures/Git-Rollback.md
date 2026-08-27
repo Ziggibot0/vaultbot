@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: Restore files from git HEAD to recover from a bad self-edit.
 when_to_use: When a self-edit broke something and you need to restore the original code.

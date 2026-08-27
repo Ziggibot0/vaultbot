@@ -4,7 +4,6 @@ description: Smoke test for the YAML Dispatch DSL — classifies intent, dispatc
 allowed_tools:
   - llm_generate
   - vault_gaps
-model_cartridge: small
 version: 1.1.0
 activation: manual
 status: raw

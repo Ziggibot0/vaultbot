@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-08-14
 description: "Diagnose why the preflight (Think + Route-Task) is slow or appears hung. Reads the latest session log, computes per-step durations for Think and Route-Task, and checks whether asyncio.wait_for timeouts are actually firing or being silently defeated by event-loop-blocking subprocess calls. Use when the GUI shows a procedure step (e.g. 'Route-Task step 2/2') stuck for minutes, when a user message takes 3+ minutes before the first response token, or when the watchdog reports a stale heartbeat during preflight."
 when_to_use: when the GUI is stuck on a procedure step for a long time, when a user message takes minutes before any response, when the watchdog reports the backend is hung, when Think or Route-Task seems to take forever, when preflight timeouts don't seem to work

@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: big
 created: 2026-08-22
 description: "Verify a code change's external API usage against official documentation. Fetches the authoritative docs for every non-VaultBot module the change imports, then checks the four code-hallucination modes (wrong name, wrong signature, deprecated pattern, nonexistent import) against them. Produces a doc_source URL list that safe_write requires."
 when_to_use: "Before any safe_write that imports a stdlib or third-party module. Run this to prove the edit matches the official docs instead of model weights."

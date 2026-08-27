@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-18
 description: "Diagnose and fix the general class of problem where the research engine produces notes with hallucinated, dead, or irrelevant source links. Covers: (a) URLs that 404 or point to nothing, (b) GitHub issues/PRs passed off as authoritative sources, (c) notes with '- none' in Sources, (d) notes with no Sources section at all. Checks URL liveness, source domain credibility, synthesis source-list integrity, and whether the note was produced by the research engine or hallucinated directly by the LLM. Use when sources look wrong, links are dead, or the vaultbot is 'drawing from bullshit'."
 when_to_use: "when research note sources are dead links, when GitHub repos appear as sources, when a note has no Sources section or says '- none', when the vaultbot seems to be hallucinating sources, after changing the research engine source filtering pipeline"

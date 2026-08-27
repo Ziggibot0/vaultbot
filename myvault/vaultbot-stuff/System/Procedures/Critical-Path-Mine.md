@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: big
 created: 2026-08-10
 updated: 2026-08-11
 description: "Mines full user-assistant conversations for the critical reasoning path — the minimal chain of thought that actually got from the question to the answer. Strips waste (dead ends, over-explanation, wrong directions the user corrected). Turns the critical path into a procedure so next time that type of problem comes up, the model walks straight down the path with no detours. Auto-batches large corpora and deduplicates against previous runs. Uses LLM for all pattern detection — no regex, no keyword matching."

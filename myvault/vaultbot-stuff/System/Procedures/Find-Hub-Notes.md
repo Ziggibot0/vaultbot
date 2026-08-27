@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Find notes that are referenced by many other notes but have no incoming links from hub or index notes — notes that should be more prominently linked. Identifies important notes that are discovered but not well-connected to the vault's hub structure. Use when strengthening the vault's organizational structure.
 when_to_use: when strengthening vault organization, when important notes aren't connected to hubs, when improving discoverability of key notes, or during graph organization

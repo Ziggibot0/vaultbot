@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: "Score the procedure library: classify every procedure as healthy/degraded/broken and surface which need review, cartridge demotion, or retirement. Calls Procedure-Eval."
 when_to_use: As the final step of a Dream-Pass cycle, or standalone when the procedure library needs scoring.

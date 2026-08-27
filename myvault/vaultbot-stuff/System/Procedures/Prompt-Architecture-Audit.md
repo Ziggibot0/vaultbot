@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: big
 created: 2026-08-05
 description: "Audit how the agentic loop assembles the prompt sent to the model: trace every block that gets injected (system prompt, vault context, procedure surface, hints, working memory, conversation recall), map the ORDER they appear in the final message list, and identify blocks that are in the wrong position. Use when the model seems to ignore suggestions, when context seems buried, or when improving where information appears in the prompt pipeline."
 when_to_use: when the model isn't acting on injected suggestions, when context or hints seem to get lost, when you suspect prompt ordering is hurting model performance, when asked to improve the prompt pipeline, or when auditing how the prompt is built

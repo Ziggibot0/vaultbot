@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-03
 description: "Report the current system status: backend running, tools available, autonomous researcher state, and any known issues. Uses the small model to format the report."
 when_to_use: when the user asks 'how are you doing' or 'what's your status' or you need a quick health check

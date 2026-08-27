@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Find vault notes that contradict what the backend code actually does. Walks the System/ and Knowledge/ notes that describe backend behavior, reads the actual .py source, and asks the small model whether the note's description matches the code. Returns a list of contradictions (note path, claim, code location, mismatch). Records and history notes are fine — only flag notes that describe current behavior incorrectly.
 when_to_use: when you suspect vault notes are out of sync with the code, after a backend refactor, before trusting a vault note that explains how something works, or when asked 'do the docs match the code'

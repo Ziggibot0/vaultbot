@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-17
 description: "Verify a chat answer's claims against their cited vault notes. Splits the answer into sentences, maps each sentence to the [[wikilink]] it cites, reads the cited note, and runs entailment checking (supported/unsupported/contradicted) per claim. Returns a per-claim verdict list. This is the idle-time verification layer behind the chat trust badge."
 when_to_use: after a chat answer is delivered, to verify that each cited claim is actually supported by its source note (the 'I don't worry about hallucinations' guarantee)

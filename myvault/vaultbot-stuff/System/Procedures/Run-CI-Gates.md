@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-19
 description: "Run the same CI gates locally that GitHub Actions runs: ruff check (full rule set), ruff format --check, pyright on hot-path files, and pytest. Returns a structured per-gate pass/fail report with the exact errors so they can be fixed before pushing. This is the local mirror of the CI pipeline — catch failures in seconds instead of waiting for GitHub Actions."
 when_to_use: "Before pushing a PR, after editing backend code, before calling submit_contribution, when a PR's CI failed and you need to reproduce the failure locally, or when asked 'run the CI checks locally'."

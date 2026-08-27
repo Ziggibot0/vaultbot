@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-04
 description: "Granular probe: filters Vault-Walk output to identify notes with open todos (contains '- [ ]' checkboxes). Returns JSON list of note records with has_todo and todo_count fields added."
 when_to_use: when you need to find notes with open todos in the vault. Call this probe instead of re-walking the vault — it filters the Vault-Walk JSON output. The Pattern-Scan orchestrator calls this as one of its signal probes.

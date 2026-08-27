@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-07-28
 restored: 2026-08-09
 description: "Meta-procedure for creating new procedures: reads a draft from _procedure_draft.md, runs static validation + dry-run sandbox test, publishes only if all checks pass. Catches the 7 friction points from Dream-Pass creation."

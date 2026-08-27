@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-22
 description: "Back up ALL personal vault content (gitignored procedures, memories, chat logs, knowledge notes, build logs) to a private GitHub repo. Uses a separate 'personal' remote and a 'personal-backup' branch so the public repo never sees the files. The .gitignore protects the public repo; this procedure force-adds to the private repo only."
 when_to_use: "When you want to back up your personal VaultBot content — procedures, memories, chat history — to a private GitHub repo. Run this after creating new procedures, after chat consolidation, or on a schedule."

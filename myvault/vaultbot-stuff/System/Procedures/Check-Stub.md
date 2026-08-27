@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-04
 description: "Granular probe: filters Vault-Walk output to identify stub notes (body contains stub markers like 'TODO', 'stub', 'placeholder', 'expand', 'tbd', 'wip'). A ~10-line filter — no vault walk needed. Returns JSON list of stub note records."
 when_to_use: when you need to find stub notes in the vault. Call this probe instead of re-walking the vault — it filters the Vault-Walk JSON output. The Pattern-Scan orchestrator calls this as one of its signal probes.

@@ -6,7 +6,6 @@ created: 2026-08-14
 description: "Decision logic for the autonomous researcher's cycle. Takes the current vault state as args and returns a JSON plan: skip, run consolidation, or research a prioritized list of gaps. The Python infrastructure in autonomous_researcher.py calls this procedure and executes the returned plan. Edit this note to change what gets researched, in what order, and how gaps are filtered — no backend restart needed."
 when_to_use: "Called automatically by autonomous_researcher.py every cycle. Not for manual invocation."
 allowed_tools: []
-model_cartridge: big
 summary: Decision logic for the autonomous research cycle — returns a JSON plan.
 tags:
   - procedure

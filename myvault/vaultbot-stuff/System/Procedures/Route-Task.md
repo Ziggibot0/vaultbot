@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-03
 last_reviewed: 2026-08-15
 description: Intent router that classifies incoming user requests and returns a procedure chain. Uses a small-model LLM step for classification — cheap, local, zero cloud cost. Each branch is backed by vault research.

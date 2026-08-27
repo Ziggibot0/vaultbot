@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: Run the pytest test suite for the vaultbot backend and report which tests passed, failed, or errored. Accepts an optional filter expression to run a subset of tests. Identifies pre-existing failures vs new ones by comparing against a known-baseline list. Use after any code change to verify nothing broke.
 when_to_use: after editing backend code, after running Safe-Write, before restarting the backend, when verifying a change didn't break anything, or when asked 'run the tests'

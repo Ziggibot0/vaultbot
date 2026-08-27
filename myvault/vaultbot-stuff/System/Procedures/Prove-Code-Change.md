@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: big
 created: 2026-08-22
 description: "Prove a code change against official docs before writing it. Reads the current file, identifies external APIs, fetches their authoritative docs, verifies the change against them, then calls safe_write with the doc_source attached. This is the single correct path for any backend edit — safe_write rejects edits without a doc_source."
 when_to_use: "Before ANY safe_write that imports a stdlib or third-party module. This is the default (and only) path for editing backend code that touches external APIs."
