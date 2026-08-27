@@ -15,6 +15,7 @@ Only the leaf module `custom_tools.google_workspace` is imported — never
 
 import hashlib
 import json
+import os
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
@@ -216,6 +217,31 @@ def test_save_helpers_swallow_oserror_from_chmod(patched_paths, monkeypatch):
     }
     assert {path for path, _mode in calls} == expected_targets
     assert all(mode == 0o600 for _path, mode in calls)
+
+
+def test_save_helpers_fallback_write_uses_private_mode_on_posix(
+    patched_paths, monkeypatch
+):
+    open_modes = []
+    real_open = os.open
+
+    def failing_replace(self, target):
+        raise OSError("replace failed")
+
+    def recording_open(path, flags, mode):
+        open_modes.append(mode)
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(gw.os, "name", "posix")
+    monkeypatch.setattr(gw.Path, "replace", failing_replace, raising=False)
+    monkeypatch.setattr(gw.os, "open", recording_open)
+
+    gw._save_config({"client_id": "x"})
+    gw._save_tokens({"access_token": "t"})
+
+    assert open_modes == [0o600, 0o600]
+    assert not (gw.CONFIG_PATH.parent / f"{gw.CONFIG_PATH.name}.tmp").exists()
+    assert not (gw.TOKEN_PATH.parent / f"{gw.TOKEN_PATH.name}.tmp").exists()
 
 
 # ── run() dispatch: setup / auth / callback / status ─────────────────────────

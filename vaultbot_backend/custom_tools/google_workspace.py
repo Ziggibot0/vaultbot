@@ -309,7 +309,16 @@ def _write_private_json(path, payload):
     try:
         tmp_path.replace(path)
     except OSError:
-        path.write_text(content, encoding="utf-8")
+        try:
+            if os.name == "posix":
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as file_handle:
+                    file_handle.write(content)
+            else:
+                path.write_text(content, encoding="utf-8")
+        finally:
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
 
     if os.name == "posix":
         with contextlib.suppress(OSError):
