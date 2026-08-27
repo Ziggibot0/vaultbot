@@ -25,6 +25,7 @@ import re
 import time
 from collections import Counter
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from research_synthesizer import (
     extractive_synthesis as _extractive_synthesis_fn,
@@ -413,6 +414,38 @@ def _focus_topic(topic: str) -> str:
     return result.strip()
 
 
+def _allowlist_site_ops(source_allowlist: list[str] | None) -> list[str]:
+    """Build deduplicated ``site:`` operators from allowlisted domains/URLs."""
+    if not source_allowlist:
+        return []
+    ops: list[str] = []
+    seen: set[str] = set()
+    for entry in source_allowlist:
+        raw = (entry or "").strip().lower()
+        if not raw:
+            continue
+        candidate = raw if "://" in raw else f"https://{raw}"
+        host = (urlparse(candidate).hostname or "").lower().lstrip(".")
+        if host.startswith("www."):
+            host = host[4:]
+        if not host or host in seen:
+            continue
+        seen.add(host)
+        ops.append(f"site:{host}")
+    return ops
+
+
+def _append_site_ops(query: str, site_ops: list[str]) -> str:
+    """Append site operators to a query once, preserving existing operators."""
+    if not site_ops:
+        return query
+    existing = {tok.lower() for tok in query.split()}
+    extras = [op for op in site_ops if op.lower() not in existing]
+    if not extras:
+        return query
+    return f"{query} {' '.join(extras)}".strip()
+
+
 class ResearchEngine:
     """Multi-round, LLM-free deep research over the web.
 
@@ -717,19 +750,27 @@ class ResearchEngine:
                 )
         return sources
 
-    def _expand_query(self, base_terms: list[str], discovered_terms: list[str]) -> str:
+    def _expand_query(
+        self,
+        base_terms: list[str],
+        discovered_terms: list[str],
+        site_ops: list[str] | None = None,
+    ) -> str:
         """Build a refined query that adds newly-discovered salient terms."""
         # Prefer the base terms plus any discovered terms not already present.
         base_low = {t.lower() for t in base_terms}
         additions = [t for t in discovered_terms if t.lower() not in base_low]
-        # Separate site: operators from regular terms — operators always go
-        # last and are never dropped by the term cap.
-        site_ops = [t for t in base_terms if t.lower().startswith("site:")]
-        regular = [t for t in base_terms if not t.lower().startswith("site:")]
-        terms = regular + additions[:3]
+        terms = base_terms + additions[:3]
+        ops = []
+        seen_ops: set[str] = set()
+        for op in site_ops or []:
+            low = op.lower()
+            if low.startswith("site:") and low not in seen_ops:
+                seen_ops.add(low)
+                ops.append(op)
         # Cap regular terms, then always append site: operators.
-        max_regular = max(1, 6 - len(site_ops))
-        query_terms = terms[:max_regular] + site_ops
+        max_regular = max(1, 6 - len(ops))
+        query_terms = terms[:max_regular] + ops
         return " ".join(query_terms)
 
     def _corroborated_facts(
@@ -865,6 +906,7 @@ class ResearchEngine:
         # version (first clause, ≤80 chars) is what gets searched.
         search_topic = _focus_topic(topic)
         base_terms = _keyterms(search_topic)
+        site_ops = _allowlist_site_ops(source_allowlist)
         facets = _detect_facets(search_topic)
         self._log(
             "research_begin",
@@ -894,9 +936,11 @@ class ResearchEngine:
             # "communicate bacteria". Subsequent rounds use keyterm-based
             # queries with progressive refinement.
             if round_idx == 0:
-                query = search_topic
+                query = _append_site_ops(search_topic, site_ops)
             else:
-                query = self._expand_query(base_terms, discovered_terms)
+                query = self._expand_query(
+                    base_terms, discovered_terms, site_ops=site_ops
+                )
             round_t0 = time.time()
             self._progress(
                 "search_round",
@@ -978,8 +1022,13 @@ class ResearchEngine:
             self._log("research_gap_fill", {"gaps": gaps})
             self._progress("gap_fill", {"queries": len(gaps), "gaps": gaps})
             for _gq_idx, gq in enumerate(gaps):
+                gap_query = _append_site_ops(gq, site_ops)
                 gsrc = self._search_round(
-                    gq, round_idx=self.max_rounds, topic=search_topic
+                    gap_query,
+                    round_idx=self.max_rounds,
+                    topic=search_topic,
+                    source_allowlist=source_allowlist,
+                    source_denylist=source_denylist,
                 )
                 for s in gsrc:
                     if _normalize_url(s["url"]) not in seen_urls:
