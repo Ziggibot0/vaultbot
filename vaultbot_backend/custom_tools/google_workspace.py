@@ -265,7 +265,7 @@ def _write_private_json(path, payload):
     tmp_path = path.parent / f"{path.name}.tmp"
 
     tmp_path.write_text(content, encoding="utf-8")
-    if os.name != "nt":
+    if os.name == "posix":
         with contextlib.suppress(OSError):
             os.chmod(tmp_path, 0o600)
 
@@ -274,7 +274,7 @@ def _write_private_json(path, payload):
     except OSError:
         path.write_text(content, encoding="utf-8")
 
-    if os.name != "nt":
+    if os.name == "posix":
         with contextlib.suppress(OSError):
             os.chmod(path, 0o600)
 
