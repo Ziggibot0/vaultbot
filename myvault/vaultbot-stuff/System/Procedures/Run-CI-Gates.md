@@ -205,7 +205,9 @@ has a debt ratchet: pre-existing errors are tracked, and only NEW errors
 fail the gate. Running pyright on the full repo is slow (>300s on 226
 files), so it is **opt-in** — pass `run_pyright=true` in args to enable
 it. By default it's skipped, which matches the pre-push use case where
-you want fast feedback from ruff + pytest.
+you want fast feedback from ruff + pytest. We are widening the hot-path
+files incrementally; the target date to flip full-repo pyright to a hard
+blocking gate is 2026-10-01 (see CI configuration comments).
 
 ```python
 import json, subprocess, os, shutil

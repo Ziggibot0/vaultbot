@@ -57,7 +57,7 @@ jobs:
 
           run_check "Ruff lint" uv run ruff check .
           run_check "Unit tests" uv run pytest -q -m unit --tb=short
-          run_check "Hot-path pyright" uv run pyright --level error vault_indexer.py chat_handler.py fused_retrieval.py
+          run_check "Hot-path pyright" uv run pyright --level error vault_indexer.py chat_handler.py fused_retrieval.py services.py subprocess_utils.py
 
           echo "all_ok=$ALL_OK" >> "$GITHUB_OUTPUT"
 

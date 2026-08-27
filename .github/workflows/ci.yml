@@ -171,9 +171,10 @@ jobs:
         # is a real bug (mirrors the BLE001 hot-path strategy). Narrow scope
         # first so we don't drown in pre-existing debt; widen incrementally.
         #
-        # vault_indexer.py, chat_handler.py, and fused_retrieval.py are all
-        # clean (0 errors) and are the hard gate today (issue #20).
-        run: uv run pyright --level error vaultbot_backend/vault_indexer.py vaultbot_backend/chat_handler.py vaultbot_backend/fused_retrieval.py
+        # vault_indexer.py, chat_handler.py, fused_retrieval.py, services.py,
+        # and subprocess_utils.py are all clean (0 errors) and are the hard gate
+        # today (issue #20). Target: flip full-repo pyright to blocking on 2026-10-01.
+        run: uv run pyright --level error vaultbot_backend/vault_indexer.py vaultbot_backend/chat_handler.py vaultbot_backend/fused_retrieval.py vaultbot_backend/services.py vaultbot_backend/subprocess_utils.py
 
       - name: Pytest — unit tests (HARD GATE)
         # Pure-logic tests marked with `pytestmark = pytest.mark.unit`.
