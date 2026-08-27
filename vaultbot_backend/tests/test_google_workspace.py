@@ -74,6 +74,46 @@ def test_get_credentials_returns_stored(patched_paths):
     assert gw._get_credentials() == ("cid", "csec")
 
 
+# New tests for permission hardening behavior
+
+def test_save_helpers_attempt_chmod_on_posix(patched_paths, monkeypatch):
+    calls = []
+
+    def fake_chmod(path, mode):
+        calls.append((str(path), mode))
+
+    monkeypatch.setattr(gw.os, "name", "posix")
+    monkeypatch.setattr(gw.os, "chmod", fake_chmod)
+
+    gw._save_config({"client_id": "x"})
+    gw._save_tokens({"access_token": "t"})
+
+    config_targets = {
+        str(patched_paths / "config.json.tmp"),
+        str(patched_paths / "config.json"),
+    }
+    token_targets = {
+        str(patched_paths / "tokens.json.tmp"),
+        str(patched_paths / "tokens.json"),
+    }
+    chmod_targets = {path for path, _mode in calls}
+
+    assert config_targets & chmod_targets
+    assert token_targets & chmod_targets
+    assert all(mode == 0o600 for _path, mode in calls)
+
+
+def test_save_helpers_swallow_oserror_from_chmod(patched_paths, monkeypatch):
+    def raising_chmod(path, mode):
+        raise OSError("nope")
+
+    monkeypatch.setattr(gw.os, "chmod", raising_chmod)
+
+    # Should not raise
+    gw._save_config({"client_id": "x"})
+    gw._save_tokens({"access_token": "t"})
+
+
 # ── run() dispatch: setup / auth / callback / status ─────────────────────────
 
 
