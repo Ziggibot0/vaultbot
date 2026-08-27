@@ -129,9 +129,10 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE001", "FAST"]
 # calls on the dynamically-typed `WebSocket` in chat_handler.py are DELIBERATE —
 # they bypass pyright's reportAttributeAccessIssue on unknown attributes. The
 # pyright hot-path hard gate (vault_indexer.py, chat_handler.py,
-# fused_retrieval.py) fails if these are converted to direct attribute access.
+# fused_retrieval.py, services.py, subprocess_utils.py) fails if these are
+# converted to direct attribute access. We widen this hot-path incrementally
+# and plan to flip full-repo pyright to blocking on 2026-10-01.
 ignore = ["RUF100", "B009", "B010"]
-
 # Allow fix for all enabled rules (when `--fix` is provided).
 fixable = ["ALL"]
 unfixable = []
