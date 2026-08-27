@@ -105,11 +105,10 @@ def test_save_helpers_attempt_chmod_on_posix(patched_paths, monkeypatch):
 
 
 def test_save_helpers_swallow_oserror_from_chmod(patched_paths, monkeypatch):
-    calls = 0
+    calls = []
 
     def raising_chmod(path, mode):
-        nonlocal calls
-        calls += 1
+        calls.append((str(path), mode))
         raise OSError("nope")
 
     monkeypatch.setattr(gw.os, "name", "posix")
@@ -118,7 +117,14 @@ def test_save_helpers_swallow_oserror_from_chmod(patched_paths, monkeypatch):
     # Should not raise
     gw._save_config({"client_id": "x"})
     gw._save_tokens({"access_token": "t"})
-    assert calls == 4
+    expected_targets = {
+        f"{gw.CONFIG_PATH}.tmp",
+        str(gw.CONFIG_PATH),
+        f"{gw.TOKEN_PATH}.tmp",
+        str(gw.TOKEN_PATH),
+    }
+    assert {path for path, _mode in calls} == expected_targets
+    assert all(mode == 0o600 for _path, mode in calls)
 
 
 # ── run() dispatch: setup / auth / callback / status ─────────────────────────
