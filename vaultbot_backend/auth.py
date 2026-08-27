@@ -37,6 +37,11 @@ import contextlib
 import os
 import secrets
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+# Warn only once when auth bypass is enabled.
+_auth_bypass_warned = False
 
 # The token file lives next to this module (in vaultbot_backend/).
 _TOKEN_FILE = Path(__file__).resolve().parent / ".vaultbot_auth_token"
@@ -174,11 +179,20 @@ def validate_token(token: str | None) -> bool:
     this is defense-in-depth — an attacker who can measure timing on
     localhost already has bigger problems).
 
-    Skips validation when VAULTBOT_SKIP_LOCK=1 (test mode) — the same env
-    var that disables the PID lock also disables auth so the test client
-    can call endpoints without a token.
+    In test/dev scenarios you can bypass auth by setting
+    VAULTBOT_SKIP_AUTH=1. This differs from VAULTBOT_SKIP_LOCK which
+    should only be used to bypass the PID lock. When the auth bypass is
+    used, a single WARNING is emitted to make the bypass loud.
     """
-    if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
+    global _auth_bypass_warned
+    if os.environ.get("VAULTBOT_SKIP_AUTH", "") == "1":
+        # Warn once so CI/dev logs surface the bypass without spamming.
+        if not _auth_bypass_warned:
+            logger.warning(
+                "VaultBot auth validation DISABLED via VAULTBOT_SKIP_AUTH=1 — "
+                "this allows anonymous requests to mutating endpoints."
+            )
+            _auth_bypass_warned = True
         return True
     if token is None:
         return False
