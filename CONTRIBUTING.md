@@ -300,10 +300,10 @@ Environment variables (set in `.env` or the OS environment):
 | `VAULTBOT_BUDGET_USD_PER_RUN` | `0.50` | Hard USD ceiling per chat turn |
 | `VAULTBOT_BUDGET_ESCALATIONS` | `3` | Max cloud-model calls per turn |
 
-When the ceiling is hit the governor raises `BudgetExceeded`, the loop
-stops immediately, and the current findings are persisted to chat history.
-Setting `VAULTBOT_BUDGET_USD_PER_RUN=0` with `VAULTBOT_BUDGET_ESCALATIONS=0`
-routes everything through the local model with no cloud fallback.
+When the governor is wired into a call site, hitting the ceiling raises
+`BudgetExceeded` so that the caller can stop further cloud escalation. Setting
+`VAULTBOT_BUDGET_USD_PER_RUN=0` with `VAULTBOT_BUDGET_ESCALATIONS=0`
+effectively disables cloud fallback when those checks are enforced.
 
 Unknown cost for a non-local model is treated as a budget overrun (refuse,
 don't proceed) — the governor is conservative by design.

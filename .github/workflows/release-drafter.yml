@@ -14,7 +14,7 @@ on:
     branches: [main]
   pull_request:
     # Keep the draft in sync as labels change on open PRs.
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
 
 permissions:
   contents: write

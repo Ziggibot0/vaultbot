@@ -84,7 +84,7 @@ class BudgetState:
             BudgetExceeded: if the hard ceiling is exceeded after this call.
         """
         if self.is_local_model(model_name):
-            # Local models are free — track escalation count but not cost.
+            # Local models are free, so they do not consume the USD budget.
             return
 
         # Unknown cost for a non-local model = conservatively refuse.
