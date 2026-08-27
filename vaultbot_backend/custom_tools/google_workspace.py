@@ -200,24 +200,28 @@ def _load_config():
     return {}
 
 
+def _write_private_json(path, payload):
+    content = json.dumps(payload, indent=2)
+    tmp_path = path.parent / f"{path.name}.tmp"
+
+    tmp_path.write_text(content, encoding="utf-8")
+    if os.name != "nt":
+        with contextlib.suppress(OSError):
+            os.chmod(tmp_path, 0o600)
+
+    try:
+        tmp_path.replace(path)
+    except OSError:
+        path.write_text(content, encoding="utf-8")
+
+    if os.name != "nt":
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
+
+
 def _save_config(cfg):
     # Atomic write with permissions hardening on POSIX, mirroring auth.py pattern.
-    tmp_path = CONFIG_PATH.with_suffix(".tmp")
-    try:
-        tmp_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        if os.name != "nt":
-            with contextlib.suppress(OSError):
-                os.chmod(tmp_path, 0o600)
-        tmp_path.replace(CONFIG_PATH)
-        # Also attempt to harden the final file permissions after replace.
-        if os.name != "nt":
-            with contextlib.suppress(OSError):
-                os.chmod(CONFIG_PATH, 0o600)
-    except Exception:  # noqa: BLE001 — best-effort fallback to direct write
-        CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        if os.name != "nt":
-            with contextlib.suppress(OSError):
-                os.chmod(CONFIG_PATH, 0o600)
+    _write_private_json(CONFIG_PATH, cfg)
 
 
 def _load_tokens():
@@ -228,22 +232,7 @@ def _load_tokens():
 
 def _save_tokens(tokens):
     # Atomic write with permissions hardening on POSIX, mirroring auth.py pattern.
-    tmp_path = TOKEN_PATH.with_suffix(".tmp")
-    try:
-        tmp_path.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
-        if os.name != "nt":
-            with contextlib.suppress(OSError):
-                os.chmod(tmp_path, 0o600)
-        tmp_path.replace(TOKEN_PATH)
-        # Also attempt to harden the final file permissions after replace.
-        if os.name != "nt":
-            with contextlib.suppress(OSError):
-                os.chmod(TOKEN_PATH, 0o600)
-    except Exception:  # noqa: BLE001 — best-effort fallback to direct write
-        TOKEN_PATH.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
-        if os.name != "nt":
-            with contextlib.suppress(OSError):
-                os.chmod(TOKEN_PATH, 0o600)
+    _write_private_json(TOKEN_PATH, tokens)
 
 
 def _get_credentials():
