@@ -44,6 +44,21 @@ def clear_pending_states(monkeypatch):
     gw._PENDING_STATES.clear()
 
 
+@pytest.fixture(autouse=True)
+def fake_secret_store(monkeypatch):
+    store = {}
+
+    def fake_load(entry):
+        return dict(store.get(entry, {}))
+
+    def fake_save(entry, payload):
+        store[entry] = json.loads(json.dumps(payload))
+
+    monkeypatch.setattr(gw, "_load_secret_blob", fake_load)
+    monkeypatch.setattr(gw, "_save_secret_blob", fake_save)
+    return store
+
+
 # ── config / token persistence ───────────────────────────────────────────────
 
 
@@ -51,18 +66,27 @@ def test_load_config_missing_returns_empty(patched_paths):
     assert gw._load_config() == {}
 
 
-def test_save_and_load_config_roundtrip(patched_paths):
+def test_save_and_load_config_roundtrip(patched_paths, fake_secret_store):
     gw._save_config({"client_id": "abc", "client_secret": "xyz"})
     assert gw._load_config() == {"client_id": "abc", "client_secret": "xyz"}
+    assert json.loads(gw.CONFIG_PATH.read_text(encoding="utf-8")) == {
+        "client_id": "abc"
+    }
+    assert fake_secret_store[gw.CONFIG_SECRET_ENTRY] == {"client_secret": "xyz"}
 
 
 def test_load_tokens_missing_returns_none(patched_paths):
     assert gw._load_tokens() is None
 
 
-def test_save_and_load_tokens_roundtrip(patched_paths):
+def test_save_and_load_tokens_roundtrip(patched_paths, fake_secret_store):
     gw._save_tokens({"access_token": "tok", "refresh_token": "ref"})
     assert gw._load_tokens() == {"access_token": "tok", "refresh_token": "ref"}
+    assert json.loads(gw.TOKEN_PATH.read_text(encoding="utf-8")) == {}
+    assert fake_secret_store[gw.TOKEN_SECRET_ENTRY] == {
+        "access_token": "tok",
+        "refresh_token": "ref",
+    }
 
 
 def test_get_credentials_empty_when_unconfigured(patched_paths):
@@ -72,6 +96,35 @@ def test_get_credentials_empty_when_unconfigured(patched_paths):
 def test_get_credentials_returns_stored(patched_paths):
     gw._save_config({"client_id": "cid", "client_secret": "csec"})
     assert gw._get_credentials() == ("cid", "csec")
+
+
+def test_load_config_migrates_legacy_plaintext_secret(patched_paths, fake_secret_store):
+    gw.CONFIG_PATH.write_text(
+        json.dumps({"client_id": "cid", "client_secret": "csec"}),
+        encoding="utf-8",
+    )
+    assert gw._load_config() == {"client_id": "cid", "client_secret": "csec"}
+    assert json.loads(gw.CONFIG_PATH.read_text(encoding="utf-8")) == {
+        "client_id": "cid"
+    }
+    assert fake_secret_store[gw.CONFIG_SECRET_ENTRY] == {"client_secret": "csec"}
+
+
+def test_load_tokens_migrates_legacy_plaintext_tokens(patched_paths, fake_secret_store):
+    gw.TOKEN_PATH.write_text(
+        json.dumps({"access_token": "tok", "refresh_token": "ref", "expires_in": 3600}),
+        encoding="utf-8",
+    )
+    assert gw._load_tokens() == {
+        "access_token": "tok",
+        "refresh_token": "ref",
+        "expires_in": 3600,
+    }
+    assert json.loads(gw.TOKEN_PATH.read_text(encoding="utf-8")) == {"expires_in": 3600}
+    assert fake_secret_store[gw.TOKEN_SECRET_ENTRY] == {
+        "access_token": "tok",
+        "refresh_token": "ref",
+    }
 
 
 # New tests for permission hardening behavior

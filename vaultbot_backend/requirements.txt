@@ -48,6 +48,9 @@ httpx==0.28.1
 # edge-tts: default free TTS provider in providers.json. Was imported but
 # undeclared, silently degrading on fresh install (issue #172).
 edge-tts==7.2.8
+# keyring: stores Google Workspace OAuth client secrets/tokens in the OS
+# keychain instead of plaintext JSON files (issue #231).
+keyring==25.7.0
 
 # ── Transitive dependencies (pinned by uv.lock) ────────────────────────────
 annotated-doc==0.0.5

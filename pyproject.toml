@@ -56,6 +56,9 @@ dependencies = [
     # but undeclared in every manifest, so it silently degraded on fresh
     # install (issue #172).
     "edge-tts>=6.1.0",
+    # keyring: stores Google Workspace OAuth client secrets/tokens in the OS
+    # keychain instead of plaintext JSON files (issue #231).
+    "keyring>=25.7.0",
 ]
 
 [project.optional-dependencies]
