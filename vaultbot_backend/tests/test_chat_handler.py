@@ -53,7 +53,8 @@ class _FakeWebSocket:
     """Minimal WebSocket substitute — no network, no handshake."""
 
     def __init__(self):
-        self.session_id = "test-session"
+        # None → no ChatLoopCheckpointer, no filesystem side effects
+        self.session_id = None
         self._cancelled = False
         self.working_memory = None  # set by handle_chat on first use
 
@@ -156,8 +157,10 @@ def test_handle_chat_trivial_turn_skips_loop(monkeypatch):
 # ---------------------------------------------------------------------------
 # Test 3: normal turn — _prepare_turn succeeds → run_agentic_loop IS called
 # ---------------------------------------------------------------------------
-def test_handle_chat_normal_turn_calls_loop(monkeypatch):
+def test_handle_chat_normal_turn_calls_loop(monkeypatch, tmp_path):
     # Arrange
+    import tempfile
+
     loop_called = []
 
     async def _fake_prepare(svc, ws, msg, sl, wm, cp, hist):  # noqa: PLR0913
@@ -176,6 +179,12 @@ def test_handle_chat_normal_turn_calls_loop(monkeypatch):
     monkeypatch.setattr(chat_handler, "run_agentic_loop", _fake_loop)
     monkeypatch.setattr(chat_handler, "_finalize_turn", _fake_finalize)
     monkeypatch.setattr(chat_handler, "_run_background_tasks", _fake_bg)
+    # Prevent write_partial from touching the real filesystem.
+    monkeypatch.setattr(
+        chat_handler, "write_partial", lambda *a, **k: None, raising=False
+    )
+    # Redirect any tempfile.gettempdir() calls inside chat_handler to tmp_path.
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
 
     logger = _FakeSessionLogger()
     ws = _FakeWebSocket()
