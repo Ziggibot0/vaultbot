@@ -15,8 +15,14 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
+import keyring
+from keyring.errors import KeyringError
+
 CONFIG_PATH = Path(__file__).parent.parent / "google_workspace_config.json"
 TOKEN_PATH = Path(__file__).parent / "google_workspace_tokens.json"
+KEYRING_SERVICE = "vaultbot.google_workspace"
+CONFIG_SECRET_ENTRY = "oauth_config"
+TOKEN_SECRET_ENTRY = "oauth_tokens"
 
 # In-flight OAuth state. Maps the `state` value sent to Google to the PKCE
 # `code_verifier` that must accompany the token exchange. This defeats
@@ -31,6 +37,84 @@ _PENDING_STATES: dict[str, str] = {}
 def _b64url(data: bytes) -> str:
     """Base64url-encode bytes (no padding), per RFC 7636."""
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _config_public_payload(payload):
+    client_id = payload.get("client_id")
+    if client_id in ("", None):
+        return {}
+    return {"client_id": client_id}
+
+
+def _config_secret_payload(payload):
+    client_secret = payload.get("client_secret")
+    if client_secret in ("", None):
+        return {}
+    return {"client_secret": client_secret}
+
+
+def _token_public_payload(payload):
+    public_payload = {}
+    for key in ("obtained_at", "expires_in", "scope", "token_type"):
+        value = payload.get(key)
+        if value not in ("", None):
+            public_payload[key] = value
+    return public_payload
+
+
+def _token_secret_payload(payload):
+    secret_payload = {}
+    for key in ("access_token", "refresh_token", "id_token"):
+        value = payload.get(key)
+        if value not in ("", None):
+            secret_payload[key] = value
+    return secret_payload
+
+
+def _load_secret_blob(entry):
+    try:
+        raw = keyring.get_password(KEYRING_SERVICE, entry)
+    except KeyringError:
+        return {}
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_secret_blob(entry, payload):
+    try:
+        keyring.set_password(KEYRING_SERVICE, entry, json.dumps(payload))
+    except KeyringError as exc:
+        raise RuntimeError(
+            "Secure Google Workspace secret storage is unavailable. "
+            "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in the "
+            "environment, or configure an OS keyring backend before using "
+            "Google Workspace setup or sign-in."
+        ) from exc
+
+
+def _migrate_legacy_secret_payload(
+    path,
+    public_payload,
+    secret_entry,
+    secret_payload,
+    legacy_secret_payload,
+):
+    if not legacy_secret_payload:
+        return secret_payload
+    merged_secret_payload = dict(secret_payload)
+    merged_secret_payload.update(legacy_secret_payload)
+    try:
+        _save_secret_blob(secret_entry, merged_secret_payload)
+    except RuntimeError:
+        return merged_secret_payload
+    with contextlib.suppress(OSError):
+        _write_private_json(path, public_payload)
+    return merged_secret_payload
 
 
 SCHEMA = {
@@ -195,23 +279,92 @@ SCOPES = [
 
 
 def _load_config():
+    file_payload = {}
     if CONFIG_PATH.exists():
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
+        file_payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    public_payload = _config_public_payload(file_payload)
+    legacy_secret_payload = _config_secret_payload(file_payload)
+    secret_payload = _load_secret_blob(CONFIG_SECRET_ENTRY)
+    secret_payload = _migrate_legacy_secret_payload(
+        CONFIG_PATH,
+        public_payload,
+        CONFIG_SECRET_ENTRY,
+        secret_payload,
+        legacy_secret_payload,
+    )
+    combined_payload = dict(public_payload)
+    combined_payload.update(secret_payload)
+    return combined_payload
+
+
+def _write_private_json(path, payload):
+    content = json.dumps(payload, indent=2)
+    tmp_path = path.parent / f"{path.name}.tmp"
+
+    tmp_path.write_text(content, encoding="utf-8")
+    if os.name == "posix":
+        with contextlib.suppress(OSError):
+            os.chmod(tmp_path, 0o600)
+
+    try:
+        tmp_path.replace(path)
+    except OSError:
+        try:
+            if os.name == "posix":
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as file_handle:
+                    file_handle.write(content)
+            else:
+                path.write_text(content, encoding="utf-8")
+        finally:
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
+
+    if os.name == "posix":
+        with contextlib.suppress(OSError):
+            os.chmod(path, 0o600)
 
 
 def _save_config(cfg):
-    CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    # Atomic write with permissions hardening on POSIX, mirroring auth.py pattern.
+    public_payload = _config_public_payload(cfg)
+    secret_payload = _config_secret_payload(cfg)
+    if secret_payload:
+        _save_secret_blob(CONFIG_SECRET_ENTRY, secret_payload)
+    _write_private_json(CONFIG_PATH, public_payload)
 
 
 def _load_tokens():
+    file_payload = None
     if TOKEN_PATH.exists():
-        return json.loads(TOKEN_PATH.read_text(encoding="utf-8"))
+        file_payload = json.loads(TOKEN_PATH.read_text(encoding="utf-8"))
+    secret_payload = _load_secret_blob(TOKEN_SECRET_ENTRY)
+    if file_payload is None and not secret_payload:
+        return None
+    file_payload = file_payload or {}
+    public_payload = _token_public_payload(file_payload)
+    legacy_secret_payload = _token_secret_payload(file_payload)
+    secret_payload = _migrate_legacy_secret_payload(
+        TOKEN_PATH,
+        public_payload,
+        TOKEN_SECRET_ENTRY,
+        secret_payload,
+        legacy_secret_payload,
+    )
+    combined_payload = dict(public_payload)
+    combined_payload.update(secret_payload)
+    if combined_payload:
+        return combined_payload
     return None
 
 
 def _save_tokens(tokens):
-    TOKEN_PATH.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
+    # Atomic write with permissions hardening on POSIX, mirroring auth.py pattern.
+    public_payload = _token_public_payload(tokens)
+    secret_payload = _token_secret_payload(tokens)
+    if secret_payload:
+        _save_secret_blob(TOKEN_SECRET_ENTRY, secret_payload)
+    _write_private_json(TOKEN_PATH, public_payload)
 
 
 def _get_credentials():
@@ -264,7 +417,10 @@ def _refresh_tokens():
             # Preserve refresh_token (not always returned on refresh)
             new_tokens["refresh_token"] = tokens["refresh_token"]
             new_tokens["obtained_at"] = datetime.now(UTC).isoformat()
-            _save_tokens(new_tokens)
+            try:
+                _save_tokens(new_tokens)
+            except RuntimeError as exc:
+                return {"error": str(exc)}
             return new_tokens
     except (
         urllib.error.URLError,
@@ -442,7 +598,10 @@ def run(args: dict) -> dict:
         cfg = _load_config()
         cfg["client_id"] = client_id
         cfg["client_secret"] = client_secret
-        _save_config(cfg)
+        try:
+            _save_config(cfg)
+        except RuntimeError as exc:
+            return {"error": str(exc)}
         return {"status": "ok", "message": "Credentials saved."}
 
     # --- Auth / sign_in: start OAuth flow ---
@@ -536,7 +695,10 @@ def run(args: dict) -> dict:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 tokens = json.loads(resp.read())
                 tokens["obtained_at"] = datetime.now(UTC).isoformat()
-                _save_tokens(tokens)
+                try:
+                    _save_tokens(tokens)
+                except RuntimeError as exc:
+                    return {"error": str(exc)}
                 return {"status": "ok", "message": "Tokens saved successfully."}
         except (
             urllib.error.URLError,
