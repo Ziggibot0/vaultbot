@@ -3,19 +3,19 @@
   "pyright_version": "1.1.411",
   "pyright": {
     "3.11": {
-      "errors": 368,
+      "errors": 372,
       "warnings": 7
     },
     "3.12": {
-      "errors": 373,
+      "errors": 377,
       "warnings": 7
     },
     "3.13": {
-      "errors": 373,
+      "errors": 377,
       "warnings": 7
     },
     "3.14": {
-      "errors": 372,
+      "errors": 375,
       "warnings": 7
     }
   },
@@ -24,6 +24,6 @@
     "tests": 29
   },
   "thinness": {
-    "sloc": 46955
+    "sloc": 46931
   }
 }

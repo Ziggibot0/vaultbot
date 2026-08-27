@@ -28,6 +28,10 @@ permissions:
 
 jobs:
   analyze:
+    # Repos with Code Scanning default setup enabled reject advanced-config
+    # CodeQL uploads. Keep this workflow dormant until a maintainer disables
+    # default setup and explicitly opts in to the advanced workflow.
+    if: ${{ vars.VAULTBOT_ENABLE_ADVANCED_CODEQL == 'true' }}
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
