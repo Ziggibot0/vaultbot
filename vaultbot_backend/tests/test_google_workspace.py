@@ -110,6 +110,16 @@ def test_load_config_migrates_legacy_plaintext_secret(patched_paths, fake_secret
     assert fake_secret_store[gw.CONFIG_SECRET_ENTRY] == {"client_secret": "csec"}
 
 
+def test_load_config_migration_prefers_file_secret(patched_paths, fake_secret_store):
+    fake_secret_store[gw.CONFIG_SECRET_ENTRY] = {"client_secret": "old"}
+    gw.CONFIG_PATH.write_text(
+        json.dumps({"client_id": "cid", "client_secret": "new"}),
+        encoding="utf-8",
+    )
+    assert gw._load_config() == {"client_id": "cid", "client_secret": "new"}
+    assert fake_secret_store[gw.CONFIG_SECRET_ENTRY] == {"client_secret": "new"}
+
+
 def test_load_tokens_migrates_legacy_plaintext_tokens(patched_paths, fake_secret_store):
     gw.TOKEN_PATH.write_text(
         json.dumps({"access_token": "tok", "refresh_token": "ref", "expires_in": 3600}),
@@ -124,6 +134,32 @@ def test_load_tokens_migrates_legacy_plaintext_tokens(patched_paths, fake_secret
     assert fake_secret_store[gw.TOKEN_SECRET_ENTRY] == {
         "access_token": "tok",
         "refresh_token": "ref",
+    }
+
+
+def test_load_tokens_migration_prefers_file_tokens(patched_paths, fake_secret_store):
+    fake_secret_store[gw.TOKEN_SECRET_ENTRY] = {
+        "access_token": "old",
+        "refresh_token": "old-ref",
+    }
+    gw.TOKEN_PATH.write_text(
+        json.dumps(
+            {
+                "access_token": "new",
+                "refresh_token": "new-ref",
+                "expires_in": 3600,
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert gw._load_tokens() == {
+        "access_token": "new",
+        "refresh_token": "new-ref",
+        "expires_in": 3600,
+    }
+    assert fake_secret_store[gw.TOKEN_SECRET_ENTRY] == {
+        "access_token": "new",
+        "refresh_token": "new-ref",
     }
 
 

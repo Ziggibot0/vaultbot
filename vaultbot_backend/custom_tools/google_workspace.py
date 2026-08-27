@@ -23,8 +23,6 @@ TOKEN_PATH = Path(__file__).parent / "google_workspace_tokens.json"
 KEYRING_SERVICE = "vaultbot.google_workspace"
 CONFIG_SECRET_ENTRY = "oauth_config"
 TOKEN_SECRET_ENTRY = "oauth_tokens"
-CONFIG_SECRET_FIELDS = frozenset({"client_secret"})
-TOKEN_SECRET_FIELDS = frozenset({"access_token", "refresh_token", "id_token"})
 
 # In-flight OAuth state. Maps the `state` value sent to Google to the PKCE
 # `code_verifier` that must accompany the token exchange. This defeats
@@ -41,15 +39,36 @@ def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-def _split_secret_fields(payload, secret_fields):
+def _config_public_payload(payload):
+    client_id = payload.get("client_id")
+    if client_id in ("", None):
+        return {}
+    return {"client_id": client_id}
+
+
+def _config_secret_payload(payload):
+    client_secret = payload.get("client_secret")
+    if client_secret in ("", None):
+        return {}
+    return {"client_secret": client_secret}
+
+
+def _token_public_payload(payload):
     public_payload = {}
-    secret_payload = {}
-    for key, value in payload.items():
-        if key in secret_fields and value not in ("", None):
-            secret_payload[key] = value
-        else:
+    for key in ("obtained_at", "expires_in", "scope", "token_type"):
+        value = payload.get(key)
+        if value not in ("", None):
             public_payload[key] = value
-    return public_payload, secret_payload
+    return public_payload
+
+
+def _token_secret_payload(payload):
+    secret_payload = {}
+    for key in ("access_token", "refresh_token", "id_token"):
+        value = payload.get(key)
+        if value not in ("", None):
+            secret_payload[key] = value
+    return secret_payload
 
 
 def _load_secret_blob(entry):
@@ -76,6 +95,26 @@ def _save_secret_blob(entry, payload):
             "environment, or configure an OS keyring backend before using "
             "Google Workspace setup or sign-in."
         ) from exc
+
+
+def _migrate_legacy_secret_payload(
+    path,
+    public_payload,
+    secret_entry,
+    secret_payload,
+    legacy_secret_payload,
+):
+    if not legacy_secret_payload:
+        return secret_payload
+    merged_secret_payload = dict(secret_payload)
+    merged_secret_payload.update(legacy_secret_payload)
+    try:
+        _save_secret_blob(secret_entry, merged_secret_payload)
+    except RuntimeError:
+        return merged_secret_payload
+    with contextlib.suppress(OSError):
+        _write_private_json(path, public_payload)
+    return merged_secret_payload
 
 
 SCHEMA = {
@@ -243,18 +282,16 @@ def _load_config():
     file_payload = {}
     if CONFIG_PATH.exists():
         file_payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    public_payload, legacy_secret_payload = _split_secret_fields(
-        file_payload,
-        CONFIG_SECRET_FIELDS,
-    )
+    public_payload = _config_public_payload(file_payload)
+    legacy_secret_payload = _config_secret_payload(file_payload)
     secret_payload = _load_secret_blob(CONFIG_SECRET_ENTRY)
-    if legacy_secret_payload:
-        merged_secret_payload = dict(legacy_secret_payload)
-        merged_secret_payload.update(secret_payload)
-        with contextlib.suppress(RuntimeError, OSError):
-            _save_secret_blob(CONFIG_SECRET_ENTRY, merged_secret_payload)
-            _write_private_json(CONFIG_PATH, public_payload)
-        secret_payload = merged_secret_payload
+    secret_payload = _migrate_legacy_secret_payload(
+        CONFIG_PATH,
+        public_payload,
+        CONFIG_SECRET_ENTRY,
+        secret_payload,
+        legacy_secret_payload,
+    )
     combined_payload = dict(public_payload)
     combined_payload.update(secret_payload)
     return combined_payload
@@ -281,7 +318,8 @@ def _write_private_json(path, payload):
 
 def _save_config(cfg):
     # Atomic write with permissions hardening on POSIX, mirroring auth.py pattern.
-    public_payload, secret_payload = _split_secret_fields(cfg, CONFIG_SECRET_FIELDS)
+    public_payload = _config_public_payload(cfg)
+    secret_payload = _config_secret_payload(cfg)
     if secret_payload:
         _save_secret_blob(CONFIG_SECRET_ENTRY, secret_payload)
     _write_private_json(CONFIG_PATH, public_payload)
@@ -295,17 +333,15 @@ def _load_tokens():
     if file_payload is None and not secret_payload:
         return None
     file_payload = file_payload or {}
-    public_payload, legacy_secret_payload = _split_secret_fields(
-        file_payload,
-        TOKEN_SECRET_FIELDS,
+    public_payload = _token_public_payload(file_payload)
+    legacy_secret_payload = _token_secret_payload(file_payload)
+    secret_payload = _migrate_legacy_secret_payload(
+        TOKEN_PATH,
+        public_payload,
+        TOKEN_SECRET_ENTRY,
+        secret_payload,
+        legacy_secret_payload,
     )
-    if legacy_secret_payload:
-        merged_secret_payload = dict(legacy_secret_payload)
-        merged_secret_payload.update(secret_payload)
-        with contextlib.suppress(RuntimeError, OSError):
-            _save_secret_blob(TOKEN_SECRET_ENTRY, merged_secret_payload)
-            _write_private_json(TOKEN_PATH, public_payload)
-        secret_payload = merged_secret_payload
     combined_payload = dict(public_payload)
     combined_payload.update(secret_payload)
     if combined_payload:
@@ -315,7 +351,8 @@ def _load_tokens():
 
 def _save_tokens(tokens):
     # Atomic write with permissions hardening on POSIX, mirroring auth.py pattern.
-    public_payload, secret_payload = _split_secret_fields(tokens, TOKEN_SECRET_FIELDS)
+    public_payload = _token_public_payload(tokens)
+    secret_payload = _token_secret_payload(tokens)
     if secret_payload:
         _save_secret_blob(TOKEN_SECRET_ENTRY, secret_payload)
     _write_private_json(TOKEN_PATH, public_payload)
