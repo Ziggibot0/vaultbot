@@ -760,9 +760,15 @@ class ResearchEngine:
         # Prefer the base terms plus any discovered terms not already present.
         base_low = {t.lower() for t in base_terms}
         additions = [t for t in discovered_terms if t.lower() not in base_low]
-        terms = base_terms + additions[:3]
+        regular_terms = [t for t in base_terms if not t.lower().startswith("site:")]
+        terms = regular_terms + additions[:3]
         ops = []
         seen_ops: set[str] = set()
+        for op in base_terms:
+            low = op.lower()
+            if low.startswith("site:") and low not in seen_ops:
+                seen_ops.add(low)
+                ops.append(op)
         for op in site_ops or []:
             low = op.lower()
             if low.startswith("site:") and low not in seen_ops:

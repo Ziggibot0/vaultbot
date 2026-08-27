@@ -66,7 +66,11 @@ def test_research_appends_allowlist_site_ops_to_search_queries(monkeypatch):
     monkeypatch.setattr(
         _research_engine_mod, "_source_relevance", lambda *a, **k: (1.0, "ok")
     )
-    monkeypatch.setattr(_research_engine_mod, "_filter_dead_urls", None)
+    monkeypatch.setattr(
+        _research_engine_mod,
+        "_filter_dead_urls",
+        lambda urls, **kwargs: (list(urls), []),
+    )
     monkeypatch.setattr(ResearchEngine, "_identify_gaps", lambda *a, **k: [])
     monkeypatch.setattr(
         ResearchEngine, "_extractive_synthesis", lambda *a, **k: ("- fact", {0})
