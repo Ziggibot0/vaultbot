@@ -63,15 +63,17 @@ git clone <your-fork>.git
 cd vaultbot
 python -m venv vaultbot_venv
 # No activation needed — invoke the venv's python directly:
-vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot/vaultbot_backend/requirements.txt   # Windows
-# or: vaultbot_venv/bin/python -m pip install -r vaultbot/vaultbot_backend/requirements.txt       # macOS/Linux
+vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot_backend/requirements.txt   # Windows
+# or: vaultbot_venv/bin/python -m pip install -r vaultbot_backend/requirements.txt       # macOS/Linux
 ollama pull qwen3.6:latest nomic-embed-text
-cp vaultbot/.env.example .env   # fill in your values
+copy .env.example .env   # Windows
+# or: cp .env.example .env   # macOS/Linux
+# Then fill in your values in .env.
 ```
 
 The backend is started automatically by the Obsidian plugin. For manual
-testing: `vaultbot_venv/Scripts/python.exe vaultbot/vaultbot_backend/main.py`
-(Windows) or `vaultbot_venv/bin/python vaultbot/vaultbot_backend/main.py` (macOS/Linux).
+testing: `vaultbot_venv/Scripts/python.exe vaultbot_backend/main.py`
+(Windows) or `vaultbot_venv/bin/python vaultbot_backend/main.py` (macOS/Linux).
 
 ## Safe self-editing
 
