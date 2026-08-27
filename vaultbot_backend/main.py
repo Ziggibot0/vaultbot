@@ -458,10 +458,11 @@ app.add_middleware(_RateLimitMiddleware)
 # custom headers — so /shutdown also accepts the token as a ?token= query
 # parameter. This is a well-known workaround for the sendBeacon limitation.
 # Health/preflight endpoints are exempt (the plugin needs them before it
-# can read the token file). When VAULTBOT_SKIP_LOCK=1 (test mode), auth is
+# can read the token file). When VAULTBOT_SKIP_AUTH=1 (test mode), auth is
 # bypassed entirely so the test client can call endpoints without a token.
 from auth import (  # noqa: E402
     get_or_create_token,
+    is_auth_disabled,
     is_auth_exempt,
     is_auth_required_for_method,
 )
@@ -480,7 +481,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if token is None and path == "/shutdown":
             # sendBeacon can't set headers — accept ?token= query param.
             token = request.query_params.get("token")
-        if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
+        if is_auth_disabled():
             return await call_next(request)
         if token is None:
             return JSONResponse(
