@@ -473,6 +473,7 @@ from auth import (  # noqa: E402
 
 class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+        global _auth_disabled_warned
         path = request.url.path.rstrip("/") or "/"
         if is_auth_exempt(path):
             return await call_next(request)
@@ -487,7 +488,6 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if os.environ.get("VAULTBOT_SKIP_AUTH", "") == "1":
             # Loud one-time warning so CI/devs notice auth is disabled, but
             # avoid spamming it on every request.
-            global _auth_disabled_warned
             with _auth_disabled_warn_lock:
                 if not _auth_disabled_warned:
                     logger.warning(

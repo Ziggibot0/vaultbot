@@ -29,6 +29,7 @@ def test_skip_auth_env_bypasses_validation(monkeypatch, caplog):
 
 def test_skip_lock_does_not_bypass_auth(monkeypatch):
     monkeypatch.delenv("VAULTBOT_SKIP_AUTH", raising=False)
+    monkeypatch.setattr(auth, "_auth_bypass_warned", False)
     monkeypatch.setenv("VAULTBOT_SKIP_LOCK", "1")
     # SKIP_LOCK should not bypass auth anymore — validate_token requires a token
     assert auth.validate_token(None) is False
