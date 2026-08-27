@@ -578,13 +578,29 @@ class SelfImprover:
             stdout_truncated = stdout_size > TUNABLES.code_run_stdout_tail
             stderr_truncated = stderr_size > TUNABLES.code_run_stderr_tail
             truncated = stdout_truncated or stderr_truncated
+            stdout_display = stdout_tail
+            if stdout_truncated:
+                stdout_display = (
+                    "[... output truncated: showing only the tail of stdout; "
+                    f"total_bytes={stdout_size}, total_lines={stdout_lines}, "
+                    f"tail_chars={TUNABLES.code_run_stdout_tail} ...]\n"
+                    f"{stdout_tail}"
+                )
+            stderr_display = stderr_tail
+            if stderr_truncated:
+                stderr_display = (
+                    "[... output truncated: showing only the tail of stderr; "
+                    f"total_bytes={stderr_size}, total_lines={stderr_lines}, "
+                    f"tail_chars={TUNABLES.code_run_stderr_tail} ...]\n"
+                    f"{stderr_tail}"
+                )
             result = {
-                "stdout": stdout_tail,
+                "stdout": stdout_display,
                 "stdout_head": stdout_head,
                 "stdout_tail": stdout_tail,
                 "stdout_total_bytes": stdout_size,
                 "stdout_total_lines": stdout_lines,
-                "stderr": stderr_tail,
+                "stderr": stderr_display,
                 "stderr_head": stderr_head,
                 "stderr_tail": stderr_tail,
                 "stderr_total_bytes": stderr_size,

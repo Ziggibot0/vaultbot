@@ -47,6 +47,57 @@ from task_api import write_partial
 from working_memory import TaskList
 
 
+def _single_tool_entry_for_round(st: TurnState, round_idx: int) -> dict | None:
+    """Return the lone tool-history entry for ``round_idx``, else ``None``."""
+    matches = [
+        entry
+        for entry in st._turn_tool_history
+        if isinstance(entry, dict) and entry.get("round") == round_idx
+    ]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def _update_same_tool_streak(st: TurnState) -> dict[str, object]:
+    """Update the same-tool streak from tool history for the current round."""
+    current = _single_tool_entry_for_round(st, st.round_idx)
+    if current is None:
+        st._last_tool_name = ""
+        st._consecutive_same_tool = 0
+        return {"tool_name": "", "count": 0, "same_result": False}
+
+    tool_name = str(current.get("tool", "") or "")
+    current_sig = str(current.get("result_signature", "") or "")
+    previous = _single_tool_entry_for_round(st, st.round_idx - 1)
+    previous_sig = str(previous.get("result_signature", "") or "") if previous else ""
+    previous_tool = str(previous.get("tool", "") or "") if previous else ""
+
+    if (
+        previous is not None
+        and previous_tool == tool_name
+        and previous_sig
+        and previous_sig == current_sig
+        and st._last_tool_name == tool_name
+        and st._consecutive_same_tool > 0
+    ):
+        st._consecutive_same_tool += 1
+    else:
+        st._consecutive_same_tool = 1
+
+    st._last_tool_name = tool_name
+    same_result = (
+        previous is not None
+        and previous_tool == tool_name
+        and previous_sig == current_sig
+    )
+    return {
+        "tool_name": tool_name,
+        "count": st._consecutive_same_tool,
+        "same_result": same_result,
+    }
+
+
 async def run_agentic_loop(
     svc: Services,
     websocket,
@@ -111,6 +162,12 @@ async def run_agentic_loop(
         # that's ~20s of zero progress -- enough to be confident it's stuck,
         # not enough to waste the user's money on a long spiral.
         _THOUGHT_LOOP_THRESHOLD = int(os.getenv("VAULTBOT_THOUGHT_LOOP_LIMIT", "5"))
+        _SAME_TOOL_STREAK_THRESHOLD = int(
+            os.getenv("VAULTBOT_SAME_TOOL_STREAK_LIMIT", "7")
+        )
+        # After the first same-tool nudge, give the model two more rounds to
+        # switch tools / arguments or explain the blocker before forcing exit.
+        _SAME_TOOL_STREAK_HARD_EXIT_THRESHOLD = _SAME_TOOL_STREAK_THRESHOLD + 2
         while st.round_idx < _MAX_ROUNDS:
             _check_cancelled(websocket)
             # --- Break condition 1: 3+ consecutive failed writes ---
@@ -190,6 +247,50 @@ async def run_agentic_loop(
                         "thought-only rounds. I was stuck in a thinking "
                         "loop and unable to break out of it. The findings "
                         "above are what I was able to determine.*"
+                    )
+                    break
+
+            # --- Break condition 3: same tool, same result, no progress ---
+            if st._consecutive_same_tool >= _SAME_TOOL_STREAK_THRESHOLD:
+                session_logger.log(
+                    "same_tool_streak_detected",
+                    {
+                        "round": st.round_idx,
+                        "tool": st._last_tool_name,
+                        "consecutive_same_tool": st._consecutive_same_tool,
+                    },
+                )
+                conversation.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "FRAMEWORK DIRECTIVE: You have called "
+                            f"{st._last_tool_name or 'the same tool'} "
+                            f"{st._consecutive_same_tool} consecutive times "
+                            "and got the same result back. This is not making "
+                            "progress. Stop repeating that call. Either use a "
+                            "different tool, change the arguments, or explain "
+                            "the blocker to the user and end the turn."
+                        ),
+                    }
+                )
+                if st._consecutive_same_tool >= _SAME_TOOL_STREAK_HARD_EXIT_THRESHOLD:
+                    session_logger.log(
+                        "loop_exit",
+                        {
+                            "reason": "same_tool_streak",
+                            "round": st.round_idx,
+                            "tool": st._last_tool_name,
+                            "consecutive_same_tool": st._consecutive_same_tool,
+                        },
+                    )
+                    st.final_answer = (st.final_answer or st.interim_text) + (
+                        "\n\n*The loop was stopped after "
+                        f"{st._consecutive_same_tool} consecutive "
+                        f"{st._last_tool_name or 'tool'} calls returned the "
+                        "same result. I was stuck repeating a non-progressing "
+                        "action. The findings above are what I was able to "
+                        "determine.*"
                     )
                     break
 
@@ -641,6 +742,17 @@ async def run_agentic_loop(
             else:
                 st._consecutive_thought_rounds = 0
 
+            _same_tool = _update_same_tool_streak(st)
+            session_logger.log(
+                "same_tool_streak_updated",
+                {
+                    "round": st.round_idx,
+                    "tool": _same_tool["tool_name"],
+                    "consecutive_same_tool": _same_tool["count"],
+                    "same_result": _same_tool["same_result"],
+                },
+            )
+
             # Loop back.
             st.round_idx += 1
             _check_cancelled(websocket)
@@ -719,6 +831,8 @@ async def run_agentic_loop(
                     "thinking_chars": len(round_thinking),
                     "failed_write_count": st._turn_failed_write_count,
                     "consecutive_thought_rounds": st._consecutive_thought_rounds,
+                    "last_tool_name": st._last_tool_name,
+                    "consecutive_same_tool": st._consecutive_same_tool,
                     "has_plan": wm.has_plan(),
                     "findings_count": len(st._findings),
                     "conv_chars": sum(
