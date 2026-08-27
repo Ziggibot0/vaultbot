@@ -76,6 +76,7 @@ def test_get_credentials_returns_stored(patched_paths):
 
 # New tests for permission hardening behavior
 
+
 def test_save_helpers_attempt_chmod_on_posix(patched_paths, monkeypatch):
     calls = []
 
