@@ -186,16 +186,7 @@ def validate_token(token: str | None) -> bool:
     should only be used to bypass the PID lock. When the auth bypass is
     used, a single WARNING is emitted to make the bypass loud.
     """
-    global _auth_bypass_warned
-    if os.environ.get("VAULTBOT_SKIP_AUTH", "") == "1":
-        # Warn once so CI/dev logs surface the bypass without spamming.
-        with _auth_bypass_warn_lock:
-            if not _auth_bypass_warned:
-                logger.warning(
-                    "VaultBot auth validation DISABLED via VAULTBOT_SKIP_AUTH=1 — "
-                    "this allows anonymous requests to mutating endpoints."
-                )
-                _auth_bypass_warned = True
+    if is_auth_disabled():
         return True
     if token is None:
         return False
@@ -205,3 +196,19 @@ def validate_token(token: str | None) -> bool:
         return False
     # secrets.compare_digest is constant-time.
     return secrets.compare_digest(token, expected)
+
+
+def is_auth_disabled() -> bool:
+    """Return True when auth is explicitly disabled via VAULTBOT_SKIP_AUTH=1."""
+    global _auth_bypass_warned
+    if os.environ.get("VAULTBOT_SKIP_AUTH", "") != "1":
+        return False
+    # Warn once so CI/dev logs surface the bypass without spamming.
+    with _auth_bypass_warn_lock:
+        if not _auth_bypass_warned:
+            logger.warning(
+                "VaultBot auth validation DISABLED via VAULTBOT_SKIP_AUTH=1 — "
+                "this allows anonymous requests to mutating endpoints."
+            )
+            _auth_bypass_warned = True
+    return True

@@ -11,15 +11,11 @@ import json
 import logging
 import os
 import sys
-import threading
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-# Avoid spamming the logs on every request when auth is intentionally disabled
-_auth_disabled_warned = False
-_auth_disabled_warn_lock = threading.Lock()
 
 # NOTE: the startup-reindex-failure flag lives in app_state.py (not here)
 # so routers/ws.py can read it via `from app_state import
@@ -466,6 +462,7 @@ app.add_middleware(_RateLimitMiddleware)
 # bypassed entirely so the test client can call endpoints without a token.
 from auth import (  # noqa: E402
     get_or_create_token,
+    is_auth_disabled,
     is_auth_exempt,
     is_auth_required_for_method,
 )
@@ -473,7 +470,6 @@ from auth import (  # noqa: E402
 
 class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        global _auth_disabled_warned
         path = request.url.path.rstrip("/") or "/"
         if is_auth_exempt(path):
             return await call_next(request)
@@ -485,15 +481,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if token is None and path == "/shutdown":
             # sendBeacon can't set headers — accept ?token= query param.
             token = request.query_params.get("token")
-        if os.environ.get("VAULTBOT_SKIP_AUTH", "") == "1":
-            # Loud one-time warning so CI/devs notice auth is disabled, but
-            # avoid spamming it on every request.
-            with _auth_disabled_warn_lock:
-                if not _auth_disabled_warned:
-                    logger.warning(
-                        "VAULTBOT_SKIP_AUTH=1 — authentication disabled. This is insecure and should only be used for tests."
-                    )
-                    _auth_disabled_warned = True
+        if is_auth_disabled():
             return await call_next(request)
         if token is None:
             return JSONResponse(
