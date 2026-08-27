@@ -88,6 +88,13 @@ class TestCodeRunReadOnlyGuard:
         assert "stdout_total_lines" in result
         assert "truncated" in result
         assert result["truncated"] is False or result["stdout_total_bytes"] > 0
+        if result["truncated"]:
+            assert result.get("output_truncated") is True
+            assert result.get("_truncation_notice")
+            assert (
+                "output truncated"
+                in (result.get("stdout", "") + result.get("stderr", "")).lower()
+            )
 
 
 class TestCodeRunNetworkIsolation:

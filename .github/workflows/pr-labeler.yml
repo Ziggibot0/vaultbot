@@ -1,0 +1,28 @@
+# Changed-path PR labeling (issue #329).
+#
+# Applies labels to PRs based on which files changed, making it easy to
+# identify the scope of a PR at a glance. Configured in .github/labeler.yml.
+#
+# The "pull-requests: write" permission is required to add labels.
+# Runs on pull_request_target so forks can trigger it without a GITHUB_TOKEN
+# secret in the forked repo.
+name: PR labeler
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label PR by changed paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: false  # Only ADD labels; don't remove existing ones.

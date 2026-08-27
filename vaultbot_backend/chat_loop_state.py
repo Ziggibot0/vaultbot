@@ -94,6 +94,10 @@ class TurnState:
     _turn_failed_write_count: int = 0
     # Consecutive thought-only rounds (5 = inject nudge, 7 = break).
     _consecutive_thought_rounds: int = 0
+    # The last tool observed in a single-tool same-result streak.
+    _last_tool_name: str = ""
+    # Consecutive rounds that repeated the same single tool with the same result.
+    _consecutive_same_tool: int = 0
 
     # Partial-answer crash-protection file path.
     partial_path: Path | None = None

@@ -41,6 +41,78 @@ jobs:
                 name: "vulnerability-radar",
                 color: "D93F0B",
                 description: "Tracking issue opened by dependency vulnerability radar"
+              },
+              // ── PR scope labels (used by pr-labeler and release-drafter) ──
+              {
+                name: "backend",
+                color: "0052CC",
+                description: "Changes to vaultbot_backend/ Python code"
+              },
+              {
+                name: "plugin",
+                color: "006B75",
+                description: "Changes to the Obsidian plugin"
+              },
+              {
+                name: "procedures",
+                color: "BFD4F2",
+                description: "Changes to vault procedures or System notes"
+              },
+              {
+                name: "ci",
+                color: "F9D0C4",
+                description: "Changes to CI/CD workflows or GitHub configuration"
+              },
+              {
+                name: "documentation",
+                color: "0075CA",
+                description: "Documentation changes (README, CONTRIBUTING, etc.)"
+              },
+              {
+                name: "security",
+                color: "E11D48",
+                description: "Security-related changes or fixes"
+              },
+              // ── Release-drafter semver labels ──────────────────────────────
+              {
+                name: "breaking-change",
+                color: "B60205",
+                description: "Introduces a breaking change (bumps major version)"
+              },
+              {
+                name: "feature",
+                color: "84B6EB",
+                description: "New feature or capability"
+              },
+              {
+                name: "enhancement",
+                color: "A2EEEF",
+                description: "Improvement to an existing feature"
+              },
+              {
+                name: "bug",
+                color: "D73A4A",
+                description: "Something isn't working as expected"
+              },
+              {
+                name: "fix",
+                color: "E4E669",
+                description: "A targeted bug fix"
+              },
+              {
+                name: "chore",
+                color: "E0E0E0",
+                description: "Maintenance work with no user-visible behavior change"
+              },
+              {
+                name: "maintenance",
+                color: "EEEEEE",
+                description: "Infrastructure, refactoring, or housekeeping"
+              },
+              {
+                name: "stale",
+                color: "CCCCCC",
+                description: "Issue or PR has been idle and is pending close"
               }
             ];
 
