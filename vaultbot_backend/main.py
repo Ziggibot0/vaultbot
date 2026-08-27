@@ -16,6 +16,8 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+# Avoid spamming the logs on every request when auth is intentionally disabled
+_auth_disabled_warned = False
 
 # NOTE: the startup-reindex-failure flag lives in app_state.py (not here)
 # so routers/ws.py can read it via `from app_state import
@@ -458,7 +460,7 @@ app.add_middleware(_RateLimitMiddleware)
 # custom headers — so /shutdown also accepts the token as a ?token= query
 # parameter. This is a well-known workaround for the sendBeacon limitation.
 # Health/preflight endpoints are exempt (the plugin needs them before it
-# can read the token file). When VAULTBOT_SKIP_LOCK=1 (test mode), auth is
+# can read the token file). When VAULTBOT_SKIP_AUTH=1 (test mode), auth is
 # bypassed entirely so the test client can call endpoints without a token.
 from auth import (  # noqa: E402
     get_or_create_token,
@@ -480,7 +482,15 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if token is None and path == "/shutdown":
             # sendBeacon can't set headers — accept ?token= query param.
             token = request.query_params.get("token")
-        if os.environ.get("VAULTBOT_SKIP_LOCK", "") == "1":
+        if os.environ.get("VAULTBOT_SKIP_AUTH", "") == "1":
+            # Loud one-time warning so CI/devs notice auth is disabled, but
+            # avoid spamming it on every request.
+            global _auth_disabled_warned
+            if not _auth_disabled_warned:
+                logger.warning(
+                    "VAULTBOT_SKIP_AUTH=1 — authentication disabled. This is insecure and should only be used for tests."
+                )
+                _auth_disabled_warned = True
             return await call_next(request)
         if token is None:
             return JSONResponse(
