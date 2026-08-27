@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-01
 description: Find duplicate notes — same title in multiple files, or near-identical stems. Imports the Pattern-Scan engine and reads its duplicates map plus per-note table. Use before merging or when asked if the vault has redundant copies.
 when_to_use: when asked to find duplicate/redundant/duplicate-title notes, before merging notes, or during cleanup

@@ -174,9 +174,16 @@ class TestCodeRunSecretFileReads:
         assert result.get("exit_code") == 0
         assert "value" in result.get("stdout", "")
 
-    def test_env_read_blocked_even_outside_repo(self, improver, tmp_path):
+    def test_env_read_blocked_even_outside_repo(self, tmp_path, monkeypatch):
         # .env is ALWAYS protected regardless of location (it is a secret
         # filename, not a repo-scoped one).
+        repo_root = tmp_path / "repo_root"
+        repo_root.mkdir()
+        monkeypatch.setattr(self_improver, "BACKEND_ROOT", repo_root, raising=True)
+        monkeypatch.setattr(
+            self_improver, "BACKEND_DIR", repo_root / "vaultbot_backend", raising=True
+        )
+        improver = self_improver.SelfImprover()
         outside = tmp_path / "outside"
         outside.mkdir()
         secret = outside / ".env"

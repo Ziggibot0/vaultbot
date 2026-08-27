@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Full verify-and-deploy chain for a backend code change: runs the test suite, restarts the backend process, and verifies it comes back healthy. Orchestrates Run-Test-Suite, Backend-Restart, and a health check in sequence. Use after editing backend code to go from edit to live in one procedure call."
 when_to_use: after editing vaultbot_backend code and you need to verify and deploy the change end-to-end, when you want to confirm a code change is safe AND live, or when asked 'verify the change and restart'

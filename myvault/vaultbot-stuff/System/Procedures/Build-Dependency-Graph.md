@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-22
 description: "Walk all backend .py files with ast, extract import dependencies, and build a forward/reverse dependency graph. Writes vaultbot-stuff/Knowledge/Architecture/Dependency-Graph.md. Deterministic AST walk — no LLM, no embeddings."
 when_to_use: "When you need to understand which modules depend on which, or before editing code to predict blast radius. Called by Predict-Change-Impact and by Know-Thyself."

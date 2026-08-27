@@ -354,12 +354,13 @@ def small_model_digest(
 # ---------------------------------------------------------------------------
 # Framework-forced procedure execution (preflight routing)
 # ---------------------------------------------------------------------------
-# The framework runs Route-Task BEFORE the big model sees the conversation,
-# then auto-executes small-cartridge chain steps. The big model becomes a
-# step-worker that receives pre-computed results and only handles big-cartridge
-# procedures + final synthesis. This removes the "decide what to do" cognitive
-# load from the big model — a local LLM can follow a chain much more reliably
-# than it can read a 1000-word prompt and self-route.
+# The framework computes the procedure chain from the embedding hint BEFORE
+# the big model sees the conversation, then auto-executes small-cartridge
+# chain steps. The big model becomes a step-worker that receives pre-computed
+# results and only handles big-cartridge procedures + final synthesis. This
+# removes the "decide what to do" cognitive load from the big model — a local
+# LLM can follow a chain much more reliably than it can read a 1000-word
+# prompt and self-route.
 
 
 # ---------------------------------------------------------------------------
@@ -507,10 +508,10 @@ async def run_procedure_direct(
 ) -> dict[str, Any]:
     """Run a procedure directly from the framework (not from a model tool call).
 
-    Used in the preflight to run Route-Task and auto-execute small-cartridge
-    chain steps before the big model ever sees the conversation. Returns a
-    dict with procedure, overall_passed, final_output, cartridge, etc.
-    On any error, returns {"error": ...} — the caller handles fallback.
+    Used in the preflight to auto-execute small-cartridge chain steps before
+    the big model ever sees the conversation. Returns a dict with procedure,
+    overall_passed, final_output, cartridge, etc. On any error, returns
+    {"error": ...} — the caller handles fallback.
 
     When ``websocket`` is provided, per-step progress events are streamed
     to the UI so the user can see what the procedure is doing in real time

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Scan the vault for a specific phrase, sentence, or claim and find every note that contains it. Given a search string, does exact substring matching across all notes and returns every occurrence with note path, line number, and context. Use when you need to find every instance of a specific string, not a concept.
 when_to_use: when looking for every instance of a specific phrase, when checking if a claim appears anywhere, when doing exact-string search, or when replacing a term across the vault

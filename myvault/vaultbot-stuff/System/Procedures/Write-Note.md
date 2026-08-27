@@ -28,7 +28,6 @@ summary: "Create a new vault note with automatic YAML frontmatter, path validati
 tags:
   - procedure
   - note-creation
-model_cartridge: small
 ---
 
 # Write-Note

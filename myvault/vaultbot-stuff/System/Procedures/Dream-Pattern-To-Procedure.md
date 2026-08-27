@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-09
 description: "Dream-Pattern-To-Procedure reads the Behavioral-Pattern-Mine report, picks the best candidate, reads session context, and deterministically generates a procedure with [llm:] steps and proper YAML frontmatter. The calling code (Dream-Pass step 2.8) writes the draft and calls Procedure-Creator for validation."
 when_to_use: "During Dream-Pass, immediately after Behavioral-Pattern-Mine."

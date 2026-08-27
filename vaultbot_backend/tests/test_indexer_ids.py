@@ -336,6 +336,51 @@ def test_reconstruct_embedding_returns_none_for_unknown(tmp_vault):
     assert indexer.reconstruct_embedding(str(vault / "alpha.md")) is None
 
 
+def test_get_embedding_memoizes_identical_query(tmp_vault):
+    """The same query text should hit Ollama once, then be served from cache."""
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+
+    q = "what is the no wikipedia directive"
+    first = indexer._get_embedding(q)
+    second = indexer._get_embedding(q)
+
+    # Only ONE Ollama call for two identical queries.
+    assert indexer.ollama_client.embeddings_call_count == 1, (
+        f"Expected 1 embedding call, got {indexer.ollama_client.embeddings_call_count}"
+    )
+    # Same vector returned.
+    assert np.array_equal(first, second)
+
+
+def test_get_embedding_returns_copy_not_cache_reference(tmp_vault):
+    """Mutating the returned vector must not corrupt the cached copy."""
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+
+    q = "mutate me"
+    first = indexer._get_embedding(q)
+    # Mutate the returned array in place (as search_by_vector does via
+    # faiss.normalize_L2 on a view).
+    first[:] = 0.0
+    second = indexer._get_embedding(q)
+
+    # The cached vector must be intact (not zeroed by the mutation).
+    assert not np.all(second == 0.0), "Cache was corrupted by in-place mutation"
+    assert indexer.ollama_client.embeddings_call_count == 1
+
+
+def test_get_embedding_distinct_texts_not_collided(tmp_vault):
+    """Different query strings must produce separate cache entries."""
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+
+    indexer._get_embedding("alpha query")
+    indexer._get_embedding("beta query")
+
+    assert indexer.ollama_client.embeddings_call_count == 2
+
+
 def test_metadata_persist_round_trip_json(tmp_vault):
     """persist() writes metadata.json; a fresh indexer loads it back intact.
 

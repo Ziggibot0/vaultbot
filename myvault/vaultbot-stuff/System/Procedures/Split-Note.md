@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-03
 description: Split verbose notes with multiple distinct claims into separate one-idea-per-note files. Auto-scans the vault for split candidates, then writes each part as its own note with proper frontmatter. The original note becomes a hub note with wikilinks to the parts.
 when_to_use: when notes are too verbose, cover multiple distinct claims, or during Dream-Pass maintenance to make notes more granular and discoverable

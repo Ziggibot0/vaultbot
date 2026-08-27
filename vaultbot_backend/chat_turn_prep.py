@@ -3,7 +3,7 @@
 Extracted from ``chat_handler.py`` -- ``prepare_turn`` runs BEFORE the
 agentic loop starts. It does vault graph refresh, fused retrieval (query
 rewrite + expand + parallel retrieve + rerank), conversation-aware
-retrieval, context budgeting, procedure surface build, Route-Task
+retrieval, context budgeting, procedure surface build, embedding-based
 preflight routing, confirmation-context injection, and the trivial-turn
 shortcut. Returns the fully-built conversation list plus all the
 per-turn state the agentic loop needs, or ``None`` if the turn was
@@ -54,143 +54,36 @@ from small_model_filters import (
 )
 from working_memory import TaskList
 
-ROUTE_TASK_ALLOWED_CATEGORIES = {
-    "research",
-    "vault-maintenance",
-    "self-improvement",
-    "gap-filling",
-    "chat-consolidation",
-    "question-answering",
-    "code-editing",
-    "fact-checking",
-    "conversational",
-    "unknown",
-}
-ROUTE_TASK_ALLOWED_RATIONALE_CODES = {
-    "action_signal",
-    "clarification_or_explanation",
-    "mixed_or_unsettled",
-    "research_signal",
-    "maintenance_signal",
-    "self_improvement_signal",
-    "gap_filling_signal",
-    "chat_consolidation_signal",
-    "question_answering_signal",
-    "code_editing_signal",
-    "fact_checking_signal",
-    "conversational_signal",
-    "unknown_signal",
-    "schema_fallback",
-}
-ROUTE_TASK_FALLBACK = {
+EMBEDDING_ROUTE_DEFAULT = {
     "category": "unknown",
     "procedure_chain": [],
     "confidence": 0.0,
-    "rationale_code": "schema_fallback",
+    "rationale_code": "embedding_route",
 }
 
 
-def _route_fallback_payload(
+def _embedding_route_payload(
     results: list[dict],
     proc_idx: dict[str, dict[str, Any]] | None,
     user_message: str,
 ) -> dict[str, Any]:
-    """Build the Route-Task fallback payload when the router fails closed.
+    """Build the preflight routing payload from the embedding hint.
 
-    The old fallback chained into Small-Model-Route — asking a tiny model to
-    RE-derive a routing decision that FUSED retrieval already made (the
-    query was embedded and the whole procedure library ranked before
-    Route-Task even ran). Selection over generation: reuse the scored
-    retrieval pick as the chain. When no procedure clears the fused
-    threshold the chain is empty and the turn proceeds unrouted.
+    The old Route-Task asked a small model to classify intent and return a
+    JSON procedure_chain; it failed 8/8 times in production (session
+    e9ba8b33) because the model could not emit valid JSON. FUSED retrieval
+    already ranked the procedure library by embedding + graph + backlink
+    similarity to the query, so the best-matching procedure is simply the
+    highest-scored surfaced one. Selection over generation: reuse that
+    already-computed score — zero LLM calls, zero new embeddings. When no
+    procedure clears the fused threshold the chain is empty and the turn
+    proceeds unrouted.
     """
-    payload = dict(ROUTE_TASK_FALLBACK)
+    payload = dict(EMBEDDING_ROUTE_DEFAULT)
     hint = _deterministic_procedure_hint(results, proc_idx, user_message)
     if hint:
         payload["procedure_chain"] = [hint]
     return payload
-
-
-def _strip_json_fence(raw_output: Any) -> str:
-    """Normalize a raw LLM JSON payload by stripping markdown fences."""
-    if not isinstance(raw_output, str):
-        return ""
-    text = raw_output.strip()
-    if not text or not text.startswith("```"):
-        return text
-    lines = text.splitlines()
-    if len(lines) >= 2:
-        text = "\n".join(lines[1:])
-    if text.endswith("```"):
-        text = text[:-3].rstrip()
-    return text.strip()
-
-
-def _validate_route_task_output(raw_output: Any) -> tuple[bool, str, dict[str, Any]]:
-    """Validate a Route-Task payload against the strict schema."""
-    clean = _strip_json_fence(raw_output)
-    if not clean:
-        return False, "route output was empty", {}
-    try:
-        payload = json.loads(clean)
-    except (json.JSONDecodeError, TypeError):
-        return False, "route output was not valid JSON", {}
-
-    if not isinstance(payload, dict):
-        return False, "route output was not a JSON object", {}
-
-    missing = [
-        key
-        for key in ("category", "procedure_chain", "confidence", "rationale_code")
-        if key not in payload
-    ]
-    if missing:
-        return False, f"missing required keys: {', '.join(missing)}", {}
-
-    category = payload.get("category")
-    if not isinstance(category, str):
-        return False, "category must be a string", {}
-    if category not in ROUTE_TASK_ALLOWED_CATEGORIES:
-        return False, "category is not in the allowed enum set", {}
-
-    chain = payload.get("procedure_chain")
-    if not isinstance(chain, list):
-        return False, "procedure_chain must be a list of procedure names", {}
-    normalized_chain: list[str] = []
-    for entry in chain:
-        if not isinstance(entry, str) or not entry.strip():
-            return False, "procedure_chain entries must be non-empty strings", {}
-        normalized_chain.append(entry.strip())
-    if category != "conversational" and not normalized_chain:
-        return (
-            False,
-            "non-conversational routes require a non-empty procedure_chain",
-            {},
-        )
-
-    confidence = payload.get("confidence")
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-        return False, "confidence must be a numeric value between 0 and 1", {}
-    confidence = float(confidence)
-    if not 0.0 <= confidence <= 1.0:
-        return False, "confidence must be between 0.0 and 1.0", {}
-
-    rationale_code = payload.get("rationale_code")
-    if not isinstance(rationale_code, str):
-        return False, "rationale_code must be a string", {}
-    if rationale_code not in ROUTE_TASK_ALLOWED_RATIONALE_CODES:
-        return False, "rationale_code must be a string in the allowed enum set", {}
-
-    return (
-        True,
-        "",
-        {
-            "category": category,
-            "procedure_chain": normalized_chain,
-            "confidence": round(confidence, 4),
-            "rationale_code": rationale_code,
-        },
-    )
 
 
 async def prepare_turn(
@@ -403,122 +296,27 @@ async def prepare_turn(
         },
     )
 
-    # --- Route-Task preflight (intent classifier) ---------------------
-    # Route-Task classifies intent and returns a procedure chain. It's
-    # cheap (1 small-model LLM call). Think (the BS detector / premise
-    # gate) is NOT run here -- it's an opt-in tool the big model can call
-    # via execute_procedure("Think") if it decides a question needs
-    # structured premise checking.
+    # --- Embedding preflight routing (intent → procedure chain) --------
+    # The old Route-Task asked a small model to classify intent and return
+    # a JSON procedure_chain. It failed 8/8 times in production (session
+    # e9ba8b33) because the model could not emit valid JSON, then fell
+    # through to the embedding hint anyway. We now skip the LLM entirely:
+    # FUSED retrieval already ranked the procedure library by embedding +
+    # graph + backlink similarity to the query, so the best-matching
+    # procedure is the highest-scored surfaced one. Zero LLM calls, zero new
+    # embeddings. Think (the BS detector / premise gate) is NOT run here --
+    # it's an opt-in tool the big model can call via execute_procedure.
     #
     # Skipped for: resumed turns (model is mid-task).
     _preflight_chain: list[str] = []
     _preflight_results: list[dict[str, Any]] = []
     _preflight_category = ""
     if not _resumed_tool_history:
-
-        async def _run_route() -> dict[str, Any]:
-            """Run Route-Task. Returns {"error": ...} on failure."""
-            try:
-                await send_progress(svc, websocket, "routing", {})
-                _result = await _run_procedure_direct(
-                    svc,
-                    "Route-Task",
-                    proc_args={"intent": user_message},
-                    session_logger=session_logger,
-                    user_message=user_message,
-                    websocket=websocket,
-                )
-                await send_progress(svc, websocket, "routing_done", {})
-                return _result
-            except Exception as e:  # noqa: BLE001
-                session_logger.log("preflight_route_failed", {"error": str(e)})
-                await notify_console_failure(
-                    svc,
-                    websocket,
-                    f"Route-Task procedure failed: {e}",
-                    context="preflight_route",
-                )
-                return {"error": str(e)}
-
-        # Run Route-Task (the sole preflight router).
-        _route_result = await _run_route()
-
-        # --- Process Route-Task result ---
-        _route_payload: dict[str, Any] | None = None
-        if not _route_result.get("error"):
-            _route_output = _route_result.get("final_output", "")
-            if _route_output:
-                _valid, _route_error, _parsed = _validate_route_task_output(
-                    _route_output
-                )
-                if _valid:
-                    _route_payload = _parsed
-                else:
-                    session_logger.log_route_schema_invalid(
-                        _route_error,
-                        raw_output=_strip_json_fence(_route_output),
-                    )
-                    _repair_example = (
-                        '{"category":"research","procedure_chain":['
-                        '"Research-Batch"],"confidence":0.94,'
-                        '"rationale_code":"research_signal"}'
-                    )
-                    _repair_intent = (
-                        f"{user_message}\n\nReturn ONLY valid JSON using the strict "
-                        f"Route-Task schema. Example: {_repair_example}. "
-                        f"Allowed categories: {sorted(ROUTE_TASK_ALLOWED_CATEGORIES)}. "
-                        f"Allowed rationale codes: "
-                        f"{sorted(ROUTE_TASK_ALLOWED_RATIONALE_CODES)}. "
-                        "Do not include markdown fences or extra text."
-                    )
-                    _repair_result = await _run_procedure_direct(
-                        svc,
-                        "Route-Task",
-                        proc_args={"intent": _repair_intent},
-                        session_logger=session_logger,
-                        user_message=user_message,
-                        websocket=websocket,
-                    )
-                    if not _repair_result.get("error"):
-                        _repair_output = _repair_result.get("final_output", "")
-                        _valid_repair, _repair_error, _repair_payload = (
-                            _validate_route_task_output(_repair_output)
-                        )
-                        if _valid_repair:
-                            _route_payload = _repair_payload
-                            session_logger.log_route_schema_recovered(
-                                _route_payload["category"],
-                                _route_payload["procedure_chain"],
-                                _route_payload["confidence"],
-                                _route_payload["rationale_code"],
-                            )
-                        else:
-                            session_logger.log_route_schema_invalid(
-                                _repair_error,
-                                raw_output=_strip_json_fence(_repair_output),
-                            )
-                    else:
-                        session_logger.log_route_schema_invalid(
-                            _repair_result.get("error", "repair failed"),
-                            raw_output="",
-                        )
-        if _route_payload is None:
-            _route_payload = _route_fallback_payload(
-                results,
-                getattr(svc.procedure_tracker, "_stem_index", None),
-                user_message,
-            )
-            if _route_result.get("error"):
-                session_logger.log_route_schema_invalid(
-                    f"Route-Task execution failed: {_route_result.get('error')}",
-                    raw_output="",
-                )
-            session_logger.log_route_schema_fallback(
-                fallback_category=_route_payload["category"],
-                fallback_chain=_route_payload["procedure_chain"],
-                confidence=_route_payload["confidence"],
-                rationale_code=_route_payload["rationale_code"],
-            )
+        _route_payload = _embedding_route_payload(
+            results,
+            getattr(svc.procedure_tracker, "_stem_index", None),
+            user_message,
+        )
         _preflight_category = _route_payload.get("category", "")
         _preflight_chain = _route_payload.get("procedure_chain", [])
         if isinstance(_preflight_chain, list) and _preflight_chain:

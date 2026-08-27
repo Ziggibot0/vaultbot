@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-19
 description: "Solve a GitHub issue end-to-end: read the issue, locate the relevant code via the codebase map, fix it with safe_write, run the test suite, submit a PR, and merge it only if CI is green and the safety scan passes. Orchestrates existing procedures — no duplicated logic."
 when_to_use: "When asked to 'solve issue #N', 'fix the GitHub issue', or when triaging open issues to fix autonomously."

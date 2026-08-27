@@ -17,76 +17,8 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from chat_turn_prep import _validate_route_task_output
 from orchestration_report import session_orchestration_report
 from session_logger import SessionLogger
-
-
-def test_validate_route_task_output_accepts_valid_schema() -> None:
-    ok, reason, payload = _validate_route_task_output(
-        '{"category":"research","procedure_chain":["Research-Batch"],'
-        '"confidence":0.92,"rationale_code":"research_signal"}'
-    )
-    assert ok
-    assert reason == ""
-    assert payload["category"] == "research"
-    assert payload["procedure_chain"] == ["Research-Batch"]
-    assert payload["confidence"] == 0.92
-    assert payload["rationale_code"] == "research_signal"
-
-
-def test_validate_route_task_output_rejects_malformed_json() -> None:
-    ok, reason, payload = _validate_route_task_output('{"category": "research"')
-    assert not ok
-    assert payload == {}
-    assert "JSON" in reason.upper()
-
-
-def test_validate_route_task_output_rejects_wrong_keys() -> None:
-    ok, reason, payload = _validate_route_task_output(
-        '{"category":"research","chain":["Research-Batch"],'
-        '"confidence":0.9,"rationale_code":"research_signal"}'
-    )
-    assert not ok
-    assert payload == {}
-    assert "missing" in reason.lower()
-
-
-def test_validate_route_task_output_rejects_wrong_types() -> None:
-    ok, reason, payload = _validate_route_task_output(
-        '{"category":"research","procedure_chain":"Research-Batch",'
-        '"confidence":"high","rationale_code":123}'
-    )
-    assert not ok
-    assert payload == {}
-    assert "must" in reason.lower()
-
-
-def test_route_schema_event_helpers_emit_expected_events(tmp_path: Path) -> None:
-    s = SessionLogger(log_dir=str(tmp_path))
-    s.log_route_schema_invalid(
-        "missing required keys",
-        raw_output='{"category":"research"}',
-    )
-    s.log_route_schema_recovered(
-        "research",
-        ["Research-Batch"],
-        0.91,
-        "research_signal",
-    )
-    s.log_route_schema_fallback(
-        fallback_category="unknown",
-        fallback_chain=["Small-Model-Route"],
-        confidence=0.0,
-        rationale_code="schema_fallback",
-    )
-    s.close()
-
-    events = _read_events(s._file_path)
-    assert {e["event"] for e in events}.issuperset(
-        {"route_schema_invalid", "route_schema_recovered", "route_schema_fallback"}
-    )
-
 
 # ── SessionLogger event-emission tests ───────────────────────────────────
 

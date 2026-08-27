@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Scan a Python file for resource-leak anti-patterns: open() calls without with-blocks, socket/database connections not closed, missing finally cleanup. Returns structured findings with line numbers and suggested fixes."
 when_to_use: when auditing code for resource safety, before a commit, after editing file I/O code, or when asked 'does this code leak resources'

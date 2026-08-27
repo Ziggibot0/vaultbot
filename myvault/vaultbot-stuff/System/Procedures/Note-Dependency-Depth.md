@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Find notes that are load-bearing — many other notes depend on them — and notes that depend on many others. Scans the wikilink graph, computes in-degree and out-degree for each note, and returns the most depended-on notes (hubs) and the most dependent notes (leaves with many dependencies). Use when understanding vault structure or before deleting a note.
 when_to_use: before deleting a note to check if it's load-bearing, when understanding vault structure, when finding hub notes, or when asked 'what notes are most important'

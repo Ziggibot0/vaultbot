@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-22
 description: "Stage, commit, and push changes to the current branch. Refuses to push to main/master. Uses conventional commit format. Can amend the previous commit if args.amend is true (for iterative CI fixes on the same PR)."
 when_to_use: "When you need to commit and push changes on a feature branch. Called by Dev-Cycle after fixing code or after a CI failure iteration."

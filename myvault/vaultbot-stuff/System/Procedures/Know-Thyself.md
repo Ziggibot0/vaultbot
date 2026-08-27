@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 updated: 2026-08-09
 description: "Parent orchestrator for instant self-knowledge. Runs a suite of probes to answer 'what am I right now?' — identity, capabilities, tools, vault state, health, and procedure library. Returns a live snapshot, not remembered state."

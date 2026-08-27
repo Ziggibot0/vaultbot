@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-17
 description: "Record a provenance trace for a chat answer: which procedure produced it, what was retrieved, and the per-claim entailment verdicts. Appends a structured provenance block to the answer's chat note frontmatter so the reasoning chain from source to claim is permanently auditable. This is the 'auditable trace' layer of the provenance pillar."
 when_to_use: after Verify-Answer-Entailment produces per-claim verdicts, to store them as a permanent, human-readable provenance manifest in the vault

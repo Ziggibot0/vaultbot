@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: big
 created: 2026-08-15
 description: "Choose the correct write tool based on file type and edit scope. Prevents the safe_write-on-markdown bug that destroyed IDENTITY.md in session 15e346b7, and the thought-loop spiral that followed."
 when_to_use: "When you need to write or edit any file in the vault. Use this BEFORE calling any write tool to pick the right one."

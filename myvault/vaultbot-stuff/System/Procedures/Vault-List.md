@@ -2,7 +2,6 @@
 type: procedure
 status: verified
 baseline: true
-model_cartridge: small
 created: 2026-07-31
 description: List all markdown notes in the vault. Optionally filter by directory or tag. Returns filenames relative to vault root. Use when you need to know what notes exist — complements semantic search.
 when_to_use: when you need to see what notes are in the vault, or filter by directory/tag

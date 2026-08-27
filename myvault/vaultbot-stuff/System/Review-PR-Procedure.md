@@ -16,7 +16,6 @@ summary: Review PR Procedure
 description: Review a community PR for safety and quality before merging, checking every contribution the same way each time.
 when_to_use: when the user says "review PRs" or "check contributions", or when a community PR is submitted to VaultBot
 falsifiable_if: a PR with unsafe or low-quality changes is merged, or a safe PR is wrongly rejected
-model_cartridge: big
 ---
 
 # Review PR Procedure

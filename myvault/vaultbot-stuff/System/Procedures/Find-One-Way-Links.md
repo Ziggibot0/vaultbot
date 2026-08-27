@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Find notes that link to something but don't link back — one-way relationships that might indicate the target note should link back. Scans for wikilinks and checks if the target links back. Returns one-way links with a suggestion for whether to add a backlink. Use when strengthening bidirectional connections in the vault graph.
 when_to_use: when strengthening vault graph bidirectionality, when looking for one-way links that should be reciprocal, or during graph organization

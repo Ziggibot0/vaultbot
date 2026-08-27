@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-06
 description: Pre-check that runs before any routing or tool work. Detects explicit user directives (negations, prohibitions, mandates) and checks whether any vault design doc, architecture note, or procedure contradicts them. If conflict exists, the user directive wins — the vault note is flagged for review, not obeyed.
 when_to_use: before Route-Task, before any tool work, whenever the user says "don't", "never", "always", "NO", or any explicit prohibition/mandate

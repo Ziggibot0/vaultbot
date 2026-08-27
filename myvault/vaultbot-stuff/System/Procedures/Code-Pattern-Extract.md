@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Scan backend code for a specific pattern (e.g., all try/except blocks, all async functions, all places a specific module is imported) and return the matches with file, line, and context. Given a pattern description, the small model translates it to a regex and searches the code. Use when looking for code patterns across the backend.
 when_to_use: when looking for all instances of a code pattern, when finding all try/except blocks, when finding all uses of a module, when auditing code patterns, or when asked 'where does the code do X'

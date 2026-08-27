@@ -2,7 +2,6 @@
 type: procedure
 status: active
 baseline: true
-model_cartridge: big
 created: 2026-07-31
 description: Create a new custom tool and register it for immediate use.
 when_to_use: When you realize you lack a capability and need to build a new tool for yourself.

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-03
 description: "Verify claims in a research note by composing existing procedures: calls Cross-Check-Claims for web source verification, then cross-references claims against existing vault notes for internal consistency. Conditional branches based on whether the note has web sources, vault links, or unsupported claims. This is a thin orchestrator — it delegates to Cross-Check-Claims rather than reimplementing claim extraction."
 when_to_use: after vault_research writes a note, before accepting it as final; when you need to verify that a note's claims are backed by sources and consistent with existing vault knowledge

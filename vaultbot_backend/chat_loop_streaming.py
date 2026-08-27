@@ -160,11 +160,10 @@ async def stream_llm_round(
                 )
             if text:
                 round_text += text
-                await svc.manager.send_personal_message(
-                    json.dumps({"type": "answer_chunk", "content": text}),
-                    websocket,
-                    session_logger=session_logger,
-                )
+                # Final prose is untrusted until synchronous provenance
+                # verification completes. Keep it buffered so unsupported
+                # claims never flash in the UI before answer_done replaces
+                # them with a truth-gap response.
                 # Debounced partial write: at most once per second.
                 # Per-chunk writes create disk I/O backpressure that
                 # throttles the LLM's streaming throughput.

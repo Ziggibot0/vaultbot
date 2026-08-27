@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-09
 last_reviewed: 2026-08-09
 description: Three-layer dichotomous key router. Classifies intent via Route-Task, checks vault coverage via vault_search, and gates output quality via Vault-Lint. Calls existing procedures — does not duplicate their logic.

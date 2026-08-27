@@ -21,7 +21,6 @@ success_count: 10
 failure_count: 1
 success_rate: 0.91
 falsifiable_if: "the procedure produces incorrect output or fails to complete its stated task"
-model_cartridge: big
 ---
 
 # Trade-off Analysis Lens (v4)

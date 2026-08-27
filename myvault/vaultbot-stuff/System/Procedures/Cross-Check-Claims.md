@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Check if a vault note's claims are consistent with the web sources it cites. Reads the note, extracts claims with source URLs, fetches each source, and verifies each claim against the source text. Returns claims that the source doesn't support. Use when fact-checking a research note against its sources.
 when_to_use: when fact-checking a research note against its cited web sources, when verifying research quality, or when a note makes claims that need source verification

@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: Given a topic, find the single best vault note that explains it. Searches for the topic, reads the top results, and the small model picks the ONE note that best explains it. Returns the note path and a confidence score. Use when you need the definitive note for a topic, not a list of candidates.
 when_to_use: when you need the single best note for a topic, when looking for the definitive explanation of something, when you need one authoritative source, or when the first result from vault_search isn't good enough

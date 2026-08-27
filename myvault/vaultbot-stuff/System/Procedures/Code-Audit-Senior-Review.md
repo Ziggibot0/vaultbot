@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-05
 description: "Orchestrating code audit that calls granular check procedures (Check-Error-Handling, Check-Resource-Leaks, Check-Mutable-Defaults, Check-Complexity, Check-Dead-Code) via run_procedure(), aggregates findings, and produces a senior-level review summary with prioritized recommendations."
 when_to_use: when performing a full code audit on a Python file, before a commit, when asked 'review this code', or when you need a comprehensive quality assessment

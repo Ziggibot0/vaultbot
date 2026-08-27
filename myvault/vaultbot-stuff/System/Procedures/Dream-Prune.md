@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: "Remove junk files from the vault: pytest cache, .bak/.orig/.tmp files, empty .md files, and trash remnants. Takes graph analyzer output (with isolated_nodes) as optional input via args."
 when_to_use: As part of a Dream-Pass cycle, or independently to clean up junk files.

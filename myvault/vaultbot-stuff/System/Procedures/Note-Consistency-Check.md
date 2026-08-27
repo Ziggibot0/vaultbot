@@ -2,7 +2,6 @@
 type: procedure
 status: experimental
 baseline: true
-model_cartridge: small
 created: 2026-08-02
 description: "Check if a note is internally consistent — do its claims, frontmatter, and structure agree? Reads a note and checks: does the frontmatter type match the content, do the tags match the topic, do the depends_on links actually relate to the note, and does the body contradict itself? Use when a note feels off or before relying on it."
 when_to_use: when a note feels inconsistent, when frontmatter doesn't match content, when tags seem wrong, or before relying on a note that might have internal contradictions
