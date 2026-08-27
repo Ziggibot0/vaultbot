@@ -67,7 +67,8 @@ vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot_backend/requirements
 # or: vaultbot_venv/bin/python -m pip install -r vaultbot_backend/requirements.txt       # macOS/Linux
 ollama pull qwen3.6:latest nomic-embed-text
 copy .env.example .env   # Windows
-# or: cp .env.example .env   # macOS/Linux; then fill in your values
+# or: cp .env.example .env   # macOS/Linux
+# Then fill in your values in .env.
 ```
 
 The backend is started automatically by the Obsidian plugin. For manual
