@@ -63,15 +63,17 @@ git clone <your-fork>.git
 cd vaultbot
 python -m venv vaultbot_venv
 # No activation needed — invoke the venv's python directly:
-vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot/vaultbot_backend/requirements.txt   # Windows
-# or: vaultbot_venv/bin/python -m pip install -r vaultbot/vaultbot_backend/requirements.txt       # macOS/Linux
+vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot_backend/requirements.txt   # Windows
+# or: vaultbot_venv/bin/python -m pip install -r vaultbot_backend/requirements.txt       # macOS/Linux
 ollama pull qwen3.6:latest nomic-embed-text
-cp vaultbot/.env.example .env   # fill in your values
+copy .env.example .env   # Windows
+# or: cp .env.example .env   # macOS/Linux
+# Then fill in your values in .env.
 ```
 
 The backend is started automatically by the Obsidian plugin. For manual
-testing: `vaultbot_venv/Scripts/python.exe vaultbot/vaultbot_backend/main.py`
-(Windows) or `vaultbot_venv/bin/python vaultbot/vaultbot_backend/main.py` (macOS/Linux).
+testing: `vaultbot_venv/Scripts/python.exe vaultbot_backend/main.py`
+(Windows) or `vaultbot_venv/bin/python vaultbot_backend/main.py` (macOS/Linux).
 
 ## Safe self-editing
 
@@ -253,6 +255,92 @@ through the contribution review flow instead.
    loops that are currently LLM-free.
 
 
+
+## Cost control and local-model workflow
+
+**The recommended development loop uses a local model as the default tier.**
+Cloud API calls (OpenAI, Anthropic, etc.) should be reserved for hard
+foundational work; a 30B model running locally through Ollama is free and
+capable enough for the vast majority of routine procedure execution and PR
+generation once the procedure layer is stable.
+
+### Why this matters
+
+Running all agentic work through a cloud model will drain your API budget
+quickly, especially during iterative debugging. The pattern that works:
+
+1. **Local by default.** Set Ollama (or another local provider) as your
+   default in `providers.json`. The budget governor (`budget_governor.py`)
+   treats local-model tokens as free — only cloud escalations count.
+2. **Procedures first, then the model.** A deterministic procedure is orders
+   of magnitude cheaper than a multi-round LLM conversation. Before asking
+   the model to solve something from scratch, check whether a procedure
+   already exists (the procedure suggestion gate will remind you).
+3. **Fix the procedure layer before scaling up.** A local 30B guided by
+   correct, deterministic procedures is viable. The same 30B guided by
+   broken procedures burns your time instead of your API dollars.
+
+### Configuring a local model as your default tier
+
+1. Install [Ollama](https://ollama.com/) and pull a model:
+   ```
+   ollama pull llama3.1:8b   # fast, low-memory
+   ollama pull qwen2.5:32b   # capable, ~20 GB VRAM
+   ```
+2. In `providers.json` (or via the VaultBot settings UI), set the default
+   provider to `ollama` and the default model to the one you pulled.
+3. Cloud escalations are still available for hard problems — the budget
+   governor (`VAULTBOT_BUDGET_ESCALATIONS=3` by default) limits paid
+   calls per turn so a runaway loop can't exhaust your balance.
+
+### Budget governor configuration
+
+Environment variables (set in `.env` or the OS environment):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULTBOT_BUDGET_USD_PER_RUN` | `0.50` | Hard USD ceiling per chat turn |
+| `VAULTBOT_BUDGET_ESCALATIONS` | `3` | Max cloud-model calls per turn |
+
+When the governor is wired into a call site, hitting the ceiling raises
+`BudgetExceeded` so that the caller can stop further cloud escalation. Setting
+`VAULTBOT_BUDGET_USD_PER_RUN=0` with `VAULTBOT_BUDGET_ESCALATIONS=0`
+effectively disables cloud fallback when those checks are enforced.
+
+Unknown cost for a non-local model is treated as a budget overrun (refuse,
+don't proceed) — the governor is conservative by design.
+
+### Recommended workflow: branches → PRs in one public repo
+
+Do not create a private mirror for iteration. Use branches:
+
+```
+git checkout -b fix/issue-341    # your scratch space
+# ... edit, test, ruff, commit ...
+# engine-tools-report_progress commits and opens a PR
+```
+
+`main` stays stable. Branches are your private scratch space until you open
+a PR. Outside contributors (or a dedicated bot account) follow the same flow.
+The bot account (`VAULTBOT_GH_BOT_USER` in `.env`) authors PRs so a human
+maintainer can approve them — GitHub forbids approving your own PR.
+
+### Loop guards and runaway prevention
+
+Two safety nets prevent a local model from spinning forever:
+
+- **Same-tool streak** (`VAULTBOT_SAME_TOOL_STREAK_LIMIT`, default 7): if
+  the model calls the same tool with the same result 7 consecutive times,
+  the loop injects a nudge and then breaks if the streak continues.
+- **Thought-loop detector** (`VAULTBOT_THOUGHT_LOOP_LIMIT`, default 5): if
+  the model only calls the `thought` scratchpad tool for 5 rounds in a row
+  without taking any real action, it gets a firm "stop thinking and act"
+  nudge and breaks if it still loops.
+
+Both guards are observable: every trigger is logged with `session_logger`
+so you can tune the thresholds or review why the loop was stopped.
+
+---
 
 ## Releases
 

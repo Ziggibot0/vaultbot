@@ -1,0 +1,45 @@
+# Changed-path PR labeling configuration (issue #329).
+# Used by the pr-labeler.yml workflow (actions/labeler).
+# Labels are applied to PRs based on which files changed.
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "vaultbot_backend/**"
+
+plugin:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "myvault/.obsidian/plugins/vaultbot/**"
+
+procedures:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "myvault/**/Procedures/**"
+          - "myvault/**/System/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.md"
+          - "docs/**"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "uv.lock"
+          - "vaultbot_backend/requirements*.txt"
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - "vaultbot_backend/auth.py"
+          - "vaultbot_backend/rate_limit.py"
+          - "vaultbot_backend/code_run_guard.py"
