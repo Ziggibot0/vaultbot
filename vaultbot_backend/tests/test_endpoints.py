@@ -29,6 +29,9 @@ import os
 
 # Bypass the PID lock so `import main` doesn't sys.exit if a backend is running.
 os.environ.setdefault("VAULTBOT_SKIP_LOCK", "1")
+# These endpoint tests intentionally call mutating routes (e.g. POST /task)
+# without attaching auth headers, so keep auth bypass explicit in test mode.
+os.environ.setdefault("VAULTBOT_SKIP_AUTH", "1")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,6 +53,7 @@ def client():
 
     This is safe because:
     - `VAULTBOT_SKIP_LOCK=1` bypasses the PID lock (set at module top).
+    - `VAULTBOT_SKIP_AUTH=1` explicitly bypasses auth for mutating endpoint tests.
     - The route handlers read globals (ollama_client, vault_indexer,
       etc.) that are constructed at `import main` time, not at lifespan
       startup time. The lifespan startup only loads the FAISS INDEX
