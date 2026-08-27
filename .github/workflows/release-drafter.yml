@@ -24,7 +24,13 @@ jobs:
   update-release-draft:
     runs-on: ubuntu-latest
     steps:
+      # release-drafter always reads its config from the default branch, so
+      # this step fails on any PR opened before `.github/release-drafter.yml`
+      # itself has been merged to main. continue-on-error keeps that
+      # bootstrapping failure from blocking PR checks; once the config is on
+      # main, this step runs (and updates the draft) normally.
       - uses: release-drafter/release-drafter@v6
+        continue-on-error: true
         with:
           config-name: release-drafter.yml
         env:
