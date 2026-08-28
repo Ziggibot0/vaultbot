@@ -27,13 +27,24 @@ import pytest
 # never touch a real index.
 # ---------------------------------------------------------------------------
 if "faiss" not in sys.modules:
+
+    class _StubIndexFlatL2:
+        def __init__(self, dim: int = 4, *args, **kwargs):
+            self.d = dim
+            self.ntotal = 0
+
+    class _StubIndexIDMap2:
+        def __init__(self, inner=None, *args, **kwargs):
+            self.inner = inner
+            self.d = getattr(inner, "d", 4)
+            self.ntotal = 0
+
+        def add_with_ids(self, *args, **kwargs):
+            return None
+
     _faiss_stub = types.ModuleType("faiss")
-    _faiss_stub.IndexFlatL2 = type("IndexFlatL2", (), {})
-    _faiss_stub.IndexIDMap2 = type(
-        "IndexIDMap2",
-        (),
-        {"add_with_ids": lambda *a, **k: None, "ntotal": 0, "d": 4},
-    )
+    _faiss_stub.IndexFlatL2 = _StubIndexFlatL2
+    _faiss_stub.IndexIDMap2 = _StubIndexIDMap2
     _faiss_stub.read_index = lambda *a, **k: None
     _faiss_stub.write_index = lambda *a, **k: None
     _faiss_stub.normalize_L2 = lambda v: None

@@ -17,8 +17,14 @@ import pytest
 # Shim faiss so fused_retrieval imports without the NumPy 2.x ABI break
 # (same pattern as test_fused_retrieval.py).
 if "faiss" not in sys.modules:
+
+    class _StubIndexFlatL2:
+        def __init__(self, dim: int = 4, *args, **kwargs):
+            self.d = dim
+            self.ntotal = 0
+
     _faiss_stub = types.ModuleType("faiss")
-    _faiss_stub.IndexFlatL2 = type("IndexFlatL2", (), {})
+    _faiss_stub.IndexFlatL2 = _StubIndexFlatL2
     _faiss_stub.read_index = lambda *a, **k: None
     _faiss_stub.write_index = lambda *a, **k: None
     sys.modules["faiss"] = _faiss_stub

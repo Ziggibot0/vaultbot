@@ -31,8 +31,14 @@ import pytest
 # succeed without dragging in the broken native extension.  This is a
 # test-environment shim, not a production-code change.
 if "faiss" not in sys.modules:
+
+    class _StubIndexFlatL2:
+        def __init__(self, dim: int = 4, *args, **kwargs):
+            self.d = dim
+            self.ntotal = 0
+
     _faiss_stub = types.ModuleType("faiss")
-    _faiss_stub.IndexFlatL2 = type("IndexFlatL2", (), {})
+    _faiss_stub.IndexFlatL2 = _StubIndexFlatL2
     _faiss_stub.read_index = lambda *a, **k: None
     _faiss_stub.write_index = lambda *a, **k: None
     sys.modules["faiss"] = _faiss_stub
