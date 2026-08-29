@@ -44,7 +44,7 @@ from dataclasses import dataclass, field
 from config import TUNABLES
 
 # ── Defaults (conservative) ─────────────────────────────────────────────
-_DEFAULT_USD_PER_RUN: float = float(
+_DEFAULT_USD_PER_TURN: float = float(
     os.getenv(
         "VAULTBOT_BUDGET_USD_PER_TURN",
         os.getenv("VAULTBOT_BUDGET_USD_PER_RUN", str(TUNABLES.budget_usd_per_turn)),
@@ -96,7 +96,7 @@ class BudgetState:
     Create one per chat turn; discard after the turn completes.
     """
 
-    usd_ceiling: float = field(default_factory=lambda: _DEFAULT_USD_PER_RUN)
+    usd_ceiling: float = field(default_factory=lambda: _DEFAULT_USD_PER_TURN)
     task_usd_ceiling: float = field(default_factory=lambda: _DEFAULT_USD_PER_TASK)
     max_escalations: int = field(default_factory=lambda: _DEFAULT_MAX_ESCALATIONS)
     input_usd_per_million_tokens: float = field(
@@ -209,7 +209,7 @@ def make_budget_state(
 ) -> BudgetState:
     """Factory that respects env-var defaults while allowing override in tests."""
     return BudgetState(
-        usd_ceiling=usd_ceiling if usd_ceiling is not None else _DEFAULT_USD_PER_RUN,
+        usd_ceiling=usd_ceiling if usd_ceiling is not None else _DEFAULT_USD_PER_TURN,
         task_usd_ceiling=task_usd_ceiling
         if task_usd_ceiling is not None
         else _DEFAULT_USD_PER_TASK,

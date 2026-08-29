@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 
 from budget_governor import make_budget_state
 from chat_checkpoint import snapshot_working_memory
@@ -539,12 +540,17 @@ async def run_agentic_loop(
                 if _projected_task_total_usd > _budget_state.task_usd_ceiling:
                     _over_budget_reasons.append("task_budget")
             _has_escalation_code = bool(
-                _escalation_code and _escalation_code in user_message
+                _escalation_code
+                and re.search(
+                    rf"(?<!\S){re.escape(_escalation_code)}(?!\S)",
+                    user_message,
+                )
             )
             session_logger.log(
                 "budget_check",
                 {
                     "round": st.round_idx,
+                    "turn_index": st.round_idx + 1,
                     "model": _model_name_raw,
                     "is_local_model": _is_local_model,
                     "projected_prompt_tokens": _projected_prompt_tokens,
@@ -564,6 +570,7 @@ async def run_agentic_loop(
                     "budget_block",
                     {
                         "round": st.round_idx,
+                        "turn_index": st.round_idx + 1,
                         "model": _model_name_raw,
                         "reasons": _over_budget_reasons,
                         "required_route": "procedure_or_small_model",
@@ -584,6 +591,7 @@ async def run_agentic_loop(
                     "budget_escalation_approved",
                     {
                         "round": st.round_idx,
+                        "turn_index": st.round_idx + 1,
                         "model": _model_name_raw,
                         "reason": (
                             "justification_code"
@@ -643,6 +651,7 @@ async def run_agentic_loop(
                         "budget_block",
                         {
                             "round": st.round_idx,
+                            "turn_index": st.round_idx + 1,
                             "model": _model_name_raw,
                             "reasons": _actual_reasons,
                             "required_route": "procedure_or_small_model",
