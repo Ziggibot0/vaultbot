@@ -160,6 +160,22 @@ def test_returns_review_comments(fake_gh):
     assert result["review_comments"][0]["line"] == 116
 
 
+def test_uses_upstream_env_vars(fake_gh, monkeypatch):
+    """pr_feedback must honor UPSTREAM_OWNER/UPSTREAM_REPO (repo-agnostic).
+
+    Regression: it previously hardcoded a Ziggibot0/vaultbot fallback and
+    only parsed the git remote, bypassing upstream_identity. With env vars
+    set, the API path must target the configured repo.
+    """
+    monkeypatch.setenv("UPSTREAM_OWNER", "someowner")
+    monkeypatch.setenv("UPSTREAM_REPO", "someproject")
+    result = pf.run({"pr_number": 67})
+    assert result["pr_number"] == 67
+    # The fake gh_api records every (method, path) call.
+    recorded_paths = [p for (_, p, _) in fake_gh["api"]]
+    assert any("repos/someowner/someproject/pulls/67" in p for p in recorded_paths)
+
+
 def test_all_checks_passing(fake_gh, monkeypatch):
     """When all check-runs pass, ci_summary is 'success' and no annotations."""
     monkeypatch.setattr(

@@ -3,7 +3,7 @@ type: procedure
 status: experimental
 baseline: true
 created: 2026-08-19
-description: "Solve a GitHub issue end-to-end: read the issue, locate the relevant code via the codebase map, fix it with safe_write, run the test suite, submit a PR, and merge it only if CI is green and the safety scan passes. Orchestrates existing procedures — no duplicated logic."
+description: "Solve a GitHub issue end-to-end: read the issue, locate the relevant code via the codebase map, fix it with safe_write, run the test suite, submit a PR, and merge it only if CI is green and the safety scan passes. Orchestrates existing procedures — no duplicated logic. Works on the configured workspace repo (VAULTBOT_WORKSPACE_PATH) or the VaultBot repo by default."
 when_to_use: "When asked to 'solve issue #N', 'fix the GitHub issue', or when triaging open issues to fix autonomously."
 falsifiable_if: "The procedure merges a PR whose CI is not green, or reports success without actually fixing the issue."
 applies_to:
@@ -68,6 +68,8 @@ else:
         result = json.dumps({"error": issue["error"]})
     else:
         # Ensure the codebase map is fresh, then surface it for the fix step.
+        # In workspace mode (VAULTBOT_WORKSPACE_PATH set) the map targets the
+        # foreign repo; otherwise the VaultBot repo.
         _map = run_procedure("Codebase-Map", {})
         result = json.dumps({
             "issue": issue,

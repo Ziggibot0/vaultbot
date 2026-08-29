@@ -45,22 +45,50 @@ A code change can break tests without being caught by a syntax check, and restar
 
 1. ```python
 import json, os, subprocess
+from pathlib import Path
 
-# The test suite lives in vaultbot_backend/tests/
-backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
-venv_python = str(Path(vault_path) / ".venv" / "Scripts" / "python.exe")
-if not os.path.exists(venv_python):
-    venv_python = "python"
+# The test suite lives in vaultbot_backend/tests/ by default. In workspace
+# mode (VAULTBOT_WORKSPACE_PATH set), the target is a foreign repo's clone
+# and the test entrypoint is detected generically.
+workspace_env = os.environ.get("VAULTBOT_WORKSPACE_PATH", "").strip()
+if workspace_env:
+    backend_dir = str(Path(workspace_env).resolve())
+    # Detect the test entrypoint: pytest if pyproject.toml mentions pytest or
+    # tests/ exists; npm test if package.json; make test if a Makefile.
+    has_pytest = (
+        (Path(backend_dir) / "pyproject.toml").exists()
+        and "pytest" in (Path(backend_dir) / "pyproject.toml").read_text(encoding="utf-8")
+    ) or (Path(backend_dir) / "tests").is_dir()
+    has_npm = (Path(backend_dir) / "package.json").exists()
+    has_make = (Path(backend_dir) / "Makefile").exists()
+    if has_pytest:
+        cmd = ["python", "-m", "pytest", "tests/", "-q", "-x"]
+    elif has_npm:
+        cmd = ["npm", "test"]
+    elif has_make:
+        cmd = ["make", "test"]
+    else:
+        result = json.dumps({
+            "status": "error",
+            "error": "No detectable test entrypoint in workspace: no pyproject.toml mentioning pytest, no tests/ dir, no package.json, no Makefile.",
+        })
+        print(result)
+        raise SystemExit
+else:
+    backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
+    venv_python = str(Path(vault_path) / ".venv" / "Scripts" / "python.exe")
+    if not os.path.exists(venv_python):
+        venv_python = "python"
 
-# Optional filter expression (e.g., "not step_gate" to skip known-broken tests)
-test_filter = args.get("filter", "")
-markers = args.get("markers", "")  # e.g., "-m 'not slow'"
+    # Optional filter expression (e.g., "not step_gate" to skip known-broken tests)
+    test_filter = args.get("filter", "")
+    markers = args.get("markers", "")  # e.g., "-m 'not slow'"
 
-cmd = [venv_python, "-m", "pytest", "tests/", "-q", "-x"]
-if test_filter:
-    cmd += ["-k", test_filter]
-if markers:
-    cmd += ["-m", markers]
+    cmd = [venv_python, "-m", "pytest", "tests/", "-q", "-x"]
+    if test_filter:
+        cmd += ["-k", test_filter]
+    if markers:
+        cmd += ["-m", markers]
 
 try:
     r = subprocess.run(
@@ -70,7 +98,7 @@ try:
     stderr = r.stderr or ""
     exit_code = r.returncode
 except subprocess.TimeoutExpired:
-    result = json.dumps({"status": "timeout", "error": "pytest timed out after 120s"})
+    result = json.dumps({"status": "timeout", "error": "test suite timed out after 120s"})
 except Exception as e:
     result = json.dumps({"status": "error", "error": str(e)})
 else:

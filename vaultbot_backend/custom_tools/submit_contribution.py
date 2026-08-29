@@ -73,6 +73,58 @@ def _failed_gates(gates: dict) -> dict:
     }
 
 
+# Dangerous code patterns that must never ship in a contributed PR (issue
+# #330, item 3). Mirrors the blocklist the PR template asks authors to
+# self-certify against — this makes it an enforced gate, not a checkbox.
+DANGEROUS_PATTERNS: list[str] = [
+    r"\beval\s*\(",
+    r"\bexec\s*\(",
+    r"\bos\.system\s*\(",
+    r"\bpickle\.loads?\s*\(",
+    r"\bsubprocess\.(call|run|Popen)\s*\(.*shell\s*=\s*True",
+    r"\b__import__\s*\(",
+    r"\bmarshal\.loads?\s*\(",
+    r"\bshutil\.rmtree\s*\(",
+]
+
+
+def _scan_dangerous_patterns(git_root: str) -> dict:
+    """Scan the staged diff for dangerous code patterns (issue #330).
+
+    Runs ``git diff --cached`` in ``git_root`` and greps the added lines for
+    the blocklist. Returns ``{"status": "pass"|"fail", "output": ...}``. A
+    hit names the offending pattern so the caller can surface it.
+    """
+    from subprocess_utils import run as _subprocess_run
+
+    try:
+        r = _subprocess_run(
+            ["git", "diff", "--cached", "-U0"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=git_root,
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+        return {"status": "error", "output": f"git diff failed: {e}"}
+    diff = r.stdout
+    hits: list[str] = []
+    for pat in DANGEROUS_PATTERNS:
+        import re
+
+        if re.search(pat, diff):
+            hits.append(pat)
+    if hits:
+        return {
+            "status": "fail",
+            "output": (
+                "Dangerous code pattern(s) detected in the staged diff: "
+                + ", ".join(hits)
+            ),
+        }
+    return {"status": "pass", "output": "No dangerous code patterns detected."}
+
+
 def _run_preflight_ci_gates(vault_root: str) -> dict:
     """Run the CI hard gates locally before pushing a PR.
 
@@ -82,6 +134,13 @@ def _run_preflight_ci_gates(vault_root: str) -> dict:
     "output" tail. This is the enforcement mechanism that prevents VaultBot
     from submitting a PR that will fail CI on a mechanical lint/format/test
     error.
+
+    In workspace mode (``VAULTBOT_WORKSPACE_PATH`` set), the target is a
+    foreign repo: the test entrypoint is detected generically (pytest if
+    ``pyproject.toml`` mentions pytest or ``tests/`` exists; ``npm test`` if
+    ``package.json`` has a test script; ``make test`` if a Makefile exists).
+    An undetectable entrypoint is reported as ``skipped`` WITH a reason — no
+    silent skip (hard rule 2).
     """
     import os
     import shutil
@@ -89,9 +148,17 @@ def _run_preflight_ci_gates(vault_root: str) -> dict:
 
     from subprocess_utils import run as _subprocess_run
 
-    backend_dir = os.path.join(vault_root, "vaultbot", "vaultbot_backend")
-    if not os.path.isdir(backend_dir):
-        backend_dir = vault_root
+    # In workspace mode the target dir is the foreign repo root, not the
+    # vaultbot backend.
+    workspace_mode = bool(os.environ.get("VAULTBOT_WORKSPACE_PATH", "").strip())
+    if workspace_mode:
+        from paths import resolve_workspace_root
+
+        backend_dir = str(resolve_workspace_root())
+    else:
+        backend_dir = os.path.join(vault_root, "vaultbot", "vaultbot_backend")
+        if not os.path.isdir(backend_dir):
+            backend_dir = vault_root
 
     # Locate ruff (venv first, then PATH).
     ruff_bin = None
@@ -163,31 +230,99 @@ def _run_preflight_ci_gates(vault_root: str) -> dict:
     else:
         gates["ruff_format"] = {"status": "skipped", "output": "ruff not found"}
 
-    # Gate 3: pytest unit tests — HARD GATE
-    try:
-        r = _subprocess_run(
-            [
-                venv_python,
-                "-m",
-                "pytest",
-                "tests/",
-                "-q",
-                "-m",
-                "unit",
-                "--tb=short",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=600,
-            cwd=backend_dir,
-            env=test_env,
-        )
-        gates["pytest"] = {
-            "status": "pass" if r.returncode == 0 else "fail",
-            "output": (r.stdout + r.stderr)[-2000:],
-        }
-    except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
-        gates["pytest"] = {"status": "error", "output": str(e)}
+    # Gate 3: test suite — HARD GATE. In legacy mode this is pytest unit
+    # tests against the vaultbot backend. In workspace mode the entrypoint is
+    # detected generically; an undetectable one is skipped with a reason.
+    if workspace_mode:
+        _pyproject = os.path.join(backend_dir, "pyproject.toml")
+        _has_pytest = os.path.isdir(os.path.join(backend_dir, "tests"))
+        if os.path.exists(_pyproject):
+            with open(_pyproject, encoding="utf-8") as _fh:
+                _has_pytest = _has_pytest or "pytest" in _fh.read()
+        _has_npm = os.path.exists(os.path.join(backend_dir, "package.json"))
+        _has_make = os.path.exists(os.path.join(backend_dir, "Makefile"))
+        if _has_pytest:
+            try:
+                r = _subprocess_run(
+                    [venv_python, "-m", "pytest", "tests/", "-q", "--tb=short"],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    cwd=backend_dir,
+                    env=test_env,
+                )
+                gates["pytest"] = {
+                    "status": "pass" if r.returncode == 0 else "fail",
+                    "output": (r.stdout + r.stderr)[-2000:],
+                }
+            except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+                gates["pytest"] = {"status": "error", "output": str(e)}
+        elif _has_npm:
+            try:
+                r = _subprocess_run(
+                    ["npm", "test"],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    cwd=backend_dir,
+                    env=test_env,
+                )
+                gates["npm_test"] = {
+                    "status": "pass" if r.returncode == 0 else "fail",
+                    "output": (r.stdout + r.stderr)[-2000:],
+                }
+            except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+                gates["npm_test"] = {"status": "error", "output": str(e)}
+        elif _has_make:
+            try:
+                r = _subprocess_run(
+                    ["make", "test"],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    cwd=backend_dir,
+                    env=test_env,
+                )
+                gates["make_test"] = {
+                    "status": "pass" if r.returncode == 0 else "fail",
+                    "output": (r.stdout + r.stderr)[-2000:],
+                }
+            except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+                gates["make_test"] = {"status": "error", "output": str(e)}
+        else:
+            gates["pytest"] = {
+                "status": "skipped",
+                "output": (
+                    "No detectable test entrypoint in workspace: no "
+                    "pyproject.toml mentioning pytest, no tests/ dir, no "
+                    "package.json, no Makefile."
+                ),
+            }
+    else:
+        try:
+            r = _subprocess_run(
+                [
+                    venv_python,
+                    "-m",
+                    "pytest",
+                    "tests/",
+                    "-q",
+                    "-m",
+                    "unit",
+                    "--tb=short",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                cwd=backend_dir,
+                env=test_env,
+            )
+            gates["pytest"] = {
+                "status": "pass" if r.returncode == 0 else "fail",
+                "output": (r.stdout + r.stderr)[-2000:],
+            }
+        except Exception as e:  # noqa: BLE001 — best-effort pre-flight gate
+            gates["pytest"] = {"status": "error", "output": str(e)}
 
     return gates
 
@@ -231,12 +366,16 @@ def run(args: dict) -> dict:
     description = args.get("description", "").strip()
     specific_files = args.get("files", [])
 
-    # Find the vault root — the nearest directory containing .git, found
+    # Find the git root — the nearest directory containing .git, found
     # by walking up from vaultbot_backend/.  Previously this was hardcoded
     # as 2 levels up (backend -> vaultbot/ -> vault root), which only works
     # when the vault root IS the git repo.  When the git repo is one level
     # further up (e.g. vaultbot-fork/ containing vaultbot/), the old code
     # pointed at a directory with no .git and every git command failed.
+    #
+    # In workspace mode (VAULTBOT_WORKSPACE_PATH set), the git root is the
+    # foreign target repo's clone — the whole point of repo-agnostic issue
+    # solving. The workspace root must itself be a git repo.
     from custom_tools.upstream_identity import (
         UpstreamIdentityError,
         _find_git_root,
@@ -244,16 +383,31 @@ def run(args: dict) -> dict:
         resolve_upstream,
     )
 
-    vault_root = _find_git_root(backend_dir)
-    if vault_root is None:
-        return {
-            "error": (
-                "Could not find a git repository. The vault root must be "
-                "inside a git repo (one with a .git directory). "
-                "Run 'git init' or clone the repo so that git operations "
-                "like add/commit/push work."
-            )
-        }
+    workspace_mode = bool(os.environ.get("VAULTBOT_WORKSPACE_PATH", "").strip())
+    if workspace_mode:
+        from paths import resolve_workspace_root
+
+        vault_root = str(resolve_workspace_root())
+        if not os.path.isdir(os.path.join(vault_root, ".git")):
+            return {
+                "error": (
+                    "Workspace is not a git repository. "
+                    f"VAULTBOT_WORKSPACE_PATH={vault_root} has no .git. "
+                    "Clone the target repo there (git clone) so that git "
+                    "operations like add/commit/push work."
+                )
+            }
+    else:
+        vault_root = _find_git_root(backend_dir)
+        if vault_root is None:
+            return {
+                "error": (
+                    "Could not find a git repository. The vault root must be "
+                    "inside a git repo (one with a .git directory). "
+                    "Run 'git init' or clone the repo so that git operations "
+                    "like add/commit/push work."
+                )
+            }
 
     # 1. Check for gh CLI (auth is handled by gh auth login, not a token)
     if not gh_available():
@@ -438,6 +592,25 @@ def run(args: dict) -> dict:
         ok, _, err = run_git(["add", f], vault_root)
         if not ok:
             return {"error": f"Could not stage file {f}: {err}"}
+
+    # 6b. Dangerous-patterns scan (issue #330, item 3). After staging, scan
+    # the staged diff for eval/exec/pickle.loads/shell=True etc. — the PR
+    # template asks authors to self-certify against these, but this makes it
+    # an enforced gate. Especially important for foreign workspaces whose
+    # code VaultBot did not author.
+    _danger = _scan_dangerous_patterns(vault_root)
+    if _danger["status"] == "fail":
+        return {
+            "error": (
+                "Dangerous code pattern(s) detected in the staged diff. "
+                "Refusing to submit a PR containing them."
+            ),
+            "detail": _danger["output"],
+            "hint": (
+                "Remove the flagged pattern(s) from the changes, or if this "
+                "is a false positive, review the diff manually and re-run."
+            ),
+        }
 
     ok, diff_stat, _ = run_git(["diff", "--cached", "--stat"], vault_root)
     if not diff_stat.strip():

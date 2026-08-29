@@ -40,18 +40,46 @@ def resolve_path(
     file_path: str, backend_root: Path, allow_create: bool = False
 ) -> Path | None:
     """Resolve a path relative to the vault root, restricted to the vault
-    directory so the agent can't write outside it."""
+    directory so the agent can't write outside it. Also allows the
+    configured workspace root (``VAULTBOT_WORKSPACE_PATH``) so the
+    read/edit pipeline can operate on a foreign target repo (repo-agnostic
+    issue solving). When no workspace is configured, ``backend_root`` is the
+    only root and behavior is unchanged.
+
+    Returns the resolved Path if it lands inside an allowed root, else None.
+    """
     if not file_path:
         return None
-    candidate = (backend_root / file_path).resolve()
-    # Must be inside the vault root.
-    try:
-        candidate.relative_to(backend_root.resolve())
-    except ValueError:
-        return None
-    if not allow_create and not candidate.exists():
-        return None
-    return candidate
+    roots = [backend_root.resolve()]
+    # Only add the workspace root when it is EXPLICITLY configured. When
+    # VAULTBOT_WORKSPACE_PATH is unset, resolve_workspace_root() returns
+    # FRAMEWORK_ROOT, which may differ from backend_root (e.g. in tests
+    # using a tmp backend) — treating it as a workspace root would wrongly
+    # redirect writes. The env check keeps legacy behavior byte-identical.
+    if os.environ.get("VAULTBOT_WORKSPACE_PATH", "").strip():
+        try:
+            from paths import resolve_workspace_root
+
+            ws = resolve_workspace_root().resolve()
+            if ws not in roots:
+                roots.append(ws)
+        except Exception:  # noqa: BLE001 — best-effort; workspace is optional
+            pass
+    # For a brand-new file (create case), prefer the workspace root when it
+    # is configured and distinct — that's where a foreign repo's new files
+    # belong. For reads, the first root containing an existing file wins.
+    if allow_create and len(roots) > 1:
+        roots = [roots[-1], *roots[:-1]]
+    for root in roots:
+        candidate = (root / file_path).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if not allow_create and not candidate.exists():
+            continue
+        return candidate
+    return None
 
 
 def backup_path(target: Path, backend_root: Path, trash_dir: Path) -> Path:

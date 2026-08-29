@@ -378,16 +378,18 @@ def run(args: dict) -> dict:
             "error": f"end_line ({end_line}) must be >= start_line ({start_line})",
         }
 
-    # 3. Resolve the write path against VAULT_ROOT then FRAMEWORK_ROOT
-    #    (issue #341). Repo-facing files (README.md, AGENTS.md, .github/,
-    #    vaultbot_backend/) live at the repo root, not inside the vault.
+    # 3. Resolve the write path against VAULT_ROOT, FRAMEWORK_ROOT, then the
+    #    configured workspace root (issue #341 + repo-agnostic workspace).
+    #    Repo-facing files (README.md, AGENTS.md, .github/, vaultbot_backend/)
+    #    live at the repo root, not inside the vault; a foreign target repo's
+    #    files live under the workspace root.
     full_path = resolve_write_path(file_path_str)
     if full_path is None:
         return {
             "status": "error",
             "error": (
                 f"Path traversal detected: {file_path_str} resolves outside "
-                "vault root and repo root"
+                "vault root, repo root, and workspace root"
             ),
         }
 

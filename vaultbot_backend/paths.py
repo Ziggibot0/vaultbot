@@ -110,14 +110,49 @@ def resolve_content_path(file_path: str | Path) -> Path:
     return (vault_root / p).resolve()
 
 
+def resolve_workspace_root() -> Path:
+    """Root of the target project's git clone (repo-agnostic issue solving).
+
+    Read from ``VAULTBOT_WORKSPACE_PATH`` env (absolute, or relative to
+    FRAMEWORK_ROOT).  When unset, returns FRAMEWORK_ROOT — legacy single-root
+    mode where VaultBot works on its own repo, behavior unchanged.
+
+    The workspace root lets a dev point VaultBot at ANY project's git clone
+    (not just the VaultBot repo) so the read/edit/test/PR pipeline can solve
+    that project's issues.  A nonexistent path still resolves (creates are
+    allowed); the git-root check happens at git-operation time.
+    """
+    env = os.environ.get("VAULTBOT_WORKSPACE_PATH", "").strip()
+    if not env:
+        return FRAMEWORK_ROOT
+    p = Path(env)
+    if not p.is_absolute():
+        p = FRAMEWORK_ROOT / p
+    return p.resolve()
+
+
+def _content_roots() -> list[Path]:
+    """The ordered roots a read/write path may land in.
+
+    Vault root first (legacy precedence), then framework root, then the
+    workspace root (when configured and distinct).  Deduplicated.
+    """
+    roots = [_resolve_vault_root()]
+    for extra in (FRAMEWORK_ROOT, resolve_workspace_root()):
+        if extra not in roots:
+            roots.append(extra)
+    return roots
+
+
 def is_within_content_roots(path: str | Path) -> bool:
-    """True if ``path`` resolves inside VAULT_ROOT or FRAMEWORK_ROOT.
+    """True if ``path`` resolves inside VAULT_ROOT, FRAMEWORK_ROOT, or the
+    workspace root.
 
     Used by the write tools as the path-traversal guard: a write is allowed
-    only if it lands inside one of the two content roots.
+    only if it lands inside one of the content roots.
     """
     resolved = Path(path).resolve()
-    for root in (_resolve_vault_root(), FRAMEWORK_ROOT):
+    for root in _content_roots():
         try:
             resolved.relative_to(root.resolve())
             return True
@@ -127,9 +162,10 @@ def is_within_content_roots(path: str | Path) -> bool:
 
 
 def resolve_write_path(file_path: str | Path) -> Path | None:
-    """Resolve a write path against VAULT_ROOT first, then FRAMEWORK_ROOT.
+    """Resolve a write path against VAULT_ROOT, FRAMEWORK_ROOT, then the
+    workspace root.
 
-    Returns the resolved Path if it lands inside either root, else None.
+    Returns the resolved Path if it lands inside one of the roots, else None.
 
     Handles the split layout (issue #341): vault notes live under
     ``VAULT_ROOT`` (myvault) but repo-facing files (``README.md``,
@@ -138,16 +174,18 @@ def resolve_write_path(file_path: str | Path) -> Path | None:
     against ``VAULT_ROOT``, so they blocked every repo-root file as "path
     traversal" and contributions to the repo were impossible.
 
-    Security: the resolved path must land inside VAULT_ROOT or
-    FRAMEWORK_ROOT. A ``..`` that escapes BOTH roots returns None (the
+    The workspace root (``VAULTBOT_WORKSPACE_PATH``) extends this to a
+    foreign target project's git clone, making the pipeline repo-agnostic.
+
+    Security: the resolved path must land inside VAULT_ROOT, FRAMEWORK_ROOT,
+    or the workspace root. A ``..`` that escapes ALL roots returns None (the
     caller blocks the write). Vault root wins for paths that exist in both;
     otherwise the first root that contains an existing file is used. For a
-    brand-new file (create case) the vault root is the fallback.
+    brand-new file (create case): the workspace root wins in workspace mode,
+    else the vault root is the fallback.
     """
     p = Path(file_path)
-    roots = [_resolve_vault_root()]
-    if roots[0] != FRAMEWORK_ROOT:
-        roots.append(FRAMEWORK_ROOT)
+    roots = _content_roots()
     for root in roots:
         candidate = (root / p).resolve()
         try:
@@ -156,11 +194,16 @@ def resolve_write_path(file_path: str | Path) -> Path | None:
             continue
         if candidate.exists():
             return candidate
-    # Nothing found yet — fall back to the vault root (for create-new notes),
-    # but ONLY if it stays inside the vault root.
-    fallback = (_resolve_vault_root() / p).resolve()
+    # Nothing found yet — fall back for create-new files. In workspace mode
+    # (workspace != FRAMEWORK_ROOT) the workspace root is the natural home
+    # for new files; otherwise the vault root (for create-new notes). Only
+    # if it stays inside the chosen root.
+    create_root = resolve_workspace_root()
+    if create_root == FRAMEWORK_ROOT:
+        create_root = _resolve_vault_root()
+    fallback = (create_root / p).resolve()
     try:
-        fallback.relative_to(_resolve_vault_root().resolve())
+        fallback.relative_to(create_root.resolve())
         return fallback
     except ValueError:
         return None
