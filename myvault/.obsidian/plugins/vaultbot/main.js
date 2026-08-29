@@ -1333,8 +1333,19 @@ class VaultBotPlugin extends Plugin {
 					backups[name] = fs.readFileSync(p);
 				}
 			}
-			const srcPlugin = path.join(archiveRoot, 'vault', '.obsidian', 'plugins', 'vaultbot');
-			if (!fs.existsSync(srcPlugin)) throw new Error('Archive has no plugin folder.');
+			// The vault folder was renamed vault/ -> myvault/ (PR #267).
+			// Archives from the current layout have the plugin under
+			// myvault/; a user can still pin a pre-rename tag, whose
+			// archive uses the legacy vault/ name. Try both, new name
+			// first. Without this, every self-update since the rename
+			// threw 'Archive has no plugin folder.' AFTER already
+			// applying the backend — a half-applied update.
+			let srcPlugin = null;
+			for (const _vaultDir of ['myvault', 'vault']) {
+				const candidate = path.join(archiveRoot, _vaultDir, '.obsidian', 'plugins', 'vaultbot');
+				if (fs.existsSync(candidate)) { srcPlugin = candidate; break; }
+			}
+			if (!srcPlugin) throw new Error('Archive has no plugin folder.');
 			// Copy only code files from the archive's plugin dir. Never copy
 			// data.json even if it somehow survived (it shouldn't).
 			for (const name of ['main.js', 'manifest.json', 'styles.css', 'mcp.json']) {
