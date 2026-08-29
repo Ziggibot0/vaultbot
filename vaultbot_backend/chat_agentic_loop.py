@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 
+from budget_governor import make_budget_state
 from chat_checkpoint import snapshot_working_memory
 from chat_context import (
     age_old_tool_results as _age_old_tool_results,
@@ -168,6 +169,11 @@ async def run_agentic_loop(
         # After the first same-tool nudge, give the model two more rounds to
         # switch tools / arguments or explain the blocker before forcing exit.
         _SAME_TOOL_STREAK_HARD_EXIT_THRESHOLD = _SAME_TOOL_STREAK_THRESHOLD + 2
+        _budget_state = make_budget_state()
+        _task_budget_spent_usd = float(
+            getattr(websocket, "_task_budget_spent_usd", 0.0) or 0.0
+        )
+        _escalation_code = os.getenv("VAULTBOT_BUDGET_ESCALATION_CODE", "").strip()
         while st.round_idx < _MAX_ROUNDS:
             _check_cancelled(websocket)
             # --- Break condition 1: 3+ consecutive failed writes ---
@@ -503,7 +509,8 @@ async def run_agentic_loop(
             # role), we also flatten tool calls to system messages. This
             # is a protocol bug specific to that model, not a general
             # heuristic — see /memories/glm-ollama-tool-calls-broken.md.
-            _model_name = (svc.ollama_client.llm_model or "").lower()
+            _model_name_raw = svc.ollama_client.llm_model or ""
+            _model_name = _model_name_raw.lower()
             _client_cls = svc.ollama_client.__class__.__name__.lower()
             _flatten = os.getenv(
                 "VAULTBOT_FORCE_SANITIZE_TOOL_HISTORY", "0"
@@ -511,6 +518,84 @@ async def run_agentic_loop(
             st._model_conversation = _project_for_provider(
                 conversation, flatten_tool_calls=_flatten
             )
+            _is_local_model = _budget_state.is_local_model(_model_name_raw)
+            _projected_prompt_tokens = _estimate_conv_tokens(st._model_conversation)
+            _projected_completion_tokens = _budget_state.projected_completion_tokens
+            _projected_round_cost_usd = _budget_state.estimate_round_cost_usd(
+                _projected_prompt_tokens, _projected_completion_tokens
+            )
+            _projected_turn_total_usd = (
+                _budget_state.total_usd_spent + _projected_round_cost_usd
+            )
+            _projected_task_total_usd = (
+                _task_budget_spent_usd + _projected_round_cost_usd
+            )
+            _over_budget_reasons: list[str] = []
+            if not _is_local_model:
+                if _budget_state.escalation_count >= _budget_state.max_escalations:
+                    _over_budget_reasons.append("max_escalations")
+                if _projected_turn_total_usd > _budget_state.usd_ceiling:
+                    _over_budget_reasons.append("turn_budget")
+                if _projected_task_total_usd > _budget_state.task_usd_ceiling:
+                    _over_budget_reasons.append("task_budget")
+            _has_escalation_code = bool(
+                _escalation_code and _escalation_code in user_message
+            )
+            session_logger.log(
+                "budget_check",
+                {
+                    "round": st.round_idx,
+                    "model": _model_name_raw,
+                    "is_local_model": _is_local_model,
+                    "projected_prompt_tokens": _projected_prompt_tokens,
+                    "projected_completion_tokens": _projected_completion_tokens,
+                    "projected_round_cost_usd": round(_projected_round_cost_usd, 8),
+                    "projected_turn_total_usd": round(_projected_turn_total_usd, 8),
+                    "projected_task_total_usd": round(_projected_task_total_usd, 8),
+                    "turn_budget_limit_usd": _budget_state.usd_ceiling,
+                    "task_budget_limit_usd": _budget_state.task_usd_ceiling,
+                    "escalation_count": _budget_state.escalation_count,
+                    "max_escalations": _budget_state.max_escalations,
+                    "escalation_code_present": _has_escalation_code,
+                },
+            )
+            if _over_budget_reasons and not _has_escalation_code:
+                session_logger.log(
+                    "budget_block",
+                    {
+                        "round": st.round_idx,
+                        "model": _model_name_raw,
+                        "reasons": _over_budget_reasons,
+                        "required_route": "procedure_or_small_model",
+                        "justification_required": bool(_escalation_code),
+                        "projected_round_cost_usd": round(_projected_round_cost_usd, 8),
+                        "cost_saved_usd": round(_projected_round_cost_usd, 8),
+                    },
+                )
+                st.final_answer = (
+                    "Budget guard blocked another big-model escalation. "
+                    "Use a procedure path or small-model fallback, or provide "
+                    "the configured escalation justification code to continue."
+                )
+                break
+            if not _is_local_model:
+                _budget_state.escalation_count += 1
+                session_logger.log(
+                    "budget_escalation_approved",
+                    {
+                        "round": st.round_idx,
+                        "model": _model_name_raw,
+                        "reason": (
+                            "justification_code"
+                            if _over_budget_reasons
+                            else "within_budget"
+                        ),
+                        "over_budget_reasons": _over_budget_reasons,
+                        "projected_round_cost_usd": round(_projected_round_cost_usd, 8),
+                    },
+                )
+            _pre_round_prompt_tokens = st._turn_token_totals["prompt_tokens"]
+            _pre_round_completion_tokens = st._turn_token_totals["completion_tokens"]
 
             (
                 round_text,
@@ -527,6 +612,51 @@ async def run_agentic_loop(
                 _round_tools,
                 st,
             )
+            if not _is_local_model:
+                _round_prompt_tokens = max(
+                    0, st._turn_token_totals["prompt_tokens"] - _pre_round_prompt_tokens
+                )
+                _round_completion_tokens = max(
+                    0,
+                    st._turn_token_totals["completion_tokens"]
+                    - _pre_round_completion_tokens,
+                )
+                if _round_prompt_tokens == 0 and _round_completion_tokens == 0:
+                    _round_prompt_tokens = _projected_prompt_tokens
+                    _round_completion_tokens = _projected_completion_tokens
+                _actual_round_cost_usd = _budget_state.estimate_round_cost_usd(
+                    _round_prompt_tokens, _round_completion_tokens
+                )
+                _budget_state.total_usd_spent += _actual_round_cost_usd
+                _task_budget_spent_usd += _actual_round_cost_usd
+                setattr(websocket, "_task_budget_spent_usd", _task_budget_spent_usd)
+                if (
+                    _budget_state.total_usd_spent > _budget_state.usd_ceiling
+                    or _task_budget_spent_usd > _budget_state.task_usd_ceiling
+                ):
+                    _actual_reasons: list[str] = []
+                    if _budget_state.total_usd_spent > _budget_state.usd_ceiling:
+                        _actual_reasons.append("turn_budget_actual")
+                    if _task_budget_spent_usd > _budget_state.task_usd_ceiling:
+                        _actual_reasons.append("task_budget_actual")
+                    session_logger.log(
+                        "budget_block",
+                        {
+                            "round": st.round_idx,
+                            "model": _model_name_raw,
+                            "reasons": _actual_reasons,
+                            "required_route": "procedure_or_small_model",
+                            "justification_required": bool(_escalation_code),
+                            "actual_round_cost_usd": round(_actual_round_cost_usd, 8),
+                            "turn_spend_usd": round(_budget_state.total_usd_spent, 8),
+                            "task_spend_usd": round(_task_budget_spent_usd, 8),
+                        },
+                    )
+                    st.final_answer = (
+                        "Budget guard reached the escalation limit for this task. "
+                        "Switch to a procedure path or small-model fallback."
+                    )
+                    break
 
             session_logger.log(
                 "agent_round",

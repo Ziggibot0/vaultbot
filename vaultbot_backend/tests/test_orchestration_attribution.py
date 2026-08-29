@@ -173,6 +173,15 @@ def _write_session_with_two_turns(tmp_path: Path) -> Path:
         repeated_tool_calls=["vault_search"],
         turn_index=2,
     )
+    s.log(
+        "budget_block",
+        {
+            "turn_index": 2,
+            "reasons": ["task_budget"],
+            "required_route": "procedure_or_small_model",
+            "cost_saved_usd": 0.0012,
+        },
+    )
 
     s.close()
     return s._file_path
@@ -224,6 +233,14 @@ def test_report_repeated_tool_flags(tmp_path: Path) -> None:
     assert report["summary"]["turns_with_repeated_tool_calls"] == 1
 
 
+def test_report_budget_block_savings(tmp_path: Path) -> None:
+    log = _write_session_with_two_turns(tmp_path)
+    report = session_orchestration_report(log)
+    s = report["summary"]
+    assert s["budget_block_count"] == 1
+    assert abs(s["budget_cost_saved_usd"] - 0.0012) < 1e-9
+
+
 def test_report_per_turn_detail(tmp_path: Path) -> None:
     log = _write_session_with_two_turns(tmp_path)
     report = session_orchestration_report(log)
@@ -233,6 +250,9 @@ def test_report_per_turn_detail(tmp_path: Path) -> None:
     assert t1["route"] == "procedure"
     assert t1["tool_rounds"] == 2
     assert t1["completion_outcome"] == "success"
+    t2 = next(t for t in turns if t["turn_index"] == 2)
+    assert t2["budget_blocked"] is True
+    assert t2["budget_block_reasons"] == ["task_budget"]
 
 
 def test_report_baseline_comparison(tmp_path: Path) -> None:

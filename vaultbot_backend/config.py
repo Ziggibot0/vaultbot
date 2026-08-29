@@ -117,6 +117,16 @@ class Tunables:
     # ── Small model filters (small_model_filters) ────────────────────────
     small_timeout_seconds: float = 12.0  # small-model call wall-clock timeout
 
+    # ── Token-dollar escalation governor (budget_governor/chat loop) ─────
+    # Hard spend ceilings for big-model escalation.
+    budget_usd_per_turn: float = 0.50
+    budget_usd_per_task: float = 2.00
+    # Cost projection rates (USD / 1M tokens) used for pre-round checks.
+    budget_input_usd_per_million_tokens: float = 0.15
+    budget_output_usd_per_million_tokens: float = 0.60
+    # Conservative output-token projection when estimating the next round.
+    budget_projected_completion_tokens: int = 800
+
     # ── Session log retention (session_logger.sweep_old_sessions) ────────
     session_log_retention_count: int = 200  # keep newest N files
     session_log_retention_days: int = 30  # delete files older than N days

@@ -13,11 +13,18 @@ Design principles:
   a running backend.
 
 Configuration (environment variables or .env):
-    VAULTBOT_BUDGET_USD_PER_RUN   Hard ceiling in USD per chat turn
-                                  (default: 0.50 — conservative for
-                                  occasional cloud-model escalation).
+    VAULTBOT_BUDGET_USD_PER_TURN  Hard ceiling in USD per chat turn
+                                  (legacy alias: VAULTBOT_BUDGET_USD_PER_RUN).
+    VAULTBOT_BUDGET_USD_PER_TASK  Hard ceiling in USD across the current task.
     VAULTBOT_BUDGET_ESCALATIONS   Max number of big-model escalations per
                                   turn (default: 3).
+    VAULTBOT_BUDGET_INPUT_USD_PER_MILLION_TOKENS
+                                  Prompt-token projection rate.
+    VAULTBOT_BUDGET_OUTPUT_USD_PER_MILLION_TOKENS
+                                  Completion-token projection rate.
+    VAULTBOT_BUDGET_PROJECTED_COMPLETION_TOKENS
+                                  Default completion tokens for pre-round
+                                  spend projection.
     VAULTBOT_LOCAL_MODEL_TOKENS   Token cost treated as $0 when the model
                                   name contains this substring (default:
                                   "ollama" or "local").
@@ -34,9 +41,37 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from config import TUNABLES
+
 # ── Defaults (conservative) ─────────────────────────────────────────────
-_DEFAULT_USD_PER_RUN: float = float(os.getenv("VAULTBOT_BUDGET_USD_PER_RUN", "0.50"))
+_DEFAULT_USD_PER_RUN: float = float(
+    os.getenv(
+        "VAULTBOT_BUDGET_USD_PER_TURN",
+        os.getenv("VAULTBOT_BUDGET_USD_PER_RUN", str(TUNABLES.budget_usd_per_turn)),
+    )
+)
+_DEFAULT_USD_PER_TASK: float = float(
+    os.getenv("VAULTBOT_BUDGET_USD_PER_TASK", str(TUNABLES.budget_usd_per_task))
+)
 _DEFAULT_MAX_ESCALATIONS: int = int(os.getenv("VAULTBOT_BUDGET_ESCALATIONS", "3"))
+_DEFAULT_INPUT_USD_PER_MILLION: float = float(
+    os.getenv(
+        "VAULTBOT_BUDGET_INPUT_USD_PER_MILLION_TOKENS",
+        str(TUNABLES.budget_input_usd_per_million_tokens),
+    )
+)
+_DEFAULT_OUTPUT_USD_PER_MILLION: float = float(
+    os.getenv(
+        "VAULTBOT_BUDGET_OUTPUT_USD_PER_MILLION_TOKENS",
+        str(TUNABLES.budget_output_usd_per_million_tokens),
+    )
+)
+_DEFAULT_PROJECTED_COMPLETION_TOKENS: int = int(
+    os.getenv(
+        "VAULTBOT_BUDGET_PROJECTED_COMPLETION_TOKENS",
+        str(TUNABLES.budget_projected_completion_tokens),
+    )
+)
 _LOCAL_MODEL_SUBSTRINGS: tuple[str, ...] = tuple(
     part.strip().lower()
     for part in os.getenv("VAULTBOT_LOCAL_MODEL_TOKENS", "ollama,local-,local/").split(
@@ -62,7 +97,17 @@ class BudgetState:
     """
 
     usd_ceiling: float = field(default_factory=lambda: _DEFAULT_USD_PER_RUN)
+    task_usd_ceiling: float = field(default_factory=lambda: _DEFAULT_USD_PER_TASK)
     max_escalations: int = field(default_factory=lambda: _DEFAULT_MAX_ESCALATIONS)
+    input_usd_per_million_tokens: float = field(
+        default_factory=lambda: _DEFAULT_INPUT_USD_PER_MILLION
+    )
+    output_usd_per_million_tokens: float = field(
+        default_factory=lambda: _DEFAULT_OUTPUT_USD_PER_MILLION
+    )
+    projected_completion_tokens: int = field(
+        default_factory=lambda: _DEFAULT_PROJECTED_COMPLETION_TOKENS
+    )
     total_usd_spent: float = 0.0
     escalation_count: int = 0
 
@@ -106,6 +151,20 @@ class BudgetState:
             )
         self.total_usd_spent = new_total
 
+    def estimate_round_cost_usd(
+        self, prompt_tokens: int, completion_tokens: int | None = None
+    ) -> float:
+        """Estimate round spend from token counts and configured rates."""
+        completion = (
+            self.projected_completion_tokens
+            if completion_tokens is None
+            else max(0, int(completion_tokens))
+        )
+        prompt = max(0, int(prompt_tokens))
+        in_cost = (prompt / 1_000_000.0) * self.input_usd_per_million_tokens
+        out_cost = (completion / 1_000_000.0) * self.output_usd_per_million_tokens
+        return max(0.0, in_cost + out_cost)
+
     def check_escalation(self, model_name: str) -> None:
         """Call before escalating to a big (cloud) model.
 
@@ -128,8 +187,12 @@ class BudgetState:
         return {
             "total_usd_spent": round(self.total_usd_spent, 6),
             "usd_ceiling": self.usd_ceiling,
+            "task_usd_ceiling": self.task_usd_ceiling,
             "escalation_count": self.escalation_count,
             "max_escalations": self.max_escalations,
+            "input_usd_per_million_tokens": self.input_usd_per_million_tokens,
+            "output_usd_per_million_tokens": self.output_usd_per_million_tokens,
+            "projected_completion_tokens": self.projected_completion_tokens,
             "budget_remaining_usd": round(
                 max(0.0, self.usd_ceiling - self.total_usd_spent), 6
             ),
@@ -138,12 +201,28 @@ class BudgetState:
 
 def make_budget_state(
     usd_ceiling: float | None = None,
+    task_usd_ceiling: float | None = None,
     max_escalations: int | None = None,
+    input_usd_per_million_tokens: float | None = None,
+    output_usd_per_million_tokens: float | None = None,
+    projected_completion_tokens: int | None = None,
 ) -> BudgetState:
     """Factory that respects env-var defaults while allowing override in tests."""
     return BudgetState(
         usd_ceiling=usd_ceiling if usd_ceiling is not None else _DEFAULT_USD_PER_RUN,
+        task_usd_ceiling=task_usd_ceiling
+        if task_usd_ceiling is not None
+        else _DEFAULT_USD_PER_TASK,
         max_escalations=max_escalations
         if max_escalations is not None
         else _DEFAULT_MAX_ESCALATIONS,
+        input_usd_per_million_tokens=input_usd_per_million_tokens
+        if input_usd_per_million_tokens is not None
+        else _DEFAULT_INPUT_USD_PER_MILLION,
+        output_usd_per_million_tokens=output_usd_per_million_tokens
+        if output_usd_per_million_tokens is not None
+        else _DEFAULT_OUTPUT_USD_PER_MILLION,
+        projected_completion_tokens=projected_completion_tokens
+        if projected_completion_tokens is not None
+        else _DEFAULT_PROJECTED_COMPLETION_TOKENS,
     )

@@ -81,6 +81,9 @@ _EVENT_CATEGORIES: dict[str, str] = {
     "route_decision": "orchestration",
     "turn_cost": "orchestration",
     "turn_efficiency": "orchestration",
+    "budget_check": "orchestration",
+    "budget_block": "orchestration",
+    "budget_escalation_approved": "orchestration",
     # research
     "research_begin": "research",
     "research_error": "research",

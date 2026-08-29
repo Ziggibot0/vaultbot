@@ -80,9 +80,29 @@ class TestSummary:
         summary = s.summary()
         assert "total_usd_spent" in summary
         assert "usd_ceiling" in summary
+        assert "task_usd_ceiling" in summary
         assert "escalation_count" in summary
         assert "max_escalations" in summary
         assert "budget_remaining_usd" in summary
+
+
+class TestProjection:
+    def test_estimate_round_cost_uses_configured_rates(self):
+        s = BudgetState(
+            input_usd_per_million_tokens=1.0,
+            output_usd_per_million_tokens=2.0,
+            projected_completion_tokens=0,
+        )
+        # prompt=1000 => 0.001 * 1.0, completion=500 => 0.0005 * 2.0
+        assert s.estimate_round_cost_usd(1000, 500) == pytest.approx(0.002)
+
+    def test_estimate_round_cost_uses_projected_completion_default(self):
+        s = BudgetState(
+            input_usd_per_million_tokens=0.0,
+            output_usd_per_million_tokens=1.0,
+            projected_completion_tokens=250,
+        )
+        assert s.estimate_round_cost_usd(0) == pytest.approx(0.00025)
 
     def test_remaining_never_negative(self):
         s = BudgetState(usd_ceiling=0.10)
@@ -99,3 +119,7 @@ class TestMakeBudgetState:
     def test_override_escalations(self):
         s = make_budget_state(max_escalations=10)
         assert s.max_escalations == 10
+
+    def test_override_task_budget(self):
+        s = make_budget_state(task_usd_ceiling=3.5)
+        assert s.task_usd_ceiling == pytest.approx(3.5)

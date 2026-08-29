@@ -91,6 +91,9 @@ def session_orchestration_report(
                 "tool_rounds": 0,
                 "completion_outcome": None,
                 "repeated_tool_calls": [],
+                "budget_blocked": False,
+                "budget_block_reasons": [],
+                "budget_cost_saved_usd": 0.0,
             }
         return _by_turn[idx]
 
@@ -149,6 +152,20 @@ def session_orchestration_report(
             t["repeated_tool_calls"] = data.get("repeated_tool_calls", [])
             continue
 
+        if ev == "budget_block":
+            ti = data.get("turn_index", _seq)
+            t = _ensure_turn(ti)
+            t["budget_blocked"] = True
+            t["budget_block_reasons"] = list(data.get("reasons") or [])
+            saved = data.get("cost_saved_usd")
+            if saved is None:
+                saved = data.get("projected_round_cost_usd")
+            try:
+                t["budget_cost_saved_usd"] = max(float(saved or 0.0), 0.0)
+            except (TypeError, ValueError):
+                t["budget_cost_saved_usd"] = 0.0
+            continue
+
         # Advance the sequential counter on chat_begin so events without
         # explicit turn_index still group correctly.
         if ev == "chat_begin":
@@ -163,6 +180,8 @@ def session_orchestration_report(
     total_tool_latency = 0.0
     total_tool_rounds = 0
     repeated_flag_count = 0
+    budget_block_count = 0
+    total_budget_saved_usd = 0.0
     outcome_counts: dict[str, int] = {}
 
     for t in turns:
@@ -176,6 +195,9 @@ def session_orchestration_report(
         total_tool_rounds += t["tool_rounds"]
         if t["repeated_tool_calls"]:
             repeated_flag_count += 1
+        if t["budget_blocked"]:
+            budget_block_count += 1
+            total_budget_saved_usd += float(t.get("budget_cost_saved_usd", 0.0) or 0.0)
         oc = t["completion_outcome"] or "unknown"
         outcome_counts[oc] = outcome_counts.get(oc, 0) + 1
 
@@ -189,6 +211,8 @@ def session_orchestration_report(
         "total_tokens": total_prompt + total_completion,
         "total_tool_latency_ms": round(total_tool_latency, 2),
         "turns_with_repeated_tool_calls": repeated_flag_count,
+        "budget_block_count": budget_block_count,
+        "budget_cost_saved_usd": round(total_budget_saved_usd, 8),
         "completion_outcomes": outcome_counts,
     }
     if n_turns:
