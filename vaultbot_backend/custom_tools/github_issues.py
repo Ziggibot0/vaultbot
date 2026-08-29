@@ -18,12 +18,14 @@ SAFE-MODE GATING (content-aware, mirrors edit_lines):
     it *see* issues.
 
 CONTRIBUTIONS GATE (opt-in, mirrors submit_contribution):
-  The entire tool is gated behind ``VAULTBOT_ALLOW_CONTRIBUTIONS=true``. If
-  the setting is off, every action refuses — including ``list`` / ``read``.
-  This keeps the tool out of the LLM's context when the user hasn't opted
-  into community contributions (no context bloat from a tool that will
-  never be used). The load-time gate in ``self_improver.load_custom_tools``
-  additionally prevents the schema from being advertised at all.
+  Read-only actions (``list`` / ``read``) are ALWAYS available so a fresh,
+  non-technical user can see issues without opting in (see issue #298).
+  Mutations (``comment`` / ``close`` / ``label`` / ``create``) are gated
+  behind ``VAULTBOT_ALLOW_CONTRIBUTIONS=true`` so the tool can't change
+  the repo without explicit user permission. The load-time gate in
+  ``self_improver.load_custom_tools`` additionally keeps the schema out
+  of the LLM context for non-contributors (so a tool that will never be
+  used doesn't bloat context), but a direct/programmatic read still works.
 """
 
 SCHEMA = {
@@ -33,10 +35,12 @@ SCHEMA = {
         "'list' (open issues), 'read' (issue body + comments), 'comment' "
         "(post a comment), 'close' (close an issue with a comment), "
         "'label' (add/remove labels), 'create' (open a new issue). "
-        "'list' and 'read' are read-only; 'comment', 'close', 'label', and "
-        "'create' mutate the repo and require Developer Mode. The entire "
-        "tool requires the 'Allow contributions' setting to be enabled. "
-        "Requires the gh CLI authenticated via 'gh auth login'."
+        "'list' and 'read' are read-only and always available in Safe Mode "
+        "and without the 'Allow contributions' setting. 'comment', 'close', "
+        "'label', and 'create' mutate the repo and require both Developer "
+        "Mode and the 'Allow contributions' setting. When contributions are "
+        "disabled, mutating actions decline with a hint pointing at the "
+        "setting. Requires the gh CLI authenticated via 'gh auth login'."
     ),
     "parameters": {
         "type": "object",
@@ -117,25 +121,36 @@ def run(args: dict) -> dict:
             ),
         }
 
-    # 1b. Contributions opt-in gate (mirrors submit_contribution). The entire
-    #     tool is disabled when the user hasn't opted in — including read
-    #     actions — so the tool never appears in a vault where contributions
-    #     are off. The load-time gate in self_improver.load_custom_tools also
-    #     keeps the schema out of the LLM context, but this call-time check is
-    #     a defence-in-depth for direct/programmatic calls.
-    allow_contributions = (
-        os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
-    )
-    if allow_contributions != "true":
-        return {
-            "error": "Contributions are not enabled.",
-            "hint": (
-                "Enable 'Allow contributions' in VaultBot settings (under "
-                "Community contributions), or ask your operator to enable "
-                "it. This is an opt-in feature — VaultBot will never read or "
-                "mutate GitHub issues without explicit permission."
-            ),
-        }
+    # 1b. Contributions opt-in gate (mirrors submit_contribution). Read-only
+    #     actions ('list'/'read') are ALWAYS available so a fresh,
+    #     non-technical user can see issues via a read-only action — they
+    #     contribute nothing, they just read. See issue #298: the previous
+    #     code returned "Contributions are not enabled" for even a plain
+    #     'read', defeating the tool's purpose.
+    #     Mutations ('comment'/'close'/'label'/'create') remain gated behind
+    #     the contribution opt-in AND Developer Mode — the whole point of the
+    #     gate is that VaultBot can't change the repo without explicit user
+    #     permission. When off, mutations refuse with a hint pointing at the
+    #     setting. This call-time check is defence-in-depth for direct/
+    #     programmatic calls; the load-time gate in
+    #     self_improver.load_custom_tools additionally keeps the schema out
+    #     of the LLM context when contributions are off.
+    if action in _MUTATING_ACTIONS:
+        allow_contributions = (
+            os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
+        )
+        if allow_contributions != "true":
+            return {
+                "error": "Contributions are not enabled.",
+                "hint": (
+                    "Enable 'Allow contributions' in VaultBot settings "
+                    "(under Community contributions), or ask your operator "
+                    "to enable it. This is an opt-in feature — VaultBot "
+                    "will never comment on, close, label, or open GitHub "
+                    "issues without explicit permission. Reading issues "
+                    "does not require it."
+                ),
+            }
 
     # 2. Content-aware Safe Mode gate: block mutating actions.
     if action in _MUTATING_ACTIONS:

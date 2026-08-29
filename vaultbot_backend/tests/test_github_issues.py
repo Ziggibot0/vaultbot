@@ -107,7 +107,7 @@ def safe_mode_on(monkeypatch):
 
 @pytest.fixture
 def contributions_off(monkeypatch):
-    """Contributions disabled — the whole tool should refuse."""
+    """Contributions disabled — read-only actions still work, mutations refuse."""
     monkeypatch.setenv("VAULTBOT_ALLOW_CONTRIBUTIONS", "false")
     monkeypatch.setenv("VAULTBOT_SAFE_MODE", "0")
     import safe_mode
@@ -211,16 +211,25 @@ def test_create_allowed_in_developer_mode(fake_gh, developer_mode):
 # --- contributions gate -----------------------------------------------------
 
 
-def test_list_blocked_when_contributions_off(fake_gh, contributions_off):
+def test_list_allowed_when_contributions_off(fake_gh, contributions_off):
+    """Read-only 'list' must work without the contributions opt-in (#298)."""
     result = gi.run({"action": "list"})
-    assert "error" in result
-    assert "Contributions are not enabled" in result["error"]
+    assert result["status"] == "success"
+    assert result["count"] == 1  # PR B filtered out, Bug A remains
 
 
-def test_read_blocked_when_contributions_off(fake_gh, contributions_off):
+def test_read_allowed_when_contributions_off(fake_gh, contributions_off):
+    """Read-only 'read' must work without the contributions opt-in (#298)."""
     result = gi.run({"action": "read", "issue_number": 1})
+    assert result["status"] == "success"
+    assert result["title"] == "Bug A"
+
+
+def test_comment_blocked_when_contributions_off(fake_gh, contributions_off):
+    """Mutating actions still refuse without the opt-in."""
+    result = gi.run({"action": "comment", "issue_number": 1, "body": "hi"})
     assert "error" in result
-    assert "Contributions are not enabled" in result["error"]
+    assert "hint" in result
 
 
 def test_create_blocked_when_contributions_off(fake_gh, contributions_off):

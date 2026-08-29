@@ -53,7 +53,10 @@ maintainer's own.
 
 **The opt-in gate.** `VAULTBOT_ALLOW_CONTRIBUTIONS` (the "Allow
 contributions" setting) is the single toggle. Off = pull-only: the VaultBot
-fetches updates and gives nothing back — not even an issue. This is the
+fetches updates and gives nothing back — it cannot comment on, close,
+label, or open issues, and it cannot submit PRs. Reading issues (`list` /
+`read`) is always available, even with the gate off, so a fresh install can
+see the project's issues without opting in (issue #298). This is the
 user's right, not a soft preference.
 
 ## Architecture

@@ -61,9 +61,14 @@ TRASH_DIR = (
 # schemas never reach the LLM (zero context bloat) and they can't be
 # called. Each tool also checks the env var at call time as
 # defence-in-depth. See [[Community-Contribution-System]].
+#
+# NOTE: `github_issues` is deliberately NOT in this set. Its read-only
+# actions (`list`/`read`) are always available so a fresh, non-technical
+# user can see issues without opting into contributions (issue #298). Its
+# mutating actions (`comment`/`close`/`label`/`create`) are gated at call
+# time inside the tool itself.
 _CONTRIBUTIONS_GATED_TOOLS: frozenset[str] = frozenset(
     {
-        "github_issues",  # read/comment/close/label/create GitHub issues
         "submit_contribution",  # submit PRs (fork-based or direct)
         "review_contributions",  # review open PRs (maintainer side)
         "torture_test",  # torture-test a PR before merge (maintainer side)
