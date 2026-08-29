@@ -16,7 +16,10 @@ This is a leaf module in the chat-handler family (see ``chat_context.py``,
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
+import time
 from typing import Any
 
 from abstract_context import build_abstract_context
@@ -60,6 +63,135 @@ EMBEDDING_ROUTE_DEFAULT = {
     "confidence": 0.0,
     "rationale_code": "embedding_route",
 }
+
+
+async def _apply_context_budget(
+    svc: Services, websocket, session_logger, context: str, history: list
+) -> str:
+    """Ensure the retrieved context fits the token budget, with a CLOSED
+    progress stage.
+
+    Always emits a closing ``context_budgeted`` progress event — even when
+    no truncation was needed (the common case). The old code only emitted
+    it on truncation, so ``budgeting context`` was the last label before a
+    silent stretch of preflight code (prompt build, token meter, model
+    load) and any slow call after it read as "idling at budgeting context"
+    (fresh-laptop report, 2026-08-29). Closing the stage makes the label
+    honest: a stuck 'budgeting context' line after this change means the
+    budgeter itself is stuck — which the innocence test proves impossible
+    for inputs this size.
+
+    Fail-safe: on any error the context passes through unchanged and a
+    console failure is surfaced (never silent), and the stage still closes.
+    """
+    t0 = time.monotonic()
+    detail: dict[str, Any] = {}
+    try:
+        await send_progress(svc, websocket, "budgeting context", {})
+        _budgeted = svc.context_budgeter.budget(context, history or [])
+        context = _budgeted["context"]
+        detail = {
+            "original_tokens": _budgeted["original_tokens"],
+            "budgeted_tokens": _budgeted["budgeted_tokens"],
+            "duration_ms": int((time.monotonic() - t0) * 1000),
+            "truncated": _budgeted["truncated"],
+        }
+        if _budgeted["truncated"]:
+            session_logger.log(
+                "context_budget",
+                {
+                    "original_tokens": _budgeted["original_tokens"],
+                    "budgeted_tokens": _budgeted["budgeted_tokens"],
+                    "budget": _budgeted["budget"],
+                    "chars_dropped": _budgeted["chars_dropped"],
+                },
+            )
+        return context
+    except Exception as e:  # noqa: BLE001 — best-effort: context passes through; failure is surfaced below
+        session_logger.log("context_budget_failed", {"error": str(e)})
+        await notify_console_failure(
+            svc,
+            websocket,
+            f"context budgeting failed: {e}",
+            context="context_budget",
+        )
+        return context
+    finally:
+        # ALWAYS close the stage — truncated, untruncated, or failed.
+        # The UI's activity line needs the terminal event to advance.
+        with contextlib.suppress(Exception):  # noqa: BLE001 — closing the stage must never break the turn
+            await send_progress(
+                svc,
+                websocket,
+                "context_budgeted",
+                detail,
+            )
+
+
+# Bound on how long the context-usage meter will wait for the
+# context-window probe. The meter is a UI nicety; a hung /api/show must
+# never stall the turn (or freeze the UI at the last progress label).
+_CTX_METER_TIMEOUT_S = float(os.environ.get("VAULTBOT_CTX_METER_TIMEOUT_S", "2.0"))
+
+
+async def _emit_context_usage(
+    svc: Services, websocket, session_logger, conversation: list
+) -> None:
+    """Send the token-usage meter event without ever blocking the turn.
+
+    The meter needs the model's context window, which comes from
+    ``ollama_client.context_window()`` — a blocking ``requests.post`` to
+    Ollama's /api/show (up to 15s connect+read). The old inline code
+    awaited it directly ON THE EVENT LOOP; when the boot probe failed
+    (fresh laptop, Ollama not up at backend start), the success cache
+    stayed empty and EVERY turn re-probed — freezing the loop and the UI
+    at the last progress label for up to 15s per turn. This helper runs
+    the probe OFF-loop and caps the wait at ``_CTX_METER_TIMEOUT_S``; on
+    timeout or failure it logs ``context_usage_emit_failed`` (with the
+    reason) and skips the meter. Best-effort: never raises.
+    """
+    try:
+        _total_chars = sum(
+            len(str(m.get("content", "") or ""))
+            for m in conversation
+            if isinstance(m, dict)
+        )
+        _used_tokens = max(1, _total_chars // 4)
+        loop = asyncio.get_event_loop()
+        _ctx_window = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                svc.ollama_client.context_window,
+                svc.ollama_client.llm_model,
+            ),
+            timeout=_CTX_METER_TIMEOUT_S,
+        )
+        await svc.manager.send_personal_message(
+            json.dumps(
+                {
+                    "type": "context_usage",
+                    "model": svc.ollama_client.llm_model,
+                    "context_window": _ctx_window,
+                    "used_tokens": _used_tokens,
+                    "available_tokens": max(0, _ctx_window - _used_tokens),
+                    "messages": len(conversation),
+                }
+            ),
+            websocket,
+            session_logger=session_logger,
+        )
+    except TimeoutError:
+        session_logger.log(
+            "context_usage_emit_failed",
+            {
+                "error": (
+                    f"context_window probe timeout "
+                    f"(> {_CTX_METER_TIMEOUT_S}s) — meter skipped"
+                )
+            },
+        )
+    except Exception as _e:  # noqa: BLE001 — best-effort meter, never breaks the turn
+        session_logger.log("context_usage_emit_failed", {"error": str(_e)})
 
 
 def _embedding_route_payload(
@@ -459,40 +591,16 @@ async def prepare_turn(
     )
 
     # Context budgeting: ensure the retrieved context fits within the
-    # model's token budget.
-    try:
-        await send_progress(svc, websocket, "budgeting context", {})
-        _budgeted = svc.context_budgeter.budget(
-            context, getattr(websocket, "conversation_history", [])
-        )
-        context = _budgeted["context"]
-        if _budgeted["truncated"]:
-            await send_progress(
-                svc,
-                websocket,
-                "context_budgeted",
-                {
-                    "original_tokens": _budgeted["original_tokens"],
-                    "budgeted_tokens": _budgeted["budgeted_tokens"],
-                },
-            )
-            session_logger.log(
-                "context_budget",
-                {
-                    "original_tokens": _budgeted["original_tokens"],
-                    "budgeted_tokens": _budgeted["budgeted_tokens"],
-                    "budget": _budgeted["budget"],
-                    "chars_dropped": _budgeted["chars_dropped"],
-                },
-            )
-    except Exception as e:  # noqa: BLE001
-        session_logger.log("context_budget_failed", {"error": str(e)})
-        await notify_console_failure(
-            svc,
-            websocket,
-            f"context budgeting failed: {e}",
-            context="context_budget",
-        )
+    # model's token budget. Routed through _apply_context_budget so the
+    # stage ALWAYS closes with a 'context_budgeted' event (the old inline
+    # code only emitted it on truncation — see that helper's docstring).
+    context = await _apply_context_budget(
+        svc,
+        websocket,
+        session_logger,
+        context,
+        getattr(websocket, "conversation_history", []),
+    )
 
     # Phase 4: deterministic context filtering -- drop irrelevant L1 card
     # sections so the big model sees only what's relevant to this query.
@@ -771,7 +879,7 @@ async def prepare_turn(
         context = context + _allowed_block
         session_logger.log("allowed_citations_empty", {"result_count": len(results)})
 
-    conversation = [
+    conversation: list[dict[str, Any]] = [
         {
             "role": "system",
             "content": system_prompt,
@@ -963,31 +1071,10 @@ async def prepare_turn(
                 },
             )
 
-    # Token-usage meter: report how full the context window is.
-    try:
-        _total_chars = sum(
-            len(str(m.get("content", "") or ""))
-            for m in conversation
-            if isinstance(m, dict)
-        )
-        _used_tokens = max(1, _total_chars // 4)
-        _ctx_window = svc.ollama_client.context_window(svc.ollama_client.llm_model)
-        await svc.manager.send_personal_message(
-            json.dumps(
-                {
-                    "type": "context_usage",
-                    "model": svc.ollama_client.llm_model,
-                    "context_window": _ctx_window,
-                    "used_tokens": _used_tokens,
-                    "available_tokens": max(0, _ctx_window - _used_tokens),
-                    "messages": len(conversation),
-                }
-            ),
-            websocket,
-            session_logger=session_logger,
-        )
-    except Exception as _e:  # noqa: BLE001
-        session_logger.log("context_usage_emit_failed", {"error": str(_e)})
+    # Token-usage meter: report how full the context window is. Routed
+    # through _emit_context_usage so a hung /api/show probe can never
+    # stall the turn or freeze the UI at the last progress label.
+    await _emit_context_usage(svc, websocket, session_logger, conversation)
 
     await svc.manager.send_personal_message(
         json.dumps({"type": "status", "content": "Thinking..."}),

@@ -515,31 +515,13 @@ async def finalize_turn(
             _cp.clear()
         except Exception as e:  # noqa: BLE001
             session_logger.log("checkpoint_clear_failed", {"error": str(e)})
-    # Refresh the token meter after the full turn.
-    try:
-        _total_chars = sum(
-            len(str(m.get("content", "") or ""))
-            for m in conversation
-            if isinstance(m, dict)
-        )
-        _used_tokens = max(1, _total_chars // 4)
-        _ctx_window = svc.ollama_client.context_window(svc.ollama_client.llm_model)
-        await svc.manager.send_personal_message(
-            json.dumps(
-                {
-                    "type": "context_usage",
-                    "model": svc.ollama_client.llm_model,
-                    "context_window": _ctx_window,
-                    "used_tokens": _used_tokens,
-                    "available_tokens": max(0, _ctx_window - _used_tokens),
-                    "messages": len(conversation),
-                }
-            ),
-            websocket,
-            session_logger=session_logger,
-        )
-    except Exception as _e:  # noqa: BLE001
-        session_logger.log("context_usage_emit_failed", {"error": str(_e)})
+    # Refresh the token meter after the full turn. Routed through the
+    # shared _emit_context_usage helper (chat_turn_prep) so a hung
+    # /api/show probe can never stall finalize — the old inline copy
+    # called the blocking context_window() directly on the event loop.
+    from chat_turn_prep import _emit_context_usage
+
+    await _emit_context_usage(svc, websocket, session_logger, conversation)
     session_logger.log(
         "chat_end",
         {
