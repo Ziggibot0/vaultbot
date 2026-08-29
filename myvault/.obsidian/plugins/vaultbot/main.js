@@ -31,6 +31,13 @@ class VaultBotPlugin extends Plugin {
 		ttsStream: true,
 		// Auto-listen after the bot finishes speaking, for back-and-forth.
 		ttsAutoListen: false,
+		// -- Development workspace (repo-agnostic issue solving) --
+		// Path to the git clone VaultBot solves issues in. Empty = this repo
+		// (dogfood mode). Mirrored to VAULTBOT_WORKSPACE_PATH.
+		workspacePath: '',
+		// owner/repo of the upstream project. Empty = auto-detect from git
+		// remote. Mirrored to UPSTREAM_OWNER / UPSTREAM_REPO.
+		upstreamRepo: '',
 		};
 		this.backendStarting = false;
 		this.mcpProcess = null;
@@ -1796,6 +1803,16 @@ class VaultBotPlugin extends Plugin {
 				VAULTBOT_SAFE_MODE: this.settings.safeMode !== false ? 'true' : 'false',
 				VAULTBOT_ALLOW_WEB_RESEARCH: this.settings.allowWebResearch !== false ? 'true' : 'false',
 				VAULTBOT_BS_DETECTOR_MESSAGES: this.settings.bsDetectorMessages !== false ? 'true' : 'false',
+				// Development workspace (repo-agnostic issue solving). Pass
+				// the workspace path and the upstream owner/repo so the
+				// backend's contribution pipeline targets the configured
+				// project. UPSTREAM_* are only set when the string is a valid
+				// "owner/repo" (exactly one slash) — a malformed value is
+				// ignored rather than triggering a partial-config error in
+				// upstream_identity.
+				VAULTBOT_WORKSPACE_PATH: this.settings.workspacePath || '',
+				UPSTREAM_OWNER: (this.settings.upstreamRepo || '').split('/').length === 2 ? (this.settings.upstreamRepo.split('/')[0] || '').trim() : '',
+				UPSTREAM_REPO: (this.settings.upstreamRepo || '').split('/').length === 2 ? (this.settings.upstreamRepo.split('/')[1] || '').trim() : '',
 				})
 		});
 		backendProcess.unref();
@@ -3069,6 +3086,43 @@ class VaultBotSettingTab extends PluginSettingTab {
 
 		// Show current status on load.
 		checkGhStatus();
+
+		containerEl = addSection('Development workspace', false);
+
+		// Repo-agnostic issue solving: point VaultBot at ANY project's git
+		// clone so the Solve-GitHub-Issue loop operates on that repo instead
+		// of only the VaultBot repo. Empty workspace = dogfood mode (this
+		// repo). Requires the contributions opt-in above to actually submit
+		// PRs; reading issues works regardless.
+		containerEl.createEl('div', {text:
+			'Solve GitHub issues for a project other than VaultBot. Set the ' +
+			'path to the project\u2019s git clone and the upstream owner/repo. ' +
+			'Leave empty to work on this VaultBot repo. Running a foreign ' +
+			'project\u2019s tests executes its code, so this is only active when ' +
+			'contributions are enabled.',
+			attr: {style: 'opacity:0.7;font-size:0.85em;margin:4px 0 10px 0;'}});
+
+		new Setting(containerEl)
+			.setName('Workspace path')
+			.setDesc('Path to the git clone VaultBot solves issues in. Empty = this repo.')
+			.addText(text => text
+				.setPlaceholder('C:/path/to/project-clone')
+				.setValue(this.plugin.settings.workspacePath || '')
+				.onChange(async (value) => {
+					this.plugin.settings.workspacePath = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Upstream repo')
+			.setDesc('owner/repo of the upstream project. Empty = auto-detect from git remote.')
+			.addText(text => text
+				.setPlaceholder('owner/repo')
+				.setValue(this.plugin.settings.upstreamRepo || '')
+				.onChange(async (value) => {
+					this.plugin.settings.upstreamRepo = value.trim();
+					await this.plugin.saveSettings();
+				}));
 
 		containerEl = addSection('Updates', false);
 
