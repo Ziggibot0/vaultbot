@@ -15,6 +15,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-08-29
+
+This release fixes the "idles at 'budgeting context'" symptom reported on a
+fresh-laptop install, and repairs the self-updater so installed VaultBots
+can actually pick the fix up. It is a **patch** bump (bug fixes only, no
+new surface).
+
+### Fixed
+
+- **UI idling at "budgeting context"** — the label was the last progress
+  event before a silent stretch of turn-prep code. Two real defects lived
+  in that stretch:
+  - The budget stage had no closing event when the context fit (the
+    common case), so any slow call after it read as budgeting being
+    slow. It now always emits `context_budgeted` with duration and
+    token counts (#427).
+  - The token-usage meter called `ollama_client.context_window()` — a
+    blocking HTTP probe (up to 15s) — directly on the event loop. When
+    the boot probe failed (fresh laptop, Ollama not up at backend
+    start), every turn re-probed and froze the loop at that label. The
+    probe now runs off-loop with a 2s cap
+    (`VAULTBOT_CTX_METER_TIMEOUT_S`), and failed probes are
+    negative-cached (`VAULTBOT_CTX_PROBE_FAIL_TTL`, default 300s) so a
+    dead Ollama is not re-probed from every call site every turn (#427).
+- **Self-updater half-applied updates** — the updater looked for the
+  plugin at `vault/.obsidian/...` but the repo folder has been
+  `myvault/` since the rename: updates applied the backend, then threw
+  'Archive has no plugin folder.' before the plugin was updated. The
+  updater now tries `myvault/` first, falling back to `vault/` so
+  pre-rename pinned tags still update.
+- **Updates were never offered** — the plugin manifest version was not
+  bumped for v0.4.0/v1.5.1, so "Check for updates" (a string compare of
+  manifest versions) reported nothing available. Manifest bumped to
+  1.5.2 so existing installs see the release.
+
 ## [0.4.0] - 2026-08-24
 
 This release ships the back-to-school student-UX features: coaching-aware
