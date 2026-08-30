@@ -335,6 +335,24 @@ def keyterms(text: str, max_terms: int = 6) -> list[str]:
         seen.add(tok)
         if len(result) >= max_terms:
             break
+    # Head-noun guarantee (issue #417): the FIRST content token of the
+    # topic is the subject by construction of natural language (the head
+    # of the noun phrase) — a query about "jedi ..." must never lose
+    # "jedi" to the max_terms cut just because longer generic tokens
+    # outscore it. Splice it at the FRONT when missing, evicting the last
+    # element to keep the max_terms contract. Position-based and
+    # language-level — a parsing contract, not a keyword heuristic.
+    for tok in tokens:
+        if tok not in _STOPWORDS and len(tok) >= 3:
+            head = tok
+            break
+    else:
+        head = None
+    if head is not None and head not in seen:
+        result.insert(0, head)
+        seen.add(head)
+        if len(result) > max_terms:
+            result.pop()
     return result[:max_terms]
 
 
