@@ -6,28 +6,15 @@ but mangles the exact stem — inserting or dropping spaces around hyphens:
 wikilinks are filename-based, so the mangled link renders as "note doesn't
 exist" and the grounding gate counts it as missing from the allowed set.
 
-This module REPAIRS such links against the closed set before the answer is
-scored or delivered. It is the chat-path sibling of
-``research_synthesizer.repair_wikilinks`` (which fixes case and hallucinated
-titles in research-note bodies) and follows the same
-deterministic-no-LLM-no-IO contract as ``citation_gate``.
-
-Design — deterministic ranked selection, NOT a keyword heuristic:
-  1. build_alias_map: every allowed stem produces a few canonicalized aliases
-     (lowercased; separators flattened). An exact alias hit is a certain
-     repair — zero similarity doubt.
-  2. If no alias hit, rank ALL allowed stems by difflib similarity against
-     the mangled link and accept the best only if it clears
-     Tunables.wikilink_repair_min_ratio (default 0.80) AND the length-gap
-     guard. Deterministic tie-break: match_ratio, then shorter stem, then
-     lexicographic.
-A link that survives both steps with no repair is left untouched — the
-grounding gate treats it as a genuine missing citation, which is correct
-behavior for a fabricated title.
-
-Pure leaf module: no I/O, no Services, no asyncio — same import-safety as
-citation_gate (importable from chat_turn_finalize / citation_gate without
-circular imports).
+This module REPAIRS such links before the answer is scored or delivered.
+Deterministic ranked selection, NOT a keyword heuristic:
+  1. build_alias_map() — canonicalized aliases per stem (lowercased,
+     separators flattened). An exact alias hit is a certain repair.
+  2. difflib ranking with a TUNABLES similarity floor (default 0.80) and a
+     length-gap guard. Deterministic tie-break: ratio, then shorter stem,
+     then lexicographic.
+An unrepairable link is left untouched — the grounding gate must still see
+genuine fabrications as missing. Pure leaf: no I/O, no LLM, no asyncio.
 """
 
 from __future__ import annotations
@@ -47,10 +34,10 @@ def _canonical(token: str) -> str:
 def build_alias_map(allowed: dict[str, dict[str, Any]]) -> dict[str, str]:
     """Map every allowable lowercase alias of every stem to the real stem.
 
-    ``allowed`` is the closed-set dict {stem: {"file_path", ...}} built by
+    ``allowed`` is the closed-set dict {stem: {...}} from
     citation_gate.build_allowed_citations. Aliases of "Chat-sup-homie"
-    include "chat-sup-homie" and separator-flattened forms like
-    "chatsuphomie" — the shapes the model most plausibly mangles INTO.
+    include "chat-sup-homie" and the flattened "chatsuphomie" — the shapes
+    the model most plausibly mangles INTO.
     """
     out: dict[str, str] = {}
     for stem in allowed or {}:
@@ -67,10 +54,11 @@ def _rank(
     candidates: list[str],
     allowed: dict[str, dict[str, Any]] | None,
 ) -> str | None:
-    """Rank candidates by canonicalized difflib similarity; return the best.
+    """Rank candidates by canonicalized difflib ratio; return the best.
 
-    Deterministic tie-break: match_ratio, then shorter stem, then
-    lexicographic. Returns None for an empty candidate list.
+    Rejects below the TUNABLES.similarity floor, outside the closed set
+    (when one is given), or past the length-gap guard. Tie-break:
+    ratio, then shorter stem, then lexicographic.
     """
     best: tuple[float, str] | None = None
     for stem in candidates:
@@ -88,12 +76,9 @@ def _rank(
     ratio, stem = best
     from config import TUNABLES
 
-    min_ratio = float(getattr(TUNABLES, "wikilink_repair_min_ratio", 0.80))
-    if ratio < min_ratio:
+    if ratio < float(getattr(TUNABLES, "wikilink_repair_min_ratio", 0.80)):
         return None
     if allowed is not None and stem not in allowed:
-        # Never "repair" onto a stem that is not itself a real citation
-        # target in the closed set (when one is provided).
         return None
     max_gap = int(getattr(TUNABLES, "wikilink_repair_max_length_gap", 6))
     if len(probe) > len(stem) * 3 or len(stem) > max(
@@ -109,20 +94,16 @@ def try_repair_stem(
 ) -> str | None:
     """Return the corrected stem for ``link``, or None if no safe repair.
 
-    Exact-existing stems return None (nothing to repair). A mangled link
-    returns the best allowed stem that clears the similarity floor and the
-    length-gap guard — deterministically — or None.
+    Exact-existing stems return None (nothing to repair).
     """
     if not link or not allowed:
         return None
     probe = link.strip()
     if not probe or probe in allowed:
         return None
-    # 1. Certain path: canonical alias hit.
     hit = build_alias_map(allowed).get(_canonical(probe))
     if hit is not None:
         return hit
-    # 2. Ranked path: similarity against each allowed stem.
     return _rank(probe, list(allowed.keys()), allowed)
 
 
@@ -132,14 +113,9 @@ def repair_wikilinks_in_text(
 ) -> tuple[str, list[tuple[str, str]]]:
     """Repair mangled [[wikilinks]] in ``text`` against the closed set.
 
-    Returns ``(repaired_text, repairs)`` where repairs is an ordered list
-    of ``(original_target, repaired_stem)`` pairs — one per rewrite,
-    including repeats. Links inside ```code fences``` are never touched
-    (same rule as research_synthesizer.repair_wikilinks). Pipe aliases and
-    #headings on a mangled target are preserved.
-
-    An unrepairable link is left EXACTLY as written — the grounding gate
-    needs to see genuine missing citations as missing.
+    Returns ``(repaired_text, repairs)``; repairs is ordered
+    ``(original_target, repaired_stem)`` pairs. Links inside ```fence```
+    blocks are never touched; pipe aliases and #headings are preserved.
     """
     if not text or not allowed:
         return text, []
@@ -147,18 +123,15 @@ def repair_wikilinks_in_text(
 
     def _fix(m: re.Match[str]) -> str:
         target = (m.group(1) or "").strip()
-        heading = m.group(2) or ""
-        alias = m.group(3)
         repaired = try_repair_stem(target, allowed)
         if repaired is None:
             return m.group(0)
         repairs.append((target, repaired))
+        alias = m.group(3)
         if alias is not None and alias.strip() and alias.strip() != target:
-            return f"[[{repaired}{heading}|{alias.strip()}]]"
-        return f"[[{repaired}{heading}]]"
+            return f"[[{repaired}{m.group(2) or ''}|{alias.strip()}]]"
+        return f"[[{repaired}{m.group(2) or ''}]]"
 
-    # Same fence-splitting rule as research_synthesizer.repair_wikilinks:
-    # only edit even-indexed chunks (outside ``` fences).
     parts = text.split("```")
     for i in range(0, len(parts), 2):
         parts[i] = _WIKILINK_RE.sub(_fix, parts[i])
@@ -171,37 +144,25 @@ def repair_wikilinks_verified(
     graph_lookup,
     candidate_provider=None,
 ) -> tuple[str, list[tuple[str, str]]]:
-    """``repair_wikilinks_in_text`` plus a graph-verified fallback tier.
+    """Tier 1 (closed set) + Tier 2 (graph-verified fallback).
 
-    Tier 1: closed set (authoritative — the model was shown these).
-    Tier 2: for links still unrepairable, rank ``candidate_provider(link)``
-    stems by the same similarity rule and repair only the survivor that
-    ALSO passes ``graph_lookup(candidate)``. ``graph_lookup`` receives the
-    CANDIDATE stem (bool predicate — it verifies but cannot enumerate);
-    ``candidate_provider`` returns candidate stems for a mangled link
-    (list[str]) and may return [] — Tier 2 then does nothing for that
-    link. If ``candidate_provider`` is None, Tier 2 is skipped entirely
-    (Tier 1 already covers every note the model was shown).
+    Tier 2 ranks ``candidate_provider(link)`` stems and repairs the winner
+    only if ``graph_lookup(candidate)`` confirms the note exists. With no
+    provider (the common case), Tier 2 is skipped — Tier 1 already covers
+    every note the model was shown.
     """
     repaired_text, repairs = repair_wikilinks_in_text(text, allowed)
-    if (
-        not repaired_text
-        or candidate_provider is None
-        or not callable(candidate_provider)
-    ):
+    if candidate_provider is None or not callable(candidate_provider):
         return repaired_text, repairs
     remaining = [
         stem for stem in _iter_link_stems(repaired_text) if stem not in (allowed or {})
     ]
     if not remaining:
         return repaired_text, repairs
-    _tier2: list[tuple[str, str]] = []
+    tier2: list[tuple[str, str]] = []
     seen: set[str] = set()
     for link in remaining:
-        candidates = candidate_provider(link) or []
-        if not candidates:
-            continue
-        candidate = _rank(link, candidates, None)
+        candidate = _rank(link, candidate_provider(link) or [], None)
         if candidate is None or candidate in (allowed or {}):
             continue
         try:
@@ -213,20 +174,16 @@ def repair_wikilinks_verified(
                 "wikilink_repair_tier2_lookup_failed", {"error": str(error)}
             )
             continue
-        if not verified:
-            continue
         key = _canonical(link)
-        if key in seen:
-            continue
-        seen.add(key)
-        _tier2.append((link, candidate))
-    if not _tier2:
+        if verified and key not in seen:
+            seen.add(key)
+            tier2.append((link, candidate))
+    if not tier2:
         return repaired_text, repairs
-    # Exactly one substitution site — reuse the same regex machinery.
-    for mangled, corrected in _tier2:
+    for mangled, corrected in tier2:
         pattern = re.compile(r"\[\[\s*" + re.escape(mangled) + r"(\]|#|\|)")
         repaired_text = pattern.sub("[[" + corrected + r"\1", repaired_text, count=1)
-    return repaired_text, repairs + _tier2
+    return repaired_text, repairs + tier2
 
 
 def _iter_link_stems(text: str) -> list[str]:
