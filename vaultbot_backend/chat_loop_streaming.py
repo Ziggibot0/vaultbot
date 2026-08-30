@@ -163,10 +163,9 @@ async def stream_llm_round(
                 )
             if text:
                 round_text += text
-                # Final prose is untrusted until synchronous provenance
-                # verification completes. Keep it buffered so unsupported
-                # claims never flash in the UI before answer_done replaces
-                # them with a truth-gap response.
+                # The answer is delivered as-is at answer_done (the
+                # synchronous entailment gate that used to buffer prose
+                # pending verification was removed — see chat_turn_finalize).
                 # Debounced partial write: at most once per second.
                 # Per-chunk writes create disk I/O backpressure that
                 # throttles the LLM's streaming throughput.
