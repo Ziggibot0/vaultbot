@@ -42,7 +42,7 @@ def build_energy_report(
     daily: dict[str, dict[str, float | int]] = defaultdict(
         lambda: {"invocations": 0, "actual_wh": 0.0, "counterfactual_wh": 0.0}
     )
-    coverage = {
+    coverage: dict[str, Any] = {
         "session_files_scanned": 0,
         "session_files_with_invocations": 0,
         "legacy_session_files_excluded": 0,
@@ -52,7 +52,7 @@ def build_energy_report(
         "failed_or_cancelled_invocations": 0,
         "vision_invocations_excluded_from_savings": 0,
     }
-    totals: dict[str, float | int] = {
+    totals: dict[str, Any] = {
         "tracked_invocations": 0,
         "tracked_tokens": 0,
         "actual_wh": 0.0,
