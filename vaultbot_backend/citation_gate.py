@@ -157,6 +157,7 @@ def score_grounding(
     answer: str,
     allowed: dict[str, dict[str, str]] | None,
     graph_lookup=None,
+    repair_pairs: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Score how grounded `answer` is against the closed set.
 
@@ -168,6 +169,9 @@ def score_grounding(
       - missing_from_vault: wikilinks in the set but the note doesn't exist
         in the graph (broken citations) — only populated if graph_lookup
         is provided (callable: graph_lookup(stem) -> bool)
+      - repair_pairs: (mangled, corrected) pairs the caller already rewrote
+        before scoring (issue #335); each repaired stem counts as allowed
+        for the mangled link it replaced
       - sentences: total sentences
       - ungrounded_sentences: sentences with NO [[wikilink]] from the closed set
       - ungrounded_ratio: ungrounded_sentences / sentences (0.0 if no sentences)
@@ -182,10 +186,25 @@ def score_grounding(
     total = len(links)
     allowed = allowed or {}
 
+    # Repaired links (issue #335): (mangled, corrected) pairs already
+    # rewritten in the answer text before scoring. Citation CREDIT is only
+    # granted when the corrected stem is itself in the closed set — the
+    # repair must never mint credit for a stem outside it. ALL repairs are
+    # recorded in the returned dict regardless, so the reprimand can tell
+    # the model exactly how its spelling was rewritten.
+    _repair_credit: dict[str, str] = {}
+    _repaired_all: list[tuple[str, str]] = []
+    for mangled, corrected in repair_pairs or []:
+        if not mangled or not corrected:
+            continue
+        _repaired_all.append((mangled, corrected))
+        if corrected in allowed:
+            _repair_credit.setdefault(mangled, corrected)
+
     allowed_cited = 0
     missing_from_set: list[str] = []
     for wl in links:
-        if wl in allowed:
+        if wl in allowed or wl in _repair_credit:
             allowed_cited += 1
         else:
             missing_from_set.append(wl)
@@ -229,6 +248,7 @@ def score_grounding(
         "allowed_cited": allowed_cited,
         "missing_from_set": missing_from_set[:10],
         "missing_from_vault": missing_from_vault[:10],
+        "repaired": _repaired_all[:10],
         "sentences": n_sent,
         "ungrounded_sentences": ungrounded_sentences,
         "ungrounded_ratio": round(ungrounded_ratio, 2),
@@ -306,12 +326,19 @@ def build_reprimand(
         else "(no notes were retrieved — say 'I don't know' and offer to research)"
     )
     missing = score.get("missing_from_set", [])
+    repaired = score.get("repaired") or []
     missing_block = ""
     if missing:
         missing_block = (
             f"\nThe following [[wikilinks]] in your answer are NOT in the "
             f"allowed set (they may be from your weights, not the vault): "
             f"{', '.join(f'[[{m}]]' for m in missing[:8])}. Remove or replace them."
+        )
+    if repaired:
+        missing_block += (
+            "\nSome [[wikilinks]] were auto-repaired to their vault spellings: "
+            + ", ".join(f"[[{m}]] → [[{c}]]" for m, c in repaired[:6])
+            + ". Copy citation stems EXACTLY as shown in the allowed list."
         )
     return (
         "# GROUNDING CHECK FAILED\n"
