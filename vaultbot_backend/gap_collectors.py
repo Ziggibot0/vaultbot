@@ -135,7 +135,7 @@ def collect_thin_notes(
 ) -> list[dict[str, Any]]:
     """Signal 2: existing notes with too-short bodies.
 
-    Skips anything under Memory/Chat/ or Knowledge/Research/ (the bot's own
+    Skips anything under Memory/Logs/ or Knowledge/Research/ (the bot's own
     drafts) so the curriculum doesn't chase its own work-in-progress.
     """
     try:
@@ -146,7 +146,7 @@ def collect_thin_notes(
             if skip_vaultbot_paths and any(
                 d in file_path.replace("\\", "/")
                 for d in (
-                    "vaultbot-stuff/Memory/Chat/",
+                    "vaultbot-stuff/Memory/Logs/",
                     "vaultbot-stuff/Knowledge/Research/",
                 )
             ):

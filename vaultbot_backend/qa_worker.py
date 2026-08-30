@@ -179,10 +179,10 @@ def _scan_vault_notes(vault_root: Path) -> list[str]:
 
 
 # Directories that are ephemeral/derived and should NOT go through the QA
-# frontmatter pipeline. Chat logs are conversation traces, not knowledge
-# notes — they get consolidated by the semantic consolidation pipeline
-# (hippocampal replay), not QA'd for frontmatter quality.
-_QA_EXCLUDE_DIRS = ("vaultbot-stuff/Memory/Chat",)
+# frontmatter pipeline. Session log events are conversation traces, not
+# knowledge notes — they get consolidated by the semantic consolidation
+# pipeline (hippocampal replay), not QA'd for frontmatter quality.
+_QA_EXCLUDE_DIRS = ("vaultbot-stuff/Memory/Logs",)
 
 # Cap the QA queue so it actually drains. Without a cap, a large vault fills
 # the queue with every note (thousands), the QA worker processes 50 per idle

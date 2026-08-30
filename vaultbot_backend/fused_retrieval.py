@@ -266,8 +266,16 @@ class FusedRetriever:
                         },
                     )
 
-            # ---- (e) filter by minimum score + truncate to top-k ----
+            # ---- (e) dedup condensed event logs + filter + truncate ----
             ranked = sorted(merged.values(), key=lambda c: c["score"], reverse=True)
+            # Dedup rule for session log event files: when an event .md
+            # has both a condensed block and a raw block (see
+            # log_projection._condense_body), the retriever may index
+            # both as separate candidates.  Drop the raw version when a
+            # condensed version of the same event exists — one fact, one
+            # hit.  The raw is preserved on disk for trace resolution but
+            # shouldn't waste context budget in top-k.
+            ranked = self._dedup_condensed_events(ranked)
             # Drop results below the relevance threshold — they waste
             # context budget with semantically distant noise.  But only
             # apply the threshold when we have ENOUGH candidates to be
@@ -703,6 +711,44 @@ class FusedRetriever:
                 k.lower(): v for k, v in self.procedure_status_index.items()
             }
         return self._proc_status_lower.get(name.lower())
+
+    def _dedup_condensed_events(
+        self, ranked: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Drop raw event-log candidates when a condensed version exists.
+
+        Session log event .md files (log_projection.py) contain both a
+        ``## Condensed`` block and a ``## Raw`` block when the original
+        output was long.  If the indexer treats these as separate chunks,
+        the same fact appears twice in top-k.  This drops the raw version
+        when a condensed version of the same event file is also in the
+        results — one fact, one hit.
+
+        Best-effort: never raises.  When the content doesn't look like a
+        condensed event log, passes through unchanged.
+        """
+        try:
+            # Group by file_path: if the same file appears twice (once for
+            # the condensed block, once for the raw), keep only the
+            # higher-scoring one — which is almost always the condensed
+            # block (shorter, denser, higher similarity).
+            seen: dict[str, dict[str, Any]] = {}
+            for cand in ranked:
+                fp = cand.get("file_path", "")
+                if not fp:
+                    continue
+                if fp not in seen:
+                    seen[fp] = cand
+                else:
+                    # Keep the higher score.
+                    if cand.get("score", 0) > seen[fp].get("score", 0):
+                        seen[fp] = cand
+            # If no dedup happened (all file_paths unique), return original.
+            if len(seen) == len(ranked):
+                return ranked
+            return list(seen.values())
+        except Exception:  # noqa: BLE001 — best-effort
+            return ranked
 
     def _finalize(self, cand: dict[str, Any], query: str) -> dict[str, Any]:
         """Shape a merged candidate into the final result dict."""

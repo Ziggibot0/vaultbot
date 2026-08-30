@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Lexical intent classifiers from the chat turn** — removed the three
+  heuristic detectors that ran a bespoke keyword/phrase scan to decide a
+  turn was "conversational", "coaching", or "temporal/recency" and exempted
+  it from the closed-set grounding retry (`citation_gate.detect_conversational`,
+  `detect_coaching_turn` / `classify_coaching_turn`, `detect_temporal_question`),
+  plus the `TurnState._is_temporal_question` / `_is_coaching_turn` flags and
+  the `TUNABLES.conversational_max_len` tunable. These were cheap
+  string-matching heuristics that contradicted the repo's own rule (no
+  lexical keyword lists — FUSED retrieval and the model decide relevance),
+  misfired often (e.g. a research query mentioning "help"/"plan"/"time"
+  could be classified "coaching" and ship with NO grounding check), and
+  cost an extra LLM round at the start of every agentic turn. The one
+  remaining escape hatch is content-based on the ANSWER, not the user's
+  intent: `detect_idk` (admission of ignorance) plus the tool-sourced and
+  pure-acknowledgement paths. A guard test (`TestNoLexicalIntentClassifiers`)
+  fails CI if any of them are re-added.
+
 ## [1.5.2] - 2026-08-29
 
 This release fixes the "idles at 'budgeting context'" symptom reported on a

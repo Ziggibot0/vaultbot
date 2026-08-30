@@ -20,7 +20,7 @@ depends_on:
 sources:
   - "https://ohiostate.pressbooks.pub/choosingsources/chapter/evaluating-websites/"
   - "https://www.onlinecolleges.net/for-students/online-academic-research/"
-summary: SUMMARY
+summary: How to Evaluate Source Credibility
 tags:
   - exemplar
   - exemplars

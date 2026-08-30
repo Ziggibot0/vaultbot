@@ -152,11 +152,6 @@ class Tunables:
     #     [[wikilink]] from the allowed-citations set that triggers a grounding
     #     retry. 0.30 = retry if >30% of sentences are uncited. Only applies
     #     to answers >3 sentences (short answers are hard to split cleanly).
-    #   conversational_max_len: max char length of an answer that is treated
-    #     as a casual/conversational reply (greeting, small-talk) and exempted
-    #     from the grounding retry (issue #334). A short answer carries no
-    #     vault content to ground, so forcing a re-citation retry on it wastes
-    #     an LLM round. Override via env var VAULTBOT_CONVERSATIONAL_MAX_LEN.
     #   legacy_seed_note_cap: per-note char cap for the TOP seed notes in the
     #     legacy build_graph_context path (the common personal-vault case).
     #     Seeds get more body (4000) so the model can synthesize accurately;
@@ -171,7 +166,6 @@ class Tunables:
     min_retrieval_score: float = 0.15
     max_grounding_retries: int = 1
     ungrounded_sentence_threshold: float = 0.30
-    conversational_max_len: int = 200
     legacy_seed_note_cap: int = 4000
     legacy_walked_note_cap: int = 900
     abstract_extra_drill_cap: int = 4000

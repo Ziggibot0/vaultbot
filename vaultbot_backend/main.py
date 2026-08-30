@@ -724,10 +724,11 @@ chat_checkpointer = ChatLoopCheckpointer(
 )
 
 # Context management: a sliding window (not LLM-based compaction) bounds
-# the conversation sent to the LLM. The vault IS the memory — chat history
-# is persisted as notes (Memory/Chat/Chat-*.md) and the agent can walk the
-# wikilink trail back via vault_search. working_memory.py keeps it on task
-# (the plan_task / update_task tool pair replaces the old GOALS.md file).
+# the conversation sent to the LLM. The vault IS the memory — session logs
+# are projected as event .md files (Memory/Logs/<session>/event-*.md) and
+# the agent can walk the wikilink trail back via vault_search.
+# working_memory.py keeps it on task (the plan_task / update_task tool pair
+# replaces the old GOALS.md file).
 # The old Compactor (LLM summarization of old messages) was
 # lossy, costly, and introduced its own failure modes (summarization
 # failure → silent degradation). The sliding window is deterministic,
@@ -881,31 +882,7 @@ manager = ConnectionManager()
 # services.py. The globals above stay in place; only the extracted
 # functions change to `svc.<name>` access.
 from app_state import set_services  # noqa: E402  # Phase 3: DI surface for routers
-from conversation_index import ConversationIndexRegistry  # noqa: E402
 from services import Services  # noqa: E402
-
-# Conversation-aware retrieval: a per-session registry of searchable indexes
-# of recent conversation turns.  Each tab gets its own index so cross-tab
-# recall is impossible.  The legacy single-index behavior is preserved for
-# callers that don't pass a session_id (the registry returns a throwaway).
-conversation_index = ConversationIndexRegistry(ollama_client=ollama_client)
-try:
-    from conversation_state import load_history
-
-    _prior_history = load_history()
-    if _prior_history:
-        # Rebuild into a temporary index for the log; the per-session
-        # indexes are rebuilt on-demand when each tab connects.
-        _temp_idx = ConversationIndexRegistry(ollama_client=ollama_client)
-        _temp_idx.rebuild_from_history(_prior_history, session_id="_startup")
-        default_session_logger.log(
-            "conversation_index_restored",
-            {
-                "turns": _temp_idx.size,
-            },
-        )
-except Exception as e:  # noqa: BLE001
-    default_session_logger.log("conversation_index_restore_failed", {"error": str(e)})
 
 svc = Services(
     ollama_client=ollama_client,
@@ -929,7 +906,6 @@ svc = Services(
     trigger_store=trigger_store,
     lazy_condenser=lazy_condenser,
     context_budgeter=context_budgeter,
-    conversation_index=conversation_index,
     health_monitor=health_monitor,
     calibration_tracker=calibration_tracker,
     rag_evaluator=rag_evaluator,

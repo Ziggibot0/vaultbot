@@ -266,17 +266,6 @@ async def websocket_endpoint(
     try:
         restored = load_history(session_id=session_logger.session_id)
         setattr(websocket, "conversation_history", restored)
-        # Rebuild the conversation index from the restored history so
-        # the bot can recall what was said before the restart.
-        if restored:
-            try:
-                _conv_idx = getattr(svc, "conversation_index", None)
-                if _conv_idx is not None:
-                    _conv_idx.rebuild_from_history(
-                        restored, session_id=session_logger.session_id
-                    )
-            except Exception:  # noqa: BLE001 — best-effort, index rebuild is optional
-                pass
     except ValueError as _hist_err:
         # History file is corrupt. load_history already backed it up.
         # Start fresh + notify the user so they know their conversation
@@ -434,13 +423,6 @@ async def websocket_endpoint(
                 # Clear the last-active pointer so a reconnect after /new
                 # doesn't resurrect the just-discarded session.
                 clear_last_session()
-                # Clear the conversation index so recall starts fresh.
-                try:
-                    _conv_idx = getattr(svc, "conversation_index", None)
-                    if _conv_idx is not None:
-                        _conv_idx.clear(session_id=_old_sid)
-                except Exception:  # noqa: BLE001
-                    pass
                 old_session_id = session_logger.session_id
                 session_logger = SessionLogger()
                 # Update the websocket's session_id to the new session so

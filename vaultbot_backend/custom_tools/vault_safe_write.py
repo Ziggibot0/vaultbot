@@ -38,7 +38,7 @@ SCHEMA = {
                     "Path to the note, relative to vault root. VaultBot notes "
                     "go under vaultbot/ (e.g. "
                     "'vaultbot-stuff/Knowledge/Research/My-Note.md', "
-                    "'vaultbot-stuff/Memory/Chat/Chat-Topic.md', "
+                    "'vaultbot-stuff/Memory/Logs/<session>/event-0001.md', "
                     "'vaultbot-stuff/System/Procedures/My-Procedure.md'). "
                     "User-personal notes go in User/ (e.g. 'User/VaultBot "
                     "Issues.md'). VaultBot's own directives go under "

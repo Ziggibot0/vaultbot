@@ -45,7 +45,6 @@ from chat_preflight import (
     run_procedure_direct as _run_procedure_direct,
 )
 from citation_gate import build_allowed_citations
-from conversation_index import build_conversation_context
 from procedure_surface import build_procedure_surface
 from services import Services
 from small_model_filters import (
@@ -504,35 +503,6 @@ async def prepare_turn(
                     )
                     break
 
-    # Conversation-aware retrieval: search the conversation index for
-    # prior turns relevant to this query. This is what lets the bot
-    # "remember what it just said" -- when the user asks a follow-up,
-    # the relevant prior turns are retrieved and injected into context
-    # alongside the vault notes. Best-effort: never breaks the chat loop.
-    _conv_results: list[dict] = []
-    try:
-        _conv_idx_reg = getattr(svc, "conversation_index", None)
-        _sid = getattr(websocket, "session_id", None)
-        if _conv_idx_reg is not None:
-            _conv_idx = _conv_idx_reg.get(_sid)
-            if _conv_idx.size > 0:
-                _conv_results = await loop.run_in_executor(
-                    None, _conv_idx.search, _rewritten_query, 3
-                )
-            if _conv_results:
-                session_logger.log(
-                    "conversation_search",
-                    {
-                        "query": _rewritten_query[:100],
-                        "result_count": len(_conv_results),
-                        "top_score": _conv_results[0].get("score", 0)
-                        if _conv_results
-                        else 0,
-                    },
-                )
-    except Exception as e:  # noqa: BLE001
-        session_logger.log("conversation_search_failed", {"error": str(e)})
-
     # RAG evaluation: log retrieval results for every query.
     try:
         svc.rag_evaluator.log_retrieval(user_message, results, k=5)
@@ -778,20 +748,6 @@ async def prepare_turn(
                 )
         system_prompt = system_prompt + "\n\n" + "\n".join(_lines)
 
-    # Inject conversation recall: prior turns relevant to this query.
-    # This is what lets the bot "remember what it just said" -- the
-    # conversation index retrieved turns that match the user's question,
-    # and we inject them here so the model sees its own recent history
-    # alongside the vault context. Skipped when there are no results.
-    _conv_ctx_str = ""
-    if _conv_results:
-        try:
-            _conv_ctx_str = build_conversation_context(_conv_results)
-            if _conv_ctx_str:
-                system_prompt = system_prompt + "\n\n" + _conv_ctx_str
-        except Exception as e:  # noqa: BLE001
-            session_logger.log("conversation_context_inject_failed", {"error": str(e)})
-
     session_logger.log(
         "prompt_built",
         {
@@ -800,7 +756,7 @@ async def prepare_turn(
             "context_length": len(context),
             "custom_tools": len(custom_schemas),
             "total_tools": len(all_tools),
-            "conversation_turns_recalled": len(_conv_results),
+            "conversation_turns_recalled": 0,
         },
     )
 

@@ -1,8 +1,8 @@
 """Tests for multi-tab session isolation.
 
 Verifies that per-session persistence (conversation_state, working_memory,
-chat_checkpoint) and the conversation_index registry keep concurrent
-sessions isolated — one tab's state never leaks into another.
+chat_checkpoint) keep concurrent sessions isolated — one tab's state never
+leaks into another.
 
 Offline: no FAISS, no Ollama, no network, no main import.
 Uses tmp_path for state files.
@@ -183,67 +183,6 @@ def test_checkpoint_clear_isolated(tmp_path):
         cp_a.clear()
         assert cp_a.load() is None
         assert cp_b.load() is not None
-
-
-# ---------------------------------------------------------------------------
-# conversation_index: per-session registry
-# ---------------------------------------------------------------------------
-def test_conversation_index_registry_isolated():
-    """Turns added to session A's index are not retrievable from session B."""
-    from conversation_index import ConversationIndexRegistry
-
-    # No ollama_client → keyword-only mode (no embeddings needed).
-    registry = ConversationIndexRegistry(ollama_client=None)
-    sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-    sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-
-    idx_a = registry.get(sid_a)
-    idx_a.add_turn("tell me about quantum physics", "quantum physics is...")
-
-    idx_b = registry.get(sid_b)
-    # Session B should have zero turns.
-    assert idx_b.size == 0
-    results_b = idx_b.search("quantum", k=3)
-    assert results_b == []
-
-    # Session A should find the turn.
-    results_a = idx_a.search("quantum", k=3)
-    assert len(results_a) >= 1
-    assert "quantum" in results_a[0]["user_message"].lower()
-
-
-def test_conversation_index_registry_lru_eviction():
-    """Opening more than MAX_CONCURRENT_SESSIONS evicts the oldest."""
-    from conversation_index import MAX_CONCURRENT_SESSIONS, ConversationIndexRegistry
-
-    registry = ConversationIndexRegistry(ollama_client=None)
-    sids = [f"sid-{i}" for i in range(MAX_CONCURRENT_SESSIONS + 2)]
-    for sid in sids:
-        idx = registry.get(sid)
-        idx.add_turn(f"turn for {sid}", "answer")
-
-    # The first two sids should have been evicted.
-    with registry._lock:
-        assert len(registry._indexes) == MAX_CONCURRENT_SESSIONS
-        assert sids[0] not in registry._indexes
-        assert sids[1] not in registry._indexes
-        assert sids[-1] in registry._indexes
-
-
-def test_conversation_index_registry_clear_isolated():
-    """clear(session_id=A) does not wipe session B's index."""
-    from conversation_index import ConversationIndexRegistry
-
-    registry = ConversationIndexRegistry(ollama_client=None)
-    sid_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-    sid_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-
-    registry.get(sid_a).add_turn("topic A", "answer A")
-    registry.get(sid_b).add_turn("topic B", "answer B")
-
-    registry.clear(session_id=sid_a)
-    assert registry.get(sid_a).size == 0
-    assert registry.get(sid_b).size == 1
 
 
 # ---------------------------------------------------------------------------
