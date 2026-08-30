@@ -1,4 +1,4 @@
-# ===========================================================================
+﻿# ===========================================================================
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
@@ -826,6 +826,81 @@ if (Test-StepDone "obsidian_dark_mode") {
     Set-StepDone "obsidian_dark_mode"
 }
 
+# -- 7d. Register the vault with Obsidian ------------------------------------
+# The `obsidian://open?path=...` deep link in step 8 can only open a vault
+# Obsidian ALREADY KNOWS ABOUT. Per the Obsidian URI docs, the `path`
+# parameter "will cause the app to search for the most specific vault which
+# contains the specified file path" - and that search only covers vaults
+# registered in %APPDATA%\obsidian\obsidian.json (the vault manager's
+# store). An unregistered folder is NOT auto-added: on a machine where
+# Obsidian has never opened this vault, the deep link fails with a
+# "Vault not found" error dialog (or is ignored entirely on a truly fresh
+# install, which lands in the vault manager instead). Exactly what every
+# new user hits at the end of this installer.
+#
+# Writing the vault into that store here - merging, never clobbering other
+# vaults - makes the deep link open straight into the vault on first
+# launch. The store maps vault IDs (16 hex chars) to entries:
+#   {"vaults": {"<id>": {"path": "C:\\path\\to\\vault", "ts": <ms>,
+#                        "open": true}}}
+# We skip the rewrite while Obsidian is RUNNING: on quit it rewrites the
+# file from its in-memory copy and would silently drop our entry.
+$obsidianJson    = Join-Path $env:APPDATA "obsidian\obsidian.json"
+$obsidianRunning = @(Get-Process -Name "Obsidian" -ErrorAction SilentlyContinue).Count -gt 0
+if (Test-StepDone "vault_registered") {
+    Write-Warn2 "Vault already registered with Obsidian -- skipping."
+} elseif (-not (Test-Path $obsidianJson)) {
+    Write-Warn2 "No Obsidian vault store yet (first-ever launch) -- nothing to pre-register."
+    Write-Host "  If asked on first launch, choose 'Open folder as vault' and" -ForegroundColor DarkGray
+    Write-Host "  select the vault path printed below." -ForegroundColor DarkGray
+    Set-StepDone "vault_registered"
+} elseif ($obsidianRunning) {
+    Write-Warn2 "Obsidian is currently running -- skipping vault registration."
+    Write-Host "  Close Obsidian and re-run the installer (it resumes from here)" -ForegroundColor DarkGray
+    Write-Host "  to get the one-click open." -ForegroundColor DarkGray
+} else {
+    try {
+        $obj = Get-Content $obsidianJson -Raw | ConvertFrom-Json
+        $vaults = @{}
+        if ($obj.PSObject.Properties["vaults"] -and $obj.vaults) {
+            foreach ($prop in $obj.vaults.PSObject.Properties) {
+                $entry = @{}
+                if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+                    foreach ($p in $prop.Value.PSObject.Properties) { $entry[$p.Name] = $p.Value }
+                } else {
+                    $entry["path"] = "$($prop.Value)"
+                }
+                $entry["open"] = $false   # the target vault is re-opened below
+                $vaults[$prop.Name] = $entry
+            }
+        }
+        $matchId = $null
+        foreach ($id in @($vaults.Keys)) {
+            if ("$($vaults[$id]['path'])" -ieq "$vaultPath") { $matchId = $id }
+        }
+        if ($matchId) {
+            $vaults[$matchId]["open"] = $true
+            $vaults[$matchId]["ts"]   = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        } else {
+            $newId = -join ((1..16) | ForEach-Object { "{0:x}" -f (Get-Random -Maximum 16) })
+            $vaults[$newId] = @{
+                path = "$vaultPath"
+                ts   = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+                open = $true
+            }
+        }
+        # Write UTF-8 WITHOUT BOM (BOM breaks JSON parsers).
+        [System.IO.File]::WriteAllText($obsidianJson, (@{ vaults = $vaults } | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+        Write-OK "Vault registered with Obsidian - the deep link below opens it directly"
+        Set-StepDone "vault_registered"
+    } catch {
+        # Non-fatal: registration is an optimization. Worst case Obsidian's
+        # vault picker appears at first launch instead of the vault itself.
+        Write-Warn2 "Could not pre-register the vault with Obsidian: $_"
+        Write-Host "  If asked on first launch, use 'Open folder as vault'." -ForegroundColor DarkGray
+    }
+}
+
 # -- 8. Done -- open Obsidian ------------------------------------------------
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Green
@@ -851,26 +926,18 @@ Write-Host ""
 
 # Try to open Obsidian deep-linked to the vault.
 #
-# The `obsidian://open` action's `path` parameter must point at a FILE
-# inside the vault, NOT the vault folder itself - Obsidian searches for the
-# most specific vault that CONTAINS that file path, and a bare folder
-# doesn't match. So we deep-link to a real file inside the vault and let
-# Obsidian resolve the vault from it. We prefer any .md note, then fall back
-# to the .obsidian/app.json we just wrote (guaranteed to exist after step
-# 7b), then to the vault folder as a last resort.
+# The vault was registered with Obsidian in step 7d, so this deep link
+# resolves against a KNOWN vault. The `path` parameter may point at the
+# vault folder itself or any file inside it: Obsidian picks the most
+# specific registered vault containing that path. Pointing at the folder
+# also makes this work in the edge case where registration was skipped
+# (Obsidian first-ever run / was running during install) but the user later
+# added the vault manually, and keeps step 8 functional on a re-run.
 #
 # If Obsidian still isn't installed (e.g. winget failed and the user
 # declined), fall back to launching the app directly, so the user is never
 # left with a "complete" install they can't open.
-$openTarget = $null
-$firstNote = Get-ChildItem -Path $vaultPath -Filter *.md -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($firstNote) {
-    $openTarget = $firstNote.FullName
-} elseif (Test-Path $appJson) {
-    $openTarget = $appJson
-} else {
-    $openTarget = $vaultPath
-}
+$openTarget = $vaultPath
 try {
     $uri = "obsidian://open?path=$([uri]::EscapeDataString($openTarget))"
     Start-Process $uri
