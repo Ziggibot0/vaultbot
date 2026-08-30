@@ -200,6 +200,8 @@ def _load_source(connection, path: Path, sheet: str | None, table_name: str) -> 
 
         workbook = load_workbook(path, read_only=True, data_only=True)
         worksheet = workbook[sheet] if sheet else workbook.active
+        if worksheet is None:
+            raise TableQueryError("Workbook has no active sheet")
         rows = worksheet.iter_rows(values_only=True)
         headers = [str(value or "") for value in next(rows)]
         normalized = inspect_table(path)

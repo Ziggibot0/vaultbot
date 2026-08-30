@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from agent_tools import build_tool_list
 from chat_context import dedup_seen_results as _dedup_seen_results
@@ -73,6 +74,7 @@ async def execute_round_tools(
     """
     # Execute each tool call and feed results back as tool-role messages.
     for tc in round_tool_calls:
+        tool_result: Any
         _check_cancelled(websocket)
         fn = tc.get("function", {})
         tool_name = fn.get("name", "")
