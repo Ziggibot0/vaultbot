@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from table_catalog import TableCatalogError, inspect_table, is_supported_table
+from custom_tools.table_catalog import (
+    TableCatalogError,
+    inspect_table,
+    is_supported_table,
+)
 
 MAX_RESULT_ROWS = 100
 AGGREGATIONS = frozenset({"sum", "avg", "min", "max", "count"})

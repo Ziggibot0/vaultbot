@@ -17,7 +17,7 @@ import logging
 import threading
 from pathlib import Path
 
-from table_catalog import is_supported_table
+from custom_tools.table_catalog import is_supported_table
 from watchdog.events import FileSystemEventHandler
 
 _logger = logging.getLogger(__name__)

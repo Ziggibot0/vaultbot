@@ -21,6 +21,7 @@ from typing import Any
 
 import faiss
 import numpy as np
+from custom_tools.table_catalog import inspect_table, is_supported_table
 from embedding_utils import (
     CHUNK_OVERLAP,
     CHUNK_SIZE,
@@ -29,7 +30,6 @@ from embedding_utils import (
     split_into_chunks,
 )
 from ollama_client import OllamaClient
-from table_catalog import inspect_table, is_supported_table
 from vault_watcher import IGNORED_DIRS, VaultChangeHandler, _is_ignored_path
 from watchdog.observers import Observer
 

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 from custom_tools import table_query as table_query_tool
-from table_query_engine import TableQueryError, query_table, resolve_vault_table
+from custom_tools.table_query_engine import (
+    TableQueryError,
+    query_table,
+    resolve_vault_table,
+)
 
 pytestmark = pytest.mark.unit
 
