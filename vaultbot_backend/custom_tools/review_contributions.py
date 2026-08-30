@@ -77,6 +77,26 @@ def run(args: dict) -> dict:
     pr_number = args.get("pr_number")
     do_merge = args.get("merge", False)
 
+    if do_merge:
+        from custom_tools.upstream_identity import _find_git_root
+        from workspace import WorkspaceError, workspace_registry
+
+        try:
+            selected_workspace = workspace_registry.get()
+        except WorkspaceError as e:
+            return {"error": str(e)}
+        framework_root = _find_git_root(backend_dir)
+        if selected_workspace is not None and os.path.normcase(
+            os.path.abspath(selected_workspace.local_root)
+        ) != os.path.normcase(os.path.abspath(framework_root or backend_dir)):
+            return {
+                "error": (
+                    "Automatic merge is disabled for external development "
+                    "workspaces. Review the pull request here, then merge it "
+                    "through GitHub after human approval."
+                )
+            }
+
     # 3. Get PRs to review
     if pr_number:
         # Review specific PR

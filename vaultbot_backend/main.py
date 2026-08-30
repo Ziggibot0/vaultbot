@@ -972,6 +972,7 @@ from routers import speech as _speech_router  # noqa: E402
 from routers import system as _system_router  # noqa: E402
 from routers import task as _task_router  # noqa: E402
 from routers import tournament as _tournament_router  # noqa: E402
+from routers import workspace as _workspace_router  # noqa: E402
 from routers import ws as _ws_router  # noqa: E402
 
 app.include_router(_system_router.router)
@@ -985,6 +986,7 @@ app.include_router(_ws_router.router)
 app.include_router(_tournament_router.router)
 app.include_router(_speech_router.router)
 app.include_router(_oauth_callback_router.router)
+app.include_router(_workspace_router.router)
 
 
 @app.post("/reload-plugin")

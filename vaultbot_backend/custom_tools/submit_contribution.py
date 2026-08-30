@@ -243,8 +243,17 @@ def run(args: dict) -> dict:
         _parse_github_url,
         resolve_upstream,
     )
+    from workspace import WorkspaceError, workspace_registry
 
-    vault_root = _find_git_root(backend_dir)
+    try:
+        selected_workspace = workspace_registry.get()
+    except WorkspaceError as e:
+        return {"error": str(e)}
+    vault_root = (
+        selected_workspace.local_root
+        if selected_workspace is not None
+        else _find_git_root(backend_dir)
+    )
     if vault_root is None:
         return {
             "error": (

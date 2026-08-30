@@ -378,10 +378,19 @@ def run(args: dict) -> dict:
             "error": f"end_line ({end_line}) must be >= start_line ({start_line})",
         }
 
-    # 3. Resolve the write path against VAULT_ROOT then FRAMEWORK_ROOT
-    #    (issue #341). Repo-facing files (README.md, AGENTS.md, .github/,
-    #    vaultbot_backend/) live at the repo root, not inside the vault.
-    full_path = resolve_write_path(file_path_str)
+    # 3. Project edits target the active workspace when one is selected.
+    #    Otherwise preserve the legacy vault/framework resolution behavior.
+    from workspace import WorkspaceError, workspace_registry
+
+    try:
+        selected_workspace = workspace_registry.get()
+    except WorkspaceError as exc:
+        return {"status": "error", "error": str(exc)}
+    full_path = (
+        workspace_registry.resolve_project_path(file_path_str, allow_create=False)
+        if selected_workspace is not None
+        else resolve_write_path(file_path_str)
+    )
     if full_path is None:
         return {
             "status": "error",
