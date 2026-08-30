@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-08-30
+
+This release makes the installer's final step actually work on a fresh
+machine (the deep link now opens straight into the vault), and ships a
+batch of research/retrieval refactors and fixes. It is a **patch** bump
+(bug fixes and internal refactors, no new user-facing surface).
+
+### Fixed
+
+- **Installer deep link failed on fresh installs** — both `setup.ps1`
+  and `setup.sh` now pre-register the vault in Obsidian's vault store
+  (`obsidian.json`) before firing the `obsidian://open?path=...` deep
+  link, so the link resolves instead of showing Obsidian's "Vault not
+  found" dialog. Registration is idempotent, backs up the store before
+  mutating it, and falls back gracefully if Obsidian is running (#458).
+- **Known-library recall gaps** — the research tool now guarantees a
+  head-noun keyterm, de-hyphenates terms, and retries against an
+  allowlist so known libraries are reliably recalled (#417).
+- **Mangled wikilink stems** — citations now repair wikilink stems
+  against the closed set of known notes (#335).
+- **Repo-root file access** — `code_read`/`code_write`/`safe_write` can
+  now reach repo-root files (#455).
+- **UTF-8 BOM in `setup.ps1`** — removed the BOM so `irm|iex` works on
+  PowerShell 5.1 (#440).
+- **Workspace path hardening** — selected repository paths are hardened
+  against traversal (#435).
+
 ### Removed
 
 - **Lexical intent classifiers from the chat turn** — removed the three
@@ -33,6 +60,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   intent: `detect_idk` (admission of ignorance) plus the tool-sourced and
   pure-acknowledgement paths. A guard test (`TestNoLexicalIntentClassifiers`)
   fails CI if any of them are re-added.
+
+### Added
+
+- **Active development workspace** — a dedicated workspace for active
+  development work (#425, #433).
+- **Seamless spreadsheet and table support** (#436).
+- **Energy usage estimate dashboard** (#437).
+- **Jedi-powered cross-file semantic code navigation** — the
+  `code_semantic` tool (#445).
+
+### Changed
+
+- **Research tool handler extracted** from the dispatch module into
+  `chat_research_tool.py` (#450, #462).
+- **Source acquisition pipeline extracted** (#449, #454).
+- **Ollama runtime probes separated** from transport (#448, #453).
+- **Policy middleware extracted** from HTTP handling (#446, #447).
+- **Chat consolidation replaced** with deterministic log projection
+  (#430).
+- **Canonical source policy enforced** in research (#432).
 
 ## [1.5.2] - 2026-08-29
 
