@@ -59,6 +59,7 @@ from source_classification import (
 from source_classification import (
     is_low_credibility_domain as _is_low_credibility_domain,
 )
+from source_classification import normalize_source_domains as _normalize_source_domains
 from source_classification import (
     normalize_url as _normalize_url,
 )
@@ -717,6 +718,35 @@ class ResearchEngine:
                 )
         return sources
 
+    def _search_with_source_policy(
+        self,
+        query: str,
+        round_idx: int,
+        topic: str,
+        source_allowlist: list[str],
+        source_denylist: list[str],
+    ) -> list[dict[str, Any]]:
+        """Search each allowed domain independently so the policy is OR-based."""
+        if not source_allowlist:
+            return self._search_round(
+                query,
+                round_idx,
+                topic=topic,
+                source_denylist=source_denylist,
+            )
+        sources: list[dict[str, Any]] = []
+        for domain in source_allowlist:
+            sources.extend(
+                self._search_round(
+                    f"{query} site:{domain}",
+                    round_idx,
+                    topic=topic,
+                    source_allowlist=source_allowlist,
+                    source_denylist=source_denylist,
+                )
+            )
+        return sources
+
     def _expand_query(self, base_terms: list[str], discovered_terms: list[str]) -> str:
         """Build a refined query that adds newly-discovered salient terms."""
         # Prefer the base terms plus any discovered terms not already present.
@@ -857,6 +887,22 @@ class ResearchEngine:
         """
         t0 = time.time()
         topic = topic.strip()
+        source_allowlist = _normalize_source_domains(
+            source_allowlist, field_name="source_allowlist"
+        )
+        source_denylist = _normalize_source_domains(
+            source_denylist, field_name="source_denylist"
+        )
+        blocked_allowlist = [
+            domain
+            for domain in source_allowlist
+            if _is_denylisted(f"https://{domain}", source_denylist)
+        ]
+        if blocked_allowlist:
+            raise ValueError(
+                "source_allowlist domains are blocked by source_denylist: "
+                + ", ".join(blocked_allowlist)
+            )
         # Focus overly long topics: the agent sometimes passes a 200-char
         # roadmap bullet as the topic ("Bacterial communication: quorum
         # sensing, how bacteria talk to each other with chemical signals,
@@ -907,12 +953,12 @@ class ResearchEngine:
                     "total_sources_so_far": len(all_sources),
                 },
             )
-            sources = self._search_round(
+            sources = self._search_with_source_policy(
                 query,
                 round_idx,
-                topic=search_topic,
-                source_allowlist=source_allowlist,
-                source_denylist=source_denylist,
+                search_topic,
+                source_allowlist,
+                source_denylist,
             )
             # Dedup against already-collected sources (normalized URLs
             # catch http vs https duplicates of the same page).
@@ -978,8 +1024,12 @@ class ResearchEngine:
             self._log("research_gap_fill", {"gaps": gaps})
             self._progress("gap_fill", {"queries": len(gaps), "gaps": gaps})
             for _gq_idx, gq in enumerate(gaps):
-                gsrc = self._search_round(
-                    gq, round_idx=self.max_rounds, topic=search_topic
+                gsrc = self._search_with_source_policy(
+                    gq,
+                    self.max_rounds,
+                    search_topic,
+                    source_allowlist,
+                    source_denylist,
                 )
                 for s in gsrc:
                     if _normalize_url(s["url"]) not in seen_urls:
@@ -992,6 +1042,12 @@ class ResearchEngine:
                     "follow_up_sources": len(follow_up_sources),
                     "total_sources": len(all_sources),
                 },
+            )
+
+        if source_allowlist and not all_sources:
+            raise RuntimeError(
+                "No usable research sources were found in the requested domains: "
+                + ", ".join(source_allowlist)
             )
 
         # --- Synthesis -----------------------------------------------------

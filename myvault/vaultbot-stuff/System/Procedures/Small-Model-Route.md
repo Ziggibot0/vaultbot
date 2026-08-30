@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - llm_generate
-summary: SUMMARY
+summary: Small-Model-Route
 tags:
   - procedure
   - procedures

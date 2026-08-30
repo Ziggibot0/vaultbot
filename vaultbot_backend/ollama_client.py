@@ -280,6 +280,15 @@ class OllamaClient(_BASE):
     # round-trips per chat turn (called from chat(), generate(), preflight
     # compression, and the token meter).
     _ctx_win_cache: ClassVar[dict[str, int]] = {}
+    # Negative cache (model -> monotonic timestamp of last failed probe).
+    # Without it, a dead/slow Ollama re-pays the full connect+read timeout
+    # from EVERY caller on EVERY turn — multiplying one hung /api/show
+    # into a multi-second stall at each call site (the fresh-laptop
+    # "idles at budgeting context" report, 2026-08-29). Within the TTL the
+    # failure re-raises immediately with no HTTP; after it, one re-probe
+    # is allowed. A success clears the entry. TTL is read per-call so ops
+    # can tune VAULTBOT_CTX_PROBE_FAIL_TTL without a restart.
+    _ctx_win_fail_cache: ClassVar[dict[str, float]] = {}
 
     def context_window(self, model: str | None = None) -> int:
         """Return the model's native context-window size in tokens.
@@ -292,6 +301,10 @@ class OllamaClient(_BASE):
 
         Results are cached per-instance — a model's context window never
         changes at runtime, so we only hit /api/show once per model.
+        FAILED probes are negative-cached for ``VAULTBOT_CTX_PROBE_FAIL_TTL``
+        seconds (default 300) so a hung Ollama isn't re-probed from every
+        call site every turn; within the TTL the failure re-raises without
+        a new HTTP attempt.
 
         Raises on any failure — the caller must know the context window is
         unknown rather than silently getting a wrong 32768.
@@ -303,6 +316,17 @@ class OllamaClient(_BASE):
             )
         if model in self._ctx_win_cache:
             return self._ctx_win_cache[model]
+        _fail_at = self._ctx_win_fail_cache.get(model)
+        if _fail_at is not None:
+            _ttl = float(os.environ.get("VAULTBOT_CTX_PROBE_FAIL_TTL", "300") or "300")
+            if (time.monotonic() - _fail_at) < _ttl:
+                raise RuntimeError(
+                    f"context_window: probe for {model!r} failed recently "
+                    f"(negative-cached); not re-probing until TTL "
+                    f"({_ttl:.0f}s) expires"
+                )
+            # TTL expired — forget the failure and allow one re-probe.
+            del self._ctx_win_fail_cache[model]
         try:
             resp = self._session.post(
                 f"{self.base_url}/api/show", json={"model": model}, timeout=15
@@ -315,6 +339,7 @@ class OllamaClient(_BASE):
                 if key.endswith(".context_length") and isinstance(val, (int, float)):
                     result = int(val)
                     self._ctx_win_cache[model] = result
+                    self._ctx_win_fail_cache.pop(model, None)
                     return result
             # Some older Ollama builds expose it under parameters as a
             # "num_ctx" string like "262144".
@@ -325,12 +350,16 @@ class OllamaClient(_BASE):
                         # "num_ctx" or "num_ctx:262144"
                         result = int(tok.split(":")[-1])
                         self._ctx_win_cache[model] = result
+                        self._ctx_win_fail_cache.pop(model, None)
                         return result
             raise RuntimeError(
                 f"context_window: /api/show returned no context_length "
                 f"for model {model!r}"
             )
         except Exception as e:
+            # Negative-cache the failure so sibling call sites in this
+            # same turn (and the next turn) don't each re-pay the probe.
+            self._ctx_win_fail_cache[model] = time.monotonic()
             self._log_tool("context_window", {"model": model}, error=str(e))
             raise
 

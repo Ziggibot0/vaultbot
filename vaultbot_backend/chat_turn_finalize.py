@@ -158,14 +158,14 @@ async def finalize_turn(
     # retry entirely. An IDK answer is not a factual claim — it's an
     # admission of ignorance. Retrying it wastes an LLM round and may
     # force the model to cite irrelevant notes just to pass the gate.
+    # This is the ONLY intent-based exemption. The lexical temporal/
+    # coaching/conversational classifiers were REMOVED (repo rule: no
+    # keyword lists; FUSED retrieval and the model decide relevance).
     _allowed = getattr(st, "_allowed_citations", None) or {}
     _score: dict = {}
     _confidence: dict = {}
     _grounding_caution = ""
     _is_idk = False
-    _is_temporal = bool(getattr(st, "_is_temporal_question", False))
-    _is_coaching = bool(getattr(st, "_is_coaching_turn", False))
-    _is_conversational = False
     _delivery_decision = None
     _verification_summary: dict = {}
     _graph_lookup: Callable[[str], bool] | None = None
@@ -188,18 +188,12 @@ async def finalize_turn(
         _graph_lookup = None
     if final_answer and len(final_answer) > 50:
         try:
-            from citation_gate import (
-                build_reprimand,
-                detect_conversational,
-                detect_idk,
-                score_grounding,
-            )
+            from citation_gate import build_reprimand, detect_idk, score_grounding
 
             # Check IDK BEFORE scoring — skip the grounding retry for
             # admissions of ignorance. We still score (for logging) but
             # don't trigger a retry or append a caution.
             _is_idk = detect_idk(final_answer)
-            _is_conversational = detect_conversational(final_answer)
             _score = score_grounding(final_answer, _allowed, _graph_lookup)
             session_logger.log(
                 "grounding_check",
@@ -216,20 +210,10 @@ async def finalize_turn(
                     "allowed_set_size": len(_allowed),
                     "retry_count": getattr(st, "_grounding_retry_count", 0),
                     "is_idk": _is_idk,
-                    "is_temporal": _is_temporal,
-                    "is_coaching": _is_coaching,
-                    "is_conversational": _is_conversational,
                     "is_tool_sourced": _is_tool_sourced,
                 },
             )
-            if (
-                _score["failed"]
-                and not _is_idk
-                and not _is_temporal
-                and not _is_coaching
-                and not _is_conversational
-                and not _is_tool_sourced
-            ):
+            if _score["failed"] and not _is_idk and not _is_tool_sourced:
                 # Hard gate: flag for retry if under the cap.
                 _retries = getattr(st, "_grounding_retry_count", 0)
                 if _retries < TUNABLES.max_grounding_retries:
@@ -255,39 +239,22 @@ async def finalize_turn(
                         f"this topic."
                     )
                     final_answer += _grounding_caution
-            elif _score["failed"] and (
-                _is_idk
-                or _is_temporal
-                or _is_coaching
-                or _is_conversational
-                or _is_tool_sourced
-            ):
+            elif _score["failed"] and (_is_idk or _is_tool_sourced):
                 # IDK answer failed grounding (expected — it has no factual
-                # claims to cite), a temporal/recency question (grounded
-                # in conversation history, not the vault closed set), a
-                # coaching/planning turn (issue #277; user intent is
-                # life-management guidance, not factual vault synthesis), a
-                # in conversation history, not the vault closed set), a
-                # short conversational answer (greeting/small-talk with no
-                # vault content to ground — issue #334), or a tool-sourced
-                # answer (grounded in a live tool call, not vault notes —
-                # issue #132). Log and skip — don't retry, don't caution.
+                # claims to cite) or a tool-sourced answer (grounded in a
+                # live tool call, not vault notes — issue #132). Log and
+                # skip — don't retry, don't caution.
                 session_logger.log(
                     "grounding_skipped_idk",
                     {
                         "retry_count": getattr(st, "_grounding_retry_count", 0),
-                        "is_temporal": _is_temporal,
-                        "is_coaching": _is_coaching,
-                        "is_conversational": _is_conversational,
+                        "is_idk": _is_idk,
                         "is_tool_sourced": _is_tool_sourced,
                     },
                 )
             elif (
                 _score["grounding_score"] < 0.5
                 and _score["total_wikilinks"] > 0
-                and not _is_temporal
-                and not _is_coaching
-                and not _is_conversational
                 and not _is_tool_sourced
             ):
                 # Some citations but many missing from the set/vault — soft warn.
@@ -407,9 +374,6 @@ async def finalize_turn(
         _delivery_decision is not None
         and _delivery_decision.deliverable
         and not _is_idk
-        and not _is_temporal
-        and not _is_coaching
-        and not _is_conversational
         and not _is_tool_sourced
     ):
         try:
@@ -443,9 +407,7 @@ async def finalize_turn(
         session_logger.log(
             "provenance_surface_skipped_idk",
             {
-                "is_temporal": _is_temporal,
-                "is_coaching": _is_coaching,
-                "is_conversational": _is_conversational,
+                "is_idk": _is_idk,
                 "is_tool_sourced": _is_tool_sourced,
             },
         )
@@ -515,31 +477,13 @@ async def finalize_turn(
             _cp.clear()
         except Exception as e:  # noqa: BLE001
             session_logger.log("checkpoint_clear_failed", {"error": str(e)})
-    # Refresh the token meter after the full turn.
-    try:
-        _total_chars = sum(
-            len(str(m.get("content", "") or ""))
-            for m in conversation
-            if isinstance(m, dict)
-        )
-        _used_tokens = max(1, _total_chars // 4)
-        _ctx_window = svc.ollama_client.context_window(svc.ollama_client.llm_model)
-        await svc.manager.send_personal_message(
-            json.dumps(
-                {
-                    "type": "context_usage",
-                    "model": svc.ollama_client.llm_model,
-                    "context_window": _ctx_window,
-                    "used_tokens": _used_tokens,
-                    "available_tokens": max(0, _ctx_window - _used_tokens),
-                    "messages": len(conversation),
-                }
-            ),
-            websocket,
-            session_logger=session_logger,
-        )
-    except Exception as _e:  # noqa: BLE001
-        session_logger.log("context_usage_emit_failed", {"error": str(_e)})
+    # Refresh the token meter after the full turn. Routed through the
+    # shared _emit_context_usage helper (chat_turn_prep) so a hung
+    # /api/show probe can never stall finalize — the old inline copy
+    # called the blocking context_window() directly on the event loop.
+    from chat_turn_prep import _emit_context_usage
+
+    await _emit_context_usage(svc, websocket, session_logger, conversation)
     session_logger.log(
         "chat_end",
         {

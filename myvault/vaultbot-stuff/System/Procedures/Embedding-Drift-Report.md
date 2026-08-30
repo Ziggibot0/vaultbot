@@ -14,7 +14,7 @@ applies_to:
 allowed_tools:
   - vault_list
   - code_read
-summary: SUMMARY
+summary: Embedding-Drift-Report
 tags:
   - procedure
   - procedures

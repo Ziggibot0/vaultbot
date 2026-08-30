@@ -124,7 +124,7 @@ _TYPE_INFERENCE: tuple[tuple[str, str], ...] = (
     ("Knowledge/Biology/", "research"),
     ("Knowledge/Simulations/", "research"),
     ("Knowledge/Textbooks/", "research"),
-    ("Memory/Chat/", "chat"),
+    ("Memory/Logs/", "chat"),
     ("Memory/Build-Log/", "semantic"),
 )
 

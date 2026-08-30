@@ -4,8 +4,8 @@ Extracted from ``chat_handler.py`` — ``run_background_tasks`` runs AFTER
 the answer is delivered to the user. It performs: stress-signal logging
 (for Dream Pass), vault-changed broadcast, embedding-drift feedback, model
 relevance tagging, lazy condensing (background task), QA idle worker
-(background task), history persistence, conversation-index add, working-
-memory save, chat-note creation, and pattern extraction.
+(background task), history persistence, log projection (JSONL → vault .md
+event files), working-memory save, and pattern extraction.
 
 All of this is best-effort: failures are logged but never break the chat
 loop. The user has already received their answer.
@@ -21,6 +21,7 @@ import json
 import os
 from pathlib import Path
 
+import log_projection
 from chat_helpers import (
     notify_console_failure,
     notify_problem,
@@ -441,21 +442,6 @@ async def run_background_tasks(
                 _sid = getattr(websocket, "session_id", None)
                 if _sid:
                     touch_last_session(_sid, session_logger.title)
-            # Index this turn in the conversation index so future queries
-            # can retrieve it (conversation-aware retrieval).  Only
-            # index when there's a real answer — a tool-only or empty
-            # turn isn't useful for recall.
-            if final_answer and len(final_answer) > 20:
-                try:
-                    _conv_idx_reg = getattr(svc, "conversation_index", None)
-                    if _conv_idx_reg is not None:
-                        _sid = getattr(websocket, "session_id", None)
-                        _conv_idx = _conv_idx_reg.get(_sid)
-                        _conv_idx.add_turn(user_message, final_answer)
-                except Exception as _e:  # noqa: BLE001
-                    session_logger.log(
-                        "conversation_index_add_failed", {"error": str(_e)}
-                    )
             # Persist working memory to disk so the plan survives
             # restarts.  Only save when there's an active plan.
             try:
@@ -480,22 +466,24 @@ async def run_background_tasks(
             remedy_hint="Check disk space and file permissions.",
         )
 
-    # Save a chat note if the answer is substantive.
-    if len(final_answer) > 100:
-        try:
-            note_path = await loop.run_in_executor(
-                None,
-                svc.note_creator.create_note_from_chat,
-                user_message,
-                final_answer,
-                thinking_text,
+    # Project this session's JSONL log into vault .md event files.
+    # Replaces the old chat-note system (create_note_from_chat /
+    # merge_chat_note) and the in-memory conversation_index.  Each event
+    # (user message, assistant answer, tool call) becomes its own .md
+    # file under myvault/vaultbot-stuff/Memory/Logs/<session-uuid>/,
+    # indexed by the vault watcher, tagged with objective provenance,
+    # and wikilinked into the existing vault graph.  Idempotent: only
+    # new events since the last projection are written.
+    try:
+        _sid = getattr(websocket, "session_id", None)
+        if _sid:
+            _n = await loop.run_in_executor(
+                None, log_projection.project_current_session, _sid, svc
             )
-            session_logger.log("chat_note_created", {"note_path": note_path})
-        except Exception as e:  # noqa: BLE001
-            session_logger.log_exception(
-                e, context="note_creator.create_note_from_chat"
-            )
-            print(f"Error creating chat note: {e}")
+            if _n:
+                session_logger.log("log_projected", {"new_events": _n, "session": _sid})
+    except Exception as e:  # noqa: BLE001 — best-effort, never break chat loop
+        session_logger.log("log_projection_failed", {"error": str(e)})
 
     # Pattern extraction: check for new consolidation gaps after each chat.
     try:

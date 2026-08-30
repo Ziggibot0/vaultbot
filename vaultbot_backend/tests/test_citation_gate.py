@@ -3,125 +3,58 @@
 These are pure offline tests (no Ollama, no FAISS, no Services). They
 verify the closed-set construction, wikilink extraction, grounding score,
 reprimand builder, and the retry-trigger logic.
+
+Also guards against the return of the lexical intent classifiers
+(conversational/coaching/temporal) that were removed: the repo's rule is
+"no lexical keyword list — FUSED retrieval and the model decide
+relevance", and those heuristics misfired and wasted an LLM round at the
+start of every agentic turn. If one of them is ever re-added, this fails.
 """
 
 from __future__ import annotations
 
+from importlib import import_module
+
+import pytest
 from citation_gate import (
     add_citation_target,
     build_allowed_citations,
     build_reprimand,
     build_sources_block,
     build_trust_badge,
-    classify_coaching_turn,
-    detect_coaching_turn,
-    detect_conversational,
-    detect_temporal_question,
     extract_wikilinks,
     score_grounding,
 )
 
-
-class TestDetectTemporalQuestion:
-    def test_recency_question(self):
-        assert detect_temporal_question("what were we working on last?") is True
-
-    def test_what_were_we_doing(self):
-        assert detect_temporal_question("what were we doing earlier?") is True
-
-    def test_most_recent(self):
-        assert detect_temporal_question("what's the most recent thing?") is True
-
-    def test_where_did_we_leave_off(self):
-        assert detect_temporal_question("where did we leave off?") is True
-
-    def test_non_temporal(self):
-        assert detect_temporal_question("explain the FAISS index") is False
-
-    def test_empty(self):
-        assert detect_temporal_question("") is False
-        assert detect_temporal_question(None) is False
-
-    def test_case_insensitive(self):
-        assert detect_temporal_question("WHAT WERE WE WORKING ON LAST?") is True
+pytestmark = pytest.mark.unit
 
 
-class TestDetectConversational:
-    def test_short_greeting(self):
-        assert detect_conversational("Hey Sean! I'm here and ready.") is True
+class TestNoLexicalIntentClassifiers:
+    """Guard: the cheap bs detectors must stay gone."""
 
-    def test_sup_homie(self):
-        assert detect_conversational("sup homie") is True
+    def test_conversational_detector_absent(self):
+        assert hasattr(import_module("citation_gate"), "detect_conversational") is False
 
-    def test_short_no_punctuation(self):
-        assert detect_conversational("hi") is True
-
-    def test_long_answer_not_conversational(self):
-        # >200 chars -> substantive multi-claim answer, not casual.
-        long = (
-            "This is a substantive multi-claim answer that explains how the "
-            "grounding gate works and why short greetings should be exempted "
-            "from the redundant re-citation retry. It goes on for a while and "
-            "makes several distinct factual points that need vault grounding. "
-            "There is more than one sentence here. And yet another one."
+    def test_coaching_detector_absent(self):
+        assert hasattr(import_module("citation_gate"), "detect_coaching_turn") is False
+        assert (
+            hasattr(import_module("citation_gate"), "classify_coaching_turn") is False
         )
-        assert detect_conversational(long) is False
 
-    def test_short_with_multiple_sentence_marks_still_conversational(self):
-        # Short AND has punctuation marks -> still casual (length is the signal).
-        assert detect_conversational("First claim. Second claim.") is True
-
-    def test_empty(self):
-        assert detect_conversational("") is False
-        assert detect_conversational(None) is False
-
-    def test_custom_max_len(self):
-        assert detect_conversational("a" * 300, max_len=400) is True
-        assert detect_conversational("a" * 500, max_len=400) is False
-
-    def test_greeting_with_wikilink_still_conversational(self):
-        # A short greeting that cites a chat-log note is still conversational.
-        assert detect_conversational("Hey Sean [[Chat-yo]]") is True
-
-
-class TestDetectCoachingTurn:
-    def test_daily_planning_prompt(self):
-        assert detect_coaching_turn("What should I do today?") is True
-
-    def test_burnout_prompt(self):
-        msg = "I'm tired and overwhelmed, help me prioritize"
-        assert detect_coaching_turn(msg) is True
-
-    def test_non_coaching_fact_query(self):
-        assert detect_coaching_turn("Explain how FAISS works") is False
-
-    def test_empty(self):
-        assert detect_coaching_turn("") is False
-        assert detect_coaching_turn(None) is False
-
-
-class TestClassifyCoachingTurn:
-    def test_invalid_input(self):
-        assert classify_coaching_turn("") == ("unknown", 0.0)
-        assert classify_coaching_turn(None) == ("unknown", 0.0)
-
-    def test_phrase_hit_is_coaching(self):
-        label, confidence = classify_coaching_turn("What should I do today?")
-        assert label == "coaching"
-        assert confidence > 0.0
-
-    def test_token_hits_is_coaching(self):
-        label, confidence = classify_coaching_turn(
-            "I feel overwhelmed and stressed. Help me prioritize my schedule"
+    def test_temporal_detector_absent(self):
+        assert (
+            hasattr(import_module("citation_gate"), "detect_temporal_question") is False
         )
-        assert label == "coaching"
-        assert confidence >= 0.7
 
-    def test_fact_query_is_knowledge(self):
-        assert classify_coaching_turn("Explain how FAISS works") == (
-            "knowledge",
-            0.0,
-        )
+    def test_conversational_tunable_absent(self):
+        from config import TUNABLES
+
+        assert hasattr(TUNABLES, "conversational_max_len") is False
+
+    def test_idk_detector_kept(self):
+        # The content-based escape (judges the ANSWER, not the user's intent)
+        # must remain.
+        assert hasattr(import_module("citation_gate"), "detect_idk") is True
 
 
 class TestExtractWikilinks:

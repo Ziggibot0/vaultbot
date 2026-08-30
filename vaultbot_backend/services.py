@@ -116,10 +116,6 @@ class Services:
     # Roles (big/small/vision) draw from this one pot. Optional with a default
     # so tests that build Services without it still construct.
     registry: object | None = None
-    # Conversation-aware retrieval: searchable index of recent conversation
-    # turns so the bot can "remember what it just said." Optional with a
-    # default so tests that build Services without it still construct.
-    conversation_index: object | None = None
     # Trigger/inhibitor phrase-embedding store (optional — None when not
     # wired).  Drives the retrieval gate that drops notes whose inhibitors
     # match the query.  See trigger_store.py.

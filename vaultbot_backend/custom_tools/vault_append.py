@@ -27,7 +27,8 @@ SCHEMA = {
                 "description": (
                     "Path to the note, relative to vault root. VaultBot notes "
                     "are under vaultbot/ (e.g. "
-                    "'vaultbot-stuff/Memory/Chat/Chat-Topic.md'). User-personal notes "
+                    "'vaultbot-stuff/Memory/Logs/<session>/event-0001.md'). "
+                    "User-personal notes "
                     "go in User/ (e.g. 'User/Research-Roadmap.md'). VaultBot "
                     "notes (including its own directives) are under vaultbot/ "
                     "(e.g. 'vaultbot-stuff/System/Identity/Autonomy-Directive.md')."
