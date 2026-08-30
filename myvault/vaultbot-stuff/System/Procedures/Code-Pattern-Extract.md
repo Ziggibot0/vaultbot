@@ -3,7 +3,7 @@ type: procedure
 status: experimental
 baseline: true
 created: 2026-08-02
-description: Scan backend code for a specific pattern (e.g., all try/except blocks, all async functions, all places a specific module is imported) and return the matches with file, line, and context. Given a pattern description, the small model translates it to a regex and searches the code. Use when looking for code patterns across the backend.
+description: Scan backend code for a specific pattern (e.g., all try/except blocks, all async functions, all places a specific module is imported) and return the matches with file, line, and context. Given a pattern description, the small model translates it to a regex and searches the code. For symbol-usage queries ("where is X called"), uses the jedi-backed code_semantic tool instead. Use when looking for code patterns across the backend.
 when_to_use: when looking for all instances of a code pattern, when finding all try/except blocks, when finding all uses of a module, when auditing code patterns, or when asked 'where does the code do X'
 falsifiable_if: the procedure returns matches that don't fit the pattern, or misses matches
 applies_to:
@@ -13,6 +13,7 @@ applies_to:
   - code-audit
 allowed_tools:
   - code_read
+  - code_semantic
   - llm_generate
 summary: Code-Pattern-Extract
 tags:
@@ -29,40 +30,79 @@ When you need to find all instances of a code pattern across the backend
 module. The small model translates your pattern description into a regex
 and searches.
 
+For symbol-usage queries — "where is function X called", "who uses
+`verify_import_targets`", "what resolves to Y" — the `code_semantic` tool
+(Step 1a) is preferred: it resolves imports and only counts real call
+sites, never a comment/string mention of the name.
+
 ## Why This Exists
 
-Finding all instances of a code pattern across the backend required manual grepping with no structured results. This procedure translates a pattern description into a regex and returns matches with file, line, and context. The key tradeoff is that the small model translates the description to a regex, so the search is flexible but depends on a correct translation.
+Finding all instances of a code pattern across the backend required manual
+grepping with no structured results. This procedure translates a pattern
+description into a regex and returns matches with file, line, and context.
+The key tradeoff is that the small model translates the description to a
+regex, so the search is flexible but depends on a correct translation.
+Symbol-usage queries are better served by `code_semantic` (jedi), which
+understands the import graph and ignores names that only appear in
+comments or string literals.
 
 ## Steps
 
-### Step 1: Small model translates the pattern description to a regex
+### Step 1a: Symbol-usage queries use code_semantic (semantic)
 
 1. ```python
 import json
 
 pattern_desc = args.get("pattern", "")
-if not pattern_desc:
-    result = json.dumps({"error": "pattern argument required"})
+symbol = args.get("symbol", "") or pattern_desc.strip()
+# A symbol-usage query asks about calls/uses of a specific code name.
+# Route it to code_semantic, which understands imports and call sites,
+# instead of a regex that would also match comments and string literals.
+callers_res = code_semantic("callers", symbol)
+refs_res = code_semantic("references", symbol)
+if callers_res.get("count", 0) or refs_res.get("count", 0):
+    result = json.dumps({
+        "mode": "semantic",
+        "symbol": symbol,
+        "callers": callers_res,
+        "all_references": refs_res,
+    })
 else:
-    prompt = f"""Translate this code pattern description into a Python regex
+    # Fall through to the regex path when the name isn't a resolvable symbol.
+    result = json.dumps({"mode": "regex", "symbol": symbol})
+```
+
+### Step 1b: Small model translates the pattern description to a regex
+
+1. ```python
+import json
+
+data_a = json.loads(output)
+if data_a.get("mode") == "semantic":
+    result = output
+else:
+    pattern_desc = args.get("pattern", "") or data_a.get("symbol", "")
+    if not pattern_desc:
+        result = json.dumps({"error": "pattern argument required"})
+    else:
+        prompt = f"""Translate this code pattern description into a Python regex
 that would match it in source code:
 
 Pattern: {pattern_desc}
 
 Common patterns:
-- try/except blocks: r'try:\\n.*?except\\s+\\w+.*?:'
-- async functions: r'async\\s+def\\s+\\w+'
-- imports of X: r'(?:from\\s+X\\s+import|import\\s+X)'
-- function calls to X: r'\\bX\\s*\\('
-- decorator: r'@\\w+'
+- try/except blocks: r'try:\\\\n.*?except\\\\s+\\\\w+.*?:'
+- async functions: r'async\\\\s+def\\\\s+\\\\w+'
+- imports of X: r'(?:from\\\\s+X\\\\s+import|import\\\\s+X)'
+- function calls to X: r'\\\\bX\\\\s*\\\\('
+- decorator: r'@\\\\w+'
 
 Return JSON: {{"regex": "the regex pattern", "explanation": "what it matches"}}
 Return ONLY the JSON."""
-    regex_result = llm_generate(prompt)
-    result = regex_result
+        result = llm_generate(prompt)
 ```
 
-### Step 2: Search the backend with the regex
+### Step 2: Search the backend with the regex (or return semantic results)
 
 2. ```python
 import json as _json, re
@@ -70,6 +110,8 @@ import json as _json, re
 data = _json.loads(output)
 if "error" in data:
     result = output
+elif data.get("mode") == "semantic":
+    result = data  # already the semantic answer, no regex needed
 else:
     try:
         pattern = data["regex"]
@@ -87,7 +129,6 @@ else:
             rel = str(py.relative_to(backend_dir))
             for m in regex.finditer(text):
                 line_num = text[:m.start()].count('\n') + 1
-                # Get context (3 lines around match)
                 lines = text.split('\n')
                 start_line = max(0, line_num - 2)
                 end_line = min(len(lines), line_num + 3)
@@ -99,8 +140,8 @@ else:
                     break
             if len(matches) >= 30:
                 break
-        result = _json.dumps({"matches": matches, "total": len(matches),
-                              "pattern": pattern})
+        result = _json.dumps({"mode": "regex", "matches": matches,
+                              "total": len(matches), "pattern": pattern})
 ```
 
 ### Step 3: Return the matches
@@ -111,6 +152,8 @@ import json as _json
 data = _json.loads(output)
 if "error" in data:
     result = data
+elif data.get("mode") == "semantic":
+    result = output
 else:
     result = _json.dumps({
         "matches": data.get("matches", []),

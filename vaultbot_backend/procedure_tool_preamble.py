@@ -288,6 +288,21 @@ def _build_tool_preamble(allowed_tools: list[str]) -> str:
             '    namespace["code_read"] = code_read\n'
         )
 
+    if "code_semantic" in allowed_tools:
+        # Cross-file semantic code navigation (jedi). Resolves definitions,
+        # references, callers, callees, and types across modules — the
+        # thing regex/AST can't do. Lazily imports code_semantic.run.
+        snippets.append(
+            'if "code_semantic" in allowed:\n'
+            "    from custom_tools.code_semantic import run as _code_semantic_run\n"
+            "    def code_semantic(op, symbol, file_path=None, max_results=100):\n"
+            "        return _code_semantic_run(\n"
+            '            {"op": op, "symbol": symbol,\n'
+            '             "file_path": file_path, "max_results": max_results}\n'
+            "        )\n"
+            '    namespace["code_semantic"] = code_semantic\n'
+        )
+
     if "run_procedure" in allowed_tools:
         # Recursive procedure execution: shell out to the synchronous
         # CLI (run_procedure.py) which calls asyncio.run(execute_procedure).
