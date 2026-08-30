@@ -814,7 +814,10 @@ async def prepare_turn(
             '"I don\'t know -- nothing in the vault covers this" and offer '
             "to call vault_research. Do NOT write from your own knowledge. "
             "A factual sentence with no [[wikilink]] from the allowed set is "
-            "an UNCITED claim and is FORBIDDEN."
+            "an UNCITED claim and is FORBIDDEN. "
+            "Copy each [[Note-Name]] EXACTLY as written above -- no spaces "
+            "around hyphens, no rewording; a wrong stem is a broken link "
+            "in Obsidian."
         )
         context = context + _allowed_block
         session_logger.log(
