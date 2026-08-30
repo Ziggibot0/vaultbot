@@ -91,11 +91,10 @@ def _rank(
     min_ratio = float(getattr(TUNABLES, "wikilink_repair_min_ratio", 0.80))
     if ratio < min_ratio:
         return None
-    if allowed is not None:
+    if allowed is not None and stem not in allowed:
         # Never "repair" onto a stem that is not itself a real citation
         # target in the closed set (when one is provided).
-        if stem not in allowed:
-            return None
+        return None
     max_gap = int(getattr(TUNABLES, "wikilink_repair_max_length_gap", 6))
     if len(probe) > len(stem) * 3 or len(stem) > max(
         len(probe) * 3, len(probe) + max_gap
@@ -185,14 +184,14 @@ def repair_wikilinks_verified(
     (Tier 1 already covers every note the model was shown).
     """
     repaired_text, repairs = repair_wikilinks_in_text(text, allowed)
-    if not repaired_text or candidate_provider is None or not callable(
-        candidate_provider
+    if (
+        not repaired_text
+        or candidate_provider is None
+        or not callable(candidate_provider)
     ):
         return repaired_text, repairs
     remaining = [
-        stem
-        for stem in _iter_link_stems(repaired_text)
-        if stem not in (allowed or {})
+        stem for stem in _iter_link_stems(repaired_text) if stem not in (allowed or {})
     ]
     if not remaining:
         return repaired_text, repairs
@@ -226,9 +225,7 @@ def repair_wikilinks_verified(
     # Exactly one substitution site — reuse the same regex machinery.
     for mangled, corrected in _tier2:
         pattern = re.compile(r"\[\[\s*" + re.escape(mangled) + r"(\]|#|\|)")
-        repaired_text = pattern.sub(
-            "[[" + corrected + r"\1", repaired_text, count=1
-        )
+        repaired_text = pattern.sub("[[" + corrected + r"\1", repaired_text, count=1)
     return repaired_text, repairs + _tier2
 
 

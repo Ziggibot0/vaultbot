@@ -18,7 +18,6 @@ from wikilink_repair import (
     try_repair_stem,
 )
 
-
 ALLOWED = {
     "Chat-sup-homie": {"file_path": "myvault/x/Chat-sup-homie.md", "snippet": ""},
     "FAISS-IndexIDMap2": {"file_path": "myvault/k/FAISS.md", "snippet": ""},
