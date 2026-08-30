@@ -61,6 +61,10 @@ dependencies = [
     "keyring>=25.7.0",
     "openpyxl>=3.1.5",
     "duckdb>=1.4.0",
+    # jedi: cross-file static analysis engine powering the code_semantic
+    # custom tool (go-to-definition, find-references, callers/callees,
+    # type inference across modules). Added for issue #418.
+    "jedi>=0.20.0",
 ]
 
 [project.optional-dependencies]

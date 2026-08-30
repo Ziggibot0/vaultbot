@@ -51,6 +51,11 @@ edge-tts==7.2.8
 # keyring: stores Google Workspace OAuth client secrets/tokens in the OS
 # keychain instead of plaintext JSON files (issue #231).
 keyring==25.7.0
+# jedi: cross-file static analysis engine for the code_semantic custom tool
+# (issue #418) — go-to-definition, find-references, callers/callees,
+# type inference across modules. parso is its parsing dependency.
+jedi==0.20.0
+parso==0.8.7
 # duckdb: constrained read-only filters, aggregates, and joins over vault tables.
 # openpyxl: read-only XLSX workbook/schema inspection and sheet decoding.
 duckdb==1.5.5
