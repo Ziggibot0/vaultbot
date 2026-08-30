@@ -169,7 +169,10 @@ class TestAllowlistZeroHitRetry:
         )
         assert any("site:" in q for q in calls)  # first tried the site: round
         assert any("site:" not in q for q in calls)  # then the bare retry
-        assert sources and "jedi.readthedocs.io" in sources[0]["url"]
+        assert sources
+        from urllib.parse import urlparse
+
+        assert urlparse(sources[0]["url"]).netloc == "jedi.readthedocs.io"
 
 
 class TestAcceptancePipelineRepro:
