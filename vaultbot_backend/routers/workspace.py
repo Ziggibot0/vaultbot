@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 from typing import Any
@@ -21,13 +22,20 @@ _SIGN_IN_REQUIRED = (
 _MANAGED_CHECKOUT_EXISTS = (
     "A managed checkout already exists; select its local folder instead."
 )
+_WORKSPACE_UNAVAILABLE = (
+    "The selected workspace is unavailable. Disconnect and reselect it."
+)
 
 
 def _status_payload() -> dict[str, Any]:
     try:
         workspace = workspace_registry.get()
-    except WorkspaceError as exc:
-        return {"status": "invalid", "workspace": None, "error": str(exc)}
+    except WorkspaceError:
+        return {
+            "status": "invalid",
+            "workspace": None,
+            "error": _WORKSPACE_UNAVAILABLE,
+        }
     return {
         "status": "selected" if workspace else "disconnected",
         "workspace": workspace.to_dict() if workspace else None,
@@ -47,7 +55,10 @@ async def select_local_workspace(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         selected = workspace_registry.select(local_root)
     except WorkspaceError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail="Could not select that Git repository.",
+        ) from exc
     return {"status": "selected", "workspace": selected.to_dict()}
 
 
@@ -56,7 +67,9 @@ async def disconnect_workspace() -> dict[str, Any]:
     try:
         workspace_registry.disconnect()
     except WorkspaceError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500, detail="Could not disconnect the workspace."
+        ) from exc
     return {"status": "disconnected", "workspace": None}
 
 
@@ -72,7 +85,9 @@ async def list_github_repositories() -> dict[str, Any]:
             timeout=30,
         )
     except GhError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail="Could not list GitHub repositories."
+        ) from exc
     return {
         "repositories": [
             {
@@ -90,21 +105,21 @@ async def list_github_repositories() -> dict[str, Any]:
 @router.post("/clone")
 async def clone_github_workspace(payload: dict[str, Any]) -> dict[str, Any]:
     full_name = str(payload.get("full_name") or "").strip()
-    if not _REPOSITORY_NAME.fullmatch(full_name):
+    identity_parts = full_name.split("/", 1)
+    if (
+        not _REPOSITORY_NAME.fullmatch(full_name)
+        or len(identity_parts) != 2
+        or any(part in {".", ".."} for part in identity_parts)
+    ):
         raise HTTPException(
             status_code=400, detail="full_name must be owner/repository"
         )
     if not gh_available():
         raise HTTPException(status_code=409, detail="GitHub sign-in is required")
 
-    owner, repository = full_name.split("/", 1)
-    destination = (_MANAGED_ROOT / owner / repository).resolve()
-    try:
-        destination.relative_to(_MANAGED_ROOT.resolve())
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400, detail="Invalid repository destination"
-        ) from exc
+    owner, repository = identity_parts
+    workspace_id = hashlib.sha256(full_name.casefold().encode()).hexdigest()[:24]
+    destination = _MANAGED_ROOT / workspace_id
     if destination.exists():
         raise HTTPException(status_code=409, detail=_MANAGED_CHECKOUT_EXISTS)
 
@@ -119,12 +134,13 @@ async def clone_github_workspace(payload: dict[str, Any]) -> dict[str, Any]:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise HTTPException(status_code=502, detail=f"Clone failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Repository clone failed.") from exc
     if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise HTTPException(status_code=502, detail=f"Clone failed: {detail}")
+        raise HTTPException(status_code=502, detail="Repository clone failed.")
     try:
         selected = workspace_registry.select(destination, managed_clone=True)
     except WorkspaceError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500, detail="The cloned repository could not be selected."
+        ) from exc
     return {"status": "selected", "workspace": selected.to_dict()}
