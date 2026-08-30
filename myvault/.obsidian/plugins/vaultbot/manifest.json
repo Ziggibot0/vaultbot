@@ -1,7 +1,7 @@
 {
   "id": "vaultbot",
   "name": "VaultBot",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "minAppVersion": "0.15.0",
   "description": "AI assistant that lives in your Obsidian vault, thinks with your notes, researches from the web, and starts its own backend automatically",
   "author": "VaultBot Developer",
