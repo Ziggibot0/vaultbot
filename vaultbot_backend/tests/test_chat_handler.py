@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from types import SimpleNamespace
+from typing import cast
 
 import chat_handler
 import pytest
+from services import Services
 from working_memory import TaskList
 
 pytestmark = pytest.mark.unit
@@ -17,7 +19,7 @@ class _FakeWebSocket:
     def __init__(self) -> None:
         self.session_id = None
         self._cancelled = True
-        self.working_memory = None
+        self.working_memory: TaskList | None = None
 
 
 class _FakeSessionLogger:
@@ -28,8 +30,8 @@ class _FakeSessionLogger:
         self.calls.append((event, payload))
 
 
-def _services() -> SimpleNamespace:
-    return SimpleNamespace(chat_checkpointer=None)
+def _services() -> Services:
+    return cast(Services, SimpleNamespace(chat_checkpointer=None))
 
 
 def _prep_result() -> tuple:
