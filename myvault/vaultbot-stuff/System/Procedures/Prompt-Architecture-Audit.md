@@ -16,7 +16,7 @@ allowed_tools:
   - code_read
   - llm_generate
   - run_procedure
-summary: SUMMARY
+summary: Prompt-Architecture-Audit
 tags:
   - procedure
   - procedures

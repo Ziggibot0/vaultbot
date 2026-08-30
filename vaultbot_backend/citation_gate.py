@@ -233,6 +233,16 @@ def score_grounding(
 # (skip entailment on IDK), and the trust badge (show a different badge).
 # These patterns cover the phrasing the system prompt instructs the model
 # to use (see chat_turn_prep.py _allowed_block) plus natural variants.
+# This is the ONLY intent detector in the chat path: it judges the
+# ANSWER's actual content (an admission of ignorance), not the user's
+# message. We deliberately do NOT sniff the user turn for "conversational",
+# "coaching", or "temporal/recency" — those lexical heuristics were
+# removed because they waste an LLM round at the start of every agentic
+# turn and misfire constantly (the repo's own rule: FUSED retrieval and
+# the model decide relevance, not literal string matching). A grounded
+# answer ships unverified whenever the model says "I don't know";
+# everything else that lacks citations either re-cites or ships with a
+# visible ⚠️ caution.
 _IDK_PATTERNS: list[str] = [
     "i don't know",
     "i don't have enough",
@@ -263,177 +273,6 @@ def detect_idk(answer: str) -> bool:
         return False
     _low = answer.lower()
     return any(p in _low for p in _IDK_PATTERNS)
-
-
-# ── Temporal-question detection ───────────────────────────────────────
-# Recency/continuity questions ("what were we working on last?") must be
-# grounded in the PRIOR CONVERSATION section (which carries timestamps),
-# NOT the closed-set vault citation gate. The closed set is built from
-# vault search results only, so a temporal question would otherwise be
-# forced to cite a stale vault note as "the last thing". We detect these
-# questions and exempt them from the grounding gate (same escape hatch as
-# IDK), letting the model answer from conversation history it can already
-# see. See issue #85.
-_TEMPORAL_PATTERNS: list[str] = [
-    "what were we working on",
-    "what were we doing",
-    "what did we do",
-    "what was the last",
-    "what's the last",
-    "what is the last",
-    "last thing",
-    "most recent",
-    "recently",
-    "what have we",
-    "what have you been",
-    "where did we leave off",
-    "where were we",
-    "what was i doing",
-    "what was i working on",
-    "what did i ask",
-    "what did i say",
-    "earlier",
-    "before this",
-    "what happened last",
-]
-
-
-def detect_temporal_question(text: str) -> bool:
-    """Return True if ``text`` is a temporal/recency question.
-
-    Used to exempt recency questions from the closed-set citation gate so
-    the model can ground "what were we working on last?" in the PRIOR
-    CONVERSATION section rather than being forced to cite a stale vault
-    note. Fast string scan — no LLM call, no I/O.
-    """
-    if not text:
-        return False
-    _low = text.lower()
-    return any(p in _low for p in _TEMPORAL_PATTERNS)
-
-
-# ── Conversational-answer detection ───────────────────────────────────
-# Casual greetings and small-talk ("hi", "sup homie", "hey Sean, ready")
-# are NOT factual claims — they carry no vault content to ground, so the
-# grounding gate would otherwise false-alarm (0% grounded) and force a
-# redundant second model call to re-cite a greeting. We detect these short
-# conversational answers and exempt them from the grounding retry (same
-# escape hatch as IDK and temporal questions). See issue #334.
-#
-# The signal is LENGTH: an answer at or under ``conversational_max_len``
-# chars is too short to be a substantive multi-claim answer needing vault
-# grounding. A greeting can still carry a [[wikilink]] (e.g. to a chat-log
-# note) — the point is not to punish brevity, only to skip the pointless
-# re-citation retry on casual replies.
-def detect_conversational(answer: str, max_len: int | None = None) -> bool:
-    """Return True if ``answer`` is a short conversational/casual reply.
-
-    A reply is conversational when it is at or under ``max_len`` chars
-    (default ``TUNABLES.conversational_max_len``). This is a fast string
-    scan — no LLM call, no I/O. It lets the grounding gate skip the
-    re-citation retry on greetings and small-talk that carry no vault
-    content to ground (issue #334).
-    """
-    if not answer:
-        return False
-    cap = max_len if max_len is not None else TUNABLES.conversational_max_len
-    return len(answer.strip()) <= cap
-
-
-# ── Coaching/planning user-turn detection ─────────────────────────────
-# Student life/coaching prompts ("what should I do today", "help me
-# prioritize", "I'm exhausted") are not factual-knowledge claims. For
-# these turns, enforcing per-sentence vault citations causes false alarms
-# and awkward invented citations. We detect these user intents and exempt
-# the final answer from the closed-set grounding retry.
-_COACHING_PATTERNS: list[str] = [
-    "what should i do today",
-    "plan my day",
-    "help me prioritize",
-    "prioritize my",
-    "i'm tired",
-    "im tired",
-    "i am tired",
-    "burned out",
-    "burnt out",
-    "overwhelmed",
-    "should i skip",
-    "study plan",
-    "time block",
-    "schedule my",
-    "what should i focus on",
-    "too much to do",
-    "i have too much",
-    "need motivation",
-    "feeling stressed",
-    "help me balance",
-]
-
-_COACHING_STRONG_TOKENS: set[str] = {
-    "burnout",
-    "burned",
-    "burnt",
-    "overwhelmed",
-    "stress",
-    "stressed",
-    "tired",
-    "exhausted",
-    "prioritize",
-    "schedule",
-    "study",
-    "balance",
-    "motivation",
-    "time",
-    "block",
-}
-
-_COACHING_WEAK_TOKENS: set[str] = {
-    "help",
-    "today",
-    "plan",
-    "focus",
-    "should",
-    "manage",
-    "need",
-    "feel",
-    "do",
-}
-
-
-def classify_coaching_turn(text: str) -> tuple[str, float]:
-    """Classify a user turn as coaching-like or knowledge-oriented.
-
-    Returns ``("coaching", confidence)`` when the message looks like
-    planning/life-management coaching, ``("knowledge", 0.0)`` for general
-    factual queries, and ``("unknown", 0.0)`` for empty/invalid input.
-    """
-    if not isinstance(text, str) or not text.strip():
-        return "unknown", 0.0
-
-    normalized = re.sub(r"[^a-z0-9\s]", " ", text.lower()).strip()
-    words = set(normalized.split())
-
-    phrase_hits = sum(1 for phrase in _COACHING_PATTERNS if phrase in normalized)
-    strong_hits = len(words & _COACHING_STRONG_TOKENS)
-    weak_hits = len(words & _COACHING_WEAK_TOKENS)
-
-    score = (strong_hits * 1.0) + (weak_hits * 0.5) + (phrase_hits * 1.5)
-    if phrase_hits > 0 or score >= 2.0:
-        confidence = min(1.0, 0.35 + (0.15 * score))
-        return "coaching", round(confidence, 3)
-
-    return "knowledge", 0.0
-
-
-def detect_coaching_turn(text: str) -> bool:
-    """Return True when the user turn is coaching/planning oriented.
-
-    This is a fast keyword/phrase scan on the USER message (not the model
-    answer). It is intentionally narrow: only clear life-management intents
-    are exempted from grounding retries.
-    """
-    label, _ = classify_coaching_turn(text)
-    return label == "coaching"
 
 
 # ── Reprimand ─────────────────────────────────────────────────────────

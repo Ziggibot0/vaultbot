@@ -277,8 +277,9 @@ def _is_researchable_topic(gap: dict[str, Any]) -> bool:
         topic = (gap.get("topic") or "").strip()
         if not topic:
             return False
-        # Reject chat-log titles â€” they are conversation logs, not concepts.
-        if topic.lower().startswith("chat-"):
+        # Reject session-log event titles — they are conversation traces,
+        # not concepts.
+        if topic.lower().startswith("event-"):
             return False
         if _PLACEHOLDER_RE.match(topic):
             return False
@@ -397,7 +398,7 @@ class KnowledgeCurriculum:
                 link-density sink signal (default 5).
             diversity_window: how many recently-completed topics the diversity
                 bonus penalizes against (default 5).
-            skip_vaultbot_paths: drop thin notes under Memory/Chat/ or
+            skip_vaultbot_paths: drop thin notes under Memory/Logs/ or
                 Knowledge/Research/ (the bot's own outputs) so the
                 curriculum doesn't chase its own drafts.
         """
