@@ -40,7 +40,14 @@ def resolve_path(
     file_path: str, backend_root: Path, allow_create: bool = False
 ) -> Path | None:
     """Resolve a path relative to the vault root, restricted to the vault
-    directory so the agent can't write outside it."""
+    directory so the agent can't write outside it.
+
+    When a workspace is selected, resolves against the workspace root.
+    Otherwise falls back to the dual-root resolver (vault root, then repo
+    root) so repo-facing files (README.md, AGENTS.md, vaultbot_backend/)
+    are reachable — the split-layout fix for issue #341. A ``..`` that
+    escapes both roots returns None (the caller blocks the write).
+    """
     if not file_path:
         return None
     from workspace import WorkspaceError, workspace_registry
@@ -53,15 +60,29 @@ def resolve_path(
         return workspace_registry.resolve_project_path(
             file_path, allow_create=allow_create
         )
+    # No workspace selected. First try the passed-in root (the vault root,
+    # or a monkeypatched temp root in tests) so existing behavior and test
+    # isolation are preserved. If the file isn't there, fall back to the
+    # dual-root resolver (vault root, then repo root) so repo-facing files
+    # (README.md, AGENTS.md, vaultbot_backend/) are reachable — the
+    # split-layout fix for issue #341.
     candidate = (backend_root / file_path).resolve()
-    # Must be inside the vault root.
     try:
         candidate.relative_to(backend_root.resolve())
     except ValueError:
-        return None
-    if not allow_create and not candidate.exists():
-        return None
-    return candidate
+        candidate = None
+    if candidate is not None and (allow_create or candidate.exists()):
+        return candidate
+    from paths import resolve_write_path
+
+    resolved = resolve_write_path(file_path)
+    if resolved is not None:
+        return resolved
+    # Create-new case: resolve_write_path falls back to the vault root for
+    # brand-new files, but only if it stays inside the vault root.
+    if allow_create and candidate is not None:
+        return candidate
+    return None
 
 
 def backup_path(target: Path, backend_root: Path, trash_dir: Path) -> Path:
