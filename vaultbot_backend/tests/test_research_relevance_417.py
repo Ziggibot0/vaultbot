@@ -165,7 +165,7 @@ class TestAllowlistZeroHitRetry:
             0,
             TOPIC,
             source_allowlist=["jedi.readthedocs.io"],
-            source_denylist=None,
+            source_denylist=[],
         )
         assert any("site:" in q for q in calls)  # first tried the site: round
         assert any("site:" not in q for q in calls)  # then the bare retry
