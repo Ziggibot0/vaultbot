@@ -75,7 +75,7 @@ echo "  Installing dependencies (this takes a few minutes)..."
 "$VENV_PYTHON" -m pip install -r "$VAULT_PATH/vaultbot_backend/requirements.txt" 2>&1 | tail -3
 
 # Verify key deps importable
-for mod in fastapi uvicorn requests bs4 faiss watchdog numpy dotenv; do
+for mod in fastapi uvicorn requests bs4 faiss watchdog numpy dotenv duckdb openpyxl; do
     if "$VENV_PYTHON" -c "import $mod" 2>/dev/null; then ok "import $mod"
     else fail "import $mod"; fi
 done

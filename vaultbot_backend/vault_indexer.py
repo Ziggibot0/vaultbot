@@ -29,6 +29,7 @@ from embedding_utils import (
     split_into_chunks,
 )
 from ollama_client import OllamaClient
+from table_catalog import inspect_table, is_supported_table
 from vault_watcher import IGNORED_DIRS, VaultChangeHandler, _is_ignored_path
 from watchdog.observers import Observer
 
@@ -48,7 +49,7 @@ __all__ = [
 # instead of full content). On load, if the persisted version doesn't match,
 # the index is rebuilt from scratch so every vector reflects the current
 # embedding strategy. See embedding_text_for_note.
-EMBEDDING_SCHEMA_VERSION = 4
+EMBEDDING_SCHEMA_VERSION = 5
 
 
 class VaultIndexer:
@@ -307,11 +308,10 @@ class VaultIndexer:
     def _add_file_to_index(self, file_path: Path):
         """Read a file, compute embedding, and add to index."""
         try:
-            with open(file_path, encoding="utf-8") as f:
-                content = f.read()
+            content, source_metadata = self._indexable_content(file_path)
         except FileNotFoundError:
             return  # file was deleted between the watcher event and open — normal race
-        except OSError as e:  # permission error / IO error
+        except (OSError, ValueError) as e:  # permission, IO, or malformed table
             _logger.warning(f"Error reading file {file_path}: {e}")
             return
 
@@ -351,8 +351,36 @@ class VaultIndexer:
                 _logger.warning("trigger store update failed for %s: %s", file_path, e)
 
         self._add_embedding_to_index(
-            file_path, embedding, last_modified, content_hash, content_preview=content
+            file_path,
+            embedding,
+            last_modified,
+            content_hash,
+            content_preview=content,
+            source_metadata=source_metadata,
         )
+
+    @staticmethod
+    def _indexable_content(file_path: Path) -> tuple[str, dict[str, Any]]:
+        """Return compact retrieval text and typed metadata for a source."""
+        if is_supported_table(file_path):
+            descriptors = inspect_table(file_path)
+            if len(descriptors) == 1:
+                descriptor = descriptors[0]
+                return descriptor.embedding_text(), descriptor.to_metadata()
+            return "\n\n".join(
+                descriptor.embedding_text() for descriptor in descriptors
+            ), {
+                "source_type": "table",
+                "file_path": str(file_path.resolve()),
+                "name": file_path.stem,
+                "format": file_path.suffix.lower().lstrip("."),
+                "sheets": [descriptor.to_metadata() for descriptor in descriptors],
+                "sheet_count": len(descriptors),
+                "row_count": sum(descriptor.row_count for descriptor in descriptors),
+            }
+        return file_path.read_text(encoding="utf-8", errors="replace"), {
+            "source_type": "note"
+        }
 
     def _add_embedding_to_index(
         self,
@@ -361,6 +389,7 @@ class VaultIndexer:
         last_modified: float,
         content_hash: str,
         content_preview: str = "",
+        source_metadata: dict[str, Any] | None = None,
     ):
         """Add a pre-computed embedding to the index (shared by single and batch paths).
 
@@ -420,8 +449,18 @@ class VaultIndexer:
             "last_modified": last_modified,
             "content_hash": content_hash,
         }
-        # Cache the bounded preview so future searches skip the disk read.
-        if self.preview_chars > 0 and content_preview:
+        if source_metadata:
+            meta_entry.update(source_metadata)
+        # Table content is already a bounded catalog representation and must
+        # always be cached; falling back to disk would expose raw rows as
+        # retrieval context. Note previews remain user-configurable.
+        if (
+            content_preview
+            and source_metadata
+            and source_metadata.get("source_type") == "table"
+        ):
+            meta_entry["content_preview"] = content_preview
+        elif self.preview_chars > 0 and content_preview:
             meta_entry["content_preview"] = content_preview[: self.preview_chars]
         self._metadata[faiss_id] = meta_entry
         self._path_to_id[abs_path_str] = faiss_id
@@ -663,15 +702,25 @@ class VaultIndexer:
         """Scan the vault for markdown files, skipping ignored directories."""
         return [p for p in self.vault_path.rglob("*.md") if not _is_ignored_path(p)]
 
+    def _collect_indexable_files(self) -> list[Path]:
+        """Scan the vault for notes and supported tables."""
+        return [
+            path
+            for path in self.vault_path.rglob("*")
+            if path.is_file()
+            and not _is_ignored_path(path)
+            and (path.suffix.lower() == ".md" or is_supported_table(path))
+        ]
+
     def load(self):
         """Load a persisted index quickly without making Ollama calls."""
         _logger.info("Loading vault index...")
         # _load_index already ran in __init__; just report the state.
         total = self.index.ntotal if self.index is not None else 0
-        md_files = self._collect_md_files()
+        indexable_files = self._collect_indexable_files()
         _logger.info(
             f"Loaded index with {total} vectors. "
-            f"{len(md_files)} markdown files in vault."
+            f"{len(indexable_files)} indexable files in vault."
         )
 
     def index_missing_or_changed(self):
@@ -680,7 +729,7 @@ class VaultIndexer:
         This is safe to run in the background.
         """
         _logger.info("Starting background vault indexing...")
-        md_files = self._collect_md_files()
+        indexable_files = self._collect_indexable_files()
         changed_or_missing = []
 
         # Build a quick lookup from metadata by file path.
@@ -694,10 +743,10 @@ class VaultIndexer:
             _logger.info(
                 "[migration] Forcing full re-embed of all %d notes "
                 "(embedding schema version changed).",
-                len(md_files),
+                len(indexable_files),
             )
 
-        for file_path in md_files:
+        for file_path in indexable_files:
             key = str(file_path)
             meta = meta_by_path.get(key)
             if meta is None:
@@ -720,12 +769,13 @@ class VaultIndexer:
                 changed_or_missing.append(file_path)
 
         # Also detect deleted files and remove them from the index.
-        current_paths = {str(p) for p in md_files}
+        current_paths = {str(p) for p in indexable_files}
         removed_paths = [Path(p) for p in meta_by_path if p not in current_paths]
 
         _logger.info(
             f"Background indexing: {len(changed_or_missing)} changed/missing, "
-            f"{len(removed_paths)} removed out of {len(md_files)} total files."
+            f"{len(removed_paths)} removed out of "
+            f"{len(indexable_files)} total files."
         )
 
         for file_path in removed_paths:
@@ -848,6 +898,21 @@ class VaultIndexer:
                     "file_path": str(file_path),
                     "content": content,
                     "score": float(distance),  # L2 distance, smaller is more similar
+                    **{
+                        key: meta[key]
+                        for key in (
+                            "source_type",
+                            "name",
+                            "format",
+                            "columns",
+                            "column_types",
+                            "row_count",
+                            "null_counts",
+                            "sheets",
+                            "sheet_count",
+                        )
+                        if key in meta
+                    },
                 }
             )
         self._log_tool(

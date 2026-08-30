@@ -271,6 +271,24 @@ async def execute_round_tools(
                         _fp,
                         tool_result.get("content", ""),
                     )
+            elif (
+                tool_name == "table_query"
+                and isinstance(tool_result, dict)
+                and tool_result.get("status") == "success"
+            ):
+                _provenance = tool_result.get("provenance") or {}
+                _sources = [_provenance.get("source", "")]
+                _join = _provenance.get("join") or {}
+                if _join.get("source"):
+                    _sources.append(_join["source"])
+                for _fp in _sources:
+                    if _fp:
+                        add_citation_target(
+                            st._allowed_citations,
+                            _fp,
+                            json.dumps(_provenance, default=str),
+                            source_type="table",
+                        )
         except Exception:  # noqa: BLE001 — best-effort, never break the tool
             pass
 

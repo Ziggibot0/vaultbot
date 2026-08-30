@@ -17,6 +17,7 @@ import logging
 import threading
 from pathlib import Path
 
+from table_catalog import is_supported_table
 from watchdog.events import FileSystemEventHandler
 
 _logger = logging.getLogger(__name__)
@@ -36,6 +37,11 @@ IGNORED_DIRS = {
 
 def _is_ignored_path(path: Path) -> bool:
     return any(part in IGNORED_DIRS for part in path.parts)
+
+
+def _is_indexable_path(path: str | Path) -> bool:
+    candidate = Path(path)
+    return candidate.suffix.lower() == ".md" or is_supported_table(candidate)
 
 
 class VaultChangeHandler(FileSystemEventHandler):
@@ -98,7 +104,7 @@ class VaultChangeHandler(FileSystemEventHandler):
                 _logger.warning("Error processing %s: %s", path, e)
 
     def on_modified(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and _is_indexable_path(event.src_path):
             if _is_ignored_path(Path(event.src_path)):
                 return
             with self._lock:
@@ -112,7 +118,7 @@ class VaultChangeHandler(FileSystemEventHandler):
             self._schedule_flush()
 
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and _is_indexable_path(event.src_path):
             if _is_ignored_path(Path(event.src_path)):
                 return
             with self._lock:
@@ -120,7 +126,7 @@ class VaultChangeHandler(FileSystemEventHandler):
             self._schedule_flush()
 
     def on_deleted(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and _is_indexable_path(event.src_path):
             if _is_ignored_path(Path(event.src_path)):
                 return
             with self._lock:
@@ -134,7 +140,10 @@ class VaultChangeHandler(FileSystemEventHandler):
         (the old path becomes a ghost). Watchdog fires on_moved for both
         renames and directory moves.
         """
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and (
+            _is_indexable_path(event.src_path)
+            or _is_indexable_path(getattr(event, "dest_path", ""))
+        ):
             dest_path = getattr(event, "dest_path", "")
             if not dest_path:
                 return

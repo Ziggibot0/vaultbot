@@ -107,6 +107,7 @@ def add_citation_target(
     allowed: dict[str, dict[str, str]],
     file_path: str,
     snippet: str = "",
+    source_type: str = "note",
 ) -> dict[str, dict[str, str]]:
     """Register a note as a valid citation target (mid-loop tool retrieval).
 
@@ -125,7 +126,11 @@ def add_citation_target(
     if not stem:
         return allowed
     if stem not in allowed:
-        allowed[stem] = {"file_path": file_path, "snippet": (snippet or "")[:300]}
+        allowed[stem] = {
+            "file_path": file_path,
+            "snippet": (snippet or "")[:300],
+            "source_type": source_type,
+        }
     return allowed
 
 
@@ -191,7 +196,12 @@ def score_grounding(
             # Only check ones that ARE in the allowed set; if the model
             # invented a wikilink not in the set, that's already counted
             # in missing_from_set.
-            if wl in allowed and not graph_lookup(wl):
+            target = allowed.get(wl, {})
+            if (
+                wl in allowed
+                and target.get("source_type", "note") == "note"
+                and not graph_lookup(wl)
+            ):
                 missing_from_vault.append(wl)
 
     sentences = _split_sentences(answer)
