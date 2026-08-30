@@ -111,6 +111,9 @@ jobs:
         # pytest, httpx2, uv).
         run: uv sync --frozen --extra dev
 
+      - name: Requirements lock synchronization (HARD GATE)
+        run: uv run python vaultbot_backend/scripts/check_requirements_sync.py
+
       - name: "Ruff check â€” full rule set (HARD GATE)"
         # The full rule set (E, F, W, I, B, UP, SIM, RUF, BLE001, FAST) is
         # now a hard gate. The ~1500 violations of pre-existing style debt
