@@ -323,7 +323,10 @@ def source_relevance(
         'communicate' catches 'communication', 'communicating', etc. but NOT
         'community' (unrelated). For shorter terms, use exact substring match.
         For multi-word phrases (e.g., 'sea shells'), also try the de-spaced
-        variant ('seashells') — many sources use compound words.
+        variant ('seashells') — many sources use compound words. Mirror rule
+        (issue #417): hyphenated terms like 'go-to-definition' also try the
+        hyphens→spaces form ('go to definition') — docs routinely spell
+        hyphenated concepts with spaces.
         """
         if s in text:
             return True
@@ -331,6 +334,16 @@ def source_relevance(
         if " " in s:
             despaced = s.replace(" ", "")
             if despaced in text:
+                return True
+        # Hyphenated term: also try the hyphens→spaces form
+        # ("go-to-definition" → "go to definition") — issue #417.
+        if "-" in s:
+            respaced = s.replace("-", " ")
+            if respaced in text:
+                return True
+            # And the fully-joined form ("go-to-definition" → "gotodefinition")
+            joined = s.replace("-", "")
+            if joined != s and joined in text:
                 return True
         if len(s) >= 7:
             stem_len = max(7, len(s) - 3)
