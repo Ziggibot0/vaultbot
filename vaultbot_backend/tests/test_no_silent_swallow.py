@@ -77,10 +77,22 @@ def _except_body_is_silent_swallower(handler_body: list[ast.stmt]) -> bool:
     """Check if an except handler body is a silent swallower.
 
     Returns True when the body returns a literal empty value AND doesn't
-    call any surfacing function (notify_problem, log, raise, print).
+    call any surfacing function (notify_problem, log, raise, print), or
+    when the only logging is a ``logger.debug`` call (invisible in
+    production — issue #245). ``logger.error/warning/exception`` count as
+    surfacing.
     """
     # Convert the body to source to check for surfacing patterns.
     body_source = ast.unparse(ast.Module(body=handler_body, type_ignores=[]))
+
+    # A body whose only logging is logger.debug is a silent swallow: debug
+    # is invisible in production, so the failure is masked. Require a
+    # visible log level (error/warning/exception) or a noqa justification.
+    if "logger.debug" in body_source and "noqa" not in body_source:
+        # Still allow if it ALSO surfaces via another mechanism.
+        _other = body_source.replace("logger.debug", "")
+        if not any(p in _other for p in _SURFACING_PATTERNS if p != "logger."):
+            return True
 
     # If any surfacing pattern is present, it's not silent.
     for pattern in _SURFACING_PATTERNS:
