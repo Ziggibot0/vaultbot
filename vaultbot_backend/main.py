@@ -41,6 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from forum_backends import ForumEnhancedFreeSearch  # noqa: E402
 from fused_retrieval import FusedRetriever  # noqa: E402
 from graph_ops import GraphOpRegistry  # noqa: E402
+from http_middleware import AuthMiddleware, RateLimitMiddleware  # noqa: E402
 from identity import Identity  # noqa: E402
 from knowledge_curriculum import KnowledgeCurriculum  # noqa: E402
 from lazy_condenser import LazyCondenser  # noqa: E402
@@ -429,26 +430,7 @@ app.add_middleware(
 # requests are also rate-limited). Per-endpoint limits prevent a buggy
 # agentic loop or malicious local process from hammering the backend.
 # See rate_limit.py for the full design.
-from rate_limit import is_rate_allowed  # noqa: E402
-from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
-from starlette.responses import JSONResponse  # noqa: E402
-
-
-class _RateLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        client = request.client.host if request.client else "127.0.0.1"
-        if not is_rate_allowed(request.url.path, client):
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "detail": "Rate limit exceeded. Please wait before "
-                    "sending more requests."
-                },
-            )
-        return await call_next(request)
-
-
-app.add_middleware(_RateLimitMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # ── Auth middleware ─────────────────────────────────────────────────────
 # Shared-secret token guard for sensitive endpoints. The token is a
@@ -460,47 +442,7 @@ app.add_middleware(_RateLimitMiddleware)
 # Health/preflight endpoints are exempt (the plugin needs them before it
 # can read the token file). When VAULTBOT_SKIP_AUTH=1 (test mode), auth is
 # bypassed entirely so the test client can call endpoints without a token.
-from auth import (  # noqa: E402
-    get_or_create_token,
-    is_auth_disabled,
-    is_auth_exempt,
-    is_auth_required_for_method,
-)
-
-
-class _AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        path = request.url.path.rstrip("/") or "/"
-        if is_auth_exempt(path):
-            return await call_next(request)
-        if not is_auth_required_for_method(path, request.method):
-            # Non-sensitive endpoints are trusted from localhost.
-            return await call_next(request)
-        # Sensitive endpoint — validate the token.
-        token = request.headers.get("X-VaultBot-Token")
-        if token is None and path == "/shutdown":
-            # sendBeacon can't set headers — accept ?token= query param.
-            token = request.query_params.get("token")
-        if is_auth_disabled():
-            return await call_next(request)
-        if token is None:
-            return JSONResponse(
-                status_code=401, content={"detail": "missing auth token"}
-            )
-        try:
-            expected = get_or_create_token()
-        except Exception:
-            return JSONResponse(status_code=503, content={"detail": "auth unavailable"})
-        import secrets as _secrets
-
-        if not _secrets.compare_digest(token, expected):
-            return JSONResponse(
-                status_code=401, content={"detail": "invalid auth token"}
-            )
-        return await call_next(request)
-
-
-app.add_middleware(_AuthMiddleware)
+app.add_middleware(AuthMiddleware)
 
 # Default global session logger for startup/shutdown and background tasks.
 default_session_logger = SessionLogger()
