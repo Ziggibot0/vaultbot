@@ -48,3 +48,23 @@ class TestLlmGenerateBounds:
         # the wrapper at all.
         preamble = _build_tool_preamble(["vault_search"])
         assert "def llm_generate" not in preamble
+
+
+class TestCodeSemanticPreamble:
+    """issue #418 — code_semantic wrapper injected for navigation tools."""
+
+    def test_injects_wrapper_when_allowed(self):
+        preamble = _build_tool_preamble(["code_semantic"])
+        assert "from custom_tools.code_semantic import run" in preamble
+        assert "def code_semantic(" in preamble
+        assert 'namespace["code_semantic"] = code_semantic' in preamble
+
+    def test_wrapper_passes_args_through(self):
+        preamble = _build_tool_preamble(["code_semantic"])
+        assert '"op": op' in preamble
+        assert '"symbol": symbol' in preamble
+        assert '"max_results": max_results' in preamble
+
+    def test_not_injected_when_not_allowed(self):
+        preamble = _build_tool_preamble(["code_read"])
+        assert "code_semantic" not in preamble
