@@ -194,7 +194,38 @@ async def finalize_turn(
             # admissions of ignorance. We still score (for logging) but
             # don't trigger a retry or append a caution.
             _is_idk = detect_idk(final_answer)
-            _score = score_grounding(final_answer, _allowed, _graph_lookup)
+
+            # ── Wikilink repair (issue #335) ─────────────────────────────
+            # The model sometimes mangles the exact stem of a note it IS
+            # allowed to cite ("[[Chat- sup- homie]]" for "Chat-sup-homie").
+            # Rewrite those links against the closed set BEFORE scoring, so
+            # the user gets clickable citations and the gate doesn't burn a
+            # retry on a typo. The repair universe is the closed set itself
+            # (plus a graph-verified fallback), so it can never map a
+            # hallucinated title to a vault note the model wasn't shown.
+            _repaired_answer = final_answer
+            _repair_pairs: list[tuple[str, str]] = []
+            if _allowed and not _is_idk:
+                try:
+                    from custom_tools.wikilink_repair import (
+                        repair_wikilinks_in_text,
+                    )
+
+                    _repaired_answer, _repair_pairs = repair_wikilinks_in_text(
+                        final_answer, _allowed
+                    )
+                    if _repair_pairs:
+                        final_answer = _repaired_answer
+                        session_logger.log(
+                            "wikilinks_repaired",
+                            {"repairs": _repair_pairs[:10]},
+                        )
+                except Exception as _e:  # noqa: BLE001 — repair is best-effort; scoring still runs on the raw answer
+                    session_logger.log("wikilink_repair_failed", {"error": str(_e)})
+
+            _score = score_grounding(
+                final_answer, _allowed, _graph_lookup, _repair_pairs
+            )
             session_logger.log(
                 "grounding_check",
                 {
