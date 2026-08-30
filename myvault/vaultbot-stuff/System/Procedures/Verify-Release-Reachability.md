@@ -10,6 +10,10 @@ applies_to:
   - releases
   - self-update
   - versioning
+depends_on:
+  - "[[Diagnose-Self-Update-Incomplete]]"
+  - "[[Plugin-Reload]]"
+  - "[[Backend-Restart]]"
 allowed_tools:
   - code_run
   - web_read_source
