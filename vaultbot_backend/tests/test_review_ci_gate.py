@@ -5,12 +5,15 @@ CI (check-runs all "success"). A pending/failing/unknown CI status blocks
 the merge. No network access — gh_api is monkeypatched.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 pytestmark = pytest.mark.unit
 
 from custom_tools import gh_client
 from custom_tools import review_contributions as rc
+from workspace import workspace_registry
 
 
 def _make_pr(number=1, sha="abc123"):
@@ -210,3 +213,25 @@ def test_review_only_does_not_merge(monkeypatch):
     assert r["ci_status"] == "success"
     assert "merged" not in r
     assert calls["merge"] == []
+
+
+def test_merge_blocked_for_external_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(gh_client, "gh_available", lambda: True)
+    monkeypatch.setattr(
+        workspace_registry,
+        "get",
+        lambda: SimpleNamespace(
+            local_root=str(tmp_path / "external-project"),
+            owner="example",
+            repository="project",
+        ),
+    )
+    api_calls = []
+    monkeypatch.setattr(
+        gh_client, "gh_api", lambda *args, **kwargs: api_calls.append(args)
+    )
+
+    result = rc.run({"pr_number": 1, "merge": True})
+
+    assert "Automatic merge is disabled" in result["error"]
+    assert api_calls == []

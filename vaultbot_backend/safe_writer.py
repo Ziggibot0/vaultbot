@@ -43,6 +43,16 @@ def resolve_path(
     directory so the agent can't write outside it."""
     if not file_path:
         return None
+    from workspace import WorkspaceError, workspace_registry
+
+    try:
+        selected = workspace_registry.get()
+    except WorkspaceError:
+        return None
+    if selected is not None:
+        return workspace_registry.resolve_project_path(
+            file_path, allow_create=allow_create
+        )
     candidate = (backend_root / file_path).resolve()
     # Must be inside the vault root.
     try:

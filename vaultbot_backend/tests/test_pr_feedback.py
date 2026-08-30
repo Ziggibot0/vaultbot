@@ -8,7 +8,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from custom_tools import gh_client
+from custom_tools import gh_client, upstream_identity
 from custom_tools import pr_feedback as pf
 
 
@@ -126,6 +126,20 @@ def test_returns_pr_state(fake_gh):
     assert result["state"] == "open"
     assert result["merged"] is False
     assert result["mergeable"] is True
+
+
+def test_uses_selected_workspace_identity(fake_gh, monkeypatch):
+    monkeypatch.setattr(
+        upstream_identity, "resolve_upstream", lambda: ("example", "project")
+    )
+
+    result = pf.run({"pr_number": 67})
+
+    assert "error" not in result
+    assert fake_gh["api"]
+    assert all(
+        path.startswith("repos/example/project/") for _, path, _ in fake_gh["api"]
+    )
 
 
 def test_returns_ci_checks(fake_gh):

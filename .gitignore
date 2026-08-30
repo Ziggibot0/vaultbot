@@ -6,6 +6,8 @@
 .env.local
 .env.*.local
 providers.json
+.vaultbot-workspace.json
+.vaultbot-workspaces/
 providers.json.tmp
 vaultbot_backend/.vaultbot_auth_token
 vaultbot_backend/google_workspace_config.json

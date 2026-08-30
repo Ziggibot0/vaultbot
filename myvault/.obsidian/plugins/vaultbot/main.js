@@ -195,6 +195,71 @@ class VaultBotPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	async fetchWorkspace() {
+		try {
+			const response = await fetch(this.settings.backendUrl + '/workspace', {
+				headers: this._authHeaders(),
+			});
+			return await response.json();
+		} catch (error) {
+			return {status: 'error', error: error.message || String(error)};
+		}
+	}
+
+	async selectWorkspace(localRoot) {
+		const response = await fetch(this.settings.backendUrl + '/workspace/select', {
+			method: 'POST',
+			headers: this._authHeaders({'Content-Type': 'application/json'}),
+			body: JSON.stringify({local_root: localRoot}),
+		});
+		const payload = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(payload.detail || 'Could not select workspace');
+		return payload;
+	}
+
+	async fetchWorkspaceRepositories() {
+		const response = await fetch(this.settings.backendUrl + '/workspace/repositories', {
+			headers: this._authHeaders(),
+		});
+		const payload = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(payload.detail || 'Could not list repositories');
+		return payload.repositories || [];
+	}
+
+	async cloneWorkspace(fullName) {
+		const response = await fetch(this.settings.backendUrl + '/workspace/clone', {
+			method: 'POST',
+			headers: this._authHeaders({'Content-Type': 'application/json'}),
+			body: JSON.stringify({full_name: fullName}),
+		});
+		const payload = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(payload.detail || 'Could not clone repository');
+		return payload;
+	}
+
+	async disconnectWorkspace() {
+		const response = await fetch(this.settings.backendUrl + '/workspace', {
+			method: 'DELETE', headers: this._authHeaders(),
+		});
+		const payload = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(payload.detail || 'Could not disconnect workspace');
+		return payload;
+	}
+
+	async chooseWorkspaceFolder() {
+		let dialog = null;
+		try { dialog = require('@electron/remote').dialog; } catch (error) {}
+		if (!dialog) {
+			try { dialog = require('electron').remote.dialog; } catch (error) {}
+		}
+		if (!dialog) throw new Error('The folder picker is unavailable in this Obsidian build.');
+		const result = await dialog.showOpenDialog({
+			title: 'Choose development workspace',
+			properties: ['openDirectory'],
+		});
+		return result.canceled || !result.filePaths.length ? null : result.filePaths[0];
+	}
+
 	_ensureIgnoredDirs() {
 		// Add VaultBot's internal directories to Obsidian's userIgnoreFilters
 		// so Obsidian's file watcher doesn't fire on every backend file write.
@@ -1916,6 +1981,89 @@ class VaultBotSettingTab extends PluginSettingTab {
 						this.plugin.stopMcpServer();
 					}
 				}));
+
+		// ── Development workspace ───────────────────────────────────────
+		containerEl = addSection('Development Workspace', true);
+		const workspaceStatusEl = containerEl.createEl('div', {
+			attr: {style: 'font-size:0.85em;line-height:1.5;margin-bottom:10px;'},
+		});
+		const workspaceActionsEl = containerEl.createDiv({
+			attr: {style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;'},
+		});
+		const chooseFolderBtn = workspaceActionsEl.createEl('button', {text: 'Choose local folder'});
+		const disconnectWorkspaceBtn = workspaceActionsEl.createEl('button', {text: 'Disconnect'});
+		const repositoryRow = containerEl.createDiv({
+			attr: {style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;'},
+		});
+		const repositorySelect = repositoryRow.createEl('select');
+		repositorySelect.style.flex = '1';
+		repositorySelect.style.minWidth = '220px';
+		const refreshRepositoriesBtn = repositoryRow.createEl('button', {text: 'Refresh'});
+		const cloneRepositoryBtn = repositoryRow.createEl('button', {text: 'Clone and use', cls: 'mod-cta'});
+
+		const renderWorkspace = async () => {
+			const result = await this.plugin.fetchWorkspace();
+			const workspace = result && result.workspace;
+			if (workspace) {
+				workspaceStatusEl.setText(`${workspace.owner}/${workspace.repository}\n${workspace.local_root}\nBranch: ${workspace.default_branch}`);
+				workspaceStatusEl.style.whiteSpace = 'pre-wrap';
+				disconnectWorkspaceBtn.disabled = false;
+			} else {
+				workspaceStatusEl.setText(result && result.error ? result.error : 'No development workspace selected.');
+				disconnectWorkspaceBtn.disabled = true;
+			}
+		};
+
+		const loadRepositories = async () => {
+			repositorySelect.empty();
+			repositorySelect.createEl('option', {text: 'Loading repositories...', attr: {disabled: true}});
+			try {
+				const repositories = await this.plugin.fetchWorkspaceRepositories();
+				repositorySelect.empty();
+				if (!repositories.length) {
+					repositorySelect.createEl('option', {text: 'No repositories available', attr: {disabled: true}});
+				}
+				for (const repository of repositories) {
+					repositorySelect.createEl('option', {
+						text: `${repository.private ? 'Private: ' : ''}${repository.full_name}`,
+						attr: {value: repository.full_name},
+					});
+				}
+			} catch (error) {
+				repositorySelect.empty();
+				repositorySelect.createEl('option', {text: error.message, attr: {disabled: true}});
+			}
+		};
+
+		chooseFolderBtn.addEventListener('click', async () => {
+			try {
+				const folder = await this.plugin.chooseWorkspaceFolder();
+				if (!folder) return;
+				await this.plugin.selectWorkspace(folder);
+				new Notice('Development workspace selected.');
+				await renderWorkspace();
+			} catch (error) { new Notice(error.message || String(error)); }
+		});
+		disconnectWorkspaceBtn.addEventListener('click', async () => {
+			try {
+				await this.plugin.disconnectWorkspace();
+				new Notice('Development workspace disconnected.');
+				await renderWorkspace();
+			} catch (error) { new Notice(error.message || String(error)); }
+		});
+		refreshRepositoriesBtn.addEventListener('click', loadRepositories);
+		cloneRepositoryBtn.addEventListener('click', async () => {
+			if (!repositorySelect.value) return;
+			cloneRepositoryBtn.disabled = true;
+			try {
+				await this.plugin.cloneWorkspace(repositorySelect.value);
+				new Notice('Repository cloned and selected.');
+				await renderWorkspace();
+			} catch (error) { new Notice(error.message || String(error)); }
+			finally { cloneRepositoryBtn.disabled = false; }
+		});
+		renderWorkspace();
+		loadRepositories();
 
 		// ── AI Models & Providers (the interchangeable "pot") ────────────
 		// One places to add provider connections (one-time API key) and

@@ -108,7 +108,19 @@ def resolve_upstream(backend_dir: str | None = None) -> tuple[str, str]:
             valid owner/repo.  The error message tells the operator exactly
             what to add to ``.env``.
     """
-    # ── 1. Env vars (explicit operator config — highest priority) ────────
+    # An explicitly selected development workspace is authoritative for all
+    # project operations. Its local root and GitHub identity were validated
+    # together when selected, preventing filesystem/GitHub split-brain.
+    from workspace import WorkspaceError, workspace_registry
+
+    try:
+        selected = workspace_registry.get()
+    except WorkspaceError as exc:
+        raise UpstreamIdentityError(str(exc)) from exc
+    if selected is not None:
+        return selected.owner, selected.repository
+
+    # ── 1. Env vars (legacy configuration when no workspace is selected) ─
     env_owner = os.environ.get("UPSTREAM_OWNER", "").strip()
     env_repo = os.environ.get("UPSTREAM_REPO", "").strip()
     if env_owner and env_repo:
