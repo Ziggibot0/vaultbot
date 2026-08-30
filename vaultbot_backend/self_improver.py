@@ -286,6 +286,7 @@ class SelfImprover:
         "vault_graph.py",
         "note_creator.py",
         "research_engine.py",
+        "research_source_acquirer.py",
         "fused_retrieval.py",
         "amem_evolution.py",
         "knowledge_curriculum.py",
