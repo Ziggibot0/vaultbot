@@ -10,9 +10,10 @@ import logging
 import os
 import time
 from collections.abc import Generator
-from typing import Any, ClassVar
+from typing import Any
 
 import requests
+from ollama_runtime import OllamaRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ def merge_leading_system_messages(
 
 
 class OllamaClient(_BASE):
+    # Compatibility aliases for callers/tests that inspect the process-wide
+    # context probe caches.
+    _ctx_win_cache = OllamaRuntime._ctx_win_cache
+    _ctx_win_fail_cache = OllamaRuntime._ctx_win_fail_cache
+
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
@@ -80,6 +86,7 @@ class OllamaClient(_BASE):
         # batches (8 concurrent) and the streaming chat loop no longer pay a
         # fresh connection handshake per request.
         self._session = requests.Session()
+        self._runtime = OllamaRuntime(self)
         # keep_alive duration sent with every chat/generate request so Ollama
         # keeps the model resident in GPU memory between calls.  Default 30m
         # covers a typical session's idle gaps.  Override with
@@ -132,125 +139,20 @@ class OllamaClient(_BASE):
     # resident, so we can skip a redundant preload.
 
     def is_model_loaded(self, model: str | None = None) -> bool:
-        """Check whether the model is currently resident in Ollama's memory.
+        """Return whether the model is ready, including cloud models.
 
-        Queries /api/ps (running models).  Returns True if the model is
-        loaded and ready, False if it's cold (or Ollama is unreachable).
-
-        Cloud models (``:cloud`` suffix, e.g. ``glm-5.2:cloud``) are proxied
-        through Ollama but never resident in local memory — /api/ps will
-        never list them.  Return True immediately so the chat-loop model-
-        load wait doesn't spin the full 300s timeout on every turn.
+        Unreachable local runtimes are reported as not loaded.
         """
-        model = model or self.llm_model
-        if not model:
-            return False
-        if model.endswith(":cloud") or ":cloud:" in model:
-            return True
-        try:
-            resp = self._session.get(f"{self.base_url}/api/ps", timeout=5)
-            resp.raise_for_status()
-            loaded = resp.json().get("models", [])
-            # /api/ps returns model names with ":latest" expanded; compare
-            # by prefix so "qwen3.6:27b" matches "qwen3.6:27b" exactly.
-            for m in loaded:
-                name = m.get("name", "") or m.get("model", "")
-                if name == model or name.startswith(model + ":"):
-                    return True
-            return False
-        except Exception as e:  # noqa: BLE001 — best-effort probe, returns False — see CONTRIBUTING.md no-silent-fallbacks
-            # Always surface: log to the session logger if set, and to the
-            # module logger regardless, so an Ollama-down or a programming
-            # bug is never silently swallowed as "model not loaded".
-            logger.debug("is_model_loaded error for %r: %s", model, e)
-            if self.session_logger:
-                self.session_logger.log("ollama_is_loaded_error", {"model": model})
-            return False
+        return self._runtime.is_model_loaded(model)
 
     def preload_model(
         self, model: str | None = None, keep_alive: str | None = None
     ) -> bool:
-        """Force-load the model into Ollama's memory so the next chat request
-        doesn't pay the cold-load latency (up to 5 min for large models).
+        """Load the model before its next request and retain it in memory.
 
-        Sends a minimal /api/generate request (1 token, no system prompt)
-        with a long keep_alive.  The request itself returns quickly once the
-        model is loaded — the time is spent on the load, not the generation.
-
-        Returns True if the model is now loaded, False on any failure
-        (Ollama down, model not found, etc.).  Never raises — callers run
-        this in background threads and can't handle exceptions there.
+        Returns False rather than raising when preloading fails.
         """
-        model = model or self.llm_model
-        if not model:
-            return False
-        # Already resident? Skip the round-trip.
-        if self.is_model_loaded(model):
-            if self.session_logger is not None:
-                self.session_logger.log(
-                    "model_preload_skipped",
-                    {"model": model, "reason": "already_loaded"},
-                )
-            return True
-        ka = keep_alive or self._keep_alive
-        # Pass num_ctx so the model is loaded with the right context window
-        # allocated upfront — otherwise the first real chat request triggers
-        # a context resize (unload + reload) even after preload.
-        #
-        # CRITICAL: apply the SAME VAULTBOT_NUM_CTX_CAP as chat() does (line
-        # ~803). If preload uses the uncapped native context (e.g. 262144)
-        # but chat() caps it (32768), Ollama must unload+reload the model on
-        # the first chat request. For dense models like qwen3.8 this reload
-        # takes 30+ seconds; combined with a cold load it exceeds Ollama's
-        # 60s internal timeout and returns a 500. MoE models like qwen3.6
-        # can resize in-place (~2.7s) so the mismatch was invisible there.
-        _opts = {"num_predict": 1, "temperature": 0}
-        try:
-            _ctx = self.context_window(model)
-            _cap = int(os.environ.get("VAULTBOT_NUM_CTX_CAP", "32768"))
-            if _cap > 0 and _ctx and _ctx > _cap:
-                _ctx = _cap
-            if _ctx and _ctx > 0:
-                _opts["num_ctx"] = _ctx
-        except Exception:  # noqa: BLE001 — best-effort context detection
-            pass
-        t0 = time.time()
-        try:
-            resp = self._session.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": model,
-                    "prompt": "",
-                    "stream": False,
-                    "options": _opts,
-                    "keep_alive": ka,
-                },
-                timeout=600,  # large models can take minutes to load
-            )
-            resp.raise_for_status()
-            loaded = self.is_model_loaded(model)
-            if self.session_logger is not None:
-                self.session_logger.log(
-                    "model_preloaded",
-                    {
-                        "model": model,
-                        "keep_alive": ka,
-                        "already_loaded": loaded,
-                        "duration_ms": (time.time() - t0) * 1000,
-                    },
-                )
-            return True
-        except Exception as e:
-            if self.session_logger is not None:
-                self.session_logger.log(
-                    "model_preload_failed",
-                    {
-                        "model": model,
-                        "error": str(e),
-                        "duration_ms": (time.time() - t0) * 1000,
-                    },
-                )
-            return False
+        return self._runtime.preload_model(model, keep_alive)
 
     def list_local_models(self) -> list[str]:
         """Return model names installed in the local Ollama daemon.
@@ -274,94 +176,12 @@ class OllamaClient(_BASE):
     def list_models(self) -> list[str]:
         return self.list_local_models()
 
-    # Per-instance cache: model name → context window size.  A model's
-    # context window never changes at runtime, but /api/show is a blocking
-    # HTTP call that takes 1-5s for cloud models.  Caching it saves 7-10
-    # round-trips per chat turn (called from chat(), generate(), preflight
-    # compression, and the token meter).
-    _ctx_win_cache: ClassVar[dict[str, int]] = {}
-    # Negative cache (model -> monotonic timestamp of last failed probe).
-    # Without it, a dead/slow Ollama re-pays the full connect+read timeout
-    # from EVERY caller on EVERY turn — multiplying one hung /api/show
-    # into a multi-second stall at each call site (the fresh-laptop
-    # "idles at budgeting context" report, 2026-08-29). Within the TTL the
-    # failure re-raises immediately with no HTTP; after it, one re-probe
-    # is allowed. A success clears the entry. TTL is read per-call so ops
-    # can tune VAULTBOT_CTX_PROBE_FAIL_TTL without a restart.
-    _ctx_win_fail_cache: ClassVar[dict[str, float]] = {}
-
     def context_window(self, model: str | None = None) -> int:
-        """Return the model's native context-window size in tokens.
+        """Return the model's cached native context-window size in tokens.
 
-        Queries Ollama's /api/show for the model and extracts the
-        architecture-prefixed ``*.context_length`` field from ``model_info``
-        (e.g. ``qwen35moe.context_length``, ``glm5.2.context_length``).
-        Works for both local and cloud (``:cloud``) Ollama models — both
-        return the same show metadata shape.
-
-        Results are cached per-instance — a model's context window never
-        changes at runtime, so we only hit /api/show once per model.
-        FAILED probes are negative-cached for ``VAULTBOT_CTX_PROBE_FAIL_TTL``
-        seconds (default 300) so a hung Ollama isn't re-probed from every
-        call site every turn; within the TTL the failure re-raises without
-        a new HTTP attempt.
-
-        Raises on any failure — the caller must know the context window is
-        unknown rather than silently getting a wrong 32768.
+        Probe failures are negative-cached briefly and re-raised.
         """
-        model = model or self.llm_model
-        if not model:
-            raise ValueError(
-                "context_window: no model specified and no default model set"
-            )
-        if model in self._ctx_win_cache:
-            return self._ctx_win_cache[model]
-        _fail_at = self._ctx_win_fail_cache.get(model)
-        if _fail_at is not None:
-            _ttl = float(os.environ.get("VAULTBOT_CTX_PROBE_FAIL_TTL", "300") or "300")
-            if (time.monotonic() - _fail_at) < _ttl:
-                raise RuntimeError(
-                    f"context_window: probe for {model!r} failed recently "
-                    f"(negative-cached); not re-probing until TTL "
-                    f"({_ttl:.0f}s) expires"
-                )
-            # TTL expired — forget the failure and allow one re-probe.
-            del self._ctx_win_fail_cache[model]
-        try:
-            resp = self._session.post(
-                f"{self.base_url}/api/show", json={"model": model}, timeout=15
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            info = data.get("model_info") or {}
-            # The key is "<arch>.context_length" — find it generically.
-            for key, val in info.items():
-                if key.endswith(".context_length") and isinstance(val, (int, float)):
-                    result = int(val)
-                    self._ctx_win_cache[model] = result
-                    self._ctx_win_fail_cache.pop(model, None)
-                    return result
-            # Some older Ollama builds expose it under parameters as a
-            # "num_ctx" string like "262144".
-            params = data.get("parameters") or ""
-            if isinstance(params, str):
-                for tok in params.split():
-                    if tok.startswith("num_ctx") and ":" in tok:
-                        # "num_ctx" or "num_ctx:262144"
-                        result = int(tok.split(":")[-1])
-                        self._ctx_win_cache[model] = result
-                        self._ctx_win_fail_cache.pop(model, None)
-                        return result
-            raise RuntimeError(
-                f"context_window: /api/show returned no context_length "
-                f"for model {model!r}"
-            )
-        except Exception as e:
-            # Negative-cache the failure so sibling call sites in this
-            # same turn (and the next turn) don't each re-pay the probe.
-            self._ctx_win_fail_cache[model] = time.monotonic()
-            self._log_tool("context_window", {"model": model}, error=str(e))
-            raise
+        return self._runtime.context_window(model)
 
     def get_model_capabilities(self, model: str | None = None) -> dict[str, bool]:
         """Return capability flags (vision, instruct) for a model.
@@ -382,59 +202,7 @@ class OllamaClient(_BASE):
         is configured (empty string). On any actual API error, raises so
         the dropdown doesn't silently show wrong capability flags.
         """
-        # None → use the configured model (convenience for callers that
-        # don't specify). Empty string → genuinely no model, return defaults.
-        if model is None:
-            model = self.llm_model
-        if not model:
-            return {"vision": False, "instruct": True}
-        try:
-            resp = self._session.post(
-                f"{self.base_url}/api/show", json={"model": model}, timeout=15
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            # Vision: Ollama includes projector_info only when a vision
-            # projector is attached to the model.
-            vision = False
-            for key in data:
-                if key.startswith("projector_info"):
-                    vision = True
-                    break
-            # Also check model_info for a vision-specific arch key
-            # (some models embed the projector info under model_info).
-            if not vision:
-                info = data.get("model_info") or {}
-                for key in info:
-                    if "projector" in key.lower() or "vision" in key.lower():
-                        vision = True
-                        break
-            # Instruct: heuristic — check families + model name for
-            # instruct/chat markers, and exclude embed models.
-            instruct = True
-            details = data.get("details") or {}
-            details.get("families") or []
-            name_lower = (model or "").lower()
-            # Embed models are not instruct models.
-            if "embed" in name_lower:
-                instruct = False
-            # Base models (no chat template) are not instruct models.
-            # Ollama exposes templates; if there's no chat template, it's
-            # likely a base model. We check the templates field.
-            templates = data.get("templates") or {}
-            if (
-                isinstance(templates, dict)
-                and not templates.get("chat")
-                and "base" in name_lower
-            ):
-                # No chat template → probably a base/completion model.
-                # But some models use a different template key, so only
-                # flag as non-instruct if we also see "base" in the name.
-                instruct = False
-            return {"vision": vision, "instruct": instruct}
-        except Exception as e:
-            self._log_tool("get_model_capabilities", {"model": model}, error=str(e))
-            raise
+        return self._runtime.get_model_capabilities(model)
 
     def _log_tool(
         self,
