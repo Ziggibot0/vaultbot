@@ -65,7 +65,8 @@ python -m venv vaultbot_venv
 # No activation needed — invoke the venv's python directly:
 vaultbot_venv/Scripts/python.exe -m pip install -r vaultbot_backend/requirements.txt   # Windows
 # or: vaultbot_venv/bin/python -m pip install -r vaultbot_backend/requirements.txt       # macOS/Linux
-ollama pull qwen3.6:latest nomic-embed-text
+# Match the installer defaults: chat, small classification, then embeddings.
+ollama pull qwen3:latest qwen3.5:4b nomic-embed-text
 copy .env.example .env   # Windows
 # or: cp .env.example .env   # macOS/Linux
 # Then fill in your values in .env.
