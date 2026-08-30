@@ -42,6 +42,68 @@ class _FakeResponse:
         }
 
 
+class _RecordingLogger:
+    def __init__(self):
+        self.invocations = []
+
+    def log_llm_invocation(self, **data):
+        self.invocations.append(data)
+
+    def log_tool_call(self, **data):
+        pass
+
+
+class _StreamingResponse(_FakeResponse):
+    def iter_lines(self):
+        yield b'data: {"choices":[{"delta":{"content":"hello"}}]}'
+        yield b'data: {"choices":[{"delta":{"content":" world"}}]}'
+
+
+class TestInvocationOutcomes:
+    def test_failed_request_emits_one_invocation(self, monkeypatch):
+        logger = _RecordingLogger()
+
+        def fail_post(url, **kwargs):
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr("llm_client.requests.post", fail_post)
+        client = OpenAICompatibleClient(
+            base_url="http://localhost:13305",
+            api_key="",
+            llm_model="test-model",
+            session_logger=logger,
+        )
+
+        with pytest.raises(RuntimeError, match="offline"):
+            client.chat(messages=[{"role": "user", "content": "hello"}])
+
+        assert len(logger.invocations) == 1
+        assert logger.invocations[0]["outcome"] == "failed"
+        assert logger.invocations[0]["token_source"] == "estimated"
+
+    def test_closed_stream_emits_one_cancelled_invocation(self, monkeypatch):
+        logger = _RecordingLogger()
+        monkeypatch.setattr(
+            "llm_client.requests.post",
+            lambda url, **kwargs: _StreamingResponse(kwargs.get("json") or {}),
+        )
+        client = OpenAICompatibleClient(
+            base_url="http://localhost:13305",
+            api_key="",
+            llm_model="test-model",
+            session_logger=logger,
+        )
+
+        stream = client.chat(
+            messages=[{"role": "user", "content": "hello"}], stream=True
+        )
+        assert next(stream)["response"] == "hello"
+        stream.close()
+
+        assert len(logger.invocations) == 1
+        assert logger.invocations[0]["outcome"] == "cancelled"
+
+
 class TestThinkDisablesReasoning:
     """issue #137 — think=False must disable reasoning on OpenAI-compat backends."""
 

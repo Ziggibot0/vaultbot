@@ -60,6 +60,20 @@ the proof itself is not demonstrated yet:
 
 The mission is the direction. The work is getting there.
 
+### Energy estimates
+
+The lightning-bolt icon in Obsidian opens VaultBot's energy dashboard. It
+records each LLM invocation's provider, model role, and reported or estimated
+token counts, then applies coefficients that you supply for each model. No
+energy coefficients ship with VaultBot: hardware, quantization, provider
+infrastructure, and measurement method all materially change the result.
+
+The dashboard is an estimate, not a power meter. It shows 7-, 30-, and 90-day
+totals, per-day activity, coefficient coverage, and a comparison against using
+the configured big model for eligible non-vision calls. Session logs created
+before invocation telemetry was introduced are explicitly excluded rather than
+retrofitted with guessed attribution.
+
 For the full strategic vision, see
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 

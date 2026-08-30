@@ -99,6 +99,42 @@ class LLMClient:
     llm_model: str
     base_url: str
 
+    def set_invocation_context(self, **context: Any) -> None:
+        """Set context consumed by the next chat invocation only."""
+        self._next_invocation_context = {
+            key: value for key, value in context.items() if value is not None
+        }
+
+    def _emit_invocation(
+        self,
+        *,
+        prompt_tokens: int,
+        completion_tokens: int,
+        token_source: str,
+        stream: bool,
+        duration_ms: float,
+        outcome: str = "success",
+    ) -> None:
+        context = getattr(self, "_next_invocation_context", {})
+        self._next_invocation_context = {}
+        logger = getattr(self, "session_logger", None)
+        if logger is None or not hasattr(logger, "log_llm_invocation"):
+            return
+        logger.log_llm_invocation(
+            role=getattr(self, "_registry_role", "unknown"),
+            model_id=getattr(self, "_registry_model_id", self.llm_model),
+            provider_id=getattr(self, "_registry_provider_id", "unknown"),
+            provider_type=getattr(self, "_registry_provider_type", "unknown"),
+            model=self.llm_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            token_source=token_source,
+            stream=stream,
+            duration_ms=duration_ms,
+            outcome=outcome,
+            context=context,
+        )
+
     def set_model(self, model: str) -> None:
         raise NotImplementedError
 
@@ -460,6 +496,21 @@ class OpenAICompatibleClient(LLMClient):
             )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            prompt_tokens = (
+                sum(
+                    len(str(message.get("content", "") or ""))
+                    for message in payload["messages"]
+                )
+                // 4
+            )
+            self._emit_invocation(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                token_source="estimated",
+                stream=stream,
+                duration_ms=(time.time() - t0) * 1000,
+                outcome="failed",
+            )
             self._log(
                 "chat",
                 inputs={"model": self.llm_model, "stream": stream},
@@ -490,6 +541,29 @@ class OpenAICompatibleClient(LLMClient):
             outputs={"tool_calls": len(tool_calls)},
             duration_ms=(time.time() - t0) * 1000,
         )
+        usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+        token_source = "reported"
+        if prompt_tokens == 0 and completion_tokens == 0:
+            prompt_tokens = (
+                sum(
+                    len(str(message.get("content", "") or ""))
+                    for message in payload["messages"]
+                )
+                // 4
+            )
+            completion_tokens = max(
+                1, (len(result["response"]) + len(result["thinking"])) // 4
+            )
+            token_source = "estimated"
+        self._emit_invocation(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            token_source=token_source,
+            stream=False,
+            duration_ms=(time.time() - t0) * 1000,
+        )
         return result
 
     def _stream_chat(
@@ -504,6 +578,10 @@ class OpenAICompatibleClient(LLMClient):
         # Per-index accumulator: index -> {"id","name","arguments_str"}
         tc_acc: dict[int, dict[str, str]] = {}
         chunk_count = 0
+        prompt_tokens = completion_tokens = 0
+        response_chars = thinking_chars = 0
+        completed = False
+        outcome = "success"
         try:
             for raw in response.iter_lines():
                 if not raw:
@@ -522,10 +600,17 @@ class OpenAICompatibleClient(LLMClient):
                     data = json.loads(body)
                 except json.JSONDecodeError:
                     continue
+                usage = data.get("usage") or {}
+                prompt_tokens = int(usage.get("prompt_tokens", prompt_tokens) or 0)
+                completion_tokens = int(
+                    usage.get("completion_tokens", completion_tokens) or 0
+                )
                 choice = (data.get("choices") or [{}])[0]
                 delta = choice.get("delta", {}) or {}
                 content = delta.get("content") or ""
                 reasoning = delta.get("reasoning") or ""
+                response_chars += len(content)
+                thinking_chars += len(reasoning)
                 # Accumulate tool-call fragments.
                 for tc in delta.get("tool_calls") or []:
                     idx = tc.get("index", 0)
@@ -566,7 +651,9 @@ class OpenAICompatibleClient(LLMClient):
                         yield {"response": "", "thinking": "", "tool_calls": assembled}
                         chunk_count += 1
                     break
+            completed = True
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            outcome = "failed"
             self._log(
                 "chat",
                 inputs={"model": self.llm_model, "stream": True},
@@ -575,12 +662,33 @@ class OpenAICompatibleClient(LLMClient):
             )
             raise
         finally:
+            if not completed and outcome == "success":
+                outcome = "cancelled"
             self._active_stream_response = None
             self._log(
                 "chat",
                 inputs={"model": self.llm_model, "stream": True},
                 outputs={"chunks": chunk_count, "tool_calls": len(tc_acc)},
                 duration_ms=(time.time() - t0) * 1000,
+            )
+            token_source = "reported"
+            if prompt_tokens == 0 and completion_tokens == 0:
+                prompt_tokens = (
+                    sum(
+                        len(str(message.get("content", "") or ""))
+                        for message in payload["messages"]
+                    )
+                    // 4
+                )
+                completion_tokens = max(1, (response_chars + thinking_chars) // 4)
+                token_source = "estimated"
+            self._emit_invocation(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                token_source=token_source,
+                stream=True,
+                duration_ms=(time.time() - t0) * 1000,
+                outcome=outcome,
             )
         # Terminal done sentinel (signals end of stream to the chat handler).
         yield {"done": True}
@@ -658,6 +766,9 @@ def build_role_client(
     client = _client_for_model_entry(entry, provider, session_logger)
     with contextlib.suppress(Exception):
         client._registry_model_id = mid  # type: ignore[attr-defined]
+        client._registry_role = role  # type: ignore[attr-defined]
+        client._registry_provider_id = provider.id  # type: ignore[attr-defined]
+        client._registry_provider_type = provider.type  # type: ignore[attr-defined]
     _ROLE_CLIENT_CACHE[role] = client
     return client
 

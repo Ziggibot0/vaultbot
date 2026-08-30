@@ -95,6 +95,48 @@ def test_log_turn_cost_omits_cost_when_none(tmp_path: Path) -> None:
     assert "model" not in tc["data"]
 
 
+def test_log_llm_invocation_emits_immutable_execution_facts(tmp_path: Path) -> None:
+    s = SessionLogger(log_dir=str(tmp_path))
+    invocation_id = s.log_llm_invocation(
+        role="small",
+        model_id="ollama-local:qwen3:4b",
+        provider_id="ollama-local",
+        provider_type="ollama",
+        model="qwen3:4b",
+        prompt_tokens=120,
+        completion_tokens=30,
+        token_source="reported",
+        stream=True,
+        duration_ms=42.126,
+        context={"turn_index": 2, "round": 1, "purpose": "agentic_chat"},
+    )
+    s.close()
+
+    events = _read_events(s._file_path)
+    event = next(e for e in events if e.get("event") == "llm_invocation")
+    data = event["data"]
+    assert data["invocation_id"] == invocation_id
+    assert data["role"] == "small"
+    assert data["model_id"] == "ollama-local:qwen3:4b"
+    assert data["provider_id"] == "ollama-local"
+    assert data["provider_type"] == "ollama"
+    assert data["model"] == "qwen3:4b"
+    assert data["prompt_tokens"] == 120
+    assert data["completion_tokens"] == 30
+    assert data["total_tokens"] == 150
+    assert data["token_source"] == "reported"
+    assert data["stream"] is True
+    assert data["duration_ms"] == 42.13
+    assert data["outcome"] == "success"
+    assert data["context"] == {
+        "turn_index": 2,
+        "round": 1,
+        "purpose": "agentic_chat",
+    }
+    assert "energy_wh" not in data
+    assert "energy_saved_wh" not in data
+
+
 def test_log_turn_efficiency_emits_correct_schema(tmp_path: Path) -> None:
     s = SessionLogger(log_dir=str(tmp_path))
     s.log_turn_efficiency(
@@ -259,3 +301,32 @@ def test_report_empty_log_returns_zero_turns(tmp_path: Path) -> None:
     report = session_orchestration_report(empty)
     assert report["summary"]["turn_count"] == 0
     assert report["turns"] == []
+
+
+def test_report_attaches_multiple_invocations_to_one_turn(tmp_path: Path) -> None:
+    s = SessionLogger(log_dir=str(tmp_path))
+    s.log("chat_begin", {"user_message": "run a mixed-model procedure"})
+    for role, model_id, tokens in (
+        ("small", "local:small", (100, 20)),
+        ("big", "cloud:big", (200, 40)),
+    ):
+        s.log_llm_invocation(
+            role=role,
+            model_id=model_id,
+            provider_id=model_id.split(":", 1)[0],
+            provider_type="ollama" if role == "small" else "openai",
+            model=model_id.split(":", 1)[1],
+            prompt_tokens=tokens[0],
+            completion_tokens=tokens[1],
+            token_source="reported",
+            stream=False,
+            duration_ms=10,
+            context={"turn_index": 1, "purpose": "procedure_step"},
+        )
+    s.close()
+
+    report = session_orchestration_report(s._file_path)
+
+    assert len(report["turns"][0]["llm_invocations"]) == 2
+    assert report["summary"]["llm_invocation_count"] == 2
+    assert report["summary"]["llm_invocation_tokens"] == 360

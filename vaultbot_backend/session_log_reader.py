@@ -71,6 +71,7 @@ _EVENT_CATEGORIES: dict[str, str] = {
     "prompt_built": "llm",
     "prompt_cache_structure": "llm",
     "token_usage": "llm",
+    "llm_invocation": "llm",
     "token_usage_emit_failed": "llm",
     # error
     "exception": "error",
@@ -210,7 +211,7 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
     have chat_begin/assistant_response events.
 
     Returns a dict with: title, session_id, started_at, events_count,
-    turns, tool_calls, exceptions, console_errors, token_totals.
+    turns, tool_calls, llm_invocations, exceptions, console_errors, token_totals.
     """
     lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
     title = "New Session"
@@ -219,6 +220,7 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
     token_totals: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
     turns: list[dict[str, Any]] = []
     tool_calls: dict[Any, dict[str, Any]] = {}
+    llm_invocations: list[dict[str, Any]] = []
     exceptions: list[dict[str, Any]] = []
     console_errors: list[str] = []
     event_count = 0
@@ -249,6 +251,22 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
             )
             token_totals["completion_tokens"] = data.get(
                 "completion_tokens", token_totals["completion_tokens"]
+            )
+        elif ev == "llm_invocation":
+            llm_invocations.append(
+                {
+                    "invocation_id": data.get("invocation_id"),
+                    "role": data.get("role", "unknown"),
+                    "model_id": data.get("model_id", "unknown"),
+                    "provider_id": data.get("provider_id", "unknown"),
+                    "prompt_tokens": data.get("prompt_tokens", 0),
+                    "completion_tokens": data.get("completion_tokens", 0),
+                    "total_tokens": data.get("total_tokens", 0),
+                    "token_source": data.get("token_source", "unknown"),
+                    "outcome": data.get("outcome", "unknown"),
+                    "context": data.get("context") or {},
+                    "timestamp": _format_timestamp(ts),
+                }
             )
         # ── Conversation (canonical events, Fix #3) ──────────────
         elif ev == "chat_begin":
@@ -369,6 +387,7 @@ def parse_session_log(file_path: Path) -> dict[str, Any]:
         "events_count": event_count,
         "turns": turns,
         "tool_calls": tool_call_list,
+        "llm_invocations": llm_invocations,
         "exceptions": exceptions,
         "console_errors": console_errors,
         "token_totals": token_totals,

@@ -91,6 +91,7 @@ def session_orchestration_report(
                 "tool_rounds": 0,
                 "completion_outcome": None,
                 "repeated_tool_calls": [],
+                "llm_invocations": [],
             }
         return _by_turn[idx]
 
@@ -149,6 +150,13 @@ def session_orchestration_report(
             t["repeated_tool_calls"] = data.get("repeated_tool_calls", [])
             continue
 
+        if ev == "llm_invocation":
+            context = data.get("context") or {}
+            ti = context.get("turn_index", _seq)
+            t = _ensure_turn(ti)
+            t["llm_invocations"].append(data)
+            continue
+
         # Advance the sequential counter on chat_begin so events without
         # explicit turn_index still group correctly.
         if ev == "chat_begin":
@@ -164,6 +172,8 @@ def session_orchestration_report(
     total_tool_rounds = 0
     repeated_flag_count = 0
     outcome_counts: dict[str, int] = {}
+    invocation_count = 0
+    invocation_tokens = 0
 
     for t in turns:
         r = t["route"] or "unknown"
@@ -178,6 +188,11 @@ def session_orchestration_report(
             repeated_flag_count += 1
         oc = t["completion_outcome"] or "unknown"
         outcome_counts[oc] = outcome_counts.get(oc, 0) + 1
+        invocation_count += len(t["llm_invocations"])
+        invocation_tokens += sum(
+            int(invocation.get("total_tokens", 0) or 0)
+            for invocation in t["llm_invocations"]
+        )
 
     n_turns = len(turns)
     summary: dict[str, Any] = {
@@ -190,6 +205,8 @@ def session_orchestration_report(
         "total_tool_latency_ms": round(total_tool_latency, 2),
         "turns_with_repeated_tool_calls": repeated_flag_count,
         "completion_outcomes": outcome_counts,
+        "llm_invocation_count": invocation_count,
+        "llm_invocation_tokens": invocation_tokens,
     }
     if n_turns:
         summary["avg_tool_latency_ms_per_turn"] = round(total_tool_latency / n_turns, 2)

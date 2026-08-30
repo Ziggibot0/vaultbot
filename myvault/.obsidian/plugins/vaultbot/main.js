@@ -69,12 +69,26 @@ class VaultBotPlugin extends Plugin {
 			this.openSidebar();
 		});
 
+		this.addRibbonIcon('zap', 'VaultBot energy', () => {
+			this.openEnergyDashboard();
+		});
+
+		this.addCommand({
+			id: 'open-vaultbot-energy-dashboard',
+			name: 'Open energy dashboard',
+			callback: () => this.openEnergyDashboard(),
+		});
+
 		this.addSettingTab(new VaultBotSettingTab(this.app, this));
 
 		const backendUrl = this.settings.backendUrl;
 		this.registerView(
 			'vaultbot-sidebar',
 			(leaf) => new VaultBotSidebarView(leaf, backendUrl, this)
+		);
+		this.registerView(
+			'vaultbot-energy',
+			(leaf) => new VaultBotEnergyView(leaf, this)
 		);
 
 		// First-run health gate: if the vault lives inside a cloud-sync
@@ -332,6 +346,12 @@ class VaultBotPlugin extends Plugin {
 		this.app.workspace.revealLeaf(leaf);
 	}
 
+	async openEnergyDashboard() {
+		const leaf = this.app.workspace.getRightLeaf(false);
+		await leaf.setViewState({type: 'vaultbot-energy', state: {}});
+		this.app.workspace.revealLeaf(leaf);
+	}
+
 	async isBackendRunning() {
 		// Probe liveness. Use GET throughout: the backend registers /health as
 		// a GET handler, and FastAPI returns 405 Method Not Allowed for HEAD on
@@ -483,6 +503,26 @@ class VaultBotPlugin extends Plugin {
 			if (!r.ok) return null;
 			return await r.json();   // {models, roles:{big,small,vision}}
 		} catch (e) { return null; }
+	}
+	async fetchEnergyReport(days = 30) {
+		const r = await fetch(this.settings.backendUrl + '/energy/report?days=' + encodeURIComponent(days), {headers: this._authHeaders()});
+		if (!r.ok) throw new Error('Could not load the energy report');
+		return await r.json();
+	}
+	async fetchEnergyProfiles() {
+		const r = await fetch(this.settings.backendUrl + '/energy/profiles', {headers: this._authHeaders()});
+		if (!r.ok) throw new Error('Could not load energy profiles');
+		return await r.json();
+	}
+	async saveEnergyProfile(modelId, profile) {
+		const r = await fetch(this.settings.backendUrl + '/energy/profiles/' + encodeURIComponent(modelId), {
+			method: 'PUT',
+			headers: this._authHeaders({'Content-Type': 'application/json'}),
+			body: JSON.stringify(profile),
+		});
+		const data = await r.json().catch(() => ({}));
+		if (!r.ok) throw new Error(data.detail || 'Could not save energy profile');
+		return data;
 	}
 	async addModelCfg({id, model, provider, vision, instruct, label}) {
 		try {
@@ -1916,6 +1956,122 @@ class VaultBotPlugin extends Plugin {
 		} finally {
 			this.backendStarting = false;
 		}
+	}
+}
+
+
+class VaultBotEnergyView extends ItemView {
+	constructor(leaf, plugin) {
+		super(leaf);
+		this.plugin = plugin;
+		this.days = 30;
+	}
+
+	getViewType() { return 'vaultbot-energy'; }
+	getDisplayText() { return 'VaultBot Energy'; }
+	getIcon() { return 'zap'; }
+
+	async onOpen() { await this.render(); }
+	async onClose() { this.contentEl.empty(); }
+
+	async render() {
+		const root = this.contentEl;
+		root.empty();
+		root.addClass('vaultbot-energy-view');
+		const head = root.createDiv({cls: 'vaultbot-energy-head'});
+		head.createEl('h2', {text: 'Energy estimate'});
+		const ranges = head.createDiv({cls: 'vaultbot-energy-ranges'});
+		for (const days of [7, 30, 90]) {
+			const button = ranges.createEl('button', {text: `${days}d`});
+			if (days === this.days) button.addClass('is-active');
+			button.addEventListener('click', async () => {
+				this.days = days;
+				await this.render();
+			});
+		}
+		const status = root.createDiv({cls: 'vaultbot-energy-status', text: 'Loading estimates...'});
+		try {
+			const [report, profileData] = await Promise.all([
+				this.plugin.fetchEnergyReport(this.days),
+				this.plugin.fetchEnergyProfiles(),
+			]);
+			status.remove();
+			this.renderReport(root, report, profileData.profiles || []);
+		} catch (error) {
+			status.setText(`Energy report unavailable: ${error.message || error}`);
+			status.addClass('is-error');
+		}
+	}
+
+	renderReport(root, report, profiles) {
+		const totals = report.totals || {};
+		const coverage = report.coverage || {};
+		const formatEnergy = value => value == null ? 'Not available' : `${Number(value).toFixed(3)} Wh`;
+		const metrics = root.createDiv({cls: 'vaultbot-energy-metrics'});
+		for (const [label, value] of [
+			['Estimated used', totals.actual_wh],
+			['All-big comparison', totals.counterfactual_wh],
+			['Estimated saved', totals.saved_wh],
+		]) {
+			const metric = metrics.createDiv({cls: 'vaultbot-energy-metric'});
+			metric.createDiv({cls: 'vaultbot-energy-metric-label', text: label});
+			metric.createDiv({cls: 'vaultbot-energy-metric-value', text: formatEnergy(value)});
+		}
+
+		root.createEl('h3', {text: 'Daily estimate'});
+		const chart = root.createDiv({cls: 'vaultbot-energy-chart'});
+		const daily = report.daily || [];
+		const maximum = Math.max(0, ...daily.map(day => Number(day.actual_wh || 0)));
+		if (!daily.length) chart.createDiv({cls: 'vaultbot-energy-empty', text: 'No invocation telemetry in this range.'});
+		for (const day of daily) {
+			const column = chart.createDiv({cls: 'vaultbot-energy-day'});
+			const bar = column.createDiv({cls: 'vaultbot-energy-day-bar'});
+			bar.style.height = maximum > 0 ? `${Math.max(2, Number(day.actual_wh || 0) / maximum * 100)}%` : '2px';
+			column.title = `${day.date}: ${formatEnergy(day.actual_wh)}`;
+		}
+
+		root.createEl('h3', {text: 'Model estimates'});
+		const modelList = root.createDiv({cls: 'vaultbot-energy-models'});
+		for (const item of profiles) this.renderProfileRow(modelList, item);
+		if (!profiles.length) modelList.createDiv({cls: 'vaultbot-energy-empty', text: 'No models are registered.'});
+
+		const disclosure = root.createEl('details', {cls: 'vaultbot-energy-coverage'});
+		disclosure.createEl('summary', {text: 'Coverage and assumptions'});
+		const tracked = coverage.first_tracked_at ? new Date(coverage.first_tracked_at).toLocaleDateString() : 'not started';
+		disclosure.createEl('p', {text: `Estimate only. Tracking began: ${tracked}. Baseline: ${report.baseline_big_model_id || 'not configured'}.`});
+		disclosure.createEl('p', {text: `${coverage.legacy_session_files_excluded || 0} legacy session(s) excluded; ${coverage.invocations_missing_profile || 0} invocation(s) lack coefficients.`});
+	}
+
+	renderProfileRow(parent, item) {
+		const row = parent.createDiv({cls: 'vaultbot-energy-model'});
+		const roles = item.roles?.length ? ` [${item.roles.join(', ')}]` : '';
+		row.createDiv({cls: 'vaultbot-energy-model-title', text: `${item.label || item.model_id}${roles}`});
+		const controls = row.createDiv({cls: 'vaultbot-energy-profile-controls'});
+		const inputRate = controls.createEl('input', {type: 'number', attr: {min: '0', step: 'any', placeholder: 'Input Wh/1K'}});
+		const outputRate = controls.createEl('input', {type: 'number', attr: {min: '0', step: 'any', placeholder: 'Output Wh/1K'}});
+		const note = controls.createEl('input', {type: 'text', attr: {placeholder: 'Source or measurement note'}});
+		if (item.profile) {
+			inputRate.value = item.profile.wh_per_1k_input_tokens ?? '';
+			outputRate.value = item.profile.wh_per_1k_output_tokens ?? '';
+			note.value = item.profile.source_note || '';
+		}
+		const save = controls.createEl('button', {text: 'Save'});
+		save.addEventListener('click', async () => {
+			save.disabled = true;
+			try {
+				await this.plugin.saveEnergyProfile(item.model_id, {
+					wh_per_1k_input_tokens: inputRate.value === '' ? null : Number(inputRate.value),
+					wh_per_1k_output_tokens: outputRate.value === '' ? null : Number(outputRate.value),
+					source_note: note.value,
+				});
+				new Notice('Energy estimate saved.');
+				await this.render();
+			} catch (error) {
+				new Notice(error.message || String(error));
+			} finally {
+				save.disabled = false;
+			}
+		});
 	}
 }
 

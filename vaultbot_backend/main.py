@@ -964,6 +964,7 @@ set_services(svc)
 # migration order.
 from routers import config as _config_router  # noqa: E402
 from routers import custom_tools as _custom_tools_router  # noqa: E402
+from routers import energy as _energy_router  # noqa: E402
 from routers import identity as _identity_router  # noqa: E402
 from routers import llm as _llm_router  # noqa: E402
 from routers import oauth_callback as _oauth_callback_router  # noqa: E402
@@ -980,6 +981,7 @@ app.include_router(_llm_router.router)
 app.include_router(_config_router.router)
 app.include_router(_research_router.router)
 app.include_router(_custom_tools_router.router)
+app.include_router(_energy_router.router)
 app.include_router(_task_router.router)
 app.include_router(_identity_router.router)
 app.include_router(_ws_router.router)

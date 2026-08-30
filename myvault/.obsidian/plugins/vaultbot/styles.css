@@ -1,4 +1,104 @@
 /* =========================================================================
+   Energy estimate dashboard
+   ========================================================================= */
+.vaultbot-energy-view {
+	padding: 14px;
+	overflow-y: auto;
+	font-variant-numeric: tabular-nums;
+}
+
+.vaultbot-energy-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.vaultbot-energy-head h2 { margin: 0; }
+.vaultbot-energy-ranges { display: flex; gap: 4px; }
+.vaultbot-energy-ranges button { padding: 3px 8px; border-radius: 6px; }
+
+.vaultbot-energy-ranges button.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.vaultbot-energy-status { margin-top: 20px; color: var(--text-muted); }
+.vaultbot-energy-status.is-error { color: var(--text-error); }
+
+.vaultbot-energy-metrics {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin: 16px 0 20px;
+}
+
+.vaultbot-energy-metric {
+	padding: 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+}
+
+.vaultbot-energy-metric-label { font-size: 0.72em; color: var(--text-muted); }
+.vaultbot-energy-metric-value { margin-top: 4px; font-size: 1.05em; font-weight: 650; }
+
+.vaultbot-energy-chart {
+	height: 150px;
+	display: flex;
+	align-items: flex-end;
+	gap: 3px;
+	padding: 10px 4px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+	overflow-x: auto;
+}
+
+.vaultbot-energy-day {
+	height: 100%;
+	min-width: 8px;
+	flex: 1 0 8px;
+	display: flex;
+	align-items: flex-end;
+}
+
+.vaultbot-energy-day-bar {
+	width: 100%;
+	min-height: 2px;
+	background: var(--interactive-accent);
+	border-radius: 3px 3px 0 0;
+}
+
+.vaultbot-energy-empty { align-self: center; color: var(--text-muted); }
+
+.vaultbot-energy-model {
+	padding: 10px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.vaultbot-energy-model-title {
+	font-size: 0.86em;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.vaultbot-energy-profile-controls {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+	margin-top: 7px;
+}
+
+.vaultbot-energy-profile-controls input[type='text'] { grid-column: 1 / -1; }
+.vaultbot-energy-profile-controls button { justify-self: start; }
+.vaultbot-energy-coverage { margin-top: 18px; color: var(--text-muted); }
+.vaultbot-energy-coverage summary { cursor: pointer; font-weight: 600; }
+
+@media (max-width: 420px) {
+	.vaultbot-energy-metrics { grid-template-columns: 1fr; }
+	.vaultbot-energy-profile-controls { grid-template-columns: 1fr; }
+	.vaultbot-energy-profile-controls input[type='text'] { grid-column: auto; }
+}
+
+/* =========================================================================
    VaultBot Ã¢â‚¬â€ Earth-tone theme
    A warm, natural palette: bark, clay, moss, sand, stone. Soft shadows and
    rounded "river-stone" bubbles give the chat a grounded, product-quality

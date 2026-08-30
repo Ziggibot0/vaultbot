@@ -5,9 +5,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
-    # The `dependencies` label lets the auto-merge workflow (and humans)
-    # identify these PRs at a glance. Patch/minor bumps are auto-merged
-    # once CI + code-owner review pass; major bumps stay manual.
+    # The `dependencies` label lets humans identify these PRs at a glance.
+    # All dependency updates are reviewed and merged manually.
     labels:
       - "dependencies"
     commit-message:
