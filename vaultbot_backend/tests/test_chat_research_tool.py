@@ -2,9 +2,11 @@
 
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 
 import chat_research_tool as research_tool
 import pytest
+from services import Services
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +34,7 @@ def _service(**overrides):
         ),
     }
     values.update(overrides)
-    return SimpleNamespace(**values)
+    return cast(Services, SimpleNamespace(**values))
 
 
 def test_subagent_success_refreshes_graph_and_logs_events(monkeypatch):
