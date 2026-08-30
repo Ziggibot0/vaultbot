@@ -256,9 +256,7 @@ class TestAcceptancePipelineRepro:
         ]
         dead_filtered = any(
             e[0] == "research_dead_urls_filtered"
-            and any(
-                d.get("url") == SOCIALED["url"] for d in e[1].get("dead_urls", [])
-            )
+            and any(d.get("url") == SOCIALED["url"] for d in e[1].get("dead_urls", []))
             for e in events
         )
         assert rejected or dead_filtered, (
