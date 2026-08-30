@@ -207,7 +207,9 @@ async def finalize_turn(
             _repair_pairs: list[tuple[str, str]] = []
             if _allowed and not _is_idk:
                 try:
-                    from wikilink_repair import repair_wikilinks_in_text
+                    from custom_tools.wikilink_repair import (
+                        repair_wikilinks_in_text,
+                    )
 
                     _repaired_answer, _repair_pairs = repair_wikilinks_in_text(
                         final_answer, _allowed

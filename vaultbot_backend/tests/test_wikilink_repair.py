@@ -11,7 +11,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from wikilink_repair import (
+from custom_tools.wikilink_repair import (
     build_alias_map,
     repair_wikilinks_in_text,
     repair_wikilinks_verified,
