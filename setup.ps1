@@ -1,4 +1,4 @@
-﻿# ===========================================================================
+# ===========================================================================
 # VaultBot one-click installer for Windows
 #
 # Run from any folder (PowerShell):
@@ -141,7 +141,7 @@ Write-Host ""
 # VaultBot should be one paste for a non-technical user. So instead of just
 # DETECTING Python/Git/Ollama and telling the user to install them, we
 # AUTO-INSTALL them via winget when they're missing. The user never has to
-# remember "Add Python to PATH" — winget's Python installer does it for us.
+# remember "Add Python to PATH" - winget's Python installer does it for us.
 Write-Step "Checking prerequisites..."
 
 # Refresh PATH from the registry so freshly-installed tools are visible in
@@ -197,7 +197,7 @@ foreach ($launcher in @("python", "py", "python3")) {
     }
 }
 if (-not $pyOk) {
-    # Auto-install Python via winget (sets PATH for us — no "Add to PATH"
+    # Auto-install Python via winget (sets PATH for us - no "Add to PATH"
     # footgun). If winget isn't available or fails, fall back to the
     # download page.
     if (Install-ViaWinget "Python.Python.3.12" "Python 3.12") {
@@ -213,7 +213,7 @@ if (-not $pyOk) {
     }
 }
 
-# Git — needed to download and update VaultBot. Auto-install if missing.
+# Git - needed to download and update VaultBot. Auto-install if missing.
 $gitOk = $false
 try {
     $gv = & git --version 2>&1
@@ -231,7 +231,7 @@ if (-not $gitOk) {
     }
 }
 
-# Ollama — a background service, harder to fully bundle. Auto-install the
+# Ollama - a background service, harder to fully bundle. Auto-install the
 # app via winget if possible; otherwise open the download page. The user
 # still needs to run Ollama once (it starts a tray service), but we remove
 # the "find the download" step.
@@ -262,7 +262,7 @@ if (-not $ollamaOk) {
     }
 }
 
-# Obsidian — the app the user actually talks to VaultBot through. Unlike
+# Obsidian - the app the user actually talks to VaultBot through. Unlike
 # Python/Git/Ollama, the installer previously ASSUMED Obsidian was already
 # installed, so a fresh machine would reach the end, fail to open the
 # `obsidian://` deep link (no protocol handler registered), and leave the
@@ -320,7 +320,7 @@ if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
 # -- 3. Get the repo (anonymous clone, so updates merge cleanly) -----------
-# VaultBot installs as a plain `git clone` of the public upstream repo — NO
+# VaultBot installs as a plain `git clone` of the public upstream repo - NO
 # GitHub account is required to install or update. Pulling updates is
 # anonymous (`git pull upstream main`); only *pushing* (contributing) needs
 # a GitHub account, and that is opt-in later, not a gate on install.
@@ -329,7 +329,7 @@ Write-Host ""
 # in-Obsidian updater's `git pull upstream main` works out of the box.
 # When the user later opts into "Allow contributions", the
 # submit_contribution tool forks the repo and adds a `fork` remote on its
-# own — no install-time sign-in needed.
+# own - no install-time sign-in needed.
 #
 # The repo clones into a FRAMEWORK folder ($frameworkName). Inside it, the
 # `myvault/` subfolder is the user's Obsidian vault. The vault folder name
@@ -366,7 +366,7 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
         return
     }
 } else {
-    # Anonymous clone — no GitHub account required to install or update.
+    # Anonymous clone - no GitHub account required to install or update.
     # git is the only prerequisite here (gh is NOT required; it's only for
     # the optional "share fixes" contribution flow, handled later).
     $gitOk = $false
@@ -426,7 +426,7 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
     Write-OK "VaultBot downloaded (updates will merge cleanly)"
 
     # Optional: detect GitHub CLI for the contribution flow. This is NOT
-    # required to use or update VaultBot — the user only needs to sign in
+    # required to use or update VaultBot - the user only needs to sign in
     # the first time they opt into "Allow contributions" and their vaultbot
     # has something to give back. We just note availability, never gate on it.
     $ghOk = $false
@@ -439,7 +439,7 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
         try {
             & gh auth status *> $null
             if ($LASTEXITCODE -eq 0) {
-                Write-OK "GitHub CLI detected — you can share fixes with the community (optional)."
+                Write-OK "GitHub CLI detected - you can share fixes with the community (optional)."
             }
         } catch {}
     } else {
@@ -852,7 +852,7 @@ Write-Host ""
 # Try to open Obsidian deep-linked to the vault.
 #
 # The `obsidian://open` action's `path` parameter must point at a FILE
-# inside the vault, NOT the vault folder itself — Obsidian searches for the
+# inside the vault, NOT the vault folder itself - Obsidian searches for the
 # most specific vault that CONTAINS that file path, and a bare folder
 # doesn't match. So we deep-link to a real file inside the vault and let
 # Obsidian resolve the vault from it. We prefer any .md note, then fall back
