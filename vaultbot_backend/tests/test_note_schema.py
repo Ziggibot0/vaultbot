@@ -111,8 +111,10 @@ def test_path_inference_research():
 
 
 def test_path_inference_chat():
-    """Chat notes get type: chat."""
-    result = inject_schema("# Chat\n\nbody", "vaultbot-stuff/Memory/Chat/Chat-X.md")
+    """Session log events get type: chat."""
+    result = inject_schema(
+        "# Event\n\nbody", "vaultbot-stuff/Memory/Logs/sid/event-0001.md"
+    )
     fm = parse_frontmatter(result)
     assert fm.get("type") == "chat"
 
@@ -271,7 +273,7 @@ def test_heal_vault_schema_scans_all():
     try:
         # Create notes: one with schema, one without, one in a skipped dir
         os.makedirs(os.path.join(tmp, "vaultbot-stuff", "Knowledge", "Research"))
-        os.makedirs(os.path.join(tmp, "vaultbot-stuff", "Memory", "Chat"))
+        os.makedirs(os.path.join(tmp, "vaultbot-stuff", "Memory", "Logs", "sid"))
 
         with_schema = os.path.join(
             tmp, "vaultbot-stuff", "Knowledge", "Research", "Good.md"
@@ -283,7 +285,7 @@ def test_heal_vault_schema_scans_all():
             )
 
         without_schema = os.path.join(
-            tmp, "vaultbot-stuff", "Memory", "Chat", "Chat-Test.md"
+            tmp, "vaultbot-stuff", "Memory", "Logs", "sid", "event-0001.md"
         )
         with open(without_schema, "w", encoding="utf-8") as f:
             f.write("# Chat Test\n\nNo frontmatter.")

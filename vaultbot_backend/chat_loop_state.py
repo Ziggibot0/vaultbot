@@ -108,13 +108,5 @@ class TurnState:
     # tool-history sanitization). Recomputed each round, but the final value
     # is read after the loop by finalize_turn for token-cost estimation.
     _model_conversation: list = field(default_factory=list)
-
-    # Temporal/recency question flag (issue #85). When True, the grounding
-    # gate is exempted so the model can answer "what were we working on
-    # last?" from the PRIOR CONVERSATION section instead of being forced
-    # to cite a stale vault note. Set by handle_chat from the user message.
-    _is_temporal_question: bool = False
-    # Coaching/planning-turn flag (issue #277). When True, grounding retries
-    # are exempted because the user requested life-management coaching rather
-    # than vault-factual synthesis.
-    _is_coaching_turn: bool = False
+    # (temporal/recency + coaching-turn user-message flags were removed with
+    # the lexical classifiers they fed — repo rule: no keyword-list intents.)

@@ -35,7 +35,7 @@ PyMuPDF==1.28.2
 # pypdf: fallback PDF text-layer parser when PyMuPDF is unavailable.
 Pillow==12.3.0
 html2text==2025.4.15
-pypdf==6.16.1
+pypdf==6.16.2
 # psutil: used by /system/stats for CPU/RAM/disk/net resource meters.
 psutil==7.2.2
 # docker: used by searxng_manager.py to run the SearXNG container. Without

@@ -15,7 +15,7 @@ allowed_tools:
   - web_read_source
   - code_read
   - llm_generate
-summary: SUMMARY
+summary: Cross-Check-Claims
 tags:
   - procedure
   - procedures
