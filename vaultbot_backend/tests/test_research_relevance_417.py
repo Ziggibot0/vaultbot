@@ -114,8 +114,7 @@ class TestHyphenatedSignalMatch:
     def test_hyphenated_signal_matches_spaced_text(self):
         ratio, reason = source_relevance(
             "How to go to definition in Jedi",
-            "Jedi supports go to definition and find references on any "
-            "Python file.",
+            "Jedi supports go to definition and find references on any Python file.",
             ["go-to-definition", "find-references"],
             ["definition", "references"],
             url="https://jedi.readthedocs.io/x",
@@ -155,9 +154,7 @@ class TestAllowlistZeroHitRetry:
         import web_source_store
 
         monkeypatch.setattr(web_source_store, "save_source", lambda *a, **k: None)
-        monkeypatch.setattr(
-            web_source_store, "fetch_and_save", lambda *a, **k: None
-        )
+        monkeypatch.setattr(web_source_store, "fetch_and_save", lambda *a, **k: None)
         engine = ResearchEngine(
             search_client=StubSearch(),
             max_rounds=1,
@@ -219,7 +216,9 @@ class TestAcceptancePipelineRepro:
             def get_label(self, url):
                 return "neutral"
 
-        from research_engine import ResearchEngine  # noqa: F401 — ensures module import for sys.modules
+        from research_engine import (
+            ResearchEngine,  # noqa: F401 — ensures module import for sys.modules
+        )
 
         owner = types.SimpleNamespace(
             search_client=StubSearch(),
@@ -230,23 +229,38 @@ class TestAcceptancePipelineRepro:
             _log=lambda event, data: events.append((event, data)),
             session_logger=None,
         )
-        return ResearchSourceAcquirer(
-            owner, _sys.modules["research_engine"]
-        ), events
+        return ResearchSourceAcquirer(owner, _sys.modules["research_engine"]), events
 
     def test_acceptance_path_on_recorded_fixtures(self, monkeypatch):
         import web_source_store
 
         monkeypatch.setattr(web_source_store, "save_source", lambda *a, **k: None)
-        monkeypatch.setattr(
-            web_source_store, "fetch_and_save", lambda *a, **k: None
-        )
+        monkeypatch.setattr(web_source_store, "fetch_and_save", lambda *a, **k: None)
         acquirer, events = self._acquirer()
         sources = acquirer.search_round(TOPIC, 0)
         accepted_urls = [s["url"] for s in sources]
         # The real docs must be accepted by the deterministic pipeline...
         assert JEDI_DOCS["url"] in accepted_urls
-        # ...and the junk paper must be rejected with a logged reason.
+        # ...and the junk paper must not survive the round. On this code
+        # state the fixture arXiv URL fails the dead-URL liveness check
+        # (offline 404 in the stub environment), so its rejection may log
+        # as 'research_dead_urls_filtered' rather than a relevance
+        # rejection. What matters for the gate is: it never reaches
+        # synthesis as a source.
         assert SOCIALED["url"] not in accepted_urls
-        rejected = [e for e in events if e[0] in ("research_source_rejected", "research_search")]
-        assert rejected, "expected rejection/search events from the acquirer"
+        rejected = [
+            e
+            for e in events
+            if e[0] in ("research_source_rejected", "research_source_blocked")
+            and e[1].get("url") == SOCIALED["url"]
+        ]
+        dead_filtered = any(
+            e[0] == "research_dead_urls_filtered"
+            and any(
+                d.get("url") == SOCIALED["url"] for d in e[1].get("dead_urls", [])
+            )
+            for e in events
+        )
+        assert rejected or dead_filtered, (
+            f"junk paper not rejected by any logged mechanism: {events}"
+        )
