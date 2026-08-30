@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from custom_tools.table_catalog import (
+from custom_tools._table_catalog import (
     MAX_SAMPLE_ROWS,
     TableCatalogError,
     inspect_table,

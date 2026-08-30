@@ -1,6 +1,6 @@
 """Read-only structured queries over CSV, TSV, and XLSX vault files."""
 
-from custom_tools.table_query_engine import TableQueryError, query_table
+from custom_tools._table_query_engine import TableQueryError, query_table
 from paths import VAULT_ROOT
 
 SCHEMA = {

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from custom_tools.table_catalog import (
+from custom_tools._table_catalog import (
     TableCatalogError,
     inspect_table,
     is_supported_table,

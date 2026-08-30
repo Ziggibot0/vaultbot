@@ -21,7 +21,7 @@ from typing import Any
 
 import faiss
 import numpy as np
-from custom_tools.table_catalog import inspect_table, is_supported_table
+from custom_tools._table_catalog import inspect_table, is_supported_table
 from embedding_utils import (
     CHUNK_OVERLAP,
     CHUNK_SIZE,
