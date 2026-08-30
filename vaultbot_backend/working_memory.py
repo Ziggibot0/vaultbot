@@ -376,7 +376,7 @@ class TaskList:
                     with contextlib.suppress(OSError):
                         os.unlink(tmp)
                     raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort disk persistence; failure is non-fatal, debug-logged
             logger.debug("working_memory save_to_disk failed: %s", e)
 
     @classmethod
@@ -410,7 +410,7 @@ class TaskList:
                         with contextlib.suppress(OSError):
                             os.remove(_DEFAULT_DISK_PATH)
                         return tl
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001 — best-effort legacy migration; failure is non-fatal, debug-logged
                 logger.debug("working_memory legacy migration failed: %s", e)
         try:
             if not os.path.exists(p):
@@ -426,7 +426,7 @@ class TaskList:
             if not tl.has_plan():
                 return None
             return tl
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort disk load; failure is non-fatal, debug-logged
             logger.debug("working_memory load_from_disk failed: %s", e)
             return None
 
@@ -438,5 +438,5 @@ class TaskList:
         try:
             if os.path.exists(p):
                 os.remove(p)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — best-effort disk clear; failure is non-fatal, debug-logged
             logger.debug("working_memory clear_disk failed: %s", e)
