@@ -243,6 +243,44 @@ class SessionLogger:
         except Exception as e:  # noqa: BLE001 — token tracking is observability; a failure must not crash the chat loop, but it MUST be visible
             print(f"[SessionLogger] add_token_usage failed: {e}")
 
+    def log_llm_invocation(
+        self,
+        *,
+        role: str,
+        model_id: str,
+        provider_id: str,
+        provider_type: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        token_source: str,
+        stream: bool,
+        duration_ms: float,
+        outcome: str = "success",
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """Emit one immutable record for a completed LLM API invocation."""
+        invocation_id = str(uuid.uuid4())
+        data: dict[str, Any] = {
+            "invocation_id": invocation_id,
+            "role": role,
+            "model_id": model_id,
+            "provider_id": provider_id,
+            "provider_type": provider_type,
+            "model": model,
+            "prompt_tokens": int(prompt_tokens or 0),
+            "completion_tokens": int(completion_tokens or 0),
+            "total_tokens": int((prompt_tokens or 0) + (completion_tokens or 0)),
+            "token_source": token_source,
+            "stream": bool(stream),
+            "duration_ms": round(float(duration_ms or 0.0), 2),
+            "outcome": outcome,
+        }
+        if context:
+            data["context"] = dict(context)
+        self.log("llm_invocation", data)
+        return invocation_id
+
     # ── Per-turn orchestration attribution ───────────────────────────────
 
     def log_route_decision(

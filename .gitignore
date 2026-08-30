@@ -6,6 +6,8 @@
 .env.local
 .env.*.local
 providers.json
+energy_profiles.json
+energy_profiles.json.tmp
 .vaultbot-workspace.json
 .vaultbot-workspaces/
 providers.json.tmp

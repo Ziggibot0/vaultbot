@@ -813,6 +813,21 @@ class OllamaClient(_BASE):
             )
             r.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, raises to caller — see CONTRIBUTING.md no-silent-fallbacks
+            prompt_tokens = (
+                sum(
+                    len(str(message.get("content", "") or ""))
+                    for message in native["messages"]
+                )
+                // 4
+            )
+            self._emit_invocation(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                token_source="estimated",
+                stream=False,
+                duration_ms=(time.time() - t0) * 1000,
+                outcome="failed",
+            )
             self._log_tool(
                 "chat",
                 self._chat_log_summary(native, False),
@@ -839,6 +854,28 @@ class OllamaClient(_BASE):
                 "endpoint": "/api/chat",
                 "think": False,
             },
+            duration_ms=(time.time() - t0) * 1000,
+        )
+        prompt_tokens = int(data.get("prompt_eval_count", 0) or 0)
+        completion_tokens = int(data.get("eval_count", 0) or 0)
+        token_source = "reported"
+        if prompt_tokens == 0 and completion_tokens == 0:
+            prompt_tokens = (
+                sum(
+                    len(str(message.get("content", "") or ""))
+                    for message in native["messages"]
+                )
+                // 4
+            )
+            completion_tokens = max(
+                1, (len(result["response"]) + len(result["thinking"])) // 4
+            )
+            token_source = "estimated"
+        self._emit_invocation(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            token_source=token_source,
+            stream=False,
             duration_ms=(time.time() - t0) * 1000,
         )
         return result
@@ -998,6 +1035,21 @@ class OllamaClient(_BASE):
                 )
             response.raise_for_status()
         except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+            prompt_tokens = (
+                sum(
+                    len(str(message.get("content", "") or ""))
+                    for message in payload["messages"]
+                )
+                // 4
+            )
+            self._emit_invocation(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=0,
+                token_source="estimated",
+                stream=stream,
+                duration_ms=(time.time() - t0) * 1000,
+                outcome="failed",
+            )
             # Capture the 500 error body from Ollama for debugging.
             _err_body = ""
             try:
@@ -1017,6 +1069,10 @@ class OllamaClient(_BASE):
 
             def chat_chunks():
                 chunk_count = 0
+                prompt_tokens = completion_tokens = 0
+                response_chars = thinking_chars = 0
+                completed = False
+                outcome = "success"
                 # Per-index accumulator for fragmented tool-call arguments.
                 # OpenAI streaming sends tool-call arguments in fragments
                 # across multiple chunks (delta.tool_calls[].function.arguments
@@ -1043,10 +1099,19 @@ class OllamaClient(_BASE):
                             data = json.loads(body)
                         except json.JSONDecodeError:
                             continue
+                        usage = data.get("usage") or {}
+                        prompt_tokens = int(
+                            usage.get("prompt_tokens", prompt_tokens) or 0
+                        )
+                        completion_tokens = int(
+                            usage.get("completion_tokens", completion_tokens) or 0
+                        )
                         choice = (data.get("choices") or [{}])[0]
                         delta = choice.get("delta", {}) or {}
                         content = delta.get("content") or ""
                         reasoning = delta.get("reasoning") or ""
+                        response_chars += len(content)
+                        thinking_chars += len(reasoning)
                         # Accumulate tool-call fragments.
                         for tc in delta.get("tool_calls") or []:
                             idx = tc.get("index", 0)
@@ -1073,7 +1138,9 @@ class OllamaClient(_BASE):
                             finish_reason = fr
                         if fr in ("tool_calls", "stop", "length"):
                             break
+                    completed = True
                 except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
+                    outcome = "failed"
                     self._log_tool(
                         "chat",
                         self._chat_log_summary(payload, stream),
@@ -1082,7 +1149,30 @@ class OllamaClient(_BASE):
                     )
                     raise
                 finally:
+                    if not completed and outcome == "success":
+                        outcome = "cancelled"
                     self._active_stream_response = None
+                    token_source = "reported"
+                    if prompt_tokens == 0 and completion_tokens == 0:
+                        prompt_tokens = (
+                            sum(
+                                len(str(message.get("content", "") or ""))
+                                for message in payload["messages"]
+                            )
+                            // 4
+                        )
+                        completion_tokens = max(
+                            1, (response_chars + thinking_chars) // 4
+                        )
+                        token_source = "estimated"
+                    self._emit_invocation(
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        token_source=token_source,
+                        stream=True,
+                        duration_ms=(time.time() - t0) * 1000,
+                        outcome=outcome,
+                    )
                 # Emit accumulated tool calls as one chunk (Ollama-style
                 # one-shot), so the chat handler sees the same shape it
                 # always has.
@@ -1155,6 +1245,29 @@ class OllamaClient(_BASE):
                     "tool_calls": len(result["tool_calls"]),
                     "finish_reason": finish_reason,
                 },
+                duration_ms=(time.time() - t0) * 1000,
+            )
+            usage = data.get("usage") or {}
+            prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+            token_source = "reported"
+            if prompt_tokens == 0 and completion_tokens == 0:
+                prompt_tokens = (
+                    sum(
+                        len(str(message.get("content", "") or ""))
+                        for message in payload["messages"]
+                    )
+                    // 4
+                )
+                completion_tokens = max(
+                    1, (len(result["response"]) + len(result["thinking"])) // 4
+                )
+                token_source = "estimated"
+            self._emit_invocation(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                token_source=token_source,
+                stream=False,
                 duration_ms=(time.time() - t0) * 1000,
             )
             return result

@@ -52,6 +52,9 @@ async def stream_llm_round(
                     "t_ms": time.time() * 1000,
                 },
             )
+            set_context = getattr(svc.ollama_client, "set_invocation_context", None)
+            if callable(set_context):
+                set_context(round=st.round_idx, purpose="agentic_chat")
             yield from svc.ollama_client.chat(
                 st._model_conversation, tools=_round_tools, stream=True
             )

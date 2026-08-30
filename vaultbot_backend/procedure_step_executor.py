@@ -251,6 +251,7 @@ def _run_llm_step(
     step: Step,
     prior_results: dict[float, str],
     llm_client: Any = None,
+    procedure_name: str = "",
 ) -> tuple[bool, str, str | None]:
     """Execute an LLM step via the cartridge-selected client with minimal context.
 
@@ -306,6 +307,13 @@ def _run_llm_step(
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ]
+        set_context = getattr(client, "set_invocation_context", None)
+        if callable(set_context):
+            set_context(
+                purpose="procedure_step",
+                procedure=procedure_name,
+                step=step.number,
+            )
         result = client.chat(
             messages=messages,
             stream=False,

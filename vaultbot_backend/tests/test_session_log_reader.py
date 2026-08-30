@@ -127,6 +127,35 @@ def test_parse_token_usage(tmp_path: Path):
     assert summary["token_totals"]["completion_tokens"] == 130
 
 
+def test_parse_llm_invocation_details(tmp_path: Path):
+    f = tmp_path / "test.jsonl"
+    _write_session(
+        f,
+        [
+            _evt(
+                "llm_invocation",
+                {
+                    "invocation_id": "inv-1",
+                    "role": "small",
+                    "model_id": "local:qwen",
+                    "provider_id": "local",
+                    "prompt_tokens": 12,
+                    "completion_tokens": 8,
+                    "total_tokens": 20,
+                    "token_source": "reported",
+                    "outcome": "success",
+                    "context": {"purpose": "procedure_step", "step": 2},
+                },
+            )
+        ],
+    )
+
+    invocation = parse_session_log(f)["llm_invocations"][0]
+    assert invocation["model_id"] == "local:qwen"
+    assert invocation["total_tokens"] == 20
+    assert invocation["context"]["step"] == 2
+
+
 # ── parse_session_log: websocket fallback ──────────────────────────────
 
 

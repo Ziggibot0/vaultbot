@@ -528,7 +528,11 @@ async def execute_procedure(
         elif step.step_type == "llm":
             # to_thread keeps the event loop unblocked (see code step above).
             success, output, error = await asyncio.to_thread(
-                _run_llm_step, step, prior_results, llm_client
+                _run_llm_step,
+                step,
+                prior_results,
+                llm_client,
+                procedure.name,
             )
             if success:
                 sr = StepResult(
@@ -561,6 +565,13 @@ async def execute_procedure(
         else:  # text step (v1)
             messages = _build_active_frame(step, procedure, context, step_outputs)
             try:
+                set_context = getattr(llm_client, "set_invocation_context", None)
+                if callable(set_context):
+                    set_context(
+                        purpose="procedure_step",
+                        procedure=procedure.name,
+                        step=step.number,
+                    )
                 # to_thread keeps the event loop unblocked (see above).
                 result = await asyncio.to_thread(
                     llm_client.chat,
