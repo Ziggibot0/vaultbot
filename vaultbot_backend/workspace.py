@@ -84,9 +84,23 @@ class WorkspaceRegistry:
     def select(
         self, local_root: str | Path, *, managed_clone: bool = False
     ) -> WorkspaceDescriptor:
-        root = Path(local_root).expanduser().resolve()
-        if not root.is_dir() or not (root / ".git").exists():
-            raise WorkspaceError(f"Not a Git repository: {root}")
+        requested_root = os.path.abspath(os.path.expanduser(os.fspath(local_root)))
+        try:
+            result = subprocess.run(
+                ["git", "-C", requested_root, "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise WorkspaceError("Could not validate the Git repository") from exc
+        if result.returncode != 0:
+            raise WorkspaceError("Not a Git repository")
+
+        root = Path(result.stdout.strip()).resolve()
+        if os.path.normcase(str(root)) != os.path.normcase(requested_root):
+            raise WorkspaceError("Select the Git repository's top-level folder")
 
         origin_url = self._git(root, "remote", "get-url", "origin")
         upstream_url = self._git(root, "remote", "get-url", "upstream", required=False)

@@ -48,7 +48,7 @@ def test_select_status_disconnect(client, tmp_path):
 def test_select_rejects_non_repository(client, tmp_path):
     response = client.post("/workspace/select", json={"local_root": str(tmp_path)})
     assert response.status_code == 400
-    assert "Not a Git repository" in response.json()["detail"]
+    assert response.json()["detail"] == "Could not select that Git repository."
 
 
 def test_repository_listing_is_secret_free(client, monkeypatch):
