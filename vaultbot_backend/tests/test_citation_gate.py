@@ -371,3 +371,62 @@ class TestBuildSourcesBlock:
     def test_empty_when_no_allowed(self):
         answer = "Cites [[Alpha]] but nothing allowed."
         assert build_sources_block(answer, {}) == ""
+
+
+class TestScoreGroundingRepairs:
+    """score_grounding with repair_pairs (issue #335)."""
+
+    def test_repaired_pair_counts_as_allowed(self):
+        from citation_gate import score_grounding
+
+        allowed = {"Chat-sup-homie": {"file_path": "x.md", "snippet": ""}}
+        score = score_grounding(
+            "Discuss it in [[Chat-sup-homie]].",
+            allowed,
+            repair_pairs=[("Chat- sup- homie", "Chat-sup-homie")],
+        )
+        assert score["total_wikilinks"] == 1
+        assert score["allowed_cited"] == 1
+        assert score["missing_from_set"] == []
+        assert score["failed"] is False
+        assert score["repaired"] == [("Chat- sup- homie", "Chat-sup-homie")]
+
+    def test_unrepaired_missing_still_missing(self):
+        from citation_gate import score_grounding
+
+        allowed = {"Chat-sup-homie": {"file_path": "x.md", "snippet": ""}}
+        score = score_grounding("Discuss it in [[Other-Note]].", allowed)
+        assert score["missing_from_set"] == ["Other-Note"]
+        assert score["grounding_score"] < 1.0
+
+    def test_repair_credit_only_when_corrected_stem_is_allowed(self):
+        from citation_gate import score_grounding
+
+        # A repair pair whose REPAIRED stem is NOT in the allowed set must
+        # not mint credit for the mangled link (defense-in-depth).
+        allowed = {"Unrelated-Note": {"file_path": "x.md", "snippet": ""}}
+        score = score_grounding(
+            "Discuss it in [[Unrelated-Note]] and [[Chat-sup-homie]].",
+            allowed,
+            repair_pairs=[("Chat- sup- homie", "Chat-sup-homie")],
+        )
+        assert score["allowed_cited"] == 1  # Unrelated-Note only
+        assert "Chat-sup-homie" in score["missing_from_set"]
+
+
+class TestBuildReprimandRepairs:
+    def test_reprimand_mentions_repairs_and_exact_stem_rule(self):
+        from citation_gate import build_reprimand, score_grounding
+
+        # The repaired stem is deliberately NOT in the allowed set here, so
+        # the answer fails and the reprimand fires with the repair note.
+        allowed = {"Unrelated-Note": {"file_path": "x.md", "snippet": ""}}
+        score = score_grounding(
+            "Discuss it in [[Chat- sup- homie]].",
+            allowed,
+            repair_pairs=[("Chat- sup- homie", "Chat-sup-homie")],
+        )
+        score["failed"] = True
+        reprimand = build_reprimand(score, allowed)
+        assert "[[Chat- sup- homie]] → [[Chat-sup-homie]]" in reprimand
+        assert "Copy citation stems" in reprimand

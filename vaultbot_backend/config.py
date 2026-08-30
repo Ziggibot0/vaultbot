@@ -166,6 +166,18 @@ class Tunables:
     min_retrieval_score: float = 0.15
     max_grounding_retries: int = 1
     ungrounded_sentence_threshold: float = 0.30
+    # ── Wikilink repair (issue #335) ─────────────────────────────────────
+    # The model sometimes mangles the exact stem of a note it is allowed to
+    # cite ("[[Chat- sup- homie]]" for "Chat-sup-homie"). The repair step
+    # only fires when the candidate similarity is at least
+    # wikilink_repair_min_ratio (0 — perfect — to 1). The rewrite only ever
+    # maps a mangled link to a stem that is ALREADY in the allowed set or
+    # verified in the vault graph — never to a guessed title.
+    wikilink_repair_min_ratio: float = 0.80
+    # The single-character length headroom above a candidate stem that a
+    # mangled link may have to still be repairable. Guards against a short
+    # candidate like [[Jedi]] swallowing a much longer mangled string.
+    wikilink_repair_max_length_gap: int = 6
     legacy_seed_note_cap: int = 4000
     legacy_walked_note_cap: int = 900
     abstract_extra_drill_cap: int = 4000
