@@ -9,6 +9,7 @@ from typing import cast
 
 import chat_handler
 import pytest
+from fastapi import WebSocket
 from services import Services
 from working_memory import TaskList
 
@@ -67,7 +68,11 @@ def test_handle_chat_initializes_turn_and_short_circuits_trivial_turn(
     websocket = _FakeWebSocket()
     logger = _FakeSessionLogger()
 
-    asyncio.run(chat_handler.handle_chat(_services(), websocket, "hello", logger))
+    asyncio.run(
+        chat_handler.handle_chat(
+            _services(), cast(WebSocket, websocket), "hello", logger
+        )
+    )
 
     assert logger.calls[0] == ("chat_begin", {"user_message": "hello"})
     assert websocket._cancelled is False
@@ -109,7 +114,10 @@ def test_handle_chat_runs_normal_turn_pipeline_once(monkeypatch, tmp_path) -> No
 
     asyncio.run(
         chat_handler.handle_chat(
-            _services(), _FakeWebSocket(), "research this", _FakeSessionLogger()
+            _services(),
+            cast(WebSocket, _FakeWebSocket()),
+            "research this",
+            _FakeSessionLogger(),
         )
     )
 
@@ -132,7 +140,11 @@ def test_handle_chat_clears_completed_plan_before_preparation(monkeypatch) -> No
 
     monkeypatch.setattr(chat_handler, "_prepare_turn", fake_prepare)
 
-    asyncio.run(chat_handler.handle_chat(_services(), websocket, "next", logger))
+    asyncio.run(
+        chat_handler.handle_chat(
+            _services(), cast(WebSocket, websocket), "next", logger
+        )
+    )
 
     assert not working_memory.has_plan()
     assert "wm_plan_cleared_completed" in [event for event, _ in logger.calls]
