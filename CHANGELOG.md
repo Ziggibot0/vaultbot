@@ -15,6 +15,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-08-30
+
+This release fixes the "model calls tools and thinks but emits no words"
+bug: the synchronous claim-entailment delivery gate was silently replacing
+drafted answers with a canned non-answer. It is a **patch** bump (bug fix,
+no new user-facing surface).
+
+### Fixed
+
+- **Answers no longer blocked by the entailment gate** — the synchronous
+  `Verify-Answer-Entailment` delivery gate (added in #408) ran on every
+  cited answer and, on any unsupported/unverifiable verdict or verifier
+  failure, replaced the drafted answer with a canned "I couldn't verify..."
+  non-answer. This made the model appear to call tools and think but emit
+  no words. The gate is removed from the critical path; the answer now
+  always reaches the user, with the grounding score still driving the trust
+  badge and Sources block. Entailment is tabled until it can be
+  implemented correctly as a background layer (per the procedure's own
+  design). The now-dead `provenance_policy.py` / `provenance_runtime.py`
+  modules and their tests were removed.
+
 ## [1.5.3] - 2026-08-30
 
 This release makes the installer's final step actually work on a fresh
