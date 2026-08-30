@@ -263,6 +263,31 @@ def test_empty_file_skipped_zero_embedding_calls(tmp_vault):
     assert str(normal) in indexer._path_to_id
 
 
+def test_csv_indexes_catalog_metadata_instead_of_raw_rows(tmp_vault):
+    vault, index_dir = tmp_vault
+    indexer = _make_indexer(vault, index_dir)
+    table = vault / "sales.csv"
+    table.write_text(
+        "Region,Revenue\nWest,120.5\nEast,80\n",
+        encoding="utf-8",
+    )
+
+    indexer._add_file_to_index(table)
+
+    faiss_id = indexer._path_to_id[str(table)]
+    metadata = indexer._metadata[faiss_id]
+    assert metadata["source_type"] == "table"
+    assert metadata["columns"] == ["Region", "Revenue"]
+    assert metadata["column_types"] == ["text", "number"]
+    assert metadata["row_count"] == 2
+    assert metadata["content_preview"].startswith("Table: sales\n")
+
+    results = indexer.search("revenue by region", k=1)
+    assert results[0]["source_type"] == "table"
+    assert results[0]["columns"] == ["Region", "Revenue"]
+    assert results[0]["content"].startswith("Table: sales\n")
+
+
 def test_batch_add_files_skips_empty(tmp_vault):
     """batch_add_files must skip empty files without an Ollama call."""
     vault, index_dir = tmp_vault

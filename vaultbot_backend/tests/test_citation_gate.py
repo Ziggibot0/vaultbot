@@ -126,6 +126,13 @@ class TestAddCitationTarget:
         add_citation_target(allowed, "", "x")
         assert allowed == {}
 
+    def test_table_target_records_source_type(self):
+        allowed: dict = {}
+        add_citation_target(
+            allowed, "/vault/sales.csv", "Region, Revenue", source_type="table"
+        )
+        assert allowed["sales"]["source_type"] == "table"
+
 
 class TestScoreGrounding:
     def test_all_cited_passes(self):
@@ -185,6 +192,23 @@ class TestScoreGrounding:
             "See [[Alpha]] and [[Broken]].", allowed, graph_lookup=lookup
         )
         assert "Broken" in score["missing_from_vault"]
+
+    def test_table_citation_does_not_require_markdown_graph_node(self):
+        allowed = {
+            "sales": {
+                "file_path": "/vault/sales.csv",
+                "source_type": "table",
+            }
+        }
+
+        score = score_grounding(
+            "Revenue was 150 [[sales]].",
+            allowed,
+            graph_lookup=lambda stem: False,
+        )
+
+        assert score["missing_from_vault"] == []
+        assert score["allowed_cited"] == 1
 
     def test_empty_answer_is_ok(self):
         score = score_grounding("", {})
