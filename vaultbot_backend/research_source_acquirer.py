@@ -207,4 +207,26 @@ class ResearchSourceAcquirer:
                     source_denylist=source_denylist,
                 )
             )
+        # Bare-query retry (issue #417): a `site:`-qualified query can
+        # legitimately return zero hits even when the domain has relevant
+        # documentation (search-engine coverage of readthedocs-style sites
+        # is shallow for scoped queries). If every per-domain round came
+        # back empty, retry the BARE query once — the allowlist passed to
+        # search_round still post-filters every hit through
+        # is_allowlisted, so the source policy is enforced either way.
+        # Exactly one retry; no recursion.
+        if not sources:
+            self._log(
+                "research_allowlist_retry",
+                round=round_idx,
+                allowlist=list(source_allowlist),
+                query=query,
+            )
+            sources = self.owner._search_round(
+                query,
+                round_idx,
+                topic=topic,
+                source_allowlist=source_allowlist,
+                source_denylist=source_denylist,
+            )
         return sources
