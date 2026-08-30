@@ -158,6 +158,39 @@ def _hostname(url: str | None) -> str:
         return ""
 
 
+def normalize_source_domains(
+    domains: list[str] | None, *, field_name: str
+) -> list[str]:
+    """Validate and canonicalize a domain-only source policy."""
+    normalized: list[str] = []
+    for value in domains or []:
+        domain = (value or "").strip().lower().strip(".")
+        if domain.startswith("www."):
+            domain = domain[4:]
+        try:
+            domain = domain.encode("idna").decode("ascii")
+        except UnicodeError as exc:
+            raise ValueError(f"Invalid domain in {field_name}: {value!r}") from exc
+        labels = domain.split(".")
+        if (
+            not domain
+            or ":" in domain
+            or "/" in domain
+            or any(
+                not label
+                or len(label) > 63
+                or label.startswith("-")
+                or label.endswith("-")
+                or not re.fullmatch(r"[a-z0-9-]+", label)
+                for label in labels
+            )
+        ):
+            raise ValueError(f"{field_name} accepts domains only, not URLs: {value!r}")
+        if domain not in normalized:
+            normalized.append(domain)
+    return normalized
+
+
 def is_allowlisted(url: str, allowlist: list[str] | None) -> bool:
     """True if ``url``'s hostname matches any allowlisted domain.
 
