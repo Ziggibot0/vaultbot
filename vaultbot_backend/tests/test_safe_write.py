@@ -312,3 +312,43 @@ def test_internal_import_needs_no_doc_source(patched_improver, tmp_path):
 
     assert result["status"] == "written"
     assert "doc_source" not in result["checks"]
+
+
+def test_resolve_path_reaches_repo_root_file(monkeypatch, tmp_path):
+    """issue #341 — code_read/code_write/safe_write must reach repo-root
+    files (README.md, AGENTS.md, CONTRIBUTING.md), not just vault notes.
+
+    The split layout puts vault notes under VAULT_ROOT (myvault) but
+    repo-facing files at the repo root (FRAMEWORK_ROOT). safe_writer's
+    resolve_path previously resolved only against the vault root, so the
+    model could not edit repo-root files. It now falls back to the
+    dual-root resolver.
+    """
+    from safe_writer import resolve_path
+
+    # Point VAULT_PATH at a temp vault so the dual-root resolver sees a
+    # distinct vault root, and place a repo-root file at the repo root.
+    vault = tmp_path / "myvault"
+    vault.mkdir()
+    monkeypatch.setenv("VAULT_PATH", str(vault))
+    repo_root = tmp_path
+    (repo_root / "CONTRIBUTING.md").write_text("hello\n", encoding="utf-8")
+
+    resolved = resolve_path("CONTRIBUTING.md", repo_root)
+    assert resolved is not None
+    assert resolved == (repo_root / "CONTRIBUTING.md").resolve()
+
+
+def test_resolve_path_blocks_traversal(monkeypatch, tmp_path):
+    """issue #341 — the dual-root fallback must not weaken the traversal
+    guard: a path escaping both vault root and repo root returns None.
+    """
+    from safe_writer import resolve_path
+
+    vault = tmp_path / "myvault"
+    vault.mkdir()
+    monkeypatch.setenv("VAULT_PATH", str(vault))
+    repo_root = tmp_path
+
+    assert resolve_path("../../etc/passwd", repo_root) is None
+    assert resolve_path("..", repo_root) is None
