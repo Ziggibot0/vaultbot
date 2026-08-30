@@ -113,7 +113,7 @@ class TestRepairWikilinksInText:
 
     def test_order_preserved_for_repeated_repairs(self):
         text = "[[Chat-sup- homie]] then [[Chat- sup- homie]] again."
-        repaired, pairs = repair_wikilinks_in_text(text, ALLOWED)
+        _repaired, pairs = repair_wikilinks_in_text(text, ALLOWED)
         assert pairs == [
             ("Chat-sup- homie", "Chat-sup-homie"),
             ("Chat- sup- homie", "Chat-sup-homie"),
