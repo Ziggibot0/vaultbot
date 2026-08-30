@@ -22,10 +22,12 @@ model-independent and cacheable.
 
 import contextlib
 import re
+import sys
 import time
 from collections import Counter
 from typing import Any, Optional
 
+from research_source_acquirer import ResearchSourceAcquirer
 from research_synthesizer import (
     extractive_synthesis as _extractive_synthesis_fn,
 )
@@ -45,26 +47,26 @@ from research_synthesizer import (
     synthesize_structured_note as _synthesize_structured_note_fn,
 )
 from source_classification import (
-    is_allowlisted as _is_allowlisted,
+    is_allowlisted as _is_allowlisted,  # noqa: F401 -- compatibility patch point
 )
 from source_classification import (
-    is_blocked_source as _is_blocked_source,
+    is_blocked_source as _is_blocked_source,  # noqa: F401 -- compatibility patch point
 )
 from source_classification import (
     is_denylisted as _is_denylisted,
 )
 from source_classification import (
-    is_github_issue_or_pr as _is_github_issue_or_pr,
+    is_github_issue_or_pr as _is_github_issue_or_pr,  # noqa: F401 -- compatibility patch point
 )
 from source_classification import (
-    is_low_credibility_domain as _is_low_credibility_domain,
+    is_low_credibility_domain as _is_low_credibility_domain,  # noqa: F401 -- compatibility patch point
 )
 from source_classification import normalize_source_domains as _normalize_source_domains
 from source_classification import (
     normalize_url as _normalize_url,
 )
 from source_classification import (
-    source_relevance as _source_relevance,
+    source_relevance as _source_relevance,  # noqa: F401 -- compatibility patch point
 )
 from source_credibility import SourceCredibilityTracker
 from text_scoring import (
@@ -449,6 +451,7 @@ class ResearchEngine:
         # domain is based on how often its claims hold up under verification.
         # Scores evolve over time as more verifications accumulate.
         self.credibility = SourceCredibilityTracker()
+        self._source_acquirer = ResearchSourceAcquirer(self, sys.modules[__name__])
 
     def _log(self, event: str, data: dict[str, Any] | None = None):
         if self.session_logger is None:
@@ -471,252 +474,9 @@ class ResearchEngine:
         source_allowlist: list[str] | None = None,
         source_denylist: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Run one search query and return fetched, cleaned sources.
-
-        Tavily is the sole search backend. If Tavily is unset or returns
-        nothing, the round yields no sources (no SearXNG fallback). Tavily
-        often returns raw_content inline, so we skip scraping; when it
-        doesn't, we fetch the URL directly via tavily.scrape().
-        """
-        t0 = time.time()
-        results: dict[str, Any] = {}
-
-        if not (self.search_client and self.search_client.is_configured):
-            self._log(
-                "research_search_unconfigured", {"round": round_idx, "query": query}
-            )
-            return []
-
-        try:
-            results = self.search_client.search(
-                query, max_results=self.max_sources_per_round
-            )
-        except Exception as e:  # noqa: BLE001 — best-effort, returns error/empty to caller — see CONTRIBUTING.md no-silent-fallbacks
-            self._log(
-                "research_search_failed",
-                {
-                    "round": round_idx,
-                    "query": query,
-                    "backend": getattr(self.search_client, "name", "search_client"),
-                    "error": str(e),
-                },
-            )
-            results = {
-                "results": [],
-                "unresponsive_engines": [
-                    [getattr(self.search_client, "name", "search_client"), str(e)]
-                ],
-            }
-        hits = results.get("results", [])[: self.max_sources_per_round]
-        self._log(
-            "research_search",
-            {
-                "round": round_idx,
-                "query": query,
-                "backend": getattr(self.search_client, "name", "search_client"),
-                "hits": len(hits),
-                "duration_ms": (time.time() - t0) * 1000,
-            },
+        return self._source_acquirer.search_round(
+            query, round_idx, topic, source_allowlist, source_denylist
         )
-        # Compute the topic's signal terms ONCE for the relevance gate.
-        # The gate drops sources that don't carry the topic's
-        # high-specificity terms (proper nouns, API names) — this is the
-        # fix for "the pile has some good stuff but the bot finds garbage":
-        # without a gate, off-topic sources that happen to share generic
-        # words ("python", "vector") flow into synthesis and crowd out the
-        # real hits. See [[How-to-Fix-Research-Engine-Returning-Garbage]].
-        topic_terms = _keyterms(topic) if topic else []
-        signal = _signal_terms(topic_terms)
-        # base_signal_count: the signal count BEFORE compound signals are
-        # merged in. Passed to source_relevance() so the min_matches
-        # threshold isn't inflated by compounds (which are alternative
-        # match opportunities, not additional requirements).
-        base_signal_count = len(signal)
-        # Merge compound signals from the raw topic (e.g., "sea shells" from
-        # "what are sea shells made of"). Without this, the signal list is
-        # just ['shells'] — a single word that matches astrophysics papers
-        # about "shell galaxies". The compound "sea shells" doesn't appear
-        # in galaxy papers, so they get rejected by the gate.
-        _compounds = _compound_signals(topic)
-        if _compounds:
-            _existing = {s.lower() for s in signal}
-            for c in _compounds:
-                if c not in _existing:
-                    signal.append(c)
-                    _existing.add(c)
-        sources = []
-        for hit in hits:
-            url = hit.get("url")
-            if not url:
-                continue
-            # Defense-in-depth: skip blocked sources (Wikipedia per the
-            # operator's directive)
-            if _is_blocked_source(url):
-                self._log("research_source_blocked", {"round": round_idx, "url": url})
-                continue
-            # Source-authority allowlist/denylist (issue #133): when the
-            # caller requires authoritative-only sources ("ONLY Google
-            # official docs"), filter search results by domain BEFORE any
-            # scraping or synthesis. A non-allowlisted source is discarded
-            # entirely — not just down-ranked — so it can never leak into
-            # the synthesized note.
-            if not _is_allowlisted(url, source_allowlist):
-                self._log(
-                    "research_source_not_allowlisted",
-                    {"round": round_idx, "url": url},
-                )
-                continue
-            if _is_denylisted(url, source_denylist):
-                self._log(
-                    "research_source_denylisted",
-                    {"round": round_idx, "url": url},
-                )
-                continue
-            text = hit.get("raw_content", "") or ""
-            snippet = hit.get("content", "")
-            # Archive the raw source for on-demand re-reading (the index-don't-
-            # -copy paradigm applied to web research). We save the page's raw
-            # HTML to learningMaterial/web/ so the LLM can re-examine it later
-            # without re-scraping (the page may have changed or gone offline).
-            # The raw HTML stays OUT of the vault graph; only LLM notes about
-            # it enter the graph, with provenance to the saved file.
-            try:
-                from web_source_store import fetch_and_save, save_source
-
-                # If the search backend already gave us raw_content, save it
-                # directly; otherwise fetch the raw HTML now.
-                if text and len(text) >= 80:
-                    save_source(url, text, title=hit.get("title", ""), topic=topic)
-                else:
-                    fetch_and_save(url, title=hit.get("title", ""), topic=topic)
-            except Exception as e:
-                self._log("research_archive_failed", {"url": url, "error": str(e)})
-            # Tavily often returns raw_content inline; use it directly and
-            # skip scraping. Only fetch when raw_content is missing/short.
-            if not text or len(text) < 80:
-                self._progress(
-                    "scraping",
-                    {"round": round_idx, "url": url, "title": hit.get("title", "")},
-                )
-                try:
-                    text = self.search_client.scrape(
-                        url, timeout=int(self.scrape_timeout)
-                    )
-                except Exception as e:
-                    self._log("research_scrape_failed", {"url": url, "error": str(e)})
-                    text = ""
-            if not text or len(text) < 30:
-                # Scrape failed or returned nothing useful — skip this
-                # source. Do NOT fall back to the search-result snippet
-                # (different content, different quality).
-                continue
-            # Relevance gate: drop sources that don't carry the topic's
-            # signal terms. This is what separates the "good stuff" from
-            # the pile. A source must score >= 1.0 to pass. We use the
-            # snippet/title for the gate when text is short so a source
-            # that scraped to almost nothing still gets judged on its
-            # search-result snippet (which the engine ranked relevant).
-            gate_text = text if len(text) >= 200 else (f"{snippet}\n{text}")
-            rel_score, rel_reason = _source_relevance(
-                hit.get("title", ""),
-                gate_text,
-                signal,
-                topic_terms,
-                url=url,
-                base_signal_count=base_signal_count,
-            )
-            if rel_score < 1.0:
-                self._log(
-                    "research_source_rejected",
-                    {
-                        "round": round_idx,
-                        "url": url,
-                        "title": hit.get("title", "")[:80],
-                        "score": round(rel_score, 2),
-                        "reason": rel_reason,
-                    },
-                )
-                continue
-            # Low-credibility domain check: GitHub issues/PRs and other
-            # code-hosting planning documents are NOT authoritative sources.
-            # They pass the relevance gate (they contain the signal terms)
-            # but they're project-specific planning docs, not documentation.
-            # Tag them so the synthesis knows to down-rank them, and skip
-            # them entirely if the URL is a GitHub issue/PR (the lowest
-            # quality source type — a random project's todo item).
-            is_low_cred = _is_low_credibility_domain(url)
-            is_github_iss = _is_github_issue_or_pr(url)
-            if is_github_iss:
-                # GitHub issues/PRs/discussions are project planning artifacts,
-                # not sources. Skip them — a random repo's OAuth issue is not
-                # a source about OAuth. This is the root cause of the "links
-                # to GitHub repos" problem: search engines return them because
-                # the title matches, but they carry no authority.
-                self._log(
-                    "research_source_skipped_github_issue",
-                    {
-                        "round": round_idx,
-                        "url": url,
-                        "title": (hit.get("title", "") or "")[:80],
-                    },
-                )
-                continue
-            sources.append(
-                {
-                    "url": url,
-                    "title": hit.get("title", ""),
-                    "snippet": snippet,
-                    "text": text,
-                    "_relevance": rel_score,
-                    "_credibility": self.credibility.get(url),
-                    "_credibility_label": self.credibility.get_label(url),
-                    "_low_credibility_domain": is_low_cred,
-                }
-            )
-            self._log(
-                "research_source_accepted",
-                {
-                    "round": round_idx,
-                    "url": url,
-                    "title": (hit.get("title", "") or "")[:80],
-                    "relevance": round(rel_score, 2),
-                    "credibility": round(self.credibility.get(url), 2),
-                    "credibility_label": self.credibility.get_label(url),
-                    "low_credibility_domain": is_low_cred,
-                },
-            )
-        # --- URL liveness verification ----------------------------------
-        # Check that all accepted source URLs actually resolve (return a
-        # 2xx/3xx response). Dead links go straight into research notes
-        # without this check — the search engine returned a URL, the
-        # scraper got content (or the snippet was used), and the URL was
-        # cited as a source even though it 404s. This batch-checks all
-        # accepted URLs in parallel before returning.
-        if _filter_dead_urls is not None and sources:
-            candidate_urls = [s["url"] for s in sources]
-            alive_urls, dead_urls = _filter_dead_urls(
-                candidate_urls,
-                timeout=5.0,
-                max_workers=5,
-                session_logger=self.session_logger,
-            )
-            if dead_urls:
-                alive_set = set(alive_urls)
-                before = len(sources)
-                sources = [s for s in sources if s["url"] in alive_set]
-                self._log(
-                    "research_dead_urls_filtered",
-                    {
-                        "round": round_idx,
-                        "checked": before,
-                        "alive": len(alive_urls),
-                        "dead": len(dead_urls),
-                        "dead_urls": [
-                            {"url": u, "reason": r} for u, r in dead_urls[:10]
-                        ],
-                    },
-                )
-        return sources
 
     def _search_with_source_policy(
         self,
@@ -726,26 +486,13 @@ class ResearchEngine:
         source_allowlist: list[str],
         source_denylist: list[str],
     ) -> list[dict[str, Any]]:
-        """Search each allowed domain independently so the policy is OR-based."""
-        if not source_allowlist:
-            return self._search_round(
-                query,
-                round_idx,
-                topic=topic,
-                source_denylist=source_denylist,
-            )
-        sources: list[dict[str, Any]] = []
-        for domain in source_allowlist:
-            sources.extend(
-                self._search_round(
-                    f"{query} site:{domain}",
-                    round_idx,
-                    topic=topic,
-                    source_allowlist=source_allowlist,
-                    source_denylist=source_denylist,
-                )
-            )
-        return sources
+        return self._source_acquirer.search_with_source_policy(
+            query,
+            round_idx,
+            topic,
+            source_allowlist,
+            source_denylist,
+        )
 
     def _expand_query(self, base_terms: list[str], discovered_terms: list[str]) -> str:
         """Build a refined query that adds newly-discovered salient terms."""
