@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-08-30
+
+This release makes the two remaining "the bot thinks but never speaks"
+failure modes loud and actionable instead of silent hangs. It is a
+**patch** bump (bug fix, no new user-facing surface).
+
+### Fixed
+
+- **No-model turns fail loud** — when no model is assigned to the chat
+  role (fresh install, or a `providers.json` whose models list was lost),
+  a chat turn used to stream heartbeats forever with no answer. The turn
+  is now rejected immediately with an actionable problem card: open
+  Settings → AI Models & Providers and add a model (#465).
+- **Settings UI no longer lies about failures** — adding a provider or
+  model collapsed every failure (backend down, HTTP 400, auth) into the
+  misleading "Failed — pick a provider and a model." The real backend
+  detail is now shown, including "Could not reach the VaultBot backend
+  at <url> — is it running?" (#465).
+
 ## [1.5.4] - 2026-08-30
 
 This release fixes the "model calls tools and thinks but emits no words"
