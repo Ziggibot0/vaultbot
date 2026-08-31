@@ -1,0 +1,85 @@
+# Auto-publish the pending VaultBot release (PR: silent-release-delivery fix).
+#
+# WHY: release-drafter creates a DRAFT on every merge to main, but the
+# in-Obsidian updater only sees PUBLISHED releases — so every release was
+# invisible to users until a human remembered to click Publish (this bit us
+# twice on 2026-08-30: v1.5.4 and v1.5.5 both sat as drafts while users saw
+# the old version). This workflow publishes the release for the version in
+# the plugin manifest automatically, with safety rails:
+#
+#   - NEVER publishes code that hasn't passed CI (both paths check).
+#   - Idempotent: an already-published/tagged release is a no-op.
+#   - Never invents a version: it only acts on what manifest.json declares.
+#   - Fails loud on ambiguity rather than half-publishing.
+#
+# PATH A (workflows/run — primary, safest): fires exactly when the CI
+#   workflow on main CONCLUDES successfully, then publishes the release for
+#   the manifest version AT THAT CI-TESTED SHA. Cannot fire for un-CI'd code.
+#
+# PATH B (hourly schedule — safety net): catches anything missed (e.g. CI
+#   concluded green but this workflow errored, or retroactive catch-up for
+#   releases still sitting as drafts). Publishes only after confirming CI
+#   success for the exact commit. Exits 0 (silently) when CI isn't green.
+name: Release publisher
+
+on:
+  # Path A: CI just concluded successfully on main.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  # Path B: hourly sweep on main.
+  schedule:
+    - cron: "15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release:
+    # Path A guard: only act when CI concluded SUCCESS on main. (Skipped
+    # conclusions, failures, or PR-triggered runs do nothing.) The schedule
+    # and dispatch events skip this if and run the cron job below instead.
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for the publish script)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # the script reads the manifest AT a specific sha
+
+      - name: Publish pending release (push path, CI-verified)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        # The workflow_run's head_sha is the exact commit CI tested.
+        # verify-ci=false: this path only exists because CI already won.
+        run: |
+          chmod +x .github/scripts/publish_pending_release.sh
+          bash .github/scripts/publish_pending_release.sh \
+            "${{ github.event.workflow_run.head_sha }}" false
+
+  publish-release-cron:
+    # Path B: hourly sweep. Runs on schedule/dispatch, re-verifies CI itself
+    # before publishing (so it can safely pick up edge cases where Path A
+    # missed), and no-ops (exit 0) when there's nothing pending or CI is
+    # still running/failed.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for the publish script)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Publish pending release (self-verifying)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          chmod +x .github/scripts/publish_pending_release.sh
+          HEAD_SHA=$(git rev-parse HEAD)
+          bash .github/scripts/publish_pending_release.sh "$HEAD_SHA" true
