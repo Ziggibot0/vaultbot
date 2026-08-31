@@ -487,8 +487,14 @@ class VaultBotPlugin extends Plugin {
 			const r = await fetch(this.settings.backendUrl + '/llm/providers', {
 				method: 'POST', headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify(body)});
-			return await r.json();
-		} catch (e) { return null; }
+			const data = await r.json().catch(() => ({}));
+			if (!r.ok) {
+				return {status: 'error', detail: (data && data.detail) ? data.detail : `backend returned HTTP ${r.status}`};
+			}
+			return data;
+		} catch (e) {
+			return {status: 'error', detail: 'Could not reach the VaultBot backend at ' + this.settings.backendUrl + ' — is it running?'};
+		}
 	}
 	async removeProviderCfg(providerId) {
 		try {
@@ -532,8 +538,14 @@ class VaultBotPlugin extends Plugin {
 			const r = await fetch(this.settings.backendUrl + '/llm/models', {
 				method: 'POST', headers: this._authHeaders({'Content-Type': 'application/json'}),
 				body: JSON.stringify(body)});
-			return await r.json();
-		} catch (e) { return null; }
+			const data = await r.json().catch(() => ({}));
+			if (!r.ok) {
+				return {status: 'error', detail: (data && data.detail) ? data.detail : `backend returned HTTP ${r.status}`};
+			}
+			return data;
+		} catch (e) {
+			return {status: 'error', detail: 'Could not reach the VaultBot backend at ' + this.settings.backendUrl + ' — is it running?'};
+		}
 	}
 	async removeModelCfg(modelId) {
 		try {
@@ -2462,7 +2474,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				new Notice(`Model added to the pot: ${modelId}`);
 				refreshPotUI();
 			} else {
-				provStatusEl.setText('Failed — pick a provider and a model.');
+				provStatusEl.setText(`✗ ${res && res.detail ? res.detail : 'Could not add the model — is the backend running?'}`);
 			}
 		});
 		refreshPotUI();
