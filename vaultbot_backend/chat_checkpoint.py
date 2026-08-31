@@ -50,6 +50,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from session_logger import SessionLoggerProtocol
+
 logger = logging.getLogger(__name__)
 
 _write_lock = threading.Lock()
@@ -80,7 +82,7 @@ class ChatLoopCheckpointer:
     def __init__(
         self,
         state_path: str | Path | None = None,
-        session_logger: Any = None,
+        session_logger: SessionLoggerProtocol | None = None,
         session_id: str | None = None,
     ):
         if state_path is None:
@@ -97,7 +99,7 @@ class ChatLoopCheckpointer:
 
     @classmethod
     def for_session(
-        cls, session_id: str, session_logger: Any = None
+        cls, session_id: str, session_logger: SessionLoggerProtocol | None = None
     ) -> ChatLoopCheckpointer:
         """Create a per-session checkpointer."""
         return cls(

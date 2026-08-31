@@ -11,8 +11,8 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Any
 
+from session_logger import SessionLoggerProtocol
 from subprocess_utils import run as _subprocess_run
 from subprocess_utils import scrubbed_env
 
@@ -261,7 +261,7 @@ _build_research_wrapper = build_subagent_code
 
 def _run_subprocess(
     wrapper_code: str,
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     timeout: int = 180,
     log_tag: str = "subagent",
 ) -> dict:
@@ -394,7 +394,7 @@ _DEFAULT_TIMEOUT = 180
 def run_subagent(
     task_type: str,
     payload: dict,
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     timeout: int | None = None,
 ) -> dict:
     """Dispatch a subagent task by type.
@@ -428,7 +428,7 @@ def run_subagent(
 def run_research_subagent(
     topic: str,
     depth: str = "deep",
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     source_allowlist: list[str] | None = None,
     source_denylist: list[str] | None = None,
 ) -> dict:

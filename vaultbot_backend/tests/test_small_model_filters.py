@@ -65,6 +65,22 @@ class _FakeSessionLogger:
     def log(self, event: str, data: dict | None = None):
         self.events.append((event, data or {}))
 
+    def log_tool_call(
+        self, tool, method, inputs=None, outputs=None, duration_ms=None, error=None
+    ):
+        self.events.append(("tool_call", {"tool": tool, "method": method}))
+
+    def log_message(self, direction, payload):
+        self.events.append(("message", {direction: payload}))
+
+    def log_exception(self, exc=None, context=None):
+        self.events.append(("exception", {"error": str(exc), "context": context}))
+
+    def add_token_usage(self, prompt_tokens: int, completion_tokens: int):
+        self.events.append(
+            ("token_usage", {"prompt": prompt_tokens, "completion": completion_tokens})
+        )
+
 
 # ---------------------------------------------------------------------------
 # Phase 1: rerank_results tests

@@ -42,6 +42,8 @@ import json
 import logging
 from typing import Any
 
+from session_logger import SessionLoggerProtocol
+
 _log = logging.getLogger(__name__)
 
 # Hard caps so a runaway small-model summary can't flood the conversation
@@ -119,7 +121,7 @@ def summarize_step(
     tool_calls: list[dict[str, Any]],
     tool_results: list[dict[str, Any]],
     thinking: str = "",
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
 ) -> str:
     """Produce a consolidated summary of one plan step.
 

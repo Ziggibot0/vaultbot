@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from session_logger import SessionLoggerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class TriggerStore:
         self,
         state_path: str | Path,
         embedding_getter: Callable[[str], np.ndarray] | None = None,
-        session_logger: Any = None,
+        session_logger: SessionLoggerProtocol | None = None,
     ) -> None:
         self.state_path = Path(state_path)
         self.embedding_getter = embedding_getter
