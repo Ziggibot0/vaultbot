@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.7] - 2026-08-31
+
+This release restores live answer streaming — the model's words now appear
+in the chat as they are generated, instead of appearing only after the
+whole turn completes. It is a **patch** bump.
+
+### Fixed
+
+- **Answers stream live again** — a UX regression from the gate era made
+  the UI buffer ALL answer prose until the turn fully completed, so on
+  slow machines (or a fresh vault's first index build) the chat showed
+  thinking and tool activity for minutes with zero words — looking
+  exactly like "thinks and calls tools but never says anything." The
+  backend now streams prose as it is generated (`answer_chunk` events,
+  which the UI already knew how to render). The final authoritative
+  answer still replaces the streamed text at completion, so citations,
+  badge, and Sources render as before.
+
+
 ## [1.5.6] - 2026-08-31
 
 This release removes the closed-set grounding gate — the last mechanism
