@@ -39,6 +39,8 @@ import logging
 import re
 from typing import Any
 
+from session_logger import SessionLoggerProtocol
+
 _log = logging.getLogger(__name__)
 
 _MAX_PLAN_STEPS = 20
@@ -98,7 +100,7 @@ def _extract_json(text: str) -> dict[str, Any] | None:
 def framework_plan(
     llm_client: Any,
     user_message: str,
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
 ) -> tuple[str, list[str]] | None:
     """Make a framework-driven planning call before the agentic loop.
 

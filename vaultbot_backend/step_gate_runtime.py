@@ -49,6 +49,7 @@ from procedure_validators import (  # noqa: F401 — re-exported for tests/calle
     _parse_validation,
     _validate_step,
 )
+from session_logger import SessionLoggerProtocol
 
 # ── Data structures ───────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ _ZERO_STEPS_DIAGNOSIS = (
 
 def _empty_procedure_result(
     procedure: Procedure,
-    session_logger: Any,
+    session_logger: SessionLoggerProtocol | None,
 ) -> ExecutionResult:
     """Return an ``ExecutionResult`` for a procedure with zero steps.
 
@@ -344,7 +345,7 @@ async def execute_procedure(
     context: str,
     llm_client: Any,
     vault_path: str = ".",
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     progress_callback: Callable | None = None,
     procedure_tracker: Any = None,
     call_stack: list[str] | None = None,

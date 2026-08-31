@@ -33,6 +33,7 @@ import time
 from typing import Any
 
 from config import TUNABLES
+from session_logger import SessionLoggerProtocol
 
 # Caps shared with step_summarizer.py — keep the conversation bounded.
 _MAX_SUMMARY_CHARS = 600
@@ -187,7 +188,11 @@ def _client_chat(
 
 
 async def rerank_results(
-    svc: Any, query: str, results: list[dict], k: int = 5, session_logger: Any = None
+    svc: Any,
+    query: str,
+    results: list[dict],
+    k: int = 5,
+    session_logger: SessionLoggerProtocol | None = None,
 ) -> list[dict]:
     """Deterministic reranking using embedding cosine similarity.
 
@@ -286,7 +291,7 @@ async def rerank_results(
 
 
 def expand_query(
-    client: Any, user_message: str, session_logger: Any = None
+    client: Any, user_message: str, session_logger: SessionLoggerProtocol | None = None
 ) -> list[str]:
     """Use the small model to generate 2 alternative search queries.
 
@@ -383,7 +388,10 @@ _SECTION_RE = re.compile(r"^### \[\[([^\]]+)\]\]", re.MULTILINE)
 
 
 async def filter_context(
-    svc: Any, query: str, context: str, session_logger: Any = None
+    svc: Any,
+    query: str,
+    context: str,
+    session_logger: SessionLoggerProtocol | None = None,
 ) -> str:
     """Deterministically drop irrelevant context sections by keyword overlap.
 
@@ -461,7 +469,7 @@ async def filter_context(
 def rewrite_query_with_history(
     user_message: str,
     conversation_history: list[dict],
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     on_failure: Any = None,
 ) -> str:
     """Rewrite a user query using conversation context for better retrieval.

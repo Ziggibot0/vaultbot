@@ -38,6 +38,20 @@ class _FakeLogger:
     def log(self, event, data=None):
         self.events.append((event, data))
 
+    def log_tool_call(
+        self, tool, method, inputs=None, outputs=None, duration_ms=None, error=None
+    ):
+        self.events.append(("tool_call", {"tool": tool, "method": method}))
+
+    def log_message(self, direction, payload):
+        self.events.append(("message", {direction: payload}))
+
+    def log_exception(self, exc=None, context=None):
+        self.events.append(("exception", {"error": str(exc), "context": context}))
+
+    def add_token_usage(self, prompt_tokens, completion_tokens):
+        pass
+
 
 def _wrapper_that_prints(brief: dict) -> str:
     """A minimal wrapper that prints a fixed JSON brief to stdout."""

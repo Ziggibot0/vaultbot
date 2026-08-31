@@ -16,6 +16,7 @@ import os
 from typing import Any
 
 from config import TUNABLES
+from session_logger import SessionLoggerProtocol
 
 # ── Provider-safe message projection ────────────────────────────────────
 #
@@ -393,7 +394,7 @@ def round_tool_outcome(tool_name: str, result: Any) -> str:
 
 def age_old_tool_results(
     conversation: list[dict[str, Any]],
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     round_idx: int = 0,
 ) -> list[dict[str, Any]]:
     """Stub old tool results to a 1-line summary, independent of token cap.
@@ -523,7 +524,7 @@ def estimate_conv_tokens(conversation: list[dict[str, Any]]) -> int:
 
 def enforce_token_cap(
     conversation: list[dict[str, Any]],
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     round_idx: int = 0,
 ) -> list[dict[str, Any]]:
     """Guarantee the conversation fits within the hard token cap.

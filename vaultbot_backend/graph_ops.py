@@ -29,6 +29,7 @@ from typing import Any, Optional
 
 from note_creator import NoteCreator
 from research_engine import ResearchEngine
+from session_logger import SessionLoggerProtocol
 from vault_graph import VaultGraph
 from vault_indexer import VaultIndexer
 
@@ -67,7 +68,7 @@ class GraphOpRegistry:
         note_creator: NoteCreator,
         research_engine: ResearchEngine,
         ollama_client: Optional["OllamaClient"] = None,
-        session_logger: Any = None,
+        session_logger: SessionLoggerProtocol | None = None,
     ) -> None:
         self.vault_graph = vault_graph
         self.vault_indexer = vault_indexer

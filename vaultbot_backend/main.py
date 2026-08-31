@@ -53,7 +53,7 @@ from plan_executor import PlanExecutor  # noqa: E402
 from providers import ProviderRegistry  # noqa: E402
 from research_engine import ResearchEngine  # noqa: E402
 from self_improver import SelfImprover  # noqa: E402
-from session_logger import SessionLogger  # noqa: E402
+from session_logger import SessionLogger, SessionLoggerProtocol  # noqa: E402
 from supervision import HealthMonitor  # noqa: E402
 from vault_graph import VaultGraph  # noqa: E402
 from vault_indexer import VaultIndexer  # noqa: E402
@@ -776,7 +776,10 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
 
     async def send_personal_message(
-        self, message: str, websocket: WebSocket, session_logger: SessionLogger = None
+        self,
+        message: str,
+        websocket: WebSocket,
+        session_logger: SessionLoggerProtocol | None = None,
     ):
         try:
             await websocket.send_text(message)
@@ -799,7 +802,9 @@ class ConnectionManager:
             except json.JSONDecodeError:
                 session_logger.log_message("out", {"raw": message})
 
-    async def broadcast(self, message: str, session_logger: SessionLogger = None):
+    async def broadcast(
+        self, message: str, session_logger: SessionLoggerProtocol | None = None
+    ):
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
