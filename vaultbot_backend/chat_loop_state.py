@@ -76,16 +76,11 @@ class TurnState:
     # treated as ungrounded even if the note exists in the graph.
     _allowed_citations: dict = field(default_factory=dict)
 
-    # Grounding retry state: how many times the hard grounding gate has
-    # re-entered the agentic loop to demand a re-cited answer. Capped at
-    # TUNABLES.max_grounding_retries (default 1) before soft-fail + ⚠️.
+    # Grounding is OBSERVATIONAL (see chat_turn_finalize): the closed-set
+    # gate, its retry loop, and its reprimand plumbing were removed. The
+    # drafted answer from the first agentic pass is the answer the user
+    # gets; scoring now only drives the trust badge / Sources block.
     _grounding_retry_count: int = 0
-    # Set by finalize_turn when the answer failed the grounding check so
-    # the re-entry wrapper knows to loop back. Cleared on a clean pass.
-    _grounding_failed: bool = False
-    # The reprimand message to append as a user-role turn when re-entering
-    # the loop for a grounding retry. Built by finalize_turn.
-    _grounding_reprimand: str = ""
 
     # Findings ledger (anti-amnesia): 1-line entries per round.
     _findings: list = field(default_factory=list)

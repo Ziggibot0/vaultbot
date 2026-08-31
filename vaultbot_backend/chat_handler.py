@@ -39,7 +39,6 @@ from chat_loop_state import TurnState
 from chat_tool_dispatch import execute_agent_tool  # noqa: F401 -- re-exported
 from chat_turn_finalize import finalize_turn as _finalize_turn
 from chat_turn_prep import prepare_turn as _prepare_turn
-from config import TUNABLES
 
 # Leaf-module imports for helpers that were previously deferred-imported
 # from main (circular). These are now direct leaf imports -- no main dependency.
@@ -254,60 +253,10 @@ async def handle_chat(
             st,
         )
 
-        # --- Grounding retry re-entry (vault-centric provenance) -------
-        # finalize_turn flagged the answer as ungrounded (uncited claims
-        # against the closed-set). Re-enter the agentic loop ONCE with a
-        # reprimand as a user-role turn so the model rewrites the answer
-        # with citations. Capped at TUNABLES.max_grounding_retries (1) --
-        # after that, finalize_turn shipped the answer + a ⚠️ caution so
-        # the user is never left with no answer.
-        while (
-            getattr(st, "_grounding_failed", False)
-            and getattr(st, "_grounding_retry_count", 0)
-            < TUNABLES.max_grounding_retries
-        ):
-            st._grounding_failed = False
-            st._grounding_retry_count += 1
-            st.final_answer = ""  # reset so the rewrite replaces, not appends
-            # Append the reprimand as a user-role turn -- Ollama rejects
-            # system messages after user/assistant/tool messages.
-            conversation.append({"role": "user", "content": st._grounding_reprimand})
-            session_logger.log(
-                "grounding_retry_reenter",
-                {"retry_count": st._grounding_retry_count},
-            )
-            await run_agentic_loop(
-                svc,
-                websocket,
-                session_logger,
-                loop,
-                user_message,
-                wm,
-                conversation,
-                all_tools,
-                custom_schemas,
-                procedures_in_context,
-                st,
-                _cp,
-            )
-            st.final_answer = await _finalize_turn(
-                svc,
-                websocket,
-                session_logger,
-                loop,
-                st.final_answer,
-                st.thinking_text,
-                st.total_chunks,
-                st.round_idx,
-                t0,
-                st._turn_token_totals,
-                st._model_conversation,
-                conversation,
-                st.partial_path,
-                _cp,
-                st,
-            )
-
+        # NOTE: the grounding retry re-entry loop was REMOVED with the
+        # closed-set grounding gate (see chat_turn_finalize). The drafted
+        # answer from the first agentic pass is the answer the user gets;
+        # provenance is now observational (trust badge + Sources block).
         await _run_background_tasks(
             svc,
             websocket,
