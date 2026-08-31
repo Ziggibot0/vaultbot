@@ -138,34 +138,17 @@ class Tunables:
     trigger_max_phrases: int = 15
 
     # ── Vault-centric synthesis + provenance (2026-08-16) ────────────────
-    # The big LLM is a ROUTER/SYNTHESIZER over vault notes. These tunables
-    # enforce closed-set citation.
+    # The big LLM is a ROUTER/SYNTHESIZER over vault notes.
     #
     #   min_retrieval_score: the FUSED similarity score below which a
     #     result is treated as "not really retrieved". Results below this
     #     count as empty. Override via env var VAULTBOT_MIN_RETRIEVAL_SCORE.
-    #   max_grounding_retries: how many times finalize_turn may re-enter the
-    #     agentic loop to demand a re-cited answer before shipping the answer
-    #     with a ⚠️ caution (last resort so the user is never left with no
-    #     answer). 1 = one retry round; 0 = soft-fail only (legacy behavior).
-    #   ungrounded_sentence_threshold: fraction of answer sentences with no
-    #     [[wikilink]] from the allowed-citations set that triggers a grounding
-    #     retry. 0.30 = retry if >30% of sentences are uncited. Only applies
-    #     to answers >3 sentences (short answers are hard to split cleanly).
-    #   legacy_seed_note_cap: per-note char cap for the TOP seed notes in the
-    #     legacy build_graph_context path (the common personal-vault case).
-    #     Seeds get more body (4000) so the model can synthesize accurately;
-    #     non-seed walked nodes keep the tight 900 cap. This is the synthesis-
-    #     accuracy lever for non-textbook vaults.
-    #   legacy_walked_note_cap: per-note char cap for walked-but-non-seed
-    #     nodes in the legacy path.
-    #   abstract_extra_drill_cap: char cap for the 2nd/3rd seed drill-down in
-    #     the abstract (L0/L1/L2) path. The top seed keeps DRILL_CAP=12000;
-    #     seeds 2-3 get this smaller cap so multi-note synthesis isn't
-    #     limited to one note's full body.
+    #   LEGACY, REMOVED: max_grounding_retries / ungrounded_sentence_threshold
+    #     (the closed-set grounding gate + retry loop) — the gate flagged
+    #     nearly every answer on thin/empty vaults and burned an LLM round
+    #     re-asking the model to cite. Grounding scoring is observational
+    #     now (trust badge / Sources block only).
     min_retrieval_score: float = 0.15
-    max_grounding_retries: int = 1
-    ungrounded_sentence_threshold: float = 0.30
     # ── Wikilink repair (issue #335) ─────────────────────────────────────
     # The model sometimes mangles the exact stem of a note it is allowed to
     # cite ("[[Chat- sup- homie]]" for "Chat-sup-homie"). The repair step

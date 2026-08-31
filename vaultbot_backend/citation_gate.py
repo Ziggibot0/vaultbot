@@ -26,8 +26,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from config import TUNABLES
-
 # ── [[wikilink]] parsing ──────────────────────────────────────────────
 # Matches [[Note-Name]], [[Note-Name|alias]], [[Note-Name#heading]].
 # Capture group 1 = the note stem (what we compare against the closed set).
@@ -238,7 +236,10 @@ def score_grounding(
     else:
         grounding_score = allowed_cited / total
 
-    threshold = TUNABLES.ungrounded_sentence_threshold
+    # Was TUNABLES.ungrounded_sentence_threshold; the gate that consumed it
+    # is removed — scoring is observational, so the threshold is now a local
+    # constant (same 0.30 value) rather than a tunable.
+    threshold = 0.30
     failed = False
     if (total == 0 and n_sent > 1) or (n_sent > 3 and ungrounded_ratio > threshold):
         failed = True

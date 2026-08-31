@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.6] - 2026-08-31
+
+This release removes the closed-set grounding gate — the last mechanism
+that could block or rewrite a drafted answer. It is a **patch** bump.
+
+### Removed
+
+- **The closed-set grounding gate (and its retry loop)** — the gate scored
+  every drafted answer against the per-turn allowed-citations set and, when
+  too many sentences were uncited, re-entered the agentic loop with a
+  reprimand (burning a full LLM round) or appended a "may draw on model
+  weights" caution. On fresh installs with an empty/thin vault index it
+  flagged nearly every answer, because retrieval returned nothing to cite.
+  Together with the entailment-delivery gate removed in v1.5.4, this was
+  the last path that could suppress a drafted answer.
+
+### Changed
+
+- **Grounding is observational** — the drafted answer from the first
+  agentic pass is now exactly what the user receives. Scoring still runs
+  to drive the trust badge and Sources block, and mangled [[wikilinks]]
+  are still repaired for clickability, but nothing can alter the answer's
+  text or delay delivery. Provenance is surfaced, not enforced (ADR-0004:
+  enforcement returns as a badge upgrade once entailment is reimplemented
+  as a background layer).
+
+
 ## [1.5.5] - 2026-08-30
 
 This release makes the two remaining "the bot thinks but never speaks"

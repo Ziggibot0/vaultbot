@@ -19,7 +19,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from chat_loop_state import TurnState
-from config import TUNABLES
 from services import Services
 
 # Tools whose output is a live, authoritative fact source (not vault
@@ -142,39 +141,27 @@ async def finalize_turn(
     if st is None:
         st = TurnState()
 
-    # --- Grounding enforcement: closed-set citation gate ----------------
-    # The big LLM is a synthesis router. Its answer must cite notes from
-    # the per-turn allowed-citations set (st._allowed_citations), built
-    # from the retrieved vault context. We score the answer against that
-    # closed set: every [[wikilink]] must be in the set, and every factual
-    # sentence must contain one. If the answer fails (zero citations, or
-    # too many ungrounded sentences), we flag it for a retry re-entry into
-    # the agentic loop (capped at TUNABLES.max_grounding_retries) with a
-    # reprimand. After the retry cap, we ship the answer + a ⚠️ caution so
-    # the user is never left with no answer.
+    # --- Grounding OBSERVATION (was: closed-set citation gate) ----------
+    # The hard gate is GONE. It used to re-enter the agentic loop with a
+    # reprimand when the drafted answer had uncited sentences (and append a
+    # scary caution after the retry cap) — burning a full LLM round and, on
+    # vaults with an empty/thin index (fresh installs), flagging nearly
+    # every answer. That was the last mechanism that could suppress or
+    # delay a drafted answer, and it is what users experienced as "the bot
+    # thinks and calls tools but never speaks."
     #
-    # IDK escape hatch: if the model said "I don't know" (the correct
-    # response when the vault has nothing relevant), skip the grounding
-    # retry entirely. An IDK answer is not a factual claim — it's an
-    # admission of ignorance. Retrying it wastes an LLM round and may
-    # force the model to cite irrelevant notes just to pass the gate.
-    # This is the ONLY intent-based exemption. The lexical temporal/
-    # coaching/conversational classifiers were REMOVED (repo rule: no
-    # keyword lists; FUSED retrieval and the model decide relevance).
+    # What remains is observational only: score the answer for the trust
+    # badge / Sources block, and repair mangled wikilinks (pure usability —
+    # the user gets clickable citations). Nothing here can alter the
+    # answer's text or block delivery. Provenance is surfaced, not
+    # enforced; per ADR-0004 (ratchets-not-gates) enforcement returns as a
+    # badge upgrade once entailment is reimplemented correctly as a
+    # background layer.
     _allowed = getattr(st, "_allowed_citations", None) or {}
     _score: dict = {}
     _confidence: dict = {}
-    _grounding_caution = ""
     _is_idk = False
     _graph_lookup: Callable[[str], bool] | None = None
-    # Tool-sourced answer detection (issue #132): when the turn's facts
-    # came from LIVE tool calls (calendar, code_read, github_issues, etc.)
-    # rather than vault retrieval, the answer is grounded in the tool's
-    # output — not model weights. The grounding gate only knows about vault
-    # notes, so it would false-alarm (0% grounded) on a correct calendar
-    # answer. Detect that and suppress the scary "may draw on model
-    # weights" warning, replacing it with a neutral "sourced from live
-    # tools" note.
     _is_tool_sourced = is_tool_sourced(getattr(st, "_turn_tool_history", None))
     try:
 
@@ -186,23 +173,14 @@ async def finalize_turn(
         _graph_lookup = None
     if final_answer and len(final_answer) > 50:
         try:
-            from citation_gate import build_reprimand, detect_idk, score_grounding
+            from citation_gate import detect_idk, score_grounding
 
-            # Check IDK BEFORE scoring — skip the grounding retry for
-            # admissions of ignorance. We still score (for logging) but
-            # don't trigger a retry or append a caution.
             _is_idk = detect_idk(final_answer)
 
-            # ── Wikilink repair (issue #335) ─────────────────────────────
-            # The model sometimes mangles the exact stem of a note it IS
-            # allowed to cite ("[[Chat- sup- homie]]" for "Chat-sup-homie").
-            # Rewrite those links against the closed set BEFORE scoring, so
-            # the user gets clickable citations and the gate doesn't burn a
-            # retry on a typo. The repair universe is the closed set itself
-            # (plus a graph-verified fallback), so it can never map a
-            # hallucinated title to a vault note the model wasn't shown.
-            _repaired_answer = final_answer
-            _repair_pairs: list[tuple[str, str]] = []
+            # Wikilink repair (issue #335): rewrite mangled stems against
+            # the closed set so the user gets clickable citations. Pure
+            # text repair — can never invent a citation, only fix typos of
+            # notes the model was already shown.
             if _allowed and not _is_idk:
                 try:
                     from custom_tools.wikilink_repair import (
@@ -218,12 +196,10 @@ async def finalize_turn(
                             "wikilinks_repaired",
                             {"repairs": _repair_pairs[:10]},
                         )
-                except Exception as _e:  # noqa: BLE001 — repair is best-effort; scoring still runs on the raw answer
+                except Exception as _e:  # noqa: BLE001 — repair is best-effort
                     session_logger.log("wikilink_repair_failed", {"error": str(_e)})
 
-            _score = score_grounding(
-                final_answer, _allowed, _graph_lookup, _repair_pairs
-            )
+            _score = score_grounding(final_answer, _allowed, _graph_lookup, [])
             session_logger.log(
                 "grounding_check",
                 {
@@ -237,65 +213,12 @@ async def finalize_turn(
                     "grounding_score": _score["grounding_score"],
                     "failed": _score["failed"],
                     "allowed_set_size": len(_allowed),
-                    "retry_count": getattr(st, "_grounding_retry_count", 0),
                     "is_idk": _is_idk,
                     "is_tool_sourced": _is_tool_sourced,
+                    "gate": "observational",
                 },
             )
-            if _score["failed"] and not _is_idk and not _is_tool_sourced:
-                # Hard gate: flag for retry if under the cap.
-                _retries = getattr(st, "_grounding_retry_count", 0)
-                if _retries < TUNABLES.max_grounding_retries:
-                    st._grounding_failed = True
-                    st._grounding_reprimand = build_reprimand(_score, _allowed)
-                    session_logger.log(
-                        "grounding_retry_requested",
-                        {
-                            "retry_count": _retries,
-                            "max": TUNABLES.max_grounding_retries,
-                        },
-                    )
-                    return final_answer  # caller re-enters the loop
-                else:
-                    # Retry cap reached — ship with a visible caution.
-                    _grounding_caution = (
-                        f"\n\n> ⚠️ **Grounding check**: This answer may be "
-                        f"partially ungrounded ({_score['ungrounded_sentences']}/"
-                        f"{_score['sentences']} sentences uncited, "
-                        f"grounding_score {_score['grounding_score']}). "
-                        f"It may draw on model weights rather than your "
-                        f"vault. Consider asking me to verify or research "
-                        f"this topic."
-                    )
-                    final_answer += _grounding_caution
-            elif _score["failed"] and (_is_idk or _is_tool_sourced):
-                # IDK answer failed grounding (expected — it has no factual
-                # claims to cite) or a tool-sourced answer (grounded in a
-                # live tool call, not vault notes — issue #132). Log and
-                # skip — don't retry, don't caution.
-                session_logger.log(
-                    "grounding_skipped_idk",
-                    {
-                        "retry_count": getattr(st, "_grounding_retry_count", 0),
-                        "is_idk": _is_idk,
-                        "is_tool_sourced": _is_tool_sourced,
-                    },
-                )
-            elif (
-                _score["grounding_score"] < 0.5
-                and _score["total_wikilinks"] > 0
-                and not _is_tool_sourced
-            ):
-                # Some citations but many missing from the set/vault — soft warn.
-                _grounding_caution = (
-                    f"\n\n> ⚠️ **Grounding check**: Only "
-                    f"{_score['allowed_cited']}/{_score['total_wikilinks']} "
-                    f"cited notes were in the allowed set. Missing: "
-                    f"{', '.join(_score['missing_from_set'][:5])}. "
-                    f"This answer may be partially ungrounded."
-                )
-                final_answer += _grounding_caution
-        except Exception as _e:  # noqa: BLE001 — best-effort
+        except Exception as _e:  # noqa: BLE001 — best-effort scoring
             session_logger.log("grounding_check_failed", {"error": str(_e)})
 
     # --- Code-grounding score (the code analogue of the citation gate) ---
