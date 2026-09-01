@@ -277,10 +277,9 @@ def run(args: dict) -> dict:
         }
 
     # 1b. Check if contributions are allowed (opt-in)
-    allow_contributions = (
-        os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
-    )
-    if allow_contributions != "true":
+    from live_config import allow_contributions
+
+    if not allow_contributions():
         return {
             "error": "Contributions are not enabled.",
             "hint": (
