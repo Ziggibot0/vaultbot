@@ -49,6 +49,25 @@ def test_is_model_loaded_cloud_bypasses_session():
     owner._session.get.assert_not_called()
 
 
+def test_is_model_loaded_cloud_dash_suffix_bypasses_session():
+    # gemma4:31b-cloud uses a -cloud suffix, not :cloud. It must also be
+    # treated as always-resident (no /api/ps probe, no load wait).
+    owner = _owner(model="gemma4:31b-cloud")
+
+    assert OllamaRuntime(owner).is_model_loaded() is True
+    owner._session.get.assert_not_called()
+
+
+def test_is_cloud_model_shapes():
+    from ollama_runtime import is_cloud_model
+
+    assert is_cloud_model("glm-5.3:cloud") is True
+    assert is_cloud_model("gemma4:31b-cloud") is True
+    assert is_cloud_model("provider:cloud:model") is True
+    assert is_cloud_model("qwen3.5:4b") is False
+    assert is_cloud_model("") is False
+
+
 def test_runtime_dereferences_replaced_owner_session():
     original_session = MagicMock()
     owner = _owner(session=original_session)

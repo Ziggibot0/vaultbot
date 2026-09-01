@@ -6,6 +6,20 @@ from typing import Any, ClassVar
 logger = logging.getLogger(__name__)
 
 
+def is_cloud_model(model: str) -> bool:
+    """Return True if ``model`` is an Ollama cloud model.
+
+    Ollama names cloud models with either a ``:cloud`` tag (``glm-5.3:cloud``)
+    or a ``-cloud`` suffix (``gemma4:31b-cloud``). Cloud models are always
+    resident on Ollama's servers, so they never need a local load/wait. This
+    helper is the single source of truth for that check so callers don't
+    duplicate a fragile string match.
+    """
+    if not model:
+        return False
+    return model.endswith(":cloud") or model.endswith("-cloud") or ":cloud:" in model
+
+
 class OllamaRuntime:
     _ctx_win_cache: ClassVar[dict[str, int]] = {}
     _ctx_win_fail_cache: ClassVar[dict[str, float]] = {}
@@ -18,7 +32,7 @@ class OllamaRuntime:
         model = model or owner.llm_model
         if not model:
             return False
-        if model.endswith(":cloud") or ":cloud:" in model:
+        if is_cloud_model(model):
             return True
         try:
             resp = owner._session.get(f"{owner.base_url}/api/ps", timeout=5)

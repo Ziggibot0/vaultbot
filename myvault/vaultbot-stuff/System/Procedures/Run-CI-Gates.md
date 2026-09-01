@@ -4,8 +4,8 @@ status: experimental
 baseline: true
 created: 2026-08-19
 description: "Run the same CI gates locally that GitHub Actions runs: ruff check (full rule set), ruff format --check, pyright on hot-path files, and pytest. Returns a structured per-gate pass/fail report with the exact errors so they can be fixed before pushing. This is the local mirror of the CI pipeline — catch failures in seconds instead of waiting for GitHub Actions."
-when_to_use: "Before pushing a PR, after editing backend code, before calling submit_contribution, when a PR's CI failed and you need to reproduce the failure locally, or when asked 'run the CI checks locally'."
-falsifiable_if: "The procedure reports a gate as passing when it actually fails, or vice versa."
+when_to_use: Before pushing a PR, after editing backend code, before calling submit_contribution, when a PR's CI failed and you need to reproduce the failure locally, or when asked 'run the CI checks locally'.
+falsifiable_if: The procedure reports a gate as passing when it actually fails, or vice versa.
 applies_to:
   - ci
   - testing
@@ -15,7 +15,7 @@ applies_to:
   - git-workflow
 allowed_tools:
   - code_run
-summary: Run-CI-Gates
+summary: This note describes a local process for running CI gates like Ruff and Pytest to catch failures before pushing to GitHub.
 tags:
   - procedure
   - procedures
@@ -75,17 +75,32 @@ if not os.path.exists(venv_python):
 if not os.path.exists(venv_python):
     venv_python = "python"
 
+```python
+import json, os
+from pathlib import Path
+
+# The backend lives at vault_path/vaultbot/vaultbot_backend
+# Use FRAMEWORK_ROOT to locate the repo root, then find the .venv
+repo_root = Path(FRAMEWORK_ROOT).parent if "vaultbot_backend" in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend") if "vaultbot_backend" not in FRAMEWORK_ROOT else FRAMEWORK_ROOT
+
+venv_python = str(repo_root / ".venv" / "Scripts" / "python.exe")
+if not os.path.exists(venv_python):
+    venv_python = str(repo_root / ".venv" / "bin" / "python")
+if not os.path.exists(venv_python):
+    venv_python = "python"
+
 # Check if ruff is available (may be in venv Scripts or global)
 import shutil
 ruff_bin = shutil.which("ruff")
 if not ruff_bin:
-    ruff_venv = str(Path(vault_path) / ".venv" / "Scripts" / "ruff.exe")
+    ruff_venv = str(repo_root / ".venv" / "Scripts" / "ruff.exe")
     ruff_bin = ruff_venv if os.path.exists(ruff_venv) else None
 
 # Check if pyright is available
 pyright_bin = shutil.which("pyright")
 if not pyright_bin:
-    pyright_venv = str(Path(vault_path) / ".venv" / "Scripts" / "pyright.exe")
+    pyright_venv = str(repo_root / ".venv" / "Scripts" / "pyright.exe")
     pyright_bin = pyright_venv if os.path.exists(pyright_venv) else None
 
 result = json.dumps({
@@ -95,9 +110,6 @@ result = json.dumps({
     "pyright": pyright_bin,
 })
 ```
-
-### Step 2: Run ruff check (full rule set — HARD GATE)
-
 ```python
 import json, subprocess, os, shutil
 
@@ -119,13 +131,38 @@ if ruff_bin:
             [ruff_bin, "check", "."],
             capture_output=True, text=True, timeout=120,
             cwd=backend_dir,
+```python
+import json, subprocess, os, shutil
+from pathlib import Path
+
+# Re-discover config (each step is independent)
+repo_root = Path(FRAMEWORK_ROOT).parent if "vaultbot_backend" in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend") if "vaultbot_backend" not in FRAMEWORK_ROOT else FRAMEWORK_ROOT
+
+ruff_bin = shutil.which("ruff")
+if not ruff_bin:
+    ruff_venv = str(repo_root / ".venv" / "Scripts" / "ruff.exe")
+    ruff_bin = ruff_venv if os.path.exists(ruff_venv) else None
+
+# Preserve previous gate result
+prev = json.loads(output)
+gate_results = prev if isinstance(prev, dict) and "ruff_check" in prev else {"ruff_check": prev}
+
+gate_results["ruff_check"] = {"status": "skipped", "errors": []}
+
+if ruff_bin:
+    try:
+        r = subprocess.run(
+            [ruff_bin, "check", "."],
+            capture_output=True, text=True, timeout=120,
+            cwd=backend_dir,
         )
         if r.returncode == 0:
             gate_results["ruff_check"] = {"status": "pass", "errors": []}
         else:
             # Parse ruff output for specific violations
             errors = []
-            for line in (r.stdout + r.stderr).split("\n"):
+            for line in (r.stdout + r.stderr).split("\\n"):
                 line = line.strip()
                 if line and not line.startswith("Found") and not line.startswith("--"):
                     errors.append(line)
@@ -139,24 +176,22 @@ if ruff_bin:
     except Exception as e:
         gate_results["ruff_check"] = {"status": "error", "errors": [str(e)]}
 else:
-    gate_results["ruff_check"] = {"status": "skipped", "errors": ["ruff not found — install with: pip install ruff"]}
+    gate_results["ruff_check"] = {"status": "skipped", "errors": ["ruff not found - install with: pip install ruff"]}
 
 result = json.dumps(gate_results)
 ```
 
-### Step 3: Run ruff format --check (HARD GATE)
-
 ```python
 import json, subprocess, os, shutil
+from pathlib import Path
 
 # Re-discover config (each step is independent)
-backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
-if not os.path.isdir(backend_dir):
-    backend_dir = str(Path(vault_path))
+repo_root = Path(FRAMEWORK_ROOT).parent if "vaultbot_backend" in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend") if "vaultbot_backend" not in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
 
 ruff_bin = shutil.which("ruff")
 if not ruff_bin:
-    ruff_venv = str(Path(vault_path) / ".venv" / "Scripts" / "ruff.exe")
+    ruff_venv = str(repo_root / ".venv" / "Scripts" / "ruff.exe")
     ruff_bin = ruff_venv if os.path.exists(ruff_venv) else None
 
 # Preserve previous gate result
@@ -171,6 +206,32 @@ if ruff_bin:
             [ruff_bin, "format", "--check", "."],
             capture_output=True, text=True, timeout=120,
             cwd=backend_dir,
+        )
+        if r.returncode == 0:
+            gate_results["ruff_format"] = {"status": "pass", "errors": []}
+        else:
+            # ruff format --check lists files that would be reformatted
+            errors = []
+            for line in (r.stdout + r.stderr).split("\\n"):
+                line = line.strip()
+                if line and ("Would reformat" in line or "would reformat" in line):
+                    errors.append(line)
+            if not errors:
+                errors = [l.strip() for l in (r.stdout + r.stderr).split("\\n") if l.strip()][:10]
+            gate_results["ruff_format"] = {
+                "status": "fail",
+                "errors": errors,
+                "hint": "Run 'ruff format .' to auto-fix formatting, then re-run this gate.",
+            }
+    except subprocess.TimeoutExpired:
+        gate_results["ruff_format"] = {"status": "timeout", "errors": ["ruff format --check timed out after 120s"]}
+    except Exception as e:
+        gate_results["ruff_format"] = {"status": "error", "errors": [str(e)]}
+else:
+    gate_results["ruff_format"] = {"status": "skipped", "errors": ["ruff not found"]}
+
+result = json.dumps(gate_results)
+```
         )
         if r.returncode == 0:
             gate_results["ruff_format"] = {"status": "pass", "errors": []}
@@ -205,31 +266,27 @@ has a debt ratchet: pre-existing errors are tracked, and only NEW errors
 fail the gate. Running pyright on the full repo is slow (>300s on 226
 files), so it is **opt-in** — pass `run_pyright=true` in args to enable
 it. By default it's skipped, which matches the pre-push use case where
-you want fast feedback from ruff + pytest. We are widening the hot-path
-files incrementally; the target date to flip full-repo pyright to a hard
-blocking gate is 2026-10-01 (see CI configuration comments).
-
 ```python
 import json, subprocess, os, shutil
+from pathlib import Path
 
 # Re-discover config
-backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
-if not os.path.isdir(backend_dir):
-    backend_dir = str(Path(vault_path))
+repo_root = Path(FRAMEWORK_ROOT).parent if "vaultbot_backend" in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend") if "vaultbot_backend" not in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
 
 pyright_bin = shutil.which("pyright")
 if not pyright_bin:
-    pyright_venv = str(Path(vault_path) / ".venv" / "Scripts" / "pyright.exe")
+    pyright_venv = str(repo_root / ".venv" / "Scripts" / "pyright.exe")
     pyright_bin = pyright_venv if os.path.exists(pyright_venv) else None
 
 # Preserve previous gate results
 prev = json.loads(output)
 gate_results = prev if isinstance(prev, dict) and "ruff_check" in prev else {"ruff_check": prev}
 
-# Pyright is opt-in — slow on full repo, SOFT gate anyway
+# Pyright is opt-in - slow on full repo, SOFT gate anyway
 run_pyright = args.get("run_pyright", False)
 
-gate_results["pyright"] = {"status": "skipped", "errors": [], "note": "SOFT GATE — opt-in via run_pyright=true (slow on full repo)"}
+gate_results["pyright"] = {"status": "skipped", "errors": [], "note": "SOFT GATE - opt-in via run_pyright=true (slow on full repo)"}
 
 if pyright_bin and run_pyright:
     try:
@@ -243,7 +300,7 @@ if pyright_bin and run_pyright:
         # Count errors for reporting; the caller compares against baseline.
         error_count = 0
         errors = []
-        for line in (r.stdout + r.stderr).split("\n"):
+        for line in (r.stdout + r.stderr).split("\\n"):
             line = line.strip()
             if line and ("error:" in line.lower()):
                 error_count += 1
@@ -251,6 +308,30 @@ if pyright_bin and run_pyright:
                     errors.append(line)
         # Also check for summary line (e.g., "428 errors, 102 warnings")
         summary_line = ""
+        for line in (r.stdout + r.stderr).split("\\n"):
+            if "errors" in line and "warnings" in line:
+                summary_line = line.strip()
+
+        if r.returncode == 0:
+            gate_results["pyright"] = {"status": "pass", "errors": [], "summary": summary_line}
+        else:
+            gate_results["pyright"] = {
+                "status": "debt",  # SOFT gate - don't say "fail" for pre-existing debt
+                "errors": errors,
+                "error_count": error_count,
+                "summary": summary_line,
+                "exit_code": r.returncode,
+                "note": "SOFT GATE - compare error_count against baseline. Only NEW errors should block.",
+            }
+    except subprocess.TimeoutExpired:
+        gate_results["pyright"] = {"status": "timeout", "errors": ["pyright timed out after 600s"]}
+    except Exception as e:
+        gate_results["pyright"] = {"status": "error", "errors": [str(e)]}
+else:
+    gate_results["pyright"] = {"status": "skipped", "errors": ["pyright not found - install with: pip install pyright"]}
+
+result = json.dumps(gate_results)
+```
         for line in (r.stdout + r.stderr).split("\n"):
             if "errors" in line and "warnings" in line:
                 summary_line = line.strip()
@@ -271,24 +352,17 @@ if pyright_bin and run_pyright:
     except Exception as e:
         gate_results["pyright"] = {"status": "error", "errors": [str(e)]}
 else:
-    gate_results["pyright"] = {"status": "skipped", "errors": ["pyright not found — install with: pip install pyright"]}
-
-result = json.dumps(gate_results)
-```
-
-### Step 5: Run pytest (unit tests — HARD GATE)
-
 ```python
 import json, subprocess, os
+from pathlib import Path
 
 # Re-discover config
-backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
-if not os.path.isdir(backend_dir):
-    backend_dir = str(Path(vault_path))
+repo_root = Path(FRAMEWORK_ROOT).parent if "vaultbot_backend" in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend") if "vaultbot_backend" not in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
 
-venv_python = str(Path(vault_path) / ".venv" / "Scripts" / "python.exe")
+venv_python = str(repo_root / ".venv" / "Scripts" / "python.exe")
 if not os.path.exists(venv_python):
-    venv_python = str(Path(vault_path) / ".venv" / "bin" / "python")
+    venv_python = str(repo_root / ".venv" / "bin" / "python")
 if not os.path.exists(venv_python):
     venv_python = "python"
 
@@ -308,7 +382,7 @@ try:
         cmd, capture_output=True, text=True, timeout=600,
         cwd=backend_dir, env=dict(os.environ),
     )
-    # Detect "No module named pytest" — report as skipped, not failed
+    # Detect "No module named pytest" - report as skipped, not failed
     combined = (r.stdout or "") + (r.stderr or "")
     if "No module named pytest" in combined:
         gate_results["pytest"] = {
@@ -317,6 +391,35 @@ try:
             "hint": f"Install with: {venv_python} -m pip install pytest",
         }
     elif r.returncode == 0:
+        # Parse summary line
+        summary = ""
+        for line in (r.stdout + r.stderr).split("\\n"):
+            if "passed" in line and any(c.isdigit() for c in line):
+                summary = line.strip()
+        gate_results["pytest"] = {"status": "pass", "errors": [], "summary": summary}
+    else:
+        failures = []
+        for line in (r.stdout + r.stderr).split("\\n"):
+            if line.startswith("FAILED ") or "FAILED " in line:
+                failures.append(line.strip())
+        summary = ""
+        for line in (r.stdout + r.stderr).split("\\n"):
+            if ("passed" in line or "failed" in line or "error" in line) and any(c.isdigit() for c in line):
+                summary = line.strip()
+        gate_results["pytest"] = {
+            "status": "fail",
+            "errors": failures[:20],
+            "summary": summary,
+            "stdout_tail": (r.stdout or "")[-2000:],
+            "note": "Some tests may be pre-existing failures (e.g. test_models_returns_list raises NotImplementedError when no cloud provider is configured). Compare against baseline before blocking.",
+        }
+except subprocess.TimeoutExpired:
+    gate_results["pytest"] = {"status": "timeout", "errors": ["pytest timed out after 600s"]}
+except Exception as e:
+    gate_results["pytest"] = {"status": "error", "errors": [str(e)]}
+
+result = json.dumps(gate_results)
+```
         # Parse summary line
         summary = ""
         for line in (r.stdout + r.stderr).split("\n"):

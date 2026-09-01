@@ -368,42 +368,6 @@ async def run_background_tasks(
         _task = asyncio.create_task(_run_lazy_condense_bg())
         _background_tasks.add(_task)
         _task.add_done_callback(_background_tasks.discard)
-
-    # --- QA idle worker: fix note frontmatter while the user reads ---
-    # After the answer is delivered, the user spends time reading and
-    # typing their next message.  This idle window is when the QA worker
-    # pulls notes from a priority queue (most-used first) and fixes
-    # weak frontmatter (missing fields, weak summaries, generic tags).
-    # The worker is interrupted the moment the user sends a new message
-    # — in-flight note is completed, unprocessed notes stay queued.
-    async def _run_qa_idle_bg():
-        try:
-            from qa_worker import run_qa_idle_window
-
-            _qa_ollama = getattr(svc, "ollama_client", None)
-            # Use the small model if available (cheaper for metadata gen)
-            try:
-                from llm_client import get_small_client
-
-                _qa_ollama = get_small_client() or _qa_ollama
-            except Exception:  # noqa: BLE001
-                pass
-            _qa_summary = await run_qa_idle_window(
-                vault_root=svc.vault_path,
-                ollama_client=_qa_ollama,
-                logger=lambda msg: session_logger.log("qa_worker", {"msg": msg}),
-            )
-            session_logger.log("qa_idle_window_done", _qa_summary)
-        except Exception as e:  # noqa: BLE001
-            session_logger.log("qa_idle_bg_failed", {"error": str(e)})
-            await notify_console_failure(
-                svc,
-                websocket,
-                f"background QA worker failed: {e}",
-                context="qa_worker",
-            )
-
-    _task = asyncio.create_task(_run_qa_idle_bg())
     _background_tasks.add(_task)
     _task.add_done_callback(_background_tasks.discard)
 

@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -102,19 +103,36 @@ def backup_path(target: Path, backend_root: Path, trash_dir: Path) -> Path:
     return bak.with_suffix(bak.suffix + ".bak")
 
 
-def detect_external_imports(content: str, internal_modules: set[str]) -> list[str]:
+def detect_external_imports(
+    content: str, internal_modules: set[str], *, stdlib_internal: bool = True
+) -> list[str]:
     """Return the top-level modules imported by ``content`` that are NOT
-    VaultBot-internal.
+    VaultBot-internal (and, when ``stdlib_internal`` is True, not stdlib).
 
     "Internal" means: a relative import (``from . import x``), or a
     top-level module whose name is in ``internal_modules`` (the backend's
     own ``.py`` stems plus the ``routers`` / ``custom_tools`` / ``identity``
-    packages). Everything else — stdlib (``os``, ``json``, ``re``, ...) and
-    third-party (``requests``, ``bs4``, ``numpy``, ...) — is "external" and
-    must be doc-proven before a write.
+    packages).
+
+    ``stdlib_internal`` controls whether the Python standard library counts
+    as "internal" (exempt from doc-proving) or external:
+      - True (safe_writer's diff-scope gate): stdlib (os, json, sys,
+        subprocess, ...) is the language itself and always present — it
+        needs no provenance proof and has no meaningful "official docs URL"
+        to cite. Exempting it is what lets VaultBot create brand-new backend
+        scripts (e.g. scripts/backend_supervisor.py uses os/sys/subprocess)
+        and edit ordinary files; without it every stdlib import tripped the
+        gate and the only "fix" was an absurd Prove-Code-Change run against
+        os/sys — the gate deadlocked on the very code VaultBot writes.
+      - False (custom_tool_gate): the gate for AGENT-AUTHORED tools must
+        still flag dangerous stdlib (os, socket, subprocess) as requiring a
+        doc_source, because a custom tool reaching for raw OS/socket
+        primitives is a sandbox-escape risk (issue #228) regardless of
+        whether the module is stdlib.
 
     Returns a deduped, order-preserving list of external module names.
     """
+    stdlib = sys.stdlib_module_names  # set of builtin+stdlib module names
     try:
         tree = ast.parse(content)
     except SyntaxError:
@@ -125,18 +143,24 @@ def detect_external_imports(content: str, internal_modules: set[str]) -> list[st
         if isinstance(node, ast.Import):
             for alias in node.names:
                 top = alias.name.split(".")[0]
-                if top not in internal_modules and top not in seen:
-                    seen.add(top)
-                    external.append(top)
+                if top in internal_modules or top in seen:
+                    continue
+                if stdlib_internal and top in stdlib:
+                    continue
+                seen.add(top)
+                external.append(top)
         elif isinstance(node, ast.ImportFrom):
             if node.level and node.level > 0:
                 continue  # relative import — internal
             if node.module is None:
                 continue
             top = node.module.split(".")[0]
-            if top not in internal_modules and top not in seen:
-                seen.add(top)
-                external.append(top)
+            if top in internal_modules or top in seen:
+                continue
+            if stdlib_internal and top in stdlib:
+                continue
+            seen.add(top)
+            external.append(top)
     return external
 
 
@@ -288,15 +312,41 @@ def safe_write(
 
     # --- 1a. Doc-source gate (semantic provenance, no disk touch) ---
     # The edit must PROVE its external API usage against real docs, not
-    # model weights. Any import of a non-VaultBot module (stdlib or
-    # third-party) requires a `doc_source` (URL or list of URLs) naming
-    # the official documentation the edit was checked against. This is
-    # the code analogue of the chat closed-set citation gate: an edit
-    # that can't point at a source is rejected, exactly like an uncited
-    # chat claim. Run Prove-Code-Change to satisfy this automatically.
+    # model weights. Only imports THE EDIT NEWLY INTRODUCES require a
+    # `doc_source` (URL or list of URLs) naming the official documentation
+    # the edit was checked against. Imports already present in the existing
+    # file are pre-existing decisions, not this edit's claim — gating on
+    # them made every one-line self-edit of an existing file impossible
+    # (the gate rejected edits to safe_writer.py itself: the bootstrap
+    # paradox). This is the code analogue of the chat closed-set citation
+    # gate: an edit that introduces an uncited external import is rejected,
+    # exactly like an uncited chat claim. Run Prove-Code-Change to satisfy
+    # this automatically when a genuinely new import is introduced.
+    # (Diff-scoped per vaultbot patch spec vaultbot-stuff/Memory/Logs/
+    # task5b-patch-spec.md, 2026-08-31.)
     _internal = {p.stem for p in backend_dir.glob("*.py")}
     _internal |= {"routers", "custom_tools", "identity"}
-    _external = detect_external_imports(content, _internal)
+    _existing_content = ""
+    if full.exists():
+        try:
+            _existing_content = full.read_text(encoding="utf-8")
+        except OSError:  # noqa: BLE001 — unreadable existing file: keep full gate
+            _existing_content = ""
+    if _existing_content:
+        _existing_imports = set(detect_external_imports(_existing_content, _internal))
+        _new_imports = set(detect_external_imports(content, _internal))
+        _external = sorted(_new_imports - _existing_imports)
+        log_fn(
+            "doc_source_diff_scan",
+            {
+                "file_path": str(full),
+                "existing_imports": sorted(_existing_imports),
+                "newly_introduced": _external,
+            },
+        )
+    else:
+        # Brand-new file: every external import is a new claim by this edit.
+        _external = detect_external_imports(content, _internal)
     if _external and not doc_source:
         checks["doc_source"] = f"FAIL: {len(_external)} external import(s) uncited"
         log_fn(

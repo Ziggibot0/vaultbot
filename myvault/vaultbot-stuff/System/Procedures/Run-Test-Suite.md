@@ -45,10 +45,17 @@ A code change can break tests without being caught by a syntax check, and restar
 
 1. ```python
 import json, os, subprocess
+from pathlib import Path
 
 # The test suite lives in vaultbot_backend/tests/
-backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend")
-venv_python = str(Path(vault_path) / ".venv" / "Scripts" / "python.exe")
+# Use FRAMEWORK_ROOT to locate the repo root, then find the .venv
+repo_root = Path(FRAMEWORK_ROOT).parent if "vaultbot_backend" in FRAMEWORK_ROOT else Path(FRAMEWORK_ROOT)
+backend_dir = str(Path(FRAMEWORK_ROOT) / "vaultbot_backend") if "vaultbot_backend" not in FRAMEWORK_ROOT else FRAMEWORK_ROOT
+
+# Reliable venv resolution
+venv_python = str(repo_root / ".venv" / "Scripts" / "python.exe")
+if not os.path.exists(venv_python):
+    venv_python = str(repo_root / ".venv" / "bin" / "python")
 if not os.path.exists(venv_python):
     venv_python = "python"
 
@@ -86,7 +93,6 @@ else:
     for line in (stdout + stderr).split("\n"):
         if line.startswith("FAILED ") or "FAILED " in line:
             failures.append(line.strip())
-
     result = json.dumps({
         "status": "ok" if exit_code == 0 else "failures",
         "exit_code": exit_code,
@@ -97,19 +103,17 @@ else:
     })
 print(result)
 ```
-
 ### Step 2: Interpret results
 
-2. [llm: Analyze the test results from Step 1.
-  - If status is "ok" (exit_code 0): report that all tests passed. The code change is safe.
-  - If status is "failures": list each failing test and its error. Determine whether each failure is:
-    - NEW (caused by this code change) — must be fixed before proceeding
-    - PRE-EXISTING (unrelated to this change, e.g., an LLM client issue) — note it but don't block
-  - If status is "timeout" or "error": report the infrastructure issue.
-Output a verdict: "PASS" (all tests green) or "FAIL" (new failures found) with the list of new failures.]
-
+[llm: Analyze the `result` JSON. 
+1. **Strict Verification Rule**: Empty tool output or an error is INDETERMINATE — never report it as success. If a command returns empty, say you cannot verify. Never invent pytest/grep/file results. The actual pytest stdout is the only acceptable evidence of pass/fail.
+2. Check `status`. If \"ok\", output \"VERDICT: PASS\".
+3. If \"failures\", look at the `summary` and `failures` list.
+4. Compare these failures against the baseline (if provided in context). 
+5. If the failures are new or not in the baseline, output \"VERDICT: FAIL\" and list the new failing tests.
+6. If all failures are pre-existing, output \"VERDICT: PASS (with known failures)\".]
 ## Related
 
-- [[Safe-Write]] — the edit step this test suite verifies
-- [[Proc-Step-Summary]] — the lighter import check before the full suite
-- [[Run-CI-Gates]] — the full CI mirror that includes this pytest gate
+- [[Safe-Write]]
+- [[Proc-Step-Summary]]
+- [[Run-CI-Gates]]
