@@ -611,6 +611,25 @@ class VaultBotPlugin extends Plugin {
 		}
 	}
 
+	// Push Safe Mode + contributions opt-in to the running backend so a
+	// settings-GUI toggle takes effect immediately, no restart needed.
+	// Without this the backend keeps the spawn-time env value and the GUI
+	// and backend disagree (split-brain config).
+	async pushLiveConfig() {
+		try {
+			await fetch(this.settings.backendUrl + '/config', {
+				method: 'POST',
+				headers: this._authHeaders({'Content-Type': 'application/json'}),
+				body: JSON.stringify({
+					safe_mode: this.settings.safeMode !== false,
+					allow_contributions: !!(this.settings.allowContributions)
+				})
+			});
+		} catch (e) {
+			console.warn('VaultBot: could not push live config', e);
+		}
+	}
+
 	// ─────────────────────────────────────────────────────────────────────
 	// Cross-platform venv path helpers.
 	// Windows: .venv/Scripts/{pythonw.exe,python.exe}
@@ -3266,9 +3285,10 @@ class VaultBotSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.safeMode = value;
 					await this.plugin.saveSettings();
+					await this.plugin.pushLiveConfig();
 					new Notice(value
-						? 'Safe Mode enabled — self-modification blocked. Restart backend to apply.'
-						: 'Developer Mode enabled — full self-modification unlocked. Restart backend to apply.');
+						? 'Safe Mode enabled — self-modification blocked. Applied to running backend.'
+						: 'Developer Mode enabled — full self-modification unlocked. Applied to running backend.');
 				}));
 
 		new Setting(containerEl)
@@ -3315,6 +3335,7 @@ class VaultBotSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.allowContributions = value;
 					await this.plugin.saveSettings();
+					await this.plugin.pushLiveConfig();
 					new Notice(value ? 'Contributions enabled' : 'Contributions disabled');
 				}));
 
@@ -3351,9 +3372,9 @@ class VaultBotSettingTab extends PluginSettingTab {
 		ghSignInBtn.addEventListener('click', async () => {
 			ghSignInBtn.setAttribute('disabled', 'disabled');
 			ghSignInBtn.setText('Working\u2026');
-			const { execFile } = require('child_process');
+			const { execFile, spawn } = require('child_process');
 			const run = (args) => new Promise((resolve) => {
-				execFile('gh', args, { timeout: 120000 }, (err, stdout) => {
+				execFile('gh', args, { timeout: 15000 }, (err, stdout) => {
 					resolve(err ? null : (stdout || '').trim());
 				});
 			});
@@ -3375,23 +3396,77 @@ class VaultBotSettingTab extends PluginSettingTab {
 				}
 			}
 
-			// 2. Run the browser login flow. This opens a browser window; the
-			//    user signs in and copies the one-time code back.
-			ghStatusEl.setText('A browser window will open. Sign in to GitHub, then return here.');
-			new Notice('Opening GitHub sign-in in your browser\u2026');
-			await run(['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web']);
+			// 2. Run the browser login flow. `gh auth login --web` prints a
+			//    one-time code to stdout and waits for the user to enter it.
+			//    We must NOT use execFile here — it captures stdout so the
+			//    code is never shown and there's no way to paste it back,
+			//    which makes the flow hang. Instead we spawn, read the code
+			//    from stdout, show it in the UI, and send Enter when the
+			//    user confirms they've entered it in the browser.
+			ghStatusEl.setText('Starting GitHub sign-in\u2026');
+			new Notice('Starting GitHub sign-in\u2026');
 
-			// 3. Verify it completed (gh auth login can exit 0 even if the
-			//    user closed the browser early).
-			const status = await run(['auth', 'status']);
-			if (status === null) {
-				ghStatusEl.setText('Sign-in did not complete. Click "Sign in to GitHub" to try again.');
-			} else {
-				ghStatusEl.setText('Signed in to GitHub. Your VaultBot can share fixes.');
-				new Notice('Signed in to GitHub.');
-			}
-			ghSignInBtn.removeAttribute('disabled');
-			ghSignInBtn.setText('Sign in to GitHub');
+			const child = spawn('gh', ['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web'], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+			let code = null;
+			let done = false;
+			const finish = (ok, msg) => {
+				if (done) return;
+				done = true;
+				ghStatusEl.setText(msg);
+				ghSignInBtn.removeAttribute('disabled');
+				ghSignInBtn.setText('Sign in to GitHub');
+				if (ok) new Notice('Signed in to GitHub.');
+			};
+
+			// Read stdout incrementally to capture the one-time code.
+			child.stdout.on('data', (chunk) => {
+				const text = chunk.toString();
+				// gh prints: "First copy your one-time code: XXXX-XXXX"
+				const m = text.match(/one-time code:\s*([A-Z0-9-]{4,})/i);
+				if (m && !code) {
+					code = m[1];
+					ghStatusEl.setText('A browser window opened. Enter this code there, then click "Done" here: ' + code);
+					new Notice('GitHub one-time code: ' + code);
+					// Add a Done button so the user can confirm and we send Enter.
+					const doneBtn = containerEl.createEl('button', { text: 'Done — I entered the code', cls: 'mod-cta' });
+					doneBtn.style.marginTop = '6px';
+					doneBtn.addEventListener('click', () => {
+						doneBtn.remove();
+						ghStatusEl.setText('Finishing sign-in\u2026');
+						child.stdin.write('\n');
+					});
+				}
+			});
+			child.stderr.on('data', (chunk) => {
+				const text = chunk.toString();
+				const m = text.match(/one-time code:\s*([A-Z0-9-]{4,})/i);
+				if (m && !code) {
+					code = m[1];
+					ghStatusEl.setText('A browser window opened. Enter this code there, then click "Done" here: ' + code);
+					new Notice('GitHub one-time code: ' + code);
+					const doneBtn = containerEl.createEl('button', { text: 'Done — I entered the code', cls: 'mod-cta' });
+					doneBtn.style.marginTop = '6px';
+					doneBtn.addEventListener('click', () => {
+						doneBtn.remove();
+						ghStatusEl.setText('Finishing sign-in\u2026');
+						child.stdin.write('\n');
+					});
+				}
+			});
+			child.on('error', (err) => {
+				finish(false, 'Sign-in failed: ' + (err && err.message ? err.message : 'unknown error') + '. Click to try again.');
+			});
+			child.on('close', async (code2) => {
+				// gh auth login exits 0 even if the user closed the browser
+				// early, so verify with auth status.
+				const status = await run(['auth', 'status']);
+				if (status === null) {
+					finish(false, 'Sign-in did not complete. Click "Sign in to GitHub" to try again.');
+				} else {
+					finish(true, 'Signed in to GitHub. Your VaultBot can share fixes.');
+				}
+			});
 		});
 
 		// Show current status on load.
