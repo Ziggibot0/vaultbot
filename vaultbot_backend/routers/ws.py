@@ -800,15 +800,6 @@ async def websocket_endpoint(
                 task.cancel()
                 session_logger.log("chat_interrupted", {"reason": "new_message"})
 
-            # Interrupt the QA idle worker — it should stop after the
-            # current note so the user's message gets full hardware.
-            try:
-                from qa_worker import get_qa_interrupt
-
-                get_qa_interrupt().trigger()
-            except Exception:  # noqa: BLE001
-                pass
-
             # Auto-generate session title from the first user message if
             # the title is still the default "New Session".
             if session_logger.title == "New Session" and user_message.strip():

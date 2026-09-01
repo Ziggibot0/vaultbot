@@ -92,7 +92,9 @@ def gate_agent_tool_code(
     A ``doc_source`` does not *approve* the import silently — it records intent
     so the operator can review; the caller is expected to log the approval.
     """
-    external = safe_writer.detect_external_imports(code, _internal_modules(backend_dir))
+    external = safe_writer.detect_external_imports(
+        code, _internal_modules(backend_dir), stdlib_internal=False
+    )
     dangerous = [m for m in external if m in DANGEROUS_IMPORTS]
     if not dangerous:
         return {"status": "ok", "dangerous_imports": []}

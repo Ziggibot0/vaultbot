@@ -86,7 +86,7 @@ def compute_urgency(target_date_str: str, today: date | None = None) -> str | No
         target = date.fromisoformat(target_date_str)
     except ValueError:
         return None
-    today = today or datetime.now(UTC).date()
+    today = today or date.today()
     delta = (target - today).days
     if delta < 0:
         return "overdue"

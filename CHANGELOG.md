@@ -15,6 +15,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.8] - 2026-09-01
+
+This release builds VaultBot's self-maintenance infrastructure: a scriptable
+CLI for the backend, a self-respawn supervisor so the backend can restart
+itself no matter who launched it, corrected self-edit gates, and new
+procedures that let VaultBot repair its own code. It is a **patch** bump.
+
+### Added
+
+- **Backend CLI** (`vaultbot_backend/scripts/vaultbot_cli.py`) — a
+  scriptable client for the backend's HTTP API and chat WebSocket. Commands:
+  `health`, `chat` (with `--new`/`--verbose`/`--json`/`--answer-only`),
+  `sessions`, `config`, `models`, `roles`, `tools`, `tool-call`,
+  `identity`, `status`, `ws`. Auth is the same shared secret the plugin
+  uses (`X-VaultBot-Token`); chat streams over the same WebSocket protocol.
+  Unlocks scripted testing and agent-driven dogfooding without the GUI.
+- **Self-respawn supervisor** (`scripts/backend_supervisor.py`) — a
+  deterministic detached watchdog armed at backend boot. When the backend
+  process dies it relaunches the same interpreter + args, so `/restart`
+  now works no matter who started the backend (plugin, terminal, CLI,
+  scheduler). A `backend_stop_request` marker written by `/shutdown`
+  prevents zombie resurrection of a deliberate stop. `/restart` keeps the
+  plugin broadcast and adds the supervisor relaunch as the no-plugin
+  fallback (verified: pid swap on restart, no resurrect on shutdown).
+- **New procedures** — `Self-Edit-Backend-Code` (the sanctioned edit path:
+  codebase_map orient -> narrow code_read window -> edit_lines ->
+  Verify-Backend-Change), `Repair-Gate-Edit` (edit a safety-gate file even
+  when the gate rejects its own edit, by validating the intended change
+  in-memory against the gate's own checks first). `Run-Test-Suite` and
+  `Run-CI-Gates` now locate the repo `.venv` reliably via
+  `FRAMEWORK_ROOT`.
+
+### Fixed
+
+- **Cloud-model detection** — `OllamaRuntime.is_model_loaded` recognized
+  only the `:cloud` tag (`glm-5.3:cloud`), not the `-cloud` suffix
+  (`gemma4:31b-cloud`), so chats on those models spun the full 300s
+  model-load wait. Added `is_cloud_model()` as the single source of truth.
+- **compute_urgency date bug** — `datetime.now(UTC).date()` vs the tests'
+  local `date.today()` returned `overdue` for everything due today.
+  Fixed to `date.today()` (found and fixed by VaultBot via its own
+  Self-Edit-Backend-Code procedure).
+- **Import-target checker false positive** — the check did
+  `import pkg; getattr(pkg, name)`, which falsely rejected every valid
+  `from routers import X` submodule import (13 in main.py), making
+  main.py un-editable through the sanctioned path. Now reproduces Python's
+  real from-import resolution (`import pkg.name`).
+- **Doc-source gate over-bread** — the provenance gate scanned the whole
+  file, so a one-line edit to an existing file was rejected for its
+  PRE-EXISTING imports (the bootstrap paradox: the gate blocked edits to
+  itself). Now diff-scoped: only imports the edit NEWLY introduces need a
+  doc_source. Stdlib is exempt (it needs no provenance); the custom-tool
+  gate still flags dangerous stdlib (os/socket) for agent-authored tools.
+- **Post-turn QA worker removed** — the idle-time QA worker silently fell
+  back to the BIG model when no small model was assigned (110 big-model
+  enrichment calls in one session, competing with chat for the model and
+  stretching rounds to ~9 minutes). Removed by operator decision; metadata
+  QA now happens only in the deliberate Dream-Pass cycle. `qa_worker.py`
+  stays on disk unused.
+- **Run-Test-Suite venv resolution** — resolved the venv python from
+  `vault_path`, which pointed outside the repo on some installs, falling
+  back to a global python with no pytest. Now derives the repo root from
+  `FRAMEWORK_ROOT` (fixed by VaultBot itself).
+
+
 ## [1.5.7] - 2026-08-31
 
 This release restores live answer streaming — the model's words now appear
