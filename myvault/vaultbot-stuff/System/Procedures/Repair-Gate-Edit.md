@@ -1,6 +1,7 @@
 ---
 type: procedure
 status: experimental
+baseline: true
 created: 2026-09-01
 description: "Allows the agent to repair safety gate files (safe_writer.py, custom_tool_gate.py, code_verify.py) even when the gate rejects the edit. It verifies the edit against the gate's own internal checks in-memory before committing the write."
 when: When a safety gate file needs modification but is being rejected by the very gate it implements.
