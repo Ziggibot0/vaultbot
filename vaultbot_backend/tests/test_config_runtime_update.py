@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from types import SimpleNamespace
+from typing import cast
 
 import live_config
 import pytest
 from routers.config import _coerce_bool, set_config
+from services import Services
 
 pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def _reset_live_config_overrides() -> None:
+def _reset_live_config_overrides() -> Iterator[None]:
     live_config.set_safe_mode(None)
     live_config.set_allow_contributions(None)
     yield
@@ -21,8 +24,11 @@ def _reset_live_config_overrides() -> None:
     live_config.set_allow_contributions(None)
 
 
-def _fake_services() -> SimpleNamespace:
-    return SimpleNamespace(search_client=SimpleNamespace(is_configured=True))
+def _fake_services() -> Services:
+    return cast(
+        Services,
+        SimpleNamespace(search_client=SimpleNamespace(is_configured=True)),
+    )
 
 
 @pytest.mark.parametrize(
