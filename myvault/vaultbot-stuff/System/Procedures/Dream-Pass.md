@@ -661,5 +661,5 @@ Session-Effort-Analysis is now a built-in step (2.6) in the Dream-Pass pipeline.
 - [[Dream-Scan]] — first sub-procedure in the chain
 - [[Dream-Consolidate]] — the big-cartridge memory-writing step
 - [[Dream-Evaluate]] — final scoring step of the pass
-
-
+## Maintenance Decisions (2026-09-01)
+- **Removed QA Background Workers**: The `_run_qa_idle_bg` worker in `chat_background.py` and the `background_build_qa_queue` boot task in `main.py` were removed. This eliminates unnecessary background processing and potential syntax/import collisions during startup. The `qa_worker.py` module is intentionally kept on disk but unused.

@@ -167,14 +167,23 @@ def verify_import_targets(
     if not Path(venv_python).exists():
         venv_python = sys.executable
 
-    # Build one check script that imports each module once and
-    # getattr's each name, printing IMPORT_REFS_OK only if every name
-    # resolves. Relative-import and stdlib modules resolve normally
-    # because PYTHONPATH points at the backend dir.
+    # Build one check script that imports each target the way Python's
+    # own from-import machinery resolves it. `from pkg import name` is
+    # legal even when pkg/__init__.py never imports `name` — Python falls
+    # back to importing pkg.name as a submodule. So `import mod` +
+    # getattr is the WRONG check for package-vs-module targets: it rejects
+    # every valid `from routers import config` (13 of them in main.py),
+    # which made main.py un-editable through the whole safe-write path
+    # (the model then couldn't complete QA-worker removal and fabricated
+    # verification output). `import mod.name` uses the identical fallback
+    # chain as from-import, so it is correct for both cases: a real
+    # attribute on the package resolves, a submodule resolves, and only a
+    # genuinely missing name raises ImportError -> SKIP (treated as
+    # non-fatal), matching the original design's "module missing entirely
+    # = not this edit's fault" rule.
     checks = "\n".join(
         "try:\n"
-        f"    import {mod}\n"
-        f"    getattr({mod}, {name!r})\n"
+        f"    import {mod}.{name} as _{name}\n"
         "except ImportError:\n"
         f"    print('SKIP {mod} {name}')\n"
         "except AttributeError:\n"
