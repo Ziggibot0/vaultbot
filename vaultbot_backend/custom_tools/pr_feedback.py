@@ -83,10 +83,9 @@ def run(args: dict) -> dict:
         }
 
     # 2. Contributions opt-in gate (mirrors submit_contribution / github_issues).
-    allow_contributions = (
-        os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
-    )
-    if allow_contributions != "true":
+    from live_config import allow_contributions
+
+    if not allow_contributions():
         return {
             "error": "Contributions are not enabled.",
             "hint": (
