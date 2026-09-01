@@ -481,13 +481,16 @@ async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
 
         await _aio.sleep(3)
         # Gracefully persist the index (like shutdown) but DO NOT write the
-        # stop-marker — the supervisor must relaunch us.
+        # stop-marker — the supervisor must relaunch us. We are already
+        # running on the event loop, so await directly (run_until_complete
+        # would raise RuntimeError here AND trips the pyright debt ratchet).
         from main import vault_indexer  # noqa: E402
 
         try:
-            _loop = _aio.get_event_loop()
-            _loop.run_until_complete(vault_indexer.stop_watching())
-            _loop.run_until_complete(vault_indexer.persist())
+            # stop_watching/persist are synchronous methods (verified via
+            # inspect.iscoroutinefunction) — call directly, no await.
+            vault_indexer.stop_watching()
+            vault_indexer.persist()
         except Exception:  # noqa: BLE001 — best-effort
             pass
         _os._exit(0)  # hard-exit; supervisor watches this pid and relaunches
