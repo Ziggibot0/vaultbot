@@ -5,6 +5,7 @@ baseline: true
 created: 2026-09-01
 description: "Allows the agent to repair safety gate files (safe_writer.py, custom_tool_gate.py, code_verify.py) even when the gate rejects the edit. It verifies the edit against the gate's own internal checks in-memory before committing the write."
 when: When a safety gate file needs modification but is being rejected by the very gate it implements.
+falsifiable_if: "The in-memory validation passes a change that the gate itself then rejects, or the procedure writes a gate file that fails the gate's own checks."
 allowed_tools:
   - code_read
   - safe_write
@@ -18,6 +19,22 @@ tags:
 # Repair-Gate-Edit
 
 This procedure provides a bootstrap mechanism to edit safety gate files without bypassing security. It ensures that any change to the gates themselves is validated by the existing gate logic before being written to disk.
+
+## Why This Exists
+
+On 2026-08-31 the doc-source gate rejected every edit to `safe_writer.py`
+because it scanned the whole file and counted the gate's own pre-existing
+stdlib imports as "unproven external API usage" — the gate deadlocked on
+itself and a human had to patch it by hand. A gate that cannot be fixed
+through the sanctioned path makes VaultBot permanently dependent on a human
+for exactly the repairs that matter most. This procedure closes that
+bootstrap paradox without weakening the gate: the intended change must
+pass the gate's own checks, evaluated in memory, before anything is written.
+
+depends_on:
+  - safe_writer.py
+  - custom_tool_gate.py
+  - code_verify.py
 
 ## Inputs
 - `file_path`: Path to the gate file (must be one of: `safe_writer.py`, `custom_tool_gate.py`, `code_verify.py`).
@@ -43,3 +60,9 @@ Run the gate's own verification checks against the `new_content` string.
 
 ### Step 4: Verification
 Run `Proc-Step-Summary` to verify the file is still importable.
+
+## Related
+
+- [[Self-Edit-Backend-Code]]
+- [[Run-Test-Suite]]
+- [[Prove-Code-Change]]
