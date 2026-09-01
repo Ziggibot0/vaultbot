@@ -130,11 +130,12 @@ def is_safe_mode() -> bool:
     """Return True if VaultBot is running in Safe Mode.
 
     Safe Mode is ON by default. Set VAULTBOT_SAFE_MODE=0 to disable it
-    (Developer Mode).
+    (Developer Mode). Reads the live value (runtime override from the
+    settings GUI, else the spawn-time env) via live_config.
     """
-    val = os.environ.get("VAULTBOT_SAFE_MODE", "true").strip().lower()
-    # Default to safe mode unless explicitly disabled.
-    return val not in ("0", "false", "off", "no", "developer")
+    from live_config import is_safe_mode as _live
+
+    return _live()
 
 
 def is_tool_allowed(tool_name: str) -> bool:
@@ -159,7 +160,6 @@ def is_file_edit_allowed(file_path: str) -> bool:
     """
     if not is_safe_mode():
         return True
-    import os
 
     _, ext = os.path.splitext(file_path)
     return ext.lower() not in _SOURCE_EXTENSIONS
@@ -167,8 +167,6 @@ def is_file_edit_allowed(file_path: str) -> bool:
 
 def blocked_file_edit_message(file_path: str) -> str:
     """Return a user-friendly message explaining why a file edit is blocked."""
-    import os
-
     _, ext = os.path.splitext(file_path)
     return (
         f"Editing '{file_path}' is blocked in Safe Mode — {ext} files are "

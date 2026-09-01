@@ -123,10 +123,9 @@ def run(args: dict) -> dict:
     #     are off. The load-time gate in self_improver.load_custom_tools also
     #     keeps the schema out of the LLM context, but this call-time check is
     #     a defence-in-depth for direct/programmatic calls.
-    allow_contributions = (
-        os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
-    )
-    if allow_contributions != "true":
+    from live_config import allow_contributions
+
+    if not allow_contributions():
         return {
             "error": "Contributions are not enabled.",
             "hint": (
