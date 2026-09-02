@@ -93,8 +93,6 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             value = kw.value
             if isinstance(value, ast.Constant) and value.value is True:
                 return True
-            if isinstance(value, ast.NameConstant) and value.value is True:
-                return True
         return False
 
 
