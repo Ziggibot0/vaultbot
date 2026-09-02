@@ -213,16 +213,7 @@ def _embedding_route_payload(
 def _current_session_log_stems(
     results: list[dict[str, Any]], session_id: str | None
 ) -> list[str]:
-    """Return unique note stems retrieved from the active session log path.
-
-    Session event notes are projected under
-    ``.../Memory/Logs/<session_id>/...``. When those notes are in retrieval
-    results, the model must treat them as current-session evidence (not
-    historical memory).
-    """
-    if not session_id:
-        return []
-    sid = str(session_id).strip().lower()
+    sid = str(session_id or "").strip().lower()
     if not sid:
         return []
 
@@ -232,22 +223,16 @@ def _current_session_log_stems(
         if not isinstance(r, dict):
             continue
         fp = str(r.get("file_path", "") or "")
-        if not fp:
+        if f"/logs/{sid}/" not in fp.replace("\\", "/").lower():
             continue
-        parts = fp.replace("\\", "/").split("/")
-        lower_parts = [p.lower() for p in parts]
-        for i in range(len(lower_parts) - 1):
-            if lower_parts[i] == "logs" and lower_parts[i + 1] == sid:
-                stem = Path(fp).stem
-                if stem and stem not in seen:
-                    seen.add(stem)
-                    out.append(stem)
-                break
+        stem = Path(fp).stem
+        if stem and stem not in seen:
+            seen.add(stem)
+            out.append(stem)
     return out
 
 
 def _append_current_session_temporal_guard(context: str, stems: list[str]) -> str:
-    """Append an explicit temporal instruction for current-session notes."""
     if not stems:
         return context
     shown = ", ".join(stems[:8])
