@@ -20,7 +20,6 @@ import contextlib
 import json
 import os
 import time
-from pathlib import Path
 from typing import Any
 
 from abstract_context import build_abstract_context
@@ -223,9 +222,11 @@ def _current_session_log_stems(
         if not isinstance(r, dict):
             continue
         fp = str(r.get("file_path", "") or "")
-        if f"/logs/{sid}/" not in fp.replace("\\", "/").lower():
+        norm = fp.replace("\\", "/")
+        if f"/logs/{sid}/" not in norm.lower():
             continue
-        stem = Path(fp).stem
+        leaf = norm.rsplit("/", 1)[-1]
+        stem = leaf.rsplit(".", 1)[0]
         if stem and stem not in seen:
             seen.add(stem)
             out.append(stem)
