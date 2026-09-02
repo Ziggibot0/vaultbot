@@ -20,6 +20,7 @@ import contextlib
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 from abstract_context import build_abstract_context
@@ -207,6 +208,59 @@ def _embedding_route_payload(
     if hint:
         payload["procedure_chain"] = [hint]
     return payload
+
+
+def _current_session_log_stems(
+    results: list[dict[str, Any]], session_id: str | None
+) -> list[str]:
+    """Return unique note stems retrieved from the active session log path.
+
+    Session event notes are projected under
+    ``.../Memory/Logs/<session_id>/...``. When those notes are in retrieval
+    results, the model must treat them as current-session evidence (not
+    historical memory).
+    """
+    if not session_id:
+        return []
+    sid = str(session_id).strip().lower()
+    if not sid:
+        return []
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for r in results or []:
+        if not isinstance(r, dict):
+            continue
+        fp = str(r.get("file_path", "") or "")
+        if not fp:
+            continue
+        parts = fp.replace("\\", "/").split("/")
+        lower_parts = [p.lower() for p in parts]
+        for i in range(len(lower_parts) - 1):
+            if lower_parts[i] == "logs" and lower_parts[i + 1] == sid:
+                stem = Path(fp).stem
+                if stem and stem not in seen:
+                    seen.add(stem)
+                    out.append(stem)
+                break
+    return out
+
+
+def _append_current_session_temporal_guard(context: str, stems: list[str]) -> str:
+    """Append an explicit temporal instruction for current-session notes."""
+    if not stems:
+        return context
+    shown = ", ".join(stems[:8])
+    guard = (
+        "\n\n--- TEMPORAL GUARD (CURRENT SESSION EVIDENCE) ---\n"
+        "Some retrieved notes are from the ACTIVE chat session log. "
+        "Treat them as evidence from this same ongoing conversation, not "
+        "a past event.\n"
+        "For those notes, do NOT use phrasing like 'last time', "
+        "'previously', or 'earlier session'.\n"
+        f"Current-session retrieved notes: {shown}"
+    )
+    return context + guard
 
 
 async def prepare_turn(
@@ -433,6 +487,19 @@ async def prepare_turn(
                 f"context filtering failed: {e}",
                 context="context_filter",
             )
+
+    # Temporal guard (issue #296): if retrieval surfaced event notes from the
+    # ACTIVE session log, tell the model explicitly those are current-session
+    # evidence, not historical memory.
+    _session_stems = _current_session_log_stems(
+        results, getattr(websocket, "session_id", None)
+    )
+    if _session_stems:
+        context = _append_current_session_temporal_guard(context, _session_stems)
+        session_logger.log(
+            "temporal_guard_current_session",
+            {"count": len(_session_stems), "notes": _session_stems[:8]},
+        )
 
     # Inject the identity boot context so the agent wakes up coherent.
     identity_context = svc.identity.boot_context()
