@@ -102,6 +102,31 @@ change and its rationale recorded in the PR. Material changes (maintainer
 changes, succession rules, decision-model changes) are announced in the
 README and the changelog.
 
+## 8. Supply-chain security model
+
+VaultBot treats CI/CD as part of the trusted computing base. The project
+therefore uses explicit controls to reduce supply-chain and automation risk:
+
+1. **Immutable action pins.** Every third-party workflow action under
+  `.github/workflows/` is pinned to a full commit SHA (not a mutable tag).
+  CI enforces this via `vaultbot_backend/scripts/check_workflow_action_pins.py`.
+2. **Dangerous-pattern hard gate.** CI scans changed Python files for
+  high-risk primitives (`eval`, `exec`, `os.system`, unsafe deserialization,
+  and `subprocess(..., shell=True)`) using
+  `vaultbot_backend/scripts/check_dangerous_patterns.py`.
+3. **Least-privilege workflow permissions.** Workflows declare minimal
+  `permissions:` scopes; broad default token scopes are not relied on.
+4. **`pull_request_target` containment.** Workflows that run on
+  `pull_request_target` are restricted to metadata operations and do not
+  execute code from forked pull requests.
+5. **No actor-blind auto-merge.** If/when automated merge is used, it must
+  be explicitly actor-scoped (e.g., Dependabot-only) and still gated by
+  required status checks on `main`.
+
+These controls are defense-in-depth rather than trust-by-checkbox. They are
+enforced in CI and review policy so the repository's security posture is
+verifiable from code and workflow configuration.
+
 ---
 
 ## Summary for a potential sponsor
@@ -114,6 +139,7 @@ README and the changelog.
 | Is there a succession plan? | **Not yet** — documented here as the target state. |
 | Is the two-account split a governance model? | No — it's a platform workaround, tracked for retirement. |
 | Is there a private CoC reporting channel? | Not yet — tracked as a known gap. |
+| Is CI/CD supply-chain risk controlled? | Yes — SHA-pinned actions, dangerous-pattern CI gate, least-privilege permissions, and `pull_request_target` containment. |
 
 The project's governance posture is: **state the gaps honestly, track them
 publicly, and work them down in priority order.** That is the model, and
