@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from chat_turn_prep import (
     _append_current_session_temporal_guard,
     _current_session_log_stems,
@@ -13,13 +12,22 @@ pytestmark = pytest.mark.unit
 def test_current_session_log_stems_detects_active_session_paths() -> None:
     results = [
         {
-            "file_path": "C:/repo/myvault/vaultbot-stuff/Memory/Logs/sid-123/event-1.md"
+            "file_path": (
+                "C:/repo/myvault/vaultbot-stuff/Memory/Logs/"
+                "sid-123/event-1.md"
+            )
         },
         {
-            "file_path": "C:/repo/myvault/vaultbot-stuff/Memory/Logs/sid-123/event-2.md"
+            "file_path": (
+                "C:/repo/myvault/vaultbot-stuff/Memory/Logs/"
+                "sid-123/event-2.md"
+            )
         },
         {
-            "file_path": "C:/repo/myvault/vaultbot-stuff/Memory/Logs/other-sid/event-3.md"
+            "file_path": (
+                "C:/repo/myvault/vaultbot-stuff/Memory/Logs/"
+                "other-sid/event-3.md"
+            )
         },
     ]
 
@@ -31,10 +39,16 @@ def test_current_session_log_stems_detects_active_session_paths() -> None:
 def test_current_session_log_stems_handles_backslashes_and_duplicates() -> None:
     results = [
         {
-            "file_path": "C:\\repo\\myvault\\vaultbot-stuff\\Memory\\Logs\\SID-123\\event-1.md"
+            "file_path": (
+                "C:\\repo\\myvault\\vaultbot-stuff\\Memory\\Logs\\"
+                "SID-123\\event-1.md"
+            )
         },
         {
-            "file_path": "C:\\repo\\myvault\\vaultbot-stuff\\Memory\\Logs\\sid-123\\event-1.md"
+            "file_path": (
+                "C:\\repo\\myvault\\vaultbot-stuff\\Memory\\Logs\\"
+                "sid-123\\event-1.md"
+            )
         },
     ]
 
