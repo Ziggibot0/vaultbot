@@ -72,6 +72,13 @@ _CONTRIBUTIONS_GATED_TOOLS: frozenset[str] = frozenset(
 )
 
 
+def _contributions_enabled() -> bool:
+    """Return whether community contributions are opted in (live value)."""
+    from live_config import allow_contributions
+
+    return allow_contributions()
+
+
 class SelfImprover:
     """File I/O, code execution, tool creation, and git rollback for the agent."""
 
@@ -113,10 +120,7 @@ class SelfImprover:
             # out of the LLM context (no bloat from a tool that will never be
             # used) and prevents the tool from being callable at all. Each
             # gated tool also has a call-time check as defence-in-depth.
-            if mod_name in _CONTRIBUTIONS_GATED_TOOLS and (
-                os.environ.get("VAULTBOT_ALLOW_CONTRIBUTIONS", "").strip().lower()
-                != "true"
-            ):
+            if mod_name in _CONTRIBUTIONS_GATED_TOOLS and not _contributions_enabled():
                 self._log(
                     "custom_tool_skipped_contributions_off",
                     {"name": mod_name, "module": mod_name},

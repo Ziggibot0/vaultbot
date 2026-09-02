@@ -19,6 +19,30 @@ from app_state import get_services
 from fastapi import APIRouter, Depends
 from services import Services
 
+_TRUE_STRINGS = {"1", "true", "on", "yes"}
+_FALSE_STRINGS = {"0", "false", "off", "no"}
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    """Parse a bool-ish value.
+
+    Returns True/False for known bool forms, else None for invalid input.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        if value in (0, 1):
+            return bool(value)
+        return None
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in _TRUE_STRINGS:
+            return True
+        if v in _FALSE_STRINGS:
+            return False
+    return None
+
+
 router = APIRouter()
 
 # The backup directory lives inside vaultbot_backend/ (created by the
@@ -57,7 +81,23 @@ async def set_config(
 
     FreeSearch is keyless, so tavily_api_key / research_backend are accepted
     for plugin backwards-compat but are no-ops. We always report freesearch.
+
+    Also accepts ``safe_mode`` and ``allow_contributions`` booleans, which
+    are applied live via live_config so a settings-GUI toggle takes effect
+    immediately without a backend restart (fixes split-brain config where
+    the GUI and the running backend disagree).
     """
+    from live_config import set_allow_contributions, set_safe_mode
+
+    if "safe_mode" in payload:
+        parsed = _coerce_bool(payload["safe_mode"])
+        if parsed is not None:
+            set_safe_mode(parsed)
+    if "allow_contributions" in payload:
+        parsed = _coerce_bool(payload["allow_contributions"])
+        if parsed is not None:
+            set_allow_contributions(parsed)
+
     return {
         "status": "ok",
         "research_backend": "freesearch",
