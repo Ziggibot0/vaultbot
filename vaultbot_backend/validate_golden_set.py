@@ -16,13 +16,9 @@ from __future__ import annotations
 
 import argparse
 import subprocess
-import sys
 from pathlib import Path
 
-# Make leaf modules importable when run as a script from the backend dir.
 _BACKEND = Path(__file__).parent.resolve()
-if str(_BACKEND) not in sys.path:
-    sys.path.insert(0, str(_BACKEND))
 
 from golden_eval import load_golden_set, validate_golden_set  # noqa: E402
 
@@ -84,4 +80,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

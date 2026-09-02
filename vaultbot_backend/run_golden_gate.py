@@ -23,13 +23,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
-# Make leaf modules importable when run as a script from the backend dir.
 _BACKEND = Path(__file__).parent.resolve()
-if str(_BACKEND) not in sys.path:
-    sys.path.insert(0, str(_BACKEND))
 
 # Bypass the PID lock / watcher for any transitive import that might touch
 # them (defensive — we only import leaf modules, but keep the env consistent

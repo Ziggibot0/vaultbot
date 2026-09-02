@@ -50,13 +50,6 @@ async def google_oauth_callback(request: Request):
         )
 
     # Exchange the auth code for tokens using the google_workspace tool.
-    import os
-    import sys
-
-    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
-
     try:
         from custom_tools.google_workspace import run as gw_run
 
