@@ -1,0 +1,51 @@
+name: Security settings audit
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "45 8 * * 1" # weekly Monday 08:45 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scanning-audit:
+    name: Secret scanning + push protection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify GitHub security settings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repo_json="$(gh api "repos/${REPO}")"
+
+          if ! jq -e '.security_and_analysis' >/dev/null <<<"$repo_json"; then
+            echo "::error title=Settings not readable::security_and_analysis is missing from API response. Ensure this workflow runs with a token that can read repository security settings."
+            exit 1
+          fi
+
+          required=(
+            secret_scanning
+            secret_scanning_push_protection
+          )
+
+          failed=0
+          for setting in "${required[@]}"; do
+            status="$(jq -r ".security_and_analysis.${setting}.status // \"missing\"" <<<"$repo_json")"
+            echo "${setting}: ${status}"
+            if [[ "$status" != "enabled" ]]; then
+              echo "::error title=Security setting disabled::${setting} is '${status}' (expected 'enabled'). Enable it in Settings > Security & analysis."
+              failed=1
+            fi
+          done
+
+          if [[ "$failed" -ne 0 ]]; then
+            exit 1
+          fi
