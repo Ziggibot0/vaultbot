@@ -114,6 +114,26 @@ jobs:
       - name: Requirements lock synchronization (HARD GATE)
         run: uv run python vaultbot_backend/scripts/check_requirements_sync.py
 
+      - name: Workflow action pinning check (HARD GATE)
+        # Every third-party GitHub Action must be pinned to a full commit SHA.
+        # This blocks tag-poisoning and force-push attacks against action tags.
+        run: uv run python vaultbot_backend/scripts/check_workflow_action_pins.py
+
+      - name: Dangerous-patterns check (HARD GATE)
+        # Scan changed Python files for high-risk execution/deserialization
+        # patterns that should never ship unnoticed.
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+          uv run python vaultbot_backend/scripts/check_dangerous_patterns.py \
+            --base "$base_sha" \
+            --head "$head_sha"
+
       - name: "Ruff check â€” full rule set (HARD GATE)"
         # The full rule set (E, F, W, I, B, UP, SIM, RUF, BLE001, FAST) is
         # now a hard gate. The ~1500 violations of pre-existing style debt

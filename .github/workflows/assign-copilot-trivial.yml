@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Skip with guidance when PAT is missing
         if: ${{ secrets.COPILOT_AGENT_PAT == '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const issue = context.payload.issue;
@@ -59,7 +59,7 @@ jobs:
 
       - name: Assign copilot-swe-agent to trivial issue
         if: ${{ secrets.COPILOT_AGENT_PAT != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           github-token: ${{ secrets.COPILOT_AGENT_PAT }}
           script: |
