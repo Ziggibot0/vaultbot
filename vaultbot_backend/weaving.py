@@ -33,6 +33,7 @@ from concept_card import build_cards_batch
 from fastapi import WebSocket
 from moc_builder import build_mocs_incremental
 from services import Services
+from session_logger import SessionLoggerProtocol
 
 _wlog = logging.getLogger(__name__)
 
@@ -399,7 +400,7 @@ async def weave_textbook_notes(
     svc: Services,
     ingest_result: dict,
     websocket: WebSocket | None = None,
-    session_logger: Any | None = None,
+    session_logger: SessionLoggerProtocol | None = None,
 ) -> dict:
     """Run the two post-ingest passes over every section note the ingester
     created or updated. Returns a summary; never raises.

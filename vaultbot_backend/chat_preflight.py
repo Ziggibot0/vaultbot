@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import WebSocket
 from procedure_surface import status_allows_execution
 from services import Services
+from session_logger import SessionLoggerProtocol
 
 # ---------------------------------------------------------------------------
 # Cancel check — called at every phase boundary so the stop button works
@@ -111,7 +112,7 @@ def deterministic_procedure_hint(
 def small_model_procedure_hint(
     user_message: str,
     procedure_lines: list[str],
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
 ) -> str:
     """Use the small model to pre-classify which procedures match the task.
 
@@ -189,7 +190,9 @@ def small_model_procedure_hint(
 # ---------------------------------------------------------------------------
 
 
-def small_model_query(goal: str, step_content: str, session_logger: Any = None) -> str:
+def small_model_query(
+    goal: str, step_content: str, session_logger: SessionLoggerProtocol | None = None
+) -> str:
     """Deterministically build a search query from the step description.
 
     Replaces the old small-model call that turned a step description into a
@@ -221,7 +224,7 @@ def small_model_query(goal: str, step_content: str, session_logger: Any = None) 
 
 
 def small_model_digest(
-    result: dict[str, Any], session_logger: Any = None
+    result: dict[str, Any], session_logger: SessionLoggerProtocol | None = None
 ) -> dict[str, Any]:
     """Use the small model to digest a non-code tool result into a compact summary.
 
@@ -379,7 +382,7 @@ async def dispatch_procedure_core(
     svc: Services,
     proc_name: str,
     proc_args: dict[str, Any] | None = None,
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     progress_callback: Any = None,
 ) -> dict[str, Any]:
     """Shared core for procedure execution from the chat handler.
@@ -502,7 +505,7 @@ async def run_procedure_direct(
     svc: Services,
     proc_name: str,
     proc_args: dict[str, Any] | None = None,
-    session_logger: Any = None,
+    session_logger: SessionLoggerProtocol | None = None,
     user_message: str = "",
     websocket: Any = None,
 ) -> dict[str, Any]:

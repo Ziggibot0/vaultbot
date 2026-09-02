@@ -46,11 +46,23 @@ class _RecordingLogger:
     def __init__(self):
         self.invocations = []
 
+    def log(self, event, data=None):
+        pass
+
+    def log_tool_call(self, *args, **data):
+        pass
+
+    def log_message(self, direction, payload):
+        pass
+
+    def log_exception(self, exc=None, context=None):
+        pass
+
+    def add_token_usage(self, prompt_tokens, completion_tokens):
+        pass
+
     def log_llm_invocation(self, **data):
         self.invocations.append(data)
-
-    def log_tool_call(self, **data):
-        pass
 
 
 class _StreamingResponse(_FakeResponse):

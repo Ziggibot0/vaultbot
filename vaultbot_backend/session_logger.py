@@ -14,7 +14,7 @@ import traceback
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from config import TUNABLES
 
@@ -121,6 +121,49 @@ def _redact(obj: Any, _key_path: str = "") -> Any:
             return "[REDACTED]"
         return obj
     return obj
+
+
+@runtime_checkable
+class SessionLoggerProtocol(Protocol):
+    """Structural seam for the ``session_logger`` dependency-injection parameter.
+
+    The backend threads a logger through dozens of functions and
+    constructors as ``session_logger: SessionLoggerProtocol | None = None``.
+    Typing that seam with the concrete ``SessionLogger`` class would force
+    every call site to construct a real file-backed logger (I/O, a
+    ``sessions/`` dir) just to satisfy the type checker. Tests instead
+    inject a cheap in-memory fake. A ``@runtime_checkable`` ``Protocol``
+    keeps the seam typed (callers can't silently pass the wrong object)
+    while letting any logger that implements the subset of methods the
+    backend actually calls satisfy it structurally.
+
+    Why not a ``typing.Protocol`` of the full class: call sites use only a
+    handful of methods (``log``, ``log_tool_call``, ``log_message``,
+    ``log_exception``, ``add_token_usage``). Exposing only those keeps the
+    seam honest—a value passed as ``session_logger`` must log, and the
+    tests' ``_FakeSessionLogger`` classes implement exactly this surface.
+    See issue #471.
+    """
+
+    def log(self, event: str, data: dict[str, Any] | None = None) -> None: ...
+
+    def log_tool_call(
+        self,
+        tool: str,
+        method: str,
+        inputs: dict[str, Any] | None = None,
+        outputs: Any | None = None,
+        duration_ms: float | None = None,
+        error: str | None = None,
+    ) -> None: ...
+
+    def log_message(self, direction: str, payload: dict[str, Any]) -> None: ...
+
+    def log_exception(
+        self, exc: Exception | None = None, context: str | None = None
+    ) -> None: ...
+
+    def add_token_usage(self, prompt_tokens: int, completion_tokens: int) -> None: ...
 
 
 class SessionLogger:

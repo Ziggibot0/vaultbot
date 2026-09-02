@@ -64,6 +64,7 @@ from collections.abc import Generator
 from typing import Any, ClassVar
 
 import requests
+from session_logger import SessionLoggerProtocol
 
 
 def _test_image_base64() -> str:
@@ -249,7 +250,7 @@ class OpenAICompatibleClient(LLMClient):
         base_url: str,
         api_key: str,
         llm_model: str = "",
-        session_logger: Any = None,
+        session_logger: SessionLoggerProtocol | None = None,
         timeout: float = 120.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -704,7 +705,7 @@ class OpenAICompatibleClient(LLMClient):
 # role points at, on whichever provider serves it — local Ollama, OpenRouter,
 # OpenAI — all interchangeable.
 def _client_for_model_entry(
-    entry: Any, provider: Any, session_logger: Any = None
+    entry: Any, provider: Any, session_logger: SessionLoggerProtocol | None = None
 ) -> LLMClient:
     """Instantiate the right LLMClient for one registry ModelEntry.
 
@@ -737,7 +738,7 @@ def _client_for_model_entry(
 
 
 def build_role_client(
-    role: str, registry: Any, session_logger: Any = None
+    role: str, registry: Any, session_logger: SessionLoggerProtocol | None = None
 ) -> LLMClient | None:
     """Build (or reuse) the live client for whichever model a role points at.
 
@@ -813,7 +814,9 @@ def _default_registry() -> Any:
     return ProviderRegistry.migrate_from_env()
 
 
-def get_cartridge(role: str, session_logger: Any = None) -> LLMClient | None:
+def get_cartridge(
+    role: str, session_logger: SessionLoggerProtocol | None = None
+) -> LLMClient | None:
     """The client for a cartridge role, from the pot. None if unassigned.
 
     All three cartridges are interchangeable: `get_cartridge("small")` CAN
@@ -823,7 +826,7 @@ def get_cartridge(role: str, session_logger: Any = None) -> LLMClient | None:
     return build_role_client(role, _default_registry(), session_logger)
 
 
-def get_llm_client(session_logger: Any = None) -> LLMClient:
+def get_llm_client(session_logger: SessionLoggerProtocol | None = None) -> LLMClient:
     """The big cartridge client (the main chat/reasoning model), from the pot.
 
     REPLACES the old .env factory. Now reads the big role from the registry.
@@ -840,7 +843,9 @@ def get_llm_client(session_logger: Any = None) -> LLMClient:
     return client
 
 
-def get_vision_client(session_logger: Any = None) -> LLMClient | None:
+def get_vision_client(
+    session_logger: SessionLoggerProtocol | None = None,
+) -> LLMClient | None:
     """The vision cartridge client (textbook-page reader), from the pot.
 
     None if no vision role is assigned (callers fall back to the big model).
@@ -848,7 +853,9 @@ def get_vision_client(session_logger: Any = None) -> LLMClient | None:
     return build_role_client("vision", _default_registry(), session_logger)
 
 
-def get_small_client(session_logger: Any = None) -> LLMClient | None:
+def get_small_client(
+    session_logger: SessionLoggerProtocol | None = None,
+) -> LLMClient | None:
     """The small cartridge client (cheap helper model), from the pot.
 
     None if no small role is assigned (callers fall back to the big model).
@@ -856,7 +863,9 @@ def get_small_client(session_logger: Any = None) -> LLMClient | None:
     return build_role_client("small", _default_registry(), session_logger)
 
 
-def get_small_client_or_big(session_logger: Any = None) -> LLMClient:
+def get_small_client_or_big(
+    session_logger: SessionLoggerProtocol | None = None,
+) -> LLMClient:
     """The small cartridge if assigned, else the big cartridge.
 
     Convenience for the ~10 helper call sites that WANT the cheap model but

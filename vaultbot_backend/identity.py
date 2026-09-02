@@ -25,6 +25,7 @@ import time
 from typing import Any
 
 from config import TUNABLES
+from session_logger import SessionLoggerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ class Identity:
         self,
         identity_dir: str = "vaultbot_backend/identity",
         ollama_client: Any = None,
-        session_logger: Any = None,
+        session_logger: SessionLoggerProtocol | None = None,
     ) -> None:
         self.identity_dir = identity_dir
         self.ollama_client = ollama_client

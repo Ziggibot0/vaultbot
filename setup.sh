@@ -728,6 +728,82 @@ with open(path, 'w') as f:
     mark_step_done "obsidian_dark_mode"
 fi
 
+# ── 7d. Register the vault with Obsidian ────────────────────────────────────
+# The `obsidian://open?path=...` deep link in step 8 can only open a vault
+# Obsidian ALREADY KNOWS ABOUT. Per the Obsidian URI docs, the `path`
+# parameter "will cause the app to search for the most specific vault which
+# contains the specified file path" — and that search only covers vaults
+# registered in Obsidian's vault store (~/.config/obsidian/obsidian.json on
+# Linux, ~/Library/Application Support/obsidian/obsidian.json on macOS).
+# An unregistered folder is NOT auto-added: on a machine where Obsidian has
+# never opened this vault, the deep link fails ("Vault not found" dialog, or
+# silently lands in the vault manager on a truly fresh install). Exactly
+# what every new user hits at the end of this installer.
+#
+# Writing the vault into that store here - merging, never clobbering other
+# vaults - makes the deep link open straight into the vault on first launch.
+# The store maps vault IDs (16 hex chars) to entries:
+#   {"vaults": {"<id>": {"path": "/path/to/vault", "ts": <ms>, "open": true}}}
+# We skip the rewrite while Obsidian is RUNNING: on quit it rewrites the
+# file from its in-memory copy and would silently drop our entry.
+case "$(uname -s)" in
+    Darwin) OBSIDIAN_JSON="$HOME/Library/Application Support/obsidian/obsidian.json" ;;
+    *)      OBSIDIAN_JSON="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian/obsidian.json" ;;
+esac
+if step_done "vault_registered"; then
+    echo "  [!]  Vault already registered with Obsidian -- skipping."
+elif [ ! -f "$OBSIDIAN_JSON" ]; then
+    echo "  [!]  No Obsidian vault store yet (first-ever launch) -- nothing to pre-register."
+    echo "       If asked on first launch, choose 'Open folder as vault' and"
+    echo "       select the vault path printed below."
+    mark_step_done "vault_registered"
+elif pgrep -x Obsidian >/dev/null 2>&1 || pgrep -x obsidian >/dev/null 2>&1; then
+    echo "  [!]  Obsidian is currently running -- skipping vault registration."
+    echo "       Close Obsidian and re-run the installer (it resumes from here)"
+    echo "       to get the one-click open."
+else
+    if VAULT_PATH="$VAULT_PATH" OBSIDIAN_JSON="$OBSIDIAN_JSON" python3 - <<'PYEOF'
+import json, os, secrets, time
+
+vault_path = os.environ["VAULT_PATH"]
+store_path = os.environ["OBSIDIAN_JSON"]
+store = {"vaults": {}}
+try:
+    with open(store_path) as f:
+        loaded = json.load(f)
+    if isinstance(loaded, dict) and isinstance(loaded.get("vaults"), dict):
+        store["vaults"] = loaded["vaults"]
+except Exception:
+    pass
+vaults = store["vaults"]
+now_ms = int(time.time() * 1000)
+match_id = None
+for vid, entry in vaults.items():
+    if not isinstance(entry, dict):
+        entry = {"path": str(entry)}
+        vaults[vid] = entry
+    entry["open"] = False  # the target vault is re-opened below
+    if str(entry.get("path", "")).rstrip("/") == vault_path.rstrip("/"):
+        match_id = vid
+if match_id:
+    vaults[match_id]["open"] = True
+    vaults[match_id]["ts"] = now_ms
+else:
+    vaults[secrets.token_hex(8)] = {"path": vault_path, "ts": now_ms, "open": True}
+with open(store_path, "w") as f:
+    json.dump(store, f, indent=2)
+PYEOF
+    then
+        echo "  [OK] Vault registered with Obsidian - the deep link below opens it directly"
+        mark_step_done "vault_registered"
+    else
+        # Non-fatal: registration is an optimization. Worst case Obsidian's
+        # vault picker appears at first launch instead of the vault itself.
+        echo "  [!]  Could not pre-register the vault with Obsidian."
+        echo "       If asked on first launch, use 'Open folder as vault'."
+    fi
+fi
+
 # ── 8. Done -- open Obsidian ─────────────────────────────────────────────────
 echo ""
 echo "  ============================="
@@ -753,21 +829,13 @@ echo ""
 
 # Try to open Obsidian deep-linked to the vault.
 #
-# The `obsidian://open` action's `path` parameter must point at a FILE
-# inside the vault, NOT the vault folder itself — Obsidian searches for the
-# most specific vault that CONTAINS that file path, and a bare folder
-# doesn't match. So we deep-link to a real file inside the vault and let
-# Obsidian resolve the vault from it. We prefer any .md note, then fall back
-# to the .obsidian/app.json we just wrote (guaranteed to exist after step
-# 7b), then to the vault folder as a last resort.
-OPEN_TARGET=""
-FIRST_NOTE=$(find "$VAULT_PATH" -name '*.md' -type f 2>/dev/null | head -n 1)
-if [ -n "$FIRST_NOTE" ]; then
-    OPEN_TARGET="$FIRST_NOTE"
-elif [ -f "$APP_JSON" ]; then
-    OPEN_TARGET="$APP_JSON"
-else
-    OPEN_TARGET="$VAULT_PATH"
-fi
+# The vault was registered with Obsidian in step 7d, so this deep link
+# resolves against a KNOWN vault. The `path` parameter may point at the
+# vault folder itself or any file inside it: Obsidian picks the most
+# specific registered vault containing that path. Pointing at the folder
+# also makes this work in the edge case where registration was skipped
+# (Obsidian first-ever run / was running during install) but the user later
+# added the vault manually.
+OPEN_TARGET="$VAULT_PATH"
 ESCAPED_PATH=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$OPEN_TARGET" 2>/dev/null || echo "$OPEN_TARGET")
 open "obsidian://open?path=$ESCAPED_PATH" 2>/dev/null || xdg-open "obsidian://open?path=$ESCAPED_PATH" 2>/dev/null || true

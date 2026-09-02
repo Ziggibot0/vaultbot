@@ -163,10 +163,22 @@ async def stream_llm_round(
                 )
             if text:
                 round_text += text
-                # Final prose is untrusted until synchronous provenance
-                # verification completes. Keep it buffered so unsupported
-                # claims never flash in the UI before answer_done replaces
-                # them with a truth-gap response.
+                # Stream prose LIVE as answer_chunk. The buffering here (from
+                # the removed provenance gates) made the UI show thinking +
+                # tool activity for the whole turn with zero words — on slow
+                # machines a fresh-vault turn looks exactly like "thinks but
+                # never speaks." The gates are gone; the drafted answer is
+                # delivered as-is at answer_done (which replaces the streamed
+                # text in the UI's final segment render), so streaming it is
+                # safe AND is what the UI was built to render.
+                try:
+                    await svc.manager.send_personal_message(
+                        json.dumps({"type": "answer_chunk", "content": text}),
+                        websocket,
+                        session_logger=session_logger,
+                    )
+                except Exception as _e:  # noqa: BLE001 — stream failure must not kill the LLM stream
+                    session_logger.log("answer_chunk_emit_failed", {"error": str(_e)})
                 # Debounced partial write: at most once per second.
                 # Per-chunk writes create disk I/O backpressure that
                 # throttles the LLM's streaming throughput.

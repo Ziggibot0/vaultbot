@@ -433,10 +433,28 @@ async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
     gives the chat loop time to process the tool result, let the LLM
     generate a final message, and send it to the user before the backend
     gets killed.
+
+    RESTART-WITHOUT-PLUGIN: when the backend was launched directly (CLI,
+    terminal, scheduler), no plugin is listening to the broadcast. We still
+    clear the stop-marker and self-exit, and the detached self-respawn
+    supervisor (backend_supervisor.py) relaunches the backend. Thus /restart
+    works in BOTH contexts. Crucially, this endpoint must NOT write the
+    stop-marker (that would suppress the supervisor); only /shutdown does.
     """
 
-    async def _delayed_broadcast():
-        await asyncio.sleep(3)
+    from pathlib import Path
+
+    # Clear any prior stop-marker so a direct-launch restart actually
+    # relaunches (the supervisor checks this file before respawning).
+    _marker = Path(__file__).resolve().parent.parent / "backend_stop_request"
+    try:
+        if _marker.exists():
+            _marker.unlink()
+    except Exception:  # noqa: BLE001 — best-effort
+        pass
+
+    async def _delayed_broadcast() -> None:
+        await asyncio.sleep(1.5)
         await svc.manager.broadcast(
             json.dumps(
                 {
@@ -450,14 +468,42 @@ async def restart_endpoint(svc: Annotated[Services, Depends(get_services)]):
             session_logger=svc.session_logger,
         )
 
-    _restart_task = asyncio.create_task(_delayed_broadcast())
+    # Broadcast for the plugin (if present) to restart us.
+    _broadcast_task = asyncio.create_task(_delayed_broadcast())
+    _background_tasks.add(_broadcast_task)
+    _broadcast_task.add_done_callback(_background_tasks.discard)
+
+    # In-process relaunch fallback for direct launches (no plugin). Same 3s
+    # delay so the chat response flushes.
+    async def _delayed_relaunch() -> None:
+        import asyncio as _aio
+        import os as _os
+
+        await _aio.sleep(3)
+        # Gracefully persist the index (like shutdown) but DO NOT write the
+        # stop-marker — the supervisor must relaunch us. We are already
+        # running on the event loop, so await directly (run_until_complete
+        # would raise RuntimeError here AND trips the pyright debt ratchet).
+        from main import vault_indexer  # noqa: E402
+
+        try:
+            # stop_watching/persist are synchronous methods (verified via
+            # inspect.iscoroutinefunction) — call directly, no await.
+            vault_indexer.stop_watching()
+            vault_indexer.persist()
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+        _os._exit(0)  # hard-exit; supervisor watches this pid and relaunches
+
+    _restart_task = asyncio.create_task(_delayed_relaunch())
     _background_tasks.add(_restart_task)
     _restart_task.add_done_callback(_background_tasks.discard)
     return {
         "status": "restart_requested",
         "message": (
             "Restart scheduled in 3 seconds. Chat loop will finish first, "
-            "then plugin will restart the backend."
+            "the plugin (if present) restarts the backend, and the "
+            "self-respawn supervisor relaunches it for direct launches."
         ),
     }
 

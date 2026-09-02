@@ -10,6 +10,7 @@ import atexit
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from contextlib import asynccontextmanager, suppress
@@ -53,7 +54,7 @@ from plan_executor import PlanExecutor  # noqa: E402
 from providers import ProviderRegistry  # noqa: E402
 from research_engine import ResearchEngine  # noqa: E402
 from self_improver import SelfImprover  # noqa: E402
-from session_logger import SessionLogger  # noqa: E402
+from session_logger import SessionLogger, SessionLoggerProtocol  # noqa: E402
 from supervision import HealthMonitor  # noqa: E402
 from vault_graph import VaultGraph  # noqa: E402
 from vault_indexer import VaultIndexer  # noqa: E402
@@ -166,6 +167,44 @@ def release_lock() -> None:
 
 
 acquire_lock()
+# ── Self-respawn supervisor ─────────────────────────────────────────────
+# Lets the backend restart itself regardless of who launched it (plugin,
+# CLI/terminal, scheduler). We spawn a detached supervisor whose only job
+# is to wait for THIS process to die, then relaunch the backend with the
+# same interpreter + args unless a stop-marker files exists. Marker logic:
+#   - /shutdown writes vaultbot_backend/backend_stop_request so a legit
+#     shutdown is NOT resurrected (no zombie).
+#   - /restart clears the marker + relaunches.
+# The supervisor lives in scripts/ (not counted by the thinness ratchet).
+# IMPORTANT: pass ONLY the backend script + args (sys.argv[0:]) here — the
+# supervisor prepends sys.executable itself, so passing sys.executable too
+# would produce `python python main.py` (double interpreter → relaunch
+# fails). Detached on both platforms.
+_supervisor_cmd = [
+    sys.executable,
+    "vaultbot_backend/scripts/backend_supervisor.py",
+    str(os.getpid()),
+    *sys.argv,
+]
+try:
+    if os.name == "nt":
+        subprocess.Popen(
+            _supervisor_cmd,
+            env=os.environ,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        subprocess.Popen(
+            _supervisor_cmd,
+            env=os.environ,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+except Exception:  # noqa: BLE001 — supervisor is best-effort; backend must still boot
+    logger.warning("failed to arm self-respawn supervisor", exc_info=True)
 atexit.register(release_lock)
 
 
@@ -272,32 +311,6 @@ async def lifespan(app: FastAPI):
         background_schema_heal_task = asyncio.create_task(background_schema_heal())
         _background_tasks.add(background_schema_heal_task)
         background_schema_heal_task.add_done_callback(_background_tasks.discard)
-
-        # ── Build initial QA queue ────────────────────────────────────
-        # On boot, build the priority-ordered QA queue (most-used notes
-        # first, from touch_counts.json) and persist it to qa_queue.json.
-        # The idle-time QA worker (triggered after each chat reply) pulls
-        # from this queue.  Rebuilding on boot ensures new notes are added
-        # and stale queue entries are pruned.
-        async def background_build_qa_queue():
-            try:
-                from qa_worker import build_qa_queue, save_qa_queue
-
-                _vault_root = os.getenv("VAULT_PATH", ".")
-
-                def _build():
-                    q = build_qa_queue(_vault_root)
-                    save_qa_queue(q)
-                    return len(q)
-
-                count = await loop.run_in_executor(None, _build)
-                startup_logger.log("qa_queue_built", {"notes": count})
-            except Exception as e:  # noqa: BLE001 — best-effort
-                startup_logger.log_exception(e, context="build_qa_queue")
-
-        background_build_qa_task = asyncio.create_task(background_build_qa_queue())
-        _background_tasks.add(background_build_qa_task)
-        background_build_qa_task.add_done_callback(_background_tasks.discard)
 
         startup_logger.log(
             "server_startup",
@@ -776,7 +789,10 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
 
     async def send_personal_message(
-        self, message: str, websocket: WebSocket, session_logger: SessionLogger = None
+        self,
+        message: str,
+        websocket: WebSocket,
+        session_logger: SessionLoggerProtocol | None = None,
     ):
         try:
             await websocket.send_text(message)
@@ -799,7 +815,9 @@ class ConnectionManager:
             except json.JSONDecodeError:
                 session_logger.log_message("out", {"raw": message})
 
-    async def broadcast(self, message: str, session_logger: SessionLogger = None):
+    async def broadcast(
+        self, message: str, session_logger: SessionLoggerProtocol | None = None
+    ):
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
@@ -976,6 +994,15 @@ async def shutdown_endpoint(request: Request):
 
     def _terminate():
         try:
+            # Write the stop marker so the self-respawn supervisor does NOT
+            # resurrect this legit shutdown (no zombie backend). Must be
+            # written HERE, beside the same file the supervisor checks, with
+            # an absolute path resolved from __file__ (not cwd, which can
+            # change under the plugin).
+            try:
+                PID_FILE.with_name("backend_stop_request").touch()
+            except Exception as e:  # noqa: BLE001 — best-effort
+                logger.debug("swallowed stop-marker write: %s", e)
             # Give the HTTP response time to flush back to the client.
             import time
 

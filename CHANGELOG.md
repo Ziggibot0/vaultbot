@@ -15,6 +15,184 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.8] - 2026-09-01
+
+This release builds VaultBot's self-maintenance infrastructure: a scriptable
+CLI for the backend, a self-respawn supervisor so the backend can restart
+itself no matter who launched it, corrected self-edit gates, and new
+procedures that let VaultBot repair its own code. It is a **patch** bump.
+
+### Added
+
+- **Backend CLI** (`vaultbot_backend/scripts/vaultbot_cli.py`) — a
+  scriptable client for the backend's HTTP API and chat WebSocket. Commands:
+  `health`, `chat` (with `--new`/`--verbose`/`--json`/`--answer-only`),
+  `sessions`, `config`, `models`, `roles`, `tools`, `tool-call`,
+  `identity`, `status`, `ws`. Auth is the same shared secret the plugin
+  uses (`X-VaultBot-Token`); chat streams over the same WebSocket protocol.
+  Unlocks scripted testing and agent-driven dogfooding without the GUI.
+- **Self-respawn supervisor** (`scripts/backend_supervisor.py`) — a
+  deterministic detached watchdog armed at backend boot. When the backend
+  process dies it relaunches the same interpreter + args, so `/restart`
+  now works no matter who started the backend (plugin, terminal, CLI,
+  scheduler). A `backend_stop_request` marker written by `/shutdown`
+  prevents zombie resurrection of a deliberate stop. `/restart` keeps the
+  plugin broadcast and adds the supervisor relaunch as the no-plugin
+  fallback (verified: pid swap on restart, no resurrect on shutdown).
+- **New procedures** — `Self-Edit-Backend-Code` (the sanctioned edit path:
+  codebase_map orient -> narrow code_read window -> edit_lines ->
+  Verify-Backend-Change), `Repair-Gate-Edit` (edit a safety-gate file even
+  when the gate rejects its own edit, by validating the intended change
+  in-memory against the gate's own checks first). `Run-Test-Suite` and
+  `Run-CI-Gates` now locate the repo `.venv` reliably via
+  `FRAMEWORK_ROOT`.
+
+### Fixed
+
+- **Cloud-model detection** — `OllamaRuntime.is_model_loaded` recognized
+  only the `:cloud` tag (`glm-5.3:cloud`), not the `-cloud` suffix
+  (`gemma4:31b-cloud`), so chats on those models spun the full 300s
+  model-load wait. Added `is_cloud_model()` as the single source of truth.
+- **compute_urgency date bug** — `datetime.now(UTC).date()` vs the tests'
+  local `date.today()` returned `overdue` for everything due today.
+  Fixed to `date.today()` (found and fixed by VaultBot via its own
+  Self-Edit-Backend-Code procedure).
+- **Import-target checker false positive** — the check did
+  `import pkg; getattr(pkg, name)`, which falsely rejected every valid
+  `from routers import X` submodule import (13 in main.py), making
+  main.py un-editable through the sanctioned path. Now reproduces Python's
+  real from-import resolution (`import pkg.name`).
+- **Doc-source gate over-bread** — the provenance gate scanned the whole
+  file, so a one-line edit to an existing file was rejected for its
+  PRE-EXISTING imports (the bootstrap paradox: the gate blocked edits to
+  itself). Now diff-scoped: only imports the edit NEWLY introduces need a
+  doc_source. Stdlib is exempt (it needs no provenance); the custom-tool
+  gate still flags dangerous stdlib (os/socket) for agent-authored tools.
+- **Post-turn QA worker removed** — the idle-time QA worker silently fell
+  back to the BIG model when no small model was assigned (110 big-model
+  enrichment calls in one session, competing with chat for the model and
+  stretching rounds to ~9 minutes). Removed by operator decision; metadata
+  QA now happens only in the deliberate Dream-Pass cycle. `qa_worker.py`
+  stays on disk unused.
+- **Run-Test-Suite venv resolution** — resolved the venv python from
+  `vault_path`, which pointed outside the repo on some installs, falling
+  back to a global python with no pytest. Now derives the repo root from
+  `FRAMEWORK_ROOT` (fixed by VaultBot itself).
+
+
+## [1.5.7] - 2026-08-31
+
+This release restores live answer streaming — the model's words now appear
+in the chat as they are generated, instead of appearing only after the
+whole turn completes. It is a **patch** bump.
+
+### Fixed
+
+- **Answers stream live again** — a UX regression from the gate era made
+  the UI buffer ALL answer prose until the turn fully completed, so on
+  slow machines (or a fresh vault's first index build) the chat showed
+  thinking and tool activity for minutes with zero words — looking
+  exactly like "thinks and calls tools but never says anything." The
+  backend now streams prose as it is generated (`answer_chunk` events,
+  which the UI already knew how to render). The final authoritative
+  answer still replaces the streamed text at completion, so citations,
+  badge, and Sources render as before.
+
+
+## [1.5.6] - 2026-08-31
+
+This release removes the closed-set grounding gate — the last mechanism
+that could block or rewrite a drafted answer. It is a **patch** bump.
+
+### Removed
+
+- **The closed-set grounding gate (and its retry loop)** — the gate scored
+  every drafted answer against the per-turn allowed-citations set and, when
+  too many sentences were uncited, re-entered the agentic loop with a
+  reprimand (burning a full LLM round) or appended a "may draw on model
+  weights" caution. On fresh installs with an empty/thin vault index it
+  flagged nearly every answer, because retrieval returned nothing to cite.
+  Together with the entailment-delivery gate removed in v1.5.4, this was
+  the last path that could suppress a drafted answer.
+
+### Changed
+
+- **Grounding is observational** — the drafted answer from the first
+  agentic pass is now exactly what the user receives. Scoring still runs
+  to drive the trust badge and Sources block, and mangled [[wikilinks]]
+  are still repaired for clickability, but nothing can alter the answer's
+  text or delay delivery. Provenance is surfaced, not enforced (ADR-0004:
+  enforcement returns as a badge upgrade once entailment is reimplemented
+  as a background layer).
+
+
+## [1.5.5] - 2026-08-30
+
+This release makes the two remaining "the bot thinks but never speaks"
+failure modes loud and actionable instead of silent hangs. It is a
+**patch** bump (bug fix, no new user-facing surface).
+
+### Fixed
+
+- **No-model turns fail loud** — when no model is assigned to the chat
+  role (fresh install, or a `providers.json` whose models list was lost),
+  a chat turn used to stream heartbeats forever with no answer. The turn
+  is now rejected immediately with an actionable problem card: open
+  Settings → AI Models & Providers and add a model (#465).
+- **Settings UI no longer lies about failures** — adding a provider or
+  model collapsed every failure (backend down, HTTP 400, auth) into the
+  misleading "Failed — pick a provider and a model." The real backend
+  detail is now shown, including "Could not reach the VaultBot backend
+  at <url> — is it running?" (#465).
+
+## [1.5.4] - 2026-08-30
+
+This release fixes the "model calls tools and thinks but emits no words"
+bug: the synchronous claim-entailment delivery gate was silently replacing
+drafted answers with a canned non-answer. It is a **patch** bump (bug fix,
+no new user-facing surface).
+
+### Fixed
+
+- **Answers no longer blocked by the entailment gate** — the synchronous
+  `Verify-Answer-Entailment` delivery gate (added in #408) ran on every
+  cited answer and, on any unsupported/unverifiable verdict or verifier
+  failure, replaced the drafted answer with a canned "I couldn't verify..."
+  non-answer. This made the model appear to call tools and think but emit
+  no words. The gate is removed from the critical path; the answer now
+  always reaches the user, with the grounding score still driving the trust
+  badge and Sources block. Entailment is tabled until it can be
+  implemented correctly as a background layer (per the procedure's own
+  design). The now-dead `provenance_policy.py` / `provenance_runtime.py`
+  modules and their tests were removed.
+
+## [1.5.3] - 2026-08-30
+
+This release makes the installer's final step actually work on a fresh
+machine (the deep link now opens straight into the vault), and ships a
+batch of research/retrieval refactors and fixes. It is a **patch** bump
+(bug fixes and internal refactors, no new user-facing surface).
+
+### Fixed
+
+- **Installer deep link failed on fresh installs** — both `setup.ps1`
+  and `setup.sh` now pre-register the vault in Obsidian's vault store
+  (`obsidian.json`) before firing the `obsidian://open?path=...` deep
+  link, so the link resolves instead of showing Obsidian's "Vault not
+  found" dialog. Registration is idempotent, backs up the store before
+  mutating it, and falls back gracefully if Obsidian is running (#458).
+- **Known-library recall gaps** — the research tool now guarantees a
+  head-noun keyterm, de-hyphenates terms, and retries against an
+  allowlist so known libraries are reliably recalled (#417).
+- **Mangled wikilink stems** — citations now repair wikilink stems
+  against the closed set of known notes (#335).
+- **Repo-root file access** — `code_read`/`code_write`/`safe_write` can
+  now reach repo-root files (#455).
+- **UTF-8 BOM in `setup.ps1`** — removed the BOM so `irm|iex` works on
+  PowerShell 5.1 (#440).
+- **Workspace path hardening** — selected repository paths are hardened
+  against traversal (#435).
+
 ### Removed
 
 - **Lexical intent classifiers from the chat turn** — removed the three
@@ -33,6 +211,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   intent: `detect_idk` (admission of ignorance) plus the tool-sourced and
   pure-acknowledgement paths. A guard test (`TestNoLexicalIntentClassifiers`)
   fails CI if any of them are re-added.
+
+### Added
+
+- **Active development workspace** — a dedicated workspace for active
+  development work (#425, #433).
+- **Seamless spreadsheet and table support** (#436).
+- **Energy usage estimate dashboard** (#437).
+- **Jedi-powered cross-file semantic code navigation** — the
+  `code_semantic` tool (#445).
+
+### Changed
+
+- **Research tool handler extracted** from the dispatch module into
+  `chat_research_tool.py` (#450, #462).
+- **Source acquisition pipeline extracted** (#449, #454).
+- **Ollama runtime probes separated** from transport (#448, #453).
+- **Policy middleware extracted** from HTTP handling (#446, #447).
+- **Chat consolidation replaced** with deterministic log projection
+  (#430).
+- **Canonical source policy enforced** in research (#432).
 
 ## [1.5.2] - 2026-08-29
 

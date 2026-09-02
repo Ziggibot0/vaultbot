@@ -20,7 +20,6 @@ from typing import Annotated
 from app_state import get_services, get_startup_reindex_failed
 from chat_handler import handle_chat
 from conversation_state import clear_history, clear_trail_tracker, load_history
-from diagnostics import classify_error
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from last_session import clear as clear_last_session
 from last_session import read as read_last_session
@@ -187,6 +186,7 @@ async def websocket_endpoint(
         _reindex_err = get_startup_reindex_failed()  # reads + clears (one-shot)
         if _reindex_err:
             from chat_helpers import notify_problem
+            from diagnostics import classify_error
 
             _diag = classify_error(
                 RuntimeError(_reindex_err), {"stage": "indexing the vault on startup"}
@@ -800,15 +800,6 @@ async def websocket_endpoint(
                 task.cancel()
                 session_logger.log("chat_interrupted", {"reason": "new_message"})
 
-            # Interrupt the QA idle worker — it should stop after the
-            # current note so the user's message gets full hardware.
-            try:
-                from qa_worker import get_qa_interrupt
-
-                get_qa_interrupt().trigger()
-            except Exception:  # noqa: BLE001
-                pass
-
             # Auto-generate session title from the first user message if
             # the title is still the default "New Session".
             if session_logger.title == "New Session" and user_message.strip():
@@ -825,6 +816,33 @@ async def websocket_endpoint(
                     websocket,
                     session_logger=session_logger,
                 )
+
+            # Fail loud BEFORE spawning the turn: with no model assigned to
+            # the big role (fresh install, or a providers.json that lost its
+            # models), the old path let handle_chat stream heartbeats forever
+            # with no answer — "the bot thinks but never speaks." Send an
+            # actionable problem card instead of a silent hang.
+            _big_model = getattr(svc.ollama_client, "llm_model", "") or ""
+            if msg_type == "chat" and not (svc.ollama_client and _big_model):
+                from diagnostics import classify_error
+
+                _diag = classify_error(
+                    RuntimeError(
+                        "No model is assigned to the chat role. Open "
+                        "Settings -> AI Models & Providers, add a model "
+                        "(e.g. Ollama (this machine) + any installed "
+                        "Ollama model), and make sure the backend is "
+                        "running."
+                    ),
+                    {"stage": "chat"},
+                )
+                session_logger.log("chat_rejected_no_big_model", _diag.to_dict())
+                await svc.manager.send_personal_message(
+                    json.dumps({"type": "problem", "diagnosis": _diag.to_dict()}),
+                    websocket,
+                    session_logger=session_logger,
+                )
+                continue
 
             # Spawn the handler fire-and-forget so the receive loop stays
             # responsive to stop/new messages.

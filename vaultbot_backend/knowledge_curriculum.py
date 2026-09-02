@@ -51,6 +51,7 @@ from typing import Any
 # The curriculum imports ONLY from the existing, already-integrated modules.
 # ---------------------------------------------------------------------------
 import gap_collectors
+from session_logger import SessionLoggerProtocol
 from vault_graph import VaultGraph
 
 # How many recently-completed topics the diversity bonus looks back at.
@@ -375,7 +376,7 @@ class KnowledgeCurriculum:
     def __init__(
         self,
         vault_graph: VaultGraph,
-        session_logger: Any | None = None,
+        session_logger: SessionLoggerProtocol | None = None,
         state_path: str | None = None,
         min_content_length: int = 200,
         thin_community_min_size: int = 3,

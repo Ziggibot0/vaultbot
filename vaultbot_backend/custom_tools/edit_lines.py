@@ -109,6 +109,16 @@ SCHEMA = {
                     "Pass empty string ('') to delete the lines entirely."
                 ),
             },
+            "doc_source": {
+                "type": "string",
+                "description": (
+                    "Optional official-docs URL. REQUIRED only when this edit "
+                    "INTRODUCES a new import of a non-VaultBot module (stdlib "
+                    "or third-party): run Prove-Code-Change to fetch the docs "
+                    "and pass the URL here. Edits that do not add new imports "
+                    "do not need this and are never blocked for it."
+                ),
+            },
             "dry_run": {
                 "type": "boolean",
                 "default": False,
@@ -358,6 +368,7 @@ def run(args: dict) -> dict:
     start_line = int(args.get("start_line", 0))
     end_line = int(args.get("end_line", 0))
     new_content = args.get("new_content", "")
+    doc_source = args.get("doc_source", "")
     dry_run = args.get("dry_run", False)
 
     # --- Validation ---
@@ -474,6 +485,7 @@ def run(args: dict) -> dict:
             file_path=file_path_str,
             content=new_full_content,
             dry_run=dry_run,
+            doc_source=doc_source or None,
         )
         # Enrich with edit_lines metadata
         result["lines_replaced"] = lines_replaced
