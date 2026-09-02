@@ -9,6 +9,7 @@ tags: [readme, reference]
 
 [![CI](https://github.com/Ziggibot0/vaultbot/workflows/CI/badge.svg)](https://github.com/Ziggibot0/vaultbot/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Ziggibot0/vaultbot?label=release)](https://github.com/Ziggibot0/vaultbot/releases)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Ziggibot0/vaultbot/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Ziggibot0/vaultbot)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
