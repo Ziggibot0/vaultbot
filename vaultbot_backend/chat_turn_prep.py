@@ -209,6 +209,46 @@ def _embedding_route_payload(
     return payload
 
 
+def _current_session_log_stems(
+    results: list[dict[str, Any]], session_id: str | None
+) -> list[str]:
+    sid = str(session_id or "").strip().lower()
+    if not sid:
+        return []
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for r in results or []:
+        if not isinstance(r, dict):
+            continue
+        fp = str(r.get("file_path", "") or "")
+        norm = fp.replace("\\", "/")
+        if f"/logs/{sid}/" not in norm.lower():
+            continue
+        leaf = norm.rsplit("/", 1)[-1]
+        stem = leaf.rsplit(".", 1)[0]
+        if stem and stem not in seen:
+            seen.add(stem)
+            out.append(stem)
+    return out
+
+
+def _append_current_session_temporal_guard(context: str, stems: list[str]) -> str:
+    if not stems:
+        return context
+    shown = ", ".join(stems[:8])
+    guard = (
+        "\n\n--- TEMPORAL GUARD (CURRENT SESSION EVIDENCE) ---\n"
+        "Some retrieved notes are from the ACTIVE chat session log. "
+        "Treat them as evidence from this same ongoing conversation, not "
+        "a past event.\n"
+        "For those notes, do NOT use phrasing like 'last time', "
+        "'previously', or 'earlier session'.\n"
+        f"Current-session retrieved notes: {shown}"
+    )
+    return context + guard
+
+
 async def prepare_turn(
     svc: Services,
     websocket,
@@ -433,6 +473,19 @@ async def prepare_turn(
                 f"context filtering failed: {e}",
                 context="context_filter",
             )
+
+    # Temporal guard (issue #296): if retrieval surfaced event notes from the
+    # ACTIVE session log, tell the model explicitly those are current-session
+    # evidence, not historical memory.
+    _session_stems = _current_session_log_stems(
+        results, getattr(websocket, "session_id", None)
+    )
+    if _session_stems:
+        context = _append_current_session_temporal_guard(context, _session_stems)
+        session_logger.log(
+            "temporal_guard_current_session",
+            {"count": len(_session_stems), "notes": _session_stems[:8]},
+        )
 
     # Inject the identity boot context so the agent wakes up coherent.
     identity_context = svc.identity.boot_context()
