@@ -52,3 +52,21 @@ VaultBot runs locally and only touches your machine, your Ollama
 instance, and the research backend you configure. It does not phone home.
 Bug reports and draft PRs filed by VaultBot are opt-in and must follow the
 privacy guardrails in `CONTRIBUTING.md` (no vault contents, no secrets).
+
+## Repository security controls
+
+VaultBot keeps GitHub's repository-side secret defenses enabled:
+
+- Secret scanning: enabled
+- Push protection: enabled
+
+These controls are audited by `.github/workflows/security-settings-audit.yml`
+on pull requests, weekly schedule, and manual runs.
+
+Maintainer verification command:
+
+```bash
+gh api repos/Ziggibot0/vaultbot --jq ".security_and_analysis"
+```
+
+Issue reference: #324.
