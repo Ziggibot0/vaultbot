@@ -123,6 +123,22 @@ print(first_free)
 " 2>/dev/null
 }
 
+get_latest_release_tag() {
+    # Resolve latest VaultBot GitHub Release tag for stable installs.
+    # Prints "" on failure so caller can fail clearly.
+    python3 -c "
+import json, urllib.request
+try:
+    with urllib.request.urlopen('https://api.github.com/repos/Ziggibot0/vaultbot/releases/latest', timeout=20) as r:
+        data = json.load(r)
+except Exception:
+    print('')
+    raise SystemExit(0)
+tag = str(data.get('tag_name', '') or '').strip()
+print(tag)
+" 2>/dev/null
+}
+
 echo ""
 echo "  ============================="
 echo "      VaultBot Installer"
@@ -284,11 +300,13 @@ read -p "  Your name: " OWNER_NAME
 OWNER_NAME="${OWNER_NAME:-friend}"
 echo ""
 
-# ── 3. Get the repo (anonymous clone, so updates merge cleanly) ─────────────
-# VaultBot installs as a plain `git clone` of the public upstream repo — NO
-# GitHub account is required to install or update. Pulling updates is
-# anonymous (`git pull upstream main`); only *pushing* (contributing) needs
-# a GitHub account, and that is opt-in later, not a gate on install.
+# ── 3. Get the repo (latest tagged release) ────────────────────────────────
+# VaultBot installs from the latest GitHub Release tag rather than moving
+# `main`, so fresh installs get a stable published build instead of in-flight
+# development commits.
+#
+# No GitHub account is required to install. Only *pushing* (contributing)
+# needs an account, and that is opt-in later, not a gate on install.
 #
 # We add an `upstream` remote pointing at Ziggibot0/vaultbot so the
 # in-Obsidian updater's `git pull upstream main` works out of the box.
@@ -364,10 +382,19 @@ else
         exit 1
     fi
 
-    echo ">>> Downloading VaultBot..."
-    git clone https://github.com/Ziggibot0/vaultbot.git "$FRAMEWORK_NAME"
+    echo ">>> Resolving latest VaultBot release..."
+    RELEASE_TAG="$(get_latest_release_tag)"
+    if [ -z "$RELEASE_TAG" ]; then
+        echo "  [X]  Could not resolve latest VaultBot release tag."
+        echo "       Check your network connection and GitHub availability, then"
+        echo "       re-run this installer."
+        exit 1
+    fi
+
+    echo ">>> Downloading VaultBot ($RELEASE_TAG)..."
+    git clone --branch "$RELEASE_TAG" --depth 1 https://github.com/Ziggibot0/vaultbot.git "$FRAMEWORK_NAME"
     if [ ! -d "$FRAMEWORK_PATH" ]; then
-        echo "  [X]  Could not download VaultBot."
+        echo "  [X]  Could not download VaultBot release $RELEASE_TAG."
         echo "       Check your network connection, then re-run this installer."
         exit 1
     fi
@@ -377,7 +404,7 @@ else
     # the updater prefers `upstream` and the contribution flow expects it.)
     ( cd "$FRAMEWORK_PATH" && git remote add upstream https://github.com/Ziggibot0/vaultbot.git ) 2>/dev/null || true
 
-    echo "  [OK] VaultBot downloaded (updates will merge cleanly)"
+    echo "  [OK] VaultBot downloaded at release $RELEASE_TAG"
 
     # Optional: detect GitHub CLI for the contribution flow. This is NOT
     # required to use or update VaultBot — the user only needs to sign in

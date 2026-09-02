@@ -131,6 +131,19 @@ function Get-FreeCloudModel {
     }
 }
 
+function Get-LatestReleaseTag {
+    # Resolve the latest GitHub Release tag for VaultBot code installs.
+    # Returns "" when the API is unavailable so the caller can fail clearly.
+    try {
+        $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/Ziggibot0/vaultbot/releases/latest" -TimeoutSec 20
+        $tag = "$($rel.tag_name)".Trim()
+        if ($tag) { return $tag }
+        return ""
+    } catch {
+        return ""
+    }
+}
+
 Write-Host ""
 Write-Host "  =============================" -ForegroundColor Cyan
 Write-Host "      VaultBot Installer" -ForegroundColor Cyan
@@ -319,11 +332,13 @@ $ownerName = Read-Host "  Your name"
 if ([string]::IsNullOrWhiteSpace($ownerName)) { $ownerName = "friend" }
 Write-Host ""
 
-# -- 3. Get the repo (anonymous clone, so updates merge cleanly) -----------
-# VaultBot installs as a plain `git clone` of the public upstream repo - NO
-# GitHub account is required to install or update. Pulling updates is
-# anonymous (`git pull upstream main`); only *pushing* (contributing) needs
-# a GitHub account, and that is opt-in later, not a gate on install.
+# -- 3. Get the repo (latest tagged release) -------------------------------
+# VaultBot installs from the latest GitHub Release tag rather than moving
+# `main`, so fresh installs get a stable published build instead of in-flight
+# development commits.
+#
+# No GitHub account is required to install. Only *pushing* (contributing)
+# needs an account, and that is opt-in later, not a gate on install.
 #
 # We add an `upstream` remote pointing at Ziggibot0/vaultbot so the
 # in-Obsidian updater's `git pull upstream main` works out of the box.
@@ -407,10 +422,19 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
         return
     }
 
-    Write-Step "Downloading VaultBot..."
-    & git clone https://github.com/Ziggibot0/vaultbot.git $frameworkName
+    Write-Step "Resolving latest VaultBot release..."
+    $releaseTag = Get-LatestReleaseTag
+    if ([string]::IsNullOrWhiteSpace($releaseTag)) {
+        Write-Err "Could not resolve latest VaultBot release tag."
+        Write-Host "  Check your network connection and GitHub availability," -ForegroundColor Yellow
+        Write-Host "  then re-run this installer." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Step "Downloading VaultBot ($releaseTag)..."
+    & git clone --branch $releaseTag --depth 1 https://github.com/Ziggibot0/vaultbot.git $frameworkName
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $frameworkPath)) {
-        Write-Err "Could not download VaultBot."
+        Write-Err "Could not download VaultBot release $releaseTag."
         Write-Host "  Check your network connection, then re-run this installer." -ForegroundColor Yellow
         return
     }
@@ -423,7 +447,7 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
         & git remote add upstream https://github.com/Ziggibot0/vaultbot.git 2>$null
     } finally { Pop-Location }
 
-    Write-OK "VaultBot downloaded (updates will merge cleanly)"
+    Write-OK "VaultBot downloaded at release $releaseTag"
 
     # Optional: detect GitHub CLI for the contribution flow. This is NOT
     # required to use or update VaultBot - the user only needs to sign in
