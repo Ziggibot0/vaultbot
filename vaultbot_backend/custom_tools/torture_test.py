@@ -38,7 +38,9 @@ def run(args: dict) -> dict:
     import os
     import re
     import subprocess
+    import sys
     import tempfile
+
     from custom_tools.gh_client import GhError, gh_api, gh_available, gh_raw
 
     # 1. Check for gh CLI (auth is handled by gh auth login, not a token)

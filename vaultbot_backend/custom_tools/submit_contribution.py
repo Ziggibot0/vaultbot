@@ -201,6 +201,7 @@ def run(args: dict) -> dict:
     Returns a dict with the PR URL on success, or an error message.
     """
     import os
+    import sys
     import time
 
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

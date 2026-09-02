@@ -32,9 +32,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-from subprocess_utils import run as _subprocess_run  # noqa: E402
+from subprocess_utils import run as _subprocess_run
+
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class GhError(Exception):

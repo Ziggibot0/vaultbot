@@ -31,6 +31,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 
 _BACKEND = Path(__file__).parent.resolve()
