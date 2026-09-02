@@ -28,16 +28,6 @@ SCHEMA = {
 
 
 def run(args: dict) -> dict:
-    import os
-    import sys
-
-    backend_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "vaultbot",
-        "vaultbot_backend",
-    )
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
     from self_improver import SelfImprover
 
     _si = SelfImprover(session_logger=None)

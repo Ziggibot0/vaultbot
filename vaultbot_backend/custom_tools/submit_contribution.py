@@ -204,10 +204,7 @@ def run(args: dict) -> dict:
     import sys
     import time
 
-    # Add backend to path for subprocess_utils + gh_client
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
     from custom_tools.gh_client import GhError, gh_api, gh_available
     from subprocess_utils import run as _subprocess_run
 

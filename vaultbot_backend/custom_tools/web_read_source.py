@@ -55,9 +55,6 @@ def run(args: dict[str, Any], llm_client=None) -> dict[str, Any]:
     Accepts either a URL (looked up in the index) or a filename (read
     directly). Returns the article text + provenance.
     """
-    import sys
-
-    sys.path.insert(0, str(BACKEND_DIR))
     from web_source_store import find_source, read_source_text, source_path
 
     url = (args.get("url") or "").strip()

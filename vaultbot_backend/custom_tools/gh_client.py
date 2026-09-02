@@ -32,16 +32,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 
-# Add the backend dir to sys.path so we can import subprocess_utils (which
-# hides console windows on Windows). This mirrors the pattern used by the
-# existing custom tools.
+from subprocess_utils import run as _subprocess_run
+
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _backend_dir not in sys.path:
-    sys.path.insert(0, _backend_dir)
-
-from subprocess_utils import run as _subprocess_run  # noqa: E402
 
 
 class GhError(Exception):
