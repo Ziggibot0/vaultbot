@@ -474,6 +474,65 @@ if ((Test-Path (Join-Path $PWD "vaultbot_backend")) -and
     }
 }
 
+# -- 3a. Repair/update an existing install to the latest release -----------
+# When re-run over an existing install, bring the CODE up to the latest
+# release. Installs are shallow, detached clones, so we do NOT merge (a
+# shallow clone shares no history with the fetched tag and a merge aborts on
+# "unrelated histories" - the bug that left older installs unable to update).
+# Instead we fetch the release tag and `reset --hard` onto it: this lands the
+# code EXACTLY on the release and can never conflict. reset --hard never
+# touches UNTRACKED files, so all notes, chat logs, API keys, learned state,
+# and bot-authored procedures are preserved; every runtime-state/log file is
+# gitignored and stays put.
+if ($inExistingRepo -and (Test-Path (Join-Path $frameworkPath ".git"))) {
+    Write-Step "Updating existing VaultBot to the latest release..."
+    $repairTag = Get-LatestReleaseTag
+    if ([string]::IsNullOrWhiteSpace($repairTag)) {
+        Write-Warn2 "Could not resolve latest release - keeping current code."
+    } else {
+        Push-Location $frameworkPath
+        try {
+            # Prefer the upstream remote; fall back to origin.
+            $repairRemote = "upstream"
+            & git remote get-url upstream *> $null
+            if ($LASTEXITCODE -ne 0) { $repairRemote = "origin" }
+
+            # Back up any tracked file with local modifications first, so a
+            # bot/user edit to a repo-tracked file is never silently lost.
+            $modified = (& git diff --name-only HEAD 2>$null) | Where-Object { $_ -and $_.Trim() }
+            if ($modified) {
+                $bts = (Get-Date).ToString("yyyy-MM-ddTHH-mm-ss")
+                $backupDir = Join-Path $frameworkPath "vaultbot_backend\.vaultbot-update-backup\$bts"
+                foreach ($rel in $modified) {
+                    $srcp = Join-Path $frameworkPath $rel
+                    if (Test-Path $srcp) {
+                        $dstp = Join-Path $backupDir ($rel -replace '[\\/]', '__')
+                        New-Item -ItemType Directory -Force -Path (Split-Path $dstp) | Out-Null
+                        Copy-Item $srcp $dstp -Force
+                    }
+                }
+                Write-Warn2 "Backed up $($modified.Count) locally-modified file(s) before update."
+            }
+
+            $fetchOk = $false
+            foreach ($spec in @($repairTag, "refs/tags/$repairTag")) {
+                & git fetch --depth 1 $repairRemote $spec *> $null
+                if ($LASTEXITCODE -eq 0) { $fetchOk = $true; break }
+            }
+            if ($fetchOk) {
+                & git reset --hard FETCH_HEAD *> $null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-OK "Updated to release $repairTag"
+                } else {
+                    Write-Warn2 "Could not apply $repairTag - keeping current code."
+                }
+            } else {
+                Write-Warn2 "Could not fetch $repairTag - keeping current code."
+            }
+        } finally { Pop-Location }
+    }
+}
+
 # -- 3b. Set the vault path ------------------------------------------------
 # The repo ships a `myvault/` subfolder (the user's Obsidian vault). The
 # folder name is FIXED to "myvault" so that `git pull` updates (new

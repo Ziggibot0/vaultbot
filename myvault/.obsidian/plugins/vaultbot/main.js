@@ -1306,49 +1306,76 @@ class VaultBotPlugin extends Plugin {
 			// Best-effort: make sure nothing is still up holding locks.
 			await new Promise(r => setTimeout(r, 800));
 
-			// ── Git-based update (fork installs) ────────────────────────────
-			// If this vault is a git fork (installed via the fork-based
-			// installer), update via `git pull` so changes MERGE instead of
-			// overwrite. This preserves any local edits the vaultbot made to
-			// tracked files — the old tarball path silently clobbered them.
-			// Legacy zip installs (no .git) fall through to the tarball path.
+			// ── Git-based update (clone installs) ───────────────────────────
+			// Every install is `git clone --branch <tag> --depth 1` — a
+			// SHALLOW, detached-HEAD clone. The old code tried to MERGE the
+			// fetched release into local HEAD, but a shallow clone shares no
+			// history with the fetched tag, so `merge --ff-only` always aborts
+			// ("Not possible to fast-forward") and the fallback merge dies on
+			// "refusing to merge unrelated histories" — leaving every user
+			// permanently unable to update. We do NOT merge. We LAND the
+			// working tree exactly on the release tree with `reset --hard`,
+			// which needs only the target commit's tree (no common ancestor),
+			// so it can never conflict, never accretes merge commits, and is
+			// fully idempotent. Legacy zip installs (no .git) fall through to
+			// the tarball path below.
+			//
+			// SAFETY: `reset --hard` never touches UNTRACKED files, so all
+			// user data and bot-authored procedures survive automatically, and
+			// every runtime-state/log file is gitignored (untracked) so the
+			// bot's learned state is untouched. The only tracked files are
+			// curated code/content that SHOULD match the release. As a
+			// belt-and-braces guard we back up any tracked file that has local
+			// modifications before resetting, so nothing is ever silently lost.
 			const gitDir = path.join(path.dirname(vaultRoot), '.git');
 			if (fs.existsSync(gitDir)) {
 				notify(`Updating via git (${refSpec})…`);
-				const runGit = (args) => execFileSync('git', args, { cwd: path.dirname(vaultRoot), stdio: 'pipe' });
-				// A fork has an `upstream` remote; a direct clone (maintainer)
-				// only has `origin`. Prefer upstream, fall back to origin.
+				const repoRoot = path.dirname(vaultRoot);
+				const runGit = (args) => execFileSync('git', args, { cwd: repoRoot, stdio: 'pipe' });
+				const runGitText = (args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+				// A clone/fork has an `upstream` remote; a direct maintainer
+				// clone only has `origin`. Prefer upstream, fall back to origin.
 				let remote = 'upstream';
 				try { runGit(['remote', 'get-url', 'upstream']); }
 				catch (e) { remote = 'origin'; }
 
-				// Fetch the target ref.
-				runGit(['fetch', remote, refSpec]);
-
-				// Stash local uncommitted changes so the merge is clean.
-				let stashed = false;
-				try {
-					runGit(['stash', 'push', '--include-untracked', '-m', 'vaultbot-self-update']);
-					stashed = true;
-				} catch (e) { /* nothing to stash, or stash failed — continue */ }
-
-				try {
-					// Fast-forward merge; fall back to a regular merge if the
-					// local branch has diverged (e.g. the vaultbot committed).
-					try { runGit(['merge', '--ff-only', 'FETCH_HEAD']); }
-					catch (e) { runGit(['merge', 'FETCH_HEAD']); }
-				} catch (mergeErr) {
-					// Merge conflict — abort and restore the stash, then fail
-					// loudly so the user can use "Restore previous version".
-					try { runGit(['merge', '--abort']); } catch (e) {}
-					if (stashed) { try { runGit(['stash', 'pop']); } catch (e) {} }
-					throw new Error('Update conflicted with local changes. Resolve manually or use "Restore previous version".');
+				// Fetch the target ref. It may be a branch or a tag — try the
+				// plain name first, then an explicit tag refspec. `--depth 1`
+				// keeps the install lean (it's already shallow); `reset --hard`
+				// below only needs the fetched commit's tree, not its history.
+				let fetched = false;
+				let fetchErr = null;
+				for (const spec of [refSpec, `refs/tags/${refSpec}`]) {
+					try { runGit(['fetch', '--depth', '1', remote, spec]); fetched = true; break; }
+					catch (e) { fetchErr = e; }
 				}
+				if (!fetched) throw new Error(`Could not fetch ${refSpec} from ${remote}: ` + (fetchErr && fetchErr.message ? fetchErr.message : 'unknown error'));
 
-				if (stashed) {
-					try { runGit(['stash', 'pop']); }
-					catch (e) { notify('Note: local changes could not be auto-restored (kept in git stash).'); }
-				}
+				// Back up any TRACKED file that has local modifications before
+				// we reset, so a bot/user edit to a repo-tracked file is never
+				// silently lost. Untracked files need no backup — reset leaves
+				// them in place. This mirrors the tarball path's backup dir so
+				// "Restore previous version" (/update/rollback) keeps working.
+				try {
+					const modified = runGitText(['diff', '--name-only', 'HEAD'])
+						.split('\n').map(s => s.trim()).filter(Boolean);
+					if (modified.length) {
+						const bts = new Date().toISOString().replace(/[:.]/g, '-');
+						const backupDir = path.join(repoRoot, 'vaultbot_backend', '.vaultbot-update-backup', bts);
+						for (const rel of modified) {
+							const srcp = path.join(repoRoot, rel);
+							if (!fs.existsSync(srcp)) continue;
+							const dstp = path.join(backupDir, rel.replace(/[\\/]/g, '__'));
+							fs.mkdirSync(path.dirname(dstp), { recursive: true });
+							fs.copyFileSync(srcp, dstp);
+						}
+						notify(`Backed up ${modified.length} locally-modified file(s) before update.`);
+					}
+				} catch (e) { /* best-effort backup; never block the update */ }
+
+				// Land the working tree EXACTLY on the release. This is the
+				// whole fix: no merge, so it can never conflict or get stuck.
+				runGit(['reset', '--hard', 'FETCH_HEAD']);
 
 				// Read the new version for reporting.
 				let newVersion = '?';
