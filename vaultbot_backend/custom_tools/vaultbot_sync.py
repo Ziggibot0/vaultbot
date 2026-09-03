@@ -20,19 +20,17 @@ handles:
      - If ``target="main"`` is passed explicitly, syncs to the tip of
        ``upstream/main`` (bleeding edge, for power users).
      - If no tags exist at all, falls back to ``upstream/main``.
-  4. **Merging cleanly** — uses ``git merge`` (not reset/checkout) so local
-     vault notes and personal data are preserved. If there are merge
-     conflicts, it reports them rather than silently overwriting.
-  5. **Pushing to origin (fork sync)** — after a successful merge, pushes
-     the current branch to ``origin`` so the fork stays in sync with
-     upstream. This eliminates the manual ``git push origin main`` step
-     that was easy to forget — a stale fork causes spurious merge
-     conflicts on the next PR branch. If the push fails (e.g. no origin
-     remote, or network error), it reports a warning but does NOT fail
-     the sync — the local repo is already updated.
-  6. **Reporting what changed** — returns the list of files that changed
-     and a summary of new commits, so the agent (or user) can see what
-     the update brought.
+  4. **Landing on the release (shallow-safe)** — installs are shallow,
+     detached ``git clone --depth 1 --branch <tag>`` clones that share no
+     history with the fetched tag, so a ``git merge`` aborts on "unrelated
+     histories". Instead it fetches the target tag and ``git reset --hard``s
+     onto it: no common history needed, never conflicts, idempotent.
+     Untracked files (vault notes, personal data, bot-authored procedures)
+     are left untouched by ``reset --hard``; tracked files with local edits
+     are backed up to ``.vaultbot-update-backup/`` first.
+  5. **Reporting what changed** — returns the list of files that changed
+     (a tree diff that works across the shallow boundary), so the agent (or
+     user) can see what the update brought.
 
 This tool is **NOT** gated behind ``VAULTBOT_ALLOW_CONTRIBUTIONS``. Syncing
 is useful for every user — even someone who never contributes still wants
@@ -40,26 +38,27 @@ updates. It requires only ``git`` on PATH (no ``gh`` auth needed for a
 read-only fetch+merge).
 
 Safety:
-  - Never force-pushes, never resets, never deletes untracked files.
-  - The push to origin is a normal ``git push`` (no --force). If the fork
-    has diverged (e.g. someone committed directly to the fork's main), the
-    push fails with a warning — the local sync still succeeded.
-  - If the working tree has uncommitted changes, it refuses and tells the
-    user to commit or stash first (prevents losing work).
-  - If a merge conflict occurs, it reports the conflicted files and leaves
-    the merge in progress for manual resolution — it does NOT abort
-    automatically (that would lose the merge state).
+  - Never force-pushes and never deletes untracked files — ``reset --hard``
+    only touches TRACKED files, which are curated code/content that should
+    match the release.
+  - Tracked files with local modifications are backed up to
+    ``.vaultbot-update-backup/`` before the reset, so a bot/user edit to a
+    repo-tracked file is never silently lost (recoverable, and the pre-sync
+    HEAD is reported for a manual ``git reset --hard <sha>`` rollback).
+  - Untracked files (vault notes, personal data, bot-authored procedures,
+    keys, all gitignored runtime state) are preserved automatically.
 """
 
 SCHEMA = {
     "name": "vaultbot_sync",
     "description": (
         "Sync VaultBot to the latest upstream release (or main). Fetches "
-        "from the upstream remote, merges the latest tagged release (or "
-        "upstream/main if no tags exist or target='main' is passed), and "
-        "reports what changed. This is the update mechanism — equivalent to "
-        "'hermes update' for Hermes Agent. Does NOT require gh auth (fetch "
-        "is read-only). Does NOT require Allow contributions to be enabled."
+        "the latest release tag (or upstream/main if target='main') and "
+        "lands the code exactly on it with reset --hard — shallow-clone "
+        "safe, so it works on every install. Preserves all untracked files "
+        "(notes, keys, bot-authored procedures); backs up tracked local "
+        "edits first. This is the autonomous self-update mechanism. Does NOT "
+        "require gh auth (fetch is read-only) or Allow contributions."
     ),
     "parameters": {
         "type": "object",
@@ -114,11 +113,80 @@ def _run_git(git_args: list[str], cwd: str) -> tuple[bool, str, str]:
         return False, "", str(e)
 
 
+def _latest_semver_tag(ls_remote_output: str) -> str | None:
+    """Pick the highest ``vMAJOR.MINOR.PATCH`` tag from ``git ls-remote
+    --tags`` output. Pure + deterministic (unit-testable).
+
+    Each ls-remote line is ``<sha>\\trefs/tags/<tag>``. We match tags of the
+    release form ``vN.N.N`` and return the highest by numeric (major, minor,
+    patch). Using ls-remote (not ``git describe``) is what makes tag
+    resolution work on a shallow ``--depth 1`` clone, which has no local
+    history for describe to walk. Returns None if no release tag is present.
+    """
+    import re
+
+    best = None
+    best_key = None
+    for line in ls_remote_output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        ref = line.split()[-1]
+        tag = ref.rsplit("/", 1)[-1]
+        m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag)
+        if not m:
+            continue
+        key = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if best_key is None or key > best_key:
+            best_key = key
+            best = tag
+    return best
+
+
+def _backup_modified_tracked(git_root: str) -> list[str]:
+    """Back up tracked files with local modifications to
+    ``.vaultbot-update-backup/<ts>/`` before a ``reset --hard``.
+
+    Untracked files (notes, keys, bot-authored procedures) are left in place
+    by ``reset --hard`` and need no backup — only tracked files whose working
+    copy differs from HEAD would be discarded, so those are what we save.
+    Returns the list of backed-up relative paths. Best-effort: never raises.
+    """
+    import os
+    import shutil
+    import time
+
+    ok, out, _ = _run_git(["diff", "--name-only", "HEAD"], git_root)
+    if not ok:
+        return []
+    modified = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    if not modified:
+        return []
+    ts = time.strftime("%Y-%m-%dT%H-%M-%S", time.gmtime())
+    backup_dir = os.path.join(
+        git_root, "vaultbot_backend", ".vaultbot-update-backup", ts
+    )
+    done: list[str] = []
+    for rel in modified:
+        src = os.path.join(git_root, rel)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(backup_dir, rel.replace("/", "__").replace("\\", "__"))
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            done.append(rel)
+        except OSError:
+            continue
+    return done
+
+
 def run(args: dict) -> dict:
     """Sync VaultBot to the latest upstream release or main branch.
 
-    Returns a dict with the sync result: target ref, commits pulled, files
-    changed, and any errors.
+    Returns a dict with the sync result: target ref, files changed, backed-up
+    files, and any errors. Lands on the release with ``reset --hard`` so it
+    works on the shallow, detached clones every install actually is.
     """
     import os
 
@@ -140,28 +208,21 @@ def run(args: dict) -> dict:
             ),
         }
 
-    # 2. Check for uncommitted changes — refuse to merge on a dirty tree.
-    ok, status_out, _ = _run_git(["status", "--porcelain"], git_root)
-    if not ok:
-        return {"error": f"git status failed: {status_out}"}
-    if status_out.strip():
-        return {
-            "error": "Working tree has uncommitted changes. Refusing to merge.",
-            "hint": (
-                "Commit or stash your changes first, then sync. "
-                "Run 'git status' to see what's changed."
-            ),
-            "dirty_files": status_out.strip().splitlines(),
-        }
-
-    # 3. Check that the upstream remote exists.
+    # 2. Resolve the remote to sync from (prefer upstream, fall back to
+    #    origin — a plain clone sets origin to the canonical repo).
     ok, remotes, _ = _run_git(["remote"], git_root)
     if not ok:
         return {"error": f"git remote failed: {remotes}"}
-    if "upstream" not in remotes.split():
+    remote_list = remotes.split()
+    remote = (
+        "upstream"
+        if "upstream" in remote_list
+        else ("origin" if "origin" in remote_list else None)
+    )
+    if remote is None:
         return {
             "error": (
-                "No 'upstream' remote found. VaultBot needs an 'upstream' "
+                "No 'upstream' or 'origin' remote found. VaultBot needs a "
                 "remote pointing to the canonical repo to sync."
             ),
             "hint": (
@@ -170,47 +231,70 @@ def run(args: dict) -> dict:
             ),
         }
 
-    # 4. Fetch upstream (with tags).
-    ok, _fetch_out, fetch_err = _run_git(["fetch", "upstream", "--tags"], git_root)
-    if not ok:
-        return {
-            "error": f"git fetch upstream failed: {fetch_err}",
-            "hint": "Check your network connection and the upstream remote URL.",
-        }
+    # 3. Best-effort current branch. Empty on a detached-HEAD tag checkout,
+    #    which is exactly what a `--depth 1 --branch <tag>` install is. We do
+    #    NOT require it — the sync lands on the release tree directly, so a
+    #    detached HEAD is fine (the old code errored out here on every real
+    #    install).
+    _, current_branch, _ = _run_git(["branch", "--show-current"], git_root)
+    current_branch = current_branch.strip()
 
-    # 5. Determine what to merge.
-    current_branch_ok, current_branch, _ = _run_git(
-        ["branch", "--show-current"], git_root
-    )
-    if not current_branch_ok or not current_branch:
-        return {"error": "Could not determine current branch."}
-
-    merge_ref = ""
-    target_desc = ""
-
+    # 4. Resolve the target ref and FETCH it shallowly. Installs are shallow,
+    #    detached clones, so we canNOT use `git describe`/`rev-list` (they
+    #    walk history a depth-1 clone doesn't have). We list the remote's tags
+    #    with ls-remote (needs no local history) and pick the highest release
+    #    tag, then fetch exactly that tag. `--depth 1` keeps the repo lean.
     if target == "main":
-        merge_ref = "upstream/main"
+        ok, _out, err = _run_git(["fetch", "--depth", "1", remote, "main"], git_root)
+        if not ok:
+            return {
+                "error": f"git fetch {remote} main failed: {err}",
+                "hint": "Check your network connection and the remote URL.",
+            }
+        merge_ref = f"{remote}/main"
         target_desc = "upstream/main (bleeding edge)"
     else:
-        # Find the latest tag on upstream. --abbrev=0 returns just the tag
-        # name (e.g. "v0.1.0"), not a describe string like "v0.1.0-14-ge06ff846"
-        # which would point at the tip of main (bleeding edge, not stable).
-        ok, latest_tag, _ = _run_git(
-            ["describe", "--tags", "--abbrev=0", "upstream/main"], git_root
+        ok, ls_out, ls_err = _run_git(
+            ["ls-remote", "--tags", "--refs", remote], git_root
         )
-        if ok and latest_tag:
-            merge_ref = latest_tag.strip()
-            target_desc = f"release tag {merge_ref} (stable)"
+        if not ok:
+            return {
+                "error": f"git ls-remote {remote} failed: {ls_err or ls_out}",
+                "hint": "Check your network connection and the remote URL.",
+            }
+        latest_tag = _latest_semver_tag(ls_out)
+        if latest_tag:
+            ok, _out, err = _run_git(
+                ["fetch", "--depth", "1", remote, f"refs/tags/{latest_tag}"],
+                git_root,
+            )
+            if not ok:
+                return {
+                    "error": f"git fetch tag {latest_tag} failed: {err}",
+                    "hint": "Check your network connection and the remote URL.",
+                }
+            merge_ref = latest_tag
+            target_desc = f"release tag {latest_tag} (stable)"
         else:
-            # No tags reachable from upstream/main — fall back to main.
-            merge_ref = "upstream/main"
+            # No release tags on the remote — fall back to main.
+            ok, _out, err = _run_git(
+                ["fetch", "--depth", "1", remote, "main"], git_root
+            )
+            if not ok:
+                return {
+                    "error": f"git fetch {remote} main failed: {err}",
+                    "hint": "Check your network connection and the remote URL.",
+                }
+            merge_ref = f"{remote}/main"
             target_desc = "upstream/main (no tags found, falling back)"
 
-    # 6. Check if already up to date.
-    ok, behind_count, _ = _run_git(
-        ["rev-list", "--count", "HEAD.." + merge_ref], git_root
-    )
-    if ok and behind_count.strip() == "0":
+    # 5. Record the pre-update HEAD and compare it against the fetched target.
+    ok, pre_head, _ = _run_git(["rev-parse", "HEAD"], git_root)
+    pre_head = pre_head.strip() if ok else ""
+    ok, target_sha, _ = _run_git(["rev-parse", "FETCH_HEAD"], git_root)
+    target_sha = target_sha.strip() if ok else ""
+
+    if pre_head and target_sha and pre_head == target_sha:
         return {
             "status": "already_up_to_date",
             "target": target_desc,
@@ -219,60 +303,41 @@ def run(args: dict) -> dict:
             "message": f"Already up to date with {target_desc}.",
         }
 
-    # 7. Record the pre-merge HEAD for the diff.
-    ok, pre_head, _ = _run_git(["rev-parse", "HEAD"], git_root)
-    pre_head = pre_head.strip() if ok else ""
+    # 6. Back up any TRACKED file with local modifications before we reset.
+    backed_up = _backup_modified_tracked(git_root)
 
-    # 8. Merge.
-    ok, _merge_out, merge_err = _run_git(
-        ["merge", merge_ref, "--no-edit", "--no-stat"], git_root
-    )
+    # 7. Land the working tree EXACTLY on the target. No merge — a shallow,
+    #    detached clone shares no history with the fetched tag, so a merge
+    #    would abort on "unrelated histories". reset --hard needs only the
+    #    target tree, so it can never conflict and is idempotent. Untracked
+    #    files (user data, bot procedures) are preserved automatically.
+    ok, _out, reset_err = _run_git(["reset", "--hard", "FETCH_HEAD"], git_root)
     if not ok:
-        # Check for merge conflicts.
-        ok2, conflict_files, _ = _run_git(
-            ["diff", "--name-only", "--diff-filter=U"], git_root
-        )
-        conflicted = (
-            [f for f in conflict_files.splitlines() if f.strip()] if ok2 else []
-        )
         return {
-            "error": "Merge failed — conflicts detected.",
-            "hint": (
-                "Resolve the conflicts manually, then commit. "
-                "Run 'git status' to see conflicted files. "
-                "To abort the merge: git merge --abort"
-            ),
+            "error": f"git reset --hard failed: {reset_err}",
             "merge_ref": merge_ref,
-            "conflicted_files": conflicted,
-            "stderr": merge_err,
+            "hint": "The local repo was not changed. Check git state manually.",
         }
 
-    # 9. Push to origin (fork sync) so the fork stays current with upstream.
-    #    This eliminates the manual `git push origin main` step that was
-    #    easy to forget. A stale fork causes spurious merge conflicts on
-    #    the next PR branch. If the push fails, we warn but don't fail —
-    #    the local repo is already updated.
-    fork_synced = False
-    fork_sync_error = ""
-    ok, push_out, push_err = _run_git(["push", "origin", current_branch], git_root)
-    if ok:
-        fork_synced = True
-    else:
-        fork_sync_error = push_err or push_out or "unknown push error"
+    # 8. Report what changed. `git diff` compares trees directly (no shared
+    #    history needed), so it works even across the shallow boundary.
+    ok, post_head, _ = _run_git(["rev-parse", "HEAD"], git_root)
+    post_head = post_head.strip() if ok else ""
 
-    # 10. Gather what changed.
-    ok, log_out, _ = _run_git(["log", "--oneline", f"{pre_head}..HEAD"], git_root)
+    ok, diff_out, _ = _run_git(["diff", "--stat", pre_head, post_head], git_root)
+    files_changed_summary = diff_out.strip() if ok else ""
+
+    # New commits are best-effort: a log between two disconnected shallow
+    # commits may be empty, which is fine — the tree diff above is the source
+    # of truth for what changed.
+    ok, log_out, _ = _run_git(
+        ["log", "--oneline", f"{pre_head}..{post_head}"], git_root
+    )
     new_commits = (
         [line for line in log_out.splitlines() if line.strip()]
         if ok and log_out.strip()
         else []
     )
-
-    ok, diff_out, _ = _run_git(["diff", "--stat", pre_head, "HEAD"], git_root)
-    files_changed_summary = diff_out.strip() if ok else ""
-
-    ok, post_head, _ = _run_git(["rev-parse", "HEAD"], git_root)
-    post_head = post_head.strip() if ok else ""
 
     return {
         "status": "success",
@@ -284,14 +349,13 @@ def run(args: dict) -> dict:
         "commits_pulled": len(new_commits),
         "new_commits": new_commits[:20],  # cap at 20 for context
         "files_changed_summary": files_changed_summary,
-        "fork_synced": fork_synced,
-        "fork_sync_error": fork_sync_error,
+        "backed_up_files": backed_up,
         "message": (
-            f"Synced to {target_desc}. {len(new_commits)} new commit(s)."
+            f"Synced to {target_desc} via reset --hard (shallow-safe). "
             + (
-                " Fork synced."
-                if fork_synced
-                else " Fork sync failed — see fork_sync_error."
+                f"Backed up {len(backed_up)} locally-modified tracked file(s)."
+                if backed_up
+                else "No local tracked edits needed backup."
             )
         ),
     }
