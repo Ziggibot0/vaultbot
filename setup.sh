@@ -422,6 +422,65 @@ else
     fi
 fi
 
+# ── 3a. Repair/update an existing install to the latest release ────────────
+# When re-run over an existing install, bring the CODE up to the latest
+# release. Installs are shallow, detached clones, so we do NOT merge (a
+# shallow clone shares no history with the fetched tag and a merge aborts on
+# "unrelated histories" - the bug that left older installs unable to update).
+# Instead we fetch the release tag and `reset --hard` onto it: this lands the
+# code EXACTLY on the release and can never conflict. reset --hard never
+# touches UNTRACKED files, so all notes, chat logs, API keys, learned state,
+# and bot-authored procedures are preserved; every runtime-state/log file is
+# gitignored and stays put.
+if [ "$IN_EXISTING_REPO" = true ] && [ -d "$FRAMEWORK_PATH/.git" ]; then
+    echo ">>> Updating existing VaultBot to the latest release..."
+    REPAIR_TAG="$(get_latest_release_tag)"
+    if [ -z "$REPAIR_TAG" ]; then
+        echo "  [!]  Could not resolve latest release - keeping current code."
+    else
+        (
+            cd "$FRAMEWORK_PATH" || exit 0
+            # Prefer the upstream remote; fall back to origin.
+            REPAIR_REMOTE=upstream
+            git remote get-url upstream >/dev/null 2>&1 || REPAIR_REMOTE=origin
+
+            # Back up any tracked file with local modifications first, so a
+            # bot/user edit to a repo-tracked file is never silently lost.
+            MODIFIED="$(git diff --name-only HEAD 2>/dev/null)"
+            if [ -n "$MODIFIED" ]; then
+                BTS="$(date +%Y-%m-%dT%H-%M-%S)"
+                BACKUP_DIR="$FRAMEWORK_PATH/vaultbot_backend/.vaultbot-update-backup/$BTS"
+                echo "$MODIFIED" | while IFS= read -r REL; do
+                    [ -z "$REL" ] && continue
+                    if [ -f "$FRAMEWORK_PATH/$REL" ]; then
+                        FLAT="$(printf '%s' "$REL" | tr '/' '_')"
+                        mkdir -p "$BACKUP_DIR"
+                        cp -f "$FRAMEWORK_PATH/$REL" "$BACKUP_DIR/$FLAT"
+                    fi
+                done
+                echo "  [!]  Backed up locally-modified file(s) before update."
+            fi
+
+            FETCH_OK=false
+            for SPEC in "$REPAIR_TAG" "refs/tags/$REPAIR_TAG"; do
+                if git fetch --depth 1 "$REPAIR_REMOTE" "$SPEC" >/dev/null 2>&1; then
+                    FETCH_OK=true
+                    break
+                fi
+            done
+            if [ "$FETCH_OK" = true ]; then
+                if git reset --hard FETCH_HEAD >/dev/null 2>&1; then
+                    echo "  [OK] Updated to release $REPAIR_TAG"
+                else
+                    echo "  [!]  Could not apply $REPAIR_TAG - keeping current code."
+                fi
+            else
+                echo "  [!]  Could not fetch $REPAIR_TAG - keeping current code."
+            fi
+        )
+    fi
+fi
+
 # ── 3b. Set the vault path ─────────────────────────────────────────────────
 # The repo ships a `myvault/` subfolder (the user's Obsidian vault). The
 # folder name is FIXED to "myvault" so that `git pull` updates (new

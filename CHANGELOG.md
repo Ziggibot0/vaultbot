@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.9] - 2026-09-02
+
+This release fixes the bug that left existing installs **unable to update** —
+the single most important fix for everyone who was already running VaultBot.
+It is a **patch** bump.
+
+### Fixed
+
+- **Self-update never worked on real installs.** Every install is a shallow,
+  detached `git clone --branch <tag> --depth 1`, but the in-Obsidian
+  "Update from GitHub" button tried to `git merge` the new release into local
+  HEAD. A shallow clone shares no history with the fetched tag, so
+  `merge --ff-only` always aborted ("Not possible to fast-forward") and the
+  fallback merge died on "refusing to merge unrelated histories" — leaving
+  every user stuck on their installed version with a dead-end error. The
+  updater now fetches the release tag and `git reset --hard`s onto it, which
+  needs no common history, can never conflict, and is idempotent. Untracked
+  files (notes, chat logs, API keys, learned state, bot-authored procedures)
+  are preserved by `reset --hard`; every runtime-state/log file is gitignored
+  and untouched. Tracked files with local edits are backed up to
+  `.vaultbot-update-backup/` first, so nothing is ever silently lost.
+- **Re-running the installer now repairs a stuck install.** `setup.ps1` and
+  `setup.sh`, when run over an existing install, fetch the latest release and
+  `reset --hard` onto it (same safe primitive). This is the rescue path for
+  users already stranded on the old merge-based updater: a single re-run of
+  the one-line installer lands them on the latest release.
+
 ## [1.5.8] - 2026-09-01
 
 This release builds VaultBot's self-maintenance infrastructure: a scriptable
