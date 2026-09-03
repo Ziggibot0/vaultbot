@@ -1,8 +1,10 @@
 """Unit tests for the vaultbot_sync custom tool.
 
 Covers the pure-logic surface with NO network access and NO real git
-operations — git calls are monkeypatched. Only the leaf module
-``custom_tools.vaultbot_sync`` is imported.
+operations — git calls are monkeypatched. The tool lands on the target
+release with ``reset --hard`` (shallow-clone safe), so these tests assert
+it NEVER merges, NEVER requires a clean tree, and NEVER requires a named
+branch (installs are detached-HEAD shallow clones).
 """
 
 import pytest
@@ -14,28 +16,66 @@ from custom_tools import vaultbot_sync as vs
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _make_git_results(monkeypatch, results):
-    """Patch _run_git to return a sequence of canned results.
+def _install(monkeypatch, mapping):
+    """Patch _run_git with a dispatch keyed on the exact git argv tuple.
 
-    ``results`` is a list of (success, stdout, stderr) tuples, returned in
-    order for each _run_git call.
+    Unspecified calls default to (True, "", "") — success with empty output.
+    Returns the list of argv lists actually invoked, so a test can assert on
+    which git commands ran (e.g. that 'merge' and 'push' never did).
     """
-    call_log = []
+    calls: list[list[str]] = []
 
     def _fake_run_git(git_args, cwd):
-        if results:
-            r = results.pop(0)
-            call_log.append((git_args, r))
-            return r
-        return (True, "", "")  # default: success, empty
+        calls.append(list(git_args))
+        return mapping.get(tuple(git_args), (True, "", ""))
 
     monkeypatch.setattr(vs, "_run_git", _fake_run_git)
-    return call_log
+    return calls
 
 
 def _make_git_root(monkeypatch, path="/fake/repo"):
-    """Patch _find_git_root to always return the given path."""
     monkeypatch.setattr(vs, "_find_git_root", lambda start_dir: path)
+
+
+# A minimal healthy latest-tag mapping the individual tests tweak.
+def _latest_tag_mapping(pre="abc123", target_sha="def456", tag="v1.5.9"):
+    return {
+        ("remote",): (True, "origin\nupstream", ""),
+        ("branch", "--show-current"): (True, "main", ""),
+        ("ls-remote", "--tags", "--refs", "upstream"): (
+            True,
+            f"111\trefs/tags/v1.5.8\n222\trefs/tags/{tag}",
+            "",
+        ),
+        ("fetch", "--depth", "1", "upstream", f"refs/tags/{tag}"): (True, "", ""),
+        ("rev-parse", "HEAD"): (True, pre, ""),
+        ("rev-parse", "FETCH_HEAD"): (True, target_sha, ""),
+        ("diff", "--name-only", "HEAD"): (True, "", ""),
+        ("reset", "--hard", "FETCH_HEAD"): (True, "", ""),
+    }
+
+
+# ─── _latest_semver_tag (pure) ────────────────────────────────────────────────
+
+
+class TestLatestSemverTag:
+    def test_picks_highest(self):
+        out = "111\trefs/tags/v1.5.8\n222\trefs/tags/v1.5.10\n333\trefs/tags/v1.5.9\n"
+        assert vs._latest_semver_tag(out) == "v1.5.10"
+
+    def test_ignores_non_semver(self):
+        out = (
+            "111\trefs/tags/nightly\n222\trefs/tags/v1.2.3-rc1\n333\trefs/tags/v0.4.0\n"
+        )
+        assert vs._latest_semver_tag(out) == "v0.4.0"
+
+    def test_no_tags_returns_none(self):
+        assert vs._latest_semver_tag("") is None
+        assert vs._latest_semver_tag("111\trefs/tags/nightly\n") is None
+
+    def test_major_minor_ordering(self):
+        out = "1\trefs/tags/v2.0.0\n2\trefs/tags/v10.0.0\n3\trefs/tags/v1.99.99\n"
+        assert vs._latest_semver_tag(out) == "v10.0.0"
 
 
 # ─── No git root ──────────────────────────────────────────────────────────────
@@ -48,57 +88,56 @@ def test_no_git_root_returns_error(monkeypatch):
     assert ".git" in result["error"]
 
 
-# ─── Dirty working tree ───────────────────────────────────────────────────────
+# ─── Remote resolution ────────────────────────────────────────────────────────
 
 
-def test_dirty_tree_refuses_merge(monkeypatch):
+def test_no_remote_returns_error(monkeypatch):
     _make_git_root(monkeypatch)
-    _make_git_results(
+    _install(monkeypatch, {("remote",): (True, "", "")})
+    result = vs.run({})
+    assert "error" in result
+    assert "remote" in result["error"].lower()
+
+
+def test_falls_back_to_origin_when_no_upstream(monkeypatch):
+    _make_git_root(monkeypatch)
+    mapping = {
+        ("remote",): (True, "origin", ""),
+        ("branch", "--show-current"): (True, "main", ""),
+        ("ls-remote", "--tags", "--refs", "origin"): (
+            True,
+            "222\trefs/tags/v1.5.9",
+            "",
+        ),
+        ("fetch", "--depth", "1", "origin", "refs/tags/v1.5.9"): (True, "", ""),
+        ("rev-parse", "HEAD"): (True, "abc", ""),
+        ("rev-parse", "FETCH_HEAD"): (True, "def", ""),
+        ("diff", "--name-only", "HEAD"): (True, "", ""),
+        ("reset", "--hard", "FETCH_HEAD"): (True, "", ""),
+    }
+    calls = _install(monkeypatch, mapping)
+    result = vs.run({})
+    assert result["status"] == "success"
+    # It fetched from origin (no upstream present).
+    assert ["ls-remote", "--tags", "--refs", "origin"] in calls
+
+
+# ─── ls-remote failure ────────────────────────────────────────────────────────
+
+
+def test_ls_remote_failure_returns_error(monkeypatch):
+    _make_git_root(monkeypatch)
+    _install(
         monkeypatch,
-        [
-            (True, " M vaultbot/some_note.md\n?? vaultbot/new_file.md\n", ""),
-        ],
+        {
+            ("remote",): (True, "origin\nupstream", ""),
+            ("branch", "--show-current"): (True, "main", ""),
+            ("ls-remote", "--tags", "--refs", "upstream"): (False, "", "network"),
+        },
     )
     result = vs.run({})
     assert "error" in result
-    assert "uncommitted" in result["error"]
-    assert "dirty_files" in result
-    assert len(result["dirty_files"]) == 2
-
-
-# ─── No upstream remote ───────────────────────────────────────────────────────
-
-
-def test_no_upstream_remote_returns_error(monkeypatch):
-    _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status --porcelain (clean)
-            (True, "origin\nfork\n", ""),  # remote (no upstream)
-        ],
-    )
-    result = vs.run({})
-    assert "error" in result
-    assert "upstream" in result["error"]
-
-
-# ─── Fetch failure ────────────────────────────────────────────────────────────
-
-
-def test_fetch_failure_returns_error(monkeypatch):
-    _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote (has upstream)
-            (False, "", "network error"),  # fetch fails
-        ],
-    )
-    result = vs.run({})
-    assert "error" in result
-    assert "fetch" in result["error"].lower()
+    assert "ls-remote" in result["error"]
 
 
 # ─── Already up to date ───────────────────────────────────────────────────────
@@ -106,20 +145,11 @@ def test_fetch_failure_returns_error(monkeypatch):
 
 def test_already_up_to_date(monkeypatch):
     _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            (True, "v0.1.0\n", ""),  # describe --tags (latest tag)
-            (True, "0\n", ""),  # rev-list count (0 = up to date)
-        ],
-    )
+    # HEAD == FETCH_HEAD → nothing to do.
+    _install(monkeypatch, _latest_tag_mapping(pre="same", target_sha="same"))
     result = vs.run({})
     assert result["status"] == "already_up_to_date"
-    assert "v0.1.0" in result["target"]
+    assert "v1.5.9" in result["target"]
 
 
 # ─── Successful sync to latest tag ────────────────────────────────────────────
@@ -127,103 +157,104 @@ def test_already_up_to_date(monkeypatch):
 
 def test_sync_to_latest_tag(monkeypatch):
     _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            (True, "v0.3.0\n", ""),  # describe --tags
-            (True, "3\n", ""),  # rev-list count (3 behind)
-            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
-            (True, "Merge made\n", ""),  # merge
-            (True, "", ""),  # push origin main (fork sync)
-            (
-                True,
-                "def456 Fix bug\n789abc Add feature\n012def Update docs\n",
-                "",
-            ),  # log
-            (True, " 3 files changed\n", ""),  # diff --stat
-            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
-        ],
-    )
+    _install(monkeypatch, _latest_tag_mapping())
     result = vs.run({})
     assert result["status"] == "success"
-    assert "v0.3.0" in result["target"]
+    assert result["merge_ref"] == "v1.5.9"
+    assert "v1.5.9" in result["target"]
     assert "stable" in result["target"]
-    assert result["merge_ref"] == "v0.3.0"
-    assert result["commits_pulled"] == 3
-    assert len(result["new_commits"]) == 3
     assert result["previous_head"] == "abc123"
-    assert result["new_head"] == "def456"
-    assert result["fork_synced"] is True
-    assert result["fork_sync_error"] == ""
 
 
-# ─── --abbrev=0 returns clean tag, not describe string ────────────────────────
-
-
-def test_describe_uses_abbrev0_for_clean_tag(monkeypatch):
-    """Regression test for the bug where --tags without --abbrev=0 returned
-    a describe string like 'v0.1.0-14-ge06ff84' (which points to the tip of
-    main, not the stable tag). With --abbrev=0, git returns just 'v0.1.0'.
-    """
+def test_sync_never_merges_or_pushes(monkeypatch):
+    """The whole fix: land with reset --hard, never merge (unrecoverable on a
+    shallow clone) and never push (irrelevant + fails on detached HEAD)."""
     _make_git_root(monkeypatch)
-    call_log = _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            (True, "v0.1.0\n", ""),  # describe --tags --abbrev=0 (clean tag)
-            (True, "2\n", ""),  # rev-list count (2 behind)
-            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
-            (True, "Merge made\n", ""),  # merge
-            (True, "", ""),  # push origin main (fork sync)
-            (True, "def456 Fix bug\nxyz789 Add feature\n", ""),  # log
-            (True, " 2 files changed\n", ""),  # diff --stat
-            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
-        ],
-    )
+    calls = _install(monkeypatch, _latest_tag_mapping())
+    vs.run({})
+    assert ["reset", "--hard", "FETCH_HEAD"] in calls
+    assert not any(c and c[0] == "merge" for c in calls), "must not merge"
+    assert not any(c and c[0] == "push" for c in calls), "must not push"
+
+
+# ─── Detached HEAD (every real install) still syncs ───────────────────────────
+
+
+def test_detached_head_still_syncs(monkeypatch):
+    """A `--depth 1 --branch <tag>` install is in detached HEAD, so
+    `branch --show-current` is empty. The old code errored here; the new
+    code must proceed."""
+    _make_git_root(monkeypatch)
+    mapping = _latest_tag_mapping()
+    mapping[("branch", "--show-current")] = (True, "", "")  # detached
+    _install(monkeypatch, mapping)
     result = vs.run({})
     assert result["status"] == "success"
-    # The merge ref must be the clean tag, not a describe string.
-    assert result["merge_ref"] == "v0.1.0"
-    assert "-14-" not in result["merge_ref"]
-    # Verify the git call used --abbrev=0.
-    describe_calls = [c for c in call_log if "describe" in c[0]]
-    assert len(describe_calls) == 1
-    assert "--abbrev=0" in describe_calls[0][0]
+    assert result["current_branch"] == ""
 
 
-# ─── Sync to main explicitly ──────────────────────────────────────────────────
+# ─── Dirty tree (untracked bot files) still syncs ─────────────────────────────
+
+
+def test_dirty_untracked_tree_still_syncs(monkeypatch):
+    """Downstream installs always have untracked bot-authored files, so the
+    old 'refuse on dirty tree' check blocked every real sync. reset --hard
+    preserves untracked files, so we must NOT refuse."""
+    _make_git_root(monkeypatch)
+    calls = _install(monkeypatch, _latest_tag_mapping())
+    result = vs.run({})
+    assert result["status"] == "success"
+    # The tool must not gate on `status --porcelain` anymore.
+    assert not any(c[:2] == ["status", "--porcelain"] for c in calls)
+
+
+# ─── Backup of modified tracked files ─────────────────────────────────────────
+
+
+def test_backs_up_modified_tracked_files(monkeypatch, tmp_path):
+    (tmp_path / "vaultbot_backend").mkdir()
+    tracked = tmp_path / "vaultbot_backend" / "calibration.py"
+    tracked.write_text("# locally edited\n", encoding="utf-8")
+
+    monkeypatch.setattr(vs, "_find_git_root", lambda start_dir: str(tmp_path))
+    mapping = _latest_tag_mapping()
+    mapping[("diff", "--name-only", "HEAD")] = (
+        True,
+        "vaultbot_backend/calibration.py",
+        "",
+    )
+    _install(monkeypatch, mapping)
+    result = vs.run({})
+    assert result["status"] == "success"
+    assert "vaultbot_backend/calibration.py" in result["backed_up_files"]
+    # A backup copy was actually written under .vaultbot-update-backup/.
+    backups = list(
+        (tmp_path / "vaultbot_backend" / ".vaultbot-update-backup").rglob("*")
+    )
+    assert any(p.is_file() for p in backups)
+
+
+# ─── target=main ──────────────────────────────────────────────────────────────
 
 
 def test_sync_to_main_explicit(monkeypatch):
     _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            # No describe call — target=main skips tag lookup
-            (True, "5\n", ""),  # rev-list count (5 behind)
-            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
-            (True, "Merge made\n", ""),  # merge
-            (True, "", ""),  # push origin main (fork sync)
-            (True, "def456 Fix bug\n", ""),  # log (1 commit)
-            (True, " 1 file changed\n", ""),  # diff --stat
-            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
-        ],
-    )
+    mapping = {
+        ("remote",): (True, "origin\nupstream", ""),
+        ("branch", "--show-current"): (True, "main", ""),
+        ("fetch", "--depth", "1", "upstream", "main"): (True, "", ""),
+        ("rev-parse", "HEAD"): (True, "abc", ""),
+        ("rev-parse", "FETCH_HEAD"): (True, "def", ""),
+        ("diff", "--name-only", "HEAD"): (True, "", ""),
+        ("reset", "--hard", "FETCH_HEAD"): (True, "", ""),
+    }
+    calls = _install(monkeypatch, mapping)
     result = vs.run({"target": "main"})
     assert result["status"] == "success"
     assert result["merge_ref"] == "upstream/main"
     assert "bleeding edge" in result["target"]
+    # target=main must NOT do a tag lookup.
+    assert not any(c[:1] == ["ls-remote"] for c in calls)
 
 
 # ─── No tags — falls back to main ─────────────────────────────────────────────
@@ -231,92 +262,44 @@ def test_sync_to_main_explicit(monkeypatch):
 
 def test_no_tags_falls_back_to_main(monkeypatch):
     _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            (False, "", "no tag"),  # describe --tags fails (no tags)
-            (True, "2\n", ""),  # rev-list count (2 behind)
-            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
-            (True, "Merge made\n", ""),  # merge
-            (True, "", ""),  # push origin main (fork sync)
-            (True, "def456 Fix bug\nxyz789 Add feature\n", ""),  # log
-            (True, " 2 files changed\n", ""),  # diff --stat
-            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
-        ],
-    )
+    mapping = {
+        ("remote",): (True, "origin\nupstream", ""),
+        ("branch", "--show-current"): (True, "main", ""),
+        ("ls-remote", "--tags", "--refs", "upstream"): (
+            True,
+            "111\trefs/tags/nightly",  # no semver tag
+            "",
+        ),
+        ("fetch", "--depth", "1", "upstream", "main"): (True, "", ""),
+        ("rev-parse", "HEAD"): (True, "abc", ""),
+        ("rev-parse", "FETCH_HEAD"): (True, "def", ""),
+        ("diff", "--name-only", "HEAD"): (True, "", ""),
+        ("reset", "--hard", "FETCH_HEAD"): (True, "", ""),
+    }
+    _install(monkeypatch, mapping)
     result = vs.run({})
     assert result["status"] == "success"
     assert result["merge_ref"] == "upstream/main"
     assert "no tags" in result["target"]
 
 
-# ─── Merge conflict ───────────────────────────────────────────────────────────
+# ─── reset --hard failure surfaces loudly ─────────────────────────────────────
 
 
-def test_merge_conflict_reports_files(monkeypatch):
+def test_reset_failure_returns_error(monkeypatch):
     _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            (True, "v0.3.0\n", ""),  # describe --tags
-            (True, "3\n", ""),  # rev-list count (3 behind)
-            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
-            (False, "Auto-merge failed\n", "conflict in file.py"),  # merge fails
-            (True, "vaultbot/some_file.py\nvaultbot/other.py\n", ""),  # conflict files
-        ],
-    )
+    mapping = _latest_tag_mapping()
+    mapping[("reset", "--hard", "FETCH_HEAD")] = (False, "", "reset boom")
+    _install(monkeypatch, mapping)
     result = vs.run({})
     assert "error" in result
-    assert "conflict" in result["error"].lower()
-    assert "conflicted_files" in result
-    assert len(result["conflicted_files"]) == 2
-
-
-# ─── Fork sync failure (non-blocking) ─────────────────────────────────────────
-
-
-def test_fork_sync_failure_does_not_fail_sync(monkeypatch):
-    """If the push to origin fails, the sync should still succeed — the
-    local repo is already updated. The failure is reported as a warning.
-    """
-    _make_git_root(monkeypatch)
-    _make_git_results(
-        monkeypatch,
-        [
-            (True, "", ""),  # status (clean)
-            (True, "origin\nupstream\n", ""),  # remote
-            (True, "Fetching upstream\n", ""),  # fetch
-            (True, "main\n", ""),  # branch --show-current
-            (True, "v0.3.0\n", ""),  # describe --tags --abbrev=0
-            (True, "1\n", ""),  # rev-list count (1 behind)
-            (True, "abc123\n", ""),  # rev-parse HEAD (pre-merge)
-            (True, "Merge made\n", ""),  # merge
-            (False, "", "non-fast-forward"),  # push origin fails
-            (True, "def456 Fix bug\n", ""),  # log
-            (True, " 1 file changed\n", ""),  # diff --stat
-            (True, "def456\n", ""),  # rev-parse HEAD (post-merge)
-        ],
-    )
-    result = vs.run({})
-    assert result["status"] == "success"
-    assert result["fork_synced"] is False
-    assert "non-fast-forward" in result["fork_sync_error"]
-    assert "Fork sync failed" in result["message"]
+    assert "reset" in result["error"].lower()
 
 
 # ─── _find_git_root (real, no monkeypatch) ────────────────────────────────────
 
 
 def test_find_git_root_walks_up(tmp_path):
-    # Create a fake repo structure: tmp_path / repo / vaultbot / backend
     repo = tmp_path / "myrepo"
     git_dir = repo / ".git"
     git_dir.mkdir(parents=True)
@@ -327,7 +310,5 @@ def test_find_git_root_walks_up(tmp_path):
 
 
 def test_find_git_root_returns_none_at_fs_root():
-    # Walking up from / on most systems will reach the root without
-    # finding .git. We just assert it returns None (no crash).
     result = vs._find_git_root("/")
     assert result is None
