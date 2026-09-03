@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.10] - 2026-09-02
+
+This release fixes VaultBot's **own autonomous self-update** so it works on a
+real install — the piece that lets the bot maintain itself without a human.
+It is a **patch** bump.
+
+### Fixed
+
+- **`vaultbot_sync` never worked on a real install.** The bot's self-update
+  tool had three independent blockers, all triggered by the shallow, detached
+  `git clone --branch <tag> --depth 1` that every install is: it refused on a
+  dirty tree (downstream installs always have untracked bot-authored files);
+  it required a named branch via `git branch --show-current` (empty on a
+  detached-HEAD tag checkout); and it used `git describe`/`git merge`, which
+  need history a `--depth 1` clone lacks (merge aborts on "unrelated
+  histories"). It now resolves the latest release tag via `git ls-remote`
+  (no local history needed), fetches it shallowly, and `git reset --hard`s
+  onto it — the same shallow-safe primitive as the plugin/installer update.
+  Untracked files (notes, keys, bot procedures, gitignored runtime state) are
+  preserved; tracked local edits are backed up to `.vaultbot-update-backup/`
+  first.
+
 ## [1.5.9] - 2026-09-02
 
 This release fixes the bug that left existing installs **unable to update** —
