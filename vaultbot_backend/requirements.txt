@@ -91,7 +91,7 @@ multidict==6.7.1
 packaging==26.3
 pydantic==2.13.4
 pydantic-core==2.46.4
-propcache==0.5.2
+propcache==0.5.4
 pycparser==3.0 ; implementation_name != "PyPy" and platform_python_implementation != "PyPy" and sys_platform == "linux"
 pywin32==312 ; sys_platform == "win32"
 pywin32-ctypes==0.2.3 ; sys_platform == "win32"
