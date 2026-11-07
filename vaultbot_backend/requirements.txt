@@ -20,7 +20,7 @@ beautifulsoup4==4.15.0
 # faiss-cpu 1.8.0 is built against numpy 1.x and breaks on numpy 2
 # (ABI error in tests — see /memories/repo/pytest-faiss-numpy2-abi.md).
 # 1.11+ supports numpy 2.x.
-faiss-cpu==1.15.0
+faiss-cpu==1.15.1
 watchdog==6.0.0
 # numpy 2.x required by faiss-cpu 1.11+.
 # uv resolves different patch versions per Python minor (2.4.6 on 3.11,
