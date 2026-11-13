@@ -97,7 +97,7 @@ pywin32==312 ; sys_platform == "win32"
 pywin32-ctypes==0.2.3 ; sys_platform == "win32"
 pyyaml==6.0.3
 secretstorage==3.5.0 ; sys_platform == "linux"
-soupsieve==2.9.2
+soupsieve==4.0
 starlette==1.6.0
 tabulate==0.10.0
 typing-extensions==4.16.0
