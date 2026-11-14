@@ -33,7 +33,7 @@ PyMuPDF==1.28.2
 # Pillow: used by llm_client.vision_capable() to render a test image.
 # html2text: used by textbook_ingest.parse_html() (HTML→Markdown).
 # pypdf: fallback PDF text-layer parser when PyMuPDF is unavailable.
-Pillow==12.3.0
+Pillow==13.0.0
 html2text==2025.4.15
 pypdf==6.16.2
 # psutil: used by /system/stats for CPU/RAM/disk/net resource meters.
